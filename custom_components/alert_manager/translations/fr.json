@@ -1,0 +1,13 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Une seule configuration d’Alert Manager est autorisée."
+    },
+    "step": {
+      "user": {
+        "description": "Installe Alert Manager. Les détections, règles et exclusions se configurent ensuite dans le panel Alertes.",
+        "title": "Alert Manager"
+      }
+    }
+  }
+}

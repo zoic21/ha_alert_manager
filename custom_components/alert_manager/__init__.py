@@ -1,0 +1,69 @@
+"""Alert Manager integration setup."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+from .const import (
+    DATA_MANAGER,
+    DATA_STATIC_REGISTERED,
+    DATA_WEBSOCKET_REGISTERED,
+    DOMAIN,
+    PANEL_COMPONENT,
+    PANEL_ICON,
+    PANEL_STATIC_URL,
+    PANEL_TITLE,
+    PANEL_URL,
+    PLATFORMS,
+)
+from .manager import AlertManager
+from .websocket import async_register_websocket_commands
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Alert Manager from its single config entry."""
+    manager = AlertManager(hass, entry)
+    await manager.async_setup()
+    hass.data[DATA_MANAGER] = manager
+
+    if not hass.data.get(DATA_STATIC_REGISTERED):
+        frontend_dir = Path(__file__).parent / "frontend"
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(PANEL_STATIC_URL, str(frontend_dir), True)]
+        )
+        hass.data[DATA_STATIC_REGISTERED] = True
+
+    if not hass.data.get(DATA_WEBSOCKET_REGISTERED):
+        async_register_websocket_commands(hass)
+        hass.data[DATA_WEBSOCKET_REGISTERED] = True
+
+    await panel_custom.async_register_panel(
+        hass,
+        frontend_url_path=PANEL_URL,
+        webcomponent_name=PANEL_COMPONENT,
+        sidebar_title=PANEL_TITLE,
+        sidebar_icon=PANEL_ICON,
+        module_url=f"{PANEL_STATIC_URL}/alert-manager-panel.js?v=1.0.0",
+        require_admin=True,
+        config_panel_domain=DOMAIN,
+    )
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload Alert Manager cleanly."""
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
+
+    frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+    manager: AlertManager | None = hass.data.pop(DATA_MANAGER, None)
+    if manager is not None:
+        await manager.async_unload()
+    return True

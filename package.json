@@ -1,0 +1,14 @@
+{
+  "name": "ha-alert-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-frontend.mjs",
+    "lint:frontend": "node scripts/lint-frontend.mjs",
+    "test:frontend": "node --test tests/frontend.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
