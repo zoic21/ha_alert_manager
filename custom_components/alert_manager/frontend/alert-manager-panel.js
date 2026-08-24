@@ -34,6 +34,19 @@ const durationText = (seconds) => {
   return `${Math.floor(value / 60)} min ${value % 60} s`;
 };
 
+const newRuleDefaults = () => ({
+  name: "",
+  entity_id: "",
+  enabled: true,
+  source: "state",
+  attribute: "",
+  operator: "equals",
+  value: "",
+  duration: 900,
+  severity: "warning",
+  message: "",
+});
+
 class AlertManagerPanel extends HTMLElement {
   constructor() {
     super();
@@ -47,16 +60,17 @@ class AlertManagerPanel extends HTMLElement {
     this._busy = false;
     this._notice = null;
     this._timer = null;
+    this._sensorState = null;
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
   }
 
   set hass(value) {
     this._hass = value;
-    this._syncSensor();
+    const alertsChanged = this._syncSensor();
     if (this.isConnected && !this._config && !this._loadPromise) {
       this._load();
-    } else if (this.isConnected && this._activeTab === "overview") {
+    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
       this._render();
     }
   }
@@ -110,7 +124,8 @@ class AlertManagerPanel extends HTMLElement {
 
   _syncSensor() {
     const state = this._hass?.states?.["sensor.alert_manager"];
-    if (!state) return;
+    if (!state || state === this._sensorState) return false;
+    this._sensorState = state;
     const attributes = state.attributes ?? {};
     if (Array.isArray(attributes.alerts) && Array.isArray(attributes.pending)) {
       this._alerts = {
@@ -119,7 +134,9 @@ class AlertManagerPanel extends HTMLElement {
         alerts: attributes.alerts,
         pending: attributes.pending,
       };
+      return true;
     }
+    return false;
   }
 
   async _call(message, successText) {
@@ -266,18 +283,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderRuleEditor() {
-    const rule = this._editingRule || {
-      name: "",
-      entity_id: "",
-      enabled: true,
-      source: "state",
-      attribute: "",
-      operator: "equals",
-      value: "",
-      duration: 900,
-      severity: "warning",
-      message: "",
-    };
+    const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
     const entityOptions = Object.keys(this._hass?.states || {}).sort().map((id) => `<option value="${esc(id)}"></option>`).join("");
     return `<section class="panel editor"><h2>${rule.id ? "Modifier" : "Créer"} une règle</h2>
       <form id="rule-form" class="fields">
@@ -508,4 +514,4 @@ if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
 }
 
-export { AlertManagerPanel, durationText, lines };
+export { AlertManagerPanel, durationText, lines, newRuleDefaults };

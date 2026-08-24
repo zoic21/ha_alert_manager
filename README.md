@@ -121,7 +121,7 @@ Ordre de priorité des délais :
 
 1. durée de la règle personnalisée ;
 2. délai particulier configuré pour l’entité ;
-3. attribut entier `alert_delay` de l’entité ;
+3. attribut `alert_delay` de l’entité, entier ou chaîne numérique entière valide ;
 4. délai de la catégorie automatique ;
 5. délai global.
 

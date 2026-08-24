@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -52,10 +52,17 @@ from .models import (
     AlertStatus,
     Rule,
     advance_record,
+    calculate_due_at,
+    safe_delay_seconds,
     safe_float,
 )
 from .storage import AlertManagerStorage
-from .validation import validate_config, validate_rule_payload
+from .validation import (
+    validate_config,
+    validate_config_update,
+    validate_rule_payload,
+    validate_rule_update_fields,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +89,8 @@ class AlertManager:
         self.storage = AlertManagerStorage(hass)
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
+        self._rules: list[Rule] = []
+        self._rules_by_entity: dict[str, list[Rule]] = {}
         self._unsubscribers: list[Callable[[], None]] = []
         self._timers: dict[str, Callable[[], None]] = {}
         self._unloading = False
@@ -96,6 +105,7 @@ class AlertManager:
             _LOGGER.exception("Stored configuration is invalid; using defaults")
             self.config = validate_config({})
         self.records = records
+        self._rebuild_rule_index()
 
         self._unsubscribers.extend(
             (
@@ -149,7 +159,7 @@ class AlertManager:
     def _state_changed(self, event: Event) -> None:
         """Evaluate only the entity whose state changed."""
         entity_id = event.data.get("entity_id")
-        if not entity_id or entity_id == "sensor.alert_manager":
+        if not entity_id or not self._is_relevant_entity_id(entity_id):
             return
         self.entry.async_create_task(
             self.hass,
@@ -166,11 +176,17 @@ class AlertManager:
             name=f"{DOMAIN} registry evaluation",
         )
 
-    async def async_evaluate_all(self, *, restoring: bool = False) -> None:
+    async def async_evaluate_all(
+        self, *, restoring: bool = False, save: bool = True
+    ) -> None:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading:
             return
-        entity_ids = {state.entity_id for state in self.hass.states.async_all()}
+        entity_ids = {
+            state.entity_id
+            for state in self.hass.states.async_all()
+            if self._is_relevant_entity_id(state.entity_id)
+        }
         entity_ids.update(record.details.entity_id for record in self.records.values())
         entity_ids.update(rule.entity_id for rule in self.rules)
         persisted_changed = False
@@ -178,7 +194,7 @@ class AlertManager:
             persisted_changed |= await self.async_evaluate_entity(
                 entity_id, save=False, publish=False
             )
-        if persisted_changed:
+        if save and persisted_changed:
             await self.storage.async_save(self.config, self.records)
         self._publish_if_changed(force=restoring and self._last_public_snapshot is None)
 
@@ -212,7 +228,7 @@ class AlertManager:
                 record.details = details
                 if record.status is AlertStatus.PENDING and record.delay != delay:
                     record.delay = delay
-                    record.due_at = record.detected_at + timedelta(seconds=delay)
+                    record.due_at = calculate_due_at(record.detected_at, delay)
                     self._cancel_timer(alert_id)
                     persisted_changed = True
 
@@ -329,8 +345,8 @@ class AlertManager:
                     self._delay_for(state, CATEGORY_BATTERY),
                 )
 
-        for rule in self.rules:
-            if not rule.enabled or rule.entity_id != entity_id:
+        for rule in self._rules_by_entity.get(entity_id, ()):
+            if not rule.enabled:
                 continue
             if rule.source == "attribute" and rule.attribute not in state.attributes:
                 continue
@@ -386,12 +402,8 @@ class AlertManager:
         entity_id = state.entity_id
         if entity_id in self.config["entity_delays"]:
             return self.config["entity_delays"][entity_id]
-        attribute_delay = state.attributes.get("alert_delay")
-        if (
-            isinstance(attribute_delay, int)
-            and not isinstance(attribute_delay, bool)
-            and 0 <= attribute_delay <= 31_536_000
-        ):
+        attribute_delay = safe_delay_seconds(state.attributes.get("alert_delay"))
+        if attribute_delay is not None:
             return attribute_delay
         category_delay = self.config["automatic"][category].get("delay")
         if isinstance(category_delay, int):
@@ -453,26 +465,65 @@ class AlertManager:
     @property
     def rules(self) -> list[Rule]:
         """Return validated rule objects."""
-        return [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        return list(self._rules)
+
+    def _rebuild_rule_index(self) -> None:
+        """Cache validated rule objects by entity for hot-path evaluations."""
+        self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        self._rules_by_entity = {}
+        for rule in self._rules:
+            self._rules_by_entity.setdefault(rule.entity_id, []).append(rule)
+
+    def _is_relevant_entity_id(self, entity_id: str) -> bool:
+        """Return whether a state change can affect an alert or existing record."""
+        if entity_id == "sensor.alert_manager":
+            return False
+        if entity_id in self._rules_by_entity:
+            return True
+        if any(
+            record.details.entity_id == entity_id for record in self.records.values()
+        ):
+            return True
+        domain = entity_id.partition(".")[0]
+        automatic = self.config.get("automatic", {})
+        unavailable = automatic.get(CATEGORY_UNAVAILABLE, {})
+        if unavailable.get("enabled") and domain in unavailable.get("domains", ()):
+            return True
+        return (
+            (
+                domain == "binary_sensor"
+                and automatic.get(CATEGORY_CONNECTIVITY, {}).get("enabled", False)
+            )
+            or (
+                domain == "device_tracker"
+                and automatic.get(CATEGORY_UNIFI, {}).get("enabled", False)
+            )
+            or (
+                domain == "sensor"
+                and automatic.get(CATEGORY_BATTERY, {}).get("enabled", False)
+            )
+        )
 
     def public_snapshot(self) -> dict[str, Any]:
         """Return active and pending lists without resolved history."""
-        active = sorted(
+        active_records = sorted(
             (
-                record.as_public_dict()
+                record
                 for record in self.records.values()
                 if record.status is AlertStatus.ACTIVE
             ),
-            key=lambda item: item["active_since"],
+            key=lambda record: (record.active_since or record.due_at).astimezone(UTC),
         )
-        pending = sorted(
+        pending_records = sorted(
             (
-                record.as_public_dict()
+                record
                 for record in self.records.values()
                 if record.status is AlertStatus.PENDING
             ),
-            key=lambda item: item["due_at"],
+            key=lambda record: record.due_at.astimezone(UTC),
         )
+        active = [record.as_public_dict() for record in active_records]
+        pending = [record.as_public_dict() for record in pending_records]
         return {
             "active_count": len(active),
             "pending_count": len(pending),
@@ -486,38 +537,42 @@ class AlertManager:
 
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
-        if not isinstance(changes, dict):
-            raise ValueError("config must be an object")
+        validate_config_update(changes)
         if "rules" in changes:
             raise ValueError("Rules must be changed through the rules API")
         candidate = _deep_merge(self.get_config(), changes)
         candidate["rules"] = self.config["rules"]
         self.config = validate_config(candidate)
+        self._rebuild_rule_index()
+        await self.async_evaluate_all(save=False)
         await self.storage.async_save(self.config, self.records)
-        await self.async_evaluate_all()
         return self.get_config()
 
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
         self.config["rules"].append(rule.as_dict())
+        self._rebuild_rule_index()
+        await self.async_evaluate_entity(rule.entity_id, save=False)
         await self.storage.async_save(self.config, self.records)
-        await self.async_evaluate_entity(rule.entity_id)
         return rule.as_dict()
 
     async def async_update_rule(
         self, rule_id: str, data: dict[str, Any]
     ) -> dict[str, Any]:
         """Update a rule without changing its identifier."""
+        validate_rule_update_fields(data)
         index = self._rule_index(rule_id)
         existing = self.config["rules"][index]
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
         old_entity_id = existing["entity_id"]
         self.config["rules"][index] = rule.as_dict()
-        await self.storage.async_save(self.config, self.records)
-        await self.async_evaluate_entity(old_entity_id)
+        self._rebuild_rule_index()
+        await self.async_evaluate_entity(old_entity_id, save=False, publish=False)
         if rule.entity_id != old_entity_id:
-            await self.async_evaluate_entity(rule.entity_id)
+            await self.async_evaluate_entity(rule.entity_id, save=False, publish=False)
+        self._publish_if_changed()
+        await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
     async def async_delete_rule(self, rule_id: str) -> None:
@@ -525,8 +580,9 @@ class AlertManager:
         index = self._rule_index(rule_id)
         entity_id = self.config["rules"][index]["entity_id"]
         del self.config["rules"][index]
+        self._rebuild_rule_index()
+        await self.async_evaluate_entity(entity_id, save=False)
         await self.storage.async_save(self.config, self.records)
-        await self.async_evaluate_entity(entity_id)
 
     def _rule_index(self, rule_id: str) -> int:
         """Find a rule or raise a stable API error."""

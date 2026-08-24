@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
@@ -14,6 +15,7 @@ from .const import (
     DATA_STATIC_REGISTERED,
     DATA_WEBSOCKET_REGISTERED,
     DOMAIN,
+    INTEGRATION_VERSION,
     PANEL_COMPONENT,
     PANEL_ICON,
     PANEL_STATIC_URL,
@@ -28,32 +30,44 @@ from .websocket import async_register_websocket_commands
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Alert Manager from its single config entry."""
     manager = AlertManager(hass, entry)
-    await manager.async_setup()
-    hass.data[DATA_MANAGER] = manager
+    panel_registered = False
+    try:
+        await manager.async_setup()
+        hass.data[DATA_MANAGER] = manager
 
-    if not hass.data.get(DATA_STATIC_REGISTERED):
-        frontend_dir = Path(__file__).parent / "frontend"
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(PANEL_STATIC_URL, str(frontend_dir), True)]
+        if not hass.data.get(DATA_STATIC_REGISTERED):
+            frontend_dir = Path(__file__).parent / "frontend"
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(PANEL_STATIC_URL, str(frontend_dir), True)]
+            )
+            hass.data[DATA_STATIC_REGISTERED] = True
+
+        if not hass.data.get(DATA_WEBSOCKET_REGISTERED):
+            async_register_websocket_commands(hass)
+            hass.data[DATA_WEBSOCKET_REGISTERED] = True
+
+        await panel_custom.async_register_panel(
+            hass,
+            frontend_url_path=PANEL_URL,
+            webcomponent_name=PANEL_COMPONENT,
+            sidebar_title=PANEL_TITLE,
+            sidebar_icon=PANEL_ICON,
+            module_url=(
+                f"{PANEL_STATIC_URL}/alert-manager-panel.js?v={INTEGRATION_VERSION}"
+            ),
+            require_admin=True,
+            config_panel_domain=DOMAIN,
         )
-        hass.data[DATA_STATIC_REGISTERED] = True
-
-    if not hass.data.get(DATA_WEBSOCKET_REGISTERED):
-        async_register_websocket_commands(hass)
-        hass.data[DATA_WEBSOCKET_REGISTERED] = True
-
-    await panel_custom.async_register_panel(
-        hass,
-        frontend_url_path=PANEL_URL,
-        webcomponent_name=PANEL_COMPONENT,
-        sidebar_title=PANEL_TITLE,
-        sidebar_icon=PANEL_ICON,
-        module_url=f"{PANEL_STATIC_URL}/alert-manager-panel.js?v=1.0.0",
-        require_admin=True,
-        config_panel_domain=DOMAIN,
-    )
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        panel_registered = True
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        if panel_registered:
+            frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+        if hass.data.get(DATA_MANAGER) is manager:
+            hass.data.pop(DATA_MANAGER)
+        with suppress(Exception):
+            await manager.async_unload()
+        raise
     return True
 
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from .const import OPERATORS, SEVERITIES, VALUE_SOURCES
+from .const import MAX_DELAY, MIN_DELAY, OPERATORS, SEVERITIES, VALUE_SOURCES
 
 
 class AlertStatus(StrEnum):
@@ -38,9 +38,25 @@ class AlertDetails:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertDetails:
-        """Deserialize alert details."""
+        """Deserialize alert details, rejecting malformed storage data."""
+        if not isinstance(data, dict):
+            raise ValueError("Alert details must be an object")
+        required_strings = ("id", "type", "entity_id", "name", "condition")
+        for key in required_strings:
+            if not isinstance(data.get(key), str) or not data[key]:
+                raise ValueError(f"Alert detail {key} must be a non-empty string")
+        if "value" not in data:
+            raise ValueError("Alert detail value is required")
+        severity = data.get("severity", "warning")
+        if severity not in SEVERITIES:
+            raise ValueError(f"Unsupported alert severity: {severity}")
+        for key in ("device_name", "area", "integration", "unit"):
+            if data.get(key) is not None and not isinstance(data[key], str):
+                raise ValueError(f"Alert detail {key} must be a string or null")
         allowed = cls.__dataclass_fields__
-        return cls(**{key: data.get(key) for key in allowed})
+        values = {key: data[key] for key in allowed if key in data}
+        values["severity"] = severity
+        return cls(**values)
 
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-safe details without empty optional fields."""
@@ -65,23 +81,48 @@ class AlertRecord:
             details=details,
             status=AlertStatus.PENDING,
             detected_at=now,
-            due_at=now + timedelta(seconds=delay),
+            due_at=calculate_due_at(now, delay),
             delay=delay,
         )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertRecord:
-        """Deserialize a persisted record."""
+        """Deserialize a persisted record with strict temporal invariants."""
+        if not isinstance(data, dict):
+            raise ValueError("Alert record must be an object")
         active_since = data.get("active_since")
+        status = AlertStatus(data["status"])
+        if status is AlertStatus.NORMAL:
+            raise ValueError("Normal alerts must not be persisted")
+        delay = data["delay"]
+        if isinstance(delay, bool) or not isinstance(delay, int):
+            raise ValueError("Alert delay must be an integer")
+        if not MIN_DELAY <= delay <= MAX_DELAY:
+            raise ValueError("Alert delay is out of range")
+        detected_at = _parse_aware_datetime(data["detected_at"], "detected_at")
+        due_at = _parse_aware_datetime(data["due_at"], "due_at")
+        if due_at.astimezone(UTC) < detected_at.astimezone(UTC):
+            raise ValueError("Alert due_at must not precede detected_at")
+        parsed_active_since = (
+            _parse_aware_datetime(active_since, "active_since")
+            if active_since is not None
+            else None
+        )
+        if status is AlertStatus.ACTIVE and parsed_active_since is None:
+            raise ValueError("Active alerts require active_since")
+        if status is AlertStatus.PENDING and parsed_active_since is not None:
+            raise ValueError("Pending alerts must not have active_since")
+        if parsed_active_since is not None and parsed_active_since.astimezone(
+            UTC
+        ) < detected_at.astimezone(UTC):
+            raise ValueError("Alert active_since must not precede detected_at")
         return cls(
             details=AlertDetails.from_dict(data["details"]),
-            status=AlertStatus(data["status"]),
-            detected_at=datetime.fromisoformat(data["detected_at"]),
-            due_at=datetime.fromisoformat(data["due_at"]),
-            delay=int(data["delay"]),
-            active_since=(
-                datetime.fromisoformat(active_since) if active_since else None
-            ),
+            status=status,
+            detected_at=detected_at,
+            due_at=due_at,
+            delay=delay,
+            active_since=parsed_active_since,
         )
 
     def as_storage_dict(self) -> dict[str, Any]:
@@ -214,9 +255,39 @@ def normalize_scalar(value: Any) -> str:
     return str(value).strip()
 
 
+def safe_delay_seconds(value: Any) -> int | None:
+    """Parse a finite, integral delay attribute within the supported range."""
+    number = safe_float(value)
+    if number is None or not number.is_integer():
+        return None
+    delay = int(number)
+    return delay if MIN_DELAY <= delay <= MAX_DELAY else None
+
+
+def calculate_due_at(detected_at: datetime, delay: int) -> datetime:
+    """Add an elapsed duration without daylight-saving wall-clock errors."""
+    if detected_at.tzinfo is None or detected_at.utcoffset() is None:
+        raise ValueError("Alert timestamps must include a timezone")
+    return (detected_at.astimezone(UTC) + timedelta(seconds=delay)).astimezone(
+        detected_at.tzinfo
+    )
+
+
+def _parse_aware_datetime(value: Any, field: str) -> datetime:
+    """Parse a timezone-aware ISO datetime from persisted storage."""
+    if not isinstance(value, str):
+        raise ValueError(f"Alert {field} must be an ISO datetime")
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"Alert {field} must include a timezone")
+    return parsed
+
+
 def advance_record(record: AlertRecord, now: datetime) -> bool:
     """Advance a due pending record; return whether it changed."""
-    if record.status is not AlertStatus.PENDING or now < record.due_at:
+    if record.status is not AlertStatus.PENDING or now.astimezone(
+        UTC
+    ) < record.due_at.astimezone(UTC):
         return False
     record.status = AlertStatus.ACTIVE
     record.active_since = record.due_at

@@ -89,7 +89,11 @@ config_entries = _module("homeassistant.config_entries")
 class ConfigEntry:
     entry_id = "alert-manager-entry"
 
+    def __init__(self):
+        self.created_task_names = []
+
     def async_create_task(self, hass, coroutine, name=None, eager_start=True):
+        self.created_task_names.append(name)
         return asyncio.create_task(coroutine, name=name)
 
 
@@ -186,6 +190,7 @@ class Store:
         return self.hass.stores.get(self.key)
 
     async def async_save(self, data):
+        self.hass.store_save_count += 1
         self.hass.stores[self.key] = data
 
 
@@ -299,6 +304,7 @@ class FakeHass:
         self.states = FakeStates()
         self.data = {}
         self.stores = {}
+        self.store_save_count = 0
         self.timers = []
         self.dispatchers = defaultdict(list)
         self.commands = []

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from homeassistant.core import Event
 
 from custom_components.alert_manager.const import (
     DATA_MANAGER,
@@ -245,6 +246,13 @@ def test_delay_priority(hass, entry):
     assert manager.records["unavailable:sensor.test"].delay == 20
 
 
+def test_numeric_string_alert_delay_attribute(hass, entry):
+    """Integral numeric attributes are accepted without weakening config validation."""
+    hass.states.set("sensor.test", "unavailable", {"alert_delay": "40"})
+    manager = make_manager(hass, entry)
+    assert manager.records["unavailable:sensor.test"].delay == 40
+
+
 def test_missing_rule_attribute_does_not_trigger_not_equals(hass, entry):
     """A missing attribute is not treated as an arbitrary comparison value."""
     hass.states.set("sensor.test", "ok", {})
@@ -274,6 +282,62 @@ def test_unchanged_global_evaluation_does_not_publish(hass, entry):
     )
     run(manager.async_evaluate_all())
     assert notifications == []
+
+
+def test_global_evaluation_skips_irrelevant_domains(hass, entry):
+    """Full scans do not spend work on states outside enabled categories and rules."""
+    hass.states.set("automation.unrelated", "unavailable")
+    hass.states.set("sensor.relevant", "unavailable")
+    manager = make_manager(hass, entry)
+    evaluated = []
+    original = manager.async_evaluate_entity
+
+    async def tracked(entity_id, **kwargs):
+        evaluated.append(entity_id)
+        return await original(entity_id, **kwargs)
+
+    manager.async_evaluate_entity = tracked
+    run(manager.async_evaluate_all())
+    assert evaluated == ["sensor.relevant"]
+
+
+def test_state_listener_skips_irrelevant_entities(hass, entry):
+    """Unrelated state events do not allocate config-entry evaluation tasks."""
+    manager = make_manager(hass, entry)
+    entry.created_task_names.clear()
+
+    async def fire_events():
+        manager._state_changed(Event({"entity_id": "automation.unrelated"}))
+        await asyncio.sleep(0)
+
+    run(fire_events())
+    assert entry.created_task_names == []
+
+
+def test_rule_mutation_uses_one_atomic_storage_write(hass, entry):
+    """A rule change and its immediate evaluation persist in one snapshot."""
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    hass.store_save_count = 0
+    run(
+        manager.async_create_rule(
+            {
+                "name": "One write",
+                "entity_id": "sensor.test",
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+            }
+        )
+    )
+    assert hass.store_save_count == 1
+
+
+def test_invalid_alerts_collection_is_ignored(hass, entry):
+    """A malformed storage collection cannot prevent integration startup."""
+    hass.stores["alert_manager"] = {"config": {}, "alerts": []}
+    manager = make_manager(hass, entry)
+    assert manager.records == {}
 
 
 def test_unload_reload_cleans_listeners_and_timers(hass, entry):

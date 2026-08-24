@@ -56,7 +56,11 @@ class AlertManagerStorage:
 
         config = _merge_dict(deepcopy(DEFAULT_CONFIG), raw.get("config", {}))
         records: dict[str, AlertRecord] = {}
-        for alert_id, record_data in raw.get("alerts", {}).items():
+        raw_alerts = raw.get("alerts", {})
+        if not isinstance(raw_alerts, dict):
+            _LOGGER.warning("Ignoring invalid persisted alerts collection")
+            return config, records
+        for alert_id, record_data in raw_alerts.items():
             try:
                 record = AlertRecord.from_dict(record_data)
             except (KeyError, TypeError, ValueError):
