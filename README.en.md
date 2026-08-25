@@ -69,7 +69,7 @@ messages and comparison values are user data and are never translated.
 ## Overview and device grouping
 
 The overview separates active alerts (red), upcoming alerts (orange) and
-acknowledged alerts (green). Each card shows the source, current value,
+acknowledged alerts (blue). Each card shows the source, current value,
 translated condition, device, area and timestamps. Selecting an existing source
 opens Home Assistant's native more-info dialog.
 

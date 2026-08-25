@@ -529,6 +529,7 @@ test("acknowledged alerts stay compact and expose the real unacknowledge action"
   assert.doesNotMatch(html, /data-action="acknowledge-alert"/);
   assert.match(html, /class="alert-status-icon alert-state-action/);
   assert.doesNotMatch(html, /class="alert-header-actions"/);
+  assert.match(panel._styles(), /\.alert-card\.is-acknowledged[^}]*--alert-state-color:var\(--blue-color/);
   assert.match(panel._styles(), /data-action="unacknowledge-alert"[^}]*--alert-hover-color:color-mix\(in srgb,var\(--error-color/);
 
   const calls = [];
@@ -964,8 +965,12 @@ test("overview displays the backend tracked total", () => {
     acknowledge: [],
   };
 
-  assert.match(panel._renderOverview(), /Total suivi<\/span><strong>47<\/strong>/);
-  assert.match(panel._renderOverview(), /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
+  const html = panel._renderOverview();
+  assert.match(html, /Total suivi<\/span><strong>47<\/strong>/);
+  assert.match(html, /Alertes à venir<\/span><strong class="pending">3<\/strong>/);
+  assert.match(html, /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
+  assert.ok(html.indexOf("Alertes à venir") < html.indexOf("Alertes acquittées"));
+  assert.match(panel._styles(), /\.acknowledged\{color:var\(--blue-color/);
   assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(panel._styles(), /@media\(max-width:700px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
@@ -1291,11 +1296,13 @@ test("panel renders French and English from backend translation resources", () =
   panel._language = "fr";
   panel._translations = TRANSLATIONS.fr;
   assert.match(panel._renderOverview(), /Alertes actives/);
+  assert.equal(panel._t("overview.status_pending"), "À venir");
   assert.match(panel._renderAutomatic(), /Entités indisponibles/);
 
   panel._language = "en";
   panel._translations = TRANSLATIONS.en;
   assert.match(panel._renderOverview(), /Active alerts/);
+  assert.equal(panel._t("overview.status_pending"), "Upcoming");
   assert.match(panel._renderAutomatic(), /Unavailable entities/);
   assert.deepEqual(panel._tabs().map((tab) => tab.name), [
     "Overview",

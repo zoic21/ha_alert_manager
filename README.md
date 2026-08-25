@@ -85,8 +85,9 @@ latérale et reste réservé aux administrateurs.
 
 Le panel est réservé aux administrateurs et contient quatre sections :
 
-1. **Vue d’ensemble** : sections distinctes pour les alertes actives, à venir et
-   acquittées, avec valeur, condition, équipement, pièce et dates. Le nom de la
+1. **Vue d’ensemble** : sections distinctes pour les alertes actives en rouge, à
+   venir en orange et acquittées en bleu, avec valeur, condition, équipement,
+   pièce et dates. Le nom de la
    source ouvre le dialogue natif
    « Plus d’informations ». Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
