@@ -354,6 +354,27 @@ test("alert overview uses native Home Assistant cards without nested panels", ()
   assert.match(empty, /<ha-card outlined class="alert-empty">/);
 });
 
+test("pending alerts start on a row below active alerts", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  panel._alerts = {
+    active_count: 1,
+    pending_count: 1,
+    alerts: [{ entity_id: "zone.home", name: "Maison", condition: "Vide" }],
+    pending: [{ entity_id: "media_player.tv", name: "TV", condition: "Indisponible" }],
+  };
+
+  const html = panel._renderOverviewAlerts(
+    buildOverviewItems(panel._alerts.alerts, panel._alerts.pending),
+  );
+
+  assert.match(html, /class="alert-list alert-list-active"[\s\S]*is-active/);
+  assert.match(html, /class="alert-list alert-list-pending"[\s\S]*is-pending/);
+  assert.ok(html.indexOf("alert-list-active") < html.indexOf("alert-list-pending"));
+  assert.match(panel._styles(), /\.alert-list\+\.alert-list\{margin-top:16px\}/);
+});
+
 test("two alerts from one device form one mixed-status visual group", () => {
   const active = {
     id: "unavailable:sensor.ups_status",
@@ -391,7 +412,9 @@ test("two alerts from one device form one mixed-status visual group", () => {
       "sensor.ups_battery": { state: "10" },
     },
   };
+  panel._alerts = { active_count: 1, pending_count: 1 };
   const html = panel._renderDeviceGroup(items[0]);
+  const overview = panel._renderOverviewAlerts(items);
   assert.match(html, /class="device-alert-group is-active"/);
   assert.match(html, /Onduleur/);
   assert.match(html, /1 active · 1 en attente/);
@@ -401,6 +424,8 @@ test("two alerts from one device form one mixed-status visual group", () => {
   assert.match(html, />En attente</);
   assert.match(html, /data-due=/);
   assert.equal((html.match(/data-action="more-info"/g) ?? []).length, 2);
+  assert.match(overview, /alert-list-active/);
+  assert.doesNotMatch(overview, /alert-list-pending/);
 });
 
 test("single alerts and entities without a device stay compact and individual", () => {
@@ -572,6 +597,27 @@ test("table toggle updates an open editor for the same rule", async () => {
   assert.equal(panel._editingRule.enabled, false);
 });
 
+test("saving the editor preserves the activation controlled by the table", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...ruleValues({ id: "disabled-rule", enabled: false }),
+  };
+  let savedRule;
+  panel._hass = {
+    callWS: async (message) => {
+      savedRule = message.rule;
+      return { ...message.rule, id: "disabled-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+
+  await panel._saveRule(form(ruleValues({ enabled: true })));
+
+  assert.equal(savedRule.enabled, false);
+});
+
 test("rule rows and editor use native Home Assistant components", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -602,7 +648,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
-  assert.match(editor, /class="rule-enabled"[\s\S]*<ha-switch id="rule-enabled"/);
+  assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
   assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
