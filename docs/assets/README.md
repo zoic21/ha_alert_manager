@@ -2,7 +2,8 @@
 
 - `alert-manager-mark.svg`: maintainable square vector source for avatars and small sizes.
 - `alert-manager-logo.svg`: adaptable horizontal wordmark for documentation.
-- `../../brand/icon.png`: 256 × 256 HACS repository icon generated from the square vector source.
+- `../../custom_components/alert_manager/brand/icon.png`: 256 × 256 HACS
+  integration icon generated from the square vector source.
 
 The artwork is original to Alert Manager, uses a transparent background and does
 not reuse the Home Assistant logo. The sidebar deliberately keeps the native

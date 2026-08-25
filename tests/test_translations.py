@@ -82,7 +82,7 @@ def test_documented_brand_assets_exist_and_are_referenced() -> None:
     """Both README files use existing project-owned visual assets."""
     mark = ROOT / "docs" / "assets" / "alert-manager-mark.svg"
     logo = ROOT / "docs" / "assets" / "alert-manager-logo.svg"
-    icon = ROOT / "brand" / "icon.png"
+    icon = INTEGRATION / "brand" / "icon.png"
     assert mark.is_file()
     assert logo.is_file()
     assert icon.is_file()
