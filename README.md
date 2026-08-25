@@ -12,8 +12,10 @@ Version minimale prise en charge : **Home Assistant 2026.8**.
   UniFi absents et batteries faibles ;
 - packs automatiques décrits par le backend et activés uniquement lorsque leurs
   intégrations prérequises sont réellement disponibles ;
-- règles personnalisées multi-entités `equals`, `not_equals`, `above` et `below`
-  sur l’état ou un attribut, avec une alerte indépendante par source ;
+- règles personnalisées multi-entités `equals`, `not_equals`, `contains`,
+  `not_contains`, `above` et `below` sur l’état ou un attribut, avec plusieurs
+  valeurs possibles pour les comparaisons textuelles et une alerte indépendante
+  par source ;
 - exclusions automatiques par plusieurs labels, entités ou appareils ;
 - panel administrateur responsive, servi directement par l’intégration ;
 - regroupement visuel, sans fusion des alertes, lorsque plusieurs anomalies
@@ -44,6 +46,10 @@ Le dépôt est compatible avec HACS comme **dépôt personnalisé** :
    **Integration**.
 3. Installer Alert Manager, redémarrer Home Assistant et ajouter l’intégration.
 
+Chaque version publiée possède un tag `vX.Y.Z` et une release GitHub avec son
+changelog. HACS affiche ainsi la version fonctionnelle publiée et ses notes, et
+non l’identifiant du dernier commit de la branche principale.
+
 Tant que le dépôt n’est pas publié dans le catalogue HACS par défaut, il doit être
 ajouté manuellement comme dépôt personnalisé.
 
@@ -65,9 +71,10 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    cartes sont produites depuis les métadonnées du backend et seuls les packs
    actuellement disponibles sont proposés.
 3. **Règles personnalisées** : création et modification dans un volet latéral
-   composé des éléments natifs Home Assistant. Un clic sur la ligne ouvre le
-   volet, l’interrupteur natif en fin de ligne active la règle et la suppression
-   se trouve uniquement dans le volet.
+   structuré en sections, composé des éléments natifs Home Assistant. Un clic sur
+   la ligne ouvre le volet ; l’activation, les sources, la condition, les valeurs,
+   la temporisation et le message y sont regroupés clairement. L’interrupteur
+   natif en fin de ligne reste disponible pour une activation rapide.
 4. **Exclusions et paramètres** : labels, entités, appareils, délai global et délais
    particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
    Home Assistant.
@@ -114,24 +121,31 @@ catégorie.
 ## Règles personnalisées
 
 Chaque règle possède un identifiant immuable généré par le backend. Elle compare
-l’état principal ou un attribut de plusieurs entités avec une valeur. Chaque
+l’état principal ou un attribut de plusieurs entités avec une ou plusieurs valeurs.
+Chaque
 couple règle/entité a son propre cycle, son délai et son identifiant stable
 `rule:<rule_uuid>:<entity_id>` :
 
-- `equals` : égalité textuelle exacte après suppression des espaces externes ;
-- `not_equals` : différence textuelle ;
+- `equals` : égalité textuelle exacte avec au moins une valeur configurée, après
+  suppression des espaces externes ;
+- `not_equals` : aucune des valeurs configurées n’est égale à l’état courant ;
+- `contains` : l’état courant contient au moins une des valeurs configurées ;
+- `not_contains` : l’état courant ne contient aucune des valeurs configurées ;
 - `above` : valeur numérique strictement supérieure ;
 - `below` : valeur numérique strictement inférieure.
 
-Les conversions numériques refusent les booléens, valeurs invalides, `NaN` et
-infinis. Une règle portant sur un attribut absent n’est pas déclenchée. Les états
-principaux `unknown` et `unavailable` sont laissés aux détections automatiques.
+Les quatre opérateurs textuels acceptent une ou plusieurs valeurs ; les opérateurs
+numériques acceptent exactement une valeur. Les conversions numériques refusent
+les booléens, valeurs invalides, `NaN` et infinis. Une règle portant sur un attribut
+absent n’est pas déclenchée. Les états principaux `unknown` et `unavailable` sont
+laissés aux détections automatiques.
 
 Exemples :
 
 - `binary_sensor.chrony_en_cours_d_execution equals off` ;
 - `sensor.solarflow_2400_pro_is_error equals 1` ;
-- `sensor.ups_code_d_etat not_equals OL CHRG` ;
+- `sensor.ups_code_d_etat contains CHRG ou ERROR` ;
+- `sensor.mode not_equals off ou idle` ;
 - `sensor.frigo_temperature above 9` pendant 1 800 secondes ;
 - `sensor.eas_bai_waterpressure_press below 1`.
 

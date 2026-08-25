@@ -70,6 +70,8 @@ _LOGGER = logging.getLogger(__name__)
 _OPERATOR_LABELS = {
     "equals": "Égal à",
     "not_equals": "Différent de",
+    "contains": "Contient",
+    "not_contains": "Ne contient pas",
     "above": "Supérieur à",
     "below": "Inférieur à",
 }
@@ -536,9 +538,14 @@ class AlertManager:
         source = f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
         suffix = f" {unit}" if unit else ""
         duration = f" pendant {rule.duration} s" if rule.duration else ""
+        expected = (
+            " / ".join(str(value) for value in rule.value)
+            if isinstance(rule.value, list)
+            else str(rule.value)
+        )
         return (
             f"{source} {_OPERATOR_LABELS[rule.operator].lower()} "
-            f"{rule.value}{suffix}{duration}"
+            f"{expected}{suffix}{duration}"
         )
 
     @property

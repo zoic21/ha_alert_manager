@@ -66,7 +66,7 @@ test("new rules start enabled with safe defaults", () => {
     source: "state",
     attribute: "",
     operator: "equals",
-    value: "",
+    value: [""],
     duration: 900,
     message: "",
   });
@@ -238,7 +238,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         source: "state",
         attribute: null,
         operator: "equals",
-        value: "0",
+        value: ["0"],
         duration: 900,
         message: null,
       },
@@ -261,7 +261,36 @@ test("rule create errors remain visible without clearing the draft", async () =>
   assert.equal(panel._notice.kind, "error");
   assert.equal(panel._notice.text, "Règle refusée");
   assert.deepEqual(panel._editingRule.entity_ids, ["todo.liste_d_achats"]);
-  assert.equal(panel._editingRule.value, "0");
+  assert.deepEqual(panel._editingRule.value, ["0"]);
+});
+
+test("text rules serialize several trimmed comparison values", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = { entity_ids: ["sensor.ups"] };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "contains-id", version: 2 };
+    },
+  };
+  const ruleForm = form(ruleValues({
+    name: "UPS",
+    entity_ids: ["sensor.ups"],
+    operator: "contains",
+    value: "unused fallback",
+  }));
+  ruleForm.querySelectorAll = (selector) => selector === "[data-rule-value-index]"
+    ? [{ value: " CHRG " }, { value: "ERROR" }]
+    : [];
+  panel._render = () => {};
+
+  await panel._saveRule(ruleForm);
+
+  assert.deepEqual(calls[0].rule.value, ["CHRG", "ERROR"]);
+  assert.equal(calls[0].rule.operator, "contains");
 });
 
 test("active alerts are red while pending alerts stay orange", () => {
@@ -414,6 +443,29 @@ test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
+test("native toolbar back callback returns to the previous Home Assistant page", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._loading = false;
+  panel._hass = { states: {} };
+  const shell = {};
+  panel.shadowRoot.querySelector = (selector) => selector === "#panel-shell" ? shell : null;
+  let backCalls = 0;
+  window.history = {
+    state: { from: "/lovelace/home" },
+    back() { backCalls += 1; },
+  };
+
+  panel._render();
+  shell.backCallback();
+
+  assert.equal(backCalls, 1);
+  assert.equal(shell.backPath, "/config/integrations");
+  window.history = undefined;
+});
+
 test("native panel routes select the matching tab", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -550,10 +602,12 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
-  assert.doesNotMatch(editor, /rule-enabled|Règle activée/);
+  assert.match(editor, /class="rule-enabled"[\s\S]*<ha-switch id="rule-enabled"/);
+  assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
+  assert.match(editor, /data-action="add-rule-value"/);
   assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
   assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
-  assert.doesNotMatch(editor, />Annuler<\/ha-button>/);
+  assert.match(editor, />Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
@@ -562,7 +616,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /main\.rules-page\{max-width:none\}/);
   assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
   assert.match(panel._styles(), /inset-inline-end:16px/);
-  assert.match(panel._styles(), /\.rule-editor-form\{[^}]*align-content:start/);
+  assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
 });
 
@@ -870,7 +924,31 @@ test("custom rule choices use native Home Assistant selects", () => {
     { value: "attribute", label: "Attribut" },
   ]);
   assert.equal(operator.value, "above");
-  assert.equal(operator.options.length, 4);
+  assert.deepEqual(operator.options.map((option) => option.value), [
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "above",
+    "below",
+  ]);
+});
+
+test("rule editor renders multiple native value inputs with compact actions", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._editingRule = {
+    ...ruleValues(),
+    operator: "not_contains",
+    value: ["ERROR", "WARN"],
+  };
+
+  const editor = panel._renderRuleEditor();
+
+  assert.match(editor, /data-rule-value-index="0"[^>]*value="ERROR"/);
+  assert.match(editor, /data-rule-value-index="1"[^>]*value="WARN"/);
+  assert.equal((editor.match(/data-action="remove-rule-value"/g) ?? []).length, 2);
+  assert.match(editor, /seulement lorsqu’aucune valeur ne correspond/);
 });
 
 test("native save buttons call their matching form action", async () => {

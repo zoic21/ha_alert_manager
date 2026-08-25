@@ -157,7 +157,7 @@ class Rule:
     name: str
     entity_ids: list[str]
     operator: str
-    value: str | int | float | bool
+    value: str | int | float | bool | list[str | int | float | bool]
     duration: int
     enabled: bool = True
     source: str = "state"
@@ -220,8 +220,24 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
-        if self.operator in ("above", "below") and safe_float(self.value) is None:
-            raise ValueError("Numeric operators require a finite numeric value")
+        if self.operator in ("above", "below"):
+            if isinstance(self.value, list) or safe_float(self.value) is None:
+                raise ValueError("Numeric operators require one finite numeric value")
+            return
+
+        values = self.value if isinstance(self.value, list) else [self.value]
+        if not values:
+            raise ValueError("Text operators require at least one value")
+        if any(
+            value is None or isinstance(value, dict | list | tuple | set)
+            for value in values
+        ):
+            raise ValueError("Text operator values must be scalar")
+        normalized = [normalize_scalar(value) for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("Text operator values must not be empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("Text operator values must be unique")
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize a rule including forward-compatible fields."""
@@ -244,9 +260,17 @@ class Rule:
             )
 
         current_text = normalize_scalar(current)
-        expected_text = normalize_scalar(self.value)
-        equal = current_text == expected_text
-        return equal if self.operator == "equals" else not equal
+        raw_values = self.value if isinstance(self.value, list) else [self.value]
+        expected_texts = [normalize_scalar(value) for value in raw_values]
+        if self.operator in ("equals", "not_equals"):
+            positive_match = current_text in expected_texts
+        else:
+            positive_match = any(value in current_text for value in expected_texts)
+        return (
+            positive_match
+            if self.operator in ("equals", "contains")
+            else not positive_match
+        )
 
 
 def safe_float(value: Any) -> float | None:

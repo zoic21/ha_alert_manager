@@ -32,12 +32,18 @@ from custom_components.alert_manager.validation import (
     [
         ("equals", "off", "off", True),
         ("not_equals", "OL CHRG", "OL", True),
+        ("contains", "OL CHRG", "CHRG", True),
+        ("not_contains", "OL CHRG", "ERROR", True),
+        ("equals", "idle", ["off", "idle"], True),
+        ("not_equals", "idle", ["off", "unknown"], True),
+        ("contains", "OL CHRG", ["ERROR", "CHRG"], True),
+        ("not_contains", "OL CHRG", ["ERROR", "WARN"], True),
         ("above", "11.2", 9, True),
         ("below", "0.8", 1, True),
     ],
 )
 def test_rule_operators(operator, current, expected, matches):
-    """equals, not_equals, above and below all use predictable comparison."""
+    """All scalar and multi-value operators use predictable comparison."""
     rule = Rule(
         id="rule-id",
         name="Test",
@@ -47,6 +53,45 @@ def test_rule_operators(operator, current, expected, matches):
         duration=60,
     )
     assert rule.matches(current) is matches
+
+
+@pytest.mark.parametrize(
+    ("operator", "current", "expected"),
+    [
+        ("equals", "idle", ["idle", "off"]),
+        ("not_equals", "idle", ["idle", "off"]),
+        ("contains", "OL CHRG", ["CHRG", "ERROR"]),
+        ("not_contains", "OL CHRG", ["CHRG", "ERROR"]),
+    ],
+)
+def test_negative_text_operators_are_the_inverse_of_positive_operators(
+    operator, current, expected
+):
+    """Negative operators only match when none of the configured values match."""
+    rule = Rule(
+        id="rule-id",
+        name="Test",
+        entity_ids=["sensor.test"],
+        operator=operator,
+        value=expected,
+        duration=60,
+    )
+    expected_match = operator in ("equals", "contains")
+    assert rule.matches(current) is expected_match
+
+
+def test_text_rule_values_must_be_non_empty_unique_scalars():
+    """Lists cannot contain empty, duplicate or structured comparison values."""
+    for value in ([], ["on", " on "], ["on", {"nested": True}]):
+        with pytest.raises(ValueError, match="Text operators?"):
+            Rule(
+                id="bad",
+                name="Bad",
+                entity_ids=["sensor.test"],
+                operator="contains",
+                value=value,
+                duration=1,
+            ).validate()
 
 
 def test_numeric_rule_rejects_non_finite_values():
@@ -61,6 +106,15 @@ def test_numeric_rule_rejects_non_finite_values():
             entity_ids=["sensor.test"],
             operator="above",
             value="not-number",
+            duration=1,
+        ).validate()
+    with pytest.raises(ValueError, match="one finite numeric"):
+        Rule(
+            id="bad-list",
+            name="Bad",
+            entity_ids=["sensor.test"],
+            operator="above",
+            value=[1, 2],
             duration=1,
         ).validate()
 

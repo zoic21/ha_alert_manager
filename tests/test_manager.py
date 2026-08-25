@@ -260,12 +260,14 @@ def test_battery_entity_low_level_override(hass, entry):
     [
         ("equals", "off", "off"),
         ("not_equals", "ERROR", "OL CHRG"),
+        ("contains", "OL CHRG", ["ERROR", "CHRG"]),
+        ("not_contains", "OL CHRG", ["ERROR", "WARN"]),
         ("above", "11.2", 9),
         ("below", "0.8", 1),
     ],
 )
 def test_custom_rule_operator(hass, entry, operator, state, expected):
-    """Every V1 custom-rule operator creates the stable rule alert id."""
+    """Every custom-rule operator creates the stable rule alert id."""
     hass.states.set("sensor.test", state)
     manager = make_manager(hass, entry)
     rule = run(
