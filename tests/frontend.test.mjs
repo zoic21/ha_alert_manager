@@ -348,13 +348,14 @@ test("alert overview uses native Home Assistant cards without nested panels", ()
   panel._alerts.alerts = [];
   const empty = panel._renderOverviewAlerts([]);
 
-  assert.match(populated, /<section class="alert-group">/);
+  assert.match(populated, /<section class="alert-group alert-group-active">/);
+  assert.match(populated, /<section class="alert-group alert-group-pending">/);
   assert.match(populated, /<ha-card outlined class="alert-card is-active"/);
   assert.doesNotMatch(populated, /<section class="panel">/);
   assert.match(empty, /<ha-card outlined class="alert-empty">/);
 });
 
-test("pending alerts start on a row below active alerts", () => {
+test("overview renders active and upcoming alerts in separate vertical sections", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
@@ -371,11 +372,13 @@ test("pending alerts start on a row below active alerts", () => {
 
   assert.match(html, /class="alert-list alert-list-active"[\s\S]*is-active/);
   assert.match(html, /class="alert-list alert-list-pending"[\s\S]*is-pending/);
-  assert.ok(html.indexOf("alert-list-active") < html.indexOf("alert-list-pending"));
-  assert.match(panel._styles(), /\.alert-list\+\.alert-list\{margin-top:16px\}/);
+  assert.match(html, /<h2>Alertes actives<\/h2>/);
+  assert.match(html, /<h2>Alertes à venir<\/h2>/);
+  assert.ok(html.indexOf("alert-group-active") < html.indexOf("alert-group-pending"));
+  assert.match(panel._styles(), /\.alert-group\+\.alert-group\{margin-top:28px\}/);
 });
 
-test("two alerts from one device form one mixed-status visual group", () => {
+test("active and pending alerts from one device stay in separate sections", () => {
   const active = {
     id: "unavailable:sensor.ups_status",
     entity_id: "sensor.ups_status",
@@ -400,9 +403,9 @@ test("two alerts from one device form one mixed-status visual group", () => {
     due_at: "2026-08-25T12:15:00Z",
   };
   const items = buildOverviewItems([active], [pending]);
-  assert.equal(items.length, 1);
-  assert.equal(items[0].kind, "device");
-  assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "pending"]);
+  assert.equal(items.length, 2);
+  assert.deepEqual(items.map((item) => item.kind), ["alert", "alert"]);
+  assert.deepEqual(items.map((item) => item.status), ["active", "pending"]);
 
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -413,19 +416,25 @@ test("two alerts from one device form one mixed-status visual group", () => {
     },
   };
   panel._alerts = { active_count: 1, pending_count: 1 };
-  const html = panel._renderDeviceGroup(items[0]);
   const overview = panel._renderOverviewAlerts(items);
-  assert.match(html, /class="device-alert-group is-active"/);
-  assert.match(html, /Onduleur/);
-  assert.match(html, /1 active · 1 en attente/);
-  assert.match(html, /sensor\.ups_status/);
-  assert.match(html, /sensor\.ups_battery/);
-  assert.match(html, />Active</);
-  assert.match(html, />En attente</);
-  assert.match(html, /data-due=/);
-  assert.equal((html.match(/data-action="more-info"/g) ?? []).length, 2);
-  assert.match(overview, /alert-list-active/);
-  assert.doesNotMatch(overview, /alert-list-pending/);
+  assert.match(overview, /alert-group-active[\s\S]*sensor\.ups_status/);
+  assert.match(overview, /alert-group-pending[\s\S]*sensor\.ups_battery/);
+  assert.ok(overview.indexOf("sensor.ups_status") < overview.indexOf("sensor.ups_battery"));
+  assert.match(overview, /alert-card is-active/);
+  assert.match(overview, /alert-card is-pending/);
+  assert.match(overview, /data-due=/);
+  assert.equal((overview.match(/data-action="more-info"/g) ?? []).length, 2);
+});
+
+test("multiple alerts from one device still form a group within one section", () => {
+  const deviceId = "a".repeat(32);
+  const first = { entity_id: "sensor.ups_status", device_id: deviceId };
+  const second = { entity_id: "sensor.ups_load", device_id: deviceId };
+  const items = buildOverviewItems([first, second], []);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "device");
+  assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
 });
 
 test("single alerts and entities without a device stay compact and individual", () => {
