@@ -48,7 +48,7 @@ ajouté manuellement comme dépôt personnalisé.
 Le panel est réservé aux administrateurs et contient quatre sections :
 
 1. **Vue d’ensemble** : alertes actives et en attente, valeur, condition,
-   équipement, pièce, gravité et dates. Le temps restant est calculé dans le
+   équipement, pièce et dates. Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
 2. **Surveillance automatique** : activation, délais, seuil de batterie et domaines
    surveillés.
@@ -150,7 +150,6 @@ attributes:
       due_at: "2026-08-24T14:25:00+02:00"
       active_since: "2026-08-24T14:25:00+02:00"
       delay: 900
-      severity: warning
   pending:
     - id: battery:sensor.detecteur_entree_battery
       type: battery

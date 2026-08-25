@@ -117,6 +117,38 @@ def test_storage_round_trip_preserves_structured_data():
     assert restored.detected_at == now
 
 
+def test_legacy_severity_is_removed_from_stored_alerts_and_rules():
+    """Beta data loads without exposing the removed alert-level concept."""
+    details = AlertDetails.from_dict(
+        {
+            "id": "unavailable:sensor.test",
+            "type": "unavailable",
+            "entity_id": "sensor.test",
+            "name": "Test",
+            "value": "unavailable",
+            "condition": "État indisponible",
+            "severity": "critical",
+        }
+    )
+    assert "severity" not in details.as_dict()
+
+    rule = Rule.from_dict(
+        {
+            "id": "legacy-rule",
+            "name": "Legacy",
+            "entity_id": "sensor.test",
+            "operator": "equals",
+            "value": "on",
+            "duration": 60,
+            "severity": "warning",
+        }
+    )
+    assert "severity" not in rule.as_dict()
+
+    normalized = validate_config({"rules": [rule.as_dict()]})
+    assert "severity" not in normalized["rules"][0]
+
+
 def test_storage_rejects_naive_dates_and_incomplete_details():
     """Corrupt persisted timestamps and required fields are ignored safely."""
     now = datetime(2026, 8, 24, 12, tzinfo=UTC)
@@ -189,6 +221,17 @@ def test_unknown_frontend_fields_are_rejected():
         )
     with pytest.raises(ValueError, match="Unknown rule field"):
         validate_rule_update_fields({"template": "{{ dangerous }}"})
+    with pytest.raises(ValueError, match="Unknown rule field: severity"):
+        validate_rule_payload(
+            {
+                "name": "No levels",
+                "entity_id": "sensor.test",
+                "operator": "equals",
+                "value": "on",
+                "duration": 60,
+                "severity": "critical",
+            }
+        )
 
 
 def test_backend_and_frontend_versions_stay_in_sync():

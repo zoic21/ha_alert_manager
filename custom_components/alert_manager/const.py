@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 from homeassistant.util.hass_dict import HassKey
 
 DOMAIN: Final = "alert_manager"
-INTEGRATION_VERSION: Final = "1.0.1-beta.3"
+INTEGRATION_VERSION: Final = "1.0.1-beta.4"
 PLATFORMS: Final = [Platform.SENSOR]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -23,7 +23,7 @@ PANEL_STATIC_URL: Final = "/alert_manager_static"
 
 STORAGE_KEY: Final = DOMAIN
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 1
+STORAGE_MINOR_VERSION: Final = 2
 
 DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
 DATA_WEBSOCKET_REGISTERED: HassKey = HassKey(f"{DOMAIN}_websocket_registered")
@@ -94,5 +94,4 @@ MIN_THRESHOLD: Final = -1_000_000_000.0
 MAX_THRESHOLD: Final = 1_000_000_000.0
 
 OPERATORS: Final = ("equals", "not_equals", "above", "below")
-SEVERITIES: Final = ("info", "warning", "critical")
 VALUE_SOURCES: Final = ("state", "attribute")

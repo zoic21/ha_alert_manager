@@ -365,7 +365,6 @@ class AlertManager:
                     alert_id,
                     "rule",
                     condition,
-                    severity=rule.severity,
                     value=current,
                 ),
                 rule.duration,
@@ -417,7 +416,6 @@ class AlertManager:
         alert_type: str,
         condition: str,
         *,
-        severity: str = "warning",
         value: Any | None = None,
     ) -> AlertDetails:
         """Resolve names, device, area and integration once per evaluation."""
@@ -448,7 +446,6 @@ class AlertManager:
             value=state.state if value is None else value,
             unit=state.attributes.get(ATTR_UNIT_OF_MEASUREMENT),
             condition=condition,
-            severity=severity,
         )
 
     def _rule_condition(self, rule: Rule, state: State) -> str:

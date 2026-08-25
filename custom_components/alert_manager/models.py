@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from .const import MAX_DELAY, MIN_DELAY, OPERATORS, SEVERITIES, VALUE_SOURCES
+from .const import MAX_DELAY, MIN_DELAY, OPERATORS, VALUE_SOURCES
 
 
 class AlertStatus(StrEnum):
@@ -30,7 +30,6 @@ class AlertDetails:
     name: str
     value: Any
     condition: str
-    severity: str = "warning"
     device_name: str | None = None
     area: str | None = None
     integration: str | None = None
@@ -47,15 +46,11 @@ class AlertDetails:
                 raise ValueError(f"Alert detail {key} must be a non-empty string")
         if "value" not in data:
             raise ValueError("Alert detail value is required")
-        severity = data.get("severity", "warning")
-        if severity not in SEVERITIES:
-            raise ValueError(f"Unsupported alert severity: {severity}")
         for key in ("device_name", "area", "integration", "unit"):
             if data.get(key) is not None and not isinstance(data[key], str):
                 raise ValueError(f"Alert detail {key} must be a string or null")
         allowed = cls.__dataclass_fields__
         values = {key: data[key] for key in allowed if key in data}
-        values["severity"] = severity
         return cls(**values)
 
     def as_dict(self) -> dict[str, Any]:
@@ -163,7 +158,6 @@ class Rule:
     operator: str
     value: str | int | float | bool
     duration: int
-    severity: str = "warning"
     enabled: bool = True
     source: str = "state"
     attribute: str | None = None
@@ -182,7 +176,9 @@ class Rule:
         known = cls.__dataclass_fields__
         values = {key: data[key] for key in known if key in data and key != "extra"}
         values["extra"] = {
-            key: value for key, value in data.items() if key not in known
+            key: value
+            for key, value in data.items()
+            if key not in known and key != "severity"
         }
         rule = cls(**values)
         rule.validate()
@@ -196,8 +192,6 @@ class Rule:
             raise ValueError("Rule name is required")
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
-        if self.severity not in SEVERITIES:
-            raise ValueError(f"Unsupported severity: {self.severity}")
         if self.source not in VALUE_SOURCES:
             raise ValueError(f"Unsupported value source: {self.source}")
         if self.source == "attribute" and not self.attribute:

@@ -116,6 +116,8 @@ def test_active_resolution_and_events(hass, entry, set_now):
     resolved = [data for event, data in hass.bus.fired if event == EVENT_ALERT_RESOLVED]
     assert len(started) == len(resolved) == 1
     assert started[0]["id"] == "unavailable:sensor.test"
+    assert "severity" not in started[0]
+    assert "severity" not in resolved[0]
     assert "active_since" in started[0]
     assert "resolved_at" in resolved[0]
 
@@ -241,7 +243,6 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
                 "operator": operator,
                 "value": expected,
                 "duration": 300,
-                "severity": "critical",
                 "enabled": True,
                 "source": "state",
             }

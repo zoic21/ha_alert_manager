@@ -83,7 +83,6 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
         "operator": "equals",
         "value": "0",
         "duration": 900,
-        "severity": "warning",
         "message": None,
     }
 

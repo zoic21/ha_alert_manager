@@ -44,7 +44,6 @@ _RULE_CLIENT_KEYS = {
     "operator",
     "value",
     "duration",
-    "severity",
     "message",
 }
 

@@ -43,7 +43,6 @@ const newRuleDefaults = () => ({
   operator: "equals",
   value: "",
   duration: 900,
-  severity: "warning",
   message: "",
 });
 
@@ -220,10 +219,9 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderAlert(alert, active) {
     const value = alert.unit ? `${alert.value} ${alert.unit}` : alert.value;
-    return `<article class="alert-card severity-${esc(alert.severity || "warning")}">
+    return `<article class="alert-card ${active ? "is-active" : "is-pending"}">
       <div class="alert-title">
         <div><strong>${esc(alert.name || alert.entity_id)}</strong><code>${esc(alert.entity_id)}</code></div>
-        <span class="severity">${esc(alert.severity || "warning")}</span>
       </div>
       <dl>
         <div><dt>Équipement</dt><dd>${esc(alert.device_name || "—")}</dd></div>
@@ -270,11 +268,10 @@ class AlertManagerPanel extends HTMLElement {
     return `<section class="panel">
       <div class="row between"><div><h2>Règles personnalisées</h2><p>Comparaisons simples sur l’état ou un attribut.</p></div>
       <button class="primary" data-action="new-rule">Nouvelle règle</button></div>
-      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entité</th><th>Condition</th><th>Durée</th><th>Gravité</th><th>Active</th><th></th></tr></thead><tbody>
+      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entité</th><th>Condition</th><th>Durée</th><th>Active</th><th></th></tr></thead><tbody>
         ${rules.map((rule) => `<tr>
           <td>${esc(rule.name)}</td><td><code>${esc(rule.entity_id)}</code></td>
           <td>${esc(this._ruleSummary(rule))}</td><td>${esc(durationText(rule.duration))}</td>
-          <td><span class="severity severity-${esc(rule.severity)}">${esc(rule.severity)}</span></td>
           <td><button class="icon-button" data-action="toggle-rule" data-id="${esc(rule.id)}" title="Activer/désactiver">${rule.enabled ? "✓" : "—"}</button></td>
           <td class="nowrap"><button data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</button> <button class="danger-button" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</button></td>
         </tr>`).join("")}
@@ -297,7 +294,6 @@ class AlertManagerPanel extends HTMLElement {
         </select></label>
         ${this._textField("value", "Valeur de comparaison", rule.value, true)}
         ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
-        <label>Gravité<select name="severity"><option value="info" ${rule.severity === "info" ? "selected" : ""}>info</option><option value="warning" ${rule.severity === "warning" ? "selected" : ""}>warning</option><option value="critical" ${rule.severity === "critical" ? "selected" : ""}>critical</option></select></label>
         ${this._textField("message", "Message facultatif", rule.message || "")}
         <label class="checkbox"><input name="enabled" type="checkbox" ${rule.enabled ? "checked" : ""}> Règle activée</label>
         <div class="actions full"><button type="button" data-action="cancel-rule">Annuler</button><button class="primary" type="button" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</button></div>
@@ -455,7 +451,6 @@ class AlertManagerPanel extends HTMLElement {
       operator: value("operator"),
       value: String(value("value")),
       duration: Number(value("duration")),
-      severity: value("severity"),
       message: String(value("message")).trim() || null,
     };
     const id = String(value("id"));
@@ -510,8 +505,8 @@ class AlertManagerPanel extends HTMLElement {
       nav{display:flex;gap:6px;overflow:auto;border-bottom:1px solid var(--divider-color,#ddd);margin-bottom:20px}.tab{border:0;border-bottom:3px solid transparent;background:transparent;padding:12px 16px;white-space:nowrap;color:var(--secondary-text-color,#727272);cursor:pointer}.tab.active{color:var(--primary-color,#03a9f4);border-color:var(--primary-color,#03a9f4);font-weight:600}
       button{font:inherit;border:1px solid var(--divider-color,#ccc);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);padding:8px 12px;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.primary{background:var(--primary-color,#03a9f4);border-color:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.danger-button{color:var(--error-color,#db4437)}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
-      .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.severity-critical{border-left-color:var(--error-color,#db4437)}.alert-card.severity-info{border-left-color:var(--info-color,#2196f3)}
-      .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}.severity{display:inline-block;padding:3px 8px;border-radius:999px;background:var(--secondary-background-color,#eee);font-size:12px}.severity-critical{color:var(--error-color,#db4437)}
+      .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}
+      .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}
       code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;word-break:break-all}dl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0}dl div{min-width:0}dt{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color,#727272)}dd{margin:3px 0 0;overflow-wrap:anywhere}
       .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;display:block;margin-top:16px}label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500}input,select,textarea{width:100%;font:inherit;color:var(--primary-text-color,#212121);background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#bbb);border-radius:8px;padding:10px}textarea{resize:vertical}.input-suffix{display:flex;align-items:center}.input-suffix input{border-radius:8px 0 0 8px}.input-suffix span{padding:10px;border:1px solid var(--divider-color,#bbb);border-left:0;border-radius:0 8px 8px 0;color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272)}
       .switch{display:inline-block;position:relative;width:48px;height:26px;flex:none}.switch input{opacity:0;width:0;height:0}.switch span{position:absolute;inset:0;background:#aaa;border-radius:20px;cursor:pointer}.switch span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:white;border-radius:50%;transition:.15s}.switch input:checked+span{background:var(--primary-color,#03a9f4)}.switch input:checked+span:before{transform:translateX(22px)}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}

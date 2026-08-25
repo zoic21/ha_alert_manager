@@ -56,7 +56,6 @@ test("new rules start enabled with safe defaults", () => {
     operator: "equals",
     value: "",
     duration: 900,
-    severity: "warning",
     message: "",
   });
 });
@@ -115,7 +114,6 @@ const ruleValues = (changes = {}) => ({
   operator: "equals",
   value: "0",
   duration: "900",
-  severity: "warning",
   message: "",
   ...changes,
 });
@@ -159,7 +157,6 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         operator: "equals",
         value: "0",
         duration: 900,
-        severity: "warning",
         message: null,
       },
     },
@@ -181,6 +178,21 @@ test("rule create errors remain visible without clearing the draft", async () =>
   assert.equal(panel._notice.text, "Règle refusée");
   assert.equal(panel._editingRule.entity_id, "todo.liste_d_achats");
   assert.equal(panel._editingRule.value, "0");
+});
+
+test("active alerts are red while pending alerts stay orange", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const alert = {
+    entity_id: "sensor.test",
+    name: "Test",
+    condition: "État indisponible",
+  };
+
+  assert.match(panel._renderAlert(alert, true), /class="alert-card is-active"/);
+  assert.match(panel._renderAlert(alert, false), /class="alert-card is-pending"/);
+  assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
+  assert.match(panel._styles(), /\.alert-card\.is-active\{border-left-color:var\(--error-color/);
 });
 
 test("rule edit, toggle and delete actions call their dedicated APIs", async () => {
