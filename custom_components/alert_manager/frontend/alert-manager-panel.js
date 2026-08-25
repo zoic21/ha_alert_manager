@@ -300,7 +300,7 @@ class AlertManagerPanel extends HTMLElement {
         <label>Gravité<select name="severity"><option value="info" ${rule.severity === "info" ? "selected" : ""}>info</option><option value="warning" ${rule.severity === "warning" ? "selected" : ""}>warning</option><option value="critical" ${rule.severity === "critical" ? "selected" : ""}>critical</option></select></label>
         ${this._textField("message", "Message facultatif", rule.message || "")}
         <label class="checkbox"><input name="enabled" type="checkbox" ${rule.enabled ? "checked" : ""}> Règle activée</label>
-        <div class="actions full"><button type="button" data-action="cancel-rule">Annuler</button><button class="primary" type="submit" ${this._busy ? "disabled" : ""}>Enregistrer</button></div>
+        <div class="actions full"><button type="button" data-action="cancel-rule">Annuler</button><button class="primary" type="button" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</button></div>
       </form>
     </section>`;
   }
@@ -361,6 +361,11 @@ class AlertManagerPanel extends HTMLElement {
       this._render();
       return;
     }
+    if (action === "save-rule") {
+      const form = this.shadowRoot.querySelector("#rule-form");
+      if (form && form.reportValidity() && !this._busy) await this._saveRule(form);
+      return;
+    }
     const rule = (this._config.rules || []).find((item) => item.id === button.dataset.id);
     if (!rule) return;
     if (action === "edit-rule") {
@@ -387,9 +392,12 @@ class AlertManagerPanel extends HTMLElement {
 
   async _handleSubmit(event) {
     event.preventDefault();
+    if (this._busy) return;
     if (event.target.id === "automatic-form") await this._saveAutomatic();
     if (event.target.id === "settings-form") await this._saveSettings();
-    if (event.target.id === "rule-form") await this._saveRule(event.target);
+    if (event.target.id === "rule-form" && event.target.reportValidity()) {
+      await this._saveRule(event.target);
+    }
   }
 
   async _saveAutomatic() {
@@ -435,21 +443,25 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   async _saveRule(form) {
-    const data = new FormData(form);
-    const source = data.get("source");
+    const field = (name) => form.elements.namedItem(name);
+    const value = (name) => field(name)?.value ?? "";
+    const source = value("source");
     const rule = {
-      name: String(data.get("name") || "").trim(),
-      entity_id: String(data.get("entity_id") || "").trim(),
-      enabled: data.get("enabled") === "on",
+      name: String(value("name")).trim(),
+      entity_id: String(value("entity_id")).trim(),
+      enabled: Boolean(field("enabled")?.checked),
       source,
-      attribute: source === "attribute" ? String(data.get("attribute") || "").trim() : null,
-      operator: data.get("operator"),
-      value: String(data.get("value") ?? ""),
-      duration: Number(data.get("duration")),
-      severity: data.get("severity"),
-      message: String(data.get("message") || "").trim() || null,
+      attribute: source === "attribute" ? String(value("attribute")).trim() : null,
+      operator: value("operator"),
+      value: String(value("value")),
+      duration: Number(value("duration")),
+      severity: value("severity"),
+      message: String(value("message")).trim() || null,
     };
-    const id = String(data.get("id") || "");
+    const id = String(value("id"));
+    // _call renders a busy state. Keep the submitted values as the editor draft so
+    // that render cannot clear the form, especially when the backend rejects it.
+    this._editingRule = { ...rule, ...(id ? { id } : {}) };
     const message = id
       ? { type: "alert_manager/rules/update", rule_id: id, rule }
       : { type: "alert_manager/rules/create", rule };

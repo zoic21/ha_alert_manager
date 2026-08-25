@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 from custom_components.alert_manager.const import DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
-from custom_components.alert_manager.websocket import websocket_config_update
+from custom_components.alert_manager.websocket import (
+    websocket_config_update,
+    websocket_rule_create,
+    websocket_rule_delete,
+    websocket_rule_update,
+)
 
 
 class Connection:
@@ -60,3 +65,66 @@ def test_websocket_invalid_frontend_data_gets_readable_error(hass, entry):
     assert connection.results == []
     assert connection.errors[0][1] == "invalid_format"
     assert "between" in connection.errors[0][2]
+
+
+def test_websocket_rule_actions_create_update_and_delete(hass, entry):
+    """The complete mutating rule API works with panel-shaped payloads."""
+    hass.states.set("todo.liste_d_achats", "0")
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    payload = {
+        "name": "Liste vide",
+        "entity_id": "todo.liste_d_achats",
+        "enabled": True,
+        "source": "state",
+        "attribute": None,
+        "operator": "equals",
+        "value": "0",
+        "duration": 900,
+        "severity": "warning",
+        "message": None,
+    }
+
+    asyncio.run(
+        websocket_rule_create(
+            hass,
+            connection,
+            {"id": 3, "type": "alert_manager/rules/create", "rule": payload},
+        )
+    )
+    assert connection.errors == []
+    created = connection.results[-1][1]
+    assert created["name"] == "Liste vide"
+    assert manager.get_config()["rules"] == [created]
+
+    asyncio.run(
+        websocket_rule_update(
+            hass,
+            connection,
+            {
+                "id": 4,
+                "type": "alert_manager/rules/update",
+                "rule_id": created["id"],
+                "rule": {"enabled": False, "name": "Liste désactivée"},
+            },
+        )
+    )
+    updated = connection.results[-1][1]
+    assert updated["enabled"] is False
+    assert updated["name"] == "Liste désactivée"
+
+    asyncio.run(
+        websocket_rule_delete(
+            hass,
+            connection,
+            {
+                "id": 5,
+                "type": "alert_manager/rules/delete",
+                "rule_id": created["id"],
+            },
+        )
+    )
+    assert connection.results[-1] == (5, {"deleted": True})
+    assert manager.get_config()["rules"] == []
