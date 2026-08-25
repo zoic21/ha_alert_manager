@@ -274,6 +274,7 @@ test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
     { path: "/alert-manager/settings", name: "Exclusions et paramètres" },
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /<h1>Alertes<|class="header-count"|Détection centralisée des anomalies/);
   assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
@@ -399,16 +400,60 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(rules, /<ha-switch haptic data-action="toggle-rule" data-id="disabled"(?![^>]* checked)/);
   assert.doesNotMatch(rules, /<ha-button[^>]+data-action="edit-rule"/);
   assert.doesNotMatch(rules, /data-action="delete-rule"/);
+  assert.match(rules, /<ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start"/);
+  assert.ok(rules.indexOf("</table>") < rules.indexOf('data-action="new-rule"'));
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
-  assert.match(editor, /<form id="rule-form" class="fields rule-editor-form">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
-  assert.match(editor, /<ha-switch id="rule-enabled" data-field="enabled" checked/);
+  assert.match(editor, /class="rule-editor-resize" role="separator"/);
+  assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
+  assert.match(editor, /class="field rule-attribute-field" hidden/);
+  assert.doesNotMatch(editor, /rule-enabled|Règle activée/);
   assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
-  assert.match(editor, /appearance="plain" data-action="cancel-rule"/);
+  assert.doesNotMatch(editor, />Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
+  assert.match(panel._styles(), /\.rule-editor-form\{[^}]*align-content:start/);
+  assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
+});
+
+test("attribute input follows the selected rule source without rerendering", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = { ...ruleValues(), source: "state" };
+  panel._hass = { states: {} };
+  const source = {
+    addEventListener(type, listener) { if (type === "selected") this.listener = listener; },
+  };
+  const operator = { addEventListener() {} };
+  const entity = { addEventListener() {} };
+  const attribute = { hidden: true };
+  panel.shadowRoot.querySelector = (query) => ({
+    "#rule-source": source,
+    "#rule-operator": operator,
+    "#rule-entity-ids": entity,
+    ".rule-attribute-field": attribute,
+  })[query] ?? null;
+
+  panel._hydrateSelectors();
+  source.listener({ detail: { value: "attribute" } });
+  assert.equal(panel._editingRule.source, "attribute");
+  assert.equal(attribute.hidden, false);
+  source.listener({ detail: { value: "state" } });
+  assert.equal(attribute.hidden, true);
+});
+
+test("rule editor width is adjustable and clamped", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  window.innerWidth = 1200;
+
+  panel._setRuleEditorWidth(100);
+  assert.equal(panel._ruleEditorWidth, 360);
+  panel._setRuleEditorWidth(2000);
+  assert.equal(panel._ruleEditorWidth, 800);
 });
 
 test("overview displays the backend tracked total", () => {
