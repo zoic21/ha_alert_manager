@@ -11,15 +11,19 @@ from ..const import CATEGORY_CONNECTIVITY
 from .base import AutomaticPack, PackMatch
 
 
+def _applies(_hass: HomeAssistant, state: State) -> bool:
+    """Return whether the state is a connectivity binary sensor."""
+    return (
+        state.entity_id.partition(".")[0] == "binary_sensor"
+        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
+    )
+
+
 def _evaluate(
     _hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
     """Match connectivity binary sensors that are off."""
-    if (
-        state.entity_id.partition(".")[0] != "binary_sensor"
-        or state.attributes.get(ATTR_DEVICE_CLASS) != "connectivity"
-        or state.state != "off"
-    ):
+    if not _applies(_hass, state) or state.state != "off":
         return None
     return PackMatch("Connectivité désactivée")
 
@@ -28,5 +32,6 @@ PACK = AutomaticPack(
     id=CATEGORY_CONNECTIVITY,
     name="Connectivité",
     prerequisites=(),
+    applies=_applies,
     evaluate=_evaluate,
 )

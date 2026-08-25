@@ -80,7 +80,13 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
   panel._render = () => { renders += 1; };
   const sensor = {
     state: "0",
-    attributes: { active_count: 0, pending_count: 0, alerts: [], pending: [] },
+    attributes: {
+      active_count: 0,
+      pending_count: 0,
+      tracked_count: 12,
+      alerts: [],
+      pending: [],
+    },
   };
   panel.hass = { states: { "sensor.alert_manager": sensor } };
   panel.hass = {
@@ -281,12 +287,14 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.match(automatic, /<ha-button appearance="filled" data-action="save-automatic"/);
+  assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<ha-button appearance="filled" data-action="add-entity-delay">Ajouter<\/ha-button>/);
   assert.match(settings, /<ha-button appearance="filled" data-action="save-settings"/);
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
+  assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
 
@@ -328,6 +336,26 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
   assert.deepEqual(panel._config.rules, []);
 });
 
+test("table toggle updates an open editor for the same rule", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const existing = {
+    ...ruleValues({ id: "rule-id", enabled: true, duration: 900 }),
+    version: 2,
+  };
+  panel._config = { ...completeConfig(), rules: [existing] };
+  panel._editingRule = { ...existing };
+  panel._render = () => {};
+  panel._hass = {
+    callWS: async (message) => ({ ...existing, ...message.rule }),
+  };
+
+  await panel._handleClick(actionEvent("toggle-rule", "rule-id"));
+
+  assert.equal(panel._config.rules[0].enabled, false);
+  assert.equal(panel._editingRule.enabled, false);
+});
+
 test("rule actions and editor use the requested native button appearances", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -350,12 +378,27 @@ test("rule actions and editor use the requested native button appearances", () =
   assert.match(rules, /appearance="plain" variant="danger" size="xs" class="rule-status"[^>]*>✕<\/ha-button>/);
   assert.match(rules, /appearance="filled" size="s" data-action="edit-rule"/);
   assert.match(rules, /appearance="plain" variant="danger" size="s" data-action="delete-rule"/);
-  assert.match(editor, /<form id="rule-form" class="fields">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
+  assert.match(editor, /<aside class="rule-editor-drawer"[\s\S]*<form id="rule-form" class="fields rule-editor-form">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
   assert.match(editor, /<ha-switch id="rule-enabled" data-field="enabled" checked/);
   assert.match(editor, /appearance="plain" data-action="cancel-rule"/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
+  assert.match(panel._styles(), /\.rule-editor-drawer\{position:fixed/);
+});
+
+test("overview displays the backend tracked total", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._alerts = {
+    active_count: 2,
+    pending_count: 3,
+    tracked_count: 47,
+    alerts: [],
+    pending: [],
+  };
+
+  assert.match(panel._renderOverview(), /Total suivi<\/span><strong>47<\/strong>/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {

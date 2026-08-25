@@ -12,14 +12,19 @@ from ..models import safe_float
 from .base import AutomaticPack, PackMatch
 
 
+def _applies(_hass: HomeAssistant, state: State) -> bool:
+    """Return whether the state is a battery sensor."""
+    return (
+        state.entity_id.partition(".")[0] == "sensor"
+        and state.attributes.get(ATTR_DEVICE_CLASS) == "battery"
+    )
+
+
 def _evaluate(
     _hass: HomeAssistant, state: State, config: dict[str, Any]
 ) -> PackMatch | None:
     """Match battery sensors at or below their effective threshold."""
-    if (
-        state.entity_id.partition(".")[0] != "sensor"
-        or state.attributes.get(ATTR_DEVICE_CLASS) != "battery"
-    ):
+    if not _applies(_hass, state):
         return None
     value = safe_float(state.state)
     override = safe_float(state.attributes.get("low_battery_level"))
@@ -36,5 +41,6 @@ PACK = AutomaticPack(
     id=CATEGORY_BATTERY,
     name="Batteries faibles",
     prerequisites=(),
+    applies=_applies,
     evaluate=_evaluate,
 )

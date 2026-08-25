@@ -24,4 +24,5 @@ class AutomaticPack:
     id: str
     name: str
     prerequisites: tuple[str, ...]
+    applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]

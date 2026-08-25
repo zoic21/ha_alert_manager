@@ -11,6 +11,11 @@ from ..const import CATEGORY_UNAVAILABLE
 from .base import AutomaticPack, PackMatch
 
 
+def _applies(_hass: HomeAssistant, _state: State) -> bool:
+    """Monitor every eligible Home Assistant entity."""
+    return True
+
+
 def _evaluate(
     _hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
@@ -24,5 +29,6 @@ PACK = AutomaticPack(
     id=CATEGORY_UNAVAILABLE,
     name="Entités indisponibles",
     prerequisites=(),
+    applies=_applies,
     evaluate=_evaluate,
 )

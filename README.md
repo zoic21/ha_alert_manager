@@ -51,8 +51,12 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    équipement, pièce et dates. Le nom de la source ouvre le dialogue natif
    « Plus d’informations ». Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
-2. **Surveillance automatique** : activation, délais et seuil de batterie.
-3. **Règles personnalisées** : création, modification, activation et suppression.
+   Le total suivi additionne les couples règle personnalisée/entité actifs et les
+   entités uniques couvertes par au moins une surveillance automatique.
+2. **Surveillance automatique** : activation, délais et seuil de batterie, avec
+   deux catégories par ligne sur les écrans suffisamment larges.
+3. **Règles personnalisées** : création, modification dans un volet latéral,
+   activation et suppression.
 4. **Exclusions et paramètres** : labels, entités, appareils, délai global et délais
    particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
    Home Assistant.
@@ -143,6 +147,7 @@ state: 2
 attributes:
   active_count: 2
   pending_count: 1
+  tracked_count: 47
   alerts:
     - id: unavailable:sensor.unas_cpu_usage
       type: unavailable
@@ -201,7 +206,9 @@ L’intégration n’envoie elle-même aucune notification.
 
 La configuration et les états `pending`/`active` sont enregistrés dans un `Store`
 Home Assistant versionné avec écritures atomiques. Au démarrage, la condition est
-revérifiée avant de reprendre le délai ou l’état actif. Une anomalie déjà présente
+revérifiée avant de reprendre le délai ou l’état actif. Un état momentanément
+absent ou `unknown` pendant le démarrage ne résout pas une alerte persistée ; une
+valeur définitive ultérieure la confirme ou la résout. Une anomalie déjà présente
 lors de la première installation commence avec son délai normal.
 
 Le moteur écoute les changements d’état et les registres. Il ne réévalue que

@@ -83,6 +83,8 @@ class AlertManager:
         self._rules_by_entity: dict[str, list[Rule]] = {}
         self._unsubscribers: list[Callable[[], None]] = []
         self._timers: dict[str, Callable[[], None]] = {}
+        self._automatic_tracked_entities: set[str] = set()
+        self._custom_tracked_count = 0
         self._unloading = False
         self._last_public_snapshot: dict[str, Any] | None = None
 
@@ -96,6 +98,7 @@ class AlertManager:
             self.config = validate_config({})
         self.records = records
         self._rebuild_rule_index()
+        self._refresh_tracking()
 
         self._unsubscribers.extend(
             (
@@ -157,7 +160,7 @@ class AlertManager:
             return
         self.entry.async_create_task(
             self.hass,
-            self.async_evaluate_entity(entity_id),
+            self.async_evaluate_entity(entity_id, restoring=not self.hass.is_running),
             name=f"{DOMAIN} evaluate {entity_id}",
         )
 
@@ -176,6 +179,7 @@ class AlertManager:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading:
             return False
+        self._refresh_tracking()
         entity_ids = {
             state.entity_id
             for state in self.hass.states.async_all()
@@ -188,7 +192,10 @@ class AlertManager:
         persisted_changed = False
         for entity_id in entity_ids:
             persisted_changed |= await self.async_evaluate_entity(
-                entity_id, save=False, publish=False
+                entity_id,
+                restoring=restoring,
+                save=False,
+                publish=False,
             )
         if save and persisted_changed:
             await self.storage.async_save(self.config, self.records)
@@ -199,6 +206,7 @@ class AlertManager:
         self,
         entity_id: str,
         *,
+        restoring: bool = False,
         save: bool = True,
         publish: bool = True,
     ) -> bool:
@@ -207,12 +215,25 @@ class AlertManager:
             return False
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
-        candidates = self._build_candidates(state) if state is not None else {}
+        self._update_automatic_tracking_for_entity(entity_id, state)
         existing_ids = {
             alert_id
             for alert_id, record in self.records.items()
             if record.details.entity_id == entity_id
         }
+        # Missing and unknown states are common while integrations are still
+        # starting. They are not proof that a persisted condition recovered.
+        # Keep those records until a definitive state change can re-evaluate them.
+        if restoring and (state is None or state.state == STATE_UNKNOWN):
+            for alert_id in existing_ids:
+                record = self.records[alert_id]
+                if record.status is AlertStatus.PENDING:
+                    self._schedule_timer(record)
+            if publish:
+                self._publish_if_changed()
+            return False
+
+        candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed = False
 
         for alert_id, (details, delay) in candidates.items():
@@ -227,10 +248,9 @@ class AlertManager:
                     record.delay = delay
                     record.due_at = calculate_due_at(record.detected_at, delay)
                     self._cancel_timer(alert_id)
-                    if (
-                        record.status is AlertStatus.ACTIVE
-                        and now.astimezone(UTC) < record.due_at.astimezone(UTC)
-                    ):
+                    if record.status is AlertStatus.ACTIVE and now.astimezone(
+                        UTC
+                    ) < record.due_at.astimezone(UTC):
                         record.status = AlertStatus.PENDING
                         record.active_since = None
                     persisted_changed = True
@@ -451,6 +471,7 @@ class AlertManager:
         for rule in self._rules:
             for entity_id in rule.entity_ids:
                 self._rules_by_entity.setdefault(entity_id, []).append(rule)
+        self._refresh_custom_tracking()
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
@@ -501,9 +522,55 @@ class AlertManager:
         return {
             "active_count": len(active),
             "pending_count": len(pending),
+            "tracked_count": self._tracked_count(),
             "alerts": active,
             "pending": pending,
         }
+
+    def _tracked_count(self) -> int:
+        """Count enabled custom instances and unique automatic sources."""
+        return self._custom_tracked_count + len(self._automatic_tracked_entities)
+
+    def _refresh_tracking(self) -> None:
+        """Refresh tracked-source caches during infrequent full evaluations."""
+        self._refresh_custom_tracking()
+        self._automatic_tracked_entities = {
+            state.entity_id
+            for state in self.hass.states.async_all()
+            if self._is_automatically_tracked(state)
+        }
+
+    def _refresh_custom_tracking(self) -> None:
+        """Refresh enabled custom rule/entity pairs after config changes."""
+        self._custom_tracked_count = sum(
+            1
+            for rule in self._rules
+            if rule.enabled
+            for entity_id in rule.entity_ids
+            if self._is_base_eligible(entity_id)
+            and not self._is_explicitly_excluded(entity_id)
+        )
+
+    def _update_automatic_tracking_for_entity(
+        self, entity_id: str, state: State | None
+    ) -> None:
+        """Update one automatic tracked-source membership in constant time."""
+        if state is not None and self._is_automatically_tracked(state):
+            self._automatic_tracked_entities.add(entity_id)
+        else:
+            self._automatic_tracked_entities.discard(entity_id)
+
+    def _is_automatically_tracked(self, state: State) -> bool:
+        """Return whether at least one enabled automatic pack monitors a state."""
+        return (
+            self._is_base_eligible(state.entity_id)
+            and self._is_automatic_eligible(state.entity_id)
+            and any(
+                self.config["automatic"][pack.id]["enabled"]
+                and pack.applies(self.hass, state)
+                for pack in PACKS
+            )
+        )
 
     def get_config(self) -> dict[str, Any]:
         """Return a defensive copy for WebSocket clients."""

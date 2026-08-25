@@ -148,6 +148,31 @@ def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
     assert started_after == started_before
 
 
+@pytest.mark.parametrize("startup_state", [None, "unknown"])
+def test_active_alert_survives_uncertain_state_during_restart(
+    hass, entry, set_now, startup_state
+):
+    """A missing or unknown startup state cannot resolve a persisted alert."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    first = make_manager(hass, entry)
+    run(first.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    assert first.records["unavailable:sensor.test"].status is AlertStatus.ACTIVE
+    run(first.async_unload())
+
+    if startup_state is None:
+        hass.states.data.pop("sensor.test")
+    else:
+        hass.states.set("sensor.test", startup_state)
+    restarted = make_manager(hass, entry)
+    assert restarted.records["unavailable:sensor.test"].status is AlertStatus.ACTIVE
+
+    hass.states.set("sensor.test", "ok")
+    run(restarted.async_evaluate_entity("sensor.test"))
+    assert restarted.records == {}
+
+
 def test_unavailable_detection_does_not_duplicate_connectivity(hass, entry):
     """Unavailable wins over connectivity for the same entity."""
     hass.states.set(
@@ -282,11 +307,7 @@ def test_shortened_automatic_delay_uses_real_activation_time(hass, entry, set_no
 
     changed_at = start + timedelta(minutes=15)
     set_now(changed_at)
-    run(
-        manager.async_update_config(
-            {"automatic": {"unavailable": {"delay": 10}}}
-        )
-    )
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 10}}}))
 
     record = manager.records["unavailable:sensor.test"]
     assert record.status is AlertStatus.ACTIVE
@@ -455,6 +476,35 @@ def test_same_entity_can_belong_to_multiple_rules(hass, entry):
     ]
     assert set(manager.records) == {f"rule:{rule['id']}:sensor.test" for rule in rules}
     assert manager.public_snapshot()["active_count"] == 2
+
+
+def test_tracked_count_combines_custom_instances_and_automatic_entities(
+    hass, entry, registry_entry
+):
+    """Tracked total counts rule/entity pairs plus unique automatic sources."""
+    hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    hass.states.set("sensor.one", "ok")
+    hass.states.set("sensor.two", "ok")
+    registry_entry(hass, "sensor.excluded", labels={"skip"})
+    hass.states.set("sensor.excluded", "ok")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Two custom instances",
+                "entity_ids": ["sensor.one", "sensor.excluded"],
+                "operator": "equals",
+                "value": "alert",
+                "duration": 0,
+            }
+        )
+    )
+
+    # Two eligible automatic entities plus two configured custom instances.
+    assert manager.public_snapshot()["tracked_count"] == 4
+
+    run(manager.async_update_rule(rule["id"], {"enabled": False}))
+    assert manager.public_snapshot()["tracked_count"] == 2
 
 
 def test_rule_delay_update_can_activate_immediately(hass, entry, set_now):
