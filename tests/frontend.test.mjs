@@ -306,16 +306,20 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
 
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
-  assert.match(automatic, /<ha-button appearance="filled" data-action="save-automatic"/);
+  assert.match(automatic, /<ha-button appearance="accent" variant="brand" data-action="save-automatic"/);
+  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>État unavailable/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
-  assert.match(settings, /<ha-button appearance="filled" data-action="save-settings"/);
+  assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="save-settings"/);
+  assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
-  assert.match(styles, /\.category-card>\.row\.between\{align-items:flex-start\}/);
+  assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
+  assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
@@ -411,6 +415,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|Règle activée/);
   assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
+  assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
   assert.doesNotMatch(editor, />Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
