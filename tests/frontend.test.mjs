@@ -209,6 +209,53 @@ test("active alerts are red while pending alerts stay orange", () => {
   assert.match(panel._styles(), /\.alert-card\.is-active\{border-left-color:var\(--error-color/);
 });
 
+test("alert conditions stay on one line in the wider detail column", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: { "todo.list": { state: "0" } } };
+
+  const html = panel._renderAlert({
+    entity_id: "todo.list",
+    name: "Liste d’achats",
+    condition: "État inférieur à 1 pendant 600 s",
+  }, true);
+  const styles = panel._styles();
+
+  assert.match(html, /class="alert-condition"/);
+  assert.match(styles, /grid-template-columns:minmax\(0,\.85fr\) minmax\(0,1\.15fr\)/);
+  assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
+});
+
+test("tabs use Home Assistant dimensions, typography and icons", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._loading = false;
+
+  panel._render();
+
+  assert.match(panel.shadowRoot.innerHTML, /role="tablist"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:view-dashboard-outline"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:radar"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:format-list-checks"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:tune-variant"/);
+  assert.match(panel.shadowRoot.innerHTML, /role="tab" aria-selected="true"/);
+  assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
+  assert.match(panel._styles(), /nav\{[^}]*min-height:56px/);
+  assert.match(panel._styles(), /\.tab\{[^}]*font-size:var\(--ha-font-size-m,14px\)/);
+});
+
+test("legacy form controls follow the native Home Assistant field style", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const styles = new Panel()._styles();
+
+  assert.match(styles, /--alert-manager-control-height:56px/);
+  assert.match(styles, /input:not\(\[type="checkbox"\]\),select,textarea\{[^}]*background:var\(--input-fill-color/);
+  assert.match(styles, /border-bottom:1px solid var\(--input-idle-line-color/);
+  assert.match(styles, /ha-selector\{[^}]*min-height:var\(--alert-manager-control-height\)/);
+  assert.match(styles, /\.input-suffix\{[^}]*min-height:var\(--alert-manager-control-height\)/);
+});
+
 test("rule edit, toggle and delete actions call their dedicated APIs", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
