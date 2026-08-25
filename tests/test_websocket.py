@@ -88,11 +88,11 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "unifi",
         "battery",
     ]
-    assert all(pack["name"] and pack["description"] for pack in packs)
+    assert all(pack["translation_key"] == pack["id"] for pack in packs)
+    assert all("name" not in pack and "description" not in pack for pack in packs)
     assert next(pack for pack in packs if pack["id"] == "unifi") == {
         "id": "unifi",
-        "name": "Équipements UniFi",
-        "description": "Surveille les équipements suivis par un routeur UniFi.",
+        "translation_key": "unifi",
         "prerequisites": ["unifi"],
         "available": False,
     }

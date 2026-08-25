@@ -25,13 +25,16 @@ def _evaluate(
     """Match connectivity binary sensors that are off."""
     if not _applies(_hass, state) or state.state != "off":
         return None
-    return PackMatch("Connectivité désactivée")
+    return PackMatch(
+        "Connectivité désactivée",
+        condition_key="automatic.connectivity",
+        condition_params={},
+    )
 
 
 PACK = AutomaticPack(
     id=CATEGORY_CONNECTIVITY,
-    name="Connectivité",
-    description="Surveille les capteurs de connectivité qui passent à off.",
+    translation_key="connectivity",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">Alert Manager mark</title>
+  <desc id="description">A central alert connected to three monitored sources.</desc>
+  <style>
+    .outline { stroke: #123047; }
+    @media (prefers-color-scheme: dark) { .outline { stroke: #F4F7F9; } }
+  </style>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle class="outline" cx="128" cy="128" r="88" stroke-width="18"/>
+    <path d="M128 40V18M52 172l-19 11m171-11 19 11" stroke="#16A6A1" stroke-width="14"/>
+    <circle class="outline" cx="128" cy="18" r="12" fill="#16A6A1" stroke-width="7"/>
+    <circle class="outline" cx="33" cy="183" r="12" fill="#16A6A1" stroke-width="7"/>
+    <circle class="outline" cx="223" cy="183" r="12" fill="#16A6A1" stroke-width="7"/>
+    <path class="outline" d="M128 71 75 169h106L128 71Z" fill="#F15B5D" stroke-width="10"/>
+    <path d="M128 105v31" stroke="#FFFFFF" stroke-width="12"/>
+    <circle cx="128" cy="154" r="7" fill="#FFFFFF"/>
+  </g>
+</svg>

@@ -1,5 +1,27 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+
+const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
+  (result, [key, item]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (item && typeof item === "object") {
+      Object.assign(result, flattenTranslations(item, path));
+    } else {
+      result[`component.alert_manager.config_panel.${path}`] = item;
+    }
+    return result;
+  },
+  {},
+);
+const translationFile = (language) => JSON.parse(readFileSync(
+  new URL(`../custom_components/alert_manager/translations/${language}.json`, import.meta.url),
+  "utf8",
+));
+const TRANSLATIONS = Object.fromEntries(["en", "fr"].map((language) => [
+  language,
+  flattenTranslations(translationFile(language).config_panel),
+]));
 
 globalThis.HTMLElement = class {
   constructor() {
@@ -29,21 +51,32 @@ globalThis.CustomEvent = class {
 };
 globalThis.customElements = {
   _items: new Map(),
-  define(name, value) { this._items.set(name, value); },
+  define(name, value) {
+    this._items.set(name, class extends value {
+      constructor() {
+        super();
+        this._language = "fr";
+        this._translations = TRANSLATIONS.fr;
+        this._englishTranslations = TRANSLATIONS.en;
+      }
+    });
+  },
   get(name) { return this._items.get(name); },
 };
 globalThis.window = {
   confirm: () => true,
 };
 
-const { buildOverviewItems, durationText, lines, newRuleDefaults } = await import(
+const { buildOverviewItems, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
 );
 
 test("human duration formatter", () => {
-  assert.equal(durationText(45), "45 s");
-  assert.equal(durationText(900), "15 min");
-  assert.equal(durationText(7200), "2 h");
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  assert.equal(panel._durationText(45), "45 s");
+  assert.equal(panel._durationText(900), "15 min");
+  assert.equal(panel._durationText(7200), "2 h");
 });
 
 test("textarea list parser", () => {
@@ -113,29 +146,25 @@ const completeConfig = () => ({
 const completePacks = () => [
   {
     id: "unavailable",
-    name: "Entités indisponibles",
-    description: "Surveille le statut unavailable sur toutes les entités.",
+    translation_key: "unavailable",
     prerequisites: [],
     available: true,
   },
   {
     id: "connectivity",
-    name: "Connectivité",
-    description: "Surveille les capteurs de connectivité qui passent à off.",
+    translation_key: "connectivity",
     prerequisites: [],
     available: true,
   },
   {
     id: "unifi",
-    name: "Équipements UniFi",
-    description: "Surveille les équipements suivis par un routeur UniFi.",
+    translation_key: "unifi",
     prerequisites: ["unifi"],
     available: true,
   },
   {
     id: "battery",
-    name: "Batteries faibles",
-    description: "Surveille les capteurs de batterie sous leur seuil.",
+    translation_key: "battery",
     prerequisites: [],
     available: true,
   },
@@ -195,6 +224,9 @@ test("initial load requests pack metadata from the backend", async () => {
     states: {},
     callWS: async (message) => {
       calls.push(message.type);
+      if (message.type === "frontend/get_translations") {
+        return { resources: TRANSLATIONS[message.language] };
+      }
       return responses[message.type];
     },
   };
@@ -205,6 +237,8 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/config/get",
     "alert_manager/alerts/list",
     "alert_manager/packs/list",
+    "frontend/get_translations",
+    "frontend/get_translations",
   ]);
   assert.deepEqual(panel._packs, completePacks());
 });
@@ -259,7 +293,7 @@ test("rule create errors remain visible without clearing the draft", async () =>
   await panel._saveRule(form(ruleValues()));
 
   assert.equal(panel._notice.kind, "error");
-  assert.equal(panel._notice.text, "Règle refusée");
+  assert.equal(panel._notice.text, "Une erreur inattendue s’est produite.");
   assert.deepEqual(panel._editingRule.entity_ids, ["todo.liste_d_achats"]);
   assert.deepEqual(panel._editingRule.value, ["0"]);
 });
@@ -528,7 +562,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.match(automatic, /<ha-button appearance="accent" variant="brand" data-action="save-automatic"/);
-  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille le statut unavailable/);
+  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille l’état unavailable/);
   assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
@@ -1047,4 +1081,95 @@ test("a missing alert source is not rendered as a clickable link", () => {
     true,
   );
   assert.doesNotMatch(html, /data-action="more-info"/);
+});
+
+test("panel renders French and English from backend translation resources", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._alerts = {
+    active_count: 1,
+    pending_count: 0,
+    tracked_count: 1,
+    alerts: [],
+    pending: [],
+  };
+
+  panel._language = "fr";
+  panel._translations = TRANSLATIONS.fr;
+  assert.match(panel._renderOverview(), /Alertes actives/);
+  assert.match(panel._renderAutomatic(), /Entités indisponibles/);
+
+  panel._language = "en";
+  panel._translations = TRANSLATIONS.en;
+  assert.match(panel._renderOverview(), /Active alerts/);
+  assert.match(panel._renderAutomatic(), /Unavailable entities/);
+  assert.deepEqual(panel._tabs().map((tab) => tab.name), [
+    "Overview",
+    "Automatic monitoring",
+    "Custom rules",
+    "Exclusions and settings",
+  ]);
+});
+
+test("missing localized keys fall back to English backend resources", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._translations = {};
+  panel._englishTranslations = TRANSLATIONS.en;
+  assert.equal(panel._t("overview.summary_tracked"), "Total monitored");
+});
+
+test("changing the Home Assistant locale reloads backend translations", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._loading = false;
+  panel._render = () => {};
+  const calls = [];
+  panel.hass = {
+    locale: { language: "en" },
+    states: {},
+    callWS: async (message) => {
+      calls.push(message);
+      return { resources: TRANSLATIONS[message.language] };
+    },
+  };
+  await panel._translationPromise;
+
+  assert.equal(panel._language, "en");
+  assert.equal(panel._t("tabs.overview"), "Overview");
+  assert.deepEqual(calls, [{
+    type: "frontend/get_translations",
+    language: "en",
+    category: "config_panel",
+    integration: "alert_manager",
+  }]);
+});
+
+test("structured automatic and generated rule conditions are localized", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._language = "en";
+  panel._translations = TRANSLATIONS.en;
+
+  assert.equal(panel._conditionText({
+    condition: "Batterie inférieure ou égale à 15 %",
+    condition_key: "automatic.battery",
+    condition_params: { threshold: "15" },
+  }), "Battery less than or equal to 15%");
+  assert.equal(panel._conditionText({
+    condition: "État supérieur à 9 pendant 900 s",
+    condition_key: "rule.generated",
+    condition_params: {
+      source: "state",
+      attribute: null,
+      operator: "above",
+      expected: "9",
+      unit: "°C",
+      duration: 900,
+    },
+  }), "State greater than 9 °C for 15 min");
+  assert.equal(panel._conditionText({ condition: "User text" }), "User text");
 });

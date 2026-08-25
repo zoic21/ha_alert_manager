@@ -44,6 +44,8 @@ def test_creation_of_single_sensor(hass, entry):
     assert len(entities) == 1
     assert isinstance(entities[0], AlertManagerSensor)
     assert entities[0].entity_id == "sensor.alert_manager"
+    assert entities[0]._attr_unique_id == "alert_manager"
+    assert entities[0]._attr_translation_key == "alert_manager"
     assert entities[0].native_value == 0
     assert entities[0].extra_state_attributes["alerts"] == []
 
@@ -117,6 +119,9 @@ def test_active_resolution_and_events(hass, entry, set_now):
     resolved = [data for event, data in hass.bus.fired if event == EVENT_ALERT_RESOLVED]
     assert len(started) == len(resolved) == 1
     assert started[0]["id"] == "unavailable:sensor.test"
+    assert started[0]["condition"] == "État indisponible"
+    assert started[0]["condition_key"] == "automatic.unavailable"
+    assert started[0]["condition_params"] == {}
     assert "severity" not in started[0]
     assert "severity" not in resolved[0]
     assert "active_since" in started[0]
@@ -283,7 +288,42 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
             }
         )
     )
-    assert f"rule:{rule['id']}:sensor.test" in manager.records
+    record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.details.condition_key == "rule.generated"
+    assert record.details.condition_params == {
+        "source": "state",
+        "attribute": None,
+        "operator": operator,
+        "expected": (
+            " / ".join(str(value) for value in expected)
+            if isinstance(expected, list)
+            else str(expected)
+        ),
+        "unit": None,
+        "duration": 300,
+    }
+
+
+def test_custom_rule_message_remains_untranslated_user_text(hass, entry):
+    """A custom message remains the compatible condition without a key."""
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "User rule",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "message": "My custom message",
+            }
+        )
+    )
+    details = manager.records[f"rule:{rule['id']}:sensor.test"].details
+    assert details.condition == "My custom message"
+    assert details.condition_key is None
+    assert details.condition_params is None
 
 
 def test_delay_priority(hass, entry):

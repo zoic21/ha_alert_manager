@@ -1,11 +1,21 @@
+<p align="center">
+  <img src="docs/assets/alert-manager-logo.svg" width="520" alt="Alert Manager">
+</p>
+
+<p align="center">
+  🇫🇷 <strong>Français</strong> | 🇬🇧 <a href="README.en.md">English</a>
+</p>
+
 # Alert Manager pour Home Assistant
 
 Alert Manager centralise les anomalies Home Assistant dans un moteur événementiel,
 un panel **Alertes** et une seule entité : `sensor.alert_manager`.
 
-Version minimale prise en charge : **Home Assistant 2026.8**.
+Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
+une intégration communautaire non officielle, sans lien avec le projet Home
+Assistant.
 
-## Fonctionnalités V1.2
+## Fonctionnalités V1.3
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -18,11 +28,18 @@ Version minimale prise en charge : **Home Assistant 2026.8**.
   par source ;
 - exclusions automatiques par plusieurs labels, entités ou appareils ;
 - panel administrateur responsive, servi directement par l’intégration ;
+- interface, flux de configuration, packs et conditions disponibles en français
+  et en anglais selon la langue de chaque utilisateur Home Assistant ;
 - regroupement visuel, sans fusion des alertes, lorsque plusieurs anomalies
   appartiennent au même appareil ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved` ;
 - aucune notification imposée et aucun polling global fréquent.
+
+Alert Manager centralise des anomalies simples et indépendantes. Il ne remplace
+ni un système de supervision externe, ni l’historique de Home Assistant, ni une
+solution de notification : les automatisations restent sous le contrôle de
+l’utilisateur.
 
 ## Installation
 
@@ -53,7 +70,14 @@ non l’identifiant du dernier commit de la branche principale.
 Tant que le dépôt n’est pas publié dans le catalogue HACS par défaut, il doit être
 ajouté manuellement comme dépôt personnalisé.
 
-## Panel Alertes
+## Ajout de l’intégration et accès au panneau
+
+Après installation et redémarrage, ouvrir **Paramètres → Appareils et services →
+Ajouter une intégration**, rechercher **Alert Manager**, puis confirmer. Une seule
+instance est autorisée. Le panneau **Alert Manager** apparaît ensuite dans la barre
+latérale et reste réservé aux administrateurs.
+
+## Panneau Alert Manager
 
 Le panel est réservé aux administrateurs et contient quatre sections :
 
@@ -79,7 +103,7 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
    Home Assistant.
 
-## Détections automatiques
+## Packs automatiques
 
 Les packs génériques **Entités indisponibles**, **Connectivité** et **Batteries
 faibles** sont toujours disponibles. Le choix d’activation d’un pack est conservé
@@ -192,6 +216,8 @@ attributes:
       name: UNAS
       value: unavailable
       condition: État indisponible
+      condition_key: automatic.unavailable
+      condition_params: {}
       detected_at: "2026-08-24T14:10:00+02:00"
       due_at: "2026-08-24T14:25:00+02:00"
       active_since: "2026-08-24T14:25:00+02:00"
@@ -203,6 +229,9 @@ attributes:
       value: 12
       unit: "%"
       condition: Batterie inférieure ou égale à 15 %
+      condition_key: automatic.battery
+      condition_params:
+        threshold: "15"
       detected_at: "2026-08-24T14:20:00+02:00"
       due_at: "2026-08-24T14:35:00+02:00"
       delay: 900
@@ -212,6 +241,10 @@ Aucun historique résolu et aucun compte à rebours périodique ne sont enregist
 dans les attributs. `device_id` est facultatif et n’est présent que pour une entité
 rattachée à un appareil. Les listes `alerts` et `pending` restent toujours des
 alertes individuelles : aucun groupe visuel n’est persisté ou exposé au capteur.
+`condition` est conservé pour les automatisations existantes. Les champs
+`condition_key` et `condition_params`, présents pour les conditions générées par
+Alert Manager, permettent au panneau de les afficher dans la langue de
+l’utilisateur. Un message personnalisé reste inchangé et n’est jamais traduit.
 
 ## Événements et notifications
 
@@ -240,6 +273,23 @@ mode: queued
 ```
 
 L’intégration n’envoie elle-même aucune notification.
+
+## Dépannage courant
+
+- **Le panneau n’apparaît pas** : vérifier que l’intégration est ajoutée, que
+  l’utilisateur est administrateur, puis vider le cache du navigateur après une
+  mise à jour du frontend.
+- **Le pack UniFi est absent** : au moins une entrée de l’intégration UniFi doit
+  être chargée et non désactivée. Un `device_tracker` d’un autre fournisseur ne
+  suffit pas.
+- **Une entité désactivée remonte** : contrôler son entrée dans le registre des
+  entités et l’appareil parent. L’attribut `restored: true` ne signifie pas que
+  l’entité est désactivée.
+- **Une alerte ne démarre pas immédiatement** : vérifier, dans cet ordre, la durée
+  de règle, le délai particulier de l’entité, le délai du pack et le délai global.
+- **La langue ne change pas** : recharger le panneau après avoir changé la langue
+  du profil Home Assistant. Les noms d’entités, d’appareils, de pièces, de règles
+  et les messages personnalisés restent volontairement inchangés.
 
 ## Persistance et performances
 
@@ -272,13 +322,14 @@ npm run test:frontend
 
 Les workflows exécutent également Hassfest et la validation HACS.
 
-## Limites connues de la V1.2
+## Limites connues et fonctions reportées
 
 - pas d’acquittement, snooze, répétition ou escalade ;
-- pas d’historique des alertes résolues ;
+- pas d’historique des alertes résolues ni de stockage CSV ;
 - pas de template Jinja, condition combinée ou hystérésis ;
 - pas d’import automatique des anciennes automatisations ;
 - pas de notification directe, application mobile, add-on, MQTT ou entité par
   alerte ;
-- le panel V1 est en français, tandis que le flux de configuration est traduit en
-  français et en anglais.
+- regroupement uniquement visuel, sans fusion des alertes ;
+- configuration réservée aux administrateurs ;
+- interface fournie uniquement en français et en anglais dans cette version.

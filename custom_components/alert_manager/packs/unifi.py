@@ -30,13 +30,16 @@ def _evaluate(
     """Match router-backed UniFi trackers away from home."""
     if not _applies(hass, state) or state.state == STATE_HOME:
         return None
-    return PackMatch("Équipement UniFi absent")
+    return PackMatch(
+        "Équipement UniFi absent",
+        condition_key="automatic.unifi",
+        condition_params={},
+    )
 
 
 PACK = AutomaticPack(
     id=CATEGORY_UNIFI,
-    name="Équipements UniFi",
-    description="Surveille les équipements suivis par un routeur UniFi.",
+    translation_key="unifi",
     prerequisites=("unifi",),
     applies=_applies,
     evaluate=_evaluate,

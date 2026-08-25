@@ -30,6 +30,8 @@ class AlertDetails:
     name: str
     value: Any
     condition: str
+    condition_key: str | None = None
+    condition_params: dict[str, Any] | None = None
     device_id: str | None = None
     device_name: str | None = None
     area: str | None = None
@@ -50,6 +52,14 @@ class AlertDetails:
         for key in ("device_id", "device_name", "area", "integration", "unit"):
             if data.get(key) is not None and not isinstance(data[key], str):
                 raise ValueError(f"Alert detail {key} must be a string or null")
+        if data.get("condition_key") is not None and not isinstance(
+            data["condition_key"], str
+        ):
+            raise ValueError("Alert detail condition_key must be a string or null")
+        if data.get("condition_params") is not None and not isinstance(
+            data["condition_params"], dict
+        ):
+            raise ValueError("Alert detail condition_params must be an object or null")
         allowed = cls.__dataclass_fields__
         values = {key: data[key] for key in allowed if key in data}
         return cls(**values)

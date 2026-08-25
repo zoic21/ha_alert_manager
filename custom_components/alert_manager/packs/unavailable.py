@@ -22,13 +22,16 @@ def _evaluate(
     """Match only unavailable, for every entity domain."""
     if state.state != STATE_UNAVAILABLE:
         return None
-    return PackMatch("État indisponible")
+    return PackMatch(
+        "État indisponible",
+        condition_key="automatic.unavailable",
+        condition_params={},
+    )
 
 
 PACK = AutomaticPack(
     id=CATEGORY_UNAVAILABLE,
-    name="Entités indisponibles",
-    description="Surveille le statut unavailable sur toutes les entités.",
+    translation_key="unavailable",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,

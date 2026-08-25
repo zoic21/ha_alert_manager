@@ -5,8 +5,186 @@
     },
     "step": {
       "user": {
-        "description": "Installe Alert Manager. Les détections, règles et exclusions se configurent ensuite dans le panel Alertes.",
+        "description": "Installe Alert Manager. Les détections, règles et exclusions se configurent ensuite dans le panneau Alertes.",
         "title": "Alert Manager"
+      }
+    }
+  },
+  "config_panel": {
+    "automatic": {
+      "aria_enable": "Activer {name}",
+      "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
+      "pack_delay": "Délai propre au pack",
+      "save": "Enregistrer la surveillance automatique",
+      "threshold": "Seuil"
+    },
+    "buttons": {
+      "add": "Ajouter",
+      "cancel": "Annuler",
+      "delete": "Supprimer",
+      "remove": "Retirer",
+      "save": "Enregistrer"
+    },
+    "conditions": {
+      "automatic": {
+        "battery": "Batterie inférieure ou égale à {threshold} %",
+        "connectivity": "Connectivité désactivée",
+        "unavailable": "État indisponible",
+        "unifi": "Équipement UniFi absent"
+      },
+      "fragments": {
+        "duration": "pendant {duration}"
+      },
+      "rule": {
+        "generated": "{source} {operator} {expected}{unit}{duration}"
+      },
+      "sources": {
+        "attribute": "Attribut {attribute}",
+        "state": "État"
+      }
+    },
+    "duration": {
+      "activation": "Activation en cours…",
+      "hours": "{count} h",
+      "minutes": "{count} min",
+      "minutes_seconds": "{minutes} min {seconds} s",
+      "seconds": "{count} s"
+    },
+    "errors": {
+      "invalid_format": "Les données sont invalides. Vérifiez les champs et réessayez.",
+      "not_loaded": "Alert Manager n’est pas chargé.",
+      "unknown": "Une erreur inattendue s’est produite."
+    },
+    "loading": "Chargement d’Alert Manager…",
+    "operators": {
+      "above": "supérieur à",
+      "below": "inférieur à",
+      "contains": "contient",
+      "equals": "égal à",
+      "not_contains": "ne contient pas",
+      "not_equals": "différent de"
+    },
+    "overview": {
+      "active_since": "Active depuis",
+      "area": "Pièce",
+      "condition": "Condition",
+      "detected": "Détectée",
+      "device": "Équipement",
+      "device_fallback": "Appareil",
+      "empty_active": "Aucune alerte active.",
+      "empty_upcoming": "Aucune alerte à venir.",
+      "remaining": "Temps restant",
+      "section_active": "Alertes actives",
+      "section_upcoming": "Alertes à venir",
+      "status_active": "Active",
+      "status_active_count": "Actives : {count}",
+      "status_pending": "En attente",
+      "status_pending_count": "En attente : {count}",
+      "summary_active": "Alertes actives",
+      "summary_pending": "En attente",
+      "summary_tracked": "Total suivi"
+    },
+    "packs": {
+      "battery": {
+        "description": "Surveille les capteurs de batterie inférieurs ou égaux à leur seuil.",
+        "name": "Batteries faibles"
+      },
+      "connectivity": {
+        "description": "Surveille les capteurs de connectivité qui passent à off.",
+        "name": "Connectivité"
+      },
+      "unavailable": {
+        "description": "Surveille l’état unavailable sur toutes les entités.",
+        "name": "Entités indisponibles"
+      },
+      "unifi": {
+        "description": "Surveille les équipements suivis par un routeur UniFi.",
+        "name": "Équipements UniFi"
+      }
+    },
+    "rules": {
+      "aria_close": "Fermer",
+      "aria_create_dialog": "Créer une règle",
+      "aria_disable": "Désactiver la règle {name}",
+      "aria_edit": "Modifier la règle {name}",
+      "aria_edit_dialog": "Modifier une règle",
+      "aria_enable": "Activer la règle {name}",
+      "aria_remove_value": "Retirer la valeur {index}",
+      "aria_resize": "Redimensionner le volet",
+      "aria_value": "Valeur de comparaison {index}",
+      "attribute": "Attribut",
+      "attribute_name": "Nom de l’attribut",
+      "condition": "Condition",
+      "create": "Créer",
+      "delete_confirm": "Supprimer la règle « {name} » ?",
+      "description": "Comparaisons simples sur l’état ou un attribut.",
+      "duration": "Durée",
+      "editor_condition_help": "Définissez la valeur qui doit déclencher l’alerte.",
+      "editor_information": "Informations",
+      "editor_information_help": "Identifiez la règle et choisissez les entités surveillées.",
+      "editor_trigger": "Déclenchement",
+      "editor_trigger_help": "Ajoutez une temporisation et personnalisez le message exposé.",
+      "empty": "Aucune règle personnalisée.",
+      "entities": "Entités",
+      "entities_help": "Chaque entité est évaluée indépendamment.",
+      "message_optional": "Message facultatif",
+      "modify": "Modifier",
+      "multiple_any": "L’alerte se déclenche dès qu’une valeur correspond.",
+      "multiple_none": "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.",
+      "name": "Nom",
+      "new": "Nouvelle règle",
+      "new_subtitle": "Nouvelle règle personnalisée",
+      "operator": "Opérateur",
+      "source": "Source",
+      "source_attribute": "Attribut",
+      "source_state": "État principal",
+      "title": "Règles personnalisées",
+      "value": "Valeur de comparaison",
+      "values": "Valeurs de comparaison"
+    },
+    "settings": {
+      "aria_delay": "Délai en secondes",
+      "aria_remove_delay": "Supprimer ce délai",
+      "delay_help": "Prioritaire sur le délai du pack et le délai global.",
+      "delay_validation": "Chaque délai particulier doit avoir une entité et un nombre entier positif.",
+      "device_exclusions": "Appareils exclus",
+      "duplicate_delay": "L’entité {entity_id} possède déjà un délai particulier.",
+      "duplicate_delay_save": "L’entité {entity_id} est présente deux fois dans les délais.",
+      "entity_delay": "Délais particuliers par entité",
+      "entity_exclusions": "Entités exclues",
+      "explicit_exclusions": "Exclusions explicites",
+      "general": "Paramètres généraux",
+      "global_delay": "Délai global",
+      "global_delay_help": "Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.",
+      "label_exclusions": "Labels exclus des surveillances automatiques",
+      "labels_help": "Une règle personnalisée ignore ces labels.",
+      "no_delay": "Aucun délai particulier.",
+      "save": "Enregistrer les paramètres"
+    },
+    "success": {
+      "automatic_saved": "Surveillance automatique enregistrée",
+      "rule_created": "Règle créée",
+      "rule_deleted": "Règle supprimée",
+      "rule_disabled": "Règle désactivée",
+      "rule_enabled": "Règle activée",
+      "rule_updated": "Règle modifiée",
+      "settings_saved": "Paramètres enregistrés"
+    },
+    "tabs": {
+      "automatic": "Surveillance automatique",
+      "overview": "Vue d’ensemble",
+      "rules": "Règles personnalisées",
+      "settings": "Exclusions et paramètres"
+    },
+    "unavailable": "Configuration indisponible.",
+    "units": {
+      "seconds": "secondes"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "alert_manager": {
+        "name": "Alert Manager"
       }
     }
   }

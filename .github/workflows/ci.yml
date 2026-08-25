@@ -52,4 +52,4 @@ jobs:
           category: integration
           # Publication metadata is intentionally deferred while the repository is
           # private. Keep all technical integration validations enabled.
-          ignore: brands description topics
+          ignore: description topics

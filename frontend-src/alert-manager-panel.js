@@ -2,30 +2,28 @@ const TABS = [
   {
     id: "overview",
     path: "/alert-manager/overview",
-    name: "Vue d’ensemble",
+    translationKey: "tabs.overview",
     iconPath: "M19,5V7H15V5H19M9,5V11H5V5H9M19,13V19H15V13H19M9,17V19H5V17H9M21,3H13V9H21V3M11,3H3V13H11V3M21,11H13V21H21V11M11,15H3V21H11V15Z",
   },
   {
     id: "automatic",
     path: "/alert-manager/automatic",
-    name: "Surveillance automatique",
+    translationKey: "tabs.automatic",
     iconPath: "M19.07,4.93L17.66,6.34C19.1,7.79 20,9.79 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12C4,7.92 7.05,4.56 11,4.07V6.09C8.16,6.57 6,9.03 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12C18,10.34 17.33,8.84 16.24,7.76L14.83,9.17C15.55,9.9 16,10.9 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12C8,10.14 9.28,8.59 11,8.14V10.28C10.4,10.63 10,11.26 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12C14,11.26 13.6,10.62 13,10.28V2H12A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,9.24 20.88,6.74 19.07,4.93Z",
   },
   {
     id: "rules",
     path: "/alert-manager/rules",
-    name: "Règles personnalisées",
+    translationKey: "tabs.rules",
     iconPath: "M3,5H9V11H3V5M5,7V9H7V7H5M11,7H21V9H11V7M11,15H21V17H11V15M5,20L1.5,16.5L2.91,15.09L5,17.17L9.59,12.59L11,14L5,20Z",
   },
   {
     id: "settings",
     path: "/alert-manager/settings",
-    name: "Exclusions et paramètres",
+    translationKey: "tabs.settings",
     iconPath: "M8 13C6.14 13 4.59 14.28 4.14 16H2V18H4.14C4.59 19.72 6.14 21 8 21S11.41 19.72 11.86 18H22V16H11.86C11.41 14.28 9.86 13 8 13M8 19C6.9 19 6 18.1 6 17C6 15.9 6.9 15 8 15S10 15.9 10 17C10 18.1 9.1 19 8 19M19.86 6C19.41 4.28 17.86 3 16 3S12.59 4.28 12.14 6H2V8H12.14C12.59 9.72 14.14 11 16 11S19.41 9.72 19.86 8H22V6H19.86M16 9C14.9 9 14 8.1 14 7C14 5.9 14.9 5 16 5S18 5.9 18 7C18 8.1 17.1 9 16 9Z",
   },
 ];
-
-const TAB_PAGES = TABS.map(({ path, name, iconPath }) => ({ path, name, iconPath }));
 
 const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
 const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
@@ -46,14 +44,6 @@ const lines = (value) =>
     .split(/[\n,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
-
-const durationText = (seconds) => {
-  const value = Math.max(0, Number(seconds) || 0);
-  if (value < 60) return `${value} s`;
-  if (value % 3600 === 0) return `${value / 3600} h`;
-  if (value % 60 === 0) return `${value / 60} min`;
-  return `${Math.floor(value / 60)} min ${value % 60} s`;
-};
 
 const newRuleDefaults = () => ({
   name: "",
@@ -108,6 +98,10 @@ class AlertManagerPanel extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._hass = null;
+    this._language = "en";
+    this._translations = {};
+    this._englishTranslations = {};
+    this._translationPromise = null;
     this._config = null;
     this._packs = [];
     this._alerts = {
@@ -139,10 +133,15 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set hass(value) {
+    const language = value?.locale?.language || "en";
+    const languageChanged = language !== this._language;
     this._hass = value;
+    this._language = language;
     const alertsChanged = this._syncSensor();
     if (this.isConnected && !this._config && !this._loadPromise) {
       this._load();
+    } else if (this.isConnected && languageChanged && !this._translationPromise) {
+      this._reloadTranslations();
     } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
       this._render();
     } else if (this.isConnected) {
@@ -192,6 +191,7 @@ class AlertManagerPanel extends HTMLElement {
       this._hass.callWS({ type: "alert_manager/config/get" }),
       this._hass.callWS({ type: "alert_manager/alerts/list" }),
       this._hass.callWS({ type: "alert_manager/packs/list" }),
+      this._fetchTranslations(this._language),
     ]);
     this._loading = true;
     this._render();
@@ -207,6 +207,57 @@ class AlertManagerPanel extends HTMLElement {
       this._loadPromise = null;
       this._render();
     }
+  }
+
+  async _fetchTranslations(language) {
+    const request = (requestedLanguage) => this._hass.callWS({
+      type: "frontend/get_translations",
+      language: requestedLanguage,
+      category: "config_panel",
+      integration: "alert_manager",
+    });
+    const [localized, english] = await Promise.all([
+      request(language),
+      language === "en" ? Promise.resolve(null) : request("en"),
+    ]);
+    if (language !== this._language) return;
+    this._translations = localized?.resources ?? {};
+    this._englishTranslations = english?.resources ?? this._translations;
+  }
+
+  async _reloadTranslations() {
+    this._loading = true;
+    this._render();
+    const language = this._language;
+    this._translationPromise = this._fetchTranslations(language);
+    try {
+      await this._translationPromise;
+      this._notice = null;
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._translationPromise = null;
+      this._loading = false;
+      this._render();
+    }
+  }
+
+  _t(key, params = {}) {
+    const resourceKey = `component.alert_manager.config_panel.${key}`;
+    const template = this._translations[resourceKey]
+      ?? this._englishTranslations[resourceKey]
+      ?? resourceKey;
+    return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => (
+      Object.hasOwn(params, name) ? String(params[name] ?? "") : match
+    ));
+  }
+
+  _tabs() {
+    return TABS.map(({ path, translationKey, iconPath }) => ({
+      path,
+      name: this._t(translationKey),
+      iconPath,
+    }));
   }
 
   _syncSensor() {
@@ -245,13 +296,14 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _errorText(error) {
-    return error?.message || error?.body?.message || String(error || "Erreur inconnue");
+    const code = error?.code ?? error?.body?.code;
+    return this._t(`errors.${["invalid_format", "not_loaded"].includes(code) ? code : "unknown"}`);
   }
 
   _render() {
     if (!this.shadowRoot) return;
     const content = this._loading
-      ? '<div class="loading">Chargement d’Alert Manager…</div>'
+      ? `<div class="loading">${esc(this._t("loading"))}</div>`
       : this._renderTab();
     const page = `<main class="${this._activeTab === "rules" ? "rules-page" : ""}">
       ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
@@ -292,7 +344,7 @@ class AlertManagerPanel extends HTMLElement {
     if (shell && this._hass) {
       const activePage = TABS.find((tab) => tab.id === this._activeTab) ?? TABS[0];
       shell.hass = this._hass;
-      shell.tabs = TAB_PAGES;
+      shell.tabs = this._tabs();
       shell.route = { prefix: "", path: activePage.path };
       shell.backPath = "/config/integrations";
       shell.backCallback = window.history?.state?.from !== undefined
@@ -303,14 +355,14 @@ class AlertManagerPanel extends HTMLElement {
     if (this._editingRule !== null) {
       const closeButton = this.shadowRoot.querySelector("#rule-editor-close");
       if (closeButton) {
-        closeButton.label = "Fermer";
+        closeButton.label = this._t("rules.aria_close");
         closeButton.path = MDI_CLOSE;
       }
       this._configureSelect(
         "rule-source",
         [
-          { value: "state", label: "État principal" },
-          { value: "attribute", label: "Attribut" },
+          { value: "state", label: this._t("rules.source_state") },
+          { value: "attribute", label: this._t("rules.source_attribute") },
         ],
         this._editingRule.source ?? "state",
         (value) => {
@@ -322,12 +374,12 @@ class AlertManagerPanel extends HTMLElement {
       this._configureSelect(
         "rule-operator",
         [
-          { value: "equals", label: "Égal à" },
-          { value: "not_equals", label: "Différent de" },
-          { value: "contains", label: "Contient" },
-          { value: "not_contains", label: "Ne contient pas" },
-          { value: "above", label: "Supérieur à" },
-          { value: "below", label: "Inférieur à" },
+          { value: "equals", label: this._t("operators.equals") },
+          { value: "not_equals", label: this._t("operators.not_equals") },
+          { value: "contains", label: this._t("operators.contains") },
+          { value: "not_contains", label: this._t("operators.not_contains") },
+          { value: "above", label: this._t("operators.above") },
+          { value: "below", label: this._t("operators.below") },
         ],
         this._editingRule.operator ?? "equals",
         (value) => {
@@ -379,7 +431,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderTab() {
-    if (!this._config) return '<div class="empty">Configuration indisponible.</div>';
+    if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
     if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "rules") return this._renderRules();
     if (this._activeTab === "settings") return this._renderSettings();
@@ -395,9 +447,9 @@ class AlertManagerPanel extends HTMLElement {
     const items = buildOverviewItems(this._alerts.alerts, this._alerts.pending);
     return `
       <section class="summary">
-        <article><span>Alertes actives</span><strong class="danger">${this._alerts.active_count}</strong></article>
-        <article><span>En attente</span><strong class="pending">${this._alerts.pending_count}</strong></article>
-        <article><span>Total suivi</span><strong>${this._alerts.tracked_count ?? 0}</strong></article>
+        <article><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></article>
+        <article><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></article>
+        <article><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></article>
       </section>
       ${this._renderOverviewAlerts(items)}`;
   }
@@ -416,8 +468,8 @@ class AlertManagerPanel extends HTMLElement {
           : this._renderAlert(item.alert, item.status === "active")).join("")}
         </div>` : `<ha-card outlined class="alert-empty"><div class="empty compact">${emptyText}</div></ha-card>`}
       </section>`;
-    return `${renderSection("Alertes actives", activeItems, "active", this._alerts.active_count, "Aucune alerte active.")}
-      ${renderSection("Alertes à venir", pendingItems, "pending", this._alerts.pending_count, "Aucune alerte à venir.")}`;
+    return `${renderSection(this._t("overview.section_active"), activeItems, "active", this._alerts.active_count, this._t("overview.empty_active"))}
+      ${renderSection(this._t("overview.section_upcoming"), pendingItems, "pending", this._alerts.pending_count, this._t("overview.empty_upcoming"))}`;
   }
 
   _renderAlert(alert, active) {
@@ -435,11 +487,11 @@ class AlertManagerPanel extends HTMLElement {
       </div>
       <div class="alert-card-content">
         <dl class="alert-details">
-        ${alert.device_name ? `<div><dt>Équipement</dt><dd>${esc(alert.device_name)}</dd></div>` : ""}
-        ${alert.area ? `<div><dt>Pièce</dt><dd>${esc(alert.area)}</dd></div>` : ""}
-        <div class="alert-condition"><dt>Condition</dt><dd title="${esc(alert.condition)}">${esc(alert.condition)}</dd></div>
-        <div><dt>Détectée</dt><dd>${esc(this._date(alert.detected_at))}</dd></div>
-        <div><dt>${active ? "Active depuis" : "Temps restant"}</dt><dd>${
+        ${alert.device_name ? `<div><dt>${esc(this._t("overview.device"))}</dt><dd>${esc(alert.device_name)}</dd></div>` : ""}
+        ${alert.area ? `<div><dt>${esc(this._t("overview.area"))}</dt><dd>${esc(alert.area)}</dd></div>` : ""}
+        <div class="alert-condition"><dt>${esc(this._t("overview.condition"))}</dt><dd title="${esc(this._conditionText(alert))}">${esc(this._conditionText(alert))}</dd></div>
+        <div><dt>${esc(this._t("overview.detected"))}</dt><dd>${esc(this._date(alert.detected_at))}</dd></div>
+        <div><dt>${esc(this._t(active ? "overview.active_since" : "overview.remaining"))}</dt><dd>${
           active
             ? esc(this._date(alert.active_since))
             : `<span data-due="${esc(alert.due_at)}">${esc(this._remaining(alert.due_at))}</span>`
@@ -455,13 +507,13 @@ class AlertManagerPanel extends HTMLElement {
     const pendingCount = group.alerts.length - activeCount;
     const stateClass = activeCount ? "is-active" : "is-pending";
     const statusText = [
-      activeCount ? `${activeCount} active${activeCount > 1 ? "s" : ""}` : "",
-      pendingCount ? `${pendingCount} en attente` : "",
+      activeCount ? this._t("overview.status_active_count", { count: activeCount }) : "",
+      pendingCount ? this._t("overview.status_pending_count", { count: pendingCount }) : "",
     ].filter(Boolean).join(" · ");
     return `<ha-card outlined class="device-alert-group ${stateClass}" data-device-id="${esc(group.device_id)}">
       <div class="device-group-header">
         <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${activeCount ? MDI_ALERT_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
-        <div><h3>${esc(first.device_name || "Appareil")}</h3>${first.area ? `<small>${esc(first.area)}</small>` : ""}</div>
+        <div><h3>${esc(first.device_name || this._t("overview.device_fallback"))}</h3>${first.area ? `<small>${esc(first.area)}</small>` : ""}</div>
         <strong>${esc(statusText)}</strong>
       </div>
       <div class="device-alert-rows">
@@ -484,9 +536,9 @@ class AlertManagerPanel extends HTMLElement {
     return `<article class="device-alert-row ${active ? "is-active" : "is-pending"}">
       <div class="device-alert-source">${title}<code>${esc(alert.entity_id)}</code></div>
       <strong class="device-alert-value">${esc(value ?? "—")}</strong>
-      <span class="device-alert-status">${active ? "Active" : "En attente"}</span>
-      <div class="device-alert-condition"><small>Condition</small><span>${esc(alert.condition)}</span></div>
-      <div class="device-alert-time"><small>${active ? "Active depuis" : "Temps restant"}</small><span>${time}</span></div>
+      <span class="device-alert-status">${esc(this._t(active ? "overview.status_active" : "overview.status_pending"))}</span>
+      <div class="device-alert-condition"><small>${esc(this._t("overview.condition"))}</small><span>${esc(this._conditionText(alert))}</span></div>
+      <div class="device-alert-time"><small>${esc(this._t(active ? "overview.active_since" : "overview.remaining"))}</small><span>${time}</span></div>
     </article>`;
   }
 
@@ -495,20 +547,22 @@ class AlertManagerPanel extends HTMLElement {
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
         const config = this._config.automatic[pack.id];
+        const packKey = pack.translation_key || pack.id;
+        const packName = this._t(`packs.${packKey}.name`);
         return `<section class="panel category-card">
           <div class="category-header">
-            <h2>${esc(pack.name)}</h2>
-            <ha-switch id="auto-${pack.id}-enabled" aria-label="Activer ${esc(pack.name)}" ${config.enabled ? "checked" : ""}></ha-switch>
+            <h2>${esc(packName)}</h2>
+            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(this._t("automatic.aria_enable", { name: packName }))}" ${config.enabled ? "checked" : ""}></ha-switch>
           </div>
-          <p>${esc(pack.description)}</p>
+          <p>${esc(this._t(`packs.${packKey}.description`))}</p>
           <div class="fields">
-            ${this._numberField(`auto-${pack.id}-delay`, "Délai propre au pack", config.delay, "secondes", 0, 31536000, "1", "id", false)}
-            ${pack.id === "battery" ? this._numberField("battery-threshold", "Seuil", config.threshold, "%", -1000000000, 1000000000, "any") : ""}
+            ${this._numberField(`auto-${pack.id}-delay`, this._t("automatic.pack_delay"), config.delay, this._t("units.seconds"), 0, 31536000, "1", "id", false)}
+            ${pack.id === "battery" ? this._numberField("battery-threshold", this._t("automatic.threshold"), config.threshold, "%", -1000000000, 1000000000, "any") : ""}
           </div>
-          <small>Laisser le délai vide pour utiliser le délai global.</small>
+          <small>${esc(this._t("automatic.empty_delay_help"))}</small>
         </section>`;
       }).join("")}
-      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>Enregistrer la surveillance</ha-button></div>
+      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>${esc(this._t("automatic.save"))}</ha-button></div>
     </form>`;
   }
 
@@ -517,15 +571,15 @@ class AlertManagerPanel extends HTMLElement {
     const editorOpen = this._editingRule !== null;
     const editor = editorOpen ? this._renderRuleEditor() : "";
     return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px"><section class="panel rules-list-panel">
-      <div><h2>Règles personnalisées</h2><p>Comparaisons simples sur l’état ou un attribut.</p></div>
-      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entités</th><th>Condition</th><th>Durée</th><th class="rule-toggle-cell">Active</th></tr></thead><tbody>
-        ${rules.map((rule) => `<tr class="rule-row ${this._editingRule?.id === rule.id ? "is-selected" : ""}" data-action="edit-rule" data-id="${esc(rule.id)}" tabindex="0" aria-label="Modifier la règle ${esc(rule.name)}">
+      <div><h2>${esc(this._t("rules.title"))}</h2><p>${esc(this._t("rules.description"))}</p></div>
+      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>${esc(this._t("rules.name"))}</th><th>${esc(this._t("rules.entities"))}</th><th>${esc(this._t("rules.condition"))}</th><th>${esc(this._t("rules.duration"))}</th><th class="rule-toggle-cell">${esc(this._t("overview.status_active"))}</th></tr></thead><tbody>
+        ${rules.map((rule) => `<tr class="rule-row ${this._editingRule?.id === rule.id ? "is-selected" : ""}" data-action="edit-rule" data-id="${esc(rule.id)}" tabindex="0" aria-label="${esc(this._t("rules.aria_edit", { name: rule.name }))}">
           <td>${esc(rule.name)}</td><td>${rule.entity_ids.map((entityId) => `<code>${esc(entityId)}</code>`).join("")}</td>
-          <td>${esc(this._ruleSummary(rule))}</td><td>${esc(durationText(rule.duration))}</td>
-          <td class="rule-toggle-cell"><ha-switch haptic data-action="toggle-rule" data-id="${esc(rule.id)}" aria-label="${rule.enabled ? "Désactiver" : "Activer"} la règle ${esc(rule.name)}" ${rule.enabled ? "checked" : ""} ${this._busy ? "disabled" : ""}></ha-switch></td>
+          <td>${esc(this._ruleSummary(rule))}</td><td>${esc(this._durationText(rule.duration))}</td>
+          <td class="rule-toggle-cell"><ha-switch haptic data-action="toggle-rule" data-id="${esc(rule.id)}" aria-label="${esc(this._t(rule.enabled ? "rules.aria_disable" : "rules.aria_enable", { name: rule.name }))}" ${rule.enabled ? "checked" : ""} ${this._busy ? "disabled" : ""}></ha-switch></td>
         </tr>`).join("")}
-      </tbody></table></div>` : '<div class="empty">Aucune règle personnalisée.</div>'}
-      <div class="actions new-rule-action"><ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>Nouvelle règle</ha-button></div>
+      </tbody></table></div>` : `<div class="empty">${esc(this._t("rules.empty"))}</div>`}
+      <div class="actions new-rule-action"><ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("rules.new"))}</ha-button></div>
     </section>${editor}</div>`;
   }
 
@@ -536,53 +590,53 @@ class AlertManagerPanel extends HTMLElement {
       : this._ruleValueList(rule.value)[0] ?? "";
     this._editingRule = rule;
     return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${rule.id ? "Modifier" : "Créer"} une règle">
-      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="Redimensionner le volet" tabindex="0"><div class="resize-indicator"></div></div>
+    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(this._t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(this._t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
-        <span slot="title">${rule.id ? "Modifier" : "Créer"} une règle</span>
-        <span slot="subtitle">${rule.id ? esc(rule.name) : "Nouvelle règle personnalisée"}</span>
+        <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
+        <span slot="subtitle">${rule.id ? esc(rule.name) : esc(this._t("rules.new_subtitle"))}</span>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>Informations</h3><small>Identifiez la règle et choisissez les entités surveillées.</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_information"))}</h3><small>${esc(this._t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
-            ${this._textField("name", "Nom", rule.name, true, "name", "full rule-name-field")}
-            <div class="field full"><span class="field-label">Entités</span><ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></div>
+            ${this._textField("name", this._t("rules.name"), rule.name, true, "name", "full rule-name-field")}
+            <div class="field full"><span class="field-label">${esc(this._t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(this._t("rules.entities_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>Condition</h3><small>Définissez la valeur qui doit déclencher l’alerte.</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
-            <div class="field"><span class="field-label">Source</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">Nom de l’attribut</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="Nom de l’attribut"></ha-input></div>
-            <div class="field full"><span class="field-label">Opérateur</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
+            <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input></div>
+            <div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
             ${this._renderRuleValues(rule)}
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>Déclenchement</h3><small>Ajoutez une temporisation et personnalisez le message exposé.</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_trigger"))}</h3><small>${esc(this._t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
-            ${this._textField("message", "Message facultatif", rule.message || "", false, "name", "full rule-message-field")}
+            ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, "1", "name")}
+            ${this._textField("message", this._t("rules.message_optional"), rule.message || "", false, "name", "full rule-message-field")}
           </div>
         </section>
-        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">Annuler</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
+        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">${esc(this._t("buttons.delete"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">${esc(this._t("buttons.cancel"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
   }
 
   _renderRuleValues(rule) {
     if (!TEXT_RULE_OPERATORS.has(rule.operator)) {
-      return `<div class="field full"><span class="field-label">Valeur de comparaison</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="Valeur de comparaison"></ha-input></div>`;
+      return `<div class="field full"><span class="field-label">${esc(this._t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(this._t("rules.value"))}"></ha-input></div>`;
     }
     const values = this._ruleValueList(rule.value);
     const multipleHint = rule.operator === "equals" || rule.operator === "contains"
-      ? "L’alerte se déclenche dès qu’une valeur correspond."
-      : "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.";
-    return `<div class="field full rule-values-field"><span class="field-label">Valeurs de comparaison</span><div class="rule-value-list">
-      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="Valeur de comparaison ${index + 1}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="Retirer la valeur ${index + 1}">Retirer</ha-button>` : ""}</div>`).join("")}
-    </div><div class="rule-value-footer"><small>${multipleHint}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>Ajouter une valeur</ha-button></div></div>`;
+      ? this._t("rules.multiple_any")
+      : this._t("rules.multiple_none");
+    return `<div class="field full rule-values-field"><span class="field-label">${esc(this._t("rules.values"))}</span><div class="rule-value-list">
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(this._t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(this._t("rules.aria_remove_value", { index: index + 1 }))}">${esc(this._t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
+    </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div></div>`;
   }
 
   _ruleValueList(value) {
@@ -592,23 +646,23 @@ class AlertManagerPanel extends HTMLElement {
   _renderSettings() {
     this._ensureSettingsDraft();
     return `<form id="settings-form" class="stack">
-      <section class="panel"><h2>Paramètres généraux</h2><div class="fields">
-        ${this._numberField("global-delay", "Délai global", this._config.global_delay, "secondes", 0, 31536000)}
-        <div class="field"><span class="field-label">Labels exclus des surveillances automatiques</span><ha-selector id="excluded-labels"></ha-selector><small>Une règle personnalisée ignore ces labels.</small></div>
-      </div><small>Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.</small></section>
-      <section class="panel"><h2>Exclusions explicites</h2><div class="fields">
-        <div class="field"><span class="field-label">Entités exclues</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">Appareils exclus</span><ha-selector id="excluded-devices"></ha-selector></div>
+      <section class="panel"><h2>${esc(this._t("settings.general"))}</h2><div class="fields">
+        ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000)}
+        <div class="field"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
+      </div><small>${esc(this._t("settings.global_delay_help"))}</small></section>
+      <section class="panel"><h2>${esc(this._t("settings.explicit_exclusions"))}</h2><div class="fields">
+        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></section>
-      <section class="panel"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur le délai du pack et le délai global.</small></div>
+      <section class="panel"><div><h2>${esc(this._t("settings.entity_delay"))}</h2><small>${esc(this._t("settings.delay_help"))}</small></div>
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
-          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="Délai en secondes"><span slot="end">secondes</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</ha-button>
-        </div>`).join("") : '<div class="empty compact">Aucun délai particulier.</div>'}</div>
-        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>Ajouter</ha-button></div>
+          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(this._t("settings.aria_delay"))}"><span slot="end">${esc(this._t("units.seconds"))}</span></ha-input>
+          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(this._t("settings.aria_remove_delay"))}">${esc(this._t("buttons.delete"))}</ha-button>
+        </div>`).join("") : `<div class="empty compact">${esc(this._t("settings.no_delay"))}</div>`}</div>
+        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
       </section>
-      <div class="actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>Enregistrer les paramètres</ha-button></div>
+      <div class="actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
     </form>`;
   }
 
@@ -624,17 +678,11 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _ruleSummary(rule) {
-    const source = rule.source === "attribute" ? rule.attribute : "état";
-    const symbols = {
-      equals: "=",
-      not_equals: "≠",
-      contains: "contient",
-      not_contains: "ne contient pas",
-      above: ">",
-      below: "<",
-    };
+    const source = rule.source === "attribute"
+      ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
+      : this._t("conditions.sources.state");
     const expected = this._ruleValueList(rule.value).join(" / ");
-    return `${source} ${symbols[rule.operator]} ${expected}`;
+    return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
   }
 
   async _handleClick(event) {
@@ -722,14 +770,14 @@ class AlertManagerPanel extends HTMLElement {
     } else if (action === "toggle-rule") {
       const updated = await this._call(
         { type: "alert_manager/rules/update", rule_id: rule.id, rule: { enabled: !rule.enabled } },
-        rule.enabled ? "Règle désactivée" : "Règle activée",
+        this._t(rule.enabled ? "success.rule_disabled" : "success.rule_enabled"),
       );
       if (updated) this._replaceRule(updated);
     } else if (action === "delete-rule") {
-      if (!window.confirm(`Supprimer la règle « ${rule.name} » ?`)) return;
+      if (!window.confirm(this._t("rules.delete_confirm", { name: rule.name }))) return;
       const result = await this._call(
         { type: "alert_manager/rules/delete", rule_id: rule.id },
-        "Règle supprimée",
+        this._t("success.rule_deleted"),
       );
       if (result !== null) {
         this._config.rules = this._config.rules.filter((item) => item.id !== rule.id);
@@ -847,7 +895,10 @@ class AlertManagerPanel extends HTMLElement {
         );
       }
     }
-    const config = await this._call({ type: "alert_manager/config/update", config: { automatic } }, "Surveillance enregistrée");
+    const config = await this._call(
+      { type: "alert_manager/config/update", config: { automatic } },
+      this._t("success.automatic_saved"),
+    );
     if (config) {
       this._config = config;
       this._render();
@@ -860,12 +911,15 @@ class AlertManagerPanel extends HTMLElement {
     const entityDelays = {};
     for (const row of this._entityDelayDraft) {
       if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
-        this._notice = { kind: "error", text: "Chaque délai particulier doit avoir une entité et un nombre entier positif." };
+        this._notice = { kind: "error", text: this._t("settings.delay_validation") };
         this._render();
         return;
       }
       if (row.entity_id in entityDelays) {
-        this._notice = { kind: "error", text: `L’entité ${row.entity_id} est présente deux fois dans les délais.` };
+        this._notice = {
+          kind: "error",
+          text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
+        };
         this._render();
         return;
       }
@@ -878,7 +932,10 @@ class AlertManagerPanel extends HTMLElement {
       excluded_devices: [...this._settingsDraft.excluded_devices],
       entity_delays: entityDelays,
     };
-    const config = await this._call({ type: "alert_manager/config/update", config: changes }, "Paramètres enregistrés");
+    const config = await this._call(
+      { type: "alert_manager/config/update", config: changes },
+      this._t("success.settings_saved"),
+    );
     if (config) {
       this._config = config;
       this._resetSettingsDraft();
@@ -918,7 +975,10 @@ class AlertManagerPanel extends HTMLElement {
     const message = id
       ? { type: "alert_manager/rules/update", rule_id: id, rule }
       : { type: "alert_manager/rules/create", rule };
-    const updated = await this._call(message, id ? "Règle modifiée" : "Règle créée");
+    const updated = await this._call(
+      message,
+      this._t(id ? "success.rule_updated" : "success.rule_created"),
+    );
     if (updated) {
       this._editingRule = null;
       this._replaceRule(updated);
@@ -992,7 +1052,7 @@ class AlertManagerPanel extends HTMLElement {
     ) {
       this._notice = {
         kind: "error",
-        text: `L’entité ${entityId} possède déjà un délai particulier.`,
+        text: this._t("settings.duplicate_delay", { entity_id: entityId }),
       };
       this._render();
       return;
@@ -1004,7 +1064,7 @@ class AlertManagerPanel extends HTMLElement {
     if (!value) return "—";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(this._hass?.locale?.language || "fr-FR", {
+    return new Intl.DateTimeFormat(this._language, {
       dateStyle: "short",
       timeStyle: "medium",
     }).format(date);
@@ -1014,7 +1074,41 @@ class AlertManagerPanel extends HTMLElement {
     const due = new Date(value).getTime();
     if (!Number.isFinite(due)) return "—";
     const seconds = Math.max(0, Math.ceil((due - Date.now()) / 1000));
-    return seconds === 0 ? "Activation en cours…" : durationText(seconds);
+    return seconds === 0 ? this._t("duration.activation") : this._durationText(seconds);
+  }
+
+  _durationText(seconds) {
+    const value = Math.max(0, Number(seconds) || 0);
+    if (value < 60) return this._t("duration.seconds", { count: value });
+    if (value % 3600 === 0) {
+      return this._t("duration.hours", { count: value / 3600 });
+    }
+    if (value % 60 === 0) {
+      return this._t("duration.minutes", { count: value / 60 });
+    }
+    return this._t("duration.minutes_seconds", {
+      minutes: Math.floor(value / 60),
+      seconds: value % 60,
+    });
+  }
+
+  _conditionText(alert) {
+    if (!alert?.condition_key) return alert?.condition ?? "";
+    const params = { ...(alert.condition_params ?? {}) };
+    if (alert.condition_key === "rule.generated") {
+      const sourceKey = params.source === "attribute"
+        ? "conditions.sources.attribute"
+        : "conditions.sources.state";
+      params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
+      params.operator = this._t(`operators.${params.operator}`);
+      params.unit = params.unit ? ` ${params.unit}` : "";
+      params.duration = Number(params.duration)
+        ? ` ${this._t("conditions.fragments.duration", {
+          duration: this._durationText(params.duration),
+        })}`
+        : "";
+    }
+    return this._t(`conditions.${alert.condition_key}`, params);
   }
 
   _updateCountdowns() {
@@ -1043,4 +1137,4 @@ if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
 }
 
-export { AlertManagerPanel, buildOverviewItems, durationText, lines, newRuleDefaults };
+export { AlertManagerPanel, buildOverviewItems, lines, newRuleDefaults };

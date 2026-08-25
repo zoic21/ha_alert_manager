@@ -9,5 +9,183 @@
         "title": "Alert Manager"
       }
     }
+  },
+  "config_panel": {
+    "automatic": {
+      "aria_enable": "Enable {name}",
+      "empty_delay_help": "Leave the delay empty to use the global delay.",
+      "pack_delay": "Pack delay",
+      "save": "Save automatic monitoring",
+      "threshold": "Threshold"
+    },
+    "buttons": {
+      "add": "Add",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "remove": "Remove",
+      "save": "Save"
+    },
+    "conditions": {
+      "automatic": {
+        "battery": "Battery less than or equal to {threshold}%",
+        "connectivity": "Connectivity is off",
+        "unavailable": "State is unavailable",
+        "unifi": "UniFi device is away"
+      },
+      "fragments": {
+        "duration": "for {duration}"
+      },
+      "rule": {
+        "generated": "{source} {operator} {expected}{unit}{duration}"
+      },
+      "sources": {
+        "attribute": "Attribute {attribute}",
+        "state": "State"
+      }
+    },
+    "duration": {
+      "activation": "Activating…",
+      "hours": "{count} h",
+      "minutes": "{count} min",
+      "minutes_seconds": "{minutes} min {seconds} s",
+      "seconds": "{count} s"
+    },
+    "errors": {
+      "invalid_format": "The data is invalid. Check the fields and try again.",
+      "not_loaded": "Alert Manager is not loaded.",
+      "unknown": "An unexpected error occurred."
+    },
+    "loading": "Loading Alert Manager…",
+    "operators": {
+      "above": "greater than",
+      "below": "less than",
+      "contains": "contains",
+      "equals": "equals",
+      "not_contains": "does not contain",
+      "not_equals": "does not equal"
+    },
+    "overview": {
+      "active_since": "Active since",
+      "area": "Area",
+      "condition": "Condition",
+      "detected": "Detected",
+      "device": "Device",
+      "device_fallback": "Device",
+      "empty_active": "No active alerts.",
+      "empty_upcoming": "No upcoming alerts.",
+      "remaining": "Time remaining",
+      "section_active": "Active alerts",
+      "section_upcoming": "Upcoming alerts",
+      "status_active": "Active",
+      "status_active_count": "Active: {count}",
+      "status_pending": "Pending",
+      "status_pending_count": "Pending: {count}",
+      "summary_active": "Active alerts",
+      "summary_pending": "Pending",
+      "summary_tracked": "Total monitored"
+    },
+    "packs": {
+      "battery": {
+        "description": "Monitors battery sensors at or below their threshold.",
+        "name": "Low batteries"
+      },
+      "connectivity": {
+        "description": "Monitors connectivity sensors that switch to off.",
+        "name": "Connectivity"
+      },
+      "unavailable": {
+        "description": "Monitors the unavailable state for every entity.",
+        "name": "Unavailable entities"
+      },
+      "unifi": {
+        "description": "Monitors devices tracked by a UniFi router.",
+        "name": "UniFi devices"
+      }
+    },
+    "rules": {
+      "aria_close": "Close",
+      "aria_create_dialog": "Create a rule",
+      "aria_disable": "Disable rule {name}",
+      "aria_edit": "Edit rule {name}",
+      "aria_edit_dialog": "Edit a rule",
+      "aria_enable": "Enable rule {name}",
+      "aria_remove_value": "Remove value {index}",
+      "aria_resize": "Resize the drawer",
+      "aria_value": "Comparison value {index}",
+      "attribute": "Attribute",
+      "attribute_name": "Attribute name",
+      "condition": "Condition",
+      "create": "Create",
+      "delete_confirm": "Delete rule “{name}”?",
+      "description": "Simple comparisons on the state or an attribute.",
+      "duration": "Duration",
+      "editor_condition_help": "Define the value that triggers the alert.",
+      "editor_information": "Information",
+      "editor_information_help": "Identify the rule and select the monitored entities.",
+      "editor_trigger": "Trigger",
+      "editor_trigger_help": "Add a delay and customize the exposed message.",
+      "empty": "No custom rules.",
+      "entities": "Entities",
+      "entities_help": "Each entity is evaluated independently.",
+      "message_optional": "Optional message",
+      "modify": "Edit",
+      "multiple_any": "The alert triggers as soon as one value matches.",
+      "multiple_none": "The alert triggers only when none of the values match.",
+      "name": "Name",
+      "new": "New rule",
+      "new_subtitle": "New custom rule",
+      "operator": "Operator",
+      "source": "Source",
+      "source_attribute": "Attribute",
+      "source_state": "Main state",
+      "title": "Custom rules",
+      "value": "Comparison value",
+      "values": "Comparison values"
+    },
+    "settings": {
+      "aria_delay": "Delay in seconds",
+      "aria_remove_delay": "Delete this delay",
+      "delay_help": "Takes priority over the pack delay and global delay.",
+      "delay_validation": "Each entity-specific delay must have an entity and a positive whole number.",
+      "device_exclusions": "Excluded devices",
+      "duplicate_delay": "Entity {entity_id} already has an entity-specific delay.",
+      "duplicate_delay_save": "Entity {entity_id} appears twice in entity-specific delays.",
+      "entity_delay": "Entity-specific delays",
+      "entity_exclusions": "Excluded entities",
+      "explicit_exclusions": "Explicit exclusions",
+      "general": "General settings",
+      "global_delay": "Global delay",
+      "global_delay_help": "This delay is used when no entity-specific or pack delay is defined.",
+      "label_exclusions": "Labels excluded from automatic monitoring",
+      "labels_help": "Custom rules ignore these labels.",
+      "no_delay": "No entity-specific delays.",
+      "save": "Save settings"
+    },
+    "success": {
+      "automatic_saved": "Automatic monitoring saved",
+      "rule_created": "Rule created",
+      "rule_deleted": "Rule deleted",
+      "rule_disabled": "Rule disabled",
+      "rule_enabled": "Rule enabled",
+      "rule_updated": "Rule updated",
+      "settings_saved": "Settings saved"
+    },
+    "tabs": {
+      "automatic": "Automatic monitoring",
+      "overview": "Overview",
+      "rules": "Custom rules",
+      "settings": "Exclusions and settings"
+    },
+    "unavailable": "Configuration unavailable.",
+    "units": {
+      "seconds": "seconds"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "alert_manager": {
+        "name": "Alert Manager"
+      }
+    }
   }
 }

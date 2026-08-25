@@ -67,7 +67,7 @@ from .validation import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_OPERATOR_LABELS = {
+_LEGACY_OPERATOR_LABELS = {
     "equals": "Égal à",
     "not_equals": "Différent de",
     "contains": "Contient",
@@ -399,6 +399,11 @@ class AlertManager:
                 continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             condition = rule.message or self._rule_condition(rule, state)
+            condition_key = None
+            condition_params = None
+            if rule.message is None:
+                condition_key = "rule.generated"
+                condition_params = self._rule_condition_params(rule, state)
             result[alert_id] = (
                 self._details(
                     state,
@@ -406,6 +411,8 @@ class AlertManager:
                     "rule",
                     condition,
                     value=current,
+                    condition_key=condition_key,
+                    condition_params=condition_params,
                 ),
                 rule.duration,
             )
@@ -433,6 +440,8 @@ class AlertManager:
                 pack_id,
                 match.condition,
                 value=match.value,
+                condition_key=match.condition_key,
+                condition_params=match.condition_params,
             ),
             self._delay_for(state, pack_id),
         )
@@ -500,6 +509,8 @@ class AlertManager:
         condition: str,
         *,
         value: Any | None = None,
+        condition_key: str | None = None,
+        condition_params: dict[str, Any] | None = None,
     ) -> AlertDetails:
         """Resolve names, device, area and integration once per evaluation."""
         entity_entry = er.async_get(self.hass).async_get(state.entity_id)
@@ -530,7 +541,24 @@ class AlertManager:
             value=state.state if value is None else value,
             unit=state.attributes.get(ATTR_UNIT_OF_MEASUREMENT),
             condition=condition,
+            condition_key=condition_key,
+            condition_params=condition_params,
         )
+
+    def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
+        """Return stable structured parameters for a generated rule condition."""
+        return {
+            "source": rule.source,
+            "attribute": rule.attribute,
+            "operator": rule.operator,
+            "expected": (
+                " / ".join(str(value) for value in rule.value)
+                if isinstance(rule.value, list)
+                else str(rule.value)
+            ),
+            "unit": state.attributes.get(ATTR_UNIT_OF_MEASUREMENT),
+            "duration": rule.duration,
+        }
 
     def _rule_condition(self, rule: Rule, state: State) -> str:
         """Build a compact human-readable rule condition."""
@@ -544,7 +572,7 @@ class AlertManager:
             else str(rule.value)
         )
         return (
-            f"{source} {_OPERATOR_LABELS[rule.operator].lower()} "
+            f"{source} {_LEGACY_OPERATOR_LABELS[rule.operator].lower()} "
             f"{expected}{suffix}{duration}"
         )
 

@@ -16,6 +16,8 @@ class PackMatch:
 
     condition: str
     value: Any | None = None
+    condition_key: str | None = None
+    condition_params: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,8 +25,7 @@ class AutomaticPack:
     """Stable metadata and isolated evaluation function for an automatic pack."""
 
     id: str
-    name: str
-    description: str
+    translation_key: str
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
@@ -47,8 +48,7 @@ class AutomaticPack:
         """Expose stable metadata and current runtime availability to the panel."""
         return {
             "id": self.id,
-            "name": self.name,
-            "description": self.description,
+            "translation_key": self.translation_key,
             "prerequisites": list(self.prerequisites),
             "available": self.available(hass),
         }

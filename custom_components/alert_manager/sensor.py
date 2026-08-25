@@ -27,10 +27,10 @@ async def async_setup_entry(
 class AlertManagerSensor(SensorEntity):
     """Expose only active/pending alerts and their counts."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_icon = PANEL_ICON
-    _attr_name = "Alert Manager"
     _attr_should_poll = False
+    _attr_translation_key = "alert_manager"
     _attr_unique_id = "alert_manager"
 
     def __init__(self, manager: AlertManager) -> None:

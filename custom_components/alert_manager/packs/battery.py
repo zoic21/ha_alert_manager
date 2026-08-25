@@ -34,13 +34,14 @@ def _evaluate(
     return PackMatch(
         condition=f"Batterie inférieure ou égale à {threshold:g} %",
         value=value,
+        condition_key="automatic.battery",
+        condition_params={"threshold": f"{threshold:g}"},
     )
 
 
 PACK = AutomaticPack(
     id=CATEGORY_BATTERY,
-    name="Batteries faibles",
-    description="Surveille les capteurs de batterie sous leur seuil.",
+    translation_key="battery",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
