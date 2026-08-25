@@ -308,6 +308,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.match(automatic, /<ha-button appearance="accent" variant="brand" data-action="save-automatic"/);
   assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>État unavailable/);
+  assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
@@ -412,6 +413,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
+  assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|Règle activée/);
   assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);

@@ -413,7 +413,6 @@ class AlertManagerPanel extends HTMLElement {
             ${id === "battery" ? this._numberField("battery-threshold", "Seuil", config.threshold, "%", -1000000000, 1000000000, "any") : ""}
           </div>
           ${id === "unavailable" ? "<small>Tous les domaines sont surveillés. Seul l’état unavailable est concerné.</small>" : ""}
-          <small>Délai actuel : ${esc(durationText(config.delay))}</small>
         </section>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>Enregistrer la surveillance</ha-button></div>
@@ -456,7 +455,7 @@ class AlertManagerPanel extends HTMLElement {
         <div class="field"><span class="field-label">Opérateur</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
         ${this._textField("value", "Valeur de comparaison", rule.value, true)}
         ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
-        ${this._textField("message", "Message facultatif", rule.message || "")}
+        ${this._textField("message", "Message facultatif", rule.message || "", false, "name", "full rule-message-field")}
         <div class="actions full rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
       </form>
     </ha-card>`;
