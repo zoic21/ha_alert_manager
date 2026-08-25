@@ -319,6 +319,7 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
 
   await panel._saveRule(form(ruleValues({ id: "rule-id", name: "Modifiée" })));
   await panel._handleClick(actionEvent("toggle-rule", "rule-id"));
+  panel._editingRule = { ...existing };
   await panel._handleClick(actionEvent("delete-rule", "rule-id"));
 
   assert.equal(calls[0].type, "alert_manager/rules/update");
@@ -334,6 +335,7 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
     rule_id: "rule-id",
   });
   assert.deepEqual(panel._config.rules, []);
+  assert.equal(panel._editingRule, null);
 });
 
 test("table toggle updates an open editor for the same rule", async () => {
@@ -356,7 +358,7 @@ test("table toggle updates an open editor for the same rule", async () => {
   assert.equal(panel._editingRule.enabled, false);
 });
 
-test("rule actions and editor use the requested native button appearances", () => {
+test("rule rows and editor use native Home Assistant components", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = {
@@ -374,17 +376,21 @@ test("rule actions and editor use the requested native button appearances", () =
   panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
   const settings = panel._renderSettings();
 
-  assert.match(rules, /appearance="plain" variant="brand" size="xs" class="rule-status"[^>]*>✓<\/ha-button>/);
-  assert.match(rules, /appearance="plain" variant="danger" size="xs" class="rule-status"[^>]*>✕<\/ha-button>/);
-  assert.match(rules, /appearance="filled" size="s" data-action="edit-rule"/);
-  assert.match(rules, /appearance="plain" variant="danger" size="s" data-action="delete-rule"/);
-  assert.match(editor, /<aside class="rule-editor-drawer"[\s\S]*<form id="rule-form" class="fields rule-editor-form">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
+  assert.match(rules, /<tr class="rule-row [^"]*" data-action="edit-rule" data-id="enabled"/);
+  assert.match(rules, /<ha-switch haptic data-action="toggle-rule" data-id="enabled"[^>]* checked/);
+  assert.match(rules, /<ha-switch haptic data-action="toggle-rule" data-id="disabled"(?![^>]* checked)/);
+  assert.doesNotMatch(rules, /<ha-button[^>]+data-action="edit-rule"/);
+  assert.doesNotMatch(rules, /data-action="delete-rule"/);
+  assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
+  assert.match(editor, /<form id="rule-form" class="fields rule-editor-form">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
   assert.match(editor, /<ha-switch id="rule-enabled" data-field="enabled" checked/);
+  assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
   assert.match(editor, /appearance="plain" data-action="cancel-rule"/);
+  assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
-  assert.match(panel._styles(), /\.rule-editor-drawer\{position:fixed/);
+  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
 });
 
 test("overview displays the backend tracked total", () => {

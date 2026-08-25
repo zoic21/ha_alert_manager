@@ -55,8 +55,10 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    entités uniques couvertes par au moins une surveillance automatique.
 2. **Surveillance automatique** : activation, délais et seuil de batterie, avec
    deux catégories par ligne sur les écrans suffisamment larges.
-3. **Règles personnalisées** : création, modification dans un volet latéral,
-   activation et suppression.
+3. **Règles personnalisées** : création et modification dans un volet latéral
+   composé des éléments natifs Home Assistant. Un clic sur la ligne ouvre le
+   volet, l’interrupteur natif en fin de ligne active la règle et la suppression
+   se trouve uniquement dans le volet.
 4. **Exclusions et paramètres** : labels, entités, appareils, délai global et délais
    particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
    Home Assistant.
