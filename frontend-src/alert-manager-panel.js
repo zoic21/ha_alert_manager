@@ -31,6 +31,7 @@ const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41
 const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
 const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
+const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 
 const esc = (value) =>
   String(value ?? "")
@@ -61,7 +62,7 @@ const newRuleDefaults = () => ({
   source: "state",
   attribute: "",
   operator: "equals",
-  value: "",
+  value: [""],
   duration: 900,
   message: "",
 });
@@ -122,7 +123,7 @@ class AlertManagerPanel extends HTMLElement {
     this._sensorState = null;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
-    this._ruleEditorWidth = 500;
+    this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
@@ -291,6 +292,9 @@ class AlertManagerPanel extends HTMLElement {
       shell.tabs = TAB_PAGES;
       shell.route = { prefix: "", path: activePage.path };
       shell.backPath = "/config/integrations";
+      shell.backCallback = window.history?.state?.from !== undefined
+        ? () => window.history.back()
+        : undefined;
     }
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
@@ -317,10 +321,22 @@ class AlertManagerPanel extends HTMLElement {
         [
           { value: "equals", label: "Égal à" },
           { value: "not_equals", label: "Différent de" },
+          { value: "contains", label: "Contient" },
+          { value: "not_contains", label: "Ne contient pas" },
           { value: "above", label: "Supérieur à" },
           { value: "below", label: "Inférieur à" },
         ],
         this._editingRule.operator ?? "equals",
+        (value) => {
+          this._captureRuleDraft();
+          this._editingRule.operator = value;
+          if (TEXT_RULE_OPERATORS.has(value)) {
+            this._editingRule.value = this._ruleValueList(this._editingRule.value);
+          } else {
+            this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
+          }
+          this._render();
+        },
       );
       this._configureSelector(
         "rule-entity-ids",
@@ -512,6 +528,9 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
+    rule.value = TEXT_RULE_OPERATORS.has(rule.operator)
+      ? this._ruleValueList(rule.value)
+      : this._ruleValueList(rule.value)[0] ?? "";
     this._editingRule = rule;
     return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
     <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${rule.id ? "Modifier" : "Créer"} une règle">
@@ -521,18 +540,50 @@ class AlertManagerPanel extends HTMLElement {
         <span slot="title">${rule.id ? "Modifier" : "Créer"} une règle</span>
         <span slot="subtitle">${rule.id ? esc(rule.name) : "Nouvelle règle personnalisée"}</span>
       </ha-dialog-header>
-      <form id="rule-form" class="fields rule-editor-form">
-        ${this._textField("name", "Nom", rule.name, true, "name", "full rule-name-field")}
-        <div class="field full"><span class="field-label">Entités</span><ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></div>
-        <div class="field"><span class="field-label">Source</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-        <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">Nom de l’attribut</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="Nom de l’attribut"></ha-input></div>
-        <div class="field"><span class="field-label">Opérateur</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
-        ${this._textField("value", "Valeur de comparaison", rule.value, true)}
-        ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
-        ${this._textField("message", "Message facultatif", rule.message || "", false, "name", "full rule-message-field")}
-        <div class="actions full rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
+      <form id="rule-form" class="rule-editor-form">
+        <section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>Informations</h3><small>Identifiez la règle et choisissez les entités surveillées.</small></div><label class="rule-enabled"><span>Active</span><ha-switch id="rule-enabled" data-field="enabled" aria-label="Activer la règle" ${rule.enabled ? "checked" : ""}></ha-switch></label></div>
+          <div class="fields">
+            ${this._textField("name", "Nom", rule.name, true, "name", "full rule-name-field")}
+            <div class="field full"><span class="field-label">Entités</span><ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></div>
+          </div>
+        </section>
+        <section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>Condition</h3><small>Définissez la valeur qui doit déclencher l’alerte.</small></div></div>
+          <div class="fields">
+            <div class="field"><span class="field-label">Source</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">Nom de l’attribut</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="Nom de l’attribut"></ha-input></div>
+            <div class="field full"><span class="field-label">Opérateur</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
+            ${this._renderRuleValues(rule)}
+          </div>
+        </section>
+        <section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>Déclenchement</h3><small>Ajoutez une temporisation et personnalisez le message exposé.</small></div></div>
+          <div class="fields">
+            ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
+            ${this._textField("message", "Message facultatif", rule.message || "", false, "name", "full rule-message-field")}
+          </div>
+        </section>
+        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">Annuler</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
       </form>
     </ha-card>`;
+  }
+
+  _renderRuleValues(rule) {
+    if (!TEXT_RULE_OPERATORS.has(rule.operator)) {
+      return `<div class="field full"><span class="field-label">Valeur de comparaison</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="Valeur de comparaison"></ha-input></div>`;
+    }
+    const values = this._ruleValueList(rule.value);
+    const multipleHint = rule.operator === "equals" || rule.operator === "contains"
+      ? "L’alerte se déclenche dès qu’une valeur correspond."
+      : "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.";
+    return `<div class="field full rule-values-field"><span class="field-label">Valeurs de comparaison</span><div class="rule-value-list">
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="Valeur de comparaison ${index + 1}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="Retirer la valeur ${index + 1}">Retirer</ha-button>` : ""}</div>`).join("")}
+    </div><div class="rule-value-footer"><small>${multipleHint}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>Ajouter une valeur</ha-button></div></div>`;
+  }
+
+  _ruleValueList(value) {
+    return (Array.isArray(value) ? value : [value ?? ""]).map((item) => String(item));
   }
 
   _renderSettings() {
@@ -571,8 +622,16 @@ class AlertManagerPanel extends HTMLElement {
 
   _ruleSummary(rule) {
     const source = rule.source === "attribute" ? rule.attribute : "état";
-    const symbols = { equals: "=", not_equals: "≠", above: ">", below: "<" };
-    return `${source} ${symbols[rule.operator]} ${rule.value}`;
+    const symbols = {
+      equals: "=",
+      not_equals: "≠",
+      contains: "contient",
+      not_contains: "ne contient pas",
+      above: ">",
+      below: "<",
+    };
+    const expected = this._ruleValueList(rule.value).join(" / ");
+    return `${source} ${symbols[rule.operator]} ${expected}`;
   }
 
   async _handleClick(event) {
@@ -617,6 +676,20 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "cancel-rule") {
       this._editingRule = null;
+      this._render();
+      return;
+    }
+    if (action === "add-rule-value") {
+      this._captureRuleDraft();
+      this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
+      this._render();
+      return;
+    }
+    if (action === "remove-rule-value") {
+      this._captureRuleDraft();
+      const values = this._ruleValueList(this._editingRule.value);
+      values.splice(Number(button.dataset.index), 1);
+      this._editingRule.value = values.length ? values : [""];
       this._render();
       return;
     }
@@ -709,7 +782,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetRuleEditorWidth(event) {
     if (!event.target.closest?.(".rule-editor-resize")) return;
     event.preventDefault();
-    this._setRuleEditorWidth(500);
+    this._setRuleEditorWidth(560);
   }
 
   _handleKeydown(event) {
@@ -817,14 +890,24 @@ class AlertManagerPanel extends HTMLElement {
       form.querySelector?.(`[name="${name}"]`);
     const value = (name) => field(name)?.value ?? "";
     const source = value("source");
+    const operator = value("operator");
+    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
+    const comparisonValue = TEXT_RULE_OPERATORS.has(operator)
+      ? (valueInputs.length
+        ? valueInputs.map((input) => String(input.value).trim())
+        : this._ruleValueList(value("value")).map((item) => item.trim()))
+      : String(value("value"));
+    const enabledField = field("enabled");
     const rule = {
       name: String(value("name")).trim(),
       entity_ids: [...(this._editingRule?.entity_ids ?? [])],
-      enabled: Boolean(this._editingRule?.enabled ?? true),
+      enabled: enabledField && "checked" in enabledField
+        ? Boolean(enabledField.checked)
+        : Boolean(this._editingRule?.enabled ?? true),
       source,
       attribute: source === "attribute" ? String(value("attribute")).trim() : null,
-      operator: value("operator"),
-      value: String(value("value")),
+      operator,
+      value: comparisonValue,
       duration: Number(value("duration")),
       message: String(value("message")).trim() || null,
     };
@@ -840,6 +923,30 @@ class AlertManagerPanel extends HTMLElement {
       this._editingRule = null;
       this._replaceRule(updated);
     }
+  }
+
+  _captureRuleDraft() {
+    const form = this.shadowRoot.querySelector?.("#rule-form");
+    if (!form || this._editingRule === null) return;
+    const field = (name) => form.querySelector?.(`[data-field="${name}"]`);
+    const value = (name) => field(name)?.value;
+    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
+    const enabled = field("enabled");
+    this._editingRule = {
+      ...this._editingRule,
+      name: String(value("name") ?? this._editingRule.name ?? ""),
+      enabled: enabled && "checked" in enabled
+        ? Boolean(enabled.checked)
+        : Boolean(this._editingRule.enabled ?? true),
+      source: value("source") ?? this._editingRule.source ?? "state",
+      attribute: String(value("attribute") ?? this._editingRule.attribute ?? ""),
+      operator: value("operator") ?? this._editingRule.operator ?? "equals",
+      value: valueInputs.length
+        ? valueInputs.map((input) => String(input.value))
+        : String(value("value") ?? this._editingRule.value ?? ""),
+      duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
+      message: String(value("message") ?? this._editingRule.message ?? ""),
+    };
   }
 
   _replaceRule(rule) {
@@ -927,10 +1034,10 @@ class AlertManagerPanel extends HTMLElement {
       .panel{margin-bottom:20px}.alert-group{margin-bottom:24px}.alert-group-header{display:flex;align-items:center;gap:8px;margin:0 4px 12px}.alert-group-header h2{margin:0}.alert-group-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 8px;border-radius:var(--ha-border-radius-pill,999px);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500)}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}.alert-card,.device-alert-group{height:100%;overflow:hidden;--alert-state-color:var(--warning-color,#f5a623)}.alert-card.is-active,.device-alert-group.is-active{--alert-state-color:var(--error-color,#db4437)}.alert-card-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.alert-status-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;color:var(--alert-state-color);background:color-mix(in srgb,var(--alert-state-color) 12%,transparent)}.alert-status-icon ha-svg-icon{width:24px;height:24px}.alert-title{min-width:0;line-height:1.35}.alert-title code{display:block;margin-top:2px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.alert-current-value{color:var(--alert-state-color);font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);text-align:right;overflow-wrap:anywhere}.alert-card-content{padding:0 16px 16px;border-top:1px solid var(--divider-color,#ddd)}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer}.entity-link:hover{color:var(--primary-color,#03a9f4)}.entity-link:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:3px}.device-group-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.device-group-header h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.35;margin:0}.device-group-header small{margin:2px 0 0}.device-group-header>strong{color:var(--alert-state-color);text-align:right}.device-alert-rows{border-top:1px solid var(--divider-color,#ddd)}.device-alert-row{display:grid;grid-template-columns:minmax(0,1.25fr) auto auto;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--divider-color,#ddd)}.device-alert-row:last-child{border-bottom:0}.device-alert-source{min-width:0}.device-alert-source code{display:block;color:var(--secondary-text-color,#727272)}.device-alert-value{color:var(--alert-state-color);text-align:right}.device-alert-status{color:var(--alert-state-color);font-weight:var(--ha-font-weight-medium,500);text-align:right}.device-alert-condition{grid-column:1/3;min-width:0}.device-alert-condition span,.device-alert-time span{display:block;overflow-wrap:anywhere}.device-alert-time{text-align:right}.device-alert-row.is-pending{--alert-state-color:var(--warning-color,#f5a623)}.device-alert-row.is-active{--alert-state-color:var(--error-color,#db4437)}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}.alert-details{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:12px 16px;margin:14px 0 0}.alert-details div{min-width:0}dt{font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-normal,400);color:var(--secondary-text-color,#727272)}dd{margin:2px 0 0;overflow-wrap:anywhere}.alert-condition{grid-column:1/-1}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}.alert-empty{margin-bottom:20px}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:500px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;align-content:start;gap:16px;margin-top:0;padding:20px;padding-bottom:max(var(--safe-area-inset-bottom,0px),20px)}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-editor-actions{justify-content:flex-start}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-enabled{display:flex;align-items:center;gap:10px;white-space:nowrap}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
     `;
   }
 }

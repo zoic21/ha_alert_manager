@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "1.2.0"
+INTEGRATION_VERSION: Final = "1.2.1"
 PLATFORMS: Final = [Platform.SENSOR]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -73,5 +73,12 @@ MAX_DELAY: Final = 31_536_000
 MIN_THRESHOLD: Final = -1_000_000_000.0
 MAX_THRESHOLD: Final = 1_000_000_000.0
 
-OPERATORS: Final = ("equals", "not_equals", "above", "below")
+OPERATORS: Final = (
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "above",
+    "below",
+)
 VALUE_SOURCES: Final = ("state", "attribute")
