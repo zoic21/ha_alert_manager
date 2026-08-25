@@ -351,6 +351,29 @@ test("automatic monitoring action serializes all category controls", async () =>
   });
 });
 
+test("submit keeps the form identity across an asynchronous rerender", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  let target = { id: "automatic-form" };
+  let automaticSaves = 0;
+  let settingsSaves = 0;
+  panel._saveAutomatic = async () => {
+    automaticSaves += 1;
+    target = null;
+  };
+  panel._saveSettings = async () => {
+    settingsSaves += 1;
+  };
+
+  await panel._handleSubmit({
+    preventDefault() {},
+    get target() { return target; },
+  });
+
+  assert.equal(automaticSaves, 1);
+  assert.equal(settingsSaves, 0);
+});
+
 test("settings action serializes exclusions and entity delays", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();

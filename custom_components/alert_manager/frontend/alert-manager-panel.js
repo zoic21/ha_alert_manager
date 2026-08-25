@@ -473,10 +473,20 @@ class AlertManagerPanel extends HTMLElement {
   async _handleSubmit(event) {
     event.preventDefault();
     if (this._busy) return;
-    if (event.target.id === "automatic-form") await this._saveAutomatic();
-    if (event.target.id === "settings-form") await this._saveSettings();
-    if (event.target.id === "rule-form" && event.target.reportValidity()) {
-      await this._saveRule(event.target);
+    // The save call rerenders the panel. Keep the form reference before the
+    // first await because the browser may clear Event.target afterwards.
+    const form = event.target;
+    const formId = form?.id;
+    if (formId === "automatic-form") {
+      await this._saveAutomatic();
+      return;
+    }
+    if (formId === "settings-form") {
+      await this._saveSettings();
+      return;
+    }
+    if (formId === "rule-form" && form.reportValidity()) {
+      await this._saveRule(form);
     }
   }
 
