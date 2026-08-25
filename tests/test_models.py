@@ -67,7 +67,7 @@ def test_numeric_rule_rejects_non_finite_values():
 
 
 def test_pending_record_advances_at_due_time():
-    """The pure state machine keeps detected_at/due_at stable."""
+    """The state machine records the real activation time, even if evaluated late."""
     now = datetime(2026, 8, 24, 12, tzinfo=UTC)
     details = AlertDetails(
         id="battery:sensor.test",
@@ -80,9 +80,10 @@ def test_pending_record_advances_at_due_time():
     record = AlertRecord.pending(details, 900, now)
     assert record.status is AlertStatus.PENDING
     assert not advance_record(record, now + timedelta(seconds=899))
-    assert advance_record(record, now + timedelta(seconds=900))
+    activated_at = now + timedelta(seconds=930)
+    assert advance_record(record, activated_at)
     assert record.status is AlertStatus.ACTIVE
-    assert record.active_since == record.due_at
+    assert record.active_since == activated_at
 
 
 def test_delay_is_elapsed_time_across_daylight_saving_change():

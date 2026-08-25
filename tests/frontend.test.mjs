@@ -234,8 +234,8 @@ test("navigation uses the native Home Assistant app bar and tabs", () => {
 
   panel._render();
 
-  assert.match(panel.shadowRoot.innerHTML, /<ha-top-app-bar-fixed id="panel-shell" center-title>/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon-button-arrow-prev slot="navigationIcon" href="\/config\/integrations"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-top-app-bar-fixed id="panel-shell" center-title back-button>/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-icon-button-arrow-prev/);
   assert.match(panel.shadowRoot.innerHTML, /<ha-tab data-action="tab" data-tab="overview"/);
   assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:view-dashboard-outline"/);
   assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:radar"/);
@@ -243,6 +243,7 @@ test("navigation uses the native Home Assistant app bar and tabs", () => {
   assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:tune-variant"/);
   assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
   assert.match(panel._styles(), /ha-top-app-bar-fixed\{[^}]*--app-header-background-color/);
+  assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed\{height:100%/);
   assert.doesNotMatch(panel._styles(), /\.tab\{/);
 });
 

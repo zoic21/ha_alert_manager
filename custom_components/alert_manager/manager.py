@@ -227,12 +227,12 @@ class AlertManager:
                     record.delay = delay
                     record.due_at = calculate_due_at(record.detected_at, delay)
                     self._cancel_timer(alert_id)
-                    if record.status is AlertStatus.ACTIVE:
-                        if now.astimezone(UTC) < record.due_at.astimezone(UTC):
-                            record.status = AlertStatus.PENDING
-                            record.active_since = None
-                        else:
-                            record.active_since = record.due_at
+                    if (
+                        record.status is AlertStatus.ACTIVE
+                        and now.astimezone(UTC) < record.due_at.astimezone(UTC)
+                    ):
+                        record.status = AlertStatus.PENDING
+                        record.active_since = None
                     persisted_changed = True
 
             became_active = advance_record(record, now)
@@ -515,6 +515,10 @@ class AlertManager:
         if "rules" in changes:
             raise ValueError("Rules must be changed through the rules API")
         candidate = _deep_merge(self.get_config(), changes)
+        # Entity delays are a complete mapping from the settings form, not a
+        # partial nested update. Replacing it allows removed rows to disappear.
+        if "entity_delays" in changes:
+            candidate["entity_delays"] = deepcopy(changes["entity_delays"])
         candidate["rules"] = self.config["rules"]
         self.config = validate_config(candidate)
         self._rebuild_rule_index()

@@ -179,8 +179,7 @@ class AlertManagerPanel extends HTMLElement {
       : this._renderTab();
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      <ha-top-app-bar-fixed id="panel-shell" center-title>
-        <ha-icon-button-arrow-prev slot="navigationIcon" href="/config/integrations"></ha-icon-button-arrow-prev>
+      <ha-top-app-bar-fixed id="panel-shell" center-title back-button>
         <div slot="title" class="native-tabs" role="tablist" aria-label="Sections">
           ${TABS.map(
             ([id, label, icon]) => `<ha-tab data-action="tab" data-tab="${id}" name="${esc(label)}"
@@ -233,8 +232,6 @@ class AlertManagerPanel extends HTMLElement {
   _hydrateSelectors() {
     const shell = this.shadowRoot.querySelector("#panel-shell");
     if (shell) shell.narrow = Boolean(this._narrow);
-    const backButton = this.shadowRoot.querySelector("ha-icon-button-arrow-prev");
-    if (backButton) backButton.href = "/config/integrations";
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
       this._configureSelect(
@@ -700,7 +697,7 @@ class AlertManagerPanel extends HTMLElement {
   _styles() {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
-      *{box-sizing:border-box}ha-top-app-bar-fixed{height:100%;--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{display:flex;flex:1;justify-content:center;height:var(--header-height);overflow:auto;color:var(--sidebar-text-color,var(--primary-text-color,#212121))}.native-tabs ha-tab{flex:0 1 auto}.native-tabs ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
+      *{box-sizing:border-box}ha-top-app-bar-fixed{--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{display:flex;flex:1;justify-content:center;height:var(--header-height);overflow:auto;color:var(--sidebar-text-color,var(--primary-text-color,#212121))}.native-tabs ha-tab{flex:0 1 auto}.native-tabs ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .header-count{min-width:94px;padding:12px 18px;border-radius:18px;text-align:center;background:var(--secondary-background-color,#fff)}.header-count strong{font-size:28px;display:block}.header-count span{font-size:12px;color:var(--secondary-text-color,#727272)}.header-count.has-alert{background:var(--error-color,#db4437);color:white}.header-count.has-alert span{color:white}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}

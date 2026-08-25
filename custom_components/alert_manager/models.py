@@ -295,11 +295,11 @@ def _parse_aware_datetime(value: Any, field: str) -> datetime:
 
 
 def advance_record(record: AlertRecord, now: datetime) -> bool:
-    """Advance a due pending record; return whether it changed."""
+    """Advance a due pending record at the actual transition time."""
     if record.status is not AlertStatus.PENDING or now.astimezone(
         UTC
     ) < record.due_at.astimezone(UTC):
         return False
     record.status = AlertStatus.ACTIVE
-    record.active_since = record.due_at
+    record.active_since = now
     return True

@@ -273,6 +273,27 @@ def test_delay_priority(hass, entry):
     assert manager.records["unavailable:sensor.test"].delay == 20
 
 
+def test_shortened_automatic_delay_uses_real_activation_time(hass, entry, set_now):
+    """A pending alert activated by a shorter delay starts at the config change."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+
+    changed_at = start + timedelta(minutes=15)
+    set_now(changed_at)
+    run(
+        manager.async_update_config(
+            {"automatic": {"unavailable": {"delay": 10}}}
+        )
+    )
+
+    record = manager.records["unavailable:sensor.test"]
+    assert record.status is AlertStatus.ACTIVE
+    assert record.due_at == start + timedelta(seconds=10)
+    assert record.active_since == changed_at
+
+
 def test_numeric_string_alert_delay_attribute(hass, entry):
     """Integral numeric attributes are accepted without weakening config validation."""
     hass.states.set("sensor.test", "unavailable", {"alert_delay": "40"})
@@ -458,6 +479,20 @@ def test_rule_delay_update_can_activate_immediately(hass, entry, set_now):
     record = manager.records[f"rule:{rule['id']}:sensor.test"]
     assert record.status is AlertStatus.ACTIVE
     assert record.due_at == start + timedelta(seconds=300)
+    assert record.active_since == start + timedelta(seconds=600)
+
+
+def test_removing_entity_delay_replaces_the_complete_mapping(hass, entry):
+    """Saving an empty entity-delay mapping really removes existing overrides."""
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"entity_delays": {"sensor.test": 20}}))
+    assert manager.records["unavailable:sensor.test"].delay == 20
+
+    run(manager.async_update_config({"entity_delays": {}}))
+
+    assert manager.config["entity_delays"] == {}
+    assert manager.records["unavailable:sensor.test"].delay == 900
 
 
 def test_rule_delay_extension_rechecks_an_active_instance(hass, entry, set_now):
