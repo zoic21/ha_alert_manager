@@ -36,6 +36,7 @@ def _evaluate(
 PACK = AutomaticPack(
     id=CATEGORY_UNIFI,
     name="Équipements UniFi",
+    description="Surveille les équipements suivis par un routeur UniFi.",
     prerequisites=("unifi",),
     applies=_applies,
     evaluate=_evaluate,

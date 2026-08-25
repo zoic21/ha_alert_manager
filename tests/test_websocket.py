@@ -9,6 +9,7 @@ from custom_components.alert_manager.const import DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
     websocket_config_update,
+    websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
     websocket_rule_update,
@@ -65,6 +66,36 @@ def test_websocket_invalid_frontend_data_gets_readable_error(hass, entry):
     assert connection.results == []
     assert connection.errors[0][1] == "invalid_format"
     assert "between" in connection.errors[0][2]
+
+
+def test_websocket_exposes_backend_pack_metadata(hass, entry):
+    """The panel gets pack labels and availability from the backend registry."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    websocket_packs_list(
+        hass,
+        connection,
+        {"id": 8, "type": "alert_manager/packs/list"},
+    )
+
+    packs = connection.results[-1][1]
+    assert [pack["id"] for pack in packs] == [
+        "unavailable",
+        "connectivity",
+        "unifi",
+        "battery",
+    ]
+    assert all(pack["name"] and pack["description"] for pack in packs)
+    assert next(pack for pack in packs if pack["id"] == "unifi") == {
+        "id": "unifi",
+        "name": "Équipements UniFi",
+        "description": "Surveille les équipements suivis par un routeur UniFi.",
+        "prerequisites": ["unifi"],
+        "available": False,
+    }
 
 
 def test_websocket_rule_actions_create_update_and_delete(hass, entry):

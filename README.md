@@ -5,15 +5,19 @@ un panel **Alertes** et une seule entité : `sensor.alert_manager`.
 
 Version minimale prise en charge : **Home Assistant 2026.8**.
 
-## Fonctionnalités V1.1
+## Fonctionnalités V1.2
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
   UniFi absents et batteries faibles ;
+- packs automatiques décrits par le backend et activés uniquement lorsque leurs
+  intégrations prérequises sont réellement disponibles ;
 - règles personnalisées multi-entités `equals`, `not_equals`, `above` et `below`
   sur l’état ou un attribut, avec une alerte indépendante par source ;
 - exclusions automatiques par plusieurs labels, entités ou appareils ;
 - panel administrateur responsive, servi directement par l’intégration ;
+- regroupement visuel, sans fusion des alertes, lorsque plusieurs anomalies
+  appartiennent au même appareil ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved` ;
 - aucune notification imposée et aucun polling global fréquent.
@@ -51,10 +55,15 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    équipement, pièce et dates. Le nom de la source ouvre le dialogue natif
    « Plus d’informations ». Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
+   Plusieurs alertes rattachées au même identifiant d’appareil sont réunies dans
+   une tuile avec une ligne par source. Une même tuile peut contenir des lignes
+   actives et en attente. Une entité sans appareil, ou un appareil qui ne porte
+   plus qu’une alerte, conserve une tuile individuelle compacte.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
-2. **Surveillance automatique** : activation, délais et seuil de batterie, avec
-   deux catégories par ligne sur les écrans suffisamment larges.
+2. **Surveillance automatique** : activation, délais et seuil de batterie. Les
+   cartes sont produites depuis les métadonnées du backend et seuls les packs
+   actuellement disponibles sont proposés.
 3. **Règles personnalisées** : création et modification dans un volet latéral
    composé des éléments natifs Home Assistant. Un clic sur la ligne ouvre le
    volet, l’interrupteur natif en fin de ligne active la règle et la suppression
@@ -64,6 +73,12 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    Home Assistant.
 
 ## Détections automatiques
+
+Les packs génériques **Entités indisponibles**, **Connectivité** et **Batteries
+faibles** sont toujours disponibles. Le choix d’activation d’un pack est conservé
+même si son prérequis devient temporairement indisponible. Dans ce cas, le pack ne
+surveille aucune entité, ne conserve aucun timer et ne génère aucune alerte. Son
+dernier réglage est repris automatiquement lorsque le prérequis redevient utilisable.
 
 ### Entités indisponibles
 
@@ -84,7 +99,9 @@ indisponibilités, sans doublon.
 
 Un `device_tracker` fourni par l’intégration `unifi`, ayant
 `source_type: router`, est en anomalie lorsque son état n’est plus `home`.
-`unavailable` reste traité par la catégorie des indisponibilités.
+`unavailable` reste traité par la catégorie des indisponibilités. Le pack UniFi
+n’est proposé et exécuté que si Home Assistant possède au moins une entrée de
+configuration UniFi chargée, non désactivée et utilisable.
 
 ### Batteries
 
@@ -131,12 +148,15 @@ Ordre de priorité des délais :
 
 1. durée de la règle personnalisée ;
 2. délai particulier configuré pour l’entité ;
-3. attribut `alert_delay` de l’entité, entier ou chaîne numérique entière valide ;
-4. délai de la catégorie automatique ;
-5. délai global.
+3. délai propre au pack automatique ;
+4. délai global.
 
-Tous les délais sont stockés en secondes. L’interface affiche aussi leur forme
-lisible.
+Tous les délais sont stockés en secondes. Un délai de pack laissé vide utilise le
+délai global. Modifier un délai recalcule `due_at` depuis le `detected_at` original :
+une alerte en attente devient immédiatement active si l’échéance est dépassée, et
+une alerte active redevient en attente si sa nouvelle échéance est future. Son
+identifiant et son cycle de vie sont conservés. Les délais particuliers V1.1 sont
+réutilisés tels quels, sans migration destructive.
 
 ## Capteur unique
 
@@ -154,6 +174,7 @@ attributes:
     - id: unavailable:sensor.unas_cpu_usage
       type: unavailable
       entity_id: sensor.unas_cpu_usage
+      device_id: 0123456789abcdef0123456789abcdef
       name: UNAS
       value: unavailable
       condition: État indisponible
@@ -174,7 +195,9 @@ attributes:
 ```
 
 Aucun historique résolu et aucun compte à rebours périodique ne sont enregistrés
-dans les attributs.
+dans les attributs. `device_id` est facultatif et n’est présent que pour une entité
+rattachée à un appareil. Les listes `alerts` et `pending` restent toujours des
+alertes individuelles : aucun groupe visuel n’est persisté ou exposé au capteur.
 
 ## Événements et notifications
 
@@ -215,8 +238,9 @@ lors de la première installation commence avec son délai normal.
 
 Le moteur écoute les changements d’état et les registres. Il ne réévalue que
 l’entité concernée, sauf au démarrage, après une modification de configuration ou
-un changement de registre. Un seul timer est planifié par alerte en attente. Le
-capteur n’est réécrit que si son contenu structuré change réellement.
+un changement de registre ou de disponibilité d’un pack. Un seul timer est
+planifié par alerte en attente. Le capteur n’est réécrit que si son contenu
+structuré change réellement.
 
 ## Développement et tests
 
@@ -234,7 +258,7 @@ npm run test:frontend
 
 Les workflows exécutent également Hassfest et la validation HACS.
 
-## Limites connues de la V1
+## Limites connues de la V1.2
 
 - pas d’acquittement, snooze, répétition ou escalade ;
 - pas d’historique des alertes résolues ;

@@ -28,6 +28,7 @@ def _evaluate(
 PACK = AutomaticPack(
     id=CATEGORY_UNAVAILABLE,
     name="Entités indisponibles",
+    description="Surveille le statut unavailable sur toutes les entités.",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,

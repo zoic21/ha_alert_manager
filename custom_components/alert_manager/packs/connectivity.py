@@ -31,6 +31,7 @@ def _evaluate(
 PACK = AutomaticPack(
     id=CATEGORY_CONNECTIVITY,
     name="Connectivité",
+    description="Surveille les capteurs de connectivité qui passent à off.",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,

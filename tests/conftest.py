@@ -7,6 +7,7 @@ import re
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
+from enum import Enum, StrEnum
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -87,15 +88,55 @@ core.State = State
 config_entries = _module("homeassistant.config_entries")
 
 
-class ConfigEntry:
-    entry_id = "alert-manager-entry"
+class ConfigEntryState(Enum):
+    LOADED = "loaded"
+    NOT_LOADED = "not_loaded"
+    UNLOAD_IN_PROGRESS = "unload_in_progress"
 
-    def __init__(self):
+
+class ConfigEntryChange(StrEnum):
+    ADDED = "added"
+    REMOVED = "removed"
+    UPDATED = "updated"
+
+
+class ConfigEntry:
+    _next_id = 0
+
+    def __init__(
+        self,
+        *,
+        domain="alert_manager",
+        state=ConfigEntryState.LOADED,
+        disabled_by=None,
+        source="user",
+    ):
+        type(self)._next_id += 1
+        self.entry_id = f"entry-{type(self)._next_id}"
+        self.domain = domain
+        self.state = state
+        self.disabled_by = disabled_by
+        self.source = source
         self.created_task_names = []
+        self._state_listeners = []
 
     def async_create_task(self, hass, coroutine, name=None, eager_start=True):
         self.created_task_names.append(name)
         return asyncio.create_task(coroutine, name=name)
+
+    def async_on_state_change(self, listener):
+        self._state_listeners.append(listener)
+
+        def remove():
+            if listener in self._state_listeners:
+                self._state_listeners.remove(listener)
+
+        return remove
+
+    def set_state(self, state):
+        self.state = state
+        for listener in tuple(self._state_listeners):
+            listener()
 
 
 class ConfigFlow:
@@ -104,6 +145,9 @@ class ConfigFlow:
 
 
 config_entries.ConfigEntry = ConfigEntry
+config_entries.ConfigEntryChange = ConfigEntryChange
+config_entries.ConfigEntryState = ConfigEntryState
+config_entries.SIGNAL_CONFIG_ENTRY_CHANGED = "config_entry_changed"
 config_entries.ConfigFlow = ConfigFlow
 homeassistant.config_entries = config_entries
 
@@ -309,10 +353,34 @@ class FakeHass:
         self.timers = []
         self.dispatchers = defaultdict(list)
         self.commands = []
+        self.config_entries = FakeConfigEntries()
         self.entity_registry = Registry("entity")
         self.device_registry = Registry("device")
         self.label_registry = Registry("label")
         self.area_registry = Registry("area")
+
+
+class FakeConfigEntries:
+    def __init__(self):
+        self.entries = []
+
+    def add(self, entry):
+        self.entries.append(entry)
+        return entry
+
+    def async_entries(
+        self,
+        domain=None,
+        include_ignore=True,
+        include_disabled=True,
+    ):
+        return [
+            entry
+            for entry in self.entries
+            if (domain is None or entry.domain == domain)
+            and (include_ignore or entry.source != "ignore")
+            and (include_disabled or entry.disabled_by is None)
+        ]
 
 
 @pytest.fixture
@@ -324,6 +392,28 @@ def hass():
 @pytest.fixture
 def entry():
     return ConfigEntry()
+
+
+@pytest.fixture
+def config_entry():
+    def create(
+        hass,
+        domain,
+        *,
+        state=ConfigEntryState.LOADED,
+        disabled_by=None,
+        source="user",
+    ):
+        return hass.config_entries.add(
+            ConfigEntry(
+                domain=domain,
+                state=state,
+                disabled_by=disabled_by,
+                source=source,
+            )
+        )
+
+    return create
 
 
 @pytest.fixture

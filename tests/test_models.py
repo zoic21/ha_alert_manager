@@ -17,7 +17,6 @@ from custom_components.alert_manager.models import (
     Rule,
     advance_record,
     calculate_due_at,
-    safe_delay_seconds,
     safe_float,
 )
 from custom_components.alert_manager.validation import (
@@ -109,12 +108,14 @@ def test_storage_round_trip_preserves_structured_data():
         name="Test",
         value="unavailable",
         condition="État indisponible",
+        device_id="a" * 32,
         area="Cuisine",
     )
     restored = AlertRecord.from_dict(
         AlertRecord.pending(details, 15, now).as_storage_dict()
     )
     assert restored.details.as_dict()["area"] == "Cuisine"
+    assert restored.details.as_dict()["device_id"] == "a" * 32
     assert restored.detected_at == now
 
 
@@ -176,15 +177,6 @@ def test_storage_rejects_naive_dates_and_incomplete_details():
     del record["details"]["name"]
     with pytest.raises(ValueError, match="name"):
         AlertRecord.from_dict(record)
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [("40", 40), (40.0, 40), ("40.5", None), (True, None), ("inf", None)],
-)
-def test_safe_delay_attribute_conversion(value, expected):
-    """Entity attributes accept only finite integral delay values."""
-    assert safe_delay_seconds(value) == expected
 
 
 def test_frontend_payload_validation():

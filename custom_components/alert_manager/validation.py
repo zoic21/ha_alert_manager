@@ -115,9 +115,11 @@ def validate_config(config: Any) -> dict[str, Any]:
         if not isinstance(enabled, bool):
             raise ValueError(f"automatic.{category}.enabled must be a boolean")
         category_config["enabled"] = enabled
-        category_config["delay"] = validate_delay(
-            incoming.get("delay", category_config["delay"]),
-            f"automatic.{category}.delay",
+        pack_delay = incoming.get("delay", category_config["delay"])
+        category_config["delay"] = (
+            None
+            if pack_delay is None
+            else validate_delay(pack_delay, f"automatic.{category}.delay")
         )
 
         if category == "battery":

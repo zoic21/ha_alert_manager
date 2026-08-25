@@ -40,6 +40,7 @@ def _evaluate(
 PACK = AutomaticPack(
     id=CATEGORY_BATTERY,
     name="Batteries faibles",
+    description="Surveille les capteurs de batterie sous leur seuil.",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,

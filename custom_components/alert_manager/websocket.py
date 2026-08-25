@@ -68,6 +68,16 @@ def websocket_alerts_list(
         connection.send_result(msg["id"], manager.public_snapshot())
 
 
+@websocket_api.websocket_command({vol.Required("type"): "alert_manager/packs/list"})
+@callback
+def websocket_packs_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return backend-owned automatic pack metadata and availability."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.get_packs())
+
+
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/rules/list"})
 @callback
 def websocket_rules_list(
@@ -151,6 +161,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_get,
         websocket_config_update,
         websocket_alerts_list,
+        websocket_packs_list,
         websocket_rules_list,
         websocket_rule_create,
         websocket_rule_update,
