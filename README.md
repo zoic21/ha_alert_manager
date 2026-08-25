@@ -15,7 +15,7 @@ Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.3
+## Fonctionnalités V1.4
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -32,8 +32,12 @@ Assistant.
   et en anglais selon la langue de chaque utilisateur Home Assistant ;
 - regroupement visuel, sans fusion des alertes, lorsque plusieurs anomalies
   appartiennent au même appareil ;
+- acquittement persistant de chaque alerte active depuis le panneau ou les
+  automatisations Home Assistant ;
 - événements `alert_manager_alert_started` et
-  `alert_manager_alert_resolved` ;
+  `alert_manager_alert_resolved`, complétés par
+  `alert_manager_alert_acknowledged` et
+  `alert_manager_alert_unacknowledged` ;
 - aucune notification imposée et aucun polling global fréquent.
 
 Alert Manager centralise des anomalies simples et indépendantes. Il ne remplace
@@ -89,6 +93,9 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    une tuile avec une ligne par source. Une même tuile peut contenir des lignes
    actives et en attente. Une entité sans appareil, ou un appareil qui ne porte
    plus qu’une alerte, conserve une tuile individuelle compacte.
+   Chaque alerte affiche son identifiant copiable et conserve son propre bouton
+   **Acquitter** ou **Retirer l’acquittement**, y compris dans un groupe. Aucun
+   bouton n’agit sur toutes les alertes d’un appareil.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
 2. **Surveillance automatique** : activation, délais et seuil de batterie. Les
@@ -222,6 +229,9 @@ attributes:
       due_at: "2026-08-24T14:25:00+02:00"
       active_since: "2026-08-24T14:25:00+02:00"
       delay: 900
+      acknowledged: true
+      acknowledged_at: "2026-08-25T16:30:00+02:00"
+      acknowledged_by: "Loïc"
   pending:
     - id: battery:sensor.detecteur_entree_battery
       type: battery
@@ -246,12 +256,73 @@ alertes individuelles : aucun groupe visuel n’est persisté ou exposé au cap
 Alert Manager, permettent au panneau de les afficher dans la langue de
 l’utilisateur. Un message personnalisé reste inchangé et n’est jamais traduit.
 
+Pour une alerte active non acquittée, `acknowledged` vaut `false`. Les champs
+`acknowledged_at` et `acknowledged_by` ne sont présents qu’après acquittement.
+`acknowledged_by` est absent lorsque l’action vient d’une automatisation ou du
+système. Une alerte acquittée reste active, reste dans `alerts` et reste comptée
+dans `active_count` et dans l’état de `sensor.alert_manager` tant que sa condition
+reste vraie.
+
+## Acquittement et services
+
+L’acquittement porte toujours sur une seule alerte `active`, ciblée par son
+identifiant stable. Il ne résout pas l’alerte et ne change pas son compteur. Une
+alerte `pending`, inconnue ou déjà résolue est refusée avec une erreur explicite.
+Les actions répétées sont idempotentes : acquitter deux fois ou retirer deux fois
+l’acquittement n’émet pas de nouvel événement.
+
+Les deux services sont disponibles dans **Outils de développement → Actions** et
+dans les automatisations :
+
+```yaml
+action: alert_manager.acknowledge
+data:
+  alert_id: unavailable:sensor.unas_cpu_usage
+```
+
+```yaml
+action: alert_manager.unacknowledge
+data:
+  alert_id: unavailable:sensor.unas_cpu_usage
+```
+
+Le contexte Home Assistant détermine l’auteur affiché. Sans utilisateur associé,
+le panneau affiche le libellé traduit « Automatisation ou système ». À la
+résolution, les informations d’acquittement disparaissent avec l’occurrence. Si la
+condition réapparaît, la nouvelle occurrence démarre non acquittée.
+
 ## Événements et notifications
 
 À l’activation d’une alerte, Alert Manager émet
 `alert_manager_alert_started`. À sa résolution, il émet
 `alert_manager_alert_resolved` avec `resolved_at`. Une alerte déjà active avant un
 redémarrage n’émet pas un second événement de démarrage.
+
+Un changement réel d’acquittement émet aussi :
+
+- `alert_manager_alert_acknowledged`, avec les données publiques complètes et
+  `acknowledged_at`/`acknowledged_by` lorsque l’auteur est connu ;
+- `alert_manager_alert_unacknowledged`, avec `unacknowledged_at`, l’auteur de
+  l’action lorsqu’il est connu et les précédentes informations d’acquittement.
+
+Ces événements ne sont jamais rejoués au redémarrage. Exemple d’automatisation
+qui journalise les deux changements :
+
+```yaml
+alias: Journal des acquittements Alert Manager
+triggers:
+  - trigger: event
+    event_type: alert_manager_alert_acknowledged
+  - trigger: event
+    event_type: alert_manager_alert_unacknowledged
+actions:
+  - action: logbook.log
+    data:
+      name: Alert Manager
+      message: >-
+        {{ trigger.event.event_type }} : {{ trigger.event.data.id }}
+mode: queued
+```
 
 Exemple d’automatisation mobile :
 
@@ -293,12 +364,14 @@ L’intégration n’envoie elle-même aucune notification.
 
 ## Persistance et performances
 
-La configuration et les états `pending`/`active` sont enregistrés dans un `Store`
-Home Assistant versionné avec écritures atomiques. Au démarrage, la condition est
+La configuration, les états `pending`/`active` et l’acquittement sont enregistrés
+dans un `Store` Home Assistant versionné avec écritures atomiques. Au démarrage, la condition est
 revérifiée avant de reprendre le délai ou l’état actif. Un état momentanément
 absent ou `unknown` pendant le démarrage ne résout pas une alerte persistée ; une
 valeur définitive ultérieure la confirme ou la résout. Une anomalie déjà présente
 lors de la première installation commence avec son délai normal.
+Les enregistrements V1.3 sans champs d’acquittement sont migrés de manière
+idempotente et considérés comme non acquittés.
 
 Le moteur écoute les changements d’état et les registres. Il ne réévalue que
 l’entité concernée, sauf au démarrage, après une modification de configuration ou
@@ -324,7 +397,7 @@ Les workflows exécutent également Hassfest et la validation HACS.
 
 ## Limites connues et fonctions reportées
 
-- pas d’acquittement, snooze, répétition ou escalade ;
+- pas de snooze, répétition ou escalade ;
 - pas d’historique des alertes résolues ni de stockage CSV ;
 - pas de template Jinja, condition combinée ou hystérésis ;
 - pas d’import automatique des anciennes automatisations ;

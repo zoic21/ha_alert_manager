@@ -44,8 +44,10 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CATEGORY_UNAVAILABLE,
     DOMAIN,
+    EVENT_ALERT_ACKNOWLEDGED,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
+    EVENT_ALERT_UNACKNOWLEDGED,
     SIGNAL_ALERTS_UPDATED,
 )
 from .models import (
@@ -338,6 +340,7 @@ class AlertManager:
                     ) < record.due_at.astimezone(UTC):
                         record.status = AlertStatus.PENDING
                         record.active_since = None
+                        record.clear_acknowledgement()
                     persisted_changed = True
 
             became_active = advance_record(record, now)
@@ -699,6 +702,53 @@ class AlertManager:
         """Return backend-owned pack metadata with current availability."""
         return [pack.as_public_dict(self.hass) for pack in PACKS]
 
+    async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
+        """Acknowledge one active alert and persist before publishing it."""
+        record = self._active_record_for_service(alert_id)
+        if record.acknowledged:
+            return False
+        now = dt_util.now()
+        record.acknowledged = True
+        record.acknowledged_at = now
+        record.acknowledged_by = actor
+        try:
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            record.clear_acknowledgement()
+            raise
+        self._publish_if_changed()
+        self._fire_acknowledged(record)
+        return True
+
+    async def async_unacknowledge(self, alert_id: str, actor: str | None) -> bool:
+        """Remove acknowledgement from one active alert idempotently."""
+        record = self._active_record_for_service(alert_id)
+        if not record.acknowledged:
+            return False
+        now = dt_util.now()
+        previous_at = record.acknowledged_at
+        previous_by = record.acknowledged_by
+        record.clear_acknowledgement()
+        try:
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            record.acknowledged = True
+            record.acknowledged_at = previous_at
+            record.acknowledged_by = previous_by
+            raise
+        self._publish_if_changed()
+        self._fire_unacknowledged(record, now, actor, previous_at, previous_by)
+        return True
+
+    def _active_record_for_service(self, alert_id: str) -> AlertRecord:
+        """Resolve an exact active alert or raise a clear service error."""
+        record = self.records.get(alert_id)
+        if record is None:
+            raise ValueError(f"Unknown or resolved alert id: {alert_id}")
+        if record.status is AlertStatus.PENDING:
+            raise ValueError(f"Pending alert cannot be acknowledged: {alert_id}")
+        return record
+
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
         validate_config_update(changes)
@@ -821,6 +871,29 @@ class AlertManager:
         data = record.as_public_dict()
         data["resolved_at"] = now.isoformat()
         self.hass.bus.async_fire(EVENT_ALERT_RESOLVED, data)
+
+    def _fire_acknowledged(self, record: AlertRecord) -> None:
+        """Emit an acknowledgement event only after durable state changed."""
+        self.hass.bus.async_fire(EVENT_ALERT_ACKNOWLEDGED, record.as_public_dict())
+
+    def _fire_unacknowledged(
+        self,
+        record: AlertRecord,
+        now: datetime,
+        actor: str | None,
+        previous_at: datetime | None,
+        previous_by: str | None,
+    ) -> None:
+        """Emit removal metadata without retaining it on the active alert."""
+        data = record.as_public_dict()
+        data["unacknowledged_at"] = now.isoformat()
+        if actor is not None:
+            data["unacknowledged_by"] = actor
+        if previous_at is not None:
+            data["previous_acknowledged_at"] = previous_at.isoformat()
+        if previous_by is not None:
+            data["previous_acknowledged_by"] = previous_by
+        self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""

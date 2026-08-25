@@ -66,6 +66,16 @@ globalThis.customElements = {
 globalThis.window = {
   confirm: () => true,
 };
+Object.defineProperty(globalThis, "navigator", {
+  configurable: true,
+  value: {
+    clipboard: {
+      async writeText(value) {
+        globalThis.navigator.clipboard.lastValue = value;
+      },
+    },
+  },
+});
 
 const { buildOverviewItems, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
@@ -469,6 +479,129 @@ test("multiple alerts from one device still form a group within one section", ()
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, "device");
   assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
+});
+
+test("individual active alerts expose acknowledgement state and real service actions", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: { "sensor.test": { state: "unavailable" } } };
+  const alert = {
+    id: "unavailable:sensor.test",
+    entity_id: "sensor.test",
+    name: "Test",
+    value: "unavailable",
+    condition: "État indisponible",
+    active_since: "2026-08-25T14:00:00Z",
+    acknowledged: true,
+    acknowledged_at: "2026-08-25T14:30:00Z",
+    acknowledged_by: "Loïc",
+  };
+  const html = panel._renderAlert(alert, true);
+
+  assert.match(html, /Acquittée/);
+  assert.match(html, /Loïc/);
+  assert.match(html, /unavailable:sensor\.test/);
+  assert.match(html, /data-action="copy-alert-id"/);
+  assert.match(html, /data-action="unacknowledge-alert"/);
+  assert.match(html, /aria-label="Retirer l’acquittement/);
+  assert.doesNotMatch(html, /data-action="acknowledge-alert"/);
+
+  const calls = [];
+  panel._hass.callService = async (...args) => { calls.push(args); };
+  panel._render = () => {};
+  await panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: { action: "unacknowledge-alert", alertId: alert.id },
+      }),
+    },
+  });
+  assert.deepEqual(calls, [[
+    "alert_manager",
+    "unacknowledge",
+    { alert_id: "unavailable:sensor.test" },
+  ]]);
+});
+
+test("system acknowledgements and copy controls are translated and independent", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: { "sensor.system": { state: "unavailable" } } };
+  panel._render = () => {};
+  const alert = {
+    id: "unavailable:sensor.system",
+    entity_id: "sensor.system",
+    acknowledged: true,
+    acknowledged_at: "2026-08-25T14:30:00Z",
+  };
+  assert.match(panel._renderAlert(alert, true), /Automatisation ou système/);
+
+  await panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: { action: "copy-alert-id", alertId: alert.id },
+      }),
+    },
+  });
+  assert.equal(navigator.clipboard.lastValue, alert.id);
+  assert.equal(panel._notice.text, "Identifiant de l’alerte copié");
+});
+
+test("grouped alerts retain separate ids and acknowledgement actions per row", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const deviceId = "a".repeat(32);
+  const group = {
+    kind: "device",
+    device_id: deviceId,
+    alerts: [
+      {
+        status: "active",
+        alert: {
+          id: "unavailable:sensor.one",
+          entity_id: "sensor.one",
+          device_id: deviceId,
+          acknowledged: false,
+        },
+      },
+      {
+        status: "active",
+        alert: {
+          id: "battery:sensor.two",
+          entity_id: "sensor.two",
+          device_id: deviceId,
+          acknowledged: true,
+          acknowledged_at: "2026-08-25T14:30:00Z",
+          acknowledged_by: "Loïc",
+        },
+      },
+    ],
+  };
+  const html = panel._renderDeviceGroup(group);
+
+  assert.equal((html.match(/class="alert-controls is-compact"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-action="copy-alert-id"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-action="acknowledge-alert"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-action="unacknowledge-alert"/g) ?? []).length, 1);
+  assert.match(html, /unavailable:sensor\.one/);
+  assert.match(html, /battery:sensor\.two/);
+  assert.doesNotMatch(html, /acknowledge-device|acknowledge-group/);
+});
+
+test("pending alerts expose their id but cannot be acknowledged from the panel", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const html = panel._renderAlert({
+    id: "battery:sensor.pending",
+    entity_id: "sensor.pending",
+    due_at: "2026-08-25T15:00:00Z",
+  }, false);
+
+  assert.match(html, /battery:sensor\.pending/);
+  assert.match(html, /data-action="copy-alert-id"/);
+  assert.doesNotMatch(html, /data-action="(?:un)?acknowledge-alert"/);
 });
 
 test("single alerts and entities without a device stay compact and individual", () => {

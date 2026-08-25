@@ -51,6 +51,7 @@
       "seconds": "{count} s"
     },
     "errors": {
+      "copy_failed": "The alert ID could not be copied.",
       "invalid_format": "The data is invalid. Check the fields and try again.",
       "not_loaded": "Alert Manager is not loaded.",
       "unknown": "An unexpected error occurred."
@@ -65,9 +66,18 @@
       "not_equals": "does not equal"
     },
     "overview": {
+      "acknowledge": "Acknowledge",
+      "acknowledged": "Acknowledged",
+      "acknowledged_details": "{date} by {author}",
+      "acknowledged_system": "Automation or system",
       "active_since": "Active since",
+      "alert_id": "Alert ID",
       "area": "Area",
+      "aria_acknowledge": "Acknowledge alert {id}",
+      "aria_copy_alert_id": "Copy alert ID {id}",
+      "aria_unacknowledge": "Remove acknowledgement from alert {id}",
       "condition": "Condition",
+      "copy_alert_id": "Copy",
       "detected": "Detected",
       "device": "Device",
       "device_fallback": "Device",
@@ -82,7 +92,8 @@
       "status_pending_count": "Pending: {count}",
       "summary_active": "Active alerts",
       "summary_pending": "Pending",
-      "summary_tracked": "Total monitored"
+      "summary_tracked": "Total monitored",
+      "unacknowledge": "Remove acknowledgement"
     },
     "packs": {
       "battery": {
@@ -162,6 +173,9 @@
       "save": "Save settings"
     },
     "success": {
+      "alert_acknowledged": "Alert acknowledged",
+      "alert_id_copied": "Alert ID copied",
+      "alert_unacknowledged": "Acknowledgement removed",
       "automatic_saved": "Automatic monitoring saved",
       "rule_created": "Rule created",
       "rule_deleted": "Rule deleted",
@@ -179,6 +193,28 @@
     "unavailable": "Configuration unavailable.",
     "units": {
       "seconds": "seconds"
+    }
+  },
+  "services": {
+    "acknowledge": {
+      "name": "Acknowledge alert",
+      "description": "Acknowledge one active Alert Manager alert without resolving it.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "Exact stable ID of the active alert to acknowledge."
+        }
+      }
+    },
+    "unacknowledge": {
+      "name": "Remove alert acknowledgement",
+      "description": "Remove the acknowledgement from one active Alert Manager alert.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "Exact stable ID of the active alert whose acknowledgement is removed."
+        }
+      }
     }
   },
   "entity": {

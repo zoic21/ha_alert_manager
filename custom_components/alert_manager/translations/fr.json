@@ -51,6 +51,7 @@
       "seconds": "{count} s"
     },
     "errors": {
+      "copy_failed": "L’identifiant de l’alerte n’a pas pu être copié.",
       "invalid_format": "Les données sont invalides. Vérifiez les champs et réessayez.",
       "not_loaded": "Alert Manager n’est pas chargé.",
       "unknown": "Une erreur inattendue s’est produite."
@@ -65,9 +66,18 @@
       "not_equals": "différent de"
     },
     "overview": {
+      "acknowledge": "Acquitter",
+      "acknowledged": "Acquittée",
+      "acknowledged_details": "{date} par {author}",
+      "acknowledged_system": "Automatisation ou système",
       "active_since": "Active depuis",
+      "alert_id": "Identifiant de l’alerte",
       "area": "Pièce",
+      "aria_acknowledge": "Acquitter l’alerte {id}",
+      "aria_copy_alert_id": "Copier l’identifiant de l’alerte {id}",
+      "aria_unacknowledge": "Retirer l’acquittement de l’alerte {id}",
       "condition": "Condition",
+      "copy_alert_id": "Copier",
       "detected": "Détectée",
       "device": "Équipement",
       "device_fallback": "Appareil",
@@ -82,7 +92,8 @@
       "status_pending_count": "En attente : {count}",
       "summary_active": "Alertes actives",
       "summary_pending": "En attente",
-      "summary_tracked": "Total suivi"
+      "summary_tracked": "Total suivi",
+      "unacknowledge": "Retirer l’acquittement"
     },
     "packs": {
       "battery": {
@@ -162,6 +173,9 @@
       "save": "Enregistrer les paramètres"
     },
     "success": {
+      "alert_acknowledged": "Alerte acquittée",
+      "alert_id_copied": "Identifiant de l’alerte copié",
+      "alert_unacknowledged": "Acquittement retiré",
       "automatic_saved": "Surveillance automatique enregistrée",
       "rule_created": "Règle créée",
       "rule_deleted": "Règle supprimée",
@@ -179,6 +193,28 @@
     "unavailable": "Configuration indisponible.",
     "units": {
       "seconds": "secondes"
+    }
+  },
+  "services": {
+    "acknowledge": {
+      "name": "Acquitter une alerte",
+      "description": "Acquitte une alerte active d’Alert Manager sans la résoudre.",
+      "fields": {
+        "alert_id": {
+          "name": "Identifiant de l’alerte",
+          "description": "Identifiant stable exact de l’alerte active à acquitter."
+        }
+      }
+    },
+    "unacknowledge": {
+      "name": "Retirer l’acquittement d’une alerte",
+      "description": "Retire l’acquittement d’une alerte active d’Alert Manager.",
+      "fields": {
+        "alert_id": {
+          "name": "Identifiant de l’alerte",
+          "description": "Identifiant stable exact de l’alerte active dont l’acquittement est retiré."
+        }
+      }
     }
   },
   "entity": {

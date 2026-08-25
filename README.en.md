@@ -26,7 +26,9 @@ project.
 - responsive administrator panel in French and English;
 - visual grouping, without merging records, when several alerts belong to one
   device;
-- `alert_manager_alert_started` and `alert_manager_alert_resolved` events;
+- persistent per-alert acknowledgement from the panel and Home Assistant
+  automations;
+- start, resolution, acknowledgement and unacknowledgement events;
 - no imposed notifications and no frequent global polling.
 
 Alert Manager handles simple independent anomalies. It is not an external
@@ -75,6 +77,10 @@ Several alerts with the same `device_id` are grouped inside the same status
 section. This is display-only: alert IDs, lifecycle, sensor attributes and events
 remain independent. A lone device alert and an entity without a device use a
 compact individual card.
+
+Every alert displays its copyable stable ID. Each active row has its own
+**Acknowledge** or **Remove acknowledgement** action, including inside a device
+group. There is no device-wide acknowledgement action.
 
 The remaining time is calculated in the browser from `due_at`; Alert Manager does
 not write a countdown to Recorder every second.
@@ -181,6 +187,9 @@ attributes:
       due_at: "2026-08-25T14:25:00+02:00"
       active_since: "2026-08-25T14:25:00+02:00"
       delay: 900
+      acknowledged: true
+      acknowledged_at: "2026-08-25T16:30:00+02:00"
+      acknowledged_by: "Loïc"
   pending:
     - id: battery:sensor.entry_battery
       type: battery
@@ -202,6 +211,36 @@ also provide `condition_key` and `condition_params` so the panel can render the
 user's language. A custom rule message remains unchanged and has no translation
 key. Resolved history and periodic countdown values are not recorded.
 
+For an unacknowledged active alert, `acknowledged` is `false`.
+`acknowledged_at` and `acknowledged_by` are present only after acknowledgement;
+the author is absent for an automation or system call. Acknowledgement does not
+resolve the alert: it remains in `alerts` and remains included in `active_count`
+and the state of `sensor.alert_manager` while its condition is true.
+
+## Acknowledgement services
+
+Acknowledgement always targets one exact active alert by its stable ID. Pending,
+unknown and resolved IDs are rejected clearly. Repeating an action that has
+already taken effect is idempotent and emits no additional event.
+
+Both services are available in Home Assistant Actions and automations:
+
+```yaml
+action: alert_manager.acknowledge
+data:
+  alert_id: unavailable:sensor.nas_cpu
+```
+
+```yaml
+action: alert_manager.unacknowledge
+data:
+  alert_id: unavailable:sensor.nas_cpu
+```
+
+Home Assistant's call context determines the displayed user. Without a user, the
+panel shows the translated “Automation or system” label. Resolution discards the
+acknowledgement with that occurrence; a later occurrence starts unacknowledged.
+
 ## Events and notifications
 
 `alert_manager_alert_started` fires exactly when an alert becomes active.
@@ -209,6 +248,30 @@ key. Resolved history and periodic countdown values are not recorded.
 `resolved_at`. An alert restored as active after a restart does not fire a second
 start event. Event data keeps the existing `condition` field and adds structured
 condition fields when available.
+
+`alert_manager_alert_acknowledged` fires only when an active alert becomes
+acknowledged. `alert_manager_alert_unacknowledged` fires only when that state is
+actually removed. They contain the complete public alert data, the stable `id`,
+the action timestamp and relevant acknowledgement metadata. Neither is replayed
+after a restart.
+
+Example handling both events:
+
+```yaml
+alias: Alert Manager acknowledgement log
+triggers:
+  - trigger: event
+    event_type: alert_manager_alert_acknowledged
+  - trigger: event
+    event_type: alert_manager_alert_unacknowledged
+actions:
+  - action: logbook.log
+    data:
+      name: Alert Manager
+      message: >-
+        {{ trigger.event.event_type }}: {{ trigger.event.data.id }}
+mode: queued
+```
 
 Short mobile notification example:
 
@@ -245,8 +308,10 @@ Alert Manager does not send notifications itself.
 
 ## Persistence and performance
 
-Configuration plus pending and active records use a versioned Home Assistant
-`Store` with atomic writes. Conditions are reevaluated at startup. A temporarily
+Configuration, pending and active records, and acknowledgement state use a
+versioned Home Assistant `Store` with atomic writes. V1.3 records without
+acknowledgement fields migrate idempotently as unacknowledged alerts. Conditions
+are reevaluated at startup. A temporarily
 missing or `unknown` startup state does not incorrectly resolve a stored alert.
 
 The engine listens for state and registry changes and normally reevaluates only
@@ -256,7 +321,7 @@ pending alert, and the sensor is written only when its structured content change
 
 ## Known limitations and deferred features
 
-- no acknowledgement or snooze;
+- no snooze;
 - no resolved-alert history, CSV storage, repeat or escalation;
 - no combined conditions, Jinja templates or hysteresis;
 - no built-in notification service;

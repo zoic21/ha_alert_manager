@@ -1,0 +1,6 @@
+{
+  "services": {
+    "acknowledge": {"service": "mdi:check-circle-outline"},
+    "unacknowledge": {"service": "mdi:check-circle"}
+  }
+}

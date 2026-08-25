@@ -44,6 +44,9 @@ def test_translation_files_are_complete_independent_catalogs() -> None:
     assert "config.step.user.description" in english
     assert "config.abort.single_instance_allowed" in english
     assert "entity.sensor.alert_manager.name" in english
+    assert "services.acknowledge.fields.alert_id.description" in english
+    assert "services.unacknowledge.fields.alert_id.description" in english
+    assert "config_panel.overview.acknowledged_system" in english
     assert any(key.startswith("config_panel.") for key in english)
     for key in english:
         assert _placeholders(english[key]) == _placeholders(french[key]), key
@@ -58,6 +61,17 @@ def test_strings_json_is_removed() -> None:
         "en.json",
         "fr.json",
     ]
+
+
+def test_acknowledgement_services_have_metadata_and_standard_icons() -> None:
+    """Home Assistant can discover action fields, translations and icons."""
+    services = (INTEGRATION / "services.yaml").read_text()
+    assert "acknowledge:" in services
+    assert "unacknowledge:" in services
+    assert services.count("alert_id:") == 2
+    assert services.count("text:") == 2
+    icons = json.loads((INTEGRATION / "icons.json").read_text())
+    assert set(icons["services"]) == {"acknowledge", "unacknowledge"}
 
 
 def test_frontend_uses_backend_translation_resources() -> None:

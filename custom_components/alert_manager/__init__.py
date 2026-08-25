@@ -9,6 +9,7 @@ from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     DATA_MANAGER,
@@ -24,7 +25,14 @@ from .const import (
     PLATFORMS,
 )
 from .manager import AlertManager
+from .services import async_setup_services
 from .websocket import async_register_websocket_commands
+
+
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+    """Register actions at domain load so automations can always validate."""
+    await async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

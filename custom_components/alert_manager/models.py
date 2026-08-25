@@ -79,6 +79,9 @@ class AlertRecord:
     due_at: datetime
     delay: int
     active_since: datetime | None = None
+    acknowledged: bool = False
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
 
     @classmethod
     def pending(cls, details: AlertDetails, delay: int, now: datetime) -> AlertRecord:
@@ -122,6 +125,31 @@ class AlertRecord:
             UTC
         ) < detected_at.astimezone(UTC):
             raise ValueError("Alert active_since must not precede detected_at")
+        acknowledged = data.get("acknowledged", False)
+        if not isinstance(acknowledged, bool):
+            raise ValueError("Alert acknowledged must be a boolean")
+        acknowledged_at = data.get("acknowledged_at")
+        parsed_acknowledged_at = (
+            _parse_aware_datetime(acknowledged_at, "acknowledged_at")
+            if acknowledged_at is not None
+            else None
+        )
+        acknowledged_by = data.get("acknowledged_by")
+        if acknowledged_by is not None and (
+            not isinstance(acknowledged_by, str) or not acknowledged_by
+        ):
+            raise ValueError("Alert acknowledged_by must be a non-empty string")
+        if acknowledged:
+            if status is not AlertStatus.ACTIVE:
+                raise ValueError("Only active alerts can be acknowledged")
+            if parsed_acknowledged_at is None:
+                raise ValueError("Acknowledged alerts require acknowledged_at")
+            if parsed_acknowledged_at.astimezone(UTC) < parsed_active_since.astimezone(
+                UTC
+            ):
+                raise ValueError("Alert acknowledged_at must not precede active_since")
+        elif parsed_acknowledged_at is not None or acknowledged_by is not None:
+            raise ValueError("Unacknowledged alerts cannot retain acknowledgement data")
         return cls(
             details=AlertDetails.from_dict(data["details"]),
             status=status,
@@ -129,11 +157,14 @@ class AlertRecord:
             due_at=due_at,
             delay=delay,
             active_since=parsed_active_since,
+            acknowledged=acknowledged,
+            acknowledged_at=parsed_acknowledged_at,
+            acknowledged_by=acknowledged_by,
         )
 
     def as_storage_dict(self) -> dict[str, Any]:
         """Serialize for Home Assistant Store."""
-        return {
+        result = {
             "details": self.details.as_dict(),
             "status": self.status.value,
             "detected_at": self.detected_at.isoformat(),
@@ -142,7 +173,13 @@ class AlertRecord:
             "active_since": (
                 self.active_since.isoformat() if self.active_since else None
             ),
+            "acknowledged": self.acknowledged,
         }
+        if self.acknowledged:
+            result["acknowledged_at"] = self.acknowledged_at.isoformat()
+            if self.acknowledged_by is not None:
+                result["acknowledged_by"] = self.acknowledged_by
+        return result
 
     def as_public_dict(self) -> dict[str, Any]:
         """Serialize for the sensor, events and WebSocket API."""
@@ -156,7 +193,18 @@ class AlertRecord:
         )
         if self.active_since is not None:
             result["active_since"] = self.active_since.isoformat()
+            result["acknowledged"] = self.acknowledged
+            if self.acknowledged:
+                result["acknowledged_at"] = self.acknowledged_at.isoformat()
+                if self.acknowledged_by is not None:
+                    result["acknowledged_by"] = self.acknowledged_by
         return result
+
+    def clear_acknowledgement(self) -> None:
+        """Reset acknowledgement metadata without changing the alert lifecycle."""
+        self.acknowledged = False
+        self.acknowledged_at = None
+        self.acknowledged_by = None
 
 
 @dataclass(slots=True)

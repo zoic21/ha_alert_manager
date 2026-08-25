@@ -37,6 +37,7 @@ class AlertManagerStore(Store[dict[str, Any]]):
         migrated = deepcopy(old_data)
         config, _changed = _migrate_config_shape(migrated.get("config", {}))
         migrated["config"] = config
+        _migrate_acknowledgement_shape(migrated.get("alerts", {}))
         return migrated
 
 
@@ -71,6 +72,8 @@ class AlertManagerStorage:
             _LOGGER.warning("Ignoring invalid persisted alerts collection")
             return config, records, migrated
         for alert_id, record_data in raw_alerts.items():
+            if _migrate_acknowledgement_shape({alert_id: record_data}):
+                migrated = True
             try:
                 record = AlertRecord.from_dict(record_data)
             except (KeyError, TypeError, ValueError):
@@ -170,3 +173,17 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
             unavailable.pop("domains")
             changed = True
     return config, changed
+
+
+def _migrate_acknowledgement_shape(stored: Any) -> bool:
+    """Add the V1.4 acknowledgement flag to older records idempotently."""
+    if not isinstance(stored, dict):
+        return False
+    changed = False
+    for record in stored.values():
+        if not isinstance(record, dict):
+            continue
+        if "acknowledged" not in record:
+            record["acknowledged"] = False
+            changed = True
+    return changed

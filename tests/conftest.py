@@ -72,6 +72,17 @@ class Event:
         self.data = data or {}
 
 
+class Context:
+    def __init__(self, *, user_id=None):
+        self.user_id = user_id
+
+
+class ServiceCall:
+    def __init__(self, data=None, *, context=None):
+        self.data = data or {}
+        self.context = context or Context()
+
+
 class State:
     def __init__(self, entity_id: str, state: str, attributes=None):
         self.entity_id = entity_id
@@ -81,9 +92,20 @@ class State:
 
 core.callback = callback
 core.valid_entity_id = valid_entity_id
+core.Context = Context
 core.Event = Event
 core.HomeAssistant = object
+core.ServiceCall = ServiceCall
 core.State = State
+
+exceptions = _module("homeassistant.exceptions")
+
+
+class ServiceValidationError(Exception):
+    pass
+
+
+exceptions.ServiceValidationError = ServiceValidationError
 
 config_entries = _module("homeassistant.config_entries")
 
@@ -241,6 +263,9 @@ class Store:
 
 storage.Store = Store
 
+config_validation = _module("homeassistant.helpers.config_validation")
+config_validation.string = lambda value: str(value)
+
 dt_module = _module("homeassistant.util.dt")
 _clock = {"now": datetime(2026, 8, 24, 12, 0, tzinfo=UTC)}
 dt_module.now = lambda: _clock["now"]
@@ -342,6 +367,30 @@ class FakeStates:
         return self.data[entity_id]
 
 
+class FakeServices:
+    def __init__(self):
+        self.handlers = {}
+
+    def async_register(self, domain, service, handler, schema=None):
+        self.handlers[(domain, service)] = (handler, schema)
+
+    def async_remove(self, domain, service):
+        self.handlers.pop((domain, service), None)
+
+    async def async_call(self, domain, service, data, *, context=None):
+        handler, schema = self.handlers[(domain, service)]
+        validated = schema(data) if schema is not None else data
+        await handler(ServiceCall(validated, context=context))
+
+
+class FakeAuth:
+    def __init__(self):
+        self.users = {}
+
+    async def async_get_user(self, user_id):
+        return self.users.get(user_id)
+
+
 class FakeHass:
     def __init__(self):
         self.is_running = True
@@ -353,6 +402,8 @@ class FakeHass:
         self.timers = []
         self.dispatchers = defaultdict(list)
         self.commands = []
+        self.services = FakeServices()
+        self.auth = FakeAuth()
         self.config_entries = FakeConfigEntries()
         self.entity_registry = Registry("entity")
         self.device_registry = Registry("device")

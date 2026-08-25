@@ -1,0 +1,15 @@
+acknowledge:
+  fields:
+    alert_id:
+      required: true
+      example: "unavailable:sensor.example"
+      selector:
+        text:
+
+unacknowledge:
+  fields:
+    alert_id:
+      required: true
+      example: "unavailable:sensor.example"
+      selector:
+        text:
