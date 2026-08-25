@@ -120,6 +120,7 @@
       "aria_disable": "Désactiver la règle {name}",
       "aria_edit": "Modifier la règle {name}",
       "aria_edit_dialog": "Modifier une règle",
+      "aria_menu": "Options de l’éditeur de règle",
       "aria_enable": "Activer la règle {name}",
       "aria_remove_value": "Retirer la valeur {index}",
       "aria_resize": "Redimensionner le volet",
@@ -131,6 +132,9 @@
       "delete_confirm": "Supprimer la règle « {name} » ?",
       "description": "Comparaisons simples sur l’état ou un attribut.",
       "duration": "Durée",
+      "discard_confirm": "Abandonner les modifications non enregistrées de la règle ?",
+      "edit_visually": "Modifier visuellement",
+      "edit_yaml": "Modifier en YAML",
       "editor_condition_help": "Définissez la valeur qui doit déclencher l’alerte.",
       "editor_information": "Informations",
       "editor_information_help": "Identifiez la règle et choisissez les entités surveillées.",
@@ -152,7 +156,10 @@
       "source_state": "État principal",
       "title": "Règles personnalisées",
       "value": "Valeur de comparaison",
-      "values": "Valeurs de comparaison"
+      "values": "Valeurs de comparaison",
+      "yaml_help": "Seuls les champs de comparaison Alert Manager sont pris en charge. Ce n’est pas une condition d’automatisation : pas de templates ni de groupes and, or ou not.",
+      "yaml_invalid": "La règle YAML est invalide.",
+      "yaml_title": "Règle YAML"
     },
     "settings": {
       "aria_delay": "Délai en secondes",
@@ -171,12 +178,20 @@
       "label_exclusions": "Labels exclus des surveillances automatiques",
       "labels_help": "Une règle personnalisée ignore ces labels.",
       "no_delay": "Aucun délai particulier.",
-      "save": "Enregistrer les paramètres"
+      "save": "Enregistrer les paramètres",
+      "transfer_help": "L’export ne contient que la configuration persistante. L’import remplace entièrement la configuration actuelle.",
+      "transfer_title": "Export et import de configuration",
+      "export": "Exporter en YAML",
+      "import": "Importer un YAML",
+      "import_confirm": "La configuration actuelle sera entièrement remplacée.\n\nRègles : {rules}\nPacks activés : {packs}\nDélais particuliers : {delays}\n\nContinuer ?",
+      "import_read_error": "Impossible de lire le fichier sélectionné."
     },
     "success": {
       "alert_acknowledged": "Alerte acquittée",
       "alert_unacknowledged": "Acquittement retiré",
       "automatic_saved": "Surveillance automatique enregistrée",
+      "config_exported": "Configuration exportée",
+      "config_imported": "Configuration importée",
       "rule_created": "Règle créée",
       "rule_deleted": "Règle supprimée",
       "rule_disabled": "Règle désactivée",

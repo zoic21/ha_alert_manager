@@ -115,6 +115,43 @@ test("new rules start enabled with safe defaults", () => {
   });
 });
 
+test("valid YAML switches back to the visual rule editor", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  panel._editingRule = { ...ruleValues(), id: "stable" };
+  panel._ruleEditorMode = "yaml";
+  panel._ruleYaml = "name: Liste vide\n";
+  panel._call = async () => ({
+    name: "Liste YAML",
+    enabled: true,
+    entity_ids: ["todo.liste_d_achats"],
+    source: "state",
+    operator: "equals",
+    value: ["0"],
+    duration: 900,
+    message: null,
+  });
+  await panel._switchRuleEditor();
+  assert.equal(panel._ruleEditorMode, "visual");
+  assert.equal(panel._editingRule.name, "Liste YAML");
+  assert.equal(panel._editingRule.id, "stable");
+});
+
+test("invalid YAML stays in the YAML editor", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  panel._editingRule = { ...ruleValues() };
+  panel._ruleEditorMode = "yaml";
+  panel._ruleYaml = "name: [broken";
+  panel._notice = { kind: "error", text: "Invalid YAML" };
+  panel._call = async () => null;
+  await panel._switchRuleEditor();
+  assert.equal(panel._ruleEditorMode, "yaml");
+  assert.equal(panel._ruleYamlError, "Invalid YAML");
+});
+
 test("unrelated Home Assistant updates do not rerender the overview", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();

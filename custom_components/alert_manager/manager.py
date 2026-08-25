@@ -66,6 +66,14 @@ from .validation import (
     validate_rule_payload,
     validate_rule_update_fields,
 )
+from .yaml_io import (
+    dump_config_yaml,
+    dump_rule_yaml,
+    import_summary,
+    parse_config_yaml,
+    parse_rule_yaml,
+    rule_to_yaml_data,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -261,7 +269,12 @@ class AlertManager:
         return self._pack_availability.get(pack_id, False)
 
     async def async_evaluate_all(
-        self, *, restoring: bool = False, save: bool = True
+        self,
+        *,
+        restoring: bool = False,
+        save: bool = True,
+        publish: bool = True,
+        emit_events: bool = True,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading:
@@ -283,10 +296,14 @@ class AlertManager:
                 restoring=restoring,
                 save=False,
                 publish=False,
+                emit_events=emit_events,
             )
         if save and persisted_changed:
             await self.storage.async_save(self.config, self.records)
-        self._publish_if_changed(force=restoring and self._last_public_snapshot is None)
+        if publish:
+            self._publish_if_changed(
+                force=restoring and self._last_public_snapshot is None
+            )
         return persisted_changed
 
     async def async_evaluate_entity(
@@ -296,6 +313,7 @@ class AlertManager:
         restoring: bool = False,
         save: bool = True,
         publish: bool = True,
+        emit_events: bool = True,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if self._unloading:
@@ -347,7 +365,8 @@ class AlertManager:
             if became_active:
                 persisted_changed = True
                 self._cancel_timer(alert_id)
-                self._fire_started(record)
+                if emit_events:
+                    self._fire_started(record)
             elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
                 self._schedule_timer(record)
 
@@ -355,7 +374,7 @@ class AlertManager:
             record = self.records.pop(alert_id)
             self._cancel_timer(alert_id)
             persisted_changed = True
-            if record.status is AlertStatus.ACTIVE:
+            if record.status is AlertStatus.ACTIVE and emit_events:
                 self._fire_resolved(record, now)
 
         if save and persisted_changed:
@@ -708,6 +727,25 @@ class AlertManager:
         """Return backend-owned pack metadata with current availability."""
         return [pack.as_public_dict(self.hass) for pack in PACKS]
 
+    def get_rule_yaml(self, rule_id: str) -> str:
+        """Return the editable YAML form of one existing rule."""
+        return dump_rule_yaml(self.config["rules"][self._rule_index(rule_id)])
+
+    def validate_rule_yaml(
+        self, raw_yaml: str, *, rule_id: str | None = None
+    ) -> dict[str, Any]:
+        """Parse one YAML rule through the same validator as the visual form."""
+        rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
+        return rule_to_yaml_data(rule)
+
+    def export_config_yaml(self) -> str:
+        """Return a deterministic, runtime-free YAML configuration export."""
+        return dump_config_yaml(self.config)
+
+    def preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
+        """Validate an import without touching the active configuration."""
+        return import_summary(parse_config_yaml(raw_yaml))
+
     async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Acknowledge one active alert and persist before publishing it."""
         record = self._active_record_for_service(alert_id)
@@ -772,6 +810,41 @@ class AlertManager:
         await self.storage.async_save(self.config, self.records)
         return self.get_config()
 
+    async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
+        """Atomically replace configuration after fully parsing its YAML document.
+
+        Runtime records are never read from the import.  They are reconciled
+        against the newly valid configuration and persisted together with it in
+        one Store write.  A failed write restores the in-memory configuration,
+        records and pending timers.
+        """
+        candidate = parse_config_yaml(raw_yaml)
+        summary = import_summary(candidate)
+        previous_config = self.config
+        previous_records = deepcopy(self.records)
+
+        self._cancel_all_timers()
+        try:
+            self.config = candidate
+            self._rebuild_rule_index()
+            await self.async_evaluate_all(
+                save=False,
+                publish=False,
+                emit_events=False,
+            )
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self._cancel_all_timers()
+            self.config = previous_config
+            self.records = previous_records
+            self._rebuild_rule_index()
+            self._refresh_tracking()
+            self._reschedule_pending_timers()
+            raise
+
+        self._publish_if_changed(force=True)
+        return {"config": self.get_config(), "summary": summary}
+
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
@@ -782,6 +855,11 @@ class AlertManager:
         self._publish_if_changed()
         await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
+
+    async def async_create_rule_yaml(self, raw_yaml: str) -> dict[str, Any]:
+        """Create a rule from YAML while keeping backend id generation."""
+        rule = parse_rule_yaml(raw_yaml)
+        return await self.async_create_rule(rule_to_yaml_data(rule))
 
     async def async_update_rule(
         self, rule_id: str, data: dict[str, Any]
@@ -807,6 +885,13 @@ class AlertManager:
         await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
+    async def async_update_rule_yaml(
+        self, rule_id: str, raw_yaml: str
+    ) -> dict[str, Any]:
+        """Update one rule from YAML while preserving its immutable id."""
+        rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
+        return await self.async_update_rule(rule_id, rule_to_yaml_data(rule))
+
     async def async_delete_rule(self, rule_id: str) -> None:
         """Delete a rule and silently clean only the instances it owns."""
         index = self._rule_index(rule_id)
@@ -825,6 +910,18 @@ class AlertManager:
             alert_id = f"rule:{rule_id}:{entity_id}"
             if self.records.pop(alert_id, None) is not None:
                 self._cancel_timer(alert_id)
+
+    def _cancel_all_timers(self) -> None:
+        """Cancel each scheduled due transition before a full rebuild."""
+        for cancel in self._timers.values():
+            cancel()
+        self._timers.clear()
+
+    def _reschedule_pending_timers(self) -> None:
+        """Restore timers from records after an unsuccessful configuration swap."""
+        for record in self.records.values():
+            if record.status is AlertStatus.PENDING:
+                self._schedule_timer(record)
 
     def _rule_index(self, rule_id: str) -> int:
         """Find a rule or raise a stable API error."""

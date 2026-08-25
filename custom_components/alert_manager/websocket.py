@@ -137,6 +137,130 @@ async def websocket_rule_update(
 @websocket_api.async_response
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "alert_manager/rules/yaml/validate",
+        vol.Required("yaml"): str,
+        vol.Optional("rule_id"): str,
+    }
+)
+async def websocket_rule_yaml_validate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Validate YAML before switching back to the visual rule editor."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        rule = manager.validate_rule_yaml(msg["yaml"], rule_id=msg.get("rule_id"))
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], rule)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/yaml/create",
+        vol.Required("yaml"): str,
+    }
+)
+async def websocket_rule_yaml_create(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create a custom rule from its YAML representation."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        rule = await manager.async_create_rule_yaml(msg["yaml"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], rule)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/yaml/update",
+        vol.Required("rule_id"): str,
+        vol.Required("yaml"): str,
+    }
+)
+async def websocket_rule_yaml_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update a custom rule from YAML while retaining its id."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        rule = await manager.async_update_rule_yaml(msg["rule_id"], msg["yaml"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], rule)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command({vol.Required("type"): "alert_manager/config/export"})
+async def websocket_config_export(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a runtime-free YAML configuration export to an administrator."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], {"yaml": manager.export_config_yaml()})
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/config/import/validate",
+        vol.Required("yaml"): str,
+    }
+)
+async def websocket_config_import_validate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Prevalidate an import without modifying integration state."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        summary = manager.preview_config_import(msg["yaml"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], summary)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/config/import",
+        vol.Required("yaml"): str,
+        vol.Required("confirmed"): True,
+    }
+)
+async def websocket_config_import(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Replace the configuration after client-side explicit confirmation."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_import_config(msg["yaml"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "alert_manager/rules/delete",
         vol.Required("rule_id"): str,
     }
@@ -165,6 +289,12 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_rules_list,
         websocket_rule_create,
         websocket_rule_update,
+        websocket_rule_yaml_validate,
+        websocket_rule_yaml_create,
+        websocket_rule_yaml_update,
         websocket_rule_delete,
+        websocket_config_export,
+        websocket_config_import_validate,
+        websocket_config_import,
     ):
         websocket_api.async_register_command(hass, command)

@@ -28,6 +28,8 @@ project.
   device;
 - persistent per-alert acknowledgement from the panel and Home Assistant
   automations;
+- visual or YAML editing of custom rules, plus complete YAML configuration
+  export and replacement import;
 - start, resolution, acknowledgement and unacknowledgement events;
 - no imposed notifications and no frequent global polling.
 
@@ -164,6 +166,51 @@ states `unknown` and `unavailable` are left to automatic detection.
 Examples include `binary_sensor.service equals off`, `sensor.ups_status contains
 CHRG or ERROR`, `sensor.mode not_equals off or idle`, and
 `sensor.fridge_temperature above 9` for 1,800 seconds.
+
+### Visual and YAML editing
+
+The visual editor remains the default. In a create or edit drawer, open the
+three-dot menu in the upper-right corner and select **Edit in YAML**. The same
+drawer then displays Home Assistant's YAML code editor; **Edit visually** parses
+and validates the YAML before filling the visual fields. Invalid YAML stays in
+the YAML editor and is never saved. Existing rule IDs remain server-owned and
+immutable; they are deliberately omitted from the editable rule YAML.
+
+```yaml
+name: Server rack temperature high
+enabled: true
+entity_ids:
+  - sensor.server_rack_temperature
+source: state
+operator: above
+value: 33
+duration: 900
+message: null
+```
+
+`entity_ids` is a required list and each source is evaluated independently.
+`source` is `state` or `attribute`; `attribute` is required only for the latter.
+`duration` is seconds. `equals`, `not_equals`, `contains` and `not_contains`
+accept either one scalar value or a YAML list; `above` and `below` require one
+finite numeric value. This syntax intentionally is **not** Home Assistant
+automation-condition YAML: it has no templates, `and`/`or`/`not` groups,
+arbitrary conditions or the automation condition engine.
+
+### Full configuration export and import
+
+**Exclusions and settings** contains **Export YAML** and **Import YAML**. An
+export is a UTF-8 `alert-manager-config.yaml` file with format `version: 1`,
+general configuration, exclusion tags, default and entity-specific delays,
+automatic-pack configuration and all custom rules including their stable IDs.
+It contains no active or pending alerts, acknowledgements, timers, detection or
+activation timestamps, or execution history.
+
+Import accepts only supported complete format versions and rejects unknown,
+duplicate or runtime fields. It is validated before any write, displays its rule,
+enabled-pack and entity-delay totals, then requires explicit confirmation.
+**Import replaces the whole current configuration; it is not a merge.** Existing
+runtime alerts are reconciled only after a valid import, and the configuration is
+persisted atomically.
 
 ## `sensor.alert_manager`
 
@@ -334,7 +381,7 @@ pending alert, and the sensor is written only when its structured content change
 
 - no snooze;
 - no resolved-alert history, CSV storage, repeat or escalation;
-- no combined conditions, Jinja templates or hysteresis;
+- no combined conditions, Jinja templates or hysteresis (including in rule YAML);
 - no built-in notification service;
 - device grouping is visual only;
 - configuration is administrator-only;

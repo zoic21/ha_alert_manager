@@ -15,7 +15,7 @@ Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.4
+## Fonctionnalités V1.5
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -34,6 +34,8 @@ Assistant.
   appartiennent au même appareil ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
   automatisations Home Assistant ;
+- édition visuelle ou YAML des règles personnalisées, export YAML complet et
+  import YAML de remplacement de la configuration ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
@@ -182,6 +184,55 @@ Exemples :
 - `sensor.mode not_equals off ou idle` ;
 - `sensor.frigo_temperature above 9` pendant 1 800 secondes ;
 - `sensor.eas_bai_waterpressure_press below 1`.
+
+### Édition visuelle et YAML
+
+L’éditeur visuel reste le mode par défaut. Dans le volet de création ou de
+modification, ouvrir le menu trois points en haut à droite puis choisir
+**Modifier en YAML**. Le même volet affiche alors l’éditeur YAML Home Assistant ;
+**Modifier visuellement** analyse et valide le YAML avant de remplir le
+formulaire. Un YAML invalide reste dans l’éditeur YAML et n’est jamais
+enregistré. L’identifiant d’une règle existante reste géré par le backend,
+immuable et volontairement absent du YAML éditable.
+
+```yaml
+name: Température baie élevée
+enabled: true
+entity_ids:
+  - sensor.hygrometrie_baie_informatique_temperature
+source: state
+operator: above
+value: 33
+duration: 900
+message: null
+```
+
+`entity_ids` est une liste obligatoire : chaque source est suivie
+indépendamment. `source` vaut `state` ou `attribute` ; `attribute` est requis
+uniquement dans ce second cas. `duration` est exprimée en secondes. `equals`,
+`not_equals`, `contains` et `not_contains` acceptent une valeur scalaire ou une
+liste YAML ; `above` et `below` exigent une unique valeur numérique finie. Cette
+syntaxe ne correspond volontairement **pas** aux conditions YAML des
+automatisations Home Assistant : aucun template, groupe `and`/`or`/`not`, aucune
+condition arbitraire et aucun moteur de conditions d’automatisation ne sont
+utilisés.
+
+### Export et import complet de configuration
+
+Dans **Exclusions et paramètres**, les actions **Exporter en YAML** et
+**Importer un YAML** gèrent la configuration entière. L’export télécharge
+`alert-manager-config.yaml`, encodé en UTF-8, avec le format `version: 1`, les
+paramètres généraux, tags d’exclusion, délais globaux et particuliers,
+configuration des packs automatiques et toutes les règles personnalisées avec
+leurs identifiants stables. Il n’exporte jamais les alertes actives ou à venir,
+acquittements, timers, dates de détection/activation ni historique d’exécution.
+
+L’import n’accepte que les versions complètes supportées et refuse les champs
+inconnus, dupliqués ou runtime. Le fichier est validé intégralement avant toute
+écriture, affiche le nombre de règles, packs activés et délais particuliers, puis
+demande une confirmation explicite. **L’import remplace entièrement la
+configuration actuelle : ce n’est pas une fusion.** Les alertes runtime ne sont
+réconciliées qu’après un import valide et la persistance est atomique.
 
 ## Exclusions et priorité des délais
 
@@ -420,7 +471,7 @@ Les workflows exécutent également Hassfest et la validation HACS.
 
 - pas de snooze, répétition ou escalade ;
 - pas d’historique des alertes résolues ni de stockage CSV ;
-- pas de template Jinja, condition combinée ou hystérésis ;
+- pas de template Jinja, condition combinée ou hystérésis, y compris en YAML ;
 - pas d’import automatique des anciennes automatisations ;
 - pas de notification directe, application mobile, add-on, MQTT ou entité par
   alerte ;

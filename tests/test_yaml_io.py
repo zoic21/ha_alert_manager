@@ -1,0 +1,179 @@
+"""YAML rule and complete configuration interchange tests."""
+
+from __future__ import annotations
+
+import asyncio
+from copy import deepcopy
+
+import pytest
+
+from custom_components.alert_manager.const import DEFAULT_CONFIG
+from custom_components.alert_manager.manager import AlertManager
+from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.yaml_io import (
+    dump_config_yaml,
+    dump_rule_yaml,
+    parse_config_yaml,
+    parse_rule_yaml,
+)
+
+
+def run(coroutine):
+    """Run one manager coroutine with the isolated test event loop."""
+    return asyncio.run(coroutine)
+
+
+def rule_yaml(*, name: str = "Temperature") -> str:
+    """Return a complete editable Alert Manager rule YAML."""
+    return f"""name: {name}
+enabled: true
+entity_ids:
+  - sensor.bay_temperature
+source: state
+operator: above
+value: 33
+duration: 900
+message: null
+"""
+
+
+def test_rule_yaml_serialization_round_trip() -> None:
+    """The editable YAML has no mutable id and parses through shared validation."""
+    rule = parse_rule_yaml(rule_yaml())
+    rendered = dump_rule_yaml(rule)
+    assert "id:" not in rendered
+    parsed = parse_rule_yaml(rendered)
+    assert parsed.name == "Temperature"
+    assert parsed.entity_ids == ["sensor.bay_temperature"]
+    assert parsed.value == 33
+
+
+def test_rule_yaml_syntax_and_business_errors_are_clear() -> None:
+    """Syntax and rule-model failures are distinct safe validation failures."""
+    with pytest.raises(ValueError, match="Invalid YAML"):
+        parse_rule_yaml("name: [broken")
+    with pytest.raises(ValueError, match="Attribute is required"):
+        parse_rule_yaml(rule_yaml().replace("source: state", "source: attribute"))
+
+
+def test_config_export_is_deterministic_and_reimportable() -> None:
+    """The complete YAML export has stable ordering and preserves rule ids."""
+    config = deepcopy(DEFAULT_CONFIG)
+    config["rules"] = [
+        {
+            "id": "stable-rule-id",
+            "name": "Temperature",
+            "enabled": True,
+            "entity_ids": ["sensor.bay_temperature"],
+            "source": "state",
+            "operator": "above",
+            "value": 33,
+            "duration": 900,
+        }
+    ]
+    first = dump_config_yaml(config)
+    assert first == dump_config_yaml(config)
+    assert first.startswith("version: 1\nconfig:\n")
+    imported = parse_config_yaml(first)
+    assert imported["rules"][0]["id"] == "stable-rule-id"
+    assert "alerts:" not in first
+
+
+def test_config_import_rejects_duplicate_ids_and_runtime_fields() -> None:
+    """Imports are strict: stable ids cannot collide and runtime is not accepted."""
+    config = dump_config_yaml({**deepcopy(DEFAULT_CONFIG), "rules": []})
+    duplicate_rules = """rules:
+  - id: same
+    name: One
+    enabled: true
+    entity_ids: [sensor.one]
+    source: state
+    operator: equals
+    value: on
+    duration: 0
+    message: null
+  - id: same
+    name: Two
+    enabled: true
+    entity_ids: [sensor.two]
+    source: state
+    operator: equals
+    value: on
+    duration: 0
+    message: null
+"""
+    with pytest.raises(ValueError, match="Duplicate rule id"):
+        parse_config_yaml(config.replace("rules: []\n", duplicate_rules))
+    valid = config
+    with pytest.raises(ValueError, match="Unknown configuration field: alerts"):
+        parse_config_yaml(valid + "alerts: {}\n")
+
+
+def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, entry):
+    """A valid import recreates independent state for every entity of one rule."""
+    hass.states.set("sensor.one", "on")
+    hass.states.set("sensor.two", "on")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    config = deepcopy(DEFAULT_CONFIG)
+    config["rules"] = [
+        {
+            "id": "stable-multi-rule",
+            "name": "Two sources",
+            "enabled": True,
+            "entity_ids": ["sensor.one", "sensor.two"],
+            "source": "state",
+            "operator": "equals",
+            "value": "on",
+            "duration": 0,
+        }
+    ]
+    result = run(manager.async_import_config(dump_config_yaml(config)))
+    assert result["summary"] == {
+        "rules": 1,
+        "enabled_packs": 4,
+        "entity_delays": 0,
+        "warnings": [],
+    }
+    assert set(manager.records) >= {
+        "rule:stable-multi-rule:sensor.one",
+        "rule:stable-multi-rule:sensor.two",
+    }
+    assert all(
+        manager.records[alert_id].status is AlertStatus.ACTIVE
+        for alert_id in (
+            "rule:stable-multi-rule:sensor.one",
+            "rule:stable-multi-rule:sensor.two",
+        )
+    )
+
+
+def test_invalid_import_keeps_existing_configuration_and_runtime(hass, entry):
+    """Pre-parse failures cannot change the current config or pending records."""
+    hass.states.set("sensor.one", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    before_config = manager.get_config()
+    before_records = deepcopy(manager.records)
+    with pytest.raises(ValueError, match="Unsupported configuration format"):
+        run(manager.async_import_config("version: 99\nconfig: {}\nrules: []\n"))
+    assert manager.get_config() == before_config
+    assert manager.records == before_records
+
+
+def test_import_write_failure_rolls_back_configuration_and_runtime(hass, entry):
+    """A storage failure after evaluation restores the old in-memory snapshot."""
+    hass.states.set("sensor.one", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    before_config = manager.get_config()
+    before_records = deepcopy(manager.records)
+
+    async def fail_save(_config, _records):
+        raise OSError("storage unavailable")
+
+    manager.storage.async_save = fail_save
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_import_config(dump_config_yaml(deepcopy(DEFAULT_CONFIG))))
+    assert manager.get_config() == before_config
+    assert manager.records == before_records

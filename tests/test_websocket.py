@@ -8,12 +8,17 @@ from types import SimpleNamespace
 from custom_components.alert_manager.const import DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
+    websocket_config_export,
+    websocket_config_import,
+    websocket_config_import_validate,
     websocket_config_update,
     websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
     websocket_rule_update,
+    websocket_rule_yaml_validate,
 )
+from custom_components.alert_manager.yaml_io import dump_config_yaml
 
 
 class Connection:
@@ -158,3 +163,53 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     )
     assert connection.results[-1] == (5, {"deleted": True})
     assert manager.get_config()["rules"] == []
+
+
+def test_yaml_and_configuration_websocket_commands_are_admin_only(hass, entry):
+    """All new YAML and import/export paths inherit the panel's admin guard."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=False)
+    for command, message in (
+        (websocket_rule_yaml_validate, {"id": 10, "yaml": "name: test"}),
+        (websocket_config_export, {"id": 11}),
+        (websocket_config_import_validate, {"id": 12, "yaml": "version: 1"}),
+        (websocket_config_import, {"id": 13, "yaml": "version: 1", "confirmed": True}),
+    ):
+        asyncio.run(command(hass, connection, message))
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 4
+
+
+def test_configuration_export_validation_and_import_round_trip(hass, entry):
+    """The WebSocket flow validates before the explicit replacement request."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_config_export(hass, connection, {"id": 20}))
+    exported = connection.results[-1][1]["yaml"]
+    assert exported.startswith("version: 1\n")
+
+    asyncio.run(
+        websocket_config_import_validate(
+            hass,
+            connection,
+            {"id": 21, "yaml": exported},
+        )
+    )
+    assert connection.results[-1][1]["rules"] == 0
+
+    asyncio.run(
+        websocket_config_import(
+            hass,
+            connection,
+            {
+                "id": 22,
+                "yaml": dump_config_yaml(manager.get_config()),
+                "confirmed": True,
+            },
+        )
+    )
+    assert connection.results[-1][1]["config"] == manager.get_config()

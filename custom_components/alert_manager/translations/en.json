@@ -120,6 +120,7 @@
       "aria_disable": "Disable rule {name}",
       "aria_edit": "Edit rule {name}",
       "aria_edit_dialog": "Edit a rule",
+      "aria_menu": "Rule editor options",
       "aria_enable": "Enable rule {name}",
       "aria_remove_value": "Remove value {index}",
       "aria_resize": "Resize the drawer",
@@ -131,6 +132,9 @@
       "delete_confirm": "Delete rule “{name}”?",
       "description": "Simple comparisons on the state or an attribute.",
       "duration": "Duration",
+      "discard_confirm": "Discard unsaved rule changes?",
+      "edit_visually": "Edit visually",
+      "edit_yaml": "Edit in YAML",
       "editor_condition_help": "Define the value that triggers the alert.",
       "editor_information": "Information",
       "editor_information_help": "Identify the rule and select the monitored entities.",
@@ -152,7 +156,10 @@
       "source_state": "Main state",
       "title": "Custom rules",
       "value": "Comparison value",
-      "values": "Comparison values"
+      "values": "Comparison values",
+      "yaml_help": "Only Alert Manager comparison fields are supported. This is not an automation condition and does not support templates, and/or or not groups.",
+      "yaml_invalid": "The YAML rule is invalid.",
+      "yaml_title": "YAML rule"
     },
     "settings": {
       "aria_delay": "Delay in seconds",
@@ -171,12 +178,20 @@
       "label_exclusions": "Labels excluded from automatic monitoring",
       "labels_help": "Custom rules ignore these labels.",
       "no_delay": "No entity-specific delays.",
-      "save": "Save settings"
+      "save": "Save settings",
+      "transfer_help": "Export contains only persistent configuration. Import replaces the complete current configuration.",
+      "transfer_title": "Configuration export and import",
+      "export": "Export YAML",
+      "import": "Import YAML",
+      "import_confirm": "The current configuration will be completely replaced.\n\nRules: {rules}\nEnabled packs: {packs}\nEntity-specific delays: {delays}\n\nContinue?",
+      "import_read_error": "Unable to read the selected file."
     },
     "success": {
       "alert_acknowledged": "Alert acknowledged",
       "alert_unacknowledged": "Acknowledgement removed",
       "automatic_saved": "Automatic monitoring saved",
+      "config_exported": "Configuration exported",
+      "config_imported": "Configuration imported",
       "rule_created": "Rule created",
       "rule_deleted": "Rule deleted",
       "rule_disabled": "Rule disabled",

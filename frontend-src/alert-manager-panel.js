@@ -31,6 +31,9 @@ const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6
 const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
 const MDI_CHECK = "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z";
 const MDI_CHECK_CIRCLE_OUTLINE = "M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z";
+const MDI_DOTS_VERTICAL = "M12,8C13.1,8 14,7.1 14,6C14,4.9 13.1,4 12,4C10.9,4 10,4.9 10,6C10,7.1 10.9,8 12,8M12,10C10.9,10 10,10.9 10,12C10,13.1 10.9,14 12,14C13.1,14 14,13.1 14,12C14,10.9 13.1,10 12,10M12,16C10.9,16 10,16.9 10,18C10,19.1 10.9,20 12,20C13.1,20 14,19.1 14,18C14,16.9 13.1,16 12,16Z";
+const MDI_DOWNLOAD = "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z";
+const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 
 const esc = (value) =>
@@ -58,6 +61,32 @@ const newRuleDefaults = () => ({
   duration: 900,
   message: "",
 });
+
+const yamlValue = (value) => {
+  if (value === null || value === undefined || value === "") return "null";
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  return JSON.stringify(String(value));
+};
+
+const ruleToYaml = (rule) => {
+  const lines = [
+    `name: ${yamlValue(rule.name)}`,
+    `enabled: ${yamlValue(rule.enabled ?? true)}`,
+    "entity_ids:",
+    ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
+    `source: ${yamlValue(rule.source ?? "state")}`,
+  ];
+  if ((rule.source ?? "state") === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
+  lines.push(
+    `operator: ${yamlValue(rule.operator)}`,
+    Array.isArray(rule.value)
+      ? "value:\n" + rule.value.map((value) => `  - ${yamlValue(value)}`).join("\n")
+      : `value: ${yamlValue(rule.value)}`,
+    `duration: ${yamlValue(rule.duration)}`,
+    `message: ${yamlValue(rule.message)}`,
+  );
+  return `${lines.join("\n")}\n`;
+};
 
 const buildOverviewItems = (activeAlerts = [], pendingAlerts = [], acknowledgedAlerts = []) => {
   const groupByStatus = (alerts, status) => {
@@ -118,6 +147,11 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._activeTab = "overview";
     this._editingRule = null;
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleMenuOpen = false;
+    this._ruleDirty = false;
     this._loading = true;
     this._busy = false;
     this._notice = null;
@@ -133,6 +167,8 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("pointerdown", (event) => this._startRuleEditorResize(event));
     this.shadowRoot.addEventListener("dblclick", (event) => this._resetRuleEditorWidth(event));
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
+    this.shadowRoot.addEventListener("input", (event) => this._handleRuleInput(event));
+    this.shadowRoot.addEventListener("change", (event) => this._handleImportSelection(event));
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
@@ -291,7 +327,7 @@ class AlertManagerPanel extends HTMLElement {
     this._render();
     try {
       const result = await this._hass.callWS(message);
-      this._notice = { kind: "success", text: successText };
+      this._notice = successText ? { kind: "success", text: successText } : null;
       return result;
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
@@ -321,6 +357,8 @@ class AlertManagerPanel extends HTMLElement {
 
   _errorText(error) {
     const code = error?.code ?? error?.body?.code;
+    const message = error?.message ?? error?.body?.message;
+    if (code === "invalid_format" && typeof message === "string" && message) return message;
     return this._t(`errors.${["invalid_format", "not_loaded"].includes(code) ? code : "unknown"}`);
   }
 
@@ -337,6 +375,7 @@ class AlertManagerPanel extends HTMLElement {
       <style>${this._styles()}</style>
       ${this._hass ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
     this._hydrateSelectors();
+    this._hydrateYamlEditor();
     this._updateCountdowns();
   }
 
@@ -392,6 +431,9 @@ class AlertManagerPanel extends HTMLElement {
         closeButton.label = this._t("rules.aria_close");
         closeButton.path = MDI_CLOSE;
       }
+      const menuButton = this.shadowRoot.querySelector('[data-action="toggle-rule-menu"]');
+      if (menuButton) menuButton.path = MDI_DOTS_VERTICAL;
+      if (this._ruleEditorMode !== "visual") return;
       this._configureSelect(
         "rule-source",
         [
@@ -401,6 +443,7 @@ class AlertManagerPanel extends HTMLElement {
         this._editingRule.source ?? "state",
         (value) => {
           this._editingRule.source = value;
+          this._ruleDirty = true;
           const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
           if (attributeField) attributeField.hidden = value !== "attribute";
         },
@@ -419,6 +462,7 @@ class AlertManagerPanel extends HTMLElement {
         (value) => {
           this._captureRuleDraft();
           this._editingRule.operator = value;
+          this._ruleDirty = true;
           if (TEXT_RULE_OPERATORS.has(value)) {
             this._editingRule.value = this._ruleValueList(this._editingRule.value);
           } else {
@@ -431,7 +475,10 @@ class AlertManagerPanel extends HTMLElement {
         "rule-entity-ids",
         { entity: { multiple: true } },
         this._editingRule.entity_ids ?? [],
-        (value) => { this._editingRule.entity_ids = Array.isArray(value) ? value : []; },
+        (value) => {
+          this._editingRule.entity_ids = Array.isArray(value) ? value : [];
+          this._ruleDirty = true;
+        },
       );
     }
     if (this._activeTab !== "settings") return;
@@ -462,6 +509,22 @@ class AlertManagerPanel extends HTMLElement {
         (value) => this._setEntityDelayEntity(index, value),
       );
     });
+  }
+
+  _hydrateYamlEditor() {
+    if (this._editingRule === null || this._ruleEditorMode !== "yaml") return;
+    const editor = this.shadowRoot.querySelector("#rule-yaml-editor");
+    if (!editor) return;
+    editor.mode = "yaml";
+    editor.value = this._ruleYaml;
+    editor.lineNumbers = true;
+    if (editor.dataset.configured) return;
+    editor.addEventListener("value-changed", (event) => {
+      this._ruleYaml = String(event.detail?.value ?? editor.value ?? "");
+      this._ruleYamlError = null;
+      this._ruleDirty = true;
+    });
+    editor.dataset.configured = "true";
   }
 
   _renderTab() {
@@ -659,6 +722,8 @@ class AlertManagerPanel extends HTMLElement {
       ? this._ruleValueList(rule.value)
       : this._ruleValueList(rule.value)[0] ?? "";
     this._editingRule = rule;
+    const yamlMode = this._ruleEditorMode === "yaml";
+    const editorContent = yamlMode ? this._renderRuleYamlEditor(rule) : this._renderRuleVisualEditor(rule);
     return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
     <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(this._t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(this._t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
@@ -666,8 +731,17 @@ class AlertManagerPanel extends HTMLElement {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
         <span slot="subtitle">${rule.id ? esc(rule.name) : esc(this._t("rules.new_subtitle"))}</span>
+        <div slot="action" class="rule-menu-wrap"><ha-icon-button data-action="toggle-rule-menu" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"></ha-icon-button>${this._ruleMenuOpen ? `<div class="rule-editor-menu" role="menu"><ha-button appearance="plain" data-action="switch-rule-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-button></div>` : ""}</div>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
+        ${editorContent}
+        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">${esc(this._t("buttons.delete"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">${esc(this._t("buttons.cancel"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
+      </form>
+    </ha-card>`;
+  }
+
+  _renderRuleVisualEditor(rule) {
+    return `
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_information"))}</h3><small>${esc(this._t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
@@ -690,10 +764,16 @@ class AlertManagerPanel extends HTMLElement {
             ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, "1", "name")}
             ${this._textField("message", this._t("rules.message_optional"), rule.message || "", false, "name", "full rule-message-field")}
           </div>
-        </section>
-        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">${esc(this._t("buttons.delete"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">${esc(this._t("buttons.cancel"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
-      </form>
-    </ha-card>`;
+        </section>`;
+  }
+
+  _renderRuleYamlEditor(rule) {
+    if (!this._ruleYaml) this._ruleYaml = ruleToYaml(rule);
+    return `<section class="rule-editor-section yaml-rule-section">
+      <div class="rule-section-heading"><div><h3>${esc(this._t("rules.yaml_title"))}</h3><small>${esc(this._t("rules.yaml_help"))}</small></div></div>
+      <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(this._t("rules.yaml_title"))}"></ha-code-editor>
+      ${this._ruleYamlError ? `<div class="yaml-error" role="alert">${esc(this._ruleYamlError)}</div>` : ""}
+    </section>`;
   }
 
   _renderRuleValues(rule) {
@@ -731,6 +811,10 @@ class AlertManagerPanel extends HTMLElement {
           <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(this._t("settings.aria_remove_delay"))}">${esc(this._t("buttons.delete"))}</ha-button>
         </div>`).join("") : `<div class="empty compact">${esc(this._t("settings.no_delay"))}</div>`}</div>
         <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+      </section>
+      <section class="panel configuration-transfer"><div><h2>${esc(this._t("settings.transfer_title"))}</h2><small>${esc(this._t("settings.transfer_help"))}</small></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(this._t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(this._t("settings.import"))}</ha-button></div>
+        <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
       </section>
       <div class="actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
     </form>`;
@@ -800,19 +884,41 @@ class AlertManagerPanel extends HTMLElement {
       }
       return;
     }
+    if (action === "export-config") {
+      await this._exportConfiguration();
+      return;
+    }
+    if (action === "choose-config-import") {
+      this.shadowRoot.querySelector("#config-import-file")?.click();
+      return;
+    }
     if (action === "new-rule") {
       this._editingRule = {};
+      this._ruleEditorMode = "visual";
+      this._ruleYaml = "";
+      this._ruleYamlError = null;
+      this._ruleMenuOpen = false;
+      this._ruleDirty = false;
       this._render();
       return;
     }
     if (action === "cancel-rule") {
-      this._editingRule = null;
+      this._cancelRuleEditor();
+      return;
+    }
+    if (action === "toggle-rule-menu") {
+      this._ruleMenuOpen = !this._ruleMenuOpen;
       this._render();
+      return;
+    }
+    if (action === "switch-rule-editor") {
+      await this._switchRuleEditor();
       return;
     }
     if (action === "add-rule-value") {
       this._captureRuleDraft();
       this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
+      this._ruleDirty = true;
       this._render();
       return;
     }
@@ -821,6 +927,7 @@ class AlertManagerPanel extends HTMLElement {
       const values = this._ruleValueList(this._editingRule.value);
       values.splice(Number(button.dataset.index), 1);
       this._editingRule.value = values.length ? values : [""];
+      this._ruleDirty = true;
       this._render();
       return;
     }
@@ -839,13 +946,21 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "save-rule") {
       const form = this.shadowRoot.querySelector("#rule-form");
-      if (form && this._reportFormValidity(form) && !this._busy) await this._saveRule(form);
+      if (form && !this._busy) {
+        if (this._ruleEditorMode === "yaml") await this._saveRuleYaml();
+        else if (this._reportFormValidity(form)) await this._saveRule(form);
+      }
       return;
     }
     const rule = (this._config.rules || []).find((item) => item.id === button.dataset.id);
     if (!rule) return;
     if (action === "edit-rule") {
       this._editingRule = { ...rule };
+      this._ruleEditorMode = "visual";
+      this._ruleYaml = "";
+      this._ruleYamlError = null;
+      this._ruleMenuOpen = false;
+      this._ruleDirty = false;
       this._render();
     } else if (action === "toggle-rule") {
       const updated = await this._call(
@@ -865,6 +980,139 @@ class AlertManagerPanel extends HTMLElement {
         this._render();
       }
     }
+  }
+
+  _handleRuleInput(event) {
+    if (this._editingRule === null) return;
+    const target = event.target;
+    if (target?.closest?.("#rule-form")) this._ruleDirty = true;
+    if (target?.id === "rule-yaml-editor") {
+      this._ruleYaml = String(target.value ?? this._ruleYaml);
+      this._ruleYamlError = null;
+    }
+  }
+
+  _cancelRuleEditor() {
+    if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return;
+    this._editingRule = null;
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleMenuOpen = false;
+    this._ruleDirty = false;
+    this._render();
+  }
+
+  async _switchRuleEditor() {
+    this._ruleMenuOpen = false;
+    if (this._ruleEditorMode === "visual") {
+      this._captureRuleDraft();
+      this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
+      this._ruleYamlError = null;
+      this._ruleEditorMode = "yaml";
+      this._render();
+      return;
+    }
+    const ruleId = this._editingRule?.id;
+    const validated = await this._call(
+      {
+        type: "alert_manager/rules/yaml/validate",
+        yaml: this._ruleYaml,
+        ...(ruleId ? { rule_id: ruleId } : {}),
+      },
+      "",
+    );
+    if (!validated) {
+      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._render();
+      return;
+    }
+    this._editingRule = { ...validated, ...(ruleId ? { id: ruleId } : {}) };
+    this._ruleYamlError = null;
+    this._ruleEditorMode = "visual";
+    this._render();
+  }
+
+  async _saveRuleYaml() {
+    const id = String(this._editingRule?.id ?? "");
+    const message = id
+      ? { type: "alert_manager/rules/yaml/update", rule_id: id, yaml: this._ruleYaml }
+      : { type: "alert_manager/rules/yaml/create", yaml: this._ruleYaml };
+    const updated = await this._call(
+      message,
+      this._t(id ? "success.rule_updated" : "success.rule_created"),
+    );
+    if (!updated) {
+      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._render();
+      return;
+    }
+    this._editingRule = null;
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleDirty = false;
+    this._replaceRule(updated);
+  }
+
+  async _exportConfiguration() {
+    const result = await this._call(
+      { type: "alert_manager/config/export" },
+      this._t("success.config_exported"),
+    );
+    if (!result?.yaml) return;
+    const blob = new Blob([result.yaml], { type: "application/yaml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "alert-manager-config.yaml";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async _handleImportSelection(event) {
+    const input = event.target;
+    if (!input?.matches?.("[data-import-file]") || this._busy) return;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    let rawYaml;
+    try {
+      rawYaml = await file.text();
+    } catch (_error) {
+      this._notice = { kind: "error", text: this._t("settings.import_read_error") };
+      this._render();
+      return;
+    }
+    const summary = await this._call(
+      { type: "alert_manager/config/import/validate", yaml: rawYaml },
+      "",
+    );
+    if (!summary) return;
+    const prompt = this._t("settings.import_confirm", {
+      rules: summary.rules,
+      packs: summary.enabled_packs,
+      delays: summary.entity_delays,
+    });
+    if (!window.confirm(prompt)) return;
+    const result = await this._call(
+      { type: "alert_manager/config/import", yaml: rawYaml, confirmed: true },
+      this._t("success.config_imported"),
+    );
+    if (!result?.config) return;
+    this._config = result.config;
+    this._resetSettingsDraft();
+    this._editingRule = null;
+    this._ruleEditorMode = "visual";
+    this._ruleDirty = false;
+    try {
+      this._alerts = await this._hass.callWS({ type: "alert_manager/alerts/list" });
+      this._syncSensor();
+    } catch (_error) {
+      // The integration has already completed the import.  The sensor update
+      // will refresh the overview shortly even if this immediate read failed.
+    }
+    this._render();
   }
 
   _startRuleEditorResize(event) {
@@ -944,8 +1192,9 @@ class AlertManagerPanel extends HTMLElement {
       await this._saveSettings();
       return;
     }
-    if (formId === "rule-form" && this._reportFormValidity(form)) {
-      await this._saveRule(form);
+    if (formId === "rule-form") {
+      if (this._ruleEditorMode === "yaml") await this._saveRuleYaml();
+      else if (this._reportFormValidity(form)) await this._saveRule(form);
     }
   }
 
@@ -1061,6 +1310,8 @@ class AlertManagerPanel extends HTMLElement {
     );
     if (updated) {
       this._editingRule = null;
+      this._ruleEditorMode = "visual";
+      this._ruleDirty = false;
       this._replaceRule(updated);
     }
   }
@@ -1207,7 +1458,7 @@ class AlertManagerPanel extends HTMLElement {
       .acknowledged-badge{background:color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 14%,transparent);color:var(--blue-color,var(--primary-color,#0277bd))}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}.alert-details{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:12px 16px;margin:14px 0 0}.alert-details div{min-width:0}dt{font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-normal,400);color:var(--secondary-text-color,#727272)}dd{margin:2px 0 0;overflow-wrap:anywhere}.alert-condition{grid-column:1/-1}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}.alert-empty{margin-bottom:20px}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-menu-wrap{position:relative}.rule-editor-menu{position:absolute;z-index:10;inset-inline-end:0;inset-block-start:40px;min-width:190px;padding:4px;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);box-shadow:var(--ha-card-box-shadow,0 3px 10px rgba(0,0,0,.2))}.rule-editor-menu ha-button{width:100%;justify-content:flex-start}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
