@@ -80,6 +80,26 @@ def test_pending_to_active(hass, entry, set_now):
     assert record.active_since == record.due_at
 
 
+def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
+    """Timer jobs stay on the HA loop before creating config-entry tasks."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+    timer = hass.timers[-1]
+    assert timer["action"]._hass_callback is True
+
+    async def fire_timer():
+        set_now(start + timedelta(seconds=900))
+        timer["action"](start + timedelta(seconds=900))
+        await asyncio.sleep(0)
+
+    run(fire_timer())
+    record = manager.records["unavailable:sensor.test"]
+    assert record.status is AlertStatus.ACTIVE
+    assert entry.created_task_names == ["alert_manager timer unavailable:sensor.test"]
+
+
 def test_active_resolution_and_events(hass, entry, set_now):
     """Started/resolved events contain the structured documented timestamps."""
     start = datetime(2026, 8, 24, 12, tzinfo=UTC)

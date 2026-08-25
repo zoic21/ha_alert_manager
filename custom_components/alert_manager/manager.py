@@ -593,11 +593,18 @@ class AlertManager:
 
     def _schedule_timer(self, record: AlertRecord) -> None:
         """Schedule exactly one timer for a pending alert."""
-        self._cancel_timer(record.details.id)
+        alert_id = record.details.id
+        self._cancel_timer(alert_id)
         when = record.due_at.astimezone(UTC)
-        self._timers[record.details.id] = async_track_point_in_utc_time(
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            """Run the timer handler on Home Assistant's event loop."""
+            self._timer_due(alert_id)
+
+        self._timers[alert_id] = async_track_point_in_utc_time(
             self.hass,
-            lambda _now, alert_id=record.details.id: self._timer_due(alert_id),
+            timer_due,
             when,
         )
 

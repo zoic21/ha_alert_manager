@@ -58,6 +58,7 @@ core = _module("homeassistant.core")
 
 
 def callback(function):
+    function._hass_callback = True
     return function
 
 
