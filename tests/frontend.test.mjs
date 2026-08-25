@@ -206,6 +206,7 @@ test("active alerts are red while pending alerts stay orange", () => {
   const alert = {
     entity_id: "sensor.test",
     name: "Test",
+    value: "unavailable",
     condition: "État indisponible",
   };
 
@@ -214,8 +215,8 @@ test("active alerts are red while pending alerts stay orange", () => {
   assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
   assert.match(panel._styles(), /\.alert-card\.is-active\{--alert-state-color:var\(--error-color/);
   assert.match(panel._renderAlert(alert, true), /<ha-svg-icon path=/);
-  assert.match(panel._renderAlert(alert, true), /class="alert-status">Active</);
-  assert.match(panel._renderAlert(alert, false), /class="alert-status">En attente</);
+  assert.match(panel._renderAlert(alert, true), /class="alert-current-value">unavailable<\/strong>/);
+  assert.doesNotMatch(panel._renderAlert(alert, true), />Active<|>En attente<|class="alert-value"/);
 });
 
 test("alert conditions stay on one line in the wider detail column", () => {
@@ -309,11 +310,13 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
-  assert.match(settings, /<ha-button appearance="filled" data-action="add-entity-delay">Ajouter<\/ha-button>/);
+  assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
   assert.match(settings, /<ha-button appearance="filled" data-action="save-settings"/);
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
+  assert.match(styles, /\.category-card>\.row\.between\{align-items:flex-start\}/);
+  assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
 
@@ -414,8 +417,28 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
+  assert.match(panel._styles(), /main\.rules-page\{max-width:none\}/);
+  assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
+  assert.match(panel._styles(), /inset-inline-end:16px/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*align-content:start/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
+});
+
+test("alert cards omit unavailable device and area metadata", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const base = { entity_id: "sensor.test", name: "Test", condition: "Test" };
+
+  const withoutMetadata = panel._renderAlert(base, true);
+  const withDevice = panel._renderAlert({ ...base, device_name: "Pompe" }, true);
+  const withArea = panel._renderAlert({ ...base, area: "Garage" }, true);
+
+  assert.doesNotMatch(withoutMetadata, /<dt>Équipement<|<dt>Pièce</);
+  assert.match(withDevice, /<dt>Équipement<\/dt><dd>Pompe<\/dd>/);
+  assert.doesNotMatch(withDevice, /<dt>Pièce</);
+  assert.match(withArea, /<dt>Pièce<\/dt><dd>Garage<\/dd>/);
+  assert.doesNotMatch(withArea, /<dt>Équipement</);
 });
 
 test("attribute input follows the selected rule source without rerendering", () => {
