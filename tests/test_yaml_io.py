@@ -11,6 +11,7 @@ from custom_components.alert_manager.const import DEFAULT_CONFIG
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.yaml_io import (
+    MAX_YAML_SIZE,
     dump_config_yaml,
     dump_rule_yaml,
     parse_config_yaml,
@@ -54,6 +55,34 @@ def test_rule_yaml_syntax_and_business_errors_are_clear() -> None:
         parse_rule_yaml("name: [broken")
     with pytest.raises(ValueError, match="Attribute is required"):
         parse_rule_yaml(rule_yaml().replace("source: state", "source: attribute"))
+
+
+@pytest.mark.parametrize(
+    "raw_yaml",
+    (
+        "1: invalid\n",
+        "? [invalid, mapping, key]\n: value\n",
+        rule_yaml()
+        .replace("value: 33", "value: 2026-08-25")
+        .replace("operator: above", "operator: equals"),
+    ),
+)
+def test_rule_yaml_rejects_non_string_keys_and_non_json_scalars(raw_yaml) -> None:
+    """Unusual safe-YAML values become validation errors, not server failures."""
+    with pytest.raises(ValueError):
+        parse_rule_yaml(raw_yaml)
+
+
+def test_yaml_input_size_is_bounded() -> None:
+    """A WebSocket client cannot submit an unbounded YAML document."""
+    with pytest.raises(ValueError, match="must not exceed"):
+        parse_rule_yaml(" " * (MAX_YAML_SIZE + 1))
+
+
+def test_yaml_rejects_invalid_unicode() -> None:
+    """Malformed surrogate text is returned as a normal validation error."""
+    with pytest.raises(ValueError, match="valid Unicode"):
+        parse_rule_yaml("\ud800")
 
 
 def test_config_export_is_deterministic_and_reimportable() -> None:

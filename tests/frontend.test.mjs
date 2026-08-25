@@ -101,6 +101,27 @@ test("panel is registered", () => {
   assert.ok(customElements.get("alert-manager-panel"));
 });
 
+test("reconnecting during initial load does not duplicate WebSocket requests", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = {};
+  panel._render = () => {};
+  panel._loadPromise = Promise.resolve();
+  let loads = 0;
+  let intervals = 0;
+  panel._load = () => { loads += 1; };
+  const previousSetInterval = window.setInterval;
+  window.setInterval = () => { intervals += 1; return intervals; };
+  try {
+    panel.connectedCallback();
+    panel.connectedCallback();
+  } finally {
+    window.setInterval = previousSetInterval;
+  }
+  assert.equal(loads, 0);
+  assert.equal(intervals, 1);
+});
+
 test("new rules start enabled with safe defaults", () => {
   assert.deepEqual(newRuleDefaults(), {
     name: "",

@@ -2,6 +2,33 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.0-dev2 — 25 août 2026
+
+### Optimisé
+
+- Mise en cache des registres Home Assistant et des ensembles d’exclusion sur le
+  chemin d’évaluation des changements d’état, sans modifier les règles de suivi.
+- Réutilisation d’un mécanisme commun de restauration de la configuration, des
+  alertes et des timers en attente.
+
+### Corrigé
+
+- Restauration complète en mémoire si l’enregistrement d’un réglage, d’une
+  création, d’une modification ou d’une suppression de règle échoue.
+- Validation explicite des règles incomplètes afin de renvoyer une erreur lisible
+  au lieu d’une erreur interne.
+- Durcissement des imports YAML face aux clés non textuelles, scalaires non
+  sérialisables, chaînes Unicode invalides et documents anormalement volumineux.
+- Nettoyage persistant des configurations et alertes corrompues détectées au
+  démarrage, pour éviter de retraiter la même donnée invalide à chaque relance.
+- Suppression des chargements WebSocket et timers de rafraîchissement en double
+  lors d’une reconnexion très rapide du panneau.
+
+### Garanties conservées
+
+- Aucun changement du moteur fonctionnel, des identifiants, des événements, des
+  services d’acquittement ou du cycle `normal → pending → active`.
+
 ## 1.5.0-dev1 — 25 août 2026
 
 ### Ajouté

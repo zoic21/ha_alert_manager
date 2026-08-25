@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -472,6 +473,63 @@ def test_rule_mutation_uses_one_atomic_storage_write(hass, entry):
     assert hass.store_save_count == 1
 
 
+def test_configuration_write_failure_restores_runtime_state(hass, entry):
+    """A failed settings write leaves configuration, alerts and timers unchanged."""
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+    before_config = manager.get_config()
+    before_records = deepcopy(manager.records)
+
+    async def fail_save(_config, _records):
+        raise OSError("storage unavailable")
+
+    manager.storage.async_save = fail_save
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_update_config({"entity_delays": {"sensor.test": 0}}))
+    assert manager.get_config() == before_config
+    assert manager.records == before_records
+    assert [timer for timer in hass.timers if not timer["cancelled"]]
+
+
+def test_rule_write_failures_restore_create_update_and_delete(hass, entry):
+    """Every rule mutation rolls back fully when persistence is unavailable."""
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    payload = {
+        "name": "Atomic rule",
+        "entity_ids": ["sensor.test"],
+        "operator": "equals",
+        "value": "on",
+        "duration": 60,
+    }
+    original_save = manager.storage.async_save
+
+    async def fail_save(_config, _records):
+        raise OSError("storage unavailable")
+
+    manager.storage.async_save = fail_save
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_create_rule(payload))
+    assert manager.get_config()["rules"] == []
+    assert manager.records == {}
+
+    manager.storage.async_save = original_save
+    rule = run(manager.async_create_rule(payload))
+    before_config = manager.get_config()
+    before_records = deepcopy(manager.records)
+    manager.storage.async_save = fail_save
+
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_update_rule(rule["id"], {"duration": 0}))
+    assert manager.get_config() == before_config
+    assert manager.records == before_records
+
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_delete_rule(rule["id"]))
+    assert manager.get_config() == before_config
+    assert manager.records == before_records
+
+
 def test_custom_rule_entities_have_independent_lifecycles(hass, entry, set_now):
     """Each rule/entity pair owns its pending clock, activation and resolution."""
     start = datetime(2026, 8, 24, 12, tzinfo=UTC)
@@ -902,10 +960,22 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
 
 
 def test_invalid_alerts_collection_is_ignored(hass, entry):
-    """A malformed storage collection cannot prevent integration startup."""
+    """A malformed storage collection is removed during successful startup."""
     hass.stores["alert_manager"] = {"config": {}, "alerts": []}
     manager = make_manager(hass, entry)
     assert manager.records == {}
+    assert hass.stores["alert_manager"]["alerts"] == {}
+
+
+def test_invalid_stored_configuration_is_replaced_with_defaults(hass, entry):
+    """A malformed stored rule is cleaned instead of failing every startup."""
+    hass.stores["alert_manager"] = {
+        "config": {"rules": [{"id": "incomplete"}]},
+        "alerts": {},
+    }
+    manager = make_manager(hass, entry)
+    assert manager.get_config()["rules"] == []
+    assert hass.stores["alert_manager"]["config"]["rules"] == []
 
 
 def test_unload_reload_cleans_listeners_and_timers(hass, entry):

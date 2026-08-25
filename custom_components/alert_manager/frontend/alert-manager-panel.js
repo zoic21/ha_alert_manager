@@ -217,8 +217,10 @@ class AlertManagerPanel extends HTMLElement {
 
   connectedCallback() {
     this._render();
-    if (this._hass && !this._config) this._load();
-    this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
+    if (this._hass && !this._config && !this._loadPromise) this._load();
+    if (!this._timer) {
+      this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
+    }
   }
 
   disconnectedCallback() {

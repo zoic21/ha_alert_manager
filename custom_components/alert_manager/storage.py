@@ -70,19 +70,25 @@ class AlertManagerStorage:
         raw_alerts = raw.get("alerts", {})
         if not isinstance(raw_alerts, dict):
             _LOGGER.warning("Ignoring invalid persisted alerts collection")
-            return config, records, migrated
+            return config, records, True
         for alert_id, record_data in raw_alerts.items():
+            if not isinstance(alert_id, str) or not alert_id:
+                _LOGGER.warning("Ignoring persisted alert with invalid id %r", alert_id)
+                migrated = True
+                continue
             if _migrate_acknowledgement_shape({alert_id: record_data}):
                 migrated = True
             try:
                 record = AlertRecord.from_dict(record_data)
             except (KeyError, TypeError, ValueError):
                 _LOGGER.warning("Ignoring invalid persisted alert %s", alert_id)
+                migrated = True
                 continue
             if record.details.id != alert_id:
                 _LOGGER.warning(
                     "Ignoring persisted alert with mismatched id %s", alert_id
                 )
+                migrated = True
                 continue
             if alert_id.startswith("rule:") and alert_id.count(":") == 1:
                 alert_id = f"{alert_id}:{record.details.entity_id}"

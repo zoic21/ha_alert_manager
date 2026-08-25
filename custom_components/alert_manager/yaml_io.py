@@ -17,6 +17,7 @@ from .models import Rule
 from .validation import validate_config, validate_rule_payload
 
 FORMAT_VERSION = 1
+MAX_YAML_SIZE = 1_000_000
 
 _RULE_YAML_KEYS = {
     "id",
@@ -52,7 +53,11 @@ def _construct_mapping(
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
         key = loader.construct_object(key_node, deep=deep)
-        if key in mapping:
+        try:
+            duplicate = key in mapping
+        except TypeError as err:
+            raise ValueError("YAML mapping keys must be scalar") from err
+        if duplicate:
             raise ValueError(f"Duplicate YAML key: {key}")
         mapping[key] = loader.construct_object(value_node, deep=deep)
     return mapping
@@ -68,6 +73,12 @@ def _load_yaml(raw_yaml: Any, *, description: str) -> Any:
     if not isinstance(raw_yaml, str):
         raise ValueError(f"{description} YAML must be text")
     try:
+        encoded_size = len(raw_yaml.encode("utf-8"))
+    except UnicodeEncodeError as err:
+        raise ValueError(f"{description} YAML must contain valid Unicode") from err
+    if encoded_size > MAX_YAML_SIZE:
+        raise ValueError(f"{description} YAML must not exceed {MAX_YAML_SIZE} bytes")
+    try:
         loaded = yaml.load(raw_yaml, Loader=_UniqueKeyLoader)
     except (yaml.YAMLError, ValueError) as err:
         raise ValueError(f"Invalid YAML: {err}") from err
@@ -78,6 +89,9 @@ def _load_yaml(raw_yaml: Any, *, description: str) -> Any:
 
 def _reject_unknown(data: Mapping[str, Any], allowed: set[str], *, prefix: str) -> None:
     """Reject unknown fields with one concise, stable error."""
+    invalid = [key for key in data if not isinstance(key, str)]
+    if invalid:
+        raise ValueError(f"Invalid {prefix} field name: {invalid[0]!r}")
     unknown = set(data) - allowed
     if unknown:
         raise ValueError(f"Unknown {prefix} field: {sorted(unknown)[0]}")

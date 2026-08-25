@@ -232,10 +232,15 @@ class Rule:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Rule:
         """Deserialize, migrating the V1 entity_id field idempotently."""
+        if not isinstance(data, dict):
+            raise ValueError("Rule must be an object")
         normalized = dict(data)
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
+        required = {"id", "name", "entity_ids", "operator", "value", "duration"}
+        if missing := required - normalized.keys():
+            raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
         version = normalized.get("version", 2)
         if isinstance(version, int) and not isinstance(version, bool):
             normalized["version"] = max(version, 2)
@@ -287,7 +292,7 @@ class Rule:
         if not values:
             raise ValueError("Text operators require at least one value")
         if any(
-            value is None or isinstance(value, dict | list | tuple | set)
+            value is None or not isinstance(value, str | int | float | bool)
             for value in values
         ):
             raise ValueError("Text operator values must be scalar")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -82,7 +82,12 @@ def test_negative_text_operators_are_the_inverse_of_positive_operators(
 
 def test_text_rule_values_must_be_non_empty_unique_scalars():
     """Lists cannot contain empty, duplicate or structured comparison values."""
-    for value in ([], ["on", " on "], ["on", {"nested": True}]):
+    for value in (
+        [],
+        ["on", " on "],
+        ["on", {"nested": True}],
+        [date(2026, 8, 25)],
+    ):
         with pytest.raises(ValueError, match="Text operators?"):
             Rule(
                 id="bad",
@@ -92,6 +97,19 @@ def test_text_rule_values_must_be_non_empty_unique_scalars():
                 value=value,
                 duration=1,
             ).validate()
+
+
+def test_incomplete_rule_payload_has_a_validation_error():
+    """A malformed visual payload never leaks a constructor TypeError."""
+    with pytest.raises(ValueError, match="Missing rule field: duration"):
+        validate_rule_payload(
+            {
+                "name": "Incomplete",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+            }
+        )
 
 
 def test_numeric_rule_rejects_non_finite_values():

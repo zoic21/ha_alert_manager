@@ -95,6 +95,9 @@ class AlertManager:
         self.hass = hass
         self.entry = entry
         self.storage = AlertManagerStorage(hass)
+        self._entity_registry = er.async_get(hass)
+        self._device_registry = dr.async_get(hass)
+        self._area_registry = ar.async_get(hass)
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
         self._rules: list[Rule] = []
@@ -107,6 +110,9 @@ class AlertManager:
         self._unloading = False
         self._last_public_snapshot: dict[str, Any] | None = None
         self._pack_availability: dict[str, bool] = {}
+        self._excluded_entities: frozenset[str] = frozenset()
+        self._excluded_devices: frozenset[str] = frozenset()
+        self._excluded_labels: frozenset[str] = frozenset()
 
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
@@ -116,6 +122,7 @@ class AlertManager:
         except ValueError:
             _LOGGER.exception("Stored configuration is invalid; using defaults")
             self.config = validate_config({})
+            migrated = True
         self.records = records
         self._rebuild_rule_index()
         self._refresh_pack_entry_listeners()
@@ -470,7 +477,7 @@ class AlertManager:
 
     def _is_base_eligible(self, entity_id: str) -> bool:
         """Reject Alert Manager's own and registry-disabled entities."""
-        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        entity_entry = self._entity_registry.async_get(entity_id)
         if entity_id == "sensor.alert_manager" or (
             entity_entry is not None and entity_entry.platform == DOMAIN
         ):
@@ -480,38 +487,39 @@ class AlertManager:
 
         device = None
         if entity_entry is not None and entity_entry.device_id:
-            device = dr.async_get(self.hass).async_get(entity_entry.device_id)
+            device = self._device_registry.async_get(entity_entry.device_id)
             if device is not None and device.disabled_by is not None:
                 return False
         return True
 
     def _is_explicitly_excluded(self, entity_id: str) -> bool:
         """Apply the existing explicit entity and device exclusions."""
-        if entity_id in self.config["excluded_entities"]:
+        if entity_id in self._excluded_entities:
             return True
-        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        entity_entry = self._entity_registry.async_get(entity_id)
         return bool(
             entity_entry is not None
-            and entity_entry.device_id in self.config["excluded_devices"]
+            and entity_entry.device_id in self._excluded_devices
         )
 
     def _is_automatic_eligible(self, entity_id: str) -> bool:
         """Apply explicit and selected-label exclusions to automatic packs only."""
         if self._is_explicitly_excluded(entity_id):
             return False
-        excluded_labels = set(self.config["excluded_labels"])
-        if not excluded_labels:
+        if not self._excluded_labels:
             return True
-        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        entity_entry = self._entity_registry.async_get(entity_id)
         if entity_entry is None:
             return True
-        if excluded_labels.intersection(entity_entry.labels):
+        if self._excluded_labels.intersection(entity_entry.labels):
             return False
 
         device = None
         if entity_entry.device_id:
-            device = dr.async_get(self.hass).async_get(entity_entry.device_id)
-        return not (device is not None and excluded_labels.intersection(device.labels))
+            device = self._device_registry.async_get(entity_entry.device_id)
+        return not (
+            device is not None and self._excluded_labels.intersection(device.labels)
+        )
 
     def _delay_for(self, state: State, category: str) -> int:
         """Resolve delay priority for automatic detections."""
@@ -535,19 +543,17 @@ class AlertManager:
         condition_params: dict[str, Any] | None = None,
     ) -> AlertDetails:
         """Resolve names, device, area and integration once per evaluation."""
-        entity_entry = er.async_get(self.hass).async_get(state.entity_id)
+        entity_entry = self._entity_registry.async_get(state.entity_id)
         device = None
         if entity_entry is not None and entity_entry.device_id:
-            device = dr.async_get(self.hass).async_get(entity_entry.device_id)
+            device = self._device_registry.async_get(entity_entry.device_id)
 
         area_id = None
         if entity_entry is not None:
             area_id = entity_entry.area_id
         if area_id is None and device is not None:
             area_id = device.area_id
-        area_entry = (
-            ar.async_get(self.hass).async_get_area(area_id) if area_id else None
-        )
+        area_entry = self._area_registry.async_get_area(area_id) if area_id else None
 
         return AlertDetails(
             id=alert_id,
@@ -605,12 +611,19 @@ class AlertManager:
 
     def _rebuild_rule_index(self) -> None:
         """Cache validated rule objects by entity for hot-path evaluations."""
+        self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
         self._rules_by_entity = {}
         for rule in self._rules:
             for entity_id in rule.entity_ids:
                 self._rules_by_entity.setdefault(entity_id, []).append(rule)
         self._refresh_custom_tracking()
+
+    def _refresh_config_caches(self) -> None:
+        """Cache exclusion membership used for every state change."""
+        self._excluded_entities = frozenset(self.config.get("excluded_entities", ()))
+        self._excluded_devices = frozenset(self.config.get("excluded_devices", ()))
+        self._excluded_labels = frozenset(self.config.get("excluded_labels", ()))
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
@@ -804,10 +817,17 @@ class AlertManager:
         if "entity_delays" in changes:
             candidate["entity_delays"] = deepcopy(changes["entity_delays"])
         candidate["rules"] = self.config["rules"]
-        self.config = validate_config(candidate)
-        self._rebuild_rule_index()
-        await self.async_evaluate_all(save=False)
-        await self.storage.async_save(self.config, self.records)
+        candidate = validate_config(candidate)
+        previous = self._configuration_snapshot()
+        try:
+            self.config = candidate
+            self._rebuild_rule_index()
+            await self.async_evaluate_all(save=False, publish=False)
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self._restore_configuration_snapshot(previous)
+            raise
+        self._publish_if_changed()
         return self.get_config()
 
     async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
@@ -820,8 +840,7 @@ class AlertManager:
         """
         candidate = parse_config_yaml(raw_yaml)
         summary = import_summary(candidate)
-        previous_config = self.config
-        previous_records = deepcopy(self.records)
+        previous = self._configuration_snapshot()
 
         self._cancel_all_timers()
         try:
@@ -834,12 +853,7 @@ class AlertManager:
             )
             await self.storage.async_save(self.config, self.records)
         except Exception:
-            self._cancel_all_timers()
-            self.config = previous_config
-            self.records = previous_records
-            self._rebuild_rule_index()
-            self._refresh_tracking()
-            self._reschedule_pending_timers()
+            self._restore_configuration_snapshot(previous)
             raise
 
         self._publish_if_changed(force=True)
@@ -848,12 +862,17 @@ class AlertManager:
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
-        self.config["rules"].append(rule.as_dict())
-        self._rebuild_rule_index()
-        for entity_id in rule.entity_ids:
-            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+        previous = self._configuration_snapshot()
+        try:
+            self.config["rules"].append(rule.as_dict())
+            self._rebuild_rule_index()
+            for entity_id in rule.entity_ids:
+                await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self._restore_configuration_snapshot(previous)
+            raise
         self._publish_if_changed()
-        await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
     async def async_create_rule_yaml(self, raw_yaml: str) -> dict[str, Any]:
@@ -870,19 +889,24 @@ class AlertManager:
         existing = self.config["rules"][index]
         old_rule = Rule.from_dict(existing)
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
-        self.config["rules"][index] = rule.as_dict()
-        self._rebuild_rule_index()
+        previous = self._configuration_snapshot()
+        try:
+            self.config["rules"][index] = rule.as_dict()
+            self._rebuild_rule_index()
 
-        removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
-        if not rule.enabled:
-            removed_entities.update(old_rule.entity_ids)
-        self._remove_rule_instances(rule_id, removed_entities)
+            removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
+            if not rule.enabled:
+                removed_entities.update(old_rule.entity_ids)
+            self._remove_rule_instances(rule_id, removed_entities)
 
-        affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
-        for entity_id in affected_entities:
-            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
+            for entity_id in affected_entities:
+                await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self._restore_configuration_snapshot(previous)
+            raise
         self._publish_if_changed()
-        await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
     async def async_update_rule_yaml(
@@ -896,13 +920,34 @@ class AlertManager:
         """Delete a rule and silently clean only the instances it owns."""
         index = self._rule_index(rule_id)
         rule = Rule.from_dict(self.config["rules"][index])
-        del self.config["rules"][index]
-        self._rebuild_rule_index()
-        self._remove_rule_instances(rule_id, set(rule.entity_ids))
-        for entity_id in rule.entity_ids:
-            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+        previous = self._configuration_snapshot()
+        try:
+            del self.config["rules"][index]
+            self._rebuild_rule_index()
+            self._remove_rule_instances(rule_id, set(rule.entity_ids))
+            for entity_id in rule.entity_ids:
+                await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self._restore_configuration_snapshot(previous)
+            raise
         self._publish_if_changed()
-        await self.storage.async_save(self.config, self.records)
+
+    def _configuration_snapshot(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, AlertRecord]]:
+        """Copy the state needed to roll back a failed configuration write."""
+        return deepcopy(self.config), deepcopy(self.records)
+
+    def _restore_configuration_snapshot(
+        self, snapshot: tuple[dict[str, Any], dict[str, AlertRecord]]
+    ) -> None:
+        """Restore configuration, records, indexes and pending timers."""
+        self._cancel_all_timers()
+        self.config, self.records = snapshot
+        self._rebuild_rule_index()
+        self._refresh_tracking()
+        self._reschedule_pending_timers()
 
     def _remove_rule_instances(self, rule_id: str, entity_ids: set[str]) -> None:
         """Remove configuration-owned instances without user resolution events."""
