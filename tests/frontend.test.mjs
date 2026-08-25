@@ -226,7 +226,7 @@ test("alert conditions stay on one line in the wider detail column", () => {
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
 });
 
-test("tabs use Home Assistant dimensions, typography and icons", () => {
+test("navigation uses the native Home Assistant app bar and tabs", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -234,26 +234,36 @@ test("tabs use Home Assistant dimensions, typography and icons", () => {
 
   panel._render();
 
-  assert.match(panel.shadowRoot.innerHTML, /role="tablist"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:view-dashboard-outline"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:radar"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:format-list-checks"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:tune-variant"/);
-  assert.match(panel.shadowRoot.innerHTML, /role="tab" aria-selected="true"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-top-app-bar-fixed id="panel-shell" center-title>/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon-button-arrow-prev slot="navigationIcon" href="\/config\/integrations"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-tab data-action="tab" data-tab="overview"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:view-dashboard-outline"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:radar"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:format-list-checks"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:tune-variant"/);
   assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
-  assert.match(panel._styles(), /nav\{[^}]*min-height:56px/);
-  assert.match(panel._styles(), /\.tab\{[^}]*font-size:var\(--ha-font-size-m,14px\)/);
+  assert.match(panel._styles(), /ha-top-app-bar-fixed\{[^}]*--app-header-background-color/);
+  assert.doesNotMatch(panel._styles(), /\.tab\{/);
 });
 
-test("legacy form controls follow the native Home Assistant field style", () => {
+test("forms use native Home Assistant inputs, switches and buttons", () => {
   const Panel = customElements.get("alert-manager-panel");
-  const styles = new Panel()._styles();
+  const panel = new Panel();
+  panel._config = completeConfig();
+  const automatic = panel._renderAutomatic();
+  panel._ensureSettingsDraft();
+  const settings = panel._renderSettings();
+  const styles = panel._styles();
 
-  assert.match(styles, /--alert-manager-control-height:56px/);
-  assert.match(styles, /input:not\(\[type="checkbox"\]\),select,textarea\{[^}]*background:var\(--input-fill-color/);
-  assert.match(styles, /border-bottom:1px solid var\(--input-idle-line-color/);
-  assert.match(styles, /ha-selector\{[^}]*min-height:var\(--alert-manager-control-height\)/);
-  assert.match(styles, /\.input-suffix\{[^}]*min-height:var\(--alert-manager-control-height\)/);
+  assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
+  assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
+  assert.match(automatic, /<ha-button appearance="filled" data-action="save-automatic"/);
+  assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /<ha-selector id="excluded-labels"/);
+  assert.match(settings, /<ha-button appearance="filled" data-action="save-settings"/);
+  assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
+  assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
+  assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
 
 test("rule edit, toggle and delete actions call their dedicated APIs", async () => {
@@ -443,6 +453,52 @@ test("custom rule sources use the native multiple entity selector", () => {
 
   assert.deepEqual(selector.selector, { entity: { multiple: true } });
   assert.deepEqual(selector.value, ["sensor.one", "sensor.two"]);
+});
+
+test("custom rule choices use native Home Assistant selects", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = {
+    entity_ids: ["sensor.one"],
+    source: "attribute",
+    operator: "above",
+  };
+  panel._hass = { states: {} };
+  const source = { addEventListener() {} };
+  const operator = { addEventListener() {} };
+  const entity = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (query) => ({
+    "#rule-source": source,
+    "#rule-operator": operator,
+    "#rule-entity-ids": entity,
+  })[query] ?? null;
+
+  panel._hydrateSelectors();
+
+  assert.equal(source.value, "attribute");
+  assert.deepEqual(source.options, [
+    { value: "state", label: "État principal" },
+    { value: "attribute", label: "Attribut" },
+  ]);
+  assert.equal(operator.value, "above");
+  assert.equal(operator.options.length, 4);
+});
+
+test("native save buttons call their matching form action", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const formElement = {};
+  panel.shadowRoot.querySelector = (selector) =>
+    selector === "#automatic-form" ? formElement : null;
+  panel._reportFormValidity = () => true;
+  let saves = 0;
+  panel._saveAutomatic = async () => { saves += 1; };
+
+  await panel._handleClick(actionEvent("save-automatic"));
+
+  assert.equal(saves, 1);
 });
 
 test("clicking an existing alert source opens native more info", async () => {

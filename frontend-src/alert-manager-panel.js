@@ -62,6 +62,7 @@ class AlertManagerPanel extends HTMLElement {
     this._sensorState = null;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
+    this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
   }
@@ -92,6 +93,13 @@ class AlertManagerPanel extends HTMLElement {
 
   set narrow(value) {
     this._narrow = value;
+    const shell = this.shadowRoot?.querySelector("#panel-shell");
+    if (shell) {
+      shell.narrow = Boolean(value);
+    }
+    this.shadowRoot?.querySelectorAll(".native-tabs ha-tab").forEach((tab) => {
+      tab.narrow = Boolean(value);
+    });
   }
 
   connectedCallback() {
@@ -171,27 +179,31 @@ class AlertManagerPanel extends HTMLElement {
       : this._renderTab();
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      <main>
-        <header>
-          <div>
-            <h1>Alertes</h1>
-            <p>Détection centralisée des anomalies Home Assistant</p>
-          </div>
-          <div class="header-count ${this._alerts.active_count ? "has-alert" : ""}">
-            <strong>${this._alerts.active_count}</strong>
-            <span>active${this._alerts.active_count > 1 ? "s" : ""}</span>
-          </div>
-        </header>
-        <nav aria-label="Sections" role="tablist">
+      <ha-top-app-bar-fixed id="panel-shell" center-title>
+        <ha-icon-button-arrow-prev slot="navigationIcon" href="/config/integrations"></ha-icon-button-arrow-prev>
+        <div slot="title" class="native-tabs" role="tablist" aria-label="Sections">
           ${TABS.map(
-            ([id, label, icon]) => `<button class="tab ${id === this._activeTab ? "active" : ""}"
-              type="button" role="tab" aria-selected="${id === this._activeTab}"
-              data-action="tab" data-tab="${id}"><ha-icon icon="${icon}" aria-hidden="true"></ha-icon><span>${esc(label)}</span></button>`,
+            ([id, label, icon]) => `<ha-tab data-action="tab" data-tab="${id}" name="${esc(label)}"
+              ${id === this._activeTab ? "active" : ""} ${this._narrow ? "narrow" : ""}>
+              <ha-icon slot="icon" icon="${icon}" aria-hidden="true"></ha-icon>
+            </ha-tab>`,
           ).join("")}
-        </nav>
-        ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
-        ${content}
-      </main>`;
+        </div>
+        <main>
+          <header>
+            <div>
+              <h1>Alertes</h1>
+              <p>Détection centralisée des anomalies Home Assistant</p>
+            </div>
+            <div class="header-count ${this._alerts.active_count ? "has-alert" : ""}">
+              <strong>${this._alerts.active_count}</strong>
+              <span>active${this._alerts.active_count > 1 ? "s" : ""}</span>
+            </div>
+          </header>
+          ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
+          ${content}
+        </main>
+      </ha-top-app-bar-fixed>`;
     this._hydrateSelectors();
     this._updateCountdowns();
   }
@@ -200,14 +212,49 @@ class AlertManagerPanel extends HTMLElement {
     const element = this.shadowRoot.querySelector(`#${id}`);
     if (!element) return;
     element.hass = this._hass;
+    if (this._configuredControls.has(element)) return;
     element.selector = selector;
     element.value = value;
     element.addEventListener("value-changed", (event) => onChange(event.detail?.value));
+    this._configuredControls.add(element);
+  }
+
+  _configureSelect(id, options, value) {
+    const element = this.shadowRoot.querySelector(`#${id}`);
+    if (!element || this._configuredControls.has(element)) return;
+    element.options = options;
+    element.value = value;
+    element.addEventListener("selected", (event) => {
+      element.value = event.detail?.value;
+    });
+    this._configuredControls.add(element);
   }
 
   _hydrateSelectors() {
+    const shell = this.shadowRoot.querySelector("#panel-shell");
+    if (shell) shell.narrow = Boolean(this._narrow);
+    const backButton = this.shadowRoot.querySelector("ha-icon-button-arrow-prev");
+    if (backButton) backButton.href = "/config/integrations";
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
+      this._configureSelect(
+        "rule-source",
+        [
+          { value: "state", label: "État principal" },
+          { value: "attribute", label: "Attribut" },
+        ],
+        this._editingRule.source ?? "state",
+      );
+      this._configureSelect(
+        "rule-operator",
+        [
+          { value: "equals", label: "Égal à" },
+          { value: "not_equals", label: "Différent de" },
+          { value: "above", label: "Supérieur à" },
+          { value: "below", label: "Inférieur à" },
+        ],
+        this._editingRule.operator ?? "equals",
+      );
       this._configureSelector(
         "rule-entity-ids",
         { entity: { multiple: true } },
@@ -306,7 +353,7 @@ class AlertManagerPanel extends HTMLElement {
         return `<section class="panel category-card">
           <div class="row between">
             <div><h2>${esc(title)}</h2><p>${esc(description)}</p></div>
-            <label class="switch"><input id="auto-${id}-enabled" type="checkbox" ${config.enabled ? "checked" : ""}><span></span></label>
+            <ha-switch id="auto-${id}-enabled" aria-label="Activer ${esc(title)}" ${config.enabled ? "checked" : ""}></ha-switch>
           </div>
           <div class="fields">
             ${this._numberField(`auto-${id}-delay`, "Délai", config.delay, "secondes", 0, 31536000)}
@@ -316,7 +363,7 @@ class AlertManagerPanel extends HTMLElement {
           <small>Délai actuel : ${esc(durationText(config.delay))}</small>
         </section>`;
       }).join("")}
-      <div class="actions"><button class="primary" type="submit" ${this._busy ? "disabled" : ""}>Enregistrer la surveillance</button></div>
+      <div class="actions"><ha-button appearance="filled" data-action="save-automatic" ${this._busy ? "disabled" : ""}>Enregistrer la surveillance</ha-button></div>
     </form>`;
   }
 
@@ -325,13 +372,13 @@ class AlertManagerPanel extends HTMLElement {
     const editor = this._editingRule !== null ? this._renderRuleEditor() : "";
     return `<section class="panel">
       <div class="row between"><div><h2>Règles personnalisées</h2><p>Comparaisons simples sur l’état ou un attribut.</p></div>
-      <button class="primary" data-action="new-rule">Nouvelle règle</button></div>
+      <ha-button appearance="filled" data-action="new-rule">Nouvelle règle</ha-button></div>
       ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entités</th><th>Condition</th><th>Durée</th><th>Active</th><th></th></tr></thead><tbody>
         ${rules.map((rule) => `<tr>
           <td>${esc(rule.name)}</td><td>${rule.entity_ids.map((entityId) => `<code>${esc(entityId)}</code>`).join("")}</td>
           <td>${esc(this._ruleSummary(rule))}</td><td>${esc(durationText(rule.duration))}</td>
-          <td><button class="icon-button" data-action="toggle-rule" data-id="${esc(rule.id)}" title="Activer/désactiver">${rule.enabled ? "✓" : "—"}</button></td>
-          <td class="nowrap"><button data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</button> <button class="danger-button" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</button></td>
+          <td><ha-button appearance="outlined" size="s" data-action="toggle-rule" data-id="${esc(rule.id)}" title="Activer/désactiver">${rule.enabled ? "✓" : "—"}</ha-button></td>
+          <td class="nowrap"><ha-button appearance="outlined" size="s" data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</ha-button> <ha-button appearance="outlined" variant="danger" size="s" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button></td>
         </tr>`).join("")}
       </tbody></table></div>` : '<div class="empty">Aucune règle personnalisée.</div>'}
     </section>${editor}`;
@@ -344,17 +391,15 @@ class AlertManagerPanel extends HTMLElement {
       <form id="rule-form" class="fields">
         <input type="hidden" name="id" value="${esc(rule.id || "")}">
         ${this._textField("name", "Nom", rule.name, true)}
-        <label class="full">Entités<ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></label>
-        <label>Source<select name="source"><option value="state" ${rule.source === "state" ? "selected" : ""}>État principal</option><option value="attribute" ${rule.source === "attribute" ? "selected" : ""}>Attribut</option></select></label>
+        <div class="field full"><span class="field-label">Entités</span><ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></div>
+        <div class="field"><span class="field-label">Source</span><ha-select id="rule-source" data-field="source"></ha-select></div>
         ${this._textField("attribute", "Nom de l’attribut", rule.attribute || "")}
-        <label>Opérateur<select name="operator">
-          ${[["equals", "Égal à"], ["not_equals", "Différent de"], ["above", "Supérieur à"], ["below", "Inférieur à"]].map(([value, label]) => `<option value="${value}" ${rule.operator === value ? "selected" : ""}>${label}</option>`).join("")}
-        </select></label>
+        <div class="field"><span class="field-label">Opérateur</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>
         ${this._textField("value", "Valeur de comparaison", rule.value, true)}
         ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
         ${this._textField("message", "Message facultatif", rule.message || "")}
-        <label class="checkbox"><input name="enabled" type="checkbox" ${rule.enabled ? "checked" : ""}> Règle activée</label>
-        <div class="actions full"><button type="button" data-action="cancel-rule">Annuler</button><button class="primary" type="button" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</button></div>
+        <div class="switch-field"><span class="field-label">Règle activée</span><ha-switch id="rule-enabled" data-field="enabled" ${rule.enabled ? "checked" : ""}></ha-switch></div>
+        <div class="actions full"><ha-button appearance="outlined" data-action="cancel-rule">Annuler</ha-button><ha-button appearance="filled" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
       </form>
     </section>`;
   }
@@ -364,31 +409,32 @@ class AlertManagerPanel extends HTMLElement {
     return `<form id="settings-form" class="stack">
       <section class="panel"><h2>Paramètres généraux</h2><div class="fields">
         ${this._numberField("global-delay", "Délai global", this._config.global_delay, "secondes", 0, 31536000)}
-        <label>Labels exclus des surveillances automatiques<ha-selector id="excluded-labels"></ha-selector><small>Une règle personnalisée ignore ces labels.</small></label>
+        <div class="field"><span class="field-label">Labels exclus des surveillances automatiques</span><ha-selector id="excluded-labels"></ha-selector><small>Une règle personnalisée ignore ces labels.</small></div>
       </div><small>Délai actuel : ${esc(durationText(this._config.global_delay))}. Il est utilisé après les délais de règle, d’entité, d’attribut et de catégorie.</small></section>
       <section class="panel"><h2>Exclusions explicites</h2><div class="fields">
-        <label>Entités exclues<ha-selector id="excluded-entities"></ha-selector></label>
-        <label>Appareils exclus<ha-selector id="excluded-devices"></ha-selector></label>
+        <div class="field"><span class="field-label">Entités exclues</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">Appareils exclus</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></section>
-      <section class="panel"><div class="row between"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div><button type="button" data-action="add-entity-delay">Ajouter</button></div>
+      <section class="panel"><div class="row between"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div><ha-button appearance="outlined" data-action="add-entity-delay">Ajouter</ha-button></div>
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
-          <div class="input-suffix"><input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required><span>secondes</span></div>
-          <button type="button" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</button>
+          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="Délai en secondes"><span slot="end">secondes</span></ha-input>
+          <ha-button appearance="outlined" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</ha-button>
         </div>`).join("") : '<div class="empty compact">Aucun délai particulier.</div>'}</div>
       </section>
-      <div class="actions"><button class="primary" type="submit" ${this._busy ? "disabled" : ""}>Enregistrer les paramètres</button></div>
+      <div class="actions"><ha-button appearance="filled" data-action="save-settings" ${this._busy ? "disabled" : ""}>Enregistrer les paramètres</ha-button></div>
     </form>`;
   }
 
   _numberField(id, label, value, suffix, min, max, step = "1", nameMode = "id") {
-    const name = nameMode === "name" ? ` name="${esc(id)}"` : "";
-    return `<label>${esc(label)}<div class="input-suffix"><input ${name} id="${esc(id)}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value)}" required><span>${esc(suffix)}</span></div></label>`;
+    const field = nameMode === "name" ? ` data-field="${esc(id)}"` : "";
+    return `<div class="field"><span class="field-label">${esc(label)}</span><ha-input ${field} id="${esc(id)}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value)}" required aria-label="${esc(label)}"><span slot="end">${esc(suffix)}</span></ha-input></div>`;
   }
 
   _textField(name, label, value, required = false, mode = "name") {
     const key = mode === "id" ? `id="${esc(name)}"` : `name="${esc(name)}"`;
-    return `<label>${esc(label)}<input ${key} type="text" value="${esc(value)}" ${required ? "required" : ""}></label>`;
+    const field = mode === "name" ? `data-field="${esc(name)}"` : "";
+    return `<div class="field"><span class="field-label">${esc(label)}</span><ha-input ${key} ${field} type="text" value="${esc(value)}" ${required ? "required" : ""} aria-label="${esc(label)}"></ha-input></div>`;
   }
 
   _ruleSummary(rule) {
@@ -418,6 +464,20 @@ class AlertManagerPanel extends HTMLElement {
       this._render();
       return;
     }
+    if (action === "save-automatic") {
+      const form = this.shadowRoot.querySelector("#automatic-form");
+      if (form && this._reportFormValidity(form) && !this._busy) {
+        await this._saveAutomatic();
+      }
+      return;
+    }
+    if (action === "save-settings") {
+      const form = this.shadowRoot.querySelector("#settings-form");
+      if (form && this._reportFormValidity(form) && !this._busy) {
+        await this._saveSettings();
+      }
+      return;
+    }
     if (action === "new-rule") {
       this._editingRule = {};
       this._render();
@@ -443,7 +503,7 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "save-rule") {
       const form = this.shadowRoot.querySelector("#rule-form");
-      if (form && form.reportValidity() && !this._busy) await this._saveRule(form);
+      if (form && this._reportFormValidity(form) && !this._busy) await this._saveRule(form);
       return;
     }
     const rule = (this._config.rules || []).find((item) => item.id === button.dataset.id);
@@ -485,9 +545,21 @@ class AlertManagerPanel extends HTMLElement {
       await this._saveSettings();
       return;
     }
-    if (formId === "rule-form" && form.reportValidity()) {
+    if (formId === "rule-form" && this._reportFormValidity(form)) {
       await this._saveRule(form);
     }
+  }
+
+  _reportFormValidity(form) {
+    let valid = form.reportValidity?.() ?? true;
+    form.querySelectorAll?.("ha-input").forEach((field) => {
+      if (typeof field.reportValidity === "function") {
+        valid = field.reportValidity() && valid;
+      } else if (field.required && String(field.value ?? "") === "") {
+        valid = false;
+      }
+    });
+    return valid;
   }
 
   async _saveAutomatic() {
@@ -539,7 +611,10 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   async _saveRule(form) {
-    const field = (name) => form.elements.namedItem(name);
+    const field = (name) =>
+      form.querySelector?.(`[data-field="${name}"]`) ??
+      form.elements?.namedItem(name) ??
+      form.querySelector?.(`[name="${name}"]`);
     const value = (name) => field(name)?.value ?? "";
     const source = value("source");
     const rule = {
@@ -624,20 +699,17 @@ class AlertManagerPanel extends HTMLElement {
 
   _styles() {
     return `
-      :host{display:block;min-height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6);--alert-manager-control-height:56px}
-      *{box-sizing:border-box} main{max-width:1400px;margin:0 auto;padding:24px} header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
+      :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
+      *{box-sizing:border-box}ha-top-app-bar-fixed{height:100%;--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{display:flex;flex:1;justify-content:center;height:var(--header-height);overflow:auto;color:var(--sidebar-text-color,var(--primary-text-color,#212121))}.native-tabs ha-tab{flex:0 1 auto}.native-tabs ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .header-count{min-width:94px;padding:12px 18px;border-radius:18px;text-align:center;background:var(--secondary-background-color,#fff)}.header-count strong{font-size:28px;display:block}.header-count span{font-size:12px;color:var(--secondary-text-color,#727272)}.header-count.has-alert{background:var(--error-color,#db4437);color:white}.header-count.has-alert span{color:white}
-      nav{display:flex;justify-content:center;gap:0;min-height:56px;overflow:auto;border-bottom:1px solid var(--divider-color,#ddd);margin-bottom:20px}.tab{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:56px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:0 24px;white-space:nowrap;color:var(--primary-text-color,#212121);font-family:inherit;font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400);line-height:1;cursor:pointer}.tab ha-icon{width:24px;height:24px}.tab:hover{background:var(--secondary-background-color,rgba(0,0,0,.04))}.tab:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:-3px}.tab.active{color:var(--primary-color,#03a9f4);border-color:var(--primary-color,#03a9f4)}
-      button{font:inherit;border:1px solid var(--divider-color,#ccc);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);padding:8px 12px;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.primary{background:var(--primary-color,#03a9f4);border-color:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.danger-button{color:var(--error-color,#db4437)}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}
       .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-color,#03a9f4);font-weight:700;text-align:left}.entity-link:hover{text-decoration:underline}.entity-link:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:3px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}dl{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:10px;margin:0}dl div{min-width:0}dt{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color,#727272)}dd{margin:3px 0 0;overflow-wrap:anywhere}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}
-      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;display:block;margin-top:16px}label{display:flex;flex-direction:column;gap:6px;font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-medium,500)}input:not([type="checkbox"]),select,textarea{width:100%;min-height:var(--alert-manager-control-height);font:inherit;font-size:var(--ha-font-size-l,16px);color:var(--input-ink-color,var(--primary-text-color,#212121));background:var(--input-fill-color,var(--secondary-background-color,#f5f5f5));border:0;border-bottom:1px solid var(--input-idle-line-color,var(--divider-color,#9e9e9e));border-radius:4px 4px 0 0;padding:0 16px;outline:0}input:not([type="checkbox"]):hover,select:hover,textarea:hover{border-bottom-color:var(--input-hover-line-color,var(--primary-text-color,#212121))}input:not([type="checkbox"]):focus,select:focus,textarea:focus{border-bottom:2px solid var(--primary-color,#03a9f4)}textarea{min-height:112px;padding-top:16px;padding-bottom:16px;resize:vertical}ha-selector{display:block;width:100%;min-height:var(--alert-manager-control-height);font-weight:var(--ha-font-weight-normal,400)}.input-suffix{display:flex;align-items:stretch;min-height:var(--alert-manager-control-height);overflow:hidden;background:var(--input-fill-color,var(--secondary-background-color,#f5f5f5));border-bottom:1px solid var(--input-idle-line-color,var(--divider-color,#9e9e9e));border-radius:4px 4px 0 0}.input-suffix:hover{border-bottom-color:var(--input-hover-line-color,var(--primary-text-color,#212121))}.input-suffix:focus-within{border-bottom:2px solid var(--primary-color,#03a9f4)}.input-suffix input{min-height:calc(var(--alert-manager-control-height) - 1px);background:transparent;border:0;border-radius:0}.input-suffix input:focus{border:0}.input-suffix span{display:flex;align-items:center;padding:0 16px;border-left:1px solid var(--divider-color,#bbb);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-l,16px);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .switch{display:inline-block;position:relative;width:48px;height:26px;flex:none}.switch input{opacity:0;width:0;height:0}.switch span{position:absolute;inset:0;background:#aaa;border-radius:20px;cursor:pointer}.switch span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:white;border-radius:50%;transition:.15s}.switch input:checked+span{background:var(--primary-color,#03a9f4)}.switch input:checked+span:before{transform:translateX(22px)}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.icon-button{min-width:38px}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:center}
+      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-medium,500)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:center}.delay-row ha-input{min-width:0}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
-      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}nav{justify-content:flex-start}.tab{padding:0 16px}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row button{width:100%}}
+      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.native-tabs{justify-content:flex-start}.native-tabs ha-tab{flex:1;min-width:0}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}}
     `;
   }
 }
