@@ -32,13 +32,6 @@ const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
 const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
 
-const CATEGORIES = [
-  ["unavailable", "Entités indisponibles", "État unavailable sur toutes les entités"],
-  ["connectivity", "Connectivité", "Binary sensors connectivity à off"],
-  ["unifi", "Équipements UniFi", "Trackers routeur UniFi absents"],
-  ["battery", "Batteries faibles", "Capteurs battery sous leur seuil"],
-];
-
 const esc = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -73,12 +66,46 @@ const newRuleDefaults = () => ({
   message: "",
 });
 
+const buildOverviewItems = (activeAlerts = [], pendingAlerts = []) => {
+  const sources = [
+    ...activeAlerts.map((alert) => ({ alert, status: "active" })),
+    ...pendingAlerts.map((alert) => ({ alert, status: "pending" })),
+  ];
+  const deviceCounts = new Map();
+  for (const source of sources) {
+    if (source.alert.device_id) {
+      deviceCounts.set(
+        source.alert.device_id,
+        (deviceCounts.get(source.alert.device_id) ?? 0) + 1,
+      );
+    }
+  }
+  const emittedDevices = new Set();
+  const items = [];
+  for (const source of sources) {
+    const deviceId = source.alert.device_id;
+    if (!deviceId || deviceCounts.get(deviceId) === 1) {
+      items.push({ kind: "alert", ...source });
+      continue;
+    }
+    if (emittedDevices.has(deviceId)) continue;
+    emittedDevices.add(deviceId);
+    items.push({
+      kind: "device",
+      device_id: deviceId,
+      alerts: sources.filter((item) => item.alert.device_id === deviceId),
+    });
+  }
+  return items;
+};
+
 class AlertManagerPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
+    this._packs = [];
     this._alerts = {
       active_count: 0,
       pending_count: 0,
@@ -160,11 +187,12 @@ class AlertManagerPanel extends HTMLElement {
     this._loadPromise = Promise.all([
       this._hass.callWS({ type: "alert_manager/config/get" }),
       this._hass.callWS({ type: "alert_manager/alerts/list" }),
+      this._hass.callWS({ type: "alert_manager/packs/list" }),
     ]);
     this._loading = true;
     this._render();
     try {
-      [this._config, this._alerts] = await this._loadPromise;
+      [this._config, this._alerts, this._packs] = await this._loadPromise;
       this._resetSettingsDraft();
       this._syncSensor();
       this._notice = null;
@@ -326,7 +354,7 @@ class AlertManagerPanel extends HTMLElement {
         `delay-entity-${index}`,
         { entity: {} },
         row.entity_id || "",
-        (value) => { row.entity_id = typeof value === "string" ? value : ""; },
+        (value) => this._setEntityDelayEntity(index, value),
       );
     });
   }
@@ -345,28 +373,32 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderOverview() {
+    const items = buildOverviewItems(this._alerts.alerts, this._alerts.pending);
     return `
       <section class="summary">
         <article><span>Alertes actives</span><strong class="danger">${this._alerts.active_count}</strong></article>
         <article><span>En attente</span><strong class="pending">${this._alerts.pending_count}</strong></article>
         <article><span>Total suivi</span><strong>${this._alerts.tracked_count ?? 0}</strong></article>
       </section>
-      ${this._renderAlertGroup("Alertes actives", this._alerts.alerts, true)}
-      ${this._renderAlertGroup("Alertes en attente", this._alerts.pending, false)}`;
+      ${this._renderOverviewAlerts(items)}`;
   }
 
-  _renderAlertGroup(title, alerts, active) {
-    if (!alerts.length) {
+  _renderOverviewAlerts(items) {
+    const alertCount = this._alerts.active_count + this._alerts.pending_count;
+    if (!items.length) {
       return `<section class="alert-group">
-        <div class="alert-group-header"><h2>${esc(title)}</h2><span class="alert-group-count">0</span></div>
-        <ha-card outlined class="alert-empty"><div class="empty compact">Aucune alerte ${active ? "active" : "en attente"}.</div></ha-card>
+        <div class="alert-group-header"><h2>Alertes détectées</h2><span class="alert-group-count">0</span></div>
+        <ha-card outlined class="alert-empty"><div class="empty compact">Aucune alerte active ou en attente.</div></ha-card>
       </section>`;
     }
     return `<section class="alert-group">
-      <div class="alert-group-header"><h2>${esc(title)}</h2><span class="alert-group-count">${alerts.length}</span></div>
+      <div class="alert-group-header"><h2>Alertes détectées</h2><span class="alert-group-count">${alertCount}</span></div>
       <div class="alert-list">
-      ${alerts.map((alert) => this._renderAlert(alert, active)).join("")}
-    </div></section>`;
+        ${items.map((item) => item.kind === "device"
+          ? this._renderDeviceGroup(item)
+          : this._renderAlert(item.alert, item.status === "active")).join("")}
+      </div>
+    </section>`;
   }
 
   _renderAlert(alert, active) {
@@ -398,21 +430,63 @@ class AlertManagerPanel extends HTMLElement {
     </ha-card>`;
   }
 
+  _renderDeviceGroup(group) {
+    const first = group.alerts[0]?.alert ?? {};
+    const activeCount = group.alerts.filter((item) => item.status === "active").length;
+    const pendingCount = group.alerts.length - activeCount;
+    const stateClass = activeCount ? "is-active" : "is-pending";
+    const statusText = [
+      activeCount ? `${activeCount} active${activeCount > 1 ? "s" : ""}` : "",
+      pendingCount ? `${pendingCount} en attente` : "",
+    ].filter(Boolean).join(" · ");
+    return `<ha-card outlined class="device-alert-group ${stateClass}" data-device-id="${esc(group.device_id)}">
+      <div class="device-group-header">
+        <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${activeCount ? MDI_ALERT_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
+        <div><h3>${esc(first.device_name || "Appareil")}</h3>${first.area ? `<small>${esc(first.area)}</small>` : ""}</div>
+        <strong>${esc(statusText)}</strong>
+      </div>
+      <div class="device-alert-rows">
+        ${group.alerts.map((item) => this._renderDeviceAlertRow(item.alert, item.status)).join("")}
+      </div>
+    </ha-card>`;
+  }
+
+  _renderDeviceAlertRow(alert, status) {
+    const active = status === "active";
+    const entityExists = Boolean(this._hass?.states?.[alert.entity_id]);
+    const entityName = esc(alert.name || alert.entity_id);
+    const title = entityExists
+      ? `<button type="button" class="entity-link" data-action="more-info" data-entity-id="${esc(alert.entity_id)}">${entityName}</button>`
+      : `<strong>${entityName}</strong>`;
+    const value = alert.unit ? `${alert.value} ${alert.unit}` : alert.value;
+    const time = active
+      ? esc(this._date(alert.active_since))
+      : `<span data-due="${esc(alert.due_at)}">${esc(this._remaining(alert.due_at))}</span>`;
+    return `<article class="device-alert-row ${active ? "is-active" : "is-pending"}">
+      <div class="device-alert-source">${title}<code>${esc(alert.entity_id)}</code></div>
+      <strong class="device-alert-value">${esc(value ?? "—")}</strong>
+      <span class="device-alert-status">${active ? "Active" : "En attente"}</span>
+      <div class="device-alert-condition"><small>Condition</small><span>${esc(alert.condition)}</span></div>
+      <div class="device-alert-time"><small>${active ? "Active depuis" : "Temps restant"}</small><span>${time}</span></div>
+    </article>`;
+  }
+
   _renderAutomatic() {
+    const availablePacks = this._packs.filter((pack) => pack.available);
     return `<form id="automatic-form" class="automatic-grid">
-      ${CATEGORIES.map(([id, title, description]) => {
-        const config = this._config.automatic[id];
+      ${availablePacks.map((pack) => {
+        const config = this._config.automatic[pack.id];
         return `<section class="panel category-card">
           <div class="category-header">
-            <h2>${esc(title)}</h2>
-            <ha-switch id="auto-${id}-enabled" aria-label="Activer ${esc(title)}" ${config.enabled ? "checked" : ""}></ha-switch>
+            <h2>${esc(pack.name)}</h2>
+            <ha-switch id="auto-${pack.id}-enabled" aria-label="Activer ${esc(pack.name)}" ${config.enabled ? "checked" : ""}></ha-switch>
           </div>
-          <p>${esc(description)}</p>
+          <p>${esc(pack.description)}</p>
           <div class="fields">
-            ${this._numberField(`auto-${id}-delay`, "Délai", config.delay, "secondes", 0, 31536000)}
-            ${id === "battery" ? this._numberField("battery-threshold", "Seuil", config.threshold, "%", -1000000000, 1000000000, "any") : ""}
+            ${this._numberField(`auto-${pack.id}-delay`, "Délai propre au pack", config.delay, "secondes", 0, 31536000, "1", "id", false)}
+            ${pack.id === "battery" ? this._numberField("battery-threshold", "Seuil", config.threshold, "%", -1000000000, 1000000000, "any") : ""}
           </div>
-          ${id === "unavailable" ? "<small>Tous les domaines sont surveillés. Seul l’état unavailable est concerné.</small>" : ""}
+          <small>Laisser le délai vide pour utiliser le délai global.</small>
         </section>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>Enregistrer la surveillance</ha-button></div>
@@ -467,12 +541,12 @@ class AlertManagerPanel extends HTMLElement {
       <section class="panel"><h2>Paramètres généraux</h2><div class="fields">
         ${this._numberField("global-delay", "Délai global", this._config.global_delay, "secondes", 0, 31536000)}
         <div class="field"><span class="field-label">Labels exclus des surveillances automatiques</span><ha-selector id="excluded-labels"></ha-selector><small>Une règle personnalisée ignore ces labels.</small></div>
-      </div><small>Délai actuel : ${esc(durationText(this._config.global_delay))}. Il est utilisé après les délais de règle, d’entité, d’attribut et de catégorie.</small></section>
+      </div><small>Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.</small></section>
       <section class="panel"><h2>Exclusions explicites</h2><div class="fields">
         <div class="field"><span class="field-label">Entités exclues</span><ha-selector id="excluded-entities"></ha-selector></div>
         <div class="field"><span class="field-label">Appareils exclus</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></section>
-      <section class="panel"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div>
+      <section class="panel"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur le délai du pack et le délai global.</small></div>
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
           <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="Délai en secondes"><span slot="end">secondes</span></ha-input>
@@ -484,9 +558,9 @@ class AlertManagerPanel extends HTMLElement {
     </form>`;
   }
 
-  _numberField(id, label, value, suffix, min, max, step = "1", nameMode = "id") {
+  _numberField(id, label, value, suffix, min, max, step = "1", nameMode = "id", required = true) {
     const field = nameMode === "name" ? ` data-field="${esc(id)}"` : "";
-    return `<div class="field"><span class="field-label">${esc(label)}</span><ha-input ${field} id="${esc(id)}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value)}" required aria-label="${esc(label)}"><span slot="end">${esc(suffix)}</span></ha-input></div>`;
+    return `<div class="field"><span class="field-label">${esc(label)}</span><ha-input ${field} id="${esc(id)}" type="number" min="${min}" max="${max}" step="${step}" value="${esc(value ?? "")}" ${required ? "required" : ""} aria-label="${esc(label)}"><span slot="end">${esc(suffix)}</span></ha-input></div>`;
   }
 
   _textField(name, label, value, required = false, mode = "name", className = "") {
@@ -685,13 +759,18 @@ class AlertManagerPanel extends HTMLElement {
 
   async _saveAutomatic() {
     const automatic = {};
-    for (const [id] of CATEGORIES) {
-      automatic[id] = {
-        enabled: this.shadowRoot.querySelector(`#auto-${id}-enabled`).checked,
-        delay: Number(this.shadowRoot.querySelector(`#auto-${id}-delay`).value),
+    for (const pack of this._packs.filter((item) => item.available)) {
+      const delayValue = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`).value;
+      automatic[pack.id] = {
+        enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`).checked,
+        delay: delayValue === "" ? null : Number(delayValue),
       };
+      if (pack.id === "battery") {
+        automatic[pack.id].threshold = Number(
+          this.shadowRoot.querySelector("#battery-threshold").value,
+        );
+      }
     }
-    automatic.battery.threshold = Number(this.shadowRoot.querySelector("#battery-threshold").value);
     const config = await this._call({ type: "alert_manager/config/update", config: { automatic } }, "Surveillance enregistrée");
     if (config) {
       this._config = config;
@@ -798,6 +877,25 @@ class AlertManagerPanel extends HTMLElement {
     });
   }
 
+  _setEntityDelayEntity(index, value) {
+    if (!this._entityDelayDraft) return;
+    const entityId = typeof value === "string" ? value : "";
+    if (
+      entityId
+      && this._entityDelayDraft.some(
+        (row, rowIndex) => rowIndex !== index && row.entity_id === entityId,
+      )
+    ) {
+      this._notice = {
+        kind: "error",
+        text: `L’entité ${entityId} possède déjà un délai particulier.`,
+      };
+      this._render();
+      return;
+    }
+    this._entityDelayDraft[index].entity_id = entityId;
+  }
+
   _date(value) {
     if (!value) return "—";
     const date = new Date(value);
@@ -826,13 +924,13 @@ class AlertManagerPanel extends HTMLElement {
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
       *{box-sizing:border-box}main{max-width:1400px;margin:0 auto;padding:24px}main.rules-page{max-width:none}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
-      .panel{margin-bottom:20px}.alert-group{margin-bottom:24px}.alert-group-header{display:flex;align-items:center;gap:8px;margin:0 4px 12px}.alert-group-header h2{margin:0}.alert-group-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 8px;border-radius:var(--ha-border-radius-pill,999px);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500)}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}.alert-card{height:100%;overflow:hidden;--alert-state-color:var(--warning-color,#f5a623)}.alert-card.is-active{--alert-state-color:var(--error-color,#db4437)}.alert-card-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.alert-status-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;color:var(--alert-state-color);background:color-mix(in srgb,var(--alert-state-color) 12%,transparent)}.alert-status-icon ha-svg-icon{width:24px;height:24px}.alert-title{min-width:0;line-height:1.35}.alert-title code{display:block;margin-top:2px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.alert-current-value{color:var(--alert-state-color);font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);text-align:right;overflow-wrap:anywhere}.alert-card-content{padding:0 16px 16px;border-top:1px solid var(--divider-color,#ddd)}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer}.entity-link:hover{color:var(--primary-color,#03a9f4)}.entity-link:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:3px}
+      .panel{margin-bottom:20px}.alert-group{margin-bottom:24px}.alert-group-header{display:flex;align-items:center;gap:8px;margin:0 4px 12px}.alert-group-header h2{margin:0}.alert-group-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 8px;border-radius:var(--ha-border-radius-pill,999px);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500)}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}.alert-card,.device-alert-group{height:100%;overflow:hidden;--alert-state-color:var(--warning-color,#f5a623)}.alert-card.is-active,.device-alert-group.is-active{--alert-state-color:var(--error-color,#db4437)}.alert-card-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.alert-status-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;color:var(--alert-state-color);background:color-mix(in srgb,var(--alert-state-color) 12%,transparent)}.alert-status-icon ha-svg-icon{width:24px;height:24px}.alert-title{min-width:0;line-height:1.35}.alert-title code{display:block;margin-top:2px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.alert-current-value{color:var(--alert-state-color);font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);text-align:right;overflow-wrap:anywhere}.alert-card-content{padding:0 16px 16px;border-top:1px solid var(--divider-color,#ddd)}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer}.entity-link:hover{color:var(--primary-color,#03a9f4)}.entity-link:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:3px}.device-group-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.device-group-header h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.35;margin:0}.device-group-header small{margin:2px 0 0}.device-group-header>strong{color:var(--alert-state-color);text-align:right}.device-alert-rows{border-top:1px solid var(--divider-color,#ddd)}.device-alert-row{display:grid;grid-template-columns:minmax(0,1.25fr) auto auto;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--divider-color,#ddd)}.device-alert-row:last-child{border-bottom:0}.device-alert-source{min-width:0}.device-alert-source code{display:block;color:var(--secondary-text-color,#727272)}.device-alert-value{color:var(--alert-state-color);text-align:right}.device-alert-status{color:var(--alert-state-color);font-weight:var(--ha-font-weight-medium,500);text-align:right}.device-alert-condition{grid-column:1/3;min-width:0}.device-alert-condition span,.device-alert-time span{display:block;overflow-wrap:anywhere}.device-alert-time{text-align:right}.device-alert-row.is-pending{--alert-state-color:var(--warning-color,#f5a623)}.device-alert-row.is-active{--alert-state-color:var(--error-color,#db4437)}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}.alert-details{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:12px 16px;margin:14px 0 0}.alert-details div{min-width:0}dt{font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-normal,400);color:var(--secondary-text-color,#727272)}dd{margin:2px 0 0;overflow-wrap:anywhere}.alert-condition{grid-column:1/-1}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}.alert-empty{margin-bottom:20px}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
       .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:500px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;align-content:start;gap:16px;margin-top:0;padding:20px;padding-bottom:max(var(--safe-area-inset-bottom,0px),20px)}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-editor-actions{justify-content:flex-start}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
     `;
   }
 }
@@ -841,4 +939,4 @@ if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
 }
 
-export { AlertManagerPanel, durationText, lines, newRuleDefaults };
+export { AlertManagerPanel, buildOverviewItems, durationText, lines, newRuleDefaults };

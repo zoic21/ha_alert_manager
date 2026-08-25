@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Event
 
 from custom_components.alert_manager.const import (
@@ -227,8 +228,9 @@ def test_connectivity_off(hass, entry):
     assert "connectivity:binary_sensor.gateway" in manager.records
 
 
-def test_unifi_tracker_away(hass, entry, registry_entry):
+def test_unifi_tracker_away(hass, entry, registry_entry, config_entry):
     """Only router-backed UniFi trackers away from home trigger UniFi detection."""
+    config_entry(hass, "unifi")
     registry_entry(hass, "device_tracker.ap", platform="unifi")
     hass.states.set("device_tracker.ap", "not_home", {"source_type": "router"})
     manager = make_manager(hass, entry)
@@ -283,8 +285,9 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
 
 
 def test_delay_priority(hass, entry):
-    """Entity config outranks alert_delay, category and global delays."""
-    hass.states.set("sensor.test", "unavailable", {"alert_delay": 40})
+    """Entity, pack and global delays follow the documented priority."""
+    hass.states.set("sensor.test", "unavailable")
+    hass.states.set("sensor.custom", "on")
     manager = make_manager(hass, entry)
     run(
         manager.async_update_config(
@@ -296,6 +299,26 @@ def test_delay_priority(hass, entry):
         )
     )
     assert manager.records["unavailable:sensor.test"].delay == 20
+
+    run(manager.async_update_config({"entity_delays": {}}))
+    assert manager.records["unavailable:sensor.test"].delay == 80
+
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": None}}}))
+    assert manager.records["unavailable:sensor.test"].delay == 100
+
+    run(manager.async_update_config({"entity_delays": {"sensor.custom": 1}}))
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Custom duration",
+                "entity_ids": ["sensor.custom"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 10,
+            }
+        )
+    )
+    assert manager.records[f"rule:{rule['id']}:sensor.custom"].delay == 10
 
 
 def test_shortened_automatic_delay_uses_real_activation_time(hass, entry, set_now):
@@ -313,13 +336,6 @@ def test_shortened_automatic_delay_uses_real_activation_time(hass, entry, set_no
     assert record.status is AlertStatus.ACTIVE
     assert record.due_at == start + timedelta(seconds=10)
     assert record.active_since == changed_at
-
-
-def test_numeric_string_alert_delay_attribute(hass, entry):
-    """Integral numeric attributes are accepted without weakening config validation."""
-    hass.states.set("sensor.test", "unavailable", {"alert_delay": "40"})
-    manager = make_manager(hass, entry)
-    assert manager.records["unavailable:sensor.test"].delay == 40
 
 
 def test_missing_rule_attribute_does_not_trigger_not_equals(hass, entry):
@@ -571,6 +587,169 @@ def test_rule_delay_extension_rechecks_an_active_instance(hass, entry, set_now):
     assert not [
         event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
     ]
+
+
+def test_entity_delay_extension_returns_active_automatic_alert_to_pending(
+    hass, entry, set_now
+):
+    """Automatic delay changes retain the id and original detection time."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"entity_delays": {"sensor.test": 0}}))
+    record = manager.records["unavailable:sensor.test"]
+    assert record.status is AlertStatus.ACTIVE
+    assert record.detected_at == start
+
+    hass.bus.fired.clear()
+    run(manager.async_update_config({"entity_delays": {"sensor.test": 60}}))
+    record = manager.records["unavailable:sensor.test"]
+    assert record.details.id == "unavailable:sensor.test"
+    assert record.detected_at == start
+    assert record.due_at == start + timedelta(seconds=60)
+    assert record.status is AlertStatus.PENDING
+    assert record.active_since is None
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+    ]
+
+
+def test_pack_availability_cleans_timers_and_preserves_enabled_choice(
+    hass, entry, registry_entry, config_entry
+):
+    """An unavailable conditional pack is inert without changing its setting."""
+    registry_entry(hass, "device_tracker.ap", platform="unifi")
+    hass.states.set("device_tracker.ap", "not_home", {"source_type": "router"})
+    manager = make_manager(hass, entry)
+    metadata = {pack["id"]: pack for pack in manager.get_packs()}
+    assert metadata["unavailable"]["available"] is True
+    assert metadata["connectivity"]["available"] is True
+    assert metadata["battery"]["available"] is True
+    assert metadata["unifi"]["available"] is False
+    assert manager.records == {}
+    assert not [timer for timer in hass.timers if not timer["cancelled"]]
+
+    unifi_entry = config_entry(hass, "unifi")
+    assert run(manager.async_refresh_pack_availability()) is True
+    assert "unifi:device_tracker.ap" in manager.records
+    assert manager.get_config()["automatic"]["unifi"]["enabled"] is True
+    assert [timer for timer in hass.timers if not timer["cancelled"]]
+
+    unifi_entry.state = ConfigEntryState.NOT_LOADED
+    assert run(manager.async_refresh_pack_availability()) is True
+    assert manager.records == {}
+    assert not [timer for timer in hass.timers if not timer["cancelled"]]
+    assert manager.get_config()["automatic"]["unifi"]["enabled"] is True
+
+    unifi_entry.state = ConfigEntryState.LOADED
+    assert run(manager.async_refresh_pack_availability()) is True
+    assert "unifi:device_tracker.ap" in manager.records
+    assert manager.get_config()["automatic"]["unifi"]["enabled"] is True
+
+
+def test_pack_entry_state_listener_re_evaluates_automatically(
+    hass, entry, registry_entry, config_entry
+):
+    """A prerequisite entry state transition schedules the availability refresh."""
+    unifi_entry = config_entry(hass, "unifi")
+    registry_entry(hass, "device_tracker.ap", platform="unifi")
+    hass.states.set("device_tracker.ap", "not_home", {"source_type": "router"})
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        assert "unifi:device_tracker.ap" in manager.records
+
+        unifi_entry.set_state(ConfigEntryState.NOT_LOADED)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert "unifi:device_tracker.ap" not in manager.records
+        assert entry.created_task_names[-1] == "alert_manager pack availability"
+
+    run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("state", "disabled_by", "source"),
+    [
+        (ConfigEntryState.NOT_LOADED, None, "user"),
+        (ConfigEntryState.LOADED, "user", "user"),
+        (ConfigEntryState.LOADED, None, "ignore"),
+    ],
+)
+def test_unifi_pack_requires_a_usable_config_entry(
+    hass, entry, config_entry, state, disabled_by, source
+):
+    """Unloaded, disabled and ignored UniFi entries do not enable the pack."""
+    config_entry(
+        hass,
+        "unifi",
+        state=state,
+        disabled_by=disabled_by,
+        source=source,
+    )
+    manager = make_manager(hass, entry)
+    unifi = next(pack for pack in manager.get_packs() if pack["id"] == "unifi")
+    assert unifi["available"] is False
+
+
+def test_same_device_alerts_remain_individual_in_state_and_events(
+    hass, entry, registry_entry, device_entry
+):
+    """Device grouping data never changes individual counters or events."""
+    device = device_entry(hass, name="Onduleur")
+    registry_entry(hass, "sensor.ups_status", device_id=device.id)
+    registry_entry(hass, "sensor.ups_battery", device_id=device.id)
+    hass.states.set("sensor.ups_status", "unavailable")
+    hass.states.set("sensor.ups_battery", "unavailable")
+    manager = make_manager(hass, entry)
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {
+                    "sensor.ups_status": 0,
+                    "sensor.ups_battery": 60,
+                }
+            }
+        )
+    )
+
+    snapshot = manager.public_snapshot()
+    assert snapshot["active_count"] == 1
+    assert snapshot["pending_count"] == 1
+    assert len(snapshot["alerts"]) == len(snapshot["pending"]) == 1
+    assert snapshot["alerts"][0]["device_id"] == device.id
+    assert snapshot["pending"][0]["device_id"] == device.id
+    assert snapshot["alerts"][0]["id"] != snapshot["pending"][0]["id"]
+
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {
+                    "sensor.ups_status": 0,
+                    "sensor.ups_battery": 0,
+                }
+            }
+        )
+    )
+    started = [data for event, data in hass.bus.fired if event == EVENT_ALERT_STARTED]
+    assert {data["id"] for data in started} == {
+        "unavailable:sensor.ups_status",
+        "unavailable:sensor.ups_battery",
+    }
+    assert manager.public_snapshot()["active_count"] == 2
+
+    hass.states.set("sensor.ups_status", "ok")
+    hass.states.set("sensor.ups_battery", "ok")
+    run(manager.async_evaluate_entity("sensor.ups_status"))
+    run(manager.async_evaluate_entity("sensor.ups_battery"))
+    resolved = [data for event, data in hass.bus.fired if event == EVENT_ALERT_RESOLVED]
+    assert {data["id"] for data in resolved} == {
+        "unavailable:sensor.ups_status",
+        "unavailable:sensor.ups_battery",
+    }
 
 
 def test_rule_configuration_cleanup_is_silent(hass, entry):

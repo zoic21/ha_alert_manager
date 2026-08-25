@@ -36,7 +36,7 @@ globalThis.window = {
   confirm: () => true,
 };
 
-const { durationText, lines, newRuleDefaults } = await import(
+const { buildOverviewItems, durationText, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
 );
 
@@ -110,6 +110,37 @@ const completeConfig = () => ({
   entity_delays: {},
 });
 
+const completePacks = () => [
+  {
+    id: "unavailable",
+    name: "Entités indisponibles",
+    description: "Surveille le statut unavailable sur toutes les entités.",
+    prerequisites: [],
+    available: true,
+  },
+  {
+    id: "connectivity",
+    name: "Connectivité",
+    description: "Surveille les capteurs de connectivité qui passent à off.",
+    prerequisites: [],
+    available: true,
+  },
+  {
+    id: "unifi",
+    name: "Équipements UniFi",
+    description: "Surveille les équipements suivis par un routeur UniFi.",
+    prerequisites: ["unifi"],
+    available: true,
+  },
+  {
+    id: "battery",
+    name: "Batteries faibles",
+    description: "Surveille les capteurs de batterie sous leur seuil.",
+    prerequisites: [],
+    available: true,
+  },
+];
+
 const form = (values) => ({
   elements: {
     namedItem(name) {
@@ -142,6 +173,40 @@ const actionEvent = (action, id) => ({
       return { dataset: { action, ...(id ? { id } : {}) } };
     },
   },
+});
+
+test("initial load requests pack metadata from the backend", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  const calls = [];
+  const responses = {
+    "alert_manager/config/get": completeConfig(),
+    "alert_manager/alerts/list": {
+      active_count: 0,
+      pending_count: 0,
+      tracked_count: 0,
+      alerts: [],
+      pending: [],
+    },
+    "alert_manager/packs/list": completePacks(),
+  };
+  panel._hass = {
+    states: {},
+    callWS: async (message) => {
+      calls.push(message.type);
+      return responses[message.type];
+    },
+  };
+
+  await panel._load();
+
+  assert.deepEqual(calls, [
+    "alert_manager/config/get",
+    "alert_manager/alerts/list",
+    "alert_manager/packs/list",
+  ]);
+  assert.deepEqual(panel._packs, completePacks());
 });
 
 test("rule save button explicitly creates a rule and keeps typed values", async () => {
@@ -213,7 +278,7 @@ test("active alerts are red while pending alerts stay orange", () => {
   assert.match(panel._renderAlert(alert, true), /<ha-card outlined class="alert-card is-active"/);
   assert.match(panel._renderAlert(alert, false), /<ha-card outlined class="alert-card is-pending"/);
   assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
-  assert.match(panel._styles(), /\.alert-card\.is-active\{--alert-state-color:var\(--error-color/);
+  assert.match(panel._styles(), /\.alert-card\.is-active,\.device-alert-group\.is-active\{--alert-state-color:var\(--error-color/);
   assert.match(panel._renderAlert(alert, true), /<ha-svg-icon path=/);
   assert.match(panel._renderAlert(alert, true), /class="alert-current-value">unavailable<\/strong>/);
   assert.doesNotMatch(panel._renderAlert(alert, true), />Active<|>En attente<|class="alert-value"/);
@@ -236,14 +301,23 @@ test("alert conditions stay on one line in the wider detail column", () => {
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
 });
 
-test("alert groups use native Home Assistant cards without nested panels", () => {
+test("alert overview uses native Home Assistant cards without nested panels", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
   const alert = { entity_id: "sensor.test", name: "Test", condition: "Test" };
 
-  const populated = panel._renderAlertGroup("Alertes actives", [alert], true);
-  const empty = panel._renderAlertGroup("Alertes en attente", [], false);
+  panel._alerts = {
+    active_count: 1,
+    pending_count: 0,
+    tracked_count: 1,
+    alerts: [alert],
+    pending: [],
+  };
+  const populated = panel._renderOverviewAlerts(buildOverviewItems([alert], []));
+  panel._alerts.active_count = 0;
+  panel._alerts.alerts = [];
+  const empty = panel._renderOverviewAlerts([]);
 
   assert.match(populated, /<section class="alert-group">/);
   assert.match(populated, /<ha-card outlined class="alert-card is-active"/);
@@ -251,10 +325,70 @@ test("alert groups use native Home Assistant cards without nested panels", () =>
   assert.match(empty, /<ha-card outlined class="alert-empty">/);
 });
 
+test("two alerts from one device form one mixed-status visual group", () => {
+  const active = {
+    id: "unavailable:sensor.ups_status",
+    entity_id: "sensor.ups_status",
+    name: "État UPS",
+    device_id: "a".repeat(32),
+    device_name: "Onduleur",
+    area: "Bureau",
+    value: "unavailable",
+    condition: "État indisponible",
+    active_since: "2026-08-25T12:00:00Z",
+  };
+  const pending = {
+    id: "battery:sensor.ups_battery",
+    entity_id: "sensor.ups_battery",
+    name: "Batterie UPS",
+    device_id: "a".repeat(32),
+    device_name: "Onduleur",
+    area: "Bureau",
+    value: 10,
+    unit: "%",
+    condition: "Batterie faible",
+    due_at: "2026-08-25T12:15:00Z",
+  };
+  const items = buildOverviewItems([active], [pending]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "device");
+  assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "pending"]);
+
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = {
+    states: {
+      "sensor.ups_status": { state: "unavailable" },
+      "sensor.ups_battery": { state: "10" },
+    },
+  };
+  const html = panel._renderDeviceGroup(items[0]);
+  assert.match(html, /class="device-alert-group is-active"/);
+  assert.match(html, /Onduleur/);
+  assert.match(html, /1 active · 1 en attente/);
+  assert.match(html, /sensor\.ups_status/);
+  assert.match(html, /sensor\.ups_battery/);
+  assert.match(html, />Active</);
+  assert.match(html, />En attente</);
+  assert.match(html, /data-due=/);
+  assert.equal((html.match(/data-action="more-info"/g) ?? []).length, 2);
+});
+
+test("single alerts and entities without a device stay compact and individual", () => {
+  const deviceAlert = { entity_id: "sensor.one", device_id: "a".repeat(32) };
+  const standalone = { entity_id: "sensor.two" };
+  const items = buildOverviewItems([deviceAlert, standalone], []);
+
+  assert.deepEqual(items.map((item) => item.kind), ["alert", "alert"]);
+  assert.equal(items[0].alert, deviceAlert);
+  assert.equal(items[1].alert, standalone);
+});
+
 test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
+  panel._packs = completePacks();
   panel._loading = false;
   panel._hass = { states: {} };
   const shell = {};
@@ -299,6 +433,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
+  panel._packs = completePacks();
   const automatic = panel._renderAutomatic();
   panel._ensureSettingsDraft();
   const settings = panel._renderSettings();
@@ -307,7 +442,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.match(automatic, /<ha-button appearance="accent" variant="brand" data-action="save-automatic"/);
-  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>État unavailable/);
+  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille le statut unavailable/);
   assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
@@ -531,6 +666,7 @@ test("automatic monitoring action serializes all category controls", async () =>
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
+  panel._packs = completePacks();
   panel._render = () => {};
   const controls = {
     "#auto-unavailable-enabled": { checked: true },
@@ -554,6 +690,44 @@ test("automatic monitoring action serializes all category controls", async () =>
     connectivity: { enabled: false, delay: 120 },
     unifi: { enabled: true, delay: 180 },
     battery: { enabled: true, delay: 240, threshold: 12 },
+  });
+});
+
+test("automatic packs are rendered only from available backend metadata", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks().map((pack) => (
+    pack.id === "unifi" ? { ...pack, available: false } : pack
+  ));
+
+  const html = panel._renderAutomatic();
+
+  assert.match(html, /auto-unavailable-enabled/);
+  assert.match(html, /auto-connectivity-enabled/);
+  assert.match(html, /auto-battery-enabled/);
+  assert.doesNotMatch(html, /auto-unifi-enabled|Équipements UniFi/);
+  assert.doesNotMatch(html, /CATEGORIES|État unavailable sur toutes les entités/);
+});
+
+test("an empty pack delay serializes as the global fallback", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks().filter((pack) => pack.id === "unavailable");
+  panel._render = () => {};
+  const controls = {
+    "#auto-unavailable-enabled": { checked: true },
+    "#auto-unavailable-delay": { value: "" },
+  };
+  panel.shadowRoot.querySelector = (selector) => controls[selector];
+  let call;
+  panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
+
+  await panel._saveAutomatic();
+
+  assert.deepEqual(call.config.automatic, {
+    unavailable: { enabled: true, delay: null },
   });
 });
 
@@ -632,6 +806,23 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
   assert.deepEqual(selectors["#excluded-entities"].selector, { entity: { multiple: true } });
   assert.deepEqual(selectors["#excluded-devices"].selector, { device: { multiple: true } });
+});
+
+test("entity delay selector refuses a duplicate entity", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._entityDelayDraft = [
+    { entity_id: "sensor.one", delay: 30 },
+    { entity_id: "", delay: 60 },
+  ];
+  panel._render = () => {};
+
+  panel._setEntityDelayEntity(1, "sensor.one");
+
+  assert.equal(panel._entityDelayDraft[1].entity_id, "");
+  assert.equal(panel._notice.kind, "error");
+  assert.match(panel._notice.text, /possède déjà un délai/);
 });
 
 test("custom rule sources use the native multiple entity selector", () => {

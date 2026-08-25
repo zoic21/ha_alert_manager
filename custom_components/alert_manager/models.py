@@ -30,6 +30,7 @@ class AlertDetails:
     name: str
     value: Any
     condition: str
+    device_id: str | None = None
     device_name: str | None = None
     area: str | None = None
     integration: str | None = None
@@ -46,7 +47,7 @@ class AlertDetails:
                 raise ValueError(f"Alert detail {key} must be a non-empty string")
         if "value" not in data:
             raise ValueError("Alert detail value is required")
-        for key in ("device_name", "area", "integration", "unit"):
+        for key in ("device_id", "device_name", "area", "integration", "unit"):
             if data.get(key) is not None and not isinstance(data[key], str):
                 raise ValueError(f"Alert detail {key} must be a string or null")
         allowed = cls.__dataclass_fields__
@@ -264,15 +265,6 @@ def normalize_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value).strip()
-
-
-def safe_delay_seconds(value: Any) -> int | None:
-    """Parse a finite, integral delay attribute within the supported range."""
-    number = safe_float(value)
-    if number is None or not number.is_integer():
-        return None
-    delay = int(number)
-    return delay if MIN_DELAY <= delay <= MAX_DELAY else None
 
 
 def calculate_due_at(detected_at: datetime, delay: int) -> datetime:

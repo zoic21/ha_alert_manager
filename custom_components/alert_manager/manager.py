@@ -8,7 +8,11 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import (
+    SIGNAL_CONFIG_ENTRY_CHANGED,
+    ConfigEntry,
+    ConfigEntryChange,
+)
 from homeassistant.const import (
     ATTR_FRIENDLY_NAME,
     ATTR_UNIT_OF_MEASUREMENT,
@@ -30,7 +34,10 @@ from homeassistant.helpers import (
 from homeassistant.helpers import (
     label_registry as lr,
 )
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
@@ -48,7 +55,6 @@ from .models import (
     Rule,
     advance_record,
     calculate_due_at,
-    safe_delay_seconds,
 )
 from .packs import PACKS, PACKS_BY_ID
 from .storage import AlertManagerStorage
@@ -82,11 +88,13 @@ class AlertManager:
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
         self._unsubscribers: list[Callable[[], None]] = []
+        self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
         self._last_public_snapshot: dict[str, Any] | None = None
+        self._pack_availability: dict[str, bool] = {}
 
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
@@ -98,6 +106,8 @@ class AlertManager:
             self.config = validate_config({})
         self.records = records
         self._rebuild_rule_index()
+        self._refresh_pack_entry_listeners()
+        self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
 
         self._unsubscribers.extend(
@@ -114,6 +124,11 @@ class AlertManager:
                 ),
                 self.hass.bus.async_listen(
                     ar.EVENT_AREA_REGISTRY_UPDATED, self._registry_changed
+                ),
+                async_dispatcher_connect(
+                    self.hass,
+                    SIGNAL_CONFIG_ENTRY_CHANGED,
+                    self._config_entry_changed,
                 ),
             )
         )
@@ -138,6 +153,9 @@ class AlertManager:
         for unsubscribe in self._unsubscribers:
             unsubscribe()
         self._unsubscribers.clear()
+        for unsubscribe in self._pack_entry_unsubscribers.values():
+            unsubscribe()
+        self._pack_entry_unsubscribers.clear()
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
@@ -172,6 +190,71 @@ class AlertManager:
             self.async_evaluate_all(),
             name=f"{DOMAIN} registry evaluation",
         )
+
+    @callback
+    def _config_entry_changed(
+        self, _change: ConfigEntryChange, changed_entry: ConfigEntry
+    ) -> None:
+        """Track added, removed and updated prerequisite integration entries."""
+        if changed_entry.domain not in self._pack_prerequisite_domains():
+            return
+        self._refresh_pack_entry_listeners()
+        self._schedule_pack_availability_refresh()
+
+    @callback
+    def _pack_entry_state_changed(self) -> None:
+        """Re-evaluate packs when a prerequisite entry loads or unloads."""
+        self._schedule_pack_availability_refresh()
+
+    @callback
+    def _schedule_pack_availability_refresh(self) -> None:
+        """Schedule availability handling on Home Assistant's event loop."""
+        if self._unloading:
+            return
+        self.entry.async_create_task(
+            self.hass,
+            self.async_refresh_pack_availability(),
+            name=f"{DOMAIN} pack availability",
+        )
+
+    async def async_refresh_pack_availability(self) -> bool:
+        """Apply a changed availability snapshot and clean affected records."""
+        if self._unloading:
+            return False
+        self._refresh_pack_entry_listeners()
+        availability = self._current_pack_availability()
+        if availability == self._pack_availability:
+            return False
+        self._pack_availability = availability
+        await self.async_evaluate_all()
+        return True
+
+    def _pack_prerequisite_domains(self) -> set[str]:
+        """Return every integration domain used as a pack prerequisite."""
+        return {domain for pack in PACKS for domain in pack.prerequisites}
+
+    def _refresh_pack_entry_listeners(self) -> None:
+        """Subscribe to state changes of current prerequisite config entries."""
+        current_entries = {
+            entry.entry_id: entry
+            for domain in self._pack_prerequisite_domains()
+            for entry in self.hass.config_entries.async_entries(domain)
+        }
+        for entry_id in self._pack_entry_unsubscribers.keys() - current_entries.keys():
+            self._pack_entry_unsubscribers.pop(entry_id)()
+        for entry_id, config_entry in current_entries.items():
+            if entry_id not in self._pack_entry_unsubscribers:
+                self._pack_entry_unsubscribers[entry_id] = (
+                    config_entry.async_on_state_change(self._pack_entry_state_changed)
+                )
+
+    def _current_pack_availability(self) -> dict[str, bool]:
+        """Return current availability keyed by stable pack id."""
+        return {pack.id: pack.available(self.hass) for pack in PACKS}
+
+    def _pack_is_available(self, pack_id: str) -> bool:
+        """Read the cached availability used by the state-change hot path."""
+        return self._pack_availability.get(pack_id, False)
 
     async def async_evaluate_all(
         self, *, restoring: bool = False, save: bool = True
@@ -334,9 +417,10 @@ class AlertManager:
     ) -> None:
         """Evaluate one enabled pack and append its candidate when matching."""
         config = self.config["automatic"][pack_id]
-        if not config["enabled"]:
+        pack = PACKS_BY_ID[pack_id]
+        if not config["enabled"] or not self._pack_is_available(pack_id):
             return
-        match = PACKS_BY_ID[pack_id].evaluate(self.hass, state, config)
+        match = pack.evaluate(self.hass, state, config)
         if match is None:
             return
         alert_id = f"{pack_id}:{state.entity_id}"
@@ -401,9 +485,6 @@ class AlertManager:
         entity_id = state.entity_id
         if entity_id in self.config["entity_delays"]:
             return self.config["entity_delays"][entity_id]
-        attribute_delay = safe_delay_seconds(state.attributes.get("alert_delay"))
-        if attribute_delay is not None:
-            return attribute_delay
         category_delay = self.config["automatic"][category].get("delay")
         if isinstance(category_delay, int):
             return category_delay
@@ -438,6 +519,7 @@ class AlertManager:
             type=alert_type,
             entity_id=state.entity_id,
             name=state.attributes.get(ATTR_FRIENDLY_NAME, state.entity_id),
+            device_id=(device.id if device is not None else None),
             device_name=(
                 (device.name_by_user or device.name) if device is not None else None
             ),
@@ -492,6 +574,7 @@ class AlertManager:
             pack.id
             for pack in PACKS
             if automatic.get(pack.id, {}).get("enabled", False)
+            and self._pack_is_available(pack.id)
         }
         return (
             (domain == "binary_sensor" and "connectivity" in pack_ids)
@@ -567,6 +650,7 @@ class AlertManager:
             and self._is_automatic_eligible(state.entity_id)
             and any(
                 self.config["automatic"][pack.id]["enabled"]
+                and self._pack_is_available(pack.id)
                 and pack.applies(self.hass, state)
                 for pack in PACKS
             )
@@ -575,6 +659,10 @@ class AlertManager:
     def get_config(self) -> dict[str, Any]:
         """Return a defensive copy for WebSocket clients."""
         return deepcopy(self.config)
+
+    def get_packs(self) -> list[dict[str, Any]]:
+        """Return backend-owned pack metadata with current availability."""
+        return [pack.as_public_dict(self.hass) for pack in PACKS]
 
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
