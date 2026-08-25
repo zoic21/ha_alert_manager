@@ -236,15 +236,16 @@ test("navigation uses the native Home Assistant app bar and tabs", () => {
 
   assert.match(panel.shadowRoot.innerHTML, /<ha-top-app-bar-fixed id="panel-shell" center-title back-button>/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-icon-button-arrow-prev/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-tab data-action="tab" data-tab="overview"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:view-dashboard-outline"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:radar"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:format-list-checks"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon slot="icon" icon="mdi:tune-variant"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-tab-group slot="title" class="native-tabs"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-tab-group-tab slot="nav" panel="overview" data-action="tab" data-tab="overview"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:view-dashboard-outline"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:radar"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:format-list-checks"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:tune-variant"/);
   assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
   assert.match(panel._styles(), /ha-top-app-bar-fixed\{[^}]*--app-header-background-color/);
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed\{height:100%/);
-  assert.doesNotMatch(panel._styles(), /\.tab\{/);
+  assert.doesNotMatch(panel._styles(), /\.native-tabs\{[^}]*overflow:auto/);
 });
 
 test("forms use native Home Assistant inputs, switches and buttons", () => {
@@ -303,6 +304,35 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
     rule_id: "rule-id",
   });
   assert.deepEqual(panel._config.rules, []);
+});
+
+test("rule actions and editor use the requested native button appearances", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = {
+    ...completeConfig(),
+    rules: [
+      { ...ruleValues({ id: "enabled", enabled: true }), entity_ids: ["sensor.one"] },
+      { ...ruleValues({ id: "disabled", enabled: false }), entity_ids: ["sensor.two"] },
+    ],
+  };
+
+  const rules = panel._renderRules();
+  panel._editingRule = { ...panel._config.rules[0] };
+  const editor = panel._renderRuleEditor();
+  panel._ensureSettingsDraft();
+  panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
+  const settings = panel._renderSettings();
+
+  assert.match(rules, /appearance="plain" variant="brand" size="xs" class="rule-status"[^>]*>✓<\/ha-button>/);
+  assert.match(rules, /appearance="plain" variant="danger" size="xs" class="rule-status"[^>]*>✕<\/ha-button>/);
+  assert.match(rules, /appearance="filled" size="s" data-action="edit-rule"/);
+  assert.match(rules, /appearance="plain" variant="danger" size="s" data-action="delete-rule"/);
+  assert.match(editor, /<form id="rule-form" class="fields">[\s\S]*data-field="name"[\s\S]*<div class="switch-field"><span class="field-label">Règle activée/);
+  assert.match(editor, /<ha-switch id="rule-enabled" data-field="enabled" checked/);
+  assert.match(editor, /appearance="plain" data-action="cancel-rule"/);
+  assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
+  assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:end/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {

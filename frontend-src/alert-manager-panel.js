@@ -97,9 +97,6 @@ class AlertManagerPanel extends HTMLElement {
     if (shell) {
       shell.narrow = Boolean(value);
     }
-    this.shadowRoot?.querySelectorAll(".native-tabs ha-tab").forEach((tab) => {
-      tab.narrow = Boolean(value);
-    });
   }
 
   connectedCallback() {
@@ -180,14 +177,14 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
       <ha-top-app-bar-fixed id="panel-shell" center-title back-button>
-        <div slot="title" class="native-tabs" role="tablist" aria-label="Sections">
+        <ha-tab-group slot="title" class="native-tabs" aria-label="Sections">
           ${TABS.map(
-            ([id, label, icon]) => `<ha-tab data-action="tab" data-tab="${id}" name="${esc(label)}"
-              ${id === this._activeTab ? "active" : ""} ${this._narrow ? "narrow" : ""}>
-              <ha-icon slot="icon" icon="${icon}" aria-hidden="true"></ha-icon>
-            </ha-tab>`,
+            ([id, label, icon]) => `<ha-tab-group-tab slot="nav" panel="${id}" data-action="tab" data-tab="${id}"
+              ${id === this._activeTab ? "active" : ""}>
+              <span class="tab-label"><ha-icon icon="${icon}" aria-hidden="true"></ha-icon><span>${esc(label)}</span></span>
+            </ha-tab-group-tab>`,
           ).join("")}
-        </div>
+        </ha-tab-group>
         <main>
           <header>
             <div>
@@ -374,8 +371,8 @@ class AlertManagerPanel extends HTMLElement {
         ${rules.map((rule) => `<tr>
           <td>${esc(rule.name)}</td><td>${rule.entity_ids.map((entityId) => `<code>${esc(entityId)}</code>`).join("")}</td>
           <td>${esc(this._ruleSummary(rule))}</td><td>${esc(durationText(rule.duration))}</td>
-          <td><ha-button appearance="outlined" size="s" data-action="toggle-rule" data-id="${esc(rule.id)}" title="Activer/désactiver">${rule.enabled ? "✓" : "—"}</ha-button></td>
-          <td class="nowrap"><ha-button appearance="outlined" size="s" data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</ha-button> <ha-button appearance="outlined" variant="danger" size="s" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button></td>
+          <td><ha-button appearance="plain" variant="${rule.enabled ? "brand" : "danger"}" size="xs" class="rule-status" data-action="toggle-rule" data-id="${esc(rule.id)}" aria-label="${rule.enabled ? "Désactiver" : "Activer"} la règle" title="${rule.enabled ? "Règle active" : "Règle inactive"}">${rule.enabled ? "✓" : "✕"}</ha-button></td>
+          <td class="nowrap"><ha-button appearance="filled" size="s" data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</ha-button> <ha-button appearance="plain" variant="danger" size="s" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</ha-button></td>
         </tr>`).join("")}
       </tbody></table></div>` : '<div class="empty">Aucune règle personnalisée.</div>'}
     </section>${editor}`;
@@ -388,6 +385,7 @@ class AlertManagerPanel extends HTMLElement {
       <form id="rule-form" class="fields">
         <input type="hidden" name="id" value="${esc(rule.id || "")}">
         ${this._textField("name", "Nom", rule.name, true)}
+        <div class="switch-field"><span class="field-label">Règle activée</span><ha-switch id="rule-enabled" data-field="enabled" ${rule.enabled ? "checked" : ""}></ha-switch></div>
         <div class="field full"><span class="field-label">Entités</span><ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></div>
         <div class="field"><span class="field-label">Source</span><ha-select id="rule-source" data-field="source"></ha-select></div>
         ${this._textField("attribute", "Nom de l’attribut", rule.attribute || "")}
@@ -395,8 +393,7 @@ class AlertManagerPanel extends HTMLElement {
         ${this._textField("value", "Valeur de comparaison", rule.value, true)}
         ${this._numberField("duration", "Durée", rule.duration, "secondes", 0, 31536000, "1", "name")}
         ${this._textField("message", "Message facultatif", rule.message || "")}
-        <div class="switch-field"><span class="field-label">Règle activée</span><ha-switch id="rule-enabled" data-field="enabled" ${rule.enabled ? "checked" : ""}></ha-switch></div>
-        <div class="actions full"><ha-button appearance="outlined" data-action="cancel-rule">Annuler</ha-button><ha-button appearance="filled" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
+        <div class="actions full"><ha-button appearance="plain" data-action="cancel-rule">Annuler</ha-button><ha-button appearance="filled" data-action="save-rule" ${this._busy ? "disabled" : ""}>Enregistrer</ha-button></div>
       </form>
     </section>`;
   }
@@ -416,7 +413,7 @@ class AlertManagerPanel extends HTMLElement {
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
           <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="Délai en secondes"><span slot="end">secondes</span></ha-input>
-          <ha-button appearance="outlined" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</ha-button>
+          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</ha-button>
         </div>`).join("") : '<div class="empty compact">Aucun délai particulier.</div>'}</div>
       </section>
       <div class="actions"><ha-button appearance="filled" data-action="save-settings" ${this._busy ? "disabled" : ""}>Enregistrer les paramètres</ha-button></div>
@@ -697,16 +694,16 @@ class AlertManagerPanel extends HTMLElement {
   _styles() {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
-      *{box-sizing:border-box}ha-top-app-bar-fixed{--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{display:flex;flex:1;justify-content:center;height:var(--header-height);overflow:auto;color:var(--sidebar-text-color,var(--primary-text-color,#212121))}.native-tabs ha-tab{flex:0 1 auto}.native-tabs ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
+      *{box-sizing:border-box}ha-top-app-bar-fixed{--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{width:100%;color:var(--sidebar-text-color,var(--primary-text-color,#212121));--ha-tab-active-text-color:var(--primary-color);--ha-tab-indicator-color:var(--primary-color);--ha-tab-track-color:transparent}.tab-label{display:inline-flex;align-items:center;gap:var(--ha-space-2,8px);white-space:nowrap}.tab-label ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .header-count{min-width:94px;padding:12px 18px;border-radius:18px;text-align:center;background:var(--secondary-background-color,#fff)}.header-count strong{font-size:28px;display:block}.header-count span{font-size:12px;color:var(--secondary-text-color,#727272)}.header-count.has-alert{background:var(--error-color,#db4437);color:white}.header-count.has-alert span{color:white}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}
       .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-color,#03a9f4);font-weight:700;text-align:left}.entity-link:hover{text-decoration:underline}.entity-link:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:3px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}dl{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:10px;margin:0}dl div{min-width:0}dt{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color,#727272)}dd{margin:3px 0 0;overflow-wrap:anywhere}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}
-      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-medium,500)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:center}.delay-row ha-input{min-width:0}
+      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-medium,500)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}.rule-status{font-size:var(--ha-font-size-l,16px)}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:end}.delay-row ha-input{min-width:0}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
-      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.native-tabs{justify-content:flex-start}.native-tabs ha-tab{flex:1;min-width:0}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}}
+      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}}
     `;
   }
 }
