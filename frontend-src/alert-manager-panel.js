@@ -29,7 +29,8 @@ const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41
 const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
 const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
-const MDI_CONTENT_COPY = "M19,21H8V7H19M19,5H8C6.9,5 6,5.9 6,7V21C6,22.1 6.9,23 8,23H19C20.1,23 21,22.1 21,21V7C21,5.9 20.1,5 19,5M16,1H4C2.9,1 2,1.9 2,3V17H4V3H16V1Z";
+const MDI_CHECK = "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z";
+const MDI_CHECK_CIRCLE_OUTLINE = "M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 
 const esc = (value) =>
@@ -58,7 +59,7 @@ const newRuleDefaults = () => ({
   message: "",
 });
 
-const buildOverviewItems = (activeAlerts = [], pendingAlerts = []) => {
+const buildOverviewItems = (activeAlerts = [], pendingAlerts = [], acknowledgedAlerts = []) => {
   const groupByStatus = (alerts, status) => {
     const sources = alerts.map((alert) => ({ alert, status }));
     const deviceCounts = new Map();
@@ -91,6 +92,7 @@ const buildOverviewItems = (activeAlerts = [], pendingAlerts = []) => {
   return [
     ...groupByStatus(activeAlerts, "active"),
     ...groupByStatus(pendingAlerts, "pending"),
+    ...groupByStatus(acknowledgedAlerts, "acknowledged"),
   ];
 };
 
@@ -107,10 +109,12 @@ class AlertManagerPanel extends HTMLElement {
     this._packs = [];
     this._alerts = {
       active_count: 0,
+      acknowledge_count: 0,
       pending_count: 0,
       tracked_count: 0,
       alerts: [],
       pending: [],
+      acknowledge: [],
     };
     this._activeTab = "overview";
     this._editingRule = null;
@@ -269,10 +273,12 @@ class AlertManagerPanel extends HTMLElement {
     if (Array.isArray(attributes.alerts) && Array.isArray(attributes.pending)) {
       this._alerts = {
         active_count: Number(attributes.active_count ?? state.state ?? 0),
+        acknowledge_count: Number(attributes.acknowledge_count ?? attributes.acknowledge?.length ?? 0),
         pending_count: Number(attributes.pending_count ?? 0),
         tracked_count: Number(attributes.tracked_count ?? 0),
         alerts: attributes.alerts,
         pending: attributes.pending,
+        acknowledge: Array.isArray(attributes.acknowledge) ? attributes.acknowledge : [],
       };
       return true;
     }
@@ -369,6 +375,11 @@ class AlertManagerPanel extends HTMLElement {
         ? () => window.history.back()
         : undefined;
     }
+    this.shadowRoot.querySelectorAll(".alert-ack-action").forEach((button) => {
+      button.path = button.dataset.action === "unacknowledge-alert"
+        ? MDI_CHECK_CIRCLE_OUTLINE
+        : MDI_CHECK;
+    });
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
       const closeButton = this.shadowRoot.querySelector("#rule-editor-close");
@@ -462,7 +473,11 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderOverview() {
-    const items = buildOverviewItems(this._alerts.alerts, this._alerts.pending);
+    const items = buildOverviewItems(
+      this._alerts.alerts,
+      this._alerts.pending,
+      this._alerts.acknowledge,
+    );
     return `
       <section class="summary">
         <article><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></article>
@@ -473,35 +488,44 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderOverviewAlerts(items) {
-    const activeItems = items.filter((item) => item.kind === "device"
-      ? item.alerts.some((source) => source.status === "active")
-      : item.status === "active");
-    const pendingItems = items.filter((item) => !activeItems.includes(item));
+    const itemStatus = (item) => item.kind === "device" ? item.alerts[0]?.status : item.status;
+    const activeItems = items.filter((item) => itemStatus(item) === "active");
+    const pendingItems = items.filter((item) => itemStatus(item) === "pending");
+    const acknowledgedItems = items.filter((item) => itemStatus(item) === "acknowledged");
     const renderSection = (title, statusItems, status, count, emptyText) => `
       <section class="alert-group alert-group-${status}">
         <div class="alert-group-header"><h2>${title}</h2><span class="alert-group-count">${count}</span></div>
         ${statusItems.length ? `<div class="alert-list alert-list-${status}">
         ${statusItems.map((item) => item.kind === "device"
           ? this._renderDeviceGroup(item)
-          : this._renderAlert(item.alert, item.status === "active")).join("")}
+          : this._renderAlert(item.alert, item.status)).join("")}
         </div>` : `<ha-card outlined class="alert-empty"><div class="empty compact">${emptyText}</div></ha-card>`}
       </section>`;
-    return `${renderSection(this._t("overview.section_active"), activeItems, "active", this._alerts.active_count, this._t("overview.empty_active"))}
-      ${renderSection(this._t("overview.section_upcoming"), pendingItems, "pending", this._alerts.pending_count, this._t("overview.empty_upcoming"))}`;
+    return `${renderSection(this._t("overview.section_active"), activeItems, "active", this._alerts.alerts?.length ?? 0, this._t("overview.empty_active"))}
+      ${renderSection(this._t("overview.section_upcoming"), pendingItems, "pending", this._alerts.pending_count, this._t("overview.empty_upcoming"))}
+      ${renderSection(this._t("overview.section_acknowledged"), acknowledgedItems, "acknowledged", this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0, this._t("overview.empty_acknowledged"))}`;
   }
 
-  _renderAlert(alert, active) {
+  _renderAlert(alert, alertStatus) {
+    const status = typeof alertStatus === "string"
+      ? alertStatus
+      : alertStatus ? "active" : "pending";
+    const active = status !== "pending";
+    const acknowledged = status === "acknowledged";
     const value = alert.unit ? `${alert.value} ${alert.unit}` : alert.value;
     const entityExists = Boolean(this._hass?.states?.[alert.entity_id]);
     const entityName = esc(alert.name || alert.entity_id);
     const title = entityExists
       ? `<button type="button" class="entity-link" data-action="more-info" data-entity-id="${esc(alert.entity_id)}">${entityName}</button>`
       : `<strong>${entityName}</strong>`;
-    return `<ha-card outlined class="alert-card ${active ? "is-active" : "is-pending"}">
+    return `<ha-card outlined class="alert-card is-${status}">
       <div class="alert-card-header">
-        <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${active ? MDI_ALERT_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
+        <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${acknowledged ? MDI_CHECK_CIRCLE_OUTLINE : active ? MDI_ALERT_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
         <div class="alert-title">${title}<code>${esc(alert.entity_id)}</code></div>
-        <strong class="alert-current-value">${esc(value ?? "—")}</strong>
+        <div class="alert-header-actions">
+          <strong class="alert-current-value">${esc(value ?? "—")}</strong>
+          ${this._renderAlertAction(alert, status)}
+        </div>
       </div>
       <div class="alert-card-content">
         <dl class="alert-details">
@@ -509,13 +533,14 @@ class AlertManagerPanel extends HTMLElement {
         ${alert.area ? `<div><dt>${esc(this._t("overview.area"))}</dt><dd>${esc(alert.area)}</dd></div>` : ""}
         <div class="alert-condition"><dt>${esc(this._t("overview.condition"))}</dt><dd title="${esc(this._conditionText(alert))}">${esc(this._conditionText(alert))}</dd></div>
         <div><dt>${esc(this._t("overview.detected"))}</dt><dd>${esc(this._date(alert.detected_at))}</dd></div>
-        <div><dt>${esc(this._t(active ? "overview.active_since" : "overview.remaining"))}</dt><dd>${
-          active
-            ? esc(this._date(alert.active_since))
+        <div><dt>${esc(this._t(acknowledged ? "overview.acknowledged" : active ? "overview.active_since" : "overview.remaining"))}</dt><dd>${
+          acknowledged
+            ? esc(this._acknowledgementDetails(alert))
+            : active
+              ? esc(this._date(alert.active_since))
             : `<span data-due="${esc(alert.due_at)}">${esc(this._remaining(alert.due_at))}</span>`
         }</dd></div>
         </dl>
-        ${this._renderAlertControls(alert, active)}
       </div>
     </ha-card>`;
   }
@@ -523,15 +548,17 @@ class AlertManagerPanel extends HTMLElement {
   _renderDeviceGroup(group) {
     const first = group.alerts[0]?.alert ?? {};
     const activeCount = group.alerts.filter((item) => item.status === "active").length;
-    const pendingCount = group.alerts.length - activeCount;
-    const stateClass = activeCount ? "is-active" : "is-pending";
+    const pendingCount = group.alerts.filter((item) => item.status === "pending").length;
+    const acknowledgedCount = group.alerts.filter((item) => item.status === "acknowledged").length;
+    const stateClass = activeCount ? "is-active" : acknowledgedCount ? "is-acknowledged" : "is-pending";
     const statusText = [
       activeCount ? this._t("overview.status_active_count", { count: activeCount }) : "",
       pendingCount ? this._t("overview.status_pending_count", { count: pendingCount }) : "",
+      acknowledgedCount ? this._t("overview.status_acknowledged_count", { count: acknowledgedCount }) : "",
     ].filter(Boolean).join(" · ");
     return `<ha-card outlined class="device-alert-group ${stateClass}" data-device-id="${esc(group.device_id)}">
       <div class="device-group-header">
-        <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${activeCount ? MDI_ALERT_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
+        <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${activeCount ? MDI_ALERT_CIRCLE_OUTLINE : acknowledgedCount ? MDI_CHECK_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
         <div><h3>${esc(first.device_name || this._t("overview.device_fallback"))}</h3>${first.area ? `<small>${esc(first.area)}</small>` : ""}</div>
         <strong>${esc(statusText)}</strong>
       </div>
@@ -542,48 +569,42 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderDeviceAlertRow(alert, status) {
-    const active = status === "active";
+    const active = status !== "pending";
+    const acknowledged = status === "acknowledged";
     const entityExists = Boolean(this._hass?.states?.[alert.entity_id]);
     const entityName = esc(alert.name || alert.entity_id);
     const title = entityExists
       ? `<button type="button" class="entity-link" data-action="more-info" data-entity-id="${esc(alert.entity_id)}">${entityName}</button>`
       : `<strong>${entityName}</strong>`;
     const value = alert.unit ? `${alert.value} ${alert.unit}` : alert.value;
-    const time = active
-      ? esc(this._date(alert.active_since))
+    const time = acknowledged
+      ? esc(this._acknowledgementDetails(alert))
+      : active
+        ? esc(this._date(alert.active_since))
       : `<span data-due="${esc(alert.due_at)}">${esc(this._remaining(alert.due_at))}</span>`;
-    return `<article class="device-alert-row ${active ? "is-active" : "is-pending"}">
+    return `<article class="device-alert-row is-${status}">
       <div class="device-alert-source">${title}<code>${esc(alert.entity_id)}</code></div>
       <strong class="device-alert-value">${esc(value ?? "—")}</strong>
-      <span class="device-alert-status">${esc(this._t(active ? "overview.status_active" : "overview.status_pending"))}</span>
+      <div class="device-alert-state"><span class="device-alert-status">${esc(this._t(`overview.status_${status}`))}</span>${this._renderAlertAction(alert, status)}</div>
       <div class="device-alert-condition"><small>${esc(this._t("overview.condition"))}</small><span>${esc(this._conditionText(alert))}</span></div>
-      <div class="device-alert-time"><small>${esc(this._t(active ? "overview.active_since" : "overview.remaining"))}</small><span>${time}</span></div>
-      ${this._renderAlertControls(alert, active, true)}
+      <div class="device-alert-time"><small>${esc(this._t(acknowledged ? "overview.acknowledged" : active ? "overview.active_since" : "overview.remaining"))}</small><span>${time}</span></div>
     </article>`;
   }
 
-  _renderAlertControls(alert, active, compact = false) {
-    const alertId = alert.id || "";
-    const acknowledged = active && alert.acknowledged === true;
+  _acknowledgementDetails(alert) {
     const author = alert.acknowledged_by || this._t("overview.acknowledged_system");
-    const acknowledgement = acknowledged
-      ? `<div class="acknowledgement-state">
-          <strong class="acknowledged-badge">${esc(this._t("overview.acknowledged"))}</strong>
-          <span>${esc(this._t("overview.acknowledged_details", {
-            date: this._date(alert.acknowledged_at),
-            author,
-          }))}</span>
-        </div>`
-      : "";
-    const action = active
-      ? `<ha-button appearance="${acknowledged ? "plain" : "accent"}" ${acknowledged ? "" : "variant=\"brand\""} data-action="${acknowledged ? "unacknowledge-alert" : "acknowledge-alert"}" data-alert-id="${esc(alertId)}" aria-label="${esc(this._t(acknowledged ? "overview.aria_unacknowledge" : "overview.aria_acknowledge", { id: alertId }))}" ${this._busy ? "disabled" : ""}>${esc(this._t(acknowledged ? "overview.unacknowledge" : "overview.acknowledge"))}</ha-button>`
-      : "";
-    return `<div class="alert-controls ${compact ? "is-compact" : ""}">
-      <div class="alert-identity"><small>${esc(this._t("overview.alert_id"))}</small><code>${esc(alertId)}</code></div>
-      <ha-button appearance="plain" class="copy-alert-id" data-action="copy-alert-id" data-alert-id="${esc(alertId)}" aria-label="${esc(this._t("overview.aria_copy_alert_id", { id: alertId }))}"><ha-svg-icon slot="start" path="${MDI_CONTENT_COPY}"></ha-svg-icon>${esc(this._t("overview.copy_alert_id"))}</ha-button>
-      ${acknowledgement}
-      ${action}
-    </div>`;
+    return this._t("overview.acknowledged_details", {
+      date: this._date(alert.acknowledged_at),
+      author,
+    });
+  }
+
+  _renderAlertAction(alert, status) {
+    if (status === "pending") return "";
+    const alertId = alert.id || "";
+    const acknowledged = status === "acknowledged";
+    const label = this._t(acknowledged ? "overview.aria_unacknowledge" : "overview.aria_acknowledge", { id: alertId });
+    return `<ha-icon-button class="alert-ack-action" data-action="${acknowledged ? "unacknowledge-alert" : "acknowledge-alert"}" data-alert-id="${esc(alertId)}" aria-label="${esc(label)}" title="${esc(label)}" ${this._busy ? "disabled" : ""}></ha-icon-button>`;
   }
 
   _renderAutomatic() {
@@ -741,16 +762,6 @@ class AlertManagerPanel extends HTMLElement {
         composed: true,
         detail: { entityId },
       }));
-      return;
-    }
-    if (action === "copy-alert-id") {
-      try {
-        await navigator.clipboard.writeText(button.dataset.alertId);
-        this._notice = { kind: "success", text: this._t("success.alert_id_copied") };
-      } catch (_error) {
-        this._notice = { kind: "error", text: this._t("errors.copy_failed") };
-      }
-      this._render();
       return;
     }
     if (action === "acknowledge-alert" || action === "unacknowledge-alert") {
@@ -1187,12 +1198,14 @@ class AlertManagerPanel extends HTMLElement {
       *{box-sizing:border-box}main{max-width:1400px;margin:0 auto;padding:24px}main.rules-page{max-width:none}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-group{margin-bottom:24px}.alert-group+.alert-group{margin-top:28px}.alert-group-header{display:flex;align-items:center;gap:8px;margin:0 4px 12px}.alert-group-header h2{margin:0}.alert-group-count{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 8px;border-radius:var(--ha-border-radius-pill,999px);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500)}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}.alert-card,.device-alert-group{height:100%;overflow:hidden;--alert-state-color:var(--warning-color,#f5a623)}.alert-card.is-active,.device-alert-group.is-active{--alert-state-color:var(--error-color,#db4437)}.alert-card-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.alert-status-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;color:var(--alert-state-color);background:color-mix(in srgb,var(--alert-state-color) 12%,transparent)}.alert-status-icon ha-svg-icon{width:24px;height:24px}.alert-title{min-width:0;line-height:1.35}.alert-title code{display:block;margin-top:2px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.alert-current-value{color:var(--alert-state-color);font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);text-align:right;overflow-wrap:anywhere}.alert-card-content{padding:0 16px 16px;border-top:1px solid var(--divider-color,#ddd)}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer}.entity-link:hover{color:var(--primary-color,#03a9f4)}.entity-link:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:3px}.device-group-header{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:16px}.device-group-header h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.35;margin:0}.device-group-header small{margin:2px 0 0}.device-group-header>strong{color:var(--alert-state-color);text-align:right}.device-alert-rows{border-top:1px solid var(--divider-color,#ddd)}.device-alert-row{display:grid;grid-template-columns:minmax(0,1.25fr) auto auto;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--divider-color,#ddd)}.device-alert-row:last-child{border-bottom:0}.device-alert-source{min-width:0}.device-alert-source code{display:block;color:var(--secondary-text-color,#727272)}.device-alert-value{color:var(--alert-state-color);text-align:right}.device-alert-status{color:var(--alert-state-color);font-weight:var(--ha-font-weight-medium,500);text-align:right}.device-alert-condition{grid-column:1/3;min-width:0}.device-alert-condition span,.device-alert-time span{display:block;overflow-wrap:anywhere}.device-alert-time{text-align:right}.device-alert-row.is-pending{--alert-state-color:var(--warning-color,#f5a623)}.device-alert-row.is-active{--alert-state-color:var(--error-color,#db4437)}.alert-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--divider-color,#ddd)}.alert-controls.is-compact{grid-column:1/-1}.alert-identity{min-width:0}.alert-identity small{margin:0}.alert-identity code{display:block;user-select:all}.copy-alert-id{justify-self:end}.acknowledgement-state{display:flex;align-items:center;gap:8px;min-width:0}.acknowledgement-state span{color:var(--secondary-text-color,#727272);overflow-wrap:anywhere}.acknowledged-badge{flex:none;padding:2px 8px;border-radius:var(--ha-border-radius-pill,999px);background:color-mix(in srgb,var(--success-color,#43a047) 14%,transparent);color:var(--success-color,#2e7d32);font-size:var(--ha-font-size-s,12px)}.alert-controls>ha-button:last-child{justify-self:end}
+      .alert-card.is-acknowledged,.device-alert-group.is-acknowledged,.device-alert-row.is-acknowledged{--alert-state-color:var(--success-color,#43a047)}.alert-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0}.alert-ack-action{flex:none;color:var(--alert-state-color);--mdc-icon-button-size:40px}.alert-ack-action ha-svg-icon{width:22px;height:22px}.device-alert-state{display:flex;align-items:center;justify-content:flex-end;gap:2px;color:var(--alert-state-color)}.device-alert-state .device-alert-status{color:inherit}.alert-group-acknowledged .alert-group-count{color:var(--success-color,#2e7d32)}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}.alert-details{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:12px 16px;margin:14px 0 0}.alert-details div{min-width:0}dt{font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-normal,400);color:var(--secondary-text-color,#727272)}dd{margin:2px 0 0;overflow-wrap:anywhere}.alert-condition{grid-column:1/-1}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}.alert-empty{margin-bottom:20px}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
       .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:700px){.alert-card-header{grid-template-columns:40px minmax(0,1fr) auto}.alert-header-actions{grid-column:auto}.alert-current-value{grid-column:auto;text-align:right}.device-alert-state{grid-column:2}}
     `;
   }
 }

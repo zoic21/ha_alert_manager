@@ -85,17 +85,17 @@ latérale et reste réservé aux administrateurs.
 
 Le panel est réservé aux administrateurs et contient quatre sections :
 
-1. **Vue d’ensemble** : alertes actives et en attente, valeur, condition,
-   équipement, pièce et dates. Le nom de la source ouvre le dialogue natif
+1. **Vue d’ensemble** : sections distinctes pour les alertes actives, à venir et
+   acquittées, avec valeur, condition, équipement, pièce et dates. Le nom de la
+   source ouvre le dialogue natif
    « Plus d’informations ». Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
    Plusieurs alertes rattachées au même identifiant d’appareil sont réunies dans
-   une tuile avec une ligne par source. Une même tuile peut contenir des lignes
-   actives et en attente. Une entité sans appareil, ou un appareil qui ne porte
-   plus qu’une alerte, conserve une tuile individuelle compacte.
-   Chaque alerte affiche son identifiant copiable et conserve son propre bouton
-   **Acquitter** ou **Retirer l’acquittement**, y compris dans un groupe. Aucun
-   bouton n’agit sur toutes les alertes d’un appareil.
+   une tuile avec une ligne par source au sein d’une même section. Une entité sans
+   appareil, ou un appareil qui ne porte plus qu’une alerte, conserve une tuile
+   individuelle compacte. Chaque alerte active conserve sa propre action compacte
+   **Acquitter** ou **Retirer l’acquittement** dans l’en-tête, y compris dans un
+   groupe. Aucun bouton n’agit sur toutes les alertes d’un appareil.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
 2. **Surveillance automatique** : activation, délais et seuil de batterie. Les
@@ -206,13 +206,14 @@ réutilisés tels quels, sans migration destructive.
 ## Capteur unique
 
 L’intégration crée exactement `sensor.alert_manager`. Son état est le nombre
-d’alertes actives. Ses attributs ne contiennent que les alertes actives et en
-attente :
+d’alertes actives. Ses attributs séparent les alertes actives non acquittées,
+acquittées et en attente :
 
 ```yaml
 state: 2
 attributes:
   active_count: 2
+  acknowledge_count: 1
   pending_count: 1
   tracked_count: 47
   alerts:
@@ -228,6 +229,18 @@ attributes:
       detected_at: "2026-08-24T14:10:00+02:00"
       due_at: "2026-08-24T14:25:00+02:00"
       active_since: "2026-08-24T14:25:00+02:00"
+      delay: 900
+      acknowledged: false
+  acknowledge:
+    - id: connectivity:binary_sensor.unas_connectivity
+      type: connectivity
+      entity_id: binary_sensor.unas_connectivity
+      name: Connectivité UNAS
+      value: "off"
+      condition: Connectivité coupée
+      detected_at: "2026-08-25T16:15:00+02:00"
+      due_at: "2026-08-25T16:30:00+02:00"
+      active_since: "2026-08-25T16:30:00+02:00"
       delay: 900
       acknowledged: true
       acknowledged_at: "2026-08-25T16:30:00+02:00"
@@ -249,8 +262,11 @@ attributes:
 
 Aucun historique résolu et aucun compte à rebours périodique ne sont enregistrés
 dans les attributs. `device_id` est facultatif et n’est présent que pour une entité
-rattachée à un appareil. Les listes `alerts` et `pending` restent toujours des
-alertes individuelles : aucun groupe visuel n’est persisté ou exposé au capteur.
+rattachée à un appareil. Les listes `alerts`, `pending` et `acknowledge` restent
+toujours des alertes individuelles : aucun groupe visuel n’est persisté ou exposé
+au capteur. `alerts` contient les alertes actives non acquittées, tandis que
+`acknowledge` contient les alertes actives acquittées. `acknowledge_count` donne
+la taille de cette dernière liste.
 `condition` est conservé pour les automatisations existantes. Les champs
 `condition_key` et `condition_params`, présents pour les conditions générées par
 Alert Manager, permettent au panneau de les afficher dans la langue de
@@ -259,9 +275,9 @@ l’utilisateur. Un message personnalisé reste inchangé et n’est jamais trad
 Pour une alerte active non acquittée, `acknowledged` vaut `false`. Les champs
 `acknowledged_at` et `acknowledged_by` ne sont présents qu’après acquittement.
 `acknowledged_by` est absent lorsque l’action vient d’une automatisation ou du
-système. Une alerte acquittée reste active, reste dans `alerts` et reste comptée
-dans `active_count` et dans l’état de `sensor.alert_manager` tant que sa condition
-reste vraie.
+système. Une alerte acquittée passe de `alerts` à `acknowledge`, mais reste active
+et reste comptée dans `active_count` et dans l’état de `sensor.alert_manager` tant
+que sa condition reste vraie.
 
 ## Acquittement et services
 

@@ -52,8 +52,10 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
 
     assert run(manager.async_acknowledge(alert_id, "Loïc")) is True
     snapshot = manager.public_snapshot()
-    alert = snapshot["alerts"][0]
+    alert = snapshot["acknowledge"][0]
     assert snapshot["active_count"] == active_count == 1
+    assert snapshot["acknowledge_count"] == 1
+    assert snapshot["alerts"] == []
     assert alert["acknowledged"] is True
     assert alert["acknowledged_by"] == "Loïc"
     assert alert["acknowledged_at"].endswith("+00:00")
@@ -96,7 +98,7 @@ def test_acknowledgement_survives_restart_without_replaying_event(hass, entry, s
 
     second = AlertManager(hass, entry)
     run(second.async_setup())
-    alert = second.public_snapshot()["alerts"][0]
+    alert = second.public_snapshot()["acknowledge"][0]
     assert alert["acknowledged"] is True
     assert "acknowledged_by" not in alert
     assert len(event_data(hass, EVENT_ALERT_ACKNOWLEDGED)) == before
@@ -264,6 +266,8 @@ def test_failed_persistence_rolls_back_acknowledgement(hass, entry, set_now):
     with pytest.raises(OSError, match="disk full"):
         run(manager.async_acknowledge(alert_id, "Loïc"))
     assert manager.records[alert_id].acknowledged is False
-    assert manager.public_snapshot()["alerts"][0]["acknowledged"] is False
+    snapshot = manager.public_snapshot()
+    assert snapshot["alerts"][0]["acknowledged"] is False
+    assert snapshot["acknowledge"] == []
     assert not event_data(hass, EVENT_ALERT_ACKNOWLEDGED)
     manager.storage.async_save = original_save

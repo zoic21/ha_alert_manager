@@ -639,12 +639,18 @@ class AlertManager:
             key=lambda record: record.due_at.astimezone(UTC),
         )
         active = [record.as_public_dict() for record in active_records]
+        unacknowledged = [
+            alert for alert in active if alert.get("acknowledged") is not True
+        ]
+        acknowledged = [alert for alert in active if alert.get("acknowledged") is True]
         pending = [record.as_public_dict() for record in pending_records]
         return {
             "active_count": len(active),
+            "acknowledge_count": len(acknowledged),
             "pending_count": len(pending),
             "tracked_count": self._tracked_count(),
-            "alerts": active,
+            "alerts": unacknowledged,
+            "acknowledge": acknowledged,
             "pending": pending,
         }
 

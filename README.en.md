@@ -68,19 +68,19 @@ messages and comparison values are user data and are never translated.
 
 ## Overview and device grouping
 
-The overview separates active alerts (red) from upcoming alerts (orange). Each
-card shows the source, current value, translated condition, device, area and
-timestamps. Selecting an existing source opens Home Assistant's native more-info
-dialog.
+The overview separates active alerts (red), upcoming alerts (orange) and
+acknowledged alerts (green). Each card shows the source, current value,
+translated condition, device, area and timestamps. Selecting an existing source
+opens Home Assistant's native more-info dialog.
 
 Several alerts with the same `device_id` are grouped inside the same status
 section. This is display-only: alert IDs, lifecycle, sensor attributes and events
 remain independent. A lone device alert and an entity without a device use a
 compact individual card.
 
-Every alert displays its copyable stable ID. Each active row has its own
-**Acknowledge** or **Remove acknowledgement** action, including inside a device
-group. There is no device-wide acknowledgement action.
+Each active row has its own compact **Acknowledge** or **Remove acknowledgement**
+header action, including inside a device group. There is no device-wide
+acknowledgement action.
 
 The remaining time is calculated in the browser from `due_at`; Alert Manager does
 not write a countdown to Recorder every second.
@@ -166,15 +166,18 @@ CHRG or ERROR`, `sensor.mode not_equals off or idle`, and
 ## `sensor.alert_manager`
 
 The integration creates exactly `sensor.alert_manager`. Its state is the active
-alert count. Its attributes contain only active and pending individual alerts:
+alert count. Its attributes separate unacknowledged active, acknowledged active
+and pending individual alerts:
 
 ```yaml
 state: 1
 attributes:
   active_count: 1
+  acknowledge_count: 1
   pending_count: 1
   tracked_count: 47
-  alerts:
+  alerts: []
+  acknowledge:
     - id: unavailable:sensor.nas_cpu
       type: unavailable
       entity_id: sensor.nas_cpu
@@ -205,6 +208,11 @@ attributes:
       delay: 900
 ```
 
+`alerts` contains unacknowledged active alerts, while `acknowledge` contains
+acknowledged active alerts; `acknowledge_count` is the size of the latter list.
+All three public lists (`alerts`, `pending` and `acknowledge`) contain individual
+alerts only, never visual device groups.
+
 Optional metadata includes `device_id`, `device_name`, `area`, `integration` and
 `unit`. `condition` is retained for existing automations. Generated conditions
 also provide `condition_key` and `condition_params` so the panel can render the
@@ -214,8 +222,8 @@ key. Resolved history and periodic countdown values are not recorded.
 For an unacknowledged active alert, `acknowledged` is `false`.
 `acknowledged_at` and `acknowledged_by` are present only after acknowledgement;
 the author is absent for an automation or system call. Acknowledgement does not
-resolve the alert: it remains in `alerts` and remains included in `active_count`
-and the state of `sensor.alert_manager` while its condition is true.
+resolve the alert: it moves from `alerts` to `acknowledge` but remains included in
+`active_count` and the state of `sensor.alert_manager` while its condition is true.
 
 ## Acknowledgement services
 

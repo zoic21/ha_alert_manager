@@ -48,6 +48,8 @@ def test_creation_of_single_sensor(hass, entry):
     assert entities[0]._attr_translation_key == "alert_manager"
     assert entities[0].native_value == 0
     assert entities[0].extra_state_attributes["alerts"] == []
+    assert entities[0].extra_state_attributes["acknowledge"] == []
+    assert entities[0].extra_state_attributes["acknowledge_count"] == 0
 
 
 def test_normal_to_pending_and_no_duplicate(hass, entry):

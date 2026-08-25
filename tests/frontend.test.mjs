@@ -125,10 +125,12 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
     state: "0",
     attributes: {
       active_count: 0,
+      acknowledge_count: 0,
       pending_count: 0,
       tracked_count: 12,
       alerts: [],
       pending: [],
+      acknowledge: [],
     },
   };
   panel.hass = { states: { "sensor.alert_manager": sensor } };
@@ -382,10 +384,12 @@ test("alert overview uses native Home Assistant cards without nested panels", ()
 
   panel._alerts = {
     active_count: 1,
+    acknowledge_count: 0,
     pending_count: 0,
     tracked_count: 1,
     alerts: [alert],
     pending: [],
+    acknowledge: [],
   };
   const populated = panel._renderOverviewAlerts(buildOverviewItems([alert], []));
   panel._alerts.active_count = 0;
@@ -394,31 +398,48 @@ test("alert overview uses native Home Assistant cards without nested panels", ()
 
   assert.match(populated, /<section class="alert-group alert-group-active">/);
   assert.match(populated, /<section class="alert-group alert-group-pending">/);
+  assert.match(populated, /<section class="alert-group alert-group-acknowledged">/);
   assert.match(populated, /<ha-card outlined class="alert-card is-active"/);
   assert.doesNotMatch(populated, /<section class="panel">/);
   assert.match(empty, /<ha-card outlined class="alert-empty">/);
 });
 
-test("overview renders active and upcoming alerts in separate vertical sections", () => {
+test("overview renders active, upcoming and acknowledged alerts in separate vertical sections", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
   panel._alerts = {
-    active_count: 1,
+    active_count: 2,
+    acknowledge_count: 1,
     pending_count: 1,
     alerts: [{ entity_id: "zone.home", name: "Maison", condition: "Vide" }],
     pending: [{ entity_id: "media_player.tv", name: "TV", condition: "Indisponible" }],
+    acknowledge: [{
+      id: "unavailable:sensor.nas",
+      entity_id: "sensor.nas",
+      name: "NAS",
+      condition: "Indisponible",
+      acknowledged: true,
+      acknowledged_at: "2026-08-25T14:30:00Z",
+    }],
   };
 
   const html = panel._renderOverviewAlerts(
-    buildOverviewItems(panel._alerts.alerts, panel._alerts.pending),
+    buildOverviewItems(
+      panel._alerts.alerts,
+      panel._alerts.pending,
+      panel._alerts.acknowledge,
+    ),
   );
 
   assert.match(html, /class="alert-list alert-list-active"[\s\S]*is-active/);
   assert.match(html, /class="alert-list alert-list-pending"[\s\S]*is-pending/);
+  assert.match(html, /class="alert-list alert-list-acknowledged"[\s\S]*is-acknowledged/);
   assert.match(html, /<h2>Alertes actives<\/h2>/);
   assert.match(html, /<h2>Alertes à venir<\/h2>/);
+  assert.match(html, /<h2>Alertes acquittées<\/h2>/);
   assert.ok(html.indexOf("alert-group-active") < html.indexOf("alert-group-pending"));
+  assert.ok(html.indexOf("alert-group-pending") < html.indexOf("alert-group-acknowledged"));
   assert.match(panel._styles(), /\.alert-group\+\.alert-group\{margin-top:28px\}/);
 });
 
@@ -481,7 +502,7 @@ test("multiple alerts from one device still form a group within one section", ()
   assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
 });
 
-test("individual active alerts expose acknowledgement state and real service actions", async () => {
+test("acknowledged alerts stay compact and expose the real unacknowledge action", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: { "sensor.test": { state: "unavailable" } } };
@@ -496,15 +517,17 @@ test("individual active alerts expose acknowledgement state and real service act
     acknowledged_at: "2026-08-25T14:30:00Z",
     acknowledged_by: "Loïc",
   };
-  const html = panel._renderAlert(alert, true);
+  const html = panel._renderAlert(alert, "acknowledged");
 
   assert.match(html, /Acquittée/);
   assert.match(html, /Loïc/);
-  assert.match(html, /unavailable:sensor\.test/);
-  assert.match(html, /data-action="copy-alert-id"/);
+  assert.doesNotMatch(html, /Identifiant de l’alerte/);
+  assert.doesNotMatch(html, /data-action="copy-alert-id"/);
+  assert.doesNotMatch(html, /class="alert-controls/);
   assert.match(html, /data-action="unacknowledge-alert"/);
   assert.match(html, /aria-label="Retirer l’acquittement/);
   assert.doesNotMatch(html, /data-action="acknowledge-alert"/);
+  assert.match(html, /class="alert-header-actions"/);
 
   const calls = [];
   panel._hass.callService = async (...args) => { calls.push(args); };
@@ -523,31 +546,38 @@ test("individual active alerts expose acknowledgement state and real service act
   ]]);
 });
 
-test("system acknowledgements and copy controls are translated and independent", async () => {
+test("active alerts expose a header acknowledgement action without growing the card", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const html = panel._renderAlert({
+    id: "unavailable:sensor.test",
+    entity_id: "sensor.test",
+    condition: "État indisponible",
+    active_since: "2026-08-25T14:00:00Z",
+  }, "active");
+
+  assert.match(html, /class="alert-header-actions"[\s\S]*data-action="acknowledge-alert"/);
+  assert.doesNotMatch(html, /alert-controls|copy-alert-id|Identifiant de l’alerte/);
+  assert.match(panel._styles(), /\.alert-card-header\{[^}]*grid-template-columns:40px minmax\(0,1fr\) auto/);
+});
+
+test("system acknowledgements use the translated fallback without an ID block", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: { "sensor.system": { state: "unavailable" } } };
-  panel._render = () => {};
   const alert = {
     id: "unavailable:sensor.system",
     entity_id: "sensor.system",
     acknowledged: true,
     acknowledged_at: "2026-08-25T14:30:00Z",
   };
-  assert.match(panel._renderAlert(alert, true), /Automatisation ou système/);
-
-  await panel._handleClick({
-    target: {
-      closest: () => ({
-        dataset: { action: "copy-alert-id", alertId: alert.id },
-      }),
-    },
-  });
-  assert.equal(navigator.clipboard.lastValue, alert.id);
-  assert.equal(panel._notice.text, "Identifiant de l’alerte copié");
+  const html = panel._renderAlert(alert, "acknowledged");
+  assert.match(html, /Automatisation ou système/);
+  assert.doesNotMatch(html, /copy-alert-id|Identifiant de l’alerte/);
 });
 
-test("grouped alerts retain separate ids and acknowledgement actions per row", () => {
+test("grouped alerts retain one compact acknowledgement action per row", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
@@ -566,7 +596,7 @@ test("grouped alerts retain separate ids and acknowledgement actions per row", (
         },
       },
       {
-        status: "active",
+        status: "acknowledged",
         alert: {
           id: "battery:sensor.two",
           entity_id: "sensor.two",
@@ -580,16 +610,14 @@ test("grouped alerts retain separate ids and acknowledgement actions per row", (
   };
   const html = panel._renderDeviceGroup(group);
 
-  assert.equal((html.match(/class="alert-controls is-compact"/g) ?? []).length, 2);
-  assert.equal((html.match(/data-action="copy-alert-id"/g) ?? []).length, 2);
+  assert.equal((html.match(/class="alert-ack-action"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-action="copy-alert-id"/g) ?? []).length, 0);
   assert.equal((html.match(/data-action="acknowledge-alert"/g) ?? []).length, 1);
   assert.equal((html.match(/data-action="unacknowledge-alert"/g) ?? []).length, 1);
-  assert.match(html, /unavailable:sensor\.one/);
-  assert.match(html, /battery:sensor\.two/);
   assert.doesNotMatch(html, /acknowledge-device|acknowledge-group/);
 });
 
-test("pending alerts expose their id but cannot be acknowledged from the panel", () => {
+test("pending alerts have neither alert ID controls nor acknowledgement actions", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
@@ -599,8 +627,7 @@ test("pending alerts expose their id but cannot be acknowledged from the panel",
     due_at: "2026-08-25T15:00:00Z",
   }, false);
 
-  assert.match(html, /battery:sensor\.pending/);
-  assert.match(html, /data-action="copy-alert-id"/);
+  assert.doesNotMatch(html, /Identifiant de l’alerte|copy-alert-id/);
   assert.doesNotMatch(html, /data-action="(?:un)?acknowledge-alert"/);
 });
 
