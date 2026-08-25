@@ -6,7 +6,7 @@ const TABS = [
 ];
 
 const CATEGORIES = [
-  ["unavailable", "Entités indisponibles", "État unavailable sur les domaines sélectionnés"],
+  ["unavailable", "Entités indisponibles", "État unavailable sur toutes les entités"],
   ["connectivity", "Connectivité", "Binary sensors connectivity à off"],
   ["unifi", "Équipements UniFi", "Trackers routeur UniFi absents"],
   ["battery", "Batteries faibles", "Capteurs battery sous leur seuil"],
@@ -36,7 +36,7 @@ const durationText = (seconds) => {
 
 const newRuleDefaults = () => ({
   name: "",
-  entity_id: "",
+  entity_ids: [],
   enabled: true,
   source: "state",
   attribute: "",
@@ -60,6 +60,8 @@ class AlertManagerPanel extends HTMLElement {
     this._notice = null;
     this._timer = null;
     this._sensorState = null;
+    this._settingsDraft = null;
+    this._entityDelayDraft = null;
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
   }
@@ -71,6 +73,8 @@ class AlertManagerPanel extends HTMLElement {
       this._load();
     } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
       this._render();
+    } else if (this.isConnected) {
+      this._hydrateSelectors();
     }
   }
 
@@ -110,6 +114,7 @@ class AlertManagerPanel extends HTMLElement {
     this._render();
     try {
       [this._config, this._alerts] = await this._loadPromise;
+      this._resetSettingsDraft();
       this._syncSensor();
       this._notice = null;
     } catch (error) {
@@ -186,7 +191,57 @@ class AlertManagerPanel extends HTMLElement {
         ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
         ${content}
       </main>`;
+    this._hydrateSelectors();
     this._updateCountdowns();
+  }
+
+  _configureSelector(id, selector, value, onChange) {
+    const element = this.shadowRoot.querySelector(`#${id}`);
+    if (!element) return;
+    element.hass = this._hass;
+    element.selector = selector;
+    element.value = value;
+    element.addEventListener("value-changed", (event) => onChange(event.detail?.value));
+  }
+
+  _hydrateSelectors() {
+    if (!this._hass || !this._config) return;
+    if (this._editingRule !== null) {
+      this._configureSelector(
+        "rule-entity-ids",
+        { entity: { multiple: true } },
+        this._editingRule.entity_ids ?? [],
+        (value) => { this._editingRule.entity_ids = Array.isArray(value) ? value : []; },
+      );
+    }
+    if (this._activeTab !== "settings") return;
+    this._ensureSettingsDraft();
+    this._configureSelector(
+      "excluded-labels",
+      { label: { multiple: true } },
+      this._settingsDraft.excluded_labels,
+      (value) => { this._settingsDraft.excluded_labels = Array.isArray(value) ? value : []; },
+    );
+    this._configureSelector(
+      "excluded-entities",
+      { entity: { multiple: true } },
+      this._settingsDraft.excluded_entities,
+      (value) => { this._settingsDraft.excluded_entities = Array.isArray(value) ? value : []; },
+    );
+    this._configureSelector(
+      "excluded-devices",
+      { device: { multiple: true } },
+      this._settingsDraft.excluded_devices,
+      (value) => { this._settingsDraft.excluded_devices = Array.isArray(value) ? value : []; },
+    );
+    this._entityDelayDraft.forEach((row, index) => {
+      this._configureSelector(
+        `delay-entity-${index}`,
+        { entity: {} },
+        row.entity_id || "",
+        (value) => { row.entity_id = typeof value === "string" ? value : ""; },
+      );
+    });
   }
 
   _renderTab() {
@@ -219,9 +274,14 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderAlert(alert, active) {
     const value = alert.unit ? `${alert.value} ${alert.unit}` : alert.value;
+    const entityExists = Boolean(this._hass?.states?.[alert.entity_id]);
+    const entityName = esc(alert.name || alert.entity_id);
+    const title = entityExists
+      ? `<button type="button" class="entity-link" data-action="more-info" data-entity-id="${esc(alert.entity_id)}">${entityName}</button>`
+      : `<strong>${entityName}</strong>`;
     return `<article class="alert-card ${active ? "is-active" : "is-pending"}">
       <div class="alert-title">
-        <div><strong>${esc(alert.name || alert.entity_id)}</strong><code>${esc(alert.entity_id)}</code></div>
+        <div>${title}<code>${esc(alert.entity_id)}</code></div>
       </div>
       <dl>
         <div><dt>Équipement</dt><dd>${esc(alert.device_name || "—")}</dd></div>
@@ -251,10 +311,7 @@ class AlertManagerPanel extends HTMLElement {
             ${this._numberField(`auto-${id}-delay`, "Délai", config.delay, "secondes", 0, 31536000)}
             ${id === "battery" ? this._numberField("battery-threshold", "Seuil", config.threshold, "%", -1000000000, 1000000000, "any") : ""}
           </div>
-          ${id === "unavailable" ? `<label class="full">Domaines surveillés
-            <textarea id="unavailable-domains" rows="5">${esc(config.domains.join("\n"))}</textarea>
-            <small>Un domaine par ligne. Actuellement ${config.domains.length} domaines.</small>
-          </label>` : ""}
+          ${id === "unavailable" ? "<small>Tous les domaines sont surveillés. Seul l’état unavailable est concerné.</small>" : ""}
           <small>Délai actuel : ${esc(durationText(config.delay))}</small>
         </section>`;
       }).join("")}
@@ -268,9 +325,9 @@ class AlertManagerPanel extends HTMLElement {
     return `<section class="panel">
       <div class="row between"><div><h2>Règles personnalisées</h2><p>Comparaisons simples sur l’état ou un attribut.</p></div>
       <button class="primary" data-action="new-rule">Nouvelle règle</button></div>
-      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entité</th><th>Condition</th><th>Durée</th><th>Active</th><th></th></tr></thead><tbody>
+      ${rules.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Entités</th><th>Condition</th><th>Durée</th><th>Active</th><th></th></tr></thead><tbody>
         ${rules.map((rule) => `<tr>
-          <td>${esc(rule.name)}</td><td><code>${esc(rule.entity_id)}</code></td>
+          <td>${esc(rule.name)}</td><td>${rule.entity_ids.map((entityId) => `<code>${esc(entityId)}</code>`).join("")}</td>
           <td>${esc(this._ruleSummary(rule))}</td><td>${esc(durationText(rule.duration))}</td>
           <td><button class="icon-button" data-action="toggle-rule" data-id="${esc(rule.id)}" title="Activer/désactiver">${rule.enabled ? "✓" : "—"}</button></td>
           <td class="nowrap"><button data-action="edit-rule" data-id="${esc(rule.id)}">Modifier</button> <button class="danger-button" data-action="delete-rule" data-id="${esc(rule.id)}">Supprimer</button></td>
@@ -281,12 +338,12 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
-    const entityOptions = Object.keys(this._hass?.states || {}).sort().map((id) => `<option value="${esc(id)}"></option>`).join("");
+    this._editingRule = rule;
     return `<section class="panel editor"><h2>${rule.id ? "Modifier" : "Créer"} une règle</h2>
       <form id="rule-form" class="fields">
         <input type="hidden" name="id" value="${esc(rule.id || "")}">
         ${this._textField("name", "Nom", rule.name, true)}
-        <label>Entité<input name="entity_id" list="entity-ids" value="${esc(rule.entity_id)}" required><datalist id="entity-ids">${entityOptions}</datalist></label>
+        <label class="full">Entités<ha-selector id="rule-entity-ids"></ha-selector><small>Chaque entité est évaluée indépendamment.</small></label>
         <label>Source<select name="source"><option value="state" ${rule.source === "state" ? "selected" : ""}>État principal</option><option value="attribute" ${rule.source === "attribute" ? "selected" : ""}>Attribut</option></select></label>
         ${this._textField("attribute", "Nom de l’attribut", rule.attribute || "")}
         <label>Opérateur<select name="operator">
@@ -302,20 +359,23 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderSettings() {
-    const entityDelays = Object.entries(this._config.entity_delays || {}).map(([id, delay]) => `${id}=${delay}`).join("\n");
+    this._ensureSettingsDraft();
     return `<form id="settings-form" class="stack">
       <section class="panel"><h2>Paramètres généraux</h2><div class="fields">
         ${this._numberField("global-delay", "Délai global", this._config.global_delay, "secondes", 0, 31536000)}
-        ${this._textField("exclusion-label", "Label global d’exclusion", this._config.exclusion_label, true, "id")}
+        <label>Labels exclus des surveillances automatiques<ha-selector id="excluded-labels"></ha-selector><small>Une règle personnalisée ignore ces labels.</small></label>
       </div><small>Délai actuel : ${esc(durationText(this._config.global_delay))}. Il est utilisé après les délais de règle, d’entité, d’attribut et de catégorie.</small></section>
       <section class="panel"><h2>Exclusions explicites</h2><div class="fields">
-        <label>Entités exclues<textarea id="excluded-entities" rows="8" placeholder="sensor.exemple">${esc((this._config.excluded_entities || []).join("\n"))}</textarea><small>Une entité par ligne.</small></label>
-        <label>Appareils exclus<textarea id="excluded-devices" rows="8" placeholder="Identifiant appareil (32 caractères)">${esc((this._config.excluded_devices || []).join("\n"))}</textarea><small>Identifiants du registre des appareils, un par ligne.</small></label>
+        <label>Entités exclues<ha-selector id="excluded-entities"></ha-selector></label>
+        <label>Appareils exclus<ha-selector id="excluded-devices"></ha-selector></label>
       </div></section>
-      <section class="panel"><h2>Délais particuliers par entité</h2><label class="full">Entité et délai
-        <textarea id="entity-delays" rows="8" placeholder="sensor.exemple=300">${esc(entityDelays)}</textarea>
-        <small>Une ligne <code>entity_id=secondes</code>. Prioritaire sur alert_delay et le délai de catégorie.</small>
-      </label></section>
+      <section class="panel"><div class="row between"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div><button type="button" data-action="add-entity-delay">Ajouter</button></div>
+        <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
+          <ha-selector id="delay-entity-${index}"></ha-selector>
+          <div class="input-suffix"><input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required><span>secondes</span></div>
+          <button type="button" data-action="remove-entity-delay" data-index="${index}" aria-label="Supprimer ce délai">Supprimer</button>
+        </div>`).join("") : '<div class="empty compact">Aucun délai particulier.</div>'}</div>
+      </section>
       <div class="actions"><button class="primary" type="submit" ${this._busy ? "disabled" : ""}>Enregistrer les paramètres</button></div>
     </form>`;
   }
@@ -340,6 +400,16 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (action === "more-info") {
+      const entityId = button.dataset.entityId;
+      if (!this._hass?.states?.[entityId]) return;
+      this.dispatchEvent(new CustomEvent("hass-more-info", {
+        bubbles: true,
+        composed: true,
+        detail: { entityId },
+      }));
+      return;
+    }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
       this._editingRule = null;
@@ -354,6 +424,19 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "cancel-rule") {
       this._editingRule = null;
+      this._render();
+      return;
+    }
+    if (action === "add-entity-delay") {
+      this._ensureSettingsDraft();
+      this._captureEntityDelayValues();
+      this._entityDelayDraft.push({ entity_id: "", delay: 900 });
+      this._render();
+      return;
+    }
+    if (action === "remove-entity-delay") {
+      this._captureEntityDelayValues();
+      this._entityDelayDraft.splice(Number(button.dataset.index), 1);
       this._render();
       return;
     }
@@ -405,7 +488,6 @@ class AlertManagerPanel extends HTMLElement {
       };
     }
     automatic.battery.threshold = Number(this.shadowRoot.querySelector("#battery-threshold").value);
-    automatic.unavailable.domains = lines(this.shadowRoot.querySelector("#unavailable-domains").value);
     const config = await this._call({ type: "alert_manager/config/update", config: { automatic } }, "Surveillance enregistrée");
     if (config) {
       this._config = config;
@@ -414,26 +496,33 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   async _saveSettings() {
+    this._ensureSettingsDraft();
+    this._captureEntityDelayValues();
     const entityDelays = {};
-    for (const line of lines(this.shadowRoot.querySelector("#entity-delays").value)) {
-      const [entityId, seconds, ...rest] = line.split("=").map((part) => part.trim());
-      if (!entityId || seconds === undefined || rest.length || !/^\d+$/.test(seconds)) {
-        this._notice = { kind: "error", text: `Délai particulier invalide : ${line}` };
+    for (const row of this._entityDelayDraft) {
+      if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
+        this._notice = { kind: "error", text: "Chaque délai particulier doit avoir une entité et un nombre entier positif." };
         this._render();
         return;
       }
-      entityDelays[entityId] = Number(seconds);
+      if (row.entity_id in entityDelays) {
+        this._notice = { kind: "error", text: `L’entité ${row.entity_id} est présente deux fois dans les délais.` };
+        this._render();
+        return;
+      }
+      entityDelays[row.entity_id] = row.delay;
     }
     const changes = {
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
-      exclusion_label: this.shadowRoot.querySelector("#exclusion-label").value.trim(),
-      excluded_entities: lines(this.shadowRoot.querySelector("#excluded-entities").value),
-      excluded_devices: lines(this.shadowRoot.querySelector("#excluded-devices").value),
+      excluded_labels: [...this._settingsDraft.excluded_labels],
+      excluded_entities: [...this._settingsDraft.excluded_entities],
+      excluded_devices: [...this._settingsDraft.excluded_devices],
       entity_delays: entityDelays,
     };
     const config = await this._call({ type: "alert_manager/config/update", config: changes }, "Paramètres enregistrés");
     if (config) {
       this._config = config;
+      this._resetSettingsDraft();
       this._render();
     }
   }
@@ -444,7 +533,7 @@ class AlertManagerPanel extends HTMLElement {
     const source = value("source");
     const rule = {
       name: String(value("name")).trim(),
-      entity_id: String(value("entity_id")).trim(),
+      entity_ids: [...(this._editingRule?.entity_ids ?? [])],
       enabled: Boolean(field("enabled")?.checked),
       source,
       attribute: source === "attribute" ? String(value("attribute")).trim() : null,
@@ -472,6 +561,31 @@ class AlertManagerPanel extends HTMLElement {
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;
     this._render();
+  }
+
+  _resetSettingsDraft() {
+    this._settingsDraft = null;
+    this._entityDelayDraft = null;
+  }
+
+  _ensureSettingsDraft() {
+    if (this._settingsDraft && this._entityDelayDraft) return;
+    this._settingsDraft = {
+      excluded_labels: [...(this._config.excluded_labels ?? [])],
+      excluded_entities: [...(this._config.excluded_entities ?? [])],
+      excluded_devices: [...(this._config.excluded_devices ?? [])],
+    };
+    this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
+      ([entity_id, delay]) => ({ entity_id, delay }),
+    );
+  }
+
+  _captureEntityDelayValues() {
+    if (!this._entityDelayDraft) return;
+    this.shadowRoot.querySelectorAll("[data-delay-index]").forEach((input) => {
+      const row = this._entityDelayDraft[Number(input.dataset.delayIndex)];
+      if (row) row.delay = Number(input.value);
+    });
   }
 
   _date(value) {
@@ -506,13 +620,13 @@ class AlertManagerPanel extends HTMLElement {
       button{font:inherit;border:1px solid var(--divider-color,#ccc);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);padding:8px 12px;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.primary{background:var(--primary-color,#03a9f4);border-color:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.danger-button{color:var(--error-color,#db4437)}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}
-      .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}
+      .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-color,#03a9f4);font-weight:700;text-align:left}.entity-link:hover{text-decoration:underline}.entity-link:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:3px}
       code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;word-break:break-all}dl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0}dl div{min-width:0}dt{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color,#727272)}dd{margin:3px 0 0;overflow-wrap:anywhere}
-      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;display:block;margin-top:16px}label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500}input,select,textarea{width:100%;font:inherit;color:var(--primary-text-color,#212121);background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#bbb);border-radius:8px;padding:10px}textarea{resize:vertical}.input-suffix{display:flex;align-items:center}.input-suffix input{border-radius:8px 0 0 8px}.input-suffix span{padding:10px;border:1px solid var(--divider-color,#bbb);border-left:0;border-radius:0 8px 8px 0;color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272)}
+      .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;display:block;margin-top:16px}label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500}input,select,textarea{width:100%;font:inherit;color:var(--primary-text-color,#212121);background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#bbb);border-radius:8px;padding:10px}textarea{resize:vertical}ha-selector{display:block;width:100%;font-weight:400}.input-suffix{display:flex;align-items:center}.input-suffix input{border-radius:8px 0 0 8px}.input-suffix span{padding:10px;border:1px solid var(--divider-color,#bbb);border-left:0;border-radius:0 8px 8px 0;color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272)}
       .switch{display:inline-block;position:relative;width:48px;height:26px;flex:none}.switch input{opacity:0;width:0;height:0}.switch span{position:absolute;inset:0;background:#aaa;border-radius:20px;cursor:pointer}.switch span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:white;border-radius:50%;transition:.15s}.switch input:checked+span{background:var(--primary-color,#03a9f4)}.switch input:checked+span:before{transform:translateX(22px)}.checkbox{flex-direction:row;align-items:center}.checkbox input{width:auto}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}.nowrap{white-space:nowrap}.icon-button{min-width:38px}.editor{scroll-margin-top:12px}
-      .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
-      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions button{width:100%}}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.icon-button{min-width:38px}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:center}
+      .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
+      @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row button{width:100%}}
     `;
   }
 }

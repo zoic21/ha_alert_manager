@@ -7,10 +7,12 @@ from copy import deepcopy
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
 from .const import (
     DEFAULT_CONFIG,
+    DEFAULT_EXCLUSION_LABEL,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
@@ -29,10 +31,13 @@ class AlertManagerStore(Store[dict[str, Any]]):
         old_minor_version: int,
         old_data: dict[str, Any],
     ) -> dict[str, Any]:
-        """Migrate older data; V1 has no predecessor yet."""
+        """Migrate older stored schemas without requiring live registries."""
         if old_major_version > STORAGE_VERSION:
             raise NotImplementedError
-        return old_data
+        migrated = deepcopy(old_data)
+        config, _changed = _migrate_config_shape(migrated.get("config", {}))
+        migrated["config"] = config
+        return migrated
 
 
 class AlertManagerStorage:
@@ -40,6 +45,7 @@ class AlertManagerStorage:
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize storage."""
+        self._hass = hass
         self._store = AlertManagerStore(
             hass,
             STORAGE_VERSION,
@@ -48,18 +54,22 @@ class AlertManagerStorage:
             minor_version=STORAGE_MINOR_VERSION,
         )
 
-    async def async_load(self) -> tuple[dict[str, Any], dict[str, AlertRecord]]:
+    async def async_load(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, AlertRecord], bool]:
         """Load and validate stored data, falling back safely."""
         raw = await self._store.async_load()
         if not isinstance(raw, dict):
-            return deepcopy(DEFAULT_CONFIG), {}
+            config, migrated = self._migrate_config({})
+            return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
-        config = _merge_dict(deepcopy(DEFAULT_CONFIG), raw.get("config", {}))
+        migrated_config, migrated = self._migrate_config(raw.get("config", {}))
+        config = _merge_dict(deepcopy(DEFAULT_CONFIG), migrated_config)
         records: dict[str, AlertRecord] = {}
         raw_alerts = raw.get("alerts", {})
         if not isinstance(raw_alerts, dict):
             _LOGGER.warning("Ignoring invalid persisted alerts collection")
-            return config, records
+            return config, records, migrated
         for alert_id, record_data in raw_alerts.items():
             try:
                 record = AlertRecord.from_dict(record_data)
@@ -71,8 +81,29 @@ class AlertManagerStorage:
                     "Ignoring persisted alert with mismatched id %s", alert_id
                 )
                 continue
+            if alert_id.startswith("rule:") and alert_id.count(":") == 1:
+                alert_id = f"{alert_id}:{record.details.entity_id}"
+                record.details.id = alert_id
+                migrated = True
             records[alert_id] = record
-        return config, records
+        return config, records, migrated
+
+    def _migrate_config(self, stored: Any) -> tuple[dict[str, Any], bool]:
+        """Apply idempotent migrations that may consult Home Assistant registries."""
+        config, changed = _migrate_config_shape(stored)
+        if "excluded_labels" not in config:
+            legacy_name = config.get("exclusion_label", DEFAULT_EXCLUSION_LABEL)
+            labels: list[str] = []
+            if isinstance(legacy_name, str):
+                label = lr.async_get(self._hass).async_get_label_by_name(legacy_name)
+                if label is not None:
+                    labels.append(label.label_id)
+            config["excluded_labels"] = labels
+            changed = True
+        if "exclusion_label" in config:
+            config.pop("exclusion_label")
+            changed = True
+        return config, changed
 
     async def async_save(
         self, config: dict[str, Any], records: dict[str, AlertRecord]
@@ -103,3 +134,39 @@ def _merge_dict(defaults: dict[str, Any], stored: Any) -> dict[str, Any]:
         else:
             defaults[key] = value
     return defaults
+
+
+def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
+    """Migrate V1 rule/domain fields; safe to run repeatedly."""
+    if not isinstance(stored, dict):
+        return {}, True
+    config = deepcopy(stored)
+    changed = False
+
+    rules = config.get("rules")
+    if isinstance(rules, list):
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            if "entity_ids" not in rule and isinstance(rule.get("entity_id"), str):
+                rule["entity_ids"] = [rule["entity_id"]]
+                changed = True
+            if "entity_id" in rule:
+                rule.pop("entity_id")
+                changed = True
+            version = rule.get("version", 1)
+            if (
+                isinstance(version, int)
+                and not isinstance(version, bool)
+                and version < 2
+            ):
+                rule["version"] = 2
+                changed = True
+
+    automatic = config.get("automatic")
+    if isinstance(automatic, dict):
+        unavailable = automatic.get("unavailable")
+        if isinstance(unavailable, dict) and "domains" in unavailable:
+            unavailable.pop("domains")
+            changed = True
+    return config, changed

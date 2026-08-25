@@ -42,7 +42,7 @@ def test_rule_operators(operator, current, expected, matches):
     rule = Rule(
         id="rule-id",
         name="Test",
-        entity_id="sensor.test",
+        entity_ids=["sensor.test"],
         operator=operator,
         value=expected,
         duration=60,
@@ -59,7 +59,7 @@ def test_numeric_rule_rejects_non_finite_values():
         Rule(
             id="bad",
             name="Bad",
-            entity_id="sensor.test",
+            entity_ids=["sensor.test"],
             operator="above",
             value="not-number",
             duration=1,
@@ -144,6 +144,9 @@ def test_legacy_severity_is_removed_from_stored_alerts_and_rules():
         }
     )
     assert "severity" not in rule.as_dict()
+    assert rule.entity_ids == ["sensor.test"]
+    assert "entity_id" not in rule.as_dict()
+    assert rule.version == 2
 
     normalized = validate_config({"rules": [rule.as_dict()]})
     assert "severity" not in normalized["rules"][0]
@@ -190,7 +193,7 @@ def test_frontend_payload_validation():
             {
                 "id": "chosen-by-client",
                 "name": "Bad",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "operator": "equals",
                 "value": "1",
                 "duration": 10,
@@ -212,7 +215,7 @@ def test_unknown_frontend_fields_are_rejected():
         validate_rule_payload(
             {
                 "name": "Bad field",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "operator": "equals",
                 "value": "on",
                 "duration": 60,
@@ -225,11 +228,25 @@ def test_unknown_frontend_fields_are_rejected():
         validate_rule_payload(
             {
                 "name": "No levels",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "operator": "equals",
                 "value": "on",
                 "duration": 60,
                 "severity": "critical",
+            }
+        )
+
+
+def test_rule_entity_ids_must_be_unique():
+    """One source cannot be evaluated twice inside the same rule."""
+    with pytest.raises(ValueError, match="repeated"):
+        validate_rule_payload(
+            {
+                "name": "Duplicate",
+                "entity_ids": ["sensor.test", "sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 60,
             }
         )
 

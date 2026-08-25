@@ -76,7 +76,7 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     connection = Connection(admin=True)
     payload = {
         "name": "Liste vide",
-        "entity_id": "todo.liste_d_achats",
+        "entity_ids": ["todo.liste_d_achats"],
         "enabled": True,
         "source": "state",
         "attribute": None,

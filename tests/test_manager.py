@@ -159,6 +159,12 @@ def test_unavailable_detection_does_not_duplicate_connectivity(hass, entry):
     assert set(manager.records) == {"unavailable:binary_sensor.gateway"}
 
 
+def test_unknown_is_not_an_unavailable_alert(hass, entry):
+    """The unavailable pack deliberately excludes unknown states."""
+    hass.states.set("automation.test", "unknown")
+    assert make_manager(hass, entry).records == {}
+
+
 def test_disabled_entity_and_device_are_ignored(
     hass, entry, registry_entry, device_entry
 ):
@@ -239,7 +245,7 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
         manager.async_create_rule(
             {
                 "name": "Rule",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "operator": operator,
                 "value": expected,
                 "duration": 300,
@@ -248,7 +254,7 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
             }
         )
     )
-    assert f"rule:{rule['id']}" in manager.records
+    assert f"rule:{rule['id']}:sensor.test" in manager.records
 
 
 def test_delay_priority(hass, entry):
@@ -282,7 +288,7 @@ def test_missing_rule_attribute_does_not_trigger_not_equals(hass, entry):
         manager.async_create_rule(
             {
                 "name": "Missing attribute",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "source": "attribute",
                 "attribute": "missing",
                 "operator": "not_equals",
@@ -291,7 +297,7 @@ def test_missing_rule_attribute_does_not_trigger_not_equals(hass, entry):
             }
         )
     )
-    assert f"rule:{rule['id']}" not in manager.records
+    assert f"rule:{rule['id']}:sensor.test" not in manager.records
 
 
 def test_unchanged_global_evaluation_does_not_publish(hass, entry):
@@ -305,26 +311,36 @@ def test_unchanged_global_evaluation_does_not_publish(hass, entry):
     assert notifications == []
 
 
-def test_global_evaluation_skips_irrelevant_domains(hass, entry):
-    """Full scans do not spend work on states outside enabled categories and rules."""
+def test_unavailable_monitors_every_domain_but_not_alert_manager(
+    hass, entry, registry_entry
+):
+    """Unavailable applies to all domains while excluding the integration itself."""
     hass.states.set("automation.unrelated", "unavailable")
     hass.states.set("sensor.relevant", "unavailable")
+    registry_entry(hass, "sensor.alert_manager_copy", platform="alert_manager")
+    hass.states.set("sensor.alert_manager_copy", "unavailable")
     manager = make_manager(hass, entry)
-    evaluated = []
-    original = manager.async_evaluate_entity
-
-    async def tracked(entity_id, **kwargs):
-        evaluated.append(entity_id)
-        return await original(entity_id, **kwargs)
-
-    manager.async_evaluate_entity = tracked
-    run(manager.async_evaluate_all())
-    assert evaluated == ["sensor.relevant"]
+    assert set(manager.records) == {
+        "unavailable:automation.unrelated",
+        "unavailable:sensor.relevant",
+    }
 
 
 def test_state_listener_skips_irrelevant_entities(hass, entry):
     """Unrelated state events do not allocate config-entry evaluation tasks."""
     manager = make_manager(hass, entry)
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "unavailable": {"enabled": False},
+                    "connectivity": {"enabled": False},
+                    "unifi": {"enabled": False},
+                    "battery": {"enabled": False},
+                }
+            }
+        )
+    )
     entry.created_task_names.clear()
 
     async def fire_events():
@@ -344,7 +360,7 @@ def test_rule_mutation_uses_one_atomic_storage_write(hass, entry):
         manager.async_create_rule(
             {
                 "name": "One write",
-                "entity_id": "sensor.test",
+                "entity_ids": ["sensor.test"],
                 "operator": "equals",
                 "value": "on",
                 "duration": 0,
@@ -352,6 +368,229 @@ def test_rule_mutation_uses_one_atomic_storage_write(hass, entry):
         )
     )
     assert hass.store_save_count == 1
+
+
+def test_custom_rule_entities_have_independent_lifecycles(hass, entry, set_now):
+    """Each rule/entity pair owns its pending clock, activation and resolution."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.one", "on", {"friendly_name": "Capteur un"})
+    hass.states.set("sensor.two", "on", {"friendly_name": "Capteur deux"})
+    hass.states.set("sensor.three", "off")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Plusieurs sources",
+                "entity_ids": ["sensor.one", "sensor.two", "sensor.three"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 60,
+            }
+        )
+    )
+    one_id = f"rule:{rule['id']}:sensor.one"
+    two_id = f"rule:{rule['id']}:sensor.two"
+    assert set(manager.records) == {one_id, two_id}
+    assert manager.public_snapshot()["pending_count"] == 2
+    assert manager.records[one_id].details.name == "Capteur un"
+
+    set_now(start + timedelta(seconds=30))
+    hass.states.set("sensor.one", "off")
+    run(manager.async_evaluate_entity("sensor.one"))
+    assert one_id not in manager.records
+    assert manager.records[two_id].detected_at == start
+
+    set_now(start + timedelta(seconds=60))
+    run(manager.async_evaluate_entity("sensor.two"))
+    assert manager.records[two_id].status is AlertStatus.ACTIVE
+    snapshot = manager.public_snapshot()
+    assert snapshot["active_count"] == 1
+    assert snapshot["pending_count"] == 0
+
+    hass.states.set("sensor.one", "on")
+    run(manager.async_evaluate_entity("sensor.one"))
+    assert manager.records[one_id].detected_at == start + timedelta(seconds=60)
+    assert manager.records[one_id].status is AlertStatus.PENDING
+
+
+def test_same_entity_can_belong_to_multiple_rules(hass, entry):
+    """Rule ids keep two matching rules on the same source independent."""
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rules = [
+        run(
+            manager.async_create_rule(
+                {
+                    "name": name,
+                    "entity_ids": ["sensor.test"],
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 0,
+                }
+            )
+        )
+        for name in ("First", "Second")
+    ]
+    assert set(manager.records) == {f"rule:{rule['id']}:sensor.test" for rule in rules}
+    assert manager.public_snapshot()["active_count"] == 2
+
+
+def test_rule_delay_update_can_activate_immediately(hass, entry, set_now):
+    """A shortened duration is recalculated from the original detection time."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Delay",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 900,
+            }
+        )
+    )
+    set_now(start + timedelta(seconds=600))
+    run(manager.async_update_rule(rule["id"], {"duration": 300}))
+    record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.status is AlertStatus.ACTIVE
+    assert record.due_at == start + timedelta(seconds=300)
+
+
+def test_rule_delay_extension_rechecks_an_active_instance(hass, entry, set_now):
+    """Extending a duration can return a just-active instance to pending."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Extended delay",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+            }
+        )
+    )
+    hass.bus.fired.clear()
+    run(manager.async_update_rule(rule["id"], {"duration": 60}))
+    record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.status is AlertStatus.PENDING
+    assert record.active_since is None
+    assert record.due_at == start + timedelta(seconds=60)
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+    ]
+
+
+def test_rule_configuration_cleanup_is_silent(hass, entry):
+    """Removing a source or disabling a rule emits no resolution notification."""
+    hass.states.set("sensor.one", "on")
+    hass.states.set("sensor.two", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Cleanup",
+                "entity_ids": ["sensor.one", "sensor.two"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+            }
+        )
+    )
+    hass.bus.fired.clear()
+    run(manager.async_update_rule(rule["id"], {"entity_ids": ["sensor.one"]}))
+    assert f"rule:{rule['id']}:sensor.two" not in manager.records
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+    ]
+
+    run(manager.async_update_rule(rule["id"], {"enabled": False}))
+    assert f"rule:{rule['id']}:sensor.one" not in manager.records
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+    ]
+
+
+def test_custom_rules_ignore_selected_exclusion_labels(hass, entry, registry_entry):
+    """An explicit rule still monitors a label-excluded source."""
+    hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    registry_entry(hass, "sensor.test", labels={"skip"})
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Explicit",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+            }
+        )
+    )
+    assert f"rule:{rule['id']}:sensor.test" in manager.records
+
+
+def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
+    """V1 entity_id and exclusion-label names become V1.1 registry ids."""
+    hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    hass.states.set("sensor.test", "on", {"friendly_name": "Legacy sensor"})
+    detected_at = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    hass.stores["alert_manager"] = {
+        "config": {
+            "exclusion_label": "pas_d_alerte",
+            "automatic": {"unavailable": {"domains": ["sensor"]}},
+            "rules": [
+                {
+                    "id": "legacy",
+                    "name": "Legacy",
+                    "entity_id": "sensor.test",
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 60,
+                    "version": 1,
+                }
+            ],
+        },
+        "alerts": {
+            "rule:legacy": {
+                "details": {
+                    "id": "rule:legacy",
+                    "type": "rule",
+                    "entity_id": "sensor.test",
+                    "name": "Legacy sensor",
+                    "value": "on",
+                    "condition": "État égal à on",
+                },
+                "status": "pending",
+                "detected_at": detected_at.isoformat(),
+                "due_at": (detected_at + timedelta(seconds=60)).isoformat(),
+                "delay": 60,
+                "active_since": None,
+            }
+        },
+    }
+    manager = make_manager(hass, entry)
+    rule = manager.get_config()["rules"][0]
+    assert rule["entity_ids"] == ["sensor.test"]
+    assert "entity_id" not in rule
+    assert rule["version"] == 2
+    assert manager.get_config()["excluded_labels"] == ["skip"]
+    assert "domains" not in manager.get_config()["automatic"]["unavailable"]
+    assert "rule:legacy:sensor.test" in manager.records
+    assert manager.records["rule:legacy:sensor.test"].detected_at == detected_at
+
+    run(manager.async_unload())
+    reloaded = make_manager(hass, entry)
+    assert reloaded.get_config()["rules"] == [rule]
+    assert reloaded.get_config()["excluded_labels"] == ["skip"]
 
 
 def test_invalid_alerts_collection_is_ignored(hass, entry):

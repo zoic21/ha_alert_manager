@@ -18,10 +18,11 @@ from .const import (
 )
 from .models import Rule, safe_float
 
-_DOMAIN_RE = re.compile(r"^[a-z0-9_]+$")
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
     "global_delay",
+    "excluded_labels",
+    # Accepted only so a cached V1 panel can update safely during migration.
     "exclusion_label",
     "excluded_entities",
     "excluded_devices",
@@ -37,7 +38,7 @@ _AUTOMATIC_KEYS = {
 }
 _RULE_CLIENT_KEYS = {
     "name",
-    "entity_id",
+    "entity_ids",
     "enabled",
     "source",
     "attribute",
@@ -82,12 +83,7 @@ def validate_config(config: Any) -> dict[str, Any]:
         config.get("global_delay", result["global_delay"]), "global_delay"
     )
 
-    exclusion_label = config.get("exclusion_label", result["exclusion_label"])
-    if not isinstance(exclusion_label, str) or not exclusion_label.strip():
-        raise ValueError("exclusion_label must be a non-empty string")
-    if len(exclusion_label) > 255:
-        raise ValueError("exclusion_label is too long")
-    result["exclusion_label"] = exclusion_label.strip()
+    result["excluded_labels"] = validate_label_list(config.get("excluded_labels", []))
 
     result["excluded_entities"] = validate_entity_list(
         config.get("excluded_entities", [])
@@ -124,20 +120,6 @@ def validate_config(config: Any) -> dict[str, Any]:
             f"automatic.{category}.delay",
         )
 
-        if category == "unavailable":
-            domains = incoming.get("domains", category_config["domains"])
-            if not isinstance(domains, list) or not domains:
-                raise ValueError(
-                    "automatic.unavailable.domains must be a non-empty list"
-                )
-            normalized_domains: list[str] = []
-            for domain in domains:
-                if not isinstance(domain, str) or not _DOMAIN_RE.fullmatch(domain):
-                    raise ValueError(f"Invalid entity domain: {domain}")
-                if domain not in normalized_domains:
-                    normalized_domains.append(domain)
-            category_config["domains"] = normalized_domains
-
         if category == "battery":
             threshold = safe_float(
                 incoming.get("threshold", category_config["threshold"])
@@ -158,7 +140,7 @@ def validate_config(config: Any) -> dict[str, Any]:
         if not isinstance(raw_rule, dict):
             raise ValueError("Each rule must be an object")
         rule = Rule.from_dict(raw_rule)
-        validate_entity_id(rule.entity_id)
+        rule.entity_ids = validate_rule_entity_ids(rule.entity_ids)
         if rule.id in seen:
             raise ValueError(f"Duplicate rule id: {rule.id}")
         seen.add(rule.id)
@@ -181,7 +163,7 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
         if supplied_id != rule_id:
             raise ValueError("Rule id is immutable")
         rule = Rule.from_dict({**data, "id": rule_id})
-    validate_entity_id(rule.entity_id)
+    rule.entity_ids = validate_rule_entity_ids(rule.entity_ids)
     if len(rule.name) > 255:
         raise ValueError("Rule name is too long")
     if rule.attribute is not None and (
@@ -247,4 +229,28 @@ def validate_device_list(value: Any) -> list[str]:
             raise ValueError(f"Invalid device id: {item}")
         if item not in result:
             result.append(item)
+    return result
+
+
+def validate_label_list(value: Any) -> list[str]:
+    """Validate and deduplicate Home Assistant label registry ids."""
+    if not isinstance(value, list):
+        raise ValueError("excluded_labels must be a list")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or len(item) > 255:
+            raise ValueError(f"Invalid label id: {item}")
+        label_id = item.strip()
+        if label_id not in result:
+            result.append(label_id)
+    return result
+
+
+def validate_rule_entity_ids(value: Any) -> list[str]:
+    """Validate rule sources without silently accepting duplicates."""
+    if not isinstance(value, list) or not value:
+        raise ValueError("entity_ids must be a non-empty list")
+    result = [validate_entity_id(item) for item in value]
+    if len(set(result)) != len(result):
+        raise ValueError("An entity cannot be repeated in the same rule")
     return result

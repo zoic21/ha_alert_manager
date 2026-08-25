@@ -9,10 +9,22 @@ globalThis.HTMLElement = class {
   attachShadow() {
     this.shadowRoot = {
       addEventListener() {},
+      querySelector() { return null; },
       querySelectorAll() { return []; },
       innerHTML: "",
     };
     return this.shadowRoot;
+  }
+
+  dispatchEvent(event) {
+    this.dispatchedEvent = event;
+    return true;
+  }
+};
+globalThis.CustomEvent = class {
+  constructor(type, options) {
+    this.type = type;
+    Object.assign(this, options);
   }
 };
 globalThis.customElements = {
@@ -49,7 +61,7 @@ test("panel is registered", () => {
 test("new rules start enabled with safe defaults", () => {
   assert.deepEqual(newRuleDefaults(), {
     name: "",
-    entity_id: "",
+    entity_ids: [],
     enabled: true,
     source: "state",
     attribute: "",
@@ -79,14 +91,14 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
 
 const completeConfig = () => ({
   automatic: {
-    unavailable: { enabled: true, delay: 900, domains: ["sensor"] },
+    unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
     unifi: { enabled: true, delay: 900 },
     battery: { enabled: true, delay: 900, threshold: 15 },
   },
   rules: [],
   global_delay: 900,
-  exclusion_label: "pas_d_alerte",
+  excluded_labels: [],
   excluded_entities: [],
   excluded_devices: [],
   entity_delays: {},
@@ -107,7 +119,7 @@ const form = (values) => ({
 const ruleValues = (changes = {}) => ({
   id: "",
   name: "Liste vide",
-  entity_id: "todo.liste_d_achats",
+  entity_ids: ["todo.liste_d_achats"],
   enabled: true,
   source: "state",
   attribute: "",
@@ -130,12 +142,12 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
-  panel._editingRule = {};
+  panel._editingRule = { entity_ids: ["todo.liste_d_achats"] };
   const calls = [];
   panel._hass = {
     callWS: async (message) => {
       calls.push(message);
-      return { ...message.rule, id: "created-id", version: 1 };
+      return { ...message.rule, id: "created-id", version: 2 };
     },
   };
   const ruleForm = form(ruleValues());
@@ -150,7 +162,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
       type: "alert_manager/rules/create",
       rule: {
         name: "Liste vide",
-        entity_id: "todo.liste_d_achats",
+        entity_ids: ["todo.liste_d_achats"],
         enabled: true,
         source: "state",
         attribute: null,
@@ -170,19 +182,21 @@ test("rule create errors remain visible without clearing the draft", async () =>
   const panel = new Panel();
   panel._config = completeConfig();
   panel._hass = { callWS: async () => { throw new Error("Règle refusée"); } };
+  panel._editingRule = { entity_ids: ["todo.liste_d_achats"] };
   panel._render = () => {};
 
   await panel._saveRule(form(ruleValues()));
 
   assert.equal(panel._notice.kind, "error");
   assert.equal(panel._notice.text, "Règle refusée");
-  assert.equal(panel._editingRule.entity_id, "todo.liste_d_achats");
+  assert.deepEqual(panel._editingRule.entity_ids, ["todo.liste_d_achats"]);
   assert.equal(panel._editingRule.value, "0");
 });
 
 test("active alerts are red while pending alerts stay orange", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
+  panel._hass = { states: { "sensor.test": { state: "on" } } };
   const alert = {
     entity_id: "sensor.test",
     name: "Test",
@@ -275,7 +289,6 @@ test("automatic monitoring action serializes all category controls", async () =>
     "#auto-battery-enabled": { checked: true },
     "#auto-battery-delay": { value: "240" },
     "#battery-threshold": { value: "12" },
-    "#unavailable-domains": { value: "sensor\nlight" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   let call;
@@ -284,7 +297,7 @@ test("automatic monitoring action serializes all category controls", async () =>
   await panel._saveAutomatic();
 
   assert.deepEqual(call.config.automatic, {
-    unavailable: { enabled: true, delay: 60, domains: ["sensor", "light"] },
+    unavailable: { enabled: true, delay: 60 },
     connectivity: { enabled: false, delay: 120 },
     unifi: { enabled: true, delay: 180 },
     battery: { enabled: true, delay: 240, threshold: 12 },
@@ -296,14 +309,20 @@ test("settings action serializes exclusions and entity delays", async () => {
   const panel = new Panel();
   panel._config = completeConfig();
   panel._render = () => {};
+  panel._settingsDraft = {
+    excluded_labels: ["sans_alerte"],
+    excluded_entities: ["sensor.skip", "light.skip"],
+    excluded_devices: ["a".repeat(32), "b".repeat(32)],
+  };
+  panel._entityDelayDraft = [
+    { entity_id: "sensor.one", delay: 30 },
+    { entity_id: "light.two", delay: 60 },
+  ];
   const controls = {
-    "#entity-delays": { value: "sensor.one=30\nlight.two=60" },
     "#global-delay": { value: "300" },
-    "#exclusion-label": { value: " sans_alerte " },
-    "#excluded-entities": { value: "sensor.skip\nlight.skip" },
-    "#excluded-devices": { value: `${"a".repeat(32)}\n${"b".repeat(32)}` },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
+  panel.shadowRoot.querySelectorAll = () => [];
   let call;
   panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
 
@@ -311,9 +330,75 @@ test("settings action serializes exclusions and entity delays", async () => {
 
   assert.deepEqual(call.config, {
     global_delay: 300,
-    exclusion_label: "sans_alerte",
+    excluded_labels: ["sans_alerte"],
     excluded_entities: ["sensor.skip", "light.skip"],
     excluded_devices: ["a".repeat(32), "b".repeat(32)],
     entity_delays: { "sensor.one": 30, "light.two": 60 },
   });
+});
+
+test("native Home Assistant selectors are configured for multiple values", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "settings";
+  panel._hass = { states: {} };
+  const selectors = Object.fromEntries(
+    ["#excluded-labels", "#excluded-entities", "#excluded-devices"].map((id) => [
+      id,
+      { addEventListener() {} },
+    ]),
+  );
+  panel.shadowRoot.querySelector = (selector) => selectors[selector] ?? null;
+
+  panel._hydrateSelectors();
+
+  assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
+  assert.deepEqual(selectors["#excluded-entities"].selector, { entity: { multiple: true } });
+  assert.deepEqual(selectors["#excluded-devices"].selector, { device: { multiple: true } });
+});
+
+test("custom rule sources use the native multiple entity selector", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = { entity_ids: ["sensor.one", "sensor.two"] };
+  panel._hass = { states: {} };
+  const selector = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (query) =>
+    query === "#rule-entity-ids" ? selector : null;
+
+  panel._hydrateSelectors();
+
+  assert.deepEqual(selector.selector, { entity: { multiple: true } });
+  assert.deepEqual(selector.value, ["sensor.one", "sensor.two"]);
+});
+
+test("clicking an existing alert source opens native more info", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: { "sensor.test": { state: "on" } } };
+  await panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: { action: "more-info", entityId: "sensor.test" },
+      }),
+    },
+  });
+  assert.equal(panel.dispatchedEvent.type, "hass-more-info");
+  assert.deepEqual(panel.dispatchedEvent.detail, { entityId: "sensor.test" });
+  assert.equal(panel.dispatchedEvent.bubbles, true);
+  assert.equal(panel.dispatchedEvent.composed, true);
+});
+
+test("a missing alert source is not rendered as a clickable link", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const html = panel._renderAlert(
+    { entity_id: "sensor.deleted", name: "Deleted", condition: "Test" },
+    true,
+  );
+  assert.doesNotMatch(html, /data-action="more-info"/);
 });

@@ -5,14 +5,14 @@ un panel **Alertes** et une seule entité : `sensor.alert_manager`.
 
 Version minimale prise en charge : **Home Assistant 2026.8**.
 
-## Fonctionnalités V1
+## Fonctionnalités V1.1
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
   UniFi absents et batteries faibles ;
-- règles personnalisées `equals`, `not_equals`, `above` et `below` sur l’état ou
-  un attribut ;
-- exclusions par label, entité ou appareil ;
+- règles personnalisées multi-entités `equals`, `not_equals`, `above` et `below`
+  sur l’état ou un attribut, avec une alerte indépendante par source ;
+- exclusions automatiques par plusieurs labels, entités ou appareils ;
 - panel administrateur responsive, servi directement par l’intégration ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved` ;
@@ -48,24 +48,23 @@ ajouté manuellement comme dépôt personnalisé.
 Le panel est réservé aux administrateurs et contient quatre sections :
 
 1. **Vue d’ensemble** : alertes actives et en attente, valeur, condition,
-   équipement, pièce et dates. Le temps restant est calculé dans le
+   équipement, pièce et dates. Le nom de la source ouvre le dialogue natif
+   « Plus d’informations ». Le temps restant est calculé dans le
    navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
-2. **Surveillance automatique** : activation, délais, seuil de batterie et domaines
-   surveillés.
+2. **Surveillance automatique** : activation, délais et seuil de batterie.
 3. **Règles personnalisées** : création, modification, activation et suppression.
-4. **Exclusions et paramètres** : label, entités, appareils, délai global et délais
-   particuliers.
-
-Les identifiants d’appareil sont ceux du registre Home Assistant. Ils sont visibles
-dans l’URL de la fiche d’un appareil ou via les outils de développement WebSocket.
+4. **Exclusions et paramètres** : labels, entités, appareils, délai global et délais
+   particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
+   Home Assistant.
 
 ## Détections automatiques
 
 ### Entités indisponibles
 
-Une alerte est créée lorsqu’une entité d’un domaine surveillé passe à
-`unavailable`. Les entrées désactivées dans le registre des entités, les appareils
-désactivés et les exclusions sont ignorés. La seule présence de l’attribut
+Une alerte est créée lorsqu’une entité de n’importe quel domaine passe exactement à
+`unavailable` ; `unknown` n’est pas inclus. Les entités d’Alert Manager, les entrées
+désactivées dans le registre, les appareils désactivés et les exclusions sont
+ignorés. La seule présence de l’attribut
 `restored: true` n’est **pas** un motif d’exclusion : une entité active peut être
 restaurée légitimement après un redémarrage.
 
@@ -92,7 +91,9 @@ catégorie.
 ## Règles personnalisées
 
 Chaque règle possède un identifiant immuable généré par le backend. Elle compare
-l’état principal ou un attribut d’une entité avec une valeur :
+l’état principal ou un attribut de plusieurs entités avec une valeur. Chaque
+couple règle/entité a son propre cycle, son délai et son identifiant stable
+`rule:<rule_uuid>:<entity_id>` :
 
 - `equals` : égalité textuelle exacte après suppression des espaces externes ;
 - `not_equals` : différence textuelle ;
@@ -113,9 +114,12 @@ Exemples :
 
 ## Exclusions et priorité des délais
 
-Le label d’exclusion vaut `pas_d_alerte` par défaut. Une entité est exclue si le
-label est posé sur elle ou sur son appareil associé. Les listes explicites d’entités
-et d’appareils sont appliquées en plus.
+Plusieurs labels d’exclusion peuvent être sélectionnés depuis le registre Home
+Assistant. Lors de la migration, `pas_d_alerte` est présélectionné s’il existe, sans
+être créé automatiquement. Une alerte automatique est exclue si au moins un label
+sélectionné est posé sur l’entité ou son appareil. Les règles personnalisées
+ignorent ces labels. Les listes explicites d’entités et d’appareils sont appliquées
+en plus.
 
 Ordre de priorité des délais :
 

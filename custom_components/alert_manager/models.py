@@ -150,11 +150,11 @@ class AlertRecord:
 
 @dataclass(slots=True)
 class Rule:
-    """A custom V1 comparison rule."""
+    """A comparison rule evaluated independently for every source entity."""
 
     id: str
     name: str
-    entity_id: str
+    entity_ids: list[str]
     operator: str
     value: str | int | float | bool
     duration: int
@@ -162,7 +162,7 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
-    version: int = 1
+    version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -172,12 +172,23 @@ class Rule:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Rule:
-        """Deserialize while preserving unknown future fields."""
+        """Deserialize, migrating the V1 entity_id field idempotently."""
+        normalized = dict(data)
+        if "entity_ids" not in normalized and "entity_id" in normalized:
+            normalized["entity_ids"] = [normalized["entity_id"]]
+        normalized.pop("entity_id", None)
+        version = normalized.get("version", 2)
+        if isinstance(version, int) and not isinstance(version, bool):
+            normalized["version"] = max(version, 2)
         known = cls.__dataclass_fields__
-        values = {key: data[key] for key in known if key in data and key != "extra"}
+        values = {
+            key: normalized[key]
+            for key in known
+            if key in normalized and key != "extra"
+        }
         values["extra"] = {
             key: value
-            for key, value in data.items()
+            for key, value in normalized.items()
             if key not in known and key != "severity"
         }
         rule = cls(**values)
@@ -190,6 +201,12 @@ class Rule:
             raise ValueError("Rule id is required")
         if not self.name or not isinstance(self.name, str):
             raise ValueError("Rule name is required")
+        if not isinstance(self.entity_ids, list) or not self.entity_ids:
+            raise ValueError("Rule entity_ids must be a non-empty list")
+        if any(not isinstance(entity_id, str) for entity_id in self.entity_ids):
+            raise ValueError("Rule entity_ids must contain strings")
+        if len(set(self.entity_ids)) != len(self.entity_ids):
+            raise ValueError("An entity cannot be repeated in the same rule")
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
         if self.source not in VALUE_SOURCES:

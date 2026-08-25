@@ -10,12 +10,10 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    ATTR_DEVICE_CLASS,
     ATTR_FRIENDLY_NAME,
     ATTR_UNIT_OF_MEASUREMENT,
     EVENT_HOMEASSISTANT_STARTED,
     EVENT_STATE_CHANGED,
-    STATE_HOME,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
@@ -37,10 +35,7 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CATEGORY_BATTERY,
-    CATEGORY_CONNECTIVITY,
     CATEGORY_UNAVAILABLE,
-    CATEGORY_UNIFI,
     DOMAIN,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
@@ -54,8 +49,8 @@ from .models import (
     advance_record,
     calculate_due_at,
     safe_delay_seconds,
-    safe_float,
 )
+from .packs import PACKS, PACKS_BY_ID
 from .storage import AlertManagerStorage
 from .validation import (
     validate_config,
@@ -66,11 +61,6 @@ from .validation import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_CATEGORY_LABELS = {
-    CATEGORY_UNAVAILABLE: "État indisponible",
-    CATEGORY_CONNECTIVITY: "Connectivité désactivée",
-    CATEGORY_UNIFI: "Équipement UniFi absent",
-}
 _OPERATOR_LABELS = {
     "equals": "Égal à",
     "not_equals": "Différent de",
@@ -98,7 +88,7 @@ class AlertManager:
 
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
-        config, records = await self.storage.async_load()
+        config, records, migrated = await self.storage.async_load()
         try:
             self.config = validate_config(config)
         except ValueError:
@@ -126,8 +116,12 @@ class AlertManager:
         )
 
         if self.hass.is_running:
-            await self.async_evaluate_all(restoring=True)
+            changed = await self.async_evaluate_all(restoring=True, save=False)
+            if migrated or changed:
+                await self.storage.async_save(self.config, self.records)
         else:
+            if migrated:
+                await self.storage.async_save(self.config, self.records)
             self._unsubscribers.append(
                 self.hass.bus.async_listen_once(
                     EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
@@ -178,17 +172,19 @@ class AlertManager:
 
     async def async_evaluate_all(
         self, *, restoring: bool = False, save: bool = True
-    ) -> None:
+    ) -> bool:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading:
-            return
+            return False
         entity_ids = {
             state.entity_id
             for state in self.hass.states.async_all()
             if self._is_relevant_entity_id(state.entity_id)
         }
         entity_ids.update(record.details.entity_id for record in self.records.values())
-        entity_ids.update(rule.entity_id for rule in self.rules)
+        entity_ids.update(
+            entity_id for rule in self.rules for entity_id in rule.entity_ids
+        )
         persisted_changed = False
         for entity_id in entity_ids:
             persisted_changed |= await self.async_evaluate_entity(
@@ -197,6 +193,7 @@ class AlertManager:
         if save and persisted_changed:
             await self.storage.async_save(self.config, self.records)
         self._publish_if_changed(force=restoring and self._last_public_snapshot is None)
+        return persisted_changed
 
     async def async_evaluate_entity(
         self,
@@ -226,10 +223,16 @@ class AlertManager:
                 persisted_changed = True
             else:
                 record.details = details
-                if record.status is AlertStatus.PENDING and record.delay != delay:
+                if record.delay != delay:
                     record.delay = delay
                     record.due_at = calculate_due_at(record.detected_at, delay)
                     self._cancel_timer(alert_id)
+                    if record.status is AlertStatus.ACTIVE:
+                        if now.astimezone(UTC) < record.due_at.astimezone(UTC):
+                            record.status = AlertStatus.PENDING
+                            record.active_since = None
+                        else:
+                            record.active_since = record.due_at
                     persisted_changed = True
 
             became_active = advance_record(record, now)
@@ -255,96 +258,28 @@ class AlertManager:
 
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
-        if not self._is_eligible(state.entity_id):
+        if not self._is_base_eligible(state.entity_id):
             return {}
 
         result: dict[str, tuple[AlertDetails, int]] = {}
         entity_id = state.entity_id
-        domain = entity_id.partition(".")[0]
+        automatic_eligible = self._is_automatic_eligible(entity_id)
 
-        unavailable_config = self.config["automatic"][CATEGORY_UNAVAILABLE]
-        if (
-            state.state == STATE_UNAVAILABLE
-            and unavailable_config["enabled"]
-            and domain in unavailable_config["domains"]
-        ):
-            alert_id = f"{CATEGORY_UNAVAILABLE}:{entity_id}"
-            result[alert_id] = (
-                self._details(
-                    state,
-                    alert_id,
-                    CATEGORY_UNAVAILABLE,
-                    _CATEGORY_LABELS[CATEGORY_UNAVAILABLE],
-                ),
-                self._delay_for(state, CATEGORY_UNAVAILABLE),
-            )
+        if state.state == STATE_UNAVAILABLE:
+            if automatic_eligible:
+                self._add_pack_candidate(result, state, CATEGORY_UNAVAILABLE)
             return result
 
-        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if state.state == STATE_UNKNOWN:
             return result
 
-        connectivity = self.config["automatic"][CATEGORY_CONNECTIVITY]
-        if (
-            connectivity["enabled"]
-            and domain == "binary_sensor"
-            and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
-            and state.state == "off"
-        ):
-            alert_id = f"{CATEGORY_CONNECTIVITY}:{entity_id}"
-            result[alert_id] = (
-                self._details(
-                    state,
-                    alert_id,
-                    CATEGORY_CONNECTIVITY,
-                    _CATEGORY_LABELS[CATEGORY_CONNECTIVITY],
-                ),
-                self._delay_for(state, CATEGORY_CONNECTIVITY),
-            )
+        if automatic_eligible:
+            for pack in PACKS:
+                if pack.id != CATEGORY_UNAVAILABLE:
+                    self._add_pack_candidate(result, state, pack.id)
 
-        unifi = self.config["automatic"][CATEGORY_UNIFI]
-        registry_entry = er.async_get(self.hass).async_get(entity_id)
-        if (
-            unifi["enabled"]
-            and domain == "device_tracker"
-            and registry_entry is not None
-            and registry_entry.platform == "unifi"
-            and state.attributes.get("source_type") == "router"
-            and state.state != STATE_HOME
-        ):
-            alert_id = f"{CATEGORY_UNIFI}:{entity_id}"
-            result[alert_id] = (
-                self._details(
-                    state,
-                    alert_id,
-                    CATEGORY_UNIFI,
-                    _CATEGORY_LABELS[CATEGORY_UNIFI],
-                ),
-                self._delay_for(state, CATEGORY_UNIFI),
-            )
-
-        battery = self.config["automatic"][CATEGORY_BATTERY]
-        if (
-            battery["enabled"]
-            and domain == "sensor"
-            and state.attributes.get(ATTR_DEVICE_CLASS) == "battery"
-        ):
-            value = safe_float(state.state)
-            override = safe_float(state.attributes.get("low_battery_level"))
-            threshold = override if override is not None else battery["threshold"]
-            if value is not None and value <= threshold:
-                alert_id = f"{CATEGORY_BATTERY}:{entity_id}"
-                condition = f"Batterie inférieure ou égale à {threshold:g} %"
-                result[alert_id] = (
-                    self._details(
-                        state,
-                        alert_id,
-                        CATEGORY_BATTERY,
-                        condition,
-                        value=value,
-                    ),
-                    self._delay_for(state, CATEGORY_BATTERY),
-                )
-
+        if self._is_explicitly_excluded(entity_id):
+            return result
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
@@ -357,7 +292,7 @@ class AlertManager:
             )
             if not rule.matches(current):
                 continue
-            alert_id = f"rule:{rule.id}"
+            alert_id = f"rule:{rule.id}:{entity_id}"
             condition = rule.message or self._rule_condition(rule, state)
             result[alert_id] = (
                 self._details(
@@ -371,30 +306,75 @@ class AlertManager:
             )
         return result
 
-    def _is_eligible(self, entity_id: str) -> bool:
-        """Apply explicit, registry, device and label exclusions."""
-        if entity_id in self.config["excluded_entities"]:
-            return False
+    def _add_pack_candidate(
+        self,
+        result: dict[str, tuple[AlertDetails, int]],
+        state: State,
+        pack_id: str,
+    ) -> None:
+        """Evaluate one enabled pack and append its candidate when matching."""
+        config = self.config["automatic"][pack_id]
+        if not config["enabled"]:
+            return
+        match = PACKS_BY_ID[pack_id].evaluate(self.hass, state, config)
+        if match is None:
+            return
+        alert_id = f"{pack_id}:{state.entity_id}"
+        result[alert_id] = (
+            self._details(
+                state,
+                alert_id,
+                pack_id,
+                match.condition,
+                value=match.value,
+            ),
+            self._delay_for(state, pack_id),
+        )
+
+    def _is_base_eligible(self, entity_id: str) -> bool:
+        """Reject Alert Manager's own and registry-disabled entities."""
         entity_entry = er.async_get(self.hass).async_get(entity_id)
+        if entity_id == "sensor.alert_manager" or (
+            entity_entry is not None and entity_entry.platform == DOMAIN
+        ):
+            return False
         if entity_entry is not None and entity_entry.disabled_by is not None:
             return False
 
         device = None
         if entity_entry is not None and entity_entry.device_id:
-            if entity_entry.device_id in self.config["excluded_devices"]:
-                return False
             device = dr.async_get(self.hass).async_get(entity_entry.device_id)
             if device is not None and device.disabled_by is not None:
                 return False
+        return True
 
-        label = lr.async_get(self.hass).async_get_label_by_name(
-            self.config["exclusion_label"]
-        )
-        if label is None:
+    def _is_explicitly_excluded(self, entity_id: str) -> bool:
+        """Apply the existing explicit entity and device exclusions."""
+        if entity_id in self.config["excluded_entities"]:
             return True
-        if entity_entry is not None and label.label_id in entity_entry.labels:
+        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        return bool(
+            entity_entry is not None
+            and entity_entry.device_id in self.config["excluded_devices"]
+        )
+
+    def _is_automatic_eligible(self, entity_id: str) -> bool:
+        """Apply explicit and selected-label exclusions to automatic packs only."""
+        if self._is_explicitly_excluded(entity_id):
             return False
-        return not (device is not None and label.label_id in device.labels)
+        excluded_labels = set(self.config["excluded_labels"])
+        if not excluded_labels:
+            return True
+        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        if entity_entry is None:
+            return True
+        if excluded_labels.intersection(entity_entry.labels):
+            return False
+
+        device = None
+        if entity_entry.device_id:
+            device = dr.async_get(self.hass).async_get(entity_entry.device_id)
+        return not (device is not None and excluded_labels.intersection(device.labels))
 
     def _delay_for(self, state: State, category: str) -> int:
         """Resolve delay priority for automatic detections."""
@@ -469,11 +449,12 @@ class AlertManager:
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
         self._rules_by_entity = {}
         for rule in self._rules:
-            self._rules_by_entity.setdefault(rule.entity_id, []).append(rule)
+            for entity_id in rule.entity_ids:
+                self._rules_by_entity.setdefault(entity_id, []).append(rule)
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
-        if entity_id == "sensor.alert_manager":
+        if not self._is_base_eligible(entity_id):
             return False
         if entity_id in self._rules_by_entity:
             return True
@@ -484,21 +465,17 @@ class AlertManager:
         domain = entity_id.partition(".")[0]
         automatic = self.config.get("automatic", {})
         unavailable = automatic.get(CATEGORY_UNAVAILABLE, {})
-        if unavailable.get("enabled") and domain in unavailable.get("domains", ()):
+        if unavailable.get("enabled"):
             return True
+        pack_ids = {
+            pack.id
+            for pack in PACKS
+            if automatic.get(pack.id, {}).get("enabled", False)
+        }
         return (
-            (
-                domain == "binary_sensor"
-                and automatic.get(CATEGORY_CONNECTIVITY, {}).get("enabled", False)
-            )
-            or (
-                domain == "device_tracker"
-                and automatic.get(CATEGORY_UNIFI, {}).get("enabled", False)
-            )
-            or (
-                domain == "sensor"
-                and automatic.get(CATEGORY_BATTERY, {}).get("enabled", False)
-            )
+            (domain == "binary_sensor" and "connectivity" in pack_ids)
+            or (domain == "device_tracker" and "unifi" in pack_ids)
+            or (domain == "sensor" and "battery" in pack_ids)
         )
 
     def public_snapshot(self) -> dict[str, Any]:
@@ -550,7 +527,9 @@ class AlertManager:
         rule = validate_rule_payload(data)
         self.config["rules"].append(rule.as_dict())
         self._rebuild_rule_index()
-        await self.async_evaluate_entity(rule.entity_id, save=False)
+        for entity_id in rule.entity_ids:
+            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+        self._publish_if_changed()
         await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
@@ -561,25 +540,41 @@ class AlertManager:
         validate_rule_update_fields(data)
         index = self._rule_index(rule_id)
         existing = self.config["rules"][index]
+        old_rule = Rule.from_dict(existing)
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
-        old_entity_id = existing["entity_id"]
         self.config["rules"][index] = rule.as_dict()
         self._rebuild_rule_index()
-        await self.async_evaluate_entity(old_entity_id, save=False, publish=False)
-        if rule.entity_id != old_entity_id:
-            await self.async_evaluate_entity(rule.entity_id, save=False, publish=False)
+
+        removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
+        if not rule.enabled:
+            removed_entities.update(old_rule.entity_ids)
+        self._remove_rule_instances(rule_id, removed_entities)
+
+        affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
+        for entity_id in affected_entities:
+            await self.async_evaluate_entity(entity_id, save=False, publish=False)
         self._publish_if_changed()
         await self.storage.async_save(self.config, self.records)
         return rule.as_dict()
 
     async def async_delete_rule(self, rule_id: str) -> None:
-        """Delete a rule and resolve any active alert it owns."""
+        """Delete a rule and silently clean only the instances it owns."""
         index = self._rule_index(rule_id)
-        entity_id = self.config["rules"][index]["entity_id"]
+        rule = Rule.from_dict(self.config["rules"][index])
         del self.config["rules"][index]
         self._rebuild_rule_index()
-        await self.async_evaluate_entity(entity_id, save=False)
+        self._remove_rule_instances(rule_id, set(rule.entity_ids))
+        for entity_id in rule.entity_ids:
+            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+        self._publish_if_changed()
         await self.storage.async_save(self.config, self.records)
+
+    def _remove_rule_instances(self, rule_id: str, entity_ids: set[str]) -> None:
+        """Remove configuration-owned instances without user resolution events."""
+        for entity_id in entity_ids:
+            alert_id = f"rule:{rule_id}:{entity_id}"
+            if self.records.pop(alert_id, None) is not None:
+                self._cancel_timer(alert_id)
 
     def _rule_index(self, rule_id: str) -> int:
         """Find a rule or raise a stable API error."""
