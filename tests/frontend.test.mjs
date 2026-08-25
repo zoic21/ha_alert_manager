@@ -209,10 +209,13 @@ test("active alerts are red while pending alerts stay orange", () => {
     condition: "État indisponible",
   };
 
-  assert.match(panel._renderAlert(alert, true), /class="alert-card is-active"/);
-  assert.match(panel._renderAlert(alert, false), /class="alert-card is-pending"/);
+  assert.match(panel._renderAlert(alert, true), /<ha-card outlined class="alert-card is-active"/);
+  assert.match(panel._renderAlert(alert, false), /<ha-card outlined class="alert-card is-pending"/);
   assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
-  assert.match(panel._styles(), /\.alert-card\.is-active\{border-left-color:var\(--error-color/);
+  assert.match(panel._styles(), /\.alert-card\.is-active\{--alert-state-color:var\(--error-color/);
+  assert.match(panel._renderAlert(alert, true), /<ha-svg-icon path=/);
+  assert.match(panel._renderAlert(alert, true), /class="alert-status">Active</);
+  assert.match(panel._renderAlert(alert, false), /class="alert-status">En attente</);
 });
 
 test("alert conditions stay on one line in the wider detail column", () => {
@@ -228,8 +231,23 @@ test("alert conditions stay on one line in the wider detail column", () => {
   const styles = panel._styles();
 
   assert.match(html, /class="alert-condition"/);
-  assert.match(styles, /grid-template-columns:minmax\(0,\.85fr\) minmax\(0,1\.15fr\)/);
+  assert.match(styles, /\.alert-details\{[^}]*grid-template-columns:minmax\(0,\.85fr\) minmax\(0,1\.15fr\)/);
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
+});
+
+test("alert groups use native Home Assistant cards without nested panels", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const alert = { entity_id: "sensor.test", name: "Test", condition: "Test" };
+
+  const populated = panel._renderAlertGroup("Alertes actives", [alert], true);
+  const empty = panel._renderAlertGroup("Alertes en attente", [], false);
+
+  assert.match(populated, /<section class="alert-group">/);
+  assert.match(populated, /<ha-card outlined class="alert-card is-active"/);
+  assert.doesNotMatch(populated, /<section class="panel">/);
+  assert.match(empty, /<ha-card outlined class="alert-empty">/);
 });
 
 test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
