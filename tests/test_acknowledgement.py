@@ -18,6 +18,7 @@ from custom_components.alert_manager.const import (
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.sensor import AlertManagerSensor
 from custom_components.alert_manager.services import (
     async_setup_services,
 )
@@ -45,7 +46,7 @@ def event_data(hass, event_type):
 def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     hass, entry, set_now
 ):
-    """An active alert changes durably once without changing active_count."""
+    """Acknowledgement removes an alert from the sensor's active count."""
     manager, alert_id = active_manager(hass, entry, set_now)
     active_count = manager.public_snapshot()["active_count"]
     saves = hass.store_save_count
@@ -53,9 +54,11 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert run(manager.async_acknowledge(alert_id, "Loïc")) is True
     snapshot = manager.public_snapshot()
     alert = snapshot["acknowledge"][0]
-    assert snapshot["active_count"] == active_count == 1
+    assert active_count == 1
+    assert snapshot["active_count"] == 0
     assert snapshot["acknowledge_count"] == 1
     assert snapshot["alerts"] == []
+    assert AlertManagerSensor(manager).native_value == 0
     assert alert["acknowledged"] is True
     assert alert["acknowledged_by"] == "Loïc"
     assert alert["acknowledged_at"].endswith("+00:00")
@@ -72,7 +75,11 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert len(event_data(hass, EVENT_ALERT_ACKNOWLEDGED)) == 1
 
     assert run(manager.async_unacknowledge(alert_id, "Loïc")) is True
-    alert = manager.public_snapshot()["alerts"][0]
+    snapshot = manager.public_snapshot()
+    alert = snapshot["alerts"][0]
+    assert snapshot["active_count"] == 1
+    assert snapshot["acknowledge_count"] == 0
+    assert AlertManagerSensor(manager).native_value == 1
     assert alert["acknowledged"] is False
     assert "acknowledged_at" not in alert
     assert "acknowledged_by" not in alert
@@ -98,7 +105,10 @@ def test_acknowledgement_survives_restart_without_replaying_event(hass, entry, s
 
     second = AlertManager(hass, entry)
     run(second.async_setup())
-    alert = second.public_snapshot()["acknowledge"][0]
+    snapshot = second.public_snapshot()
+    alert = snapshot["acknowledge"][0]
+    assert snapshot["active_count"] == 0
+    assert snapshot["acknowledge_count"] == 1
     assert alert["acknowledged"] is True
     assert "acknowledged_by" not in alert
     assert len(event_data(hass, EVENT_ALERT_ACKNOWLEDGED)) == before

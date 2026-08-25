@@ -645,7 +645,7 @@ class AlertManager:
         acknowledged = [alert for alert in active if alert.get("acknowledged") is True]
         pending = [record.as_public_dict() for record in pending_records]
         return {
-            "active_count": len(active),
+            "active_count": len(unacknowledged),
             "acknowledge_count": len(acknowledged),
             "pending_count": len(pending),
             "tracked_count": self._tracked_count(),

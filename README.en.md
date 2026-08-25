@@ -78,9 +78,11 @@ section. This is display-only: alert IDs, lifecycle, sensor attributes and event
 remain independent. A lone device alert and an entity without a device use a
 compact individual card.
 
-Each active row has its own compact **Acknowledge** or **Remove acknowledgement**
-header action, including inside a device group. There is no device-wide
-acknowledgement action.
+Hovering the red status icon on the left turns it into a dark-blue check on a
+light-blue background; selecting it acknowledges that alert. For an acknowledged
+alert, hovering the icon reveals a dark-red cross on a light-red background to
+remove acknowledgement. Every grouped row keeps its own action, and there is no
+device-wide acknowledgement action.
 
 The remaining time is calculated in the browser from `due_at`; Alert Manager does
 not write a countdown to Recorder every second.
@@ -165,14 +167,14 @@ CHRG or ERROR`, `sensor.mode not_equals off or idle`, and
 
 ## `sensor.alert_manager`
 
-The integration creates exactly `sensor.alert_manager`. Its state is the active
-alert count. Its attributes separate unacknowledged active, acknowledged active
+The integration creates exactly `sensor.alert_manager`. Its state is the
+unacknowledged active alert count. Its attributes separate unacknowledged active, acknowledged active
 and pending individual alerts:
 
 ```yaml
-state: 1
+state: 0
 attributes:
-  active_count: 1
+  active_count: 0
   acknowledge_count: 1
   pending_count: 1
   tracked_count: 47
@@ -222,8 +224,9 @@ key. Resolved history and periodic countdown values are not recorded.
 For an unacknowledged active alert, `acknowledged` is `false`.
 `acknowledged_at` and `acknowledged_by` are present only after acknowledgement;
 the author is absent for an automation or system call. Acknowledgement does not
-resolve the alert: it moves from `alerts` to `acknowledge` but remains included in
-`active_count` and the state of `sensor.alert_manager` while its condition is true.
+resolve the alert: it moves from `alerts` to `acknowledge` and remains active while
+its condition is true, but it is excluded from `active_count` and the state of
+`sensor.alert_manager`. It remains included in `acknowledge_count`.
 
 ## Acknowledgement services
 

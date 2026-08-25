@@ -90,6 +90,7 @@
       "status_active_count": "Actives : {count}",
       "status_pending": "En attente",
       "status_pending_count": "En attente : {count}",
+      "summary_acknowledged": "Alertes acquittées",
       "summary_active": "Alertes actives",
       "summary_pending": "En attente",
       "summary_tracked": "Total suivi",

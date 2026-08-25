@@ -93,9 +93,11 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    Plusieurs alertes rattachées au même identifiant d’appareil sont réunies dans
    une tuile avec une ligne par source au sein d’une même section. Une entité sans
    appareil, ou un appareil qui ne porte plus qu’une alerte, conserve une tuile
-   individuelle compacte. Chaque alerte active conserve sa propre action compacte
-   **Acquitter** ou **Retirer l’acquittement** dans l’en-tête, y compris dans un
-   groupe. Aucun bouton n’agit sur toutes les alertes d’un appareil.
+   individuelle compacte. L’icône d’état rouge à gauche devient une coche bleue au
+   survol pour acquitter l’alerte. Pour une alerte acquittée, elle devient une
+   croix rouge au survol afin de retirer l’acquittement. Chaque ligne conserve sa
+   propre action, y compris dans un groupe ; aucun bouton n’agit sur toutes les
+   alertes d’un appareil.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
 2. **Surveillance automatique** : activation, délais et seuil de batterie. Les
@@ -206,13 +208,13 @@ réutilisés tels quels, sans migration destructive.
 ## Capteur unique
 
 L’intégration crée exactement `sensor.alert_manager`. Son état est le nombre
-d’alertes actives. Ses attributs séparent les alertes actives non acquittées,
+d’alertes actives non acquittées. Ses attributs séparent les alertes actives non acquittées,
 acquittées et en attente :
 
 ```yaml
-state: 2
+state: 1
 attributes:
-  active_count: 2
+  active_count: 1
   acknowledge_count: 1
   pending_count: 1
   tracked_count: 47
@@ -275,14 +277,16 @@ l’utilisateur. Un message personnalisé reste inchangé et n’est jamais trad
 Pour une alerte active non acquittée, `acknowledged` vaut `false`. Les champs
 `acknowledged_at` et `acknowledged_by` ne sont présents qu’après acquittement.
 `acknowledged_by` est absent lorsque l’action vient d’une automatisation ou du
-système. Une alerte acquittée passe de `alerts` à `acknowledge`, mais reste active
-et reste comptée dans `active_count` et dans l’état de `sensor.alert_manager` tant
-que sa condition reste vraie.
+système. Une alerte acquittée passe de `alerts` à `acknowledge` et reste active
+tant que sa condition reste vraie, mais elle n’est plus comptée dans
+`active_count` ni dans l’état de `sensor.alert_manager`. Elle reste comptée dans
+`acknowledge_count`.
 
 ## Acquittement et services
 
 L’acquittement porte toujours sur une seule alerte `active`, ciblée par son
-identifiant stable. Il ne résout pas l’alerte et ne change pas son compteur. Une
+identifiant stable. Il ne résout pas l’alerte, mais la retire du compteur des
+alertes non acquittées. Une
 alerte `pending`, inconnue ou déjà résolue est refusée avec une erreur explicite.
 Les actions répétées sont idempotentes : acquitter deux fois ou retirer deux fois
 l’acquittement n’émet pas de nouvel événement.

@@ -354,7 +354,7 @@ test("active alerts are red while pending alerts stay orange", () => {
   assert.match(panel._renderAlert(alert, false), /<ha-card outlined class="alert-card is-pending"/);
   assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
   assert.match(panel._styles(), /\.alert-card\.is-active,\.device-alert-group\.is-active\{--alert-state-color:var\(--error-color/);
-  assert.match(panel._renderAlert(alert, true), /<ha-svg-icon path=/);
+  assert.match(panel._renderAlert(alert, true), /class="alert-status-icon alert-state-action/);
   assert.match(panel._renderAlert(alert, true), /class="alert-current-value">unavailable<\/strong>/);
   assert.doesNotMatch(panel._renderAlert(alert, true), />Active<|>En attente<|class="alert-value"/);
 });
@@ -527,7 +527,9 @@ test("acknowledged alerts stay compact and expose the real unacknowledge action"
   assert.match(html, /data-action="unacknowledge-alert"/);
   assert.match(html, /aria-label="Retirer l’acquittement/);
   assert.doesNotMatch(html, /data-action="acknowledge-alert"/);
-  assert.match(html, /class="alert-header-actions"/);
+  assert.match(html, /class="alert-status-icon alert-state-action/);
+  assert.doesNotMatch(html, /class="alert-header-actions"/);
+  assert.match(panel._styles(), /data-action="unacknowledge-alert"[^}]*--alert-hover-color:color-mix\(in srgb,var\(--error-color/);
 
   const calls = [];
   panel._hass.callService = async (...args) => { calls.push(args); };
@@ -546,7 +548,7 @@ test("acknowledged alerts stay compact and expose the real unacknowledge action"
   ]]);
 });
 
-test("active alerts expose a header acknowledgement action without growing the card", () => {
+test("the left status icon becomes the acknowledgement action without growing the card", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
@@ -557,9 +559,34 @@ test("active alerts expose a header acknowledgement action without growing the c
     active_since: "2026-08-25T14:00:00Z",
   }, "active");
 
-  assert.match(html, /class="alert-header-actions"[\s\S]*data-action="acknowledge-alert"/);
+  assert.match(html, /class="alert-status-icon alert-state-action[^>]*data-action="acknowledge-alert"/);
+  assert.doesNotMatch(html, /class="alert-header-actions"/);
   assert.doesNotMatch(html, /alert-controls|copy-alert-id|Identifiant de l’alerte/);
   assert.match(panel._styles(), /\.alert-card-header\{[^}]*grid-template-columns:40px minmax\(0,1fr\) auto/);
+  assert.match(panel._styles(), /data-action="acknowledge-alert"[^}]*--alert-hover-color:var\(--dark-primary-color/);
+});
+
+test("status action icons swap on hover and return on blur", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const listeners = {};
+  const button = {
+    dataset: { action: "acknowledge-alert" },
+    addEventListener(type, callback) { listeners[type] = callback; },
+  };
+  panel.shadowRoot.querySelectorAll = () => [button];
+
+  panel._hydrateSelectors();
+  const defaultPath = button.path;
+  listeners.mouseenter();
+  assert.notEqual(button.path, defaultPath);
+  const hoverPath = button.path;
+  listeners.mouseleave();
+  assert.equal(button.path, defaultPath);
+  listeners.focus();
+  assert.equal(button.path, hoverPath);
+  listeners.blur();
+  assert.equal(button.path, defaultPath);
 });
 
 test("system acknowledgements use the translated fallback without an ID block", () => {
@@ -610,7 +637,7 @@ test("grouped alerts retain one compact acknowledgement action per row", () => {
   };
   const html = panel._renderDeviceGroup(group);
 
-  assert.equal((html.match(/class="alert-ack-action"/g) ?? []).length, 2);
+  assert.equal((html.match(/class="alert-status-icon alert-state-action is-compact"/g) ?? []).length, 2);
   assert.equal((html.match(/data-action="copy-alert-id"/g) ?? []).length, 0);
   assert.equal((html.match(/data-action="acknowledge-alert"/g) ?? []).length, 1);
   assert.equal((html.match(/data-action="unacknowledge-alert"/g) ?? []).length, 1);
@@ -929,13 +956,18 @@ test("overview displays the backend tracked total", () => {
   const panel = new Panel();
   panel._alerts = {
     active_count: 2,
+    acknowledge_count: 4,
     pending_count: 3,
     tracked_count: 47,
     alerts: [],
     pending: [],
+    acknowledge: [],
   };
 
   assert.match(panel._renderOverview(), /Total suivi<\/span><strong>47<\/strong>/);
+  assert.match(panel._renderOverview(), /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
+  assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(panel._styles(), /@media\(max-width:700px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {

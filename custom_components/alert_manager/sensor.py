@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class AlertManagerSensor(SensorEntity):
-    """Expose only active/pending alerts and their counts."""
+    """Expose unacknowledged, acknowledged and pending alerts."""
 
     _attr_has_entity_name = True
     _attr_icon = PANEL_ICON
@@ -56,10 +56,10 @@ class AlertManagerSensor(SensorEntity):
 
     @property
     def native_value(self) -> int:
-        """Return the active alert count."""
+        """Return the unacknowledged active alert count."""
         return self._snapshot["active_count"]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return structured active and pending lists, never history or CSV."""
+        """Return structured current-alert lists, never history or CSV."""
         return self._snapshot
