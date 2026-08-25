@@ -1,9 +1,31 @@
 const TABS = [
-  ["overview", "Vue d’ensemble", "mdi:view-dashboard-outline"],
-  ["automatic", "Surveillance automatique", "mdi:radar"],
-  ["rules", "Règles personnalisées", "mdi:format-list-checks"],
-  ["settings", "Exclusions et paramètres", "mdi:tune-variant"],
+  {
+    id: "overview",
+    path: "/alert-manager/overview",
+    name: "Vue d’ensemble",
+    iconPath: "M19,5V7H15V5H19M9,5V11H5V5H9M19,13V19H15V13H19M9,17V19H5V17H9M21,3H13V9H21V3M11,3H3V13H11V3M21,11H13V21H21V11M11,15H3V21H11V15Z",
+  },
+  {
+    id: "automatic",
+    path: "/alert-manager/automatic",
+    name: "Surveillance automatique",
+    iconPath: "M19.07,4.93L17.66,6.34C19.1,7.79 20,9.79 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12C4,7.92 7.05,4.56 11,4.07V6.09C8.16,6.57 6,9.03 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12C18,10.34 17.33,8.84 16.24,7.76L14.83,9.17C15.55,9.9 16,10.9 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12C8,10.14 9.28,8.59 11,8.14V10.28C10.4,10.63 10,11.26 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12C14,11.26 13.6,10.62 13,10.28V2H12A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,9.24 20.88,6.74 19.07,4.93Z",
+  },
+  {
+    id: "rules",
+    path: "/alert-manager/rules",
+    name: "Règles personnalisées",
+    iconPath: "M3,5H9V11H3V5M5,7V9H7V7H5M11,7H21V9H11V7M11,15H21V17H11V15M5,20L1.5,16.5L2.91,15.09L5,17.17L9.59,12.59L11,14L5,20Z",
+  },
+  {
+    id: "settings",
+    path: "/alert-manager/settings",
+    name: "Exclusions et paramètres",
+    iconPath: "M8 13C6.14 13 4.59 14.28 4.14 16H2V18H4.14C4.59 19.72 6.14 21 8 21S11.41 19.72 11.86 18H22V16H11.86C11.41 14.28 9.86 13 8 13M8 19C6.9 19 6 18.1 6 17C6 15.9 6.9 15 8 15S10 15.9 10 17C10 18.1 9.1 19 8 19M19.86 6C19.41 4.28 17.86 3 16 3S12.59 4.28 12.14 6H2V8H12.14C12.59 9.72 14.14 11 16 11S19.41 9.72 19.86 8H22V6H19.86M16 9C14.9 9 14 8.1 14 7C14 5.9 14.9 5 16 5S18 5.9 18 7C18 8.1 17.1 9 16 9Z",
+  },
 ];
+
+const TAB_PAGES = TABS.map(({ path, name, iconPath }) => ({ path, name, iconPath }));
 
 const CATEGORIES = [
   ["unavailable", "Entités indisponibles", "État unavailable sur toutes les entités"],
@@ -89,14 +111,19 @@ class AlertManagerPanel extends HTMLElement {
 
   set route(value) {
     this._route = value;
+    const activeTab = this._tabFromRoute(value);
+    if (activeTab !== this._activeTab) {
+      this._activeTab = activeTab;
+      this._editingRule = null;
+      this._notice = null;
+      if (this.isConnected) this._render();
+    } else if (this.isConnected) {
+      this._hydrateSelectors();
+    }
   }
 
   set narrow(value) {
     this._narrow = value;
-    const shell = this.shadowRoot?.querySelector("#panel-shell");
-    if (shell) {
-      shell.narrow = Boolean(value);
-    }
   }
 
   connectedCallback() {
@@ -174,32 +201,24 @@ class AlertManagerPanel extends HTMLElement {
     const content = this._loading
       ? '<div class="loading">Chargement d’Alert Manager…</div>'
       : this._renderTab();
+    const page = `
+      <main>
+        <header>
+          <div>
+            <h1>Alertes</h1>
+            <p>Détection centralisée des anomalies Home Assistant</p>
+          </div>
+          <div class="header-count ${this._alerts.active_count ? "has-alert" : ""}">
+            <strong>${this._alerts.active_count}</strong>
+            <span>active${this._alerts.active_count > 1 ? "s" : ""}</span>
+          </div>
+        </header>
+        ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
+        ${content}
+      </main>`;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      <ha-top-app-bar-fixed id="panel-shell" center-title back-button>
-        <ha-tab-group slot="title" class="native-tabs" aria-label="Sections">
-          ${TABS.map(
-            ([id, label, icon]) => `<ha-tab-group-tab slot="nav" panel="${id}" data-action="tab" data-tab="${id}"
-              ${id === this._activeTab ? "active" : ""}>
-              <span class="tab-label"><ha-icon icon="${icon}" aria-hidden="true"></ha-icon><span>${esc(label)}</span></span>
-            </ha-tab-group-tab>`,
-          ).join("")}
-        </ha-tab-group>
-        <main>
-          <header>
-            <div>
-              <h1>Alertes</h1>
-              <p>Détection centralisée des anomalies Home Assistant</p>
-            </div>
-            <div class="header-count ${this._alerts.active_count ? "has-alert" : ""}">
-              <strong>${this._alerts.active_count}</strong>
-              <span>active${this._alerts.active_count > 1 ? "s" : ""}</span>
-            </div>
-          </header>
-          ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
-          ${content}
-        </main>
-      </ha-top-app-bar-fixed>`;
+      ${this._hass ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
     this._hydrateSelectors();
     this._updateCountdowns();
   }
@@ -228,7 +247,13 @@ class AlertManagerPanel extends HTMLElement {
 
   _hydrateSelectors() {
     const shell = this.shadowRoot.querySelector("#panel-shell");
-    if (shell) shell.narrow = Boolean(this._narrow);
+    if (shell && this._hass) {
+      const activePage = TABS.find((tab) => tab.id === this._activeTab) ?? TABS[0];
+      shell.hass = this._hass;
+      shell.tabs = TAB_PAGES;
+      shell.route = { prefix: "", path: activePage.path };
+      shell.backPath = "/config/integrations";
+    }
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
       this._configureSelect(
@@ -292,6 +317,11 @@ class AlertManagerPanel extends HTMLElement {
     if (this._activeTab === "rules") return this._renderRules();
     if (this._activeTab === "settings") return this._renderSettings();
     return this._renderOverview();
+  }
+
+  _tabFromRoute(route) {
+    const path = `${route?.prefix ?? ""}${route?.path ?? ""}`.replace(/\/$/, "");
+    return TABS.find((tab) => path.endsWith(`/${tab.id}`))?.id ?? "overview";
   }
 
   _renderOverview() {
@@ -409,7 +439,7 @@ class AlertManagerPanel extends HTMLElement {
         <div class="field"><span class="field-label">Entités exclues</span><ha-selector id="excluded-entities"></ha-selector></div>
         <div class="field"><span class="field-label">Appareils exclus</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></section>
-      <section class="panel"><div class="row between"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div><ha-button appearance="outlined" data-action="add-entity-delay">Ajouter</ha-button></div>
+      <section class="panel"><div class="row between"><div><h2>Délais particuliers par entité</h2><small>Prioritaire sur alert_delay et le délai de catégorie.</small></div><ha-button appearance="filled" data-action="add-entity-delay">Ajouter</ha-button></div>
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
           <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="Délai en secondes"><span slot="end">secondes</span></ha-input>
@@ -694,14 +724,14 @@ class AlertManagerPanel extends HTMLElement {
   _styles() {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
-      *{box-sizing:border-box}ha-top-app-bar-fixed{--app-header-background-color:var(--sidebar-background-color,var(--card-background-color,#fff));--app-header-text-color:var(--sidebar-text-color,var(--primary-text-color,#212121));--app-header-border-bottom:1px solid var(--divider-color,#ddd)}.native-tabs{width:100%;color:var(--sidebar-text-color,var(--primary-text-color,#212121));--ha-tab-active-text-color:var(--primary-color);--ha-tab-indicator-color:var(--primary-color);--ha-tab-track-color:transparent}.tab-label{display:inline-flex;align-items:center;gap:var(--ha-space-2,8px);white-space:nowrap}.tab-label ha-icon{width:24px;height:24px}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
+      *{box-sizing:border-box}main{max-width:1400px;margin:0 auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:20px}h1{font-size:28px;margin:0 0 4px}h2{font-size:19px;margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .header-count{min-width:94px;padding:12px 18px;border-radius:18px;text-align:center;background:var(--secondary-background-color,#fff)}.header-count strong{font-size:28px;display:block}.header-count span{font-size:12px;color:var(--secondary-text-color,#727272)}.header-count.has-alert{background:var(--error-color,#db4437);color:white}.header-count.has-alert span{color:white}
       .summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.pending{color:var(--warning-color,#f5a623)}
       .panel{margin-bottom:20px}.alert-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}.alert-card{border:1px solid var(--divider-color,#ddd);border-left:5px solid var(--warning-color,#f5a623);border-radius:10px;padding:14px}.alert-card.is-active{border-left-color:var(--error-color,#db4437)}
       .alert-title,.row{display:flex;align-items:center;gap:14px}.between{justify-content:space-between}.alert-title{justify-content:space-between;margin-bottom:12px}.alert-title code{display:block;margin-top:3px}.entity-link{border:0;background:transparent;padding:0;color:var(--primary-color,#03a9f4);font-weight:700;text-align:left}.entity-link:hover{text-decoration:underline}.entity-link:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:3px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}dl{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:10px;margin:0}dl div{min-width:0}dt{font-size:11px;text-transform:uppercase;color:var(--secondary-text-color,#727272)}dd{margin:3px 0 0;overflow-wrap:anywhere}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}
       .stack{display:grid;gap:16px}.category-card p{font-size:13px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-medium,500)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}.rule-status{font-size:var(--ha-font-size-l,16px)}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:end}.delay-row ha-input{min-width:0}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:850px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.nowrap{white-space:nowrap}.editor{scroll-margin-top:12px}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:700px){main{padding:12px}header{align-items:flex-start}.header-count{min-width:78px}.summary{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}dl{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}}
     `;

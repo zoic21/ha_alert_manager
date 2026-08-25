@@ -226,26 +226,47 @@ test("alert conditions stay on one line in the wider detail column", () => {
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
 });
 
-test("navigation uses the native Home Assistant app bar and tabs", () => {
+test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
   panel._loading = false;
+  panel._hass = { states: {} };
+  const shell = {};
+  panel.shadowRoot.querySelector = (selector) => selector === "#panel-shell" ? shell : null;
 
   panel._render();
 
-  assert.match(panel.shadowRoot.innerHTML, /<ha-top-app-bar-fixed id="panel-shell" center-title back-button>/);
+  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage id="panel-shell" back-path="\/config\/integrations">/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-icon-button-arrow-prev/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-tab-group slot="title" class="native-tabs"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-tab-group-tab slot="nav" panel="overview" data-action="tab" data-tab="overview"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:view-dashboard-outline"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:radar"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:format-list-checks"/);
-  assert.match(panel.shadowRoot.innerHTML, /<ha-icon icon="mdi:tune-variant"/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-tab-group|ha-tab-group-tab|<ha-tab/);
+  assert.equal(shell.hass, panel._hass);
+  assert.equal(shell.backPath, "/config/integrations");
+  assert.deepEqual(shell.route, { prefix: "", path: "/alert-manager/overview" });
+  assert.deepEqual(shell.tabs.map(({ path, name }) => ({ path, name })), [
+    { path: "/alert-manager/overview", name: "Vue d’ensemble" },
+    { path: "/alert-manager/automatic", name: "Surveillance automatique" },
+    { path: "/alert-manager/rules", name: "Règles personnalisées" },
+    { path: "/alert-manager/settings", name: "Exclusions et paramètres" },
+  ]);
+  assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
   assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
-  assert.match(panel._styles(), /ha-top-app-bar-fixed\{[^}]*--app-header-background-color/);
-  assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed\{height:100%/);
-  assert.doesNotMatch(panel._styles(), /\.native-tabs\{[^}]*overflow:auto/);
+  assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
+});
+
+test("native panel routes select the matching tab", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._loading = false;
+  panel._render = () => {};
+
+  panel.route = { prefix: "/alert-manager", path: "/rules" };
+  assert.equal(panel._activeTab, "rules");
+  panel.route = { prefix: "", path: "/alert-manager/settings" };
+  assert.equal(panel._activeTab, "settings");
+  panel.route = { prefix: "", path: "/alert-manager" };
+  assert.equal(panel._activeTab, "overview");
 });
 
 test("forms use native Home Assistant inputs, switches and buttons", () => {
@@ -262,6 +283,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<ha-button appearance="filled" data-action="save-automatic"/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
+  assert.match(settings, /<ha-button appearance="filled" data-action="add-entity-delay">Ajouter<\/ha-button>/);
   assert.match(settings, /<ha-button appearance="filled" data-action="save-settings"/);
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
@@ -332,7 +354,8 @@ test("rule actions and editor use the requested native button appearances", () =
   assert.match(editor, /<ha-switch id="rule-enabled" data-field="enabled" checked/);
   assert.match(editor, /appearance="plain" data-action="cancel-rule"/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
-  assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:end/);
+  assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
+  assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {
