@@ -970,18 +970,21 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
+  assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
-  assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="save-settings"/);
+  assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
   assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
-  assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('class="history-settings full"'));
-  assert.ok(settings.indexOf('class="history-settings full"') < settings.indexOf('id="excluded-labels"'));
+  assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
+  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings full"'));
+  assert.ok(settings.indexOf('data-action="clear-history"') < settings.indexOf('class="actions settings-save-actions"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
   assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
+  assert.match(styles, /\.settings-save-actions\{justify-content:flex-end;margin-top:4px\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
@@ -1330,21 +1333,36 @@ test("settings action serializes exclusions and entity delays", async () => {
   ];
   const controls = {
     "#global-delay": { value: "300" },
+    "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   panel.shadowRoot.querySelectorAll = () => [];
-  let call;
-  panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
+  const calls = [];
+  panel._refreshHistory = async () => panel._history;
+  panel._hass = { callWS: async (message) => {
+    calls.push(message);
+    if (message.type === "alert_manager/history/config/update") {
+      return { retention_limit: 250, enabled: true };
+    }
+    return panel._config;
+  } };
 
   await panel._saveSettings();
 
-  assert.deepEqual(call.config, {
-    global_delay: 300,
-    excluded_labels: ["sans_alerte"],
-    excluded_entities: ["sensor.skip", "light.skip"],
-    excluded_devices: ["a".repeat(32), "b".repeat(32)],
-    entity_delays: { "sensor.one": 30, "light.two": 60 },
-  });
+  assert.deepEqual(calls, [{
+    type: "alert_manager/config/update",
+    config: {
+      global_delay: 300,
+      excluded_labels: ["sans_alerte"],
+      excluded_entities: ["sensor.skip", "light.skip"],
+      excluded_devices: ["a".repeat(32), "b".repeat(32)],
+      entity_delays: { "sensor.one": 30, "light.two": 60 },
+    },
+  }, {
+    type: "alert_manager/history/config/update",
+    retention_limit: 250,
+  }]);
+  assert.deepEqual(panel._historyConfig, { retention_limit: 250, enabled: true });
 });
 
 test("native Home Assistant selectors are configured for multiple values", () => {
@@ -1663,23 +1681,35 @@ test("clearing history requires confirmation and sends the explicit marker", asy
   assert.deepEqual(panel._history.events, []);
 });
 
-test("history retention control accepts zero through one thousand", async () => {
+test("common settings save accepts a zero history retention limit", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
-  panel._render = () => {};
-  panel.shadowRoot.querySelector = (selector) => selector === "#history-limit"
-    ? { value: "0", reportValidity: () => true }
-    : null;
-  let request;
-  panel._call = async (message) => {
-    request = message;
-    return { retention_limit: 0, enabled: false };
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  panel._settingsDraft = {
+    excluded_labels: [],
+    excluded_entities: [],
+    excluded_devices: [],
   };
+  panel._entityDelayDraft = [];
+  panel._render = () => {};
+  const controls = {
+    "#global-delay": { value: "900" },
+    "#history-limit": { value: "0", reportValidity: () => true },
+  };
+  panel.shadowRoot.querySelector = (selector) => controls[selector];
+  panel.shadowRoot.querySelectorAll = () => [];
+  const requests = [];
+  panel._hass = { callWS: async (message) => {
+    requests.push(message);
+    return message.type === "alert_manager/history/config/update"
+      ? { retention_limit: 0, enabled: false }
+      : panel._config;
+  } };
   panel._refreshHistory = async () => panel._history;
-  await panel._handleClick(actionEvent("save-history-settings"));
-  assert.deepEqual(request, {
+  await panel._saveSettings();
+  assert.deepEqual(requests[1], {
     type: "alert_manager/history/config/update",
     retention_limit: 0,
   });

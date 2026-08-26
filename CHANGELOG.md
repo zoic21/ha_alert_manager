@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.6.1 — 26 août 2026
+
+### Corrigé
+
+- Restauration de l’alignement du délai global et des labels exclus des
+  surveillances automatiques dans **Paramètres généraux**.
+- Suppression du titre et du texte descriptif Historique dans cette section.
+- Enregistrement de la limite de rétention par l’unique bouton commun placé en
+  bas à droite ; l’effacement irréversible reste une action distincte face au
+  champ de rétention.
+
 ## 1.6.0 — 26 août 2026
 
 ### Ajouté

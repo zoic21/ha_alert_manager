@@ -106,8 +106,9 @@ countdowns or remaining time. An anomaly that returns to normal while still
 `pending` was never active and is therefore not archived.
 
 In **Configuration → General settings**, directly below **Global delay**,
-**Number of historical events retained** controls retention, with its save and
-clear actions aligned beside the field. The default is `100`, the accepted range
+**Number of historical events retained** controls retention. **Clear history**
+is aligned beside the field; the single common configuration save button at the
+bottom right also saves this setting. The default is `100`, the accepted range
 is `0` to `1000`, and `0` clears stored events when saved and disables future
 history retention. Lowering the limit or
 adding an event removes the oldest excess entries immediately and
