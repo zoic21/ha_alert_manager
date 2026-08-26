@@ -749,7 +749,7 @@ test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
     { path: "/alert-manager/overview", name: "Vue d’ensemble" },
     { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/rules", name: "Règles personnalisées" },
-    { path: "/alert-manager/settings", name: "Exclusions et paramètres" },
+    { path: "/alert-manager/settings", name: "Configuration" },
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /<h1>Alertes<|class="header-count"|Détection centralisée des anomalies/);
@@ -933,6 +933,8 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(rules, /<ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start"/);
   assert.ok(rules.indexOf("</table>") < rules.indexOf('data-action="new-rule"'));
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
+  assert.match(editor, /slot="actionItems" class="rule-menu-wrap"/);
+  assert.doesNotMatch(editor, /slot="subtitle"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
@@ -1366,7 +1368,7 @@ test("panel renders French and English from backend translation resources", () =
     "Overview",
     "Automatic monitoring",
     "Custom rules",
-    "Exclusions and settings",
+    "Configuration",
   ]);
 });
 

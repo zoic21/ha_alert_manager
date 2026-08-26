@@ -159,7 +159,7 @@ def dump_config_yaml(config: Mapping[str, Any]) -> str:
     """Serialize all persistent configuration, excluding runtime alert data."""
     normalized = validate_config(dict(config))
     config_data = {key: deepcopy(normalized[key]) for key in _CONFIG_YAML_KEY_ORDER}
-    rules = [rule_to_yaml_data(rule, include_id=True) for rule in normalized["rules"]]
+    rules = [rule_to_yaml_data(rule) for rule in normalized["rules"]]
     return _dump_yaml(
         {
             "version": FORMAT_VERSION,
@@ -215,8 +215,18 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
             raise ValueError(f"rules[{index}] must be an object")
         _reject_unknown(raw_rule, _RULE_YAML_KEYS, prefix=f"rules[{index}]")
         rule_id = raw_rule.get("id")
+        if rule_id is None:
+            try:
+                rule = validate_rule_payload(dict(raw_rule))
+            except TypeError as err:
+                raise ValueError(f"Invalid rules[{index}]: {err}") from err
+            if rule.id in seen_ids:
+                raise ValueError(f"Duplicate rule id: {rule.id}")
+            seen_ids.add(rule.id)
+            normalized_rules.append(rule.as_dict())
+            continue
         if not isinstance(rule_id, str) or not rule_id:
-            raise ValueError(f"rules[{index}].id is required")
+            raise ValueError(f"rules[{index}].id must be a non-empty string")
         if rule_id in seen_ids:
             raise ValueError(f"Duplicate rule id: {rule_id}")
         seen_ids.add(rule_id)

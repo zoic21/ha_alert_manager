@@ -86,7 +86,7 @@ def test_yaml_rejects_invalid_unicode() -> None:
 
 
 def test_config_export_is_deterministic_and_reimportable() -> None:
-    """The complete YAML export has stable ordering and preserves rule ids."""
+    """The complete YAML export has stable ordering and backend-owned rule ids."""
     config = deepcopy(DEFAULT_CONFIG)
     config["rules"] = [
         {
@@ -103,13 +103,15 @@ def test_config_export_is_deterministic_and_reimportable() -> None:
     first = dump_config_yaml(config)
     assert first == dump_config_yaml(config)
     assert first.startswith("version: 1\nconfig:\n")
+    assert "id: stable-rule-id" not in first
     imported = parse_config_yaml(first)
-    assert imported["rules"][0]["id"] == "stable-rule-id"
+    assert imported["rules"][0]["id"] != "stable-rule-id"
+    assert imported["rules"][0]["id"]
     assert "alerts:" not in first
 
 
-def test_config_import_rejects_duplicate_ids_and_runtime_fields() -> None:
-    """Imports are strict: stable ids cannot collide and runtime is not accepted."""
+def test_config_import_accepts_legacy_ids_and_rejects_duplicates_and_runtime() -> None:
+    """Legacy ids remain importable, but collisions and runtime are rejected."""
     config = dump_config_yaml({**deepcopy(DEFAULT_CONFIG), "rules": []})
     duplicate_rules = """rules:
   - id: same
@@ -158,6 +160,8 @@ def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, en
         }
     ]
     result = run(manager.async_import_config(dump_config_yaml(config)))
+    imported_rule_id = manager.config["rules"][0]["id"]
+    assert imported_rule_id != "stable-multi-rule"
     assert result["summary"] == {
         "rules": 1,
         "enabled_packs": 4,
@@ -165,14 +169,14 @@ def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, en
         "warnings": [],
     }
     assert set(manager.records) >= {
-        "rule:stable-multi-rule:sensor.one",
-        "rule:stable-multi-rule:sensor.two",
+        f"rule:{imported_rule_id}:sensor.one",
+        f"rule:{imported_rule_id}:sensor.two",
     }
     assert all(
         manager.records[alert_id].status is AlertStatus.ACTIVE
         for alert_id in (
-            "rule:stable-multi-rule:sensor.one",
-            "rule:stable-multi-rule:sensor.two",
+            f"rule:{imported_rule_id}:sensor.one",
+            f"rule:{imported_rule_id}:sensor.two",
         )
     )
 

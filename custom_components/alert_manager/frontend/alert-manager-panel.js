@@ -732,8 +732,8 @@ class AlertManagerPanel extends HTMLElement {
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
-        <span slot="subtitle">${rule.id ? esc(rule.name) : esc(this._t("rules.new_subtitle"))}</span>
-        <div slot="action" class="rule-menu-wrap"><ha-icon-button data-action="toggle-rule-menu" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"></ha-icon-button>${this._ruleMenuOpen ? `<div class="rule-editor-menu" role="menu"><ha-button appearance="plain" data-action="switch-rule-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-button></div>` : ""}</div>
+        ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
+        <div slot="actionItems" class="rule-menu-wrap"><ha-icon-button data-action="toggle-rule-menu" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"></ha-icon-button>${this._ruleMenuOpen ? `<div class="rule-editor-menu" role="menu"><ha-button appearance="plain" data-action="switch-rule-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-button></div>` : ""}</div>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}

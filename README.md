@@ -111,7 +111,7 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    la ligne ouvre le volet ; l’activation, les sources, la condition, les valeurs,
    la temporisation et le message y sont regroupés clairement. L’interrupteur
    natif en fin de ligne reste disponible pour une activation rapide.
-4. **Exclusions et paramètres** : labels, entités, appareils, délai global et délais
+4. **Configuration** : labels, entités, appareils, délai global et délais
    particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
    Home Assistant.
 
@@ -219,12 +219,13 @@ utilisés.
 
 ### Export et import complet de configuration
 
-Dans **Exclusions et paramètres**, les actions **Exporter en YAML** et
+Dans **Configuration**, les actions **Exporter en YAML** et
 **Importer un YAML** gèrent la configuration entière. L’export télécharge
 `alert-manager-config.yaml`, encodé en UTF-8, avec le format `version: 1`, les
 paramètres généraux, tags d’exclusion, délais globaux et particuliers,
-configuration des packs automatiques et toutes les règles personnalisées avec
-leurs identifiants stables. Il n’exporte jamais les alertes actives ou à venir,
+configuration des packs automatiques et toutes les règles personnalisées. Les
+identifiants internes des règles ne sont pas exportés et sont recréés par le
+backend lors de l’import. Il n’exporte jamais les alertes actives ou à venir,
 acquittements, timers, dates de détection/activation ni historique d’exécution.
 
 L’import n’accepte que les versions complètes supportées et refuse les champs

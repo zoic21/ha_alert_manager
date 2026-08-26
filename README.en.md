@@ -198,11 +198,12 @@ arbitrary conditions or the automation condition engine.
 
 ### Full configuration export and import
 
-**Exclusions and settings** contains **Export YAML** and **Import YAML**. An
+**Configuration** contains **Export YAML** and **Import YAML**. An
 export is a UTF-8 `alert-manager-config.yaml` file with format `version: 1`,
 general configuration, exclusion tags, default and entity-specific delays,
-automatic-pack configuration and all custom rules including their stable IDs.
-It contains no active or pending alerts, acknowledgements, timers, detection or
+automatic-pack configuration and all custom rules. Internal rule IDs are not
+exported and are recreated by the backend during import. It contains no active
+or pending alerts, acknowledgements, timers, detection or
 activation timestamps, or execution history.
 
 Import accepts only supported complete format versions and rejects unknown,

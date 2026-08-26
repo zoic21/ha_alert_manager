@@ -203,7 +203,7 @@
       "automatic": "Automatic monitoring",
       "overview": "Overview",
       "rules": "Custom rules",
-      "settings": "Exclusions and settings"
+      "settings": "Configuration"
     },
     "unavailable": "Configuration unavailable.",
     "units": {

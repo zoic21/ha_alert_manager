@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.0-dev3 — 26 août 2026
+
+### Modifié
+
+- Renommage de l’onglet « Exclusions et paramètres » en « Configuration ».
+- Suppression des identifiants internes des règles dans l’export YAML complet ;
+  ils sont désormais recréés par le backend lors de l’import.
+- Correction du menu trois-points du volet de règle avec le slot natif
+  `actionItems` de Home Assistant et suppression du nom en sous-titre lors de
+  la modification d’une règle.
+
 ## 1.5.0-dev2 — 25 août 2026
 
 ### Optimisé
