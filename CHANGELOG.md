@@ -2,6 +2,14 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.9-dev5 — 26 août 2026
+
+### Corrigé
+
+- Alignement à gauche des blocs « Condition » et « Active depuis » dans les
+  lignes d’alertes groupées, comme sur les cartes non groupées.
+- Bundle frontend distribué régénéré avec cette correction.
+
 ## 1.5.9-dev4 — 26 août 2026
 
 ### Modifié

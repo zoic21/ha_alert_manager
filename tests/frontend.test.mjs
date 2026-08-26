@@ -516,7 +516,7 @@ test("overview cards hide entity IDs and keep grouped details vertically aligned
   assert.match(standalone, /data-entity-id="zone\.home"/);
   assert.doesNotMatch(grouped, /<code>sensor\.cloudflare<\/code>/);
   assert.match(grouped, /État inférieur à 123 % pendant 30 s/);
-  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:2\/-1[^}]*display:block/);
+  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:1\/-1[^}]*display:block/);
   assert.match(styles, /\.device-alert-condition small,\.device-alert-time small\{[^}]*margin-top:0/);
   assert.match(styles, /\.device-alert-condition span,\.device-alert-time span\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
   assert.match(grouped, /<span title="État inférieur à 123 % pendant 30 s">État inférieur à 123 % pendant 30 s<\/span>/);
