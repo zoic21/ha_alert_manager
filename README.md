@@ -16,7 +16,7 @@ Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.5.5
+## Fonctionnalités V1.5.8
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
