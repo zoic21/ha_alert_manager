@@ -490,7 +490,7 @@ test("alert conditions stay on one line in the wider detail column", () => {
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
 });
 
-test("overview cards hide entity IDs and keep grouped conditions on one line", () => {
+test("overview cards hide entity IDs and keep grouped details vertically aligned", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = {
@@ -516,8 +516,10 @@ test("overview cards hide entity IDs and keep grouped conditions on one line", (
   assert.match(standalone, /data-entity-id="zone\.home"/);
   assert.doesNotMatch(grouped, /<code>sensor\.cloudflare<\/code>/);
   assert.match(grouped, /État inférieur à 123 % pendant 30 s/);
-  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:2\/-1[^}]*display:grid/);
+  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:2\/-1[^}]*display:block/);
+  assert.match(styles, /\.device-alert-condition small,\.device-alert-time small\{[^}]*margin-top:0/);
   assert.match(styles, /\.device-alert-condition span,\.device-alert-time span\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
+  assert.match(grouped, /<span title="État inférieur à 123 % pendant 30 s">État inférieur à 123 % pendant 30 s<\/span>/);
 });
 
 test("alert overview uses native Home Assistant cards without nested panels", () => {
@@ -646,7 +648,7 @@ test("multiple alerts from one device still form a group within one section", ()
   assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
 });
 
-test("grouped alerts show the first alert and reveal the others one by one", async () => {
+test("grouped alerts show the first alert and reveal the others on demand", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._hass = { states: {} };
@@ -665,10 +667,14 @@ test("grouped alerts show the first alert and reveal the others one by one", asy
   assert.doesNotMatch(collapsed, /Second alert/);
   assert.doesNotMatch(collapsed, /Third alert/);
   assert.match(collapsed, /data-action="toggle-device-alerts"/);
+  assert.match(collapsed, /<button type="button" class="device-alert-toggle"/);
   assert.match(collapsed, /aria-expanded="false"/);
+  assert.match(panel._styles(), /\.device-alert-toggle\{[^}]*border:0[^}]*background:transparent[^}]*font-size:var\(--ha-font-size-s,12px\)/);
+  assert.match(panel._styles(), /\.device-alert-toggle:hover\{[^}]*border:0[^}]*background:transparent/);
+  assert.match(panel._styles(), /\.device-alert-toggle:focus-visible\{[^}]*outline:/);
 
   panel._render = () => {};
-  const click = () => panel._handleClick({
+  await panel._handleClick({
     target: {
       closest: () => ({
         dataset: {
@@ -679,23 +685,28 @@ test("grouped alerts show the first alert and reveal the others one by one", asy
       }),
     },
   });
-  await click();
 
   const partiallyExpanded = panel._renderDeviceGroup(group);
   assert.match(partiallyExpanded, /Second alert/);
   assert.doesNotMatch(partiallyExpanded, /Third alert/);
   assert.match(partiallyExpanded, /aria-expanded="false"/);
 
-  await click();
+  await panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: {
+          action: "toggle-device-alerts",
+          deviceGroup: `is-active:${deviceId}`,
+          alertCount: "3",
+        },
+      }),
+    },
+  });
   const expanded = panel._renderDeviceGroup(group);
   assert.match(expanded, /Third alert/);
   assert.match(expanded, /aria-expanded="true"/);
-
-  await click();
-  const collapsedAgain = panel._renderDeviceGroup(group);
-  assert.doesNotMatch(collapsedAgain, /Second alert/);
-  assert.doesNotMatch(collapsedAgain, /Third alert/);
 });
+
 test("acknowledged alerts stay compact and expose the real unacknowledge action", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
