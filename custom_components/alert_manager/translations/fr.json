@@ -56,6 +56,12 @@
       "unknown": "Une erreur inattendue s’est produite."
     },
     "loading": "Chargement d’Alert Manager…",
+    "monitoring": {
+      "disabled": "La surveillance Alert Manager est désactivée. Les alertes existantes sont conservées, mais aucune nouvelle alerte ne sera détectée.",
+      "enable": "Activer la surveillance",
+      "notification_message": "La surveillance Alert Manager est désactivée. Activez « Surveillance Alert Manager » pour reprendre la détection des alertes.",
+      "notification_title": "Surveillance Alert Manager désactivée"
+    },
     "operators": {
       "above": "supérieur à",
       "below": "inférieur à",
@@ -234,8 +240,19 @@
   },
   "entity": {
     "sensor": {
-      "alert_manager": {
-        "name": "Alert Manager"
+      "main_acknowledge": {
+        "name": "Alertes acquittées"
+      },
+      "main_active": {
+        "name": "Alertes actives"
+      },
+      "main_pending": {
+        "name": "Alertes à venir"
+      }
+    },
+    "switch": {
+      "main_monitoring": {
+        "name": "Surveillance Alert Manager"
       }
     }
   }

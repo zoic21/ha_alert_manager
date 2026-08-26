@@ -40,6 +40,7 @@ const = _module("homeassistant.const")
 
 class Platform:
     SENSOR = "sensor"
+    SWITCH = "switch"
 
 
 const.Platform = Platform
@@ -192,6 +193,19 @@ class Registry:
     def async_get_label_by_name(self, name):
         return self.labels.get(name)
 
+    def async_get_entity_id(self, domain, platform, unique_id):
+        for item in self.entries.values():
+            if (
+                item.entity_id.partition(".")[0] == domain
+                and item.platform == platform
+                and getattr(item, "unique_id", None) == unique_id
+            ):
+                return item.entity_id
+        return None
+
+    def async_remove(self, item_id):
+        self.entries.pop(item_id, None)
+
 
 for name, event in (
     ("entity_registry", "entity_registry_updated"),
@@ -206,6 +220,16 @@ for name, event in (
     module.EVENT_AREA_REGISTRY_UPDATED = event
     module.async_get = lambda hass, registry=name: getattr(hass, registry)
     setattr(helpers, name, module)
+
+device_registry = sys.modules["homeassistant.helpers.device_registry"]
+
+
+class DeviceEntryType(StrEnum):
+    SERVICE = "service"
+
+
+device_registry.DeviceEntryType = DeviceEntryType
+device_registry.DeviceInfo = lambda **kwargs: kwargs
 
 dispatcher = _module("homeassistant.helpers.dispatcher")
 
@@ -263,6 +287,34 @@ class Store:
 
 storage.Store = Store
 
+translation = _module("homeassistant.helpers.translation")
+
+
+async def async_get_translations(hass, language, category, integrations=None):
+    translation_file = (
+        ROOT
+        / "custom_components"
+        / "alert_manager"
+        / "translations"
+        / f"{language}.json"
+    )
+    catalog = __import__("json").loads(translation_file.read_text())
+    result = {}
+
+    def flatten(value, prefix):
+        for key, item in value.items():
+            path = f"{prefix}.{key}"
+            if isinstance(item, dict):
+                flatten(item, path)
+            else:
+                result[path] = item
+
+    flatten(catalog[category], f"component.alert_manager.{category}")
+    return result
+
+
+translation.async_get_translations = async_get_translations
+
 config_validation = _module("homeassistant.helpers.config_validation")
 config_validation.string = lambda value: str(value)
 
@@ -292,6 +344,29 @@ class SensorEntity:
 
 
 sensor_module.SensorEntity = SensorEntity
+
+switch_module = _module("homeassistant.components.switch")
+
+
+class SwitchEntity(SensorEntity):
+    pass
+
+
+switch_module.SwitchEntity = SwitchEntity
+
+persistent_notification = _module("homeassistant.components.persistent_notification")
+
+
+def async_create_notification(hass, message, *, title=None, notification_id=None):
+    hass.notifications[notification_id] = {"message": message, "title": title}
+
+
+def async_dismiss_notification(hass, notification_id):
+    hass.notifications.pop(notification_id, None)
+
+
+persistent_notification.async_create = async_create_notification
+persistent_notification.async_dismiss = async_dismiss_notification
 
 entity_platform = _module("homeassistant.helpers.entity_platform")
 entity_platform.AddConfigEntryEntitiesCallback = object
@@ -402,6 +477,8 @@ class FakeHass:
         self.timers = []
         self.dispatchers = defaultdict(list)
         self.commands = []
+        self.notifications = {}
+        self.config = SimpleNamespace(language="fr")
         self.services = FakeServices()
         self.auth = FakeAuth()
         self.config_entries = FakeConfigEntries()
@@ -486,6 +563,7 @@ def registry_entry():
         disabled_by=None,
         labels=None,
         area_id=None,
+        unique_id=None,
     ):
         item = SimpleNamespace(
             entity_id=entity_id,
@@ -494,6 +572,7 @@ def registry_entry():
             disabled_by=disabled_by,
             labels=set(labels or ()),
             area_id=area_id,
+            unique_id=unique_id,
         )
         hass.entity_registry.entries[entity_id] = item
         return item

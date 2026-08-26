@@ -152,6 +152,10 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
     config = deepcopy(stored)
     changed = False
 
+    if "monitoring_enabled" not in config:
+        config["monitoring_enabled"] = True
+        changed = True
+
     rules = config.get("rules")
     if isinstance(rules, list):
         for rule in rules:

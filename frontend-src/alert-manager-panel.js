@@ -155,8 +155,9 @@ class AlertManagerPanel extends HTMLElement {
     this._loading = true;
     this._busy = false;
     this._notice = null;
+    this._monitoringEnabled = true;
     this._timer = null;
-    this._sensorState = null;
+    this._entityStates = {};
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ruleEditorWidth = 560;
@@ -240,6 +241,7 @@ class AlertManagerPanel extends HTMLElement {
     this._render();
     try {
       [this._config, this._alerts, this._packs] = await this._loadPromise;
+      this._monitoringEnabled = this._config.monitoring_enabled !== false;
       this._resetSettingsDraft();
       this._syncSensor();
       this._notice = null;
@@ -304,23 +306,36 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _syncSensor() {
-    const state = this._hass?.states?.["sensor.alert_manager"];
-    if (!state || state === this._sensorState) return false;
-    this._sensorState = state;
-    const attributes = state.attributes ?? {};
-    if (Array.isArray(attributes.alerts) && Array.isArray(attributes.pending)) {
-      this._alerts = {
-        active_count: Number(attributes.active_count ?? state.state ?? 0),
-        acknowledge_count: Number(attributes.acknowledge_count ?? attributes.acknowledge?.length ?? 0),
-        pending_count: Number(attributes.pending_count ?? 0),
-        tracked_count: Number(attributes.tracked_count ?? 0),
-        alerts: attributes.alerts,
-        pending: attributes.pending,
-        acknowledge: Array.isArray(attributes.acknowledge) ? attributes.acknowledge : [],
-      };
-      return true;
+    const states = this._hass?.states ?? {};
+    const entityIds = [
+      "sensor.alert_manager_main_active",
+      "sensor.alert_manager_main_pending",
+      "sensor.alert_manager_main_acknowledge",
+      "switch.alert_manager_main_monitoring",
+    ];
+    if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
+      return false;
     }
-    return false;
+    this._entityStates = Object.fromEntries(
+      entityIds.map((entityId) => [entityId, states[entityId]]),
+    );
+    const partitions = [
+      ["sensor.alert_manager_main_active", "active_count", "alerts"],
+      ["sensor.alert_manager_main_pending", "pending_count", "pending"],
+      ["sensor.alert_manager_main_acknowledge", "acknowledge_count", "acknowledge"],
+    ];
+    for (const [entityId, countKey, alertsKey] of partitions) {
+      const state = states[entityId];
+      const alerts = state?.attributes?.alerts;
+      if (!state || !Array.isArray(alerts)) continue;
+      this._alerts[countKey] = Number(state.state ?? alerts.length ?? 0);
+      this._alerts[alertsKey] = alerts;
+    }
+    const monitoringState = states["switch.alert_manager_main_monitoring"]?.state;
+    if (monitoringState === "on" || monitoringState === "off") {
+      this._monitoringEnabled = monitoringState === "on";
+    }
+    return true;
   }
 
   async _call(message, successText) {
@@ -370,6 +385,7 @@ class AlertManagerPanel extends HTMLElement {
       ? `<div class="loading">${esc(this._t("loading"))}</div>`
       : this._renderTab();
     const page = `<main class="${this._activeTab === "rules" ? "rules-page" : ""}">
+      ${!this._monitoringEnabled ? `<div class="monitoring-warning" role="alert"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></div>` : ""}
       ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
       ${content}
     </main>`;
@@ -845,6 +861,24 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (action === "enable-monitoring") {
+      if (this._busy) return;
+      this._busy = true;
+      this._render();
+      try {
+        await this._hass.callService("switch", "turn_on", {
+          entity_id: "switch.alert_manager_main_monitoring",
+        });
+        this._monitoringEnabled = true;
+        if (this._config) this._config.monitoring_enabled = true;
+      } catch (error) {
+        this._notice = { kind: "error", text: this._errorText(error) };
+      } finally {
+        this._busy = false;
+        this._render();
+      }
+      return;
+    }
     if (action === "more-info") {
       const entityId = button.dataset.entityId;
       if (!this._hass?.states?.[entityId]) return;
@@ -1103,6 +1137,7 @@ class AlertManagerPanel extends HTMLElement {
     );
     if (!result?.config) return;
     this._config = result.config;
+    this._monitoringEnabled = this._config.monitoring_enabled !== false;
     this._resetSettingsDraft();
     this._editingRule = null;
     this._ruleEditorMode = "visual";
@@ -1461,9 +1496,9 @@ class AlertManagerPanel extends HTMLElement {
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}.alert-details{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:12px 16px;margin:14px 0 0}.alert-details div{min-width:0}dt{font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-normal,400);color:var(--secondary-text-color,#727272)}dd{margin:2px 0 0;overflow-wrap:anywhere}.alert-condition{grid-column:1/-1}.alert-condition dd{overflow:hidden;overflow-wrap:normal;text-overflow:ellipsis;white-space:nowrap}.alert-empty{margin-bottom:20px}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
       .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:16px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-menu-wrap{position:relative}.rule-editor-menu{position:absolute;z-index:10;inset-inline-end:0;inset-block-start:40px;min-width:190px;padding:4px;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);box-shadow:var(--ha-card-box-shadow,0 3px 10px rgba(0,0,0,.2))}.rule-editor-menu ha-button{width:100%;justify-content:flex-start}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
-      .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
+      .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.monitoring-warning{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-radius:8px;margin-bottom:16px;background:color-mix(in srgb,var(--warning-color,#f5a623) 16%,transparent);color:var(--primary-text-color,#212121)}.monitoring-warning ha-button{flex:none}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
       @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}.alert-card-header{grid-template-columns:40px minmax(0,1fr) auto}.alert-current-value{grid-column:auto;text-align:right}.device-alert-row{grid-template-columns:32px minmax(0,1fr) auto}.device-alert-condition,.device-alert-time{grid-column:2/-1}}
     `;
   }

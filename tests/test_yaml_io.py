@@ -103,11 +103,19 @@ def test_config_export_is_deterministic_and_reimportable() -> None:
     first = dump_config_yaml(config)
     assert first == dump_config_yaml(config)
     assert first.startswith("version: 1\nconfig:\n")
+    assert "  monitoring_enabled: true\n" in first
     assert "id: stable-rule-id" not in first
     imported = parse_config_yaml(first)
     assert imported["rules"][0]["id"] != "stable-rule-id"
     assert imported["rules"][0]["id"]
     assert "alerts:" not in first
+
+
+def test_v15_export_without_monitoring_state_defaults_to_enabled() -> None:
+    """Pre-switch V1.5 exports remain importable without weakening validation."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace("  monitoring_enabled: true\n", "")
+    assert parse_config_yaml(legacy)["monitoring_enabled"] is True
 
 
 def test_config_import_accepts_legacy_ids_and_rejects_duplicates_and_runtime() -> None:

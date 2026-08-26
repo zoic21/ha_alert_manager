@@ -58,7 +58,12 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert snapshot["active_count"] == 0
     assert snapshot["acknowledge_count"] == 1
     assert snapshot["alerts"] == []
-    assert AlertManagerSensor(manager).native_value == 0
+    assert (
+        AlertManagerSensor(
+            manager, "active", "mdi:alert-circle", "active_count", "alerts"
+        ).native_value
+        == 0
+    )
     assert alert["acknowledged"] is True
     assert alert["acknowledged_by"] == "Loïc"
     assert alert["acknowledged_at"].endswith("+00:00")
@@ -79,7 +84,12 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     alert = snapshot["alerts"][0]
     assert snapshot["active_count"] == 1
     assert snapshot["acknowledge_count"] == 0
-    assert AlertManagerSensor(manager).native_value == 1
+    assert (
+        AlertManagerSensor(
+            manager, "active", "mdi:alert-circle", "active_count", "alerts"
+        ).native_value
+        == 1
+    )
     assert alert["acknowledged"] is False
     assert "acknowledged_at" not in alert
     assert "acknowledged_by" not in alert

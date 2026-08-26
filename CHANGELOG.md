@@ -2,6 +2,42 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.5-dev — 26 août 2026
+
+### Ajouté
+
+- Appareil de service stable `Alert Manager - Général`, prévu pour accueillir
+  ultérieurement d’autres catégories sans renommer la catégorie `main`.
+- Switch persistant `switch.alert_manager_main_monitoring`, actif par défaut,
+  avec suspension réelle des détections et timers puis réévaluation sans doublon
+  à la reprise.
+- Notification persistante FR/EN, à identifiant stable, lorsque l’intégration est
+  chargée avec la surveillance désactivée.
+- Métadonnées `rule_id` et `rule_name` dans les attributs des alertes issues de
+  règles personnalisées.
+
+### Modifié
+
+- Remplacement cassant de `sensor.alert_manager` par trois capteurs exclusifs :
+  `sensor.alert_manager_main_active`, `sensor.alert_manager_main_pending` et
+  `sensor.alert_manager_main_acknowledge`.
+- Mise à jour du panneau, des traductions, de la documentation FR/EN, des exemples
+  d’automatisation et de l’export/import YAML.
+- Import toujours compatible avec les exports V1.5 sans
+  `monitoring_enabled` ; la surveillance est alors activée par défaut.
+
+### Garanties conservées
+
+- Alertes existantes conservées pendant la suspension, événements de démarrage
+  et résolution sans répétition, services d’acquittement, identifiants, packs,
+  exclusions, délais et suivi multi-entités inchangés.
+
+### Limite volontaire
+
+- L’ancienne entité agrégée est supprimée sans quatrième capteur de compatibilité
+  durable ; les cartes et automatisations doivent migrer vers le capteur d’état
+  correspondant.
+
 ## 1.5.0-dev3 — 26 août 2026
 
 ### Modifié

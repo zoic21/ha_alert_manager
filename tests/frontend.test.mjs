@@ -179,26 +179,28 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
   panel._config = { rules: [] };
   let renders = 0;
   panel._render = () => { renders += 1; };
-  const sensor = {
+  const active = {
     state: "0",
-    attributes: {
-      active_count: 0,
-      acknowledge_count: 0,
-      pending_count: 0,
-      tracked_count: 12,
-      alerts: [],
-      pending: [],
-      acknowledge: [],
-    },
+    attributes: { alerts: [] },
   };
-  panel.hass = { states: { "sensor.alert_manager": sensor } };
+  const pending = { state: "0", attributes: { alerts: [] } };
+  const acknowledge = { state: "0", attributes: { alerts: [] } };
+  const monitoring = { state: "on", attributes: {} };
+  const states = {
+    "sensor.alert_manager_main_active": active,
+    "sensor.alert_manager_main_pending": pending,
+    "sensor.alert_manager_main_acknowledge": acknowledge,
+    "switch.alert_manager_main_monitoring": monitoring,
+  };
+  panel.hass = { states };
   panel.hass = {
-    states: { "sensor.alert_manager": sensor, "sensor.other": { state: "1" } },
+    states: { ...states, "sensor.other": { state: "1" } },
   };
   assert.equal(renders, 1);
 });
 
 const completeConfig = () => ({
+  monitoring_enabled: true,
   automatic: {
     unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
@@ -211,6 +213,60 @@ const completeConfig = () => ({
   excluded_entities: [],
   excluded_devices: [],
   entity_delays: {},
+});
+
+test("partitioned entities update their matching overview lists", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel.hass = {
+    states: {
+      "sensor.alert_manager_main_active": {
+        state: "1",
+        attributes: { alerts: [{ id: "active" }] },
+      },
+      "sensor.alert_manager_main_pending": {
+        state: "2",
+        attributes: { alerts: [{ id: "pending-1" }, { id: "pending-2" }] },
+      },
+      "sensor.alert_manager_main_acknowledge": {
+        state: "1",
+        attributes: { alerts: [{ id: "acknowledged" }] },
+      },
+      "switch.alert_manager_main_monitoring": { state: "on", attributes: {} },
+    },
+  };
+  assert.equal(panel._alerts.active_count, 1);
+  assert.equal(panel._alerts.pending_count, 2);
+  assert.equal(panel._alerts.acknowledge_count, 1);
+  assert.deepEqual(panel._alerts.alerts, [{ id: "active" }]);
+  assert.deepEqual(panel._alerts.pending.map((alert) => alert.id), ["pending-1", "pending-2"]);
+  assert.deepEqual(panel._alerts.acknowledge, [{ id: "acknowledged" }]);
+});
+
+test("disabled monitoring warning can turn the switch back on", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = { ...completeConfig(), monitoring_enabled: false };
+  panel._loading = false;
+  panel._monitoringEnabled = false;
+  const calls = [];
+  panel._hass = {
+    states: {},
+    callService: async (...args) => { calls.push(args); },
+  };
+  panel._render();
+  assert.match(panel.shadowRoot.innerHTML, /<div class="monitoring-warning"/);
+  assert.match(panel.shadowRoot.innerHTML, /La surveillance Alert Manager est désactivée/);
+
+  await panel._handleClick(actionEvent("enable-monitoring"));
+  assert.deepEqual(calls, [[
+    "switch",
+    "turn_on",
+    { entity_id: "switch.alert_manager_main_monitoring" },
+  ]]);
+  assert.equal(panel._monitoringEnabled, true);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /<div class="monitoring-warning"/);
 });
 
 const completePacks = () => [

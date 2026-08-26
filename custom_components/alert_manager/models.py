@@ -32,6 +32,8 @@ class AlertDetails:
     condition: str
     condition_key: str | None = None
     condition_params: dict[str, Any] | None = None
+    rule_id: str | None = None
+    rule_name: str | None = None
     device_id: str | None = None
     device_name: str | None = None
     area: str | None = None
@@ -49,7 +51,15 @@ class AlertDetails:
                 raise ValueError(f"Alert detail {key} must be a non-empty string")
         if "value" not in data:
             raise ValueError("Alert detail value is required")
-        for key in ("device_id", "device_name", "area", "integration", "unit"):
+        for key in (
+            "rule_id",
+            "rule_name",
+            "device_id",
+            "device_name",
+            "area",
+            "integration",
+            "unit",
+        ):
             if data.get(key) is not None and not isinstance(data[key], str):
                 raise ValueError(f"Alert detail {key} must be a string or null")
         if data.get("condition_key") is not None and not isinstance(

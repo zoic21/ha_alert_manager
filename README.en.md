@@ -9,7 +9,8 @@
 # Alert Manager for Home Assistant
 
 Alert Manager centralizes Home Assistant anomalies in an event-driven engine, a
-dedicated panel and one entity: `sensor.alert_manager`.
+dedicated panel and one service device grouping three alert sensors and one
+monitoring switch.
 
 Minimum supported version: **Home Assistant 2026.8**. Alert Manager is an
 unofficial community integration and is not affiliated with the Home Assistant
@@ -28,10 +29,13 @@ project.
   device;
 - persistent per-alert acknowledgement from the panel and Home Assistant
   automations;
+- an `Alert Manager - Général` device, persistent monitoring switch and three
+  sensors separating active, upcoming and acknowledged alerts;
 - visual or YAML editing of custom rules, plus complete YAML configuration
   export and replacement import;
 - start, resolution, acknowledgement and unacknowledgement events;
-- no imposed notifications and no frequent global polling.
+- one safety notification when monitoring is still disabled at load time and no
+  frequent global polling.
 
 Alert Manager handles simple independent anomalies. It is not an external
 monitoring system, an alert history database or a notification service.
@@ -201,7 +205,8 @@ arbitrary conditions or the automation condition engine.
 **Configuration** contains **Export YAML** and **Import YAML**. An
 export is a UTF-8 `alert-manager-config.yaml` file with format `version: 1`,
 general configuration, exclusion tags, default and entity-specific delays,
-automatic-pack configuration and all custom rules. Internal rule IDs are not
+monitoring-switch state, automatic-pack configuration and all custom rules.
+Internal rule IDs are not
 exported and are recreated by the backend during import. It contains no active
 or pending alerts, acknowledgements, timers, detection or
 activation timestamps, or execution history.
@@ -211,70 +216,105 @@ duplicate or runtime fields. It is validated before any write, displays its rule
 enabled-pack and entity-delay totals, then requires explicit confirmation.
 **Import replaces the whole current configuration; it is not a merge.** Existing
 runtime alerts are reconciled only after a valid import, and the configuration is
-persisted atomically.
+persisted atomically. A V1.5 export without `monitoring_enabled` remains accepted
+and defaults monitoring to on.
 
-## `sensor.alert_manager`
+## Device and monitoring switch
 
-The integration creates exactly `sensor.alert_manager`. Its state is the
-unacknowledged active alert count. Its attributes separate unacknowledged active, acknowledged active
-and pending individual alerts:
+The `Alert Manager - Général` service device uses the stable `main` category
+identifier and groups all four entities introduced by this release:
+
+- `switch.alert_manager_main_monitoring`;
+- `sensor.alert_manager_main_active`;
+- `sensor.alert_manager_main_pending`;
+- `sensor.alert_manager_main_acknowledge`.
+
+The switch defaults to on and is persisted with the configuration. Turning it
+off prevents new records, freezes pending transitions, cancels their timers and
+preserves every existing alert. The panel shows a visible warning with a resume
+button. Turning it back on reconciles current Home Assistant states, recreates
+each required timer once and emits events only for real lifecycle transitions.
+
+When the integration loads while monitoring is off, Home Assistant creates the
+stable persistent notification `alert_manager_main_monitoring_disabled`. It
+explains how to turn on `Alert Manager Monitoring`, is not duplicated across
+reloads and is dismissed as soon as monitoring resumes.
+
+## Sensors, attributes and V1.5 migration
+
+The entity registry entry for `sensor.alert_manager` is removed during migration
+and no long-term compatibility sensor is created:
+
+| New entity | State | `attributes.alerts` contents |
+| --- | ---: | --- |
+| `sensor.alert_manager_main_active` | unacknowledged active count | unacknowledged active alerts only |
+| `sensor.alert_manager_main_pending` | upcoming count | pending alerts only |
+| `sensor.alert_manager_main_acknowledge` | acknowledged active count | acknowledged active alerts only |
+
+An occurrence is never exposed by two sensors. Each sensor has exactly one
+`alerts` list attribute. Example custom-rule alert:
 
 ```yaml
-state: 0
+state: 1
 attributes:
-  active_count: 0
-  acknowledge_count: 1
-  pending_count: 1
-  tracked_count: 47
-  alerts: []
-  acknowledge:
-    - id: unavailable:sensor.nas_cpu
-      type: unavailable
-      entity_id: sensor.nas_cpu
-      name: NAS CPU
-      value: unavailable
-      condition: État indisponible
-      condition_key: automatic.unavailable
-      condition_params: {}
-      detected_at: "2026-08-25T14:10:00+02:00"
-      due_at: "2026-08-25T14:25:00+02:00"
-      active_since: "2026-08-25T14:25:00+02:00"
-      delay: 900
-      acknowledged: true
-      acknowledged_at: "2026-08-25T16:30:00+02:00"
-      acknowledged_by: "Loïc"
-  pending:
-    - id: battery:sensor.entry_battery
-      type: battery
-      entity_id: sensor.entry_battery
-      value: 12
-      unit: "%"
-      condition: Batterie inférieure ou égale à 15 %
-      condition_key: automatic.battery
+  alerts:
+    - id: rule:4f9d…:sensor.rack_temperature
+      type: rule
+      rule_id: 4f9d…
+      rule_name: Rack temperature high
+      entity_id: sensor.rack_temperature
+      name: Rack temperature
+      device_id: 0123456789abcdef0123456789abcdef
+      device_name: Rack probe
+      area: Office
+      integration: mqtt
+      value: 34.2
+      unit: °C
+      condition: State greater than 33 °C for 15 min
+      condition_key: rule.generated
       condition_params:
-        threshold: "15"
-      detected_at: "2026-08-25T14:20:00+02:00"
-      due_at: "2026-08-25T14:35:00+02:00"
+        source: state
+        attribute: null
+        operator: above
+        expected: "33"
+        unit: °C
+        duration: 900
+      detected_at: "2026-08-26T10:00:00+02:00"
+      due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
+      active_since: "2026-08-26T10:15:00+02:00"
+      acknowledged: false
 ```
 
-`alerts` contains unacknowledged active alerts, while `acknowledge` contains
-acknowledged active alerts; `acknowledge_count` is the size of the latter list.
-All three public lists (`alerts`, `pending` and `acknowledge`) contain individual
-alerts only, never visual device groups.
+A pending alert has no `active_since` or acknowledgement fields; remaining time
+is derived from `due_at`. An acknowledged alert adds `acknowledged: true`,
+`acknowledged_at` and, when a user is known, `acknowledged_by`. `rule_id` and
+`rule_name` exist only for custom rules. Device, area, integration and unit
+metadata remain optional. Attributes contain no resolved history, visual group or
+periodically written countdown.
 
-Optional metadata includes `device_id`, `device_name`, `area`, `integration` and
-`unit`. `condition` is retained for existing automations. Generated conditions
-also provide `condition_key` and `condition_params` so the panel can render the
-user's language. A custom rule message remains unchanged and has no translation
-key. Resolved history and periodic countdown values are not recorded.
+Cards and automations reading `sensor.alert_manager` must target the appropriate
+new sensor and replace the old `alerts`, `pending` or `acknowledge` lists with its
+single `attributes.alerts` list. For example:
 
-For an unacknowledged active alert, `acknowledged` is `false`.
-`acknowledged_at` and `acknowledged_by` are present only after acknowledgement;
-the author is absent for an automation or system call. Acknowledgement does not
-resolve the alert: it moves from `alerts` to `acknowledge` and remains active while
-its condition is true, but it is excluded from `active_count` and the state of
-`sensor.alert_manager`. It remains included in `acknowledge_count`.
+```jinja
+{{ state_attr('sensor.alert_manager_main_pending', 'alerts') | default([], true) }}
+```
+
+Example automation using the new active count:
+
+```yaml
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.alert_manager_main_active
+    above: 0
+actions:
+  - action: persistent_notification.create
+    data:
+      title: Alert Manager
+      message: >-
+        {{ states('sensor.alert_manager_main_active') }} active alert(s)
+```
 
 ## Acknowledgement services
 
@@ -351,7 +391,8 @@ actions:
 mode: queued
 ```
 
-Alert Manager does not send notifications itself.
+Alert Manager sends no alert notification itself. Its only direct notification is
+the safety warning when monitoring is still disabled at load time.
 
 ## Troubleshooting
 
@@ -362,6 +403,8 @@ Alert Manager does not send notifications itself.
   its parent device. `restored: true` does not mean disabled.
 - **An alert is delayed:** check the rule duration, entity delay, pack delay and
   global delay in that order.
+- **No alert progresses:** verify that
+  `switch.alert_manager_main_monitoring` is `on`.
 - **The language did not change:** reload the panel after changing the Home
   Assistant profile language. User-provided names and messages remain unchanged.
 
@@ -376,14 +419,14 @@ missing or `unknown` startup state does not incorrectly resolve a stored alert.
 The engine listens for state and registry changes and normally reevaluates only
 the affected entity. A full evaluation occurs at startup, after configuration or
 registry changes, and when pack availability changes. One timer is scheduled per
-pending alert, and the sensor is written only when its structured content changes.
+pending alert, and sensors are written only when their structured content changes.
 
 ## Known limitations and deferred features
 
 - no snooze;
 - no resolved-alert history, CSV storage, repeat or escalation;
 - no combined conditions, Jinja templates or hysteresis (including in rule YAML);
-- no built-in notification service;
+- no built-in alert-notification service;
 - device grouping is visual only;
 - configuration is administrator-only;
 - the interface is available only in French and English in this release.

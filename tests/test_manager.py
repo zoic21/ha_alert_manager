@@ -36,21 +36,37 @@ def make_manager(hass, entry):
     return manager
 
 
-def test_creation_of_single_sensor(hass, entry):
-    """The sensor platform creates exactly sensor.alert_manager."""
+def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
+    """The sensor platform replaces the legacy sensor with three partitions."""
+    registry_entry(
+        hass,
+        "sensor.legacy_alerts",
+        platform="alert_manager",
+        unique_id="alert_manager",
+    )
     manager = make_manager(hass, entry)
     hass.data[DATA_MANAGER] = manager
     entities = []
     run(async_setup_sensor(hass, entry, entities.extend))
-    assert len(entities) == 1
-    assert isinstance(entities[0], AlertManagerSensor)
-    assert entities[0].entity_id == "sensor.alert_manager"
-    assert entities[0]._attr_unique_id == "alert_manager"
-    assert entities[0]._attr_translation_key == "alert_manager"
-    assert entities[0].native_value == 0
-    assert entities[0].extra_state_attributes["alerts"] == []
-    assert entities[0].extra_state_attributes["acknowledge"] == []
-    assert entities[0].extra_state_attributes["acknowledge_count"] == 0
+    assert len(entities) == 3
+    assert all(isinstance(entity, AlertManagerSensor) for entity in entities)
+    assert {entity.entity_id for entity in entities} == {
+        "sensor.alert_manager_main_active",
+        "sensor.alert_manager_main_pending",
+        "sensor.alert_manager_main_acknowledge",
+    }
+    assert {entity._attr_unique_id for entity in entities} == {
+        "alert_manager_main_active",
+        "alert_manager_main_pending",
+        "alert_manager_main_acknowledge",
+    }
+    assert all(entity.native_value == 0 for entity in entities)
+    assert all(entity.extra_state_attributes == {"alerts": []} for entity in entities)
+    assert all(
+        entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
+        for entity in entities
+    )
+    assert "sensor.legacy_alerts" not in hass.entity_registry.entries
 
 
 def test_normal_to_pending_and_no_duplicate(hass, entry):
@@ -292,6 +308,8 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
         )
     )
     record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.details.rule_id == rule["id"]
+    assert record.details.rule_name == "Rule"
     assert record.details.condition_key == "rule.generated"
     assert record.details.condition_params == {
         "source": "state",
@@ -949,9 +967,13 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert "entity_id" not in rule
     assert rule["version"] == 2
     assert manager.get_config()["excluded_labels"] == ["skip"]
+    assert manager.get_config()["monitoring_enabled"] is True
     assert "domains" not in manager.get_config()["automatic"]["unavailable"]
     assert "rule:legacy:sensor.test" in manager.records
     assert manager.records["rule:legacy:sensor.test"].detected_at == detected_at
+    assert manager.records["rule:legacy:sensor.test"].details.rule_id == "legacy"
+    assert manager.records["rule:legacy:sensor.test"].details.rule_name == "Legacy"
+    assert hass.stores["alert_manager"]["config"]["monitoring_enabled"] is True
 
     run(manager.async_unload())
     reloaded = make_manager(hass, entry)

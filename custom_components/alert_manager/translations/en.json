@@ -56,6 +56,12 @@
       "unknown": "An unexpected error occurred."
     },
     "loading": "Loading Alert Manager…",
+    "monitoring": {
+      "disabled": "Alert Manager monitoring is disabled. Existing alerts are preserved, but no new alerts will be detected.",
+      "enable": "Enable monitoring",
+      "notification_message": "Alert Manager monitoring is disabled. Turn on “Alert Manager Monitoring” to resume alert detection.",
+      "notification_title": "Alert Manager monitoring disabled"
+    },
     "operators": {
       "above": "greater than",
       "below": "less than",
@@ -234,8 +240,19 @@
   },
   "entity": {
     "sensor": {
-      "alert_manager": {
-        "name": "Alert Manager"
+      "main_acknowledge": {
+        "name": "Acknowledged alerts"
+      },
+      "main_active": {
+        "name": "Active alerts"
+      },
+      "main_pending": {
+        "name": "Upcoming alerts"
+      }
+    },
+    "switch": {
+      "main_monitoring": {
+        "name": "Alert Manager Monitoring"
       }
     }
   }

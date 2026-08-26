@@ -8,6 +8,12 @@ from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
+from homeassistant.components.persistent_notification import (
+    async_create as async_create_persistent_notification,
+)
+from homeassistant.components.persistent_notification import (
+    async_dismiss as async_dismiss_persistent_notification,
+)
 from homeassistant.config_entries import (
     SIGNAL_CONFIG_ENTRY_CHANGED,
     ConfigEntry,
@@ -39,6 +45,7 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -48,7 +55,9 @@ from .const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,
+    MONITORING_NOTIFICATION_ID,
     SIGNAL_ALERTS_UPDATED,
+    SIGNAL_MONITORING_UPDATED,
 )
 from .models import (
     AlertDetails,
@@ -114,6 +123,11 @@ class AlertManager:
         self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
 
+    @property
+    def monitoring_enabled(self) -> bool:
+        """Return whether the main category currently evaluates anomalies."""
+        return self.config.get("monitoring_enabled", True)
+
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
         config, records, migrated = await self.storage.async_load()
@@ -125,6 +139,8 @@ class AlertManager:
             migrated = True
         self.records = records
         self._rebuild_rule_index()
+        if self._enrich_rule_metadata():
+            migrated = True
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
@@ -165,6 +181,7 @@ class AlertManager:
                 )
             )
             self._publish_if_changed(force=True)
+        await self._async_sync_monitoring_notification()
 
     async def async_unload(self) -> None:
         """Remove listeners and timers, persisting a final snapshot."""
@@ -192,6 +209,8 @@ class AlertManager:
     @callback
     def _state_changed(self, event: Event) -> None:
         """Evaluate only the entity whose state changed."""
+        if not self.monitoring_enabled:
+            return
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_relevant_entity_id(entity_id):
             return
@@ -204,6 +223,8 @@ class AlertManager:
     @callback
     def _registry_changed(self, _event: Event) -> None:
         """Labels, disabled state, areas and devices can change eligibility."""
+        if not self.monitoring_enabled:
+            return
         self.entry.async_create_task(
             self.hass,
             self.async_evaluate_all(),
@@ -245,7 +266,8 @@ class AlertManager:
         if availability == self._pack_availability:
             return False
         self._pack_availability = availability
-        await self.async_evaluate_all()
+        if self.monitoring_enabled:
+            await self.async_evaluate_all()
         return True
 
     def _pack_prerequisite_domains(self) -> set[str]:
@@ -284,7 +306,7 @@ class AlertManager:
         emit_events: bool = True,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
-        if self._unloading:
+        if self._unloading or not self.monitoring_enabled:
             return False
         self._refresh_tracking()
         entity_ids = {
@@ -323,7 +345,7 @@ class AlertManager:
         emit_events: bool = True,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
-        if self._unloading:
+        if self._unloading or not self.monitoring_enabled:
             return False
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
@@ -442,6 +464,8 @@ class AlertManager:
                     value=current,
                     condition_key=condition_key,
                     condition_params=condition_params,
+                    rule_id=rule.id,
+                    rule_name=rule.name,
                 ),
                 rule.duration,
             )
@@ -541,6 +565,8 @@ class AlertManager:
         value: Any | None = None,
         condition_key: str | None = None,
         condition_params: dict[str, Any] | None = None,
+        rule_id: str | None = None,
+        rule_name: str | None = None,
     ) -> AlertDetails:
         """Resolve names, device, area and integration once per evaluation."""
         entity_entry = self._entity_registry.async_get(state.entity_id)
@@ -571,6 +597,8 @@ class AlertManager:
             condition=condition,
             condition_key=condition_key,
             condition_params=condition_params,
+            rule_id=rule_id,
+            rule_name=rule_name,
         )
 
     def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
@@ -624,6 +652,33 @@ class AlertManager:
         self._excluded_entities = frozenset(self.config.get("excluded_entities", ()))
         self._excluded_devices = frozenset(self.config.get("excluded_devices", ()))
         self._excluded_labels = frozenset(self.config.get("excluded_labels", ()))
+
+    def _enrich_rule_metadata(self) -> bool:
+        """Add V1.5.5 rule identity fields to persisted runtime records."""
+        changed = False
+        for record in self.records.values():
+            if record.details.type != "rule":
+                continue
+            prefix = "rule:"
+            suffix = f":{record.details.entity_id}"
+            if not record.details.id.startswith(
+                prefix
+            ) or not record.details.id.endswith(suffix):
+                continue
+            rule_id = record.details.id[len(prefix) : -len(suffix)]
+            rule = next(
+                (candidate for candidate in self._rules if candidate.id == rule_id),
+                None,
+            )
+            if rule is None:
+                continue
+            if record.details.rule_id != rule.id:
+                record.details.rule_id = rule.id
+                changed = True
+            if record.details.rule_name != rule.name:
+                record.details.rule_name = rule.name
+                changed = True
+        return changed
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
@@ -735,6 +790,97 @@ class AlertManager:
     def get_config(self) -> dict[str, Any]:
         """Return a defensive copy for WebSocket clients."""
         return deepcopy(self.config)
+
+    async def async_set_monitoring(self, enabled: bool) -> bool:
+        """Persistently suspend or resume the main monitoring category."""
+        if not isinstance(enabled, bool):
+            raise ValueError("Monitoring state must be a boolean")
+        if enabled == self.monitoring_enabled:
+            if enabled:
+                async_dismiss_persistent_notification(
+                    self.hass, MONITORING_NOTIFICATION_ID
+                )
+            return False
+
+        previous_config = deepcopy(self.config)
+        previous_records = deepcopy(self.records)
+        self.config["monitoring_enabled"] = enabled
+        try:
+            if enabled:
+                await self.async_evaluate_all(
+                    save=False,
+                    publish=False,
+                    emit_events=False,
+                )
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self.config = previous_config
+            self.records = previous_records
+            self._cancel_all_timers()
+            self._reschedule_pending_timers()
+            raise
+
+        if enabled:
+            async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
+            self._emit_resume_events(previous_records)
+        else:
+            self._cancel_all_timers()
+        self._refresh_tracking()
+        self._publish_if_changed(force=True)
+        async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
+        return True
+
+    async def _async_sync_monitoring_notification(self) -> None:
+        """Keep one localized persistent startup warning in sync."""
+        if self.monitoring_enabled:
+            async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
+            return
+        try:
+            resources = await async_get_translations(
+                self.hass,
+                self.hass.config.language,
+                "config_panel",
+                integrations=[DOMAIN],
+            )
+        except Exception:  # pragma: no cover - Home Assistant loader failure
+            _LOGGER.exception("Unable to load persistent notification translations")
+            resources = {}
+        prefix = f"component.{DOMAIN}.config_panel.monitoring"
+        title = resources.get(
+            f"{prefix}.notification_title", "Alert Manager monitoring disabled"
+        )
+        message = resources.get(
+            f"{prefix}.notification_message",
+            "Alert Manager monitoring is disabled. Turn on “Alert Manager "
+            "Monitoring” to resume alert detection.",
+        )
+        async_create_persistent_notification(
+            self.hass,
+            message,
+            title=title,
+            notification_id=MONITORING_NOTIFICATION_ID,
+        )
+
+    def _emit_resume_events(self, previous_records: dict[str, AlertRecord]) -> None:
+        """Emit only lifecycle transitions caused by the resume evaluation."""
+        now = dt_util.now()
+        for alert_id, previous in previous_records.items():
+            current = self.records.get(alert_id)
+            if current is None:
+                if previous.status is AlertStatus.ACTIVE:
+                    self._fire_resolved(previous, now)
+                continue
+            if (
+                previous.status is AlertStatus.PENDING
+                and current.status is AlertStatus.ACTIVE
+            ):
+                self._fire_started(current)
+        for alert_id, current in self.records.items():
+            if (
+                alert_id not in previous_records
+                and current.status is AlertStatus.ACTIVE
+            ):
+                self._fire_started(current)
 
     def get_packs(self) -> list[dict[str, Any]]:
         """Return backend-owned pack metadata with current availability."""
@@ -856,6 +1002,18 @@ class AlertManager:
             self._restore_configuration_snapshot(previous)
             raise
 
+        monitoring_changed = (
+            previous[0].get("monitoring_enabled", True) != self.monitoring_enabled
+        )
+        if monitoring_changed:
+            if self.monitoring_enabled:
+                async_dismiss_persistent_notification(
+                    self.hass, MONITORING_NOTIFICATION_ID
+                )
+                self._emit_resume_events(previous[1])
+            else:
+                self._cancel_all_timers()
+            async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 
@@ -897,7 +1055,8 @@ class AlertManager:
             removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
             if not rule.enabled:
                 removed_entities.update(old_rule.entity_ids)
-            self._remove_rule_instances(rule_id, removed_entities)
+            if self.monitoring_enabled:
+                self._remove_rule_instances(rule_id, removed_entities)
 
             affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
             for entity_id in affected_entities:
@@ -924,7 +1083,8 @@ class AlertManager:
         try:
             del self.config["rules"][index]
             self._rebuild_rule_index()
-            self._remove_rule_instances(rule_id, set(rule.entity_ids))
+            if self.monitoring_enabled:
+                self._remove_rule_instances(rule_id, set(rule.entity_ids))
             for entity_id in rule.entity_ids:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
             await self.storage.async_save(self.config, self.records)
@@ -964,6 +1124,8 @@ class AlertManager:
 
     def _reschedule_pending_timers(self) -> None:
         """Restore timers from records after an unsuccessful configuration swap."""
+        if not self.monitoring_enabled:
+            return
         for record in self.records.values():
             if record.status is AlertStatus.PENDING:
                 self._schedule_timer(record)
@@ -977,6 +1139,8 @@ class AlertManager:
 
     def _schedule_timer(self, record: AlertRecord) -> None:
         """Schedule exactly one timer for a pending alert."""
+        if not self.monitoring_enabled:
+            return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
         when = record.due_at.astimezone(UTC)
@@ -996,6 +1160,8 @@ class AlertManager:
     def _timer_due(self, alert_id: str) -> None:
         """Re-evaluate the source at due time instead of blindly activating."""
         self._timers.pop(alert_id, None)
+        if not self.monitoring_enabled:
+            return
         record = self.records.get(alert_id)
         if record is None:
             return

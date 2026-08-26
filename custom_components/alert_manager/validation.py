@@ -80,6 +80,10 @@ def validate_config(config: Any) -> dict[str, Any]:
         raise ValueError("Configuration must be an object")
 
     result = deepcopy(DEFAULT_CONFIG)
+    monitoring_enabled = config.get("monitoring_enabled", result["monitoring_enabled"])
+    if not isinstance(monitoring_enabled, bool):
+        raise ValueError("monitoring_enabled must be a boolean")
+    result["monitoring_enabled"] = monitoring_enabled
     result["global_delay"] = validate_delay(
         config.get("global_delay", result["global_delay"]), "global_delay"
     )

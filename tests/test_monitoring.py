@@ -1,0 +1,246 @@
+"""Main device, monitoring suspension and partitioned entity tests."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from custom_components.alert_manager.const import (
+    DATA_MANAGER,
+    EVENT_ALERT_RESOLVED,
+    EVENT_ALERT_STARTED,
+    MONITORING_NOTIFICATION_ID,
+)
+from custom_components.alert_manager.manager import AlertManager
+from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.sensor import async_setup_entry as setup_sensors
+from custom_components.alert_manager.switch import (
+    AlertManagerMonitoringSwitch,
+)
+from custom_components.alert_manager.switch import async_setup_entry as setup_switch
+
+
+def run(coroutine):
+    return asyncio.run(coroutine)
+
+
+def event_data(hass, event_type):
+    return [data for event, data in hass.bus.fired if event == event_type]
+
+
+def test_main_device_groups_all_four_entities(hass, entry):
+    """The three sensors and switch use one deterministic service device."""
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    entities = []
+    run(setup_sensors(hass, entry, entities.extend))
+    run(setup_switch(hass, entry, entities.extend))
+
+    assert len(entities) == 4
+    for entity in entities:
+        assert entity._attr_device_info == {
+            "identifiers": {("alert_manager", "main")},
+            "name": "Alert Manager - Général",
+            "entry_type": "service",
+        }
+
+
+def test_monitoring_switch_defaults_on_and_persists_off(hass, entry):
+    """A first install is enabled and a disabled state survives reload."""
+    first = AlertManager(hass, entry)
+    run(first.async_setup())
+    switch = AlertManagerMonitoringSwitch(first)
+    assert switch.entity_id == "switch.alert_manager_main_monitoring"
+    assert switch.is_on is True
+
+    run(switch.async_turn_off())
+    assert switch.is_on is False
+    assert hass.stores["alert_manager"]["config"]["monitoring_enabled"] is False
+    run(first.async_unload())
+
+    second = AlertManager(hass, entry)
+    run(second.async_setup())
+    assert second.monitoring_enabled is False
+    assert AlertManagerMonitoringSwitch(second).is_on is False
+
+
+def test_disabled_monitoring_preserves_records_and_stops_detection(
+    hass, entry, set_now
+):
+    """Suspension keeps records frozen and ignores state changes and due timers."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.pending", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    pending_id = "unavailable:sensor.pending"
+    timer = next(item for item in hass.timers if not item["cancelled"])
+
+    run(manager.async_set_monitoring(False))
+    assert timer["cancelled"] is True
+    hass.states.set("sensor.new", "unavailable")
+    run(manager.async_evaluate_entity("sensor.new"))
+    assert set(manager.records) == {pending_id}
+
+    set_now(start + timedelta(seconds=901))
+    timer["action"](start + timedelta(seconds=901))
+    assert manager.records[pending_id].status is AlertStatus.PENDING
+    assert event_data(hass, EVENT_ALERT_STARTED) == []
+
+
+def test_monitoring_persistence_failure_restores_state_and_timer(hass, entry):
+    """A failed switch write cannot leave monitoring partially suspended."""
+    hass.states.set("sensor.pending", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+
+    async def fail_save(_config, _records):
+        raise OSError("storage unavailable")
+
+    manager.storage.async_save = fail_save
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_set_monitoring(False))
+    assert manager.monitoring_enabled is True
+    assert set(manager.records) == {"unavailable:sensor.pending"}
+    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 1
+
+
+def test_resume_reconciles_once_without_duplicate_timers_or_events(
+    hass, entry, set_now
+):
+    """Resume evaluates current state once and emits only real transitions."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.pending", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    pending_id = "unavailable:sensor.pending"
+    run(manager.async_set_monitoring(False))
+    hass.states.set("sensor.new", "unavailable")
+    set_now(start + timedelta(seconds=901))
+
+    assert run(manager.async_set_monitoring(True)) is True
+    assert manager.records[pending_id].status is AlertStatus.ACTIVE
+    assert manager.records["unavailable:sensor.new"].status is AlertStatus.PENDING
+    assert [data["id"] for data in event_data(hass, EVENT_ALERT_STARTED)] == [
+        pending_id
+    ]
+    live_timers = [timer for timer in hass.timers if not timer["cancelled"]]
+    assert len(live_timers) == 1
+
+    assert run(manager.async_set_monitoring(True)) is False
+    assert len(event_data(hass, EVENT_ALERT_STARTED)) == 1
+    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 1
+
+
+def test_resume_resolves_existing_active_alert_only_once(hass, entry, set_now):
+    """An active condition recovered while suspended resolves on reconciliation."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    alert_id = "unavailable:sensor.test"
+    assert manager.records[alert_id].status is AlertStatus.ACTIVE
+    run(manager.async_set_monitoring(False))
+    hass.states.set("sensor.test", "ok")
+
+    run(manager.async_set_monitoring(True))
+    assert alert_id not in manager.records
+    assert [data["id"] for data in event_data(hass, EVENT_ALERT_RESOLVED)] == [alert_id]
+    run(manager.async_set_monitoring(True))
+    assert len(event_data(hass, EVENT_ALERT_RESOLVED)) == 1
+
+
+def test_disabled_startup_notification_is_stable_and_dismissed_on_resume(hass, entry):
+    """A disabled reload creates one localized warning which resume removes."""
+    hass.stores["alert_manager"] = {
+        "config": {"monitoring_enabled": False},
+        "alerts": {},
+    }
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    assert set(hass.notifications) == {MONITORING_NOTIFICATION_ID}
+    notification = hass.notifications[MONITORING_NOTIFICATION_ID]
+    assert notification["title"] == "Surveillance Alert Manager désactivée"
+    assert "Surveillance Alert Manager" in notification["message"]
+
+    run(manager._async_sync_monitoring_notification())
+    assert set(hass.notifications) == {MONITORING_NOTIFICATION_ID}
+    run(manager.async_set_monitoring(True))
+    assert hass.notifications == {}
+
+
+def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
+    hass, entry, set_now
+):
+    """Each sensor contains only the records represented by its state."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.active", "unavailable", {"friendly_name": "Active"})
+    hass.states.set("sensor.pending", "unavailable", {"friendly_name": "Pending"})
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(
+        manager.async_update_config(
+            {"entity_delays": {"sensor.active": 0, "sensor.pending": 900}}
+        )
+    )
+    run(manager.async_acknowledge("unavailable:sensor.active", "Loïc"))
+    hass.states.set("sensor.other", "unavailable", {"friendly_name": "Other"})
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {
+                    "sensor.active": 0,
+                    "sensor.pending": 900,
+                    "sensor.other": 0,
+                }
+            }
+        )
+    )
+
+    hass.data[DATA_MANAGER] = manager
+    sensors = []
+    run(setup_sensors(hass, entry, sensors.extend))
+    by_id = {sensor.entity_id: sensor for sensor in sensors}
+    expected = {
+        "sensor.alert_manager_main_active": {"unavailable:sensor.other"},
+        "sensor.alert_manager_main_pending": {"unavailable:sensor.pending"},
+        "sensor.alert_manager_main_acknowledge": {"unavailable:sensor.active"},
+    }
+    all_ids = []
+    for entity_id, ids in expected.items():
+        sensor = by_id[entity_id]
+        alerts = sensor.extra_state_attributes["alerts"]
+        assert sensor.native_value == len(ids)
+        assert set(sensor.extra_state_attributes) == {"alerts"}
+        assert {alert["id"] for alert in alerts} == ids
+        all_ids.extend(alert["id"] for alert in alerts)
+    assert len(all_ids) == len(set(all_ids))
+
+
+def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):
+    """Persisted active and pending runtime data loads into the right sensors."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.active", "unavailable")
+    hass.states.set("sensor.pending", "unavailable")
+    first = AlertManager(hass, entry)
+    run(first.async_setup())
+    run(first.async_update_config({"entity_delays": {"sensor.active": 0}}))
+    run(first.async_unload())
+
+    second = AlertManager(hass, entry)
+    run(second.async_setup())
+    snapshot = second.public_snapshot()
+    assert {alert["id"] for alert in snapshot["alerts"]} == {
+        "unavailable:sensor.active"
+    }
+    assert {alert["id"] for alert in snapshot["pending"]} == {
+        "unavailable:sensor.pending"
+    }

@@ -9,13 +9,14 @@
 # Alert Manager pour Home Assistant
 
 Alert Manager centralise les anomalies Home Assistant dans un moteur événementiel,
-un panel **Alertes** et une seule entité : `sensor.alert_manager`.
+un panel **Alertes** et un appareil de service regroupant trois capteurs d’alertes
+et un switch de surveillance.
 
 Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.5
+## Fonctionnalités V1.5.5
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -34,13 +35,16 @@ Assistant.
   appartiennent au même appareil ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
   automatisations Home Assistant ;
+- appareil `Alert Manager - Général`, switch de surveillance persistant et trois
+  capteurs séparant les alertes actives, à venir et acquittées ;
 - édition visuelle ou YAML des règles personnalisées, export YAML complet et
   import YAML de remplacement de la configuration ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
   `alert_manager_alert_unacknowledged` ;
-- aucune notification imposée et aucun polling global fréquent.
+- notification persistante de sécurité uniquement lorsque la surveillance est
+  encore désactivée au chargement, et aucun polling global fréquent.
 
 Alert Manager centralise des anomalies simples et indépendantes. Il ne remplace
 ni un système de supervision externe, ni l’historique de Home Assistant, ni une
@@ -223,7 +227,8 @@ Dans **Configuration**, les actions **Exporter en YAML** et
 **Importer un YAML** gèrent la configuration entière. L’export télécharge
 `alert-manager-config.yaml`, encodé en UTF-8, avec le format `version: 1`, les
 paramètres généraux, tags d’exclusion, délais globaux et particuliers,
-configuration des packs automatiques et toutes les règles personnalisées. Les
+état du switch de surveillance, configuration des packs automatiques et toutes
+les règles personnalisées. Les
 identifiants internes des règles ne sont pas exportés et sont recréés par le
 backend lors de l’import. Il n’exporte jamais les alertes actives ou à venir,
 acquittements, timers, dates de détection/activation ni historique d’exécution.
@@ -233,7 +238,9 @@ inconnus, dupliqués ou runtime. Le fichier est validé intégralement avant tou
 écriture, affiche le nombre de règles, packs activés et délais particuliers, puis
 demande une confirmation explicite. **L’import remplace entièrement la
 configuration actuelle : ce n’est pas une fusion.** Les alertes runtime ne sont
-réconciliées qu’après un import valide et la persistance est atomique.
+réconciliées qu’après un import valide et la persistance est atomique. Un export
+V1.5 dépourvu de `monitoring_enabled` reste accepté et active la surveillance par
+défaut.
 
 ## Exclusions et priorité des délais
 
@@ -258,82 +265,105 @@ une alerte active redevient en attente si sa nouvelle échéance est future. Son
 identifiant et son cycle de vie sont conservés. Les délais particuliers V1.1 sont
 réutilisés tels quels, sans migration destructive.
 
-## Capteur unique
+## Appareil et switch de surveillance
 
-L’intégration crée exactement `sensor.alert_manager`. Son état est le nombre
-d’alertes actives non acquittées. Ses attributs séparent les alertes actives non acquittées,
-acquittées et en attente :
+L’appareil de service `Alert Manager - Général`, identifié de façon stable par la
+catégorie `main`, regroupe les quatre entités de cette version :
+
+- `switch.alert_manager_main_monitoring` ;
+- `sensor.alert_manager_main_active` ;
+- `sensor.alert_manager_main_pending` ;
+- `sensor.alert_manager_main_acknowledge`.
+
+Le switch est actif par défaut et son état est stocké avec la configuration. À
+`off`, le moteur ne crée plus d’alerte, ne fait pas progresser les alertes
+`pending`, annule leurs timers et conserve toutes les occurrences existantes. Le
+panneau affiche alors un avertissement avec un bouton de réactivation. À `on`, la
+situation courante est réévaluée, les timers utiles sont recréés une seule fois et
+seules les transitions réelles émettent un événement.
+
+Si l’intégration est chargée alors que le switch est désactivé, Home Assistant
+crée la notification persistante
+`alert_manager_main_monitoring_disabled`. Elle indique comment réactiver
+`Surveillance Alert Manager`, ne se duplique pas lors des rechargements et est
+supprimée dès la reprise.
+
+## Capteurs, attributs et migration V1.5
+
+`sensor.alert_manager` est supprimé du registre des entités lors de la migration
+et remplacé sans capteur de compatibilité durable :
+
+| Nouvelle entité | État | Contenu de `attributes.alerts` |
+| --- | ---: | --- |
+| `sensor.alert_manager_main_active` | nombre d’actives non acquittées | actives non acquittées uniquement |
+| `sensor.alert_manager_main_pending` | nombre d’alertes à venir | `pending` uniquement |
+| `sensor.alert_manager_main_acknowledge` | nombre d’actives acquittées | actives acquittées uniquement |
+
+Une occurrence n’apparaît jamais dans deux capteurs. Chaque capteur n’expose
+qu’un attribut `alerts`, toujours une liste. Exemple d’alerte de règle :
 
 ```yaml
 state: 1
 attributes:
-  active_count: 1
-  acknowledge_count: 1
-  pending_count: 1
-  tracked_count: 47
   alerts:
-    - id: unavailable:sensor.unas_cpu_usage
-      type: unavailable
-      entity_id: sensor.unas_cpu_usage
+    - id: rule:4f9d…:sensor.baie_temperature
+      type: rule
+      rule_id: 4f9d…
+      rule_name: Température baie élevée
+      entity_id: sensor.baie_temperature
+      name: Température baie
       device_id: 0123456789abcdef0123456789abcdef
-      name: UNAS
-      value: unavailable
-      condition: État indisponible
-      condition_key: automatic.unavailable
-      condition_params: {}
-      detected_at: "2026-08-24T14:10:00+02:00"
-      due_at: "2026-08-24T14:25:00+02:00"
-      active_since: "2026-08-24T14:25:00+02:00"
-      delay: 900
-      acknowledged: false
-  acknowledge:
-    - id: connectivity:binary_sensor.unas_connectivity
-      type: connectivity
-      entity_id: binary_sensor.unas_connectivity
-      name: Connectivité UNAS
-      value: "off"
-      condition: Connectivité coupée
-      detected_at: "2026-08-25T16:15:00+02:00"
-      due_at: "2026-08-25T16:30:00+02:00"
-      active_since: "2026-08-25T16:30:00+02:00"
-      delay: 900
-      acknowledged: true
-      acknowledged_at: "2026-08-25T16:30:00+02:00"
-      acknowledged_by: "Loïc"
-  pending:
-    - id: battery:sensor.detecteur_entree_battery
-      type: battery
-      entity_id: sensor.detecteur_entree_battery
-      value: 12
-      unit: "%"
-      condition: Batterie inférieure ou égale à 15 %
-      condition_key: automatic.battery
+      device_name: Sonde baie
+      area: Bureau
+      integration: mqtt
+      value: 34.2
+      unit: °C
+      condition: État supérieur à 33 °C pendant 15 min
+      condition_key: rule.generated
       condition_params:
-        threshold: "15"
-      detected_at: "2026-08-24T14:20:00+02:00"
-      due_at: "2026-08-24T14:35:00+02:00"
+        source: state
+        attribute: null
+        operator: above
+        expected: "33"
+        unit: °C
+        duration: 900
+      detected_at: "2026-08-26T10:00:00+02:00"
+      due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
+      active_since: "2026-08-26T10:15:00+02:00"
+      acknowledged: false
 ```
 
-Aucun historique résolu et aucun compte à rebours périodique ne sont enregistrés
-dans les attributs. `device_id` est facultatif et n’est présent que pour une entité
-rattachée à un appareil. Les listes `alerts`, `pending` et `acknowledge` restent
-toujours des alertes individuelles : aucun groupe visuel n’est persisté ou exposé
-au capteur. `alerts` contient les alertes actives non acquittées, tandis que
-`acknowledge` contient les alertes actives acquittées. `acknowledge_count` donne
-la taille de cette dernière liste.
-`condition` est conservé pour les automatisations existantes. Les champs
-`condition_key` et `condition_params`, présents pour les conditions générées par
-Alert Manager, permettent au panneau de les afficher dans la langue de
-l’utilisateur. Un message personnalisé reste inchangé et n’est jamais traduit.
+Une alerte `pending` n’a ni `active_since` ni champ d’acquittement ; son temps
+restant se calcule à partir de `due_at`. Une alerte acquittée ajoute
+`acknowledged: true`, `acknowledged_at` et, lorsqu’un utilisateur est connu,
+`acknowledged_by`. Les champs `rule_id` et `rule_name` ne sont présents que pour
+les règles personnalisées. Les métadonnées d’appareil, de zone, d’intégration et
+d’unité restent facultatives. Aucun historique résolu, groupe visuel ou compte à
+rebours périodique n’est enregistré dans les attributs.
 
-Pour une alerte active non acquittée, `acknowledged` vaut `false`. Les champs
-`acknowledged_at` et `acknowledged_by` ne sont présents qu’après acquittement.
-`acknowledged_by` est absent lorsque l’action vient d’une automatisation ou du
-système. Une alerte acquittée passe de `alerts` à `acknowledge` et reste active
-tant que sa condition reste vraie, mais elle n’est plus comptée dans
-`active_count` ni dans l’état de `sensor.alert_manager`. Elle reste comptée dans
-`acknowledge_count`.
+Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
+le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
+`pending` ou `acknowledge` par l’unique `attributes.alerts`. Par exemple :
+
+```jinja
+{{ state_attr('sensor.alert_manager_main_pending', 'alerts') | default([], true) }}
+```
+
+Exemple d’automatisation basée sur le nouveau compteur actif :
+
+```yaml
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.alert_manager_main_active
+    above: 0
+actions:
+  - action: persistent_notification.create
+    data:
+      title: Alert Manager
+      message: >-
+        {{ states('sensor.alert_manager_main_active') }} alerte(s) active(s)
+```
 
 ## Acquittement et services
 
@@ -416,7 +446,9 @@ actions:
 mode: queued
 ```
 
-L’intégration n’envoie elle-même aucune notification.
+L’intégration n’envoie aucune notification d’alerte. La seule notification créée
+directement est l’avertissement de sécurité lorsque la surveillance est encore
+désactivée au chargement.
 
 ## Dépannage courant
 
@@ -431,6 +463,8 @@ L’intégration n’envoie elle-même aucune notification.
   l’entité est désactivée.
 - **Une alerte ne démarre pas immédiatement** : vérifier, dans cet ordre, la durée
   de règle, le délai particulier de l’entité, le délai du pack et le délai global.
+- **Aucune alerte ne progresse** : vérifier que
+  `switch.alert_manager_main_monitoring` est à `on`.
 - **La langue ne change pas** : recharger le panneau après avoir changé la langue
   du profil Home Assistant. Les noms d’entités, d’appareils, de pièces, de règles
   et les messages personnalisés restent volontairement inchangés.
@@ -449,7 +483,7 @@ idempotente et considérés comme non acquittés.
 Le moteur écoute les changements d’état et les registres. Il ne réévalue que
 l’entité concernée, sauf au démarrage, après une modification de configuration ou
 un changement de registre ou de disponibilité d’un pack. Un seul timer est
-planifié par alerte en attente. Le capteur n’est réécrit que si son contenu
+planifié par alerte en attente. Les capteurs ne sont réécrits que si leur contenu
 structuré change réellement.
 
 ## Développement et tests
@@ -474,8 +508,8 @@ Les workflows exécutent également Hassfest et la validation HACS.
 - pas d’historique des alertes résolues ni de stockage CSV ;
 - pas de template Jinja, condition combinée ou hystérésis, y compris en YAML ;
 - pas d’import automatique des anciennes automatisations ;
-- pas de notification directe, application mobile, add-on, MQTT ou entité par
-  alerte ;
+- pas de notification d’alerte directe, application mobile, add-on, MQTT ou
+  entité par alerte ;
 - regroupement uniquement visuel, sans fusion des alertes ;
 - configuration réservée aux administrateurs ;
 - interface fournie uniquement en français et en anglais dans cette version.
