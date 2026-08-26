@@ -31,16 +31,17 @@ Assistant.
 - panel administrateur responsive, servi directement par l’intégration ;
 - interface, flux de configuration, packs et conditions disponibles en français
   et en anglais selon la langue de chaque utilisateur Home Assistant ;
-- regroupement visuel, sans fusion des alertes, lorsque plusieurs anomalies
-  appartiennent au même appareil ;
+- tableau compact avec recherche, filtres, tri, groupement repliable et colonnes
+  personnalisables, sans fusion des alertes ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
   automatisations Home Assistant ;
 - appareil `Alert Manager - Général`, switch de surveillance persistant et trois
   capteurs séparant les alertes actives, à venir et acquittées ;
 - édition visuelle ou YAML des règles personnalisées, export YAML complet et
   import YAML de remplacement de la configuration ;
-- historique persistant des alertes actives résolues, limité par défaut à 100
-  événements et consultable dans un onglet dédié sans nouvelle entité ;
+- historique persistant des alertes résolues ou annulées avant activation, limité
+  par défaut à 100 événements et consultable dans un onglet dédié sans nouvelle
+  entité ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
@@ -93,30 +94,32 @@ latérale et reste réservé aux administrateurs.
 
 Le panel est réservé aux administrateurs et contient cinq sections :
 
-1. **Vue d’ensemble** : sections distinctes pour les alertes actives en rouge, à
-   venir en orange et acquittées en bleu, avec valeur, condition, équipement,
-   pièce et dates. Le nom de la
-   source ouvre le dialogue natif
-   « Plus d’informations ». Le temps restant est calculé dans le
-   navigateur depuis `due_at` ; il n’est jamais écrit chaque seconde dans Recorder.
-   Plusieurs alertes rattachées au même identifiant d’appareil sont réunies dans
-   une tuile avec une ligne par source au sein d’une même section. Une entité sans
-   appareil, ou un appareil qui ne porte plus qu’une alerte, conserve une tuile
-   individuelle compacte. L’icône d’état rouge à gauche devient une coche bleue au
-   survol pour acquitter l’alerte. Pour une alerte acquittée, elle devient une
-   croix rouge au survol afin de retirer l’acquittement. Chaque ligne conserve sa
-   propre action, y compris dans un groupe ; aucun bouton n’agit sur toutes les
-   alertes d’un appareil.
+1. **Vue d’ensemble** : un tableau compact unique réunit les alertes actives en
+   rouge, à venir en orange et acquittées en bleu. Ses colonnes par défaut sont
+   Statut, Appareil, Entité, Valeur, Condition, Détectée le et
+   Active depuis/Temps restant. Le nom de l’entité ouvre le dialogue natif
+   « Plus d’informations ». Le temps restant est calculé dans le navigateur
+   depuis `due_at` et affiche un délai suspendu lorsque la surveillance est
+   désactivée ; aucune valeur n’est écrite chaque seconde dans Recorder.
+   La barre d’outils permet une recherche immédiate, des filtres cumulables, un
+   groupement repliable par appareil, zone, règle ou statut, ainsi qu’un tri
+   ascendant ou descendant. Les colonnes facultatives (ID d’entité, zone, règle,
+   message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur
+   visibilité, le groupement et le tri sont conservés localement pour
+   l’utilisateur, sans modifier la configuration de l’intégration.
+   Le mode sélection remplace la barre d’outils par une barre d’actions. Il
+   permet de sélectionner les lignes visibles et d’acquitter ou désacquitter en
+   masse. Une sélection mixte n’agit que sur les alertes compatibles : les
+   alertes `pending` et les alertes déjà dans l’état demandé sont ignorées, et le
+   retour indique le nombre réellement modifié.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
-2. **Historique** : alertes actives résolues, de la plus récente à la plus
-   ancienne, dans des cartes grises reprenant la structure et le groupement du
-   Dashboard. Chaque événement fige le nom de règle et d’entité, l’appareil, la
-   pièce, le message, la condition et la valeur de déclenchement, les dates de
-   détection, activation et résolution, les durées et l’éventuel acquittement.
-   Il ne propose ni acquittement, ni compte à rebours, ni action runtime. Une
-   anomalie revenue à la normale pendant `pending` n’a jamais été active et
-   n’entre donc pas dans l’historique.
+2. **Historique** : le même tableau liste les alertes résolues, les résolutions
+   après acquittement et les anomalies annulées avant activation. Chaque
+   événement fige le nom de règle et d’entité, l’appareil, la zone, le message,
+   la condition, la valeur de déclenchement et les dates. Recherche, filtres,
+   groupement, tri et colonnes personnalisables restent disponibles. Aucune
+   sélection ni action métier d’acquittement n’est proposée dans l’Historique.
 3. **Surveillance automatique** : activation, délais et seuil de batterie. Les
    cartes sont produites depuis les métadonnées du backend et seuls les packs
    actuellement disponibles sont proposés.
@@ -536,11 +539,11 @@ Les workflows exécutent également Hassfest et la validation HACS.
 ## Limites connues et fonctions reportées
 
 - pas de snooze, répétition ou escalade ;
-- pas d’historique des alertes résolues ni de stockage CSV ;
+- pas d’export CSV de l’historique ;
 - pas de template Jinja, condition combinée ou hystérésis, y compris en YAML ;
 - pas d’import automatique des anciennes automatisations ;
 - pas de notification d’alerte directe, application mobile, add-on, MQTT ou
   entité par alerte ;
-- regroupement uniquement visuel, sans fusion des alertes ;
+- aucune action métier dans l’Historique ;
 - configuration réservée aux administrateurs ;
 - interface fournie uniquement en français et en anglais dans cette version.

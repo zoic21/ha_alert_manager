@@ -67,6 +67,7 @@
       "message": "Message",
       "open_settings": "Ouvrir Configuration",
       "resolved": "Résolue",
+      "resolved_acknowledged": "Résolue après acquittement",
       "resolved_at": "Résolue le",
       "status": "État final",
       "title": "Historique des alertes"
@@ -227,6 +228,93 @@
       "rule_enabled": "Règle activée",
       "rule_updated": "Règle modifiée",
       "settings_saved": "Paramètres enregistrés"
+    },
+    "table": {
+      "columns": {
+        "area": "Zone",
+        "condition": "Condition",
+        "detected": "Détectée le",
+        "device": "Appareil",
+        "duration": "Durée",
+        "entity": "Entité",
+        "entity_id": "ID de l’entité",
+        "message": "Message",
+        "move_down": "Descendre la colonne {column}",
+        "move_up": "Monter la colonne {column}",
+        "reset": "Restaurer les colonnes par défaut",
+        "resolved": "Résolue le",
+        "rule": "Règle",
+        "status": "Statut",
+        "timeline": "Active depuis / Temps restant",
+        "title": "Colonnes",
+        "value": "Valeur"
+      },
+      "empty_current": "Aucune alerte en cours.",
+      "empty_filtered": "Aucune ligne ne correspond à la recherche et aux filtres.",
+      "filters": {
+        "acknowledged": "État d’acquittement",
+        "all": "Tous",
+        "detected_from": "Détectée à partir du",
+        "detected_to": "Détectée jusqu’au",
+        "no": "Non acquittée",
+        "reset": "Réinitialiser les filtres",
+        "resolved_from": "Résolue à partir du",
+        "resolved_to": "Résolue jusqu’au",
+        "title": "Filtres",
+        "yes": "Acquittée"
+      },
+      "group": {
+        "area": "Zone",
+        "device": "Appareil",
+        "none": "Aucun groupement",
+        "rule": "Règle",
+        "status": "Statut",
+        "title": "Grouper par"
+      },
+      "groups": {
+        "without_area": "Sans zone",
+        "without_device": "Sans appareil",
+        "without_rule": "Sans règle",
+        "without_status": "Sans statut"
+      },
+      "monitoring_suspended": "Délai suspendu — surveillance désactivée",
+      "search": "Rechercher dans les alertes",
+      "selection": {
+        "acknowledge": "Acquitter ({count})",
+        "acknowledged_result": "{count} alerte(s) acquittée(s)",
+        "close": "Fermer le mode sélection",
+        "count": "{count} sélectionnée(s)",
+        "open": "Activer la sélection multiple",
+        "partial": "{count} alerte(s) modifiée(s), {failed} échec(s)",
+        "select": "Sélectionner",
+        "select_entity": "Sélectionner l’alerte de {entity}",
+        "select_visible": "Sélectionner ou désélectionner les lignes visibles",
+        "toolbar": "Actions sur les alertes sélectionnées",
+        "unacknowledge": "Désacquitter ({count})",
+        "unacknowledged_result": "Acquittement retiré pour {count} alerte(s)"
+      },
+      "sort": {
+        "activated": "Date d’activation",
+        "asc": "Croissant",
+        "desc": "Décroissant",
+        "detected": "Date de détection",
+        "device": "Appareil",
+        "direction": "Ordre",
+        "entityName": "Entité",
+        "remaining": "Temps restant",
+        "resolved": "Date de résolution",
+        "rule": "Règle",
+        "status": "Statut",
+        "title": "Trier par",
+        "value": "Valeur"
+      },
+      "status": {
+        "acknowledged": "Alerte acquittée",
+        "active": "Alerte active",
+        "pending": "Alerte à venir"
+      },
+      "toolbar": "Outils du tableau des alertes",
+      "visible_count": "{visible} sur {total}"
     },
     "tabs": {
       "automatic": "Surveillance automatique",

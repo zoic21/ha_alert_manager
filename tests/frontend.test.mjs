@@ -65,6 +65,12 @@ globalThis.customElements = {
 };
 globalThis.window = {
   confirm: () => true,
+  localStorage: {
+    values: new Map(),
+    getItem(key) { return this.values.get(key) ?? null; },
+    setItem(key, value) { this.values.set(key, value); },
+    clear() { this.values.clear(); },
+  },
 };
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
@@ -77,7 +83,7 @@ Object.defineProperty(globalThis, "navigator", {
   },
 });
 
-const { buildHistoryItems, buildOverviewItems, lines, newRuleDefaults } = await import(
+const { makeTableState, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
 );
 
@@ -323,10 +329,10 @@ const ruleValues = (changes = {}) => ({
   ...changes,
 });
 
-const actionEvent = (action, id) => ({
+const actionEvent = (action, id, dataset = {}) => ({
   target: {
     closest() {
-      return { dataset: { action, ...(id ? { id } : {}) } };
+      return { dataset: { action, ...(id ? { id } : {}), ...dataset } };
     },
   },
 });
@@ -460,426 +466,349 @@ test("text rules serialize several trimmed comparison values", async () => {
   assert.equal(calls[0].rule.operator, "contains");
 });
 
-test("active alerts are red while pending alerts stay orange", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: { "sensor.test": { state: "on" } } };
-  const alert = {
-    entity_id: "sensor.test",
-    name: "Test",
-    value: "unavailable",
-    condition: "État indisponible",
-  };
-
-  assert.match(panel._renderAlert(alert, true), /<ha-card outlined class="alert-card is-active"/);
-  assert.match(panel._renderAlert(alert, false), /<ha-card outlined class="alert-card is-pending"/);
-  assert.doesNotMatch(panel._renderAlert(alert, true), /severity|warning|critical/);
-  assert.match(panel._styles(), /\.alert-card\.is-active,\.device-alert-group\.is-active\{--alert-state-color:var\(--error-color/);
-  assert.match(panel._renderAlert(alert, true), /class="alert-status-icon alert-state-action/);
-  assert.match(panel._renderAlert(alert, true), /class="alert-current-value">unavailable<\/strong>/);
-  assert.doesNotMatch(panel._renderAlert(alert, true), />Active<|>En attente<|class="alert-value"/);
+const currentAlert = (changes = {}) => ({
+  id: "rule:temperature:sensor.rack",
+  type: "rule",
+  rule_id: "temperature",
+  rule_name: "Température baie",
+  entity_id: "sensor.rack",
+  name: "Température rack",
+  device_id: "device-rack",
+  device_name: "Sonde rack",
+  area: "Bureau",
+  message: "Refroidir la baie",
+  value: 34.5,
+  unit: "°C",
+  condition: "État supérieur à 33 °C pendant 30 s",
+  detected_at: "2026-08-26T12:00:00Z",
+  due_at: "2026-08-26T12:00:30Z",
+  active_since: "2026-08-26T12:00:30Z",
+  ...changes,
 });
 
-test("alert conditions stay on one line in the wider detail column", () => {
+const tablePanel = () => {
+  window.localStorage.clear();
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
-  panel._hass = { states: { "todo.list": { state: "0" } } };
-
-  const html = panel._renderAlert({
-    entity_id: "todo.list",
-    name: "Liste d’achats",
-    condition: "État inférieur à 1 pendant 600 s",
-  }, true);
-  const styles = panel._styles();
-
-  assert.match(html, /class="alert-condition"/);
-  assert.match(styles, /\.alert-details\{[^}]*grid-template-columns:minmax\(0,\.85fr\) minmax\(0,1\.15fr\)/);
-  assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
-});
-
-test("overview cards hide entity IDs and keep grouped details vertically aligned", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
   panel._hass = {
     states: {
-      "zone.home": { state: "0" },
-      "sensor.cloudflare": { state: "0.11" },
+      "sensor.rack": { state: "35" },
+      "sensor.pending": { state: "10" },
+      "sensor.acknowledged": { state: "unavailable" },
     },
   };
-
-  const standalone = panel._renderAlert({
-    entity_id: "zone.home",
-    name: "Maison",
-    condition: "État contient 0 pendant 1 min",
-  }, "active");
-  const grouped = panel._renderDeviceAlertRow({
-    entity_id: "sensor.cloudflare",
-    name: "Cloudflared Pourcentage du processeur",
-    condition: "État inférieur à 123 % pendant 30 s",
-  }, "active");
-  const styles = panel._styles();
-
-  assert.doesNotMatch(standalone, /<code>zone\.home<\/code>/);
-  assert.match(standalone, /data-entity-id="zone\.home"/);
-  assert.doesNotMatch(grouped, /<code>sensor\.cloudflare<\/code>/);
-  assert.match(grouped, /État inférieur à 123 % pendant 30 s/);
-  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:1\/-1[^}]*display:block/);
-  assert.match(styles, /\.device-alert-condition small,\.device-alert-time small\{[^}]*margin-top:0/);
-  assert.match(styles, /\.device-alert-condition span,\.device-alert-time span\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
-  assert.match(grouped, /<span title="État inférieur à 123 % pendant 30 s">État inférieur à 123 % pendant 30 s<\/span>/);
-});
-
-test("alert overview uses native Home Assistant cards without nested panels", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const alert = { entity_id: "sensor.test", name: "Test", condition: "Test" };
-
   panel._alerts = {
     active_count: 1,
-    acknowledge_count: 0,
-    pending_count: 0,
-    tracked_count: 1,
-    alerts: [alert],
-    pending: [],
-    acknowledge: [],
-  };
-  const populated = panel._renderOverviewAlerts(buildOverviewItems([alert], []));
-  panel._alerts.active_count = 0;
-  panel._alerts.alerts = [];
-  const empty = panel._renderOverviewAlerts([]);
-
-  assert.match(populated, /<section class="alert-group alert-group-active">/);
-  assert.match(populated, /<section class="alert-group alert-group-pending">/);
-  assert.match(populated, /<section class="alert-group alert-group-acknowledged">/);
-  assert.match(populated, /<ha-card outlined class="alert-card is-active"/);
-  assert.doesNotMatch(populated, /<section class="panel">/);
-  assert.match(empty, /<ha-card outlined class="alert-empty">/);
-});
-
-test("overview renders active, upcoming and acknowledged alerts in separate vertical sections", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  panel._alerts = {
-    active_count: 2,
-    acknowledge_count: 1,
     pending_count: 1,
-    alerts: [{ entity_id: "zone.home", name: "Maison", condition: "Vide" }],
-    pending: [{ entity_id: "media_player.tv", name: "TV", condition: "Indisponible" }],
-    acknowledge: [{
-      id: "unavailable:sensor.nas",
-      entity_id: "sensor.nas",
+    acknowledge_count: 1,
+    tracked_count: 3,
+    alerts: [currentAlert()],
+    pending: [currentAlert({
+      id: "battery:sensor.pending",
+      type: "battery",
+      rule_name: null,
+      entity_id: "sensor.pending",
+      name: "Batterie UPS",
+      device_id: null,
+      device_name: null,
+      area: "Garage",
+      message: null,
+      value: 10,
+      unit: "%",
+      condition: "Batterie inférieure ou égale à 15%",
+      detected_at: "2026-08-26T12:05:00Z",
+      due_at: "2099-08-26T12:15:00Z",
+      active_since: null,
+    })],
+    acknowledge: [currentAlert({
+      id: "unavailable:sensor.acknowledged",
+      type: "unavailable",
+      rule_name: null,
+      entity_id: "sensor.acknowledged",
       name: "NAS",
-      condition: "Indisponible",
+      device_id: "device-nas",
+      device_name: "NAS",
+      value: "unavailable",
+      unit: null,
+      detected_at: "2026-08-26T11:00:00Z",
+      active_since: "2026-08-26T11:15:00Z",
       acknowledged: true,
-      acknowledged_at: "2026-08-25T14:30:00Z",
-    }],
+      acknowledged_at: "2026-08-26T11:20:00Z",
+      acknowledged_by: "Loïc",
+    })],
   };
+  return panel;
+};
 
-  const html = panel._renderOverviewAlerts(
-    buildOverviewItems(
-      panel._alerts.alerts,
-      panel._alerts.pending,
-      panel._alerts.acknowledge,
-    ),
-  );
+test("dashboard renders one compact table with the required default columns and statuses", () => {
+  const panel = tablePanel();
+  const html = panel._renderOverview();
+  const headers = [...html.matchAll(/<th data-column="([^"]+)">/g)].map((match) => match[1]);
 
-  assert.match(html, /class="alert-list alert-list-active"[\s\S]*is-active/);
-  assert.match(html, /class="alert-list alert-list-pending"[\s\S]*is-pending/);
-  assert.match(html, /class="alert-list alert-list-acknowledged"[\s\S]*is-acknowledged/);
-  assert.match(html, /<h2>Alertes actives<\/h2>/);
-  assert.match(html, /<h2>Alertes à venir<\/h2>/);
-  assert.match(html, /<h2>Alertes acquittées<\/h2>/);
-  assert.ok(html.indexOf("alert-group-active") < html.indexOf("alert-group-pending"));
-  assert.ok(html.indexOf("alert-group-pending") < html.indexOf("alert-group-acknowledged"));
-  assert.match(panel._styles(), /\.alert-group\+\.alert-group\{margin-top:28px\}/);
+  assert.deepEqual(headers, [
+    "status", "device", "entity", "value", "condition", "detected", "timeline",
+  ]);
+  assert.equal((html.match(/class="alert-table-row/g) ?? []).length, 3);
+  assert.match(html, /class="alert-table" data-table-kind="overview"/);
+  assert.match(html, /is-active[^]*aria-label="Alerte active"/);
+  assert.match(html, /is-pending[^]*aria-label="Alerte à venir"/);
+  assert.match(html, /is-acknowledged[^]*aria-label="Alerte acquittée"/);
+  assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
+  assert.match(html, /34\.5 °C/);
+  assert.match(html, /État supérieur à 33 °C pendant 30 s/);
+  assert.doesNotMatch(html, /alert-card|device-alert-group/);
 });
 
-test("active and pending alerts from one device stay in separate sections", () => {
-  const active = {
-    id: "unavailable:sensor.ups_status",
-    entity_id: "sensor.ups_status",
-    name: "État UPS",
-    device_id: "a".repeat(32),
-    device_name: "Onduleur",
-    area: "Bureau",
-    value: "unavailable",
-    condition: "État indisponible",
-    active_since: "2026-08-25T12:00:00Z",
-  };
-  const pending = {
-    id: "battery:sensor.ups_battery",
-    entity_id: "sensor.ups_battery",
-    name: "Batterie UPS",
-    device_id: "a".repeat(32),
-    device_name: "Onduleur",
-    area: "Bureau",
-    value: 10,
-    unit: "%",
-    condition: "Batterie faible",
-    due_at: "2026-08-25T12:15:00Z",
-  };
-  const items = buildOverviewItems([active], [pending]);
-  assert.equal(items.length, 2);
-  assert.deepEqual(items.map((item) => item.kind), ["alert", "alert"]);
-  assert.deepEqual(items.map((item) => item.status), ["active", "pending"]);
+test("pending countdown is dynamic only while monitoring is enabled", () => {
+  const panel = tablePanel();
+  const enabled = panel._renderOverview();
+  assert.match(enabled, /data-due="2099-08-26T12:15:00Z"/);
+  panel._monitoringEnabled = false;
+  const suspended = panel._renderOverview();
+  assert.doesNotMatch(suspended, /data-due=/);
+  assert.match(suspended, /Délai suspendu — surveillance désactivée/);
 
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = {
-    states: {
-      "sensor.ups_status": { state: "unavailable" },
-      "sensor.ups_battery": { state: "10" },
-    },
-  };
-  panel._alerts = { active_count: 1, pending_count: 1 };
-  const overview = panel._renderOverviewAlerts(items);
-  assert.match(overview, /alert-group-active[\s\S]*sensor\.ups_status/);
-  assert.match(overview, /alert-group-pending[\s\S]*sensor\.ups_battery/);
-  assert.ok(overview.indexOf("sensor.ups_status") < overview.indexOf("sensor.ups_battery"));
-  assert.match(overview, /alert-card is-active/);
-  assert.match(overview, /alert-card is-pending/);
-  assert.match(overview, /data-due=/);
-  assert.equal((overview.match(/data-action="more-info"/g) ?? []).length, 2);
-});
-
-test("multiple alerts from one device still form a group within one section", () => {
-  const deviceId = "a".repeat(32);
-  const first = { entity_id: "sensor.ups_status", device_id: deviceId };
-  const second = { entity_id: "sensor.ups_load", device_id: deviceId };
-  const items = buildOverviewItems([first, second], []);
-
-  assert.equal(items.length, 1);
-  assert.equal(items[0].kind, "device");
-  assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
-});
-
-test("grouped alerts show the first alert and reveal the others on demand", async () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const deviceId = "a".repeat(32);
-  const group = {
-    device_id: deviceId,
-    alerts: [
-      { status: "active", alert: { entity_id: "sensor.first", name: "First alert" } },
-      { status: "active", alert: { entity_id: "sensor.second", name: "Second alert" } },
-      { status: "active", alert: { entity_id: "sensor.third", name: "Third alert" } },
-    ],
-  };
-
-  const collapsed = panel._renderDeviceGroup(group);
-  assert.match(collapsed, /First alert/);
-  assert.doesNotMatch(collapsed, /Second alert/);
-  assert.doesNotMatch(collapsed, /Third alert/);
-  assert.match(collapsed, /data-action="toggle-device-alerts"/);
-  assert.match(collapsed, /<button type="button" class="device-alert-toggle"/);
-  assert.match(collapsed, /aria-expanded="false"/);
-  assert.match(panel._styles(), /\.device-alert-toggle\{[^}]*border:0[^}]*background:transparent[^}]*font-size:var\(--ha-font-size-s,12px\)/);
-  assert.match(panel._styles(), /\.device-alert-toggle:hover\{[^}]*border:0[^}]*background:transparent/);
-  assert.match(panel._styles(), /\.device-alert-toggle:focus-visible\{[^}]*outline:/);
+  const node = { dataset: { due: "2099-08-26T12:15:00Z" }, textContent: "stable" };
+  panel.shadowRoot.querySelectorAll = () => [node];
+  panel._updateCountdowns();
+  assert.equal(node.textContent, "stable");
 
   panel._render = () => {};
-  await panel._handleClick({
-    target: {
-      closest: () => ({
-        dataset: {
-          action: "toggle-device-alerts",
-          deviceGroup: `is-active:${deviceId}`,
-          alertCount: "3",
-        },
-      }),
+  panel.hass = {
+    states: {
+      "sensor.alert_manager_main_active": { state: "0", attributes: { alerts: [] } },
+      "sensor.alert_manager_main_pending": { state: "0", attributes: { alerts: [] } },
+      "sensor.alert_manager_main_acknowledge": { state: "0", attributes: { alerts: [] } },
+      "switch.alert_manager_main_monitoring": { state: "off", attributes: {} },
     },
-  });
-
-  const partiallyExpanded = panel._renderDeviceGroup(group);
-  assert.match(partiallyExpanded, /Second alert/);
-  assert.doesNotMatch(partiallyExpanded, /Third alert/);
-  assert.match(partiallyExpanded, /aria-expanded="false"/);
-
-  await panel._handleClick({
-    target: {
-      closest: () => ({
-        dataset: {
-          action: "toggle-device-alerts",
-          deviceGroup: `is-active:${deviceId}`,
-          alertCount: "3",
-        },
-      }),
-    },
-  });
-  const expanded = panel._renderDeviceGroup(group);
-  assert.match(expanded, /Third alert/);
-  assert.match(expanded, /aria-expanded="true"/);
+  };
+  assert.equal(panel._alerts.pending.length, 1);
 });
 
-test("acknowledged alerts stay compact and expose the real unacknowledge action", async () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: { "sensor.test": { state: "unavailable" } } };
-  const alert = {
-    id: "unavailable:sensor.test",
-    entity_id: "sensor.test",
-    name: "Test",
-    value: "unavailable",
-    condition: "État indisponible",
-    active_since: "2026-08-25T14:00:00Z",
-    acknowledged: true,
-    acknowledged_at: "2026-08-25T14:30:00Z",
-    acknowledged_by: "Loïc",
-  };
-  const html = panel._renderAlert(alert, "acknowledged");
+test("search covers rule, entity ID, device, area, message, condition, value and status", () => {
+  const panel = tablePanel();
+  const rows = panel._tableRows("overview");
+  for (const query of [
+    "Température baie", "sensor.rack", "Sonde rack", "Bureau", "Refroidir",
+    "supérieur à 33", "34.5", "Alerte active",
+  ]) {
+    panel._tableState.overview.search = query;
+    assert.ok(panel._filteredTableRows("overview", rows).some((row) => (
+      row.id === "rule:temperature:sensor.rack"
+    )));
+  }
+});
 
-  assert.match(html, /Acquittée/);
-  assert.match(html, /Loïc/);
-  assert.doesNotMatch(html, /Identifiant de l’alerte/);
-  assert.doesNotMatch(html, /data-action="copy-alert-id"/);
-  assert.doesNotMatch(html, /class="alert-controls/);
-  assert.match(html, /data-action="unacknowledge-alert"/);
-  assert.match(html, /aria-label="Retirer l’acquittement/);
-  assert.doesNotMatch(html, /data-action="acknowledge-alert"/);
-  assert.match(html, /class="alert-status-icon alert-state-action/);
-  assert.doesNotMatch(html, /class="alert-header-actions"/);
-  assert.match(panel._styles(), /\.alert-card\.is-acknowledged[^}]*--alert-state-color:var\(--blue-color/);
-  assert.match(panel._styles(), /data-action="unacknowledge-alert"[^}]*--alert-hover-color:color-mix\(in srgb,var\(--error-color/);
+test("filters combine and can be reset without changing table data", async () => {
+  const panel = tablePanel();
+  const rows = panel._tableRows("overview");
+  panel._tableState.overview.filters.status = "pending";
+  panel._tableState.overview.filters.area = "Garage";
+  panel._tableState.overview.filters.acknowledged = "false";
+  assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [
+    "battery:sensor.pending",
+  ]);
+  assert.equal(panel._filterCount("overview"), 3);
+  panel._render = () => {};
+  await panel._handleClick(actionEvent("reset-filters", undefined, { tableKind: "overview" }));
+  assert.equal(panel._filterCount("overview"), 0);
+  assert.equal(panel._filteredTableRows("overview", rows).length, 3);
+});
+
+test("individual facet and date filters target their exact fields", () => {
+  const panel = tablePanel();
+  const rows = panel._tableRows("overview");
+  const cases = [
+    ["device", "Sonde rack", "rule:temperature:sensor.rack"],
+    ["area", "Garage", "battery:sensor.pending"],
+    ["rule", "Température baie", "rule:temperature:sensor.rack"],
+    ["entity", "sensor.acknowledged", "unavailable:sensor.acknowledged"],
+    ["acknowledged", "true", "unavailable:sensor.acknowledged"],
+  ];
+  for (const [key, value, expected] of cases) {
+    Object.keys(panel._tableState.overview.filters).forEach((filter) => {
+      panel._tableState.overview.filters[filter] = "";
+    });
+    panel._tableState.overview.filters[key] = value;
+    assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [expected]);
+  }
+  panel._tableState.overview.filters.acknowledged = "";
+  panel._tableState.overview.filters.detectedFrom = "2026-08-26";
+  panel._tableState.overview.filters.detectedTo = "2026-08-26";
+  assert.equal(panel._filteredTableRows("overview", rows).length, 3);
+});
+
+test("grouping works for device, area, rule and status and remembers collapsed groups", async () => {
+  const panel = tablePanel();
+  const rows = panel._filteredTableRows("overview", panel._tableRows("overview"));
+  for (const groupBy of ["device", "area", "rule", "status"]) {
+    panel._tableState.overview.groupBy = groupBy;
+    const groups = panel._groupedTableRows("overview", rows);
+    assert.ok(groups.length >= 2);
+    assert.ok(groups.every((group) => group.rows.length >= 1));
+  }
+  panel._tableState.overview.groupBy = "device";
+  const group = panel._groupedTableRows("overview", rows)[0];
+  panel._render = () => {};
+  await panel._handleClick(actionEvent("toggle-table-group", undefined, { groupKey: group.key }));
+  assert.equal(panel._collapsedTableGroups.has(group.key), true);
+  assert.match(panel._renderTableGroup("overview", group, ["status", "entity"], false), /alert-table-row[^>]* hidden/);
+});
+
+test("sorting handles dates, numeric values and text in both directions", () => {
+  const panel = tablePanel();
+  const rows = panel._tableRows("overview");
+  panel._tableState.overview.sortBy = "value";
+  panel._tableState.overview.sortDirection = "asc";
+  assert.equal(panel._filteredTableRows("overview", rows)[0].rawValue, 10);
+  panel._tableState.overview.sortDirection = "desc";
+  assert.equal(panel._filteredTableRows("overview", rows)[0].rawValue, "unavailable");
+  panel._tableState.overview.sortBy = "detected";
+  assert.equal(panel._filteredTableRows("overview", rows)[0].entityId, "sensor.pending");
+  panel._tableState.overview.sortBy = "entityName";
+  panel._tableState.overview.sortDirection = "asc";
+  assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.entityName), [
+    "Batterie UPS", "NAS", "Température rack",
+  ]);
+});
+
+test("column visibility, order and table preferences persist locally", () => {
+  const panel = tablePanel();
+  panel._tableState.overview.columns = ["status", "entity", "area", "value"];
+  panel._tableState.overview.groupBy = "device";
+  panel._tableState.overview.sortBy = "value";
+  panel._tableState.overview.sortDirection = "asc";
+  panel._saveTablePreferences();
+
+  const Panel = customElements.get("alert-manager-panel");
+  const restored = new Panel();
+  assert.deepEqual(restored._tableState.overview.columns, ["status", "entity", "area", "value"]);
+  assert.equal(restored._tableState.overview.groupBy, "device");
+  assert.equal(restored._tableState.overview.sortBy, "value");
+  assert.equal(restored._tableState.overview.sortDirection, "asc");
+
+  const invalid = makeTableState("overview", { columns: ["value"] });
+  assert.ok(invalid.columns.includes("status"));
+  assert.ok(invalid.columns.includes("entity"));
+});
+
+test("column controls hide, show, move and restore optional columns", async () => {
+  const panel = tablePanel();
+  panel._render = () => {};
+  panel._handleChange({
+    target: {
+      dataset: { tableKind: "overview", tableColumn: "device" },
+      checked: false,
+    },
+  });
+  assert.equal(panel._tableState.overview.columns.includes("device"), false);
+  panel._handleChange({
+    target: {
+      dataset: { tableKind: "overview", tableColumn: "area" },
+      checked: true,
+    },
+  });
+  assert.equal(panel._tableState.overview.columns.at(-1), "area");
+  await panel._handleClick(actionEvent("move-column", undefined, {
+    tableKind: "overview", column: "area", direction: "up",
+  }));
+  assert.equal(panel._tableState.overview.columns.at(-2), "area");
+  await panel._handleClick(actionEvent("reset-columns", undefined, { tableKind: "overview" }));
+  assert.deepEqual(panel._tableState.overview.columns, [
+    "status", "device", "entity", "value", "condition", "detected", "timeline",
+  ]);
+});
+
+test("selection mode opens, selects individual and visible rows, and closes cleanly", async () => {
+  const panel = tablePanel();
+  panel._render = () => {};
+  await panel._handleClick(actionEvent("open-selection"));
+  assert.equal(panel._selectionMode, true);
+  await panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: { action: "select-row", alertId: "rule:temperature:sensor.rack" },
+        checked: true,
+      }),
+    },
+  });
+  assert.equal(panel._selectedAlertIds.has("rule:temperature:sensor.rack"), true);
+  await panel._handleClick(actionEvent("select-visible"));
+  assert.equal(panel._selectedAlertIds.size, 3);
+  await panel._handleClick(actionEvent("select-visible"));
+  assert.equal(panel._selectedAlertIds.size, 0);
+  await panel._handleClick(actionEvent("close-selection"));
+  assert.equal(panel._selectionMode, false);
+});
+
+test("selection mode selects visible rows and mixed bulk actions affect compatible alerts only", async () => {
+  const panel = tablePanel();
+  panel._selectionMode = true;
+  panel._selectedAlertIds = new Set(panel._tableRows("overview").map((row) => row.id));
+  const toolbar = panel._renderTableToolbar(
+    "overview",
+    panel._tableRows("overview"),
+    panel._tableRows("overview"),
+  );
+  assert.match(toolbar, /Acquitter \(1\)/);
+  assert.match(toolbar, /Désacquitter \(1\)/);
 
   const calls = [];
   panel._hass.callService = async (...args) => { calls.push(args); };
   panel._render = () => {};
-  await panel._handleClick({
-    target: {
-      closest: () => ({
-        dataset: { action: "unacknowledge-alert", alertId: alert.id },
-      }),
-    },
-  });
+  await panel._bulkAlertAction("acknowledge");
   assert.deepEqual(calls, [[
-    "alert_manager",
-    "unacknowledge",
-    { alert_id: "unavailable:sensor.test" },
+    "alert_manager", "acknowledge", { alert_id: "rule:temperature:sensor.rack" },
   ]]);
+  assert.equal(panel._alerts.active_count, 0);
+  assert.equal(panel._alerts.acknowledge_count, 2);
+  assert.match(panel._notice.text, /1 alerte/);
+
+  await panel._bulkAlertAction("unacknowledge");
+  assert.equal(calls.filter((call) => call[1] === "unacknowledge").length, 1);
+  assert.equal(calls[1][2].alert_id, "unavailable:sensor.acknowledged");
+  assert.equal(panel._selectedAlertIds.has("battery:sensor.pending"), true);
 });
 
-test("the left status icon becomes the acknowledgement action without growing the card", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const html = panel._renderAlert({
-    id: "unavailable:sensor.test",
-    entity_id: "sensor.test",
-    condition: "État indisponible",
-    active_since: "2026-08-25T14:00:00Z",
-  }, "active");
-
-  assert.match(html, /class="alert-status-icon alert-state-action[^>]*data-action="acknowledge-alert"/);
-  assert.doesNotMatch(html, /class="alert-header-actions"/);
-  assert.doesNotMatch(html, /alert-controls|copy-alert-id|Identifiant de l’alerte/);
-  assert.match(panel._styles(), /\.alert-card-header\{[^}]*grid-template-columns:40px minmax\(0,1fr\) auto/);
-  assert.match(panel._styles(), /data-action="acknowledge-alert"[^}]*--alert-hover-color:var\(--dark-primary-color/);
-});
-
-test("status action icons swap on hover and return on blur", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  const listeners = {};
-  const button = {
-    dataset: { action: "acknowledge-alert" },
-    addEventListener(type, callback) { listeners[type] = callback; },
-  };
-  panel.shadowRoot.querySelectorAll = () => [button];
-
-  panel._hydrateSelectors();
-  const defaultPath = button.path;
-  listeners.mouseenter();
-  assert.notEqual(button.path, defaultPath);
-  const hoverPath = button.path;
-  listeners.mouseleave();
-  assert.equal(button.path, defaultPath);
-  listeners.focus();
-  assert.equal(button.path, hoverPath);
-  listeners.blur();
-  assert.equal(button.path, defaultPath);
-});
-
-test("system acknowledgements use the translated fallback without an ID block", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: { "sensor.system": { state: "unavailable" } } };
-  const alert = {
-    id: "unavailable:sensor.system",
-    entity_id: "sensor.system",
-    acknowledged: true,
-    acknowledged_at: "2026-08-25T14:30:00Z",
-  };
-  const html = panel._renderAlert(alert, "acknowledged");
-  assert.match(html, /Automatisation ou système/);
-  assert.doesNotMatch(html, /copy-alert-id|Identifiant de l’alerte/);
-});
-
-test("grouped alerts retain one compact acknowledgement action per row", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const deviceId = "a".repeat(32);
-  const group = {
-    kind: "device",
-    device_id: deviceId,
-    alerts: [
-      {
-        status: "active",
-        alert: {
-          id: "unavailable:sensor.one",
-          entity_id: "sensor.one",
-          device_id: deviceId,
-          acknowledged: false,
-        },
-      },
-      {
-        status: "acknowledged",
-        alert: {
-          id: "battery:sensor.two",
-          entity_id: "sensor.two",
-          device_id: deviceId,
-          acknowledged: true,
-          acknowledged_at: "2026-08-25T14:30:00Z",
-          acknowledged_by: "Loïc",
-        },
-      },
+test("history uses the same table tools without selection or runtime actions", () => {
+  const panel = tablePanel();
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  panel._history = {
+    events: [
+      historyEvent(),
+      historyEvent({
+        event_id: "event-cancelled",
+        entity_id: "sensor.pending",
+        entity_name: "Batterie UPS",
+        final_status: "cancelled",
+        acknowledged: false,
+        acknowledged_at: null,
+        acknowledged_by: null,
+      }),
     ],
   };
-  panel._expandedDeviceGroups.set(`is-active:${deviceId}`, group.alerts.length);
-  const html = panel._renderDeviceGroup(group);
-
-  assert.equal((html.match(/class="alert-status-icon alert-state-action is-compact"/g) ?? []).length, 2);
-  assert.equal((html.match(/data-action="copy-alert-id"/g) ?? []).length, 0);
-  assert.equal((html.match(/data-action="acknowledge-alert"/g) ?? []).length, 1);
-  assert.equal((html.match(/data-action="unacknowledge-alert"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /acknowledge-device|acknowledge-group/);
+  const html = panel._renderHistory();
+  const headers = [...html.matchAll(/<th data-column="([^"]+)">/g)].map((match) => match[1]);
+  assert.deepEqual(headers, [
+    "status", "device", "entity", "value", "condition", "detected", "resolved",
+  ]);
+  assert.match(html, /Résolue après acquittement/);
+  assert.match(html, /Annulée avant activation/);
+  assert.match(html, /34\.5 °C/);
+  assert.doesNotMatch(html, /open-selection|bulk-acknowledge|bulk-unacknowledge|data-due=/);
+  assert.match(html, /data-menu="filters"/);
+  assert.match(html, /data-menu="group"/);
+  assert.match(html, /data-menu="sort"/);
+  assert.match(html, /data-menu="columns"/);
 });
 
-test("pending alerts have neither alert ID controls nor acknowledgement actions", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const html = panel._renderAlert({
-    id: "battery:sensor.pending",
-    entity_id: "sensor.pending",
-    due_at: "2026-08-25T15:00:00Z",
-  }, false);
-
-  assert.doesNotMatch(html, /Identifiant de l’alerte|copy-alert-id/);
-  assert.doesNotMatch(html, /data-action="(?:un)?acknowledge-alert"/);
-});
-
-test("single alerts and entities without a device stay compact and individual", () => {
-  const deviceAlert = { entity_id: "sensor.one", device_id: "a".repeat(32) };
-  const standalone = { entity_id: "sensor.two" };
-  const items = buildOverviewItems([deviceAlert, standalone], []);
-
-  assert.deepEqual(items.map((item) => item.kind), ["alert", "alert"]);
-  assert.equal(items[0].alert, deviceAlert);
-  assert.equal(items[1].alert, standalone);
+test("table remains horizontally scrollable and keeps status sticky on mobile", () => {
+  const styles = tablePanel()._styles();
+  assert.match(styles, /\.alert-table-scroll\{[^}]*overflow:auto/);
+  assert.match(styles, /th\[data-column="status"\],\.alert-table td\[data-column="status"\]\{[^}]*position:sticky/);
+  assert.match(styles, /@media\(max-width:560px\)/);
 });
 
 test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
@@ -1122,23 +1051,6 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /inset-inline-end:max\(24px,calc\(\(85vw - 1400px\)\/2 \+ 24px\)\)/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
-});
-
-test("alert cards omit unavailable device and area metadata", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const base = { entity_id: "sensor.test", name: "Test", condition: "Test" };
-
-  const withoutMetadata = panel._renderAlert(base, true);
-  const withDevice = panel._renderAlert({ ...base, device_name: "Pompe" }, true);
-  const withArea = panel._renderAlert({ ...base, area: "Garage" }, true);
-
-  assert.doesNotMatch(withoutMetadata, /<dt>Équipement<|<dt>Pièce</);
-  assert.match(withDevice, /<dt>Équipement<\/dt><dd>Pompe<\/dd>/);
-  assert.doesNotMatch(withDevice, /<dt>Pièce</);
-  assert.match(withArea, /<dt>Pièce<\/dt><dd>Garage<\/dd>/);
-  assert.doesNotMatch(withArea, /<dt>Équipement</);
 });
 
 test("attribute input follows the selected rule source without rerendering", () => {
@@ -1531,17 +1443,6 @@ test("clicking an existing alert source opens native more info", async () => {
   assert.equal(panel.dispatchedEvent.composed, true);
 });
 
-test("a missing alert source is not rendered as a clickable link", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._hass = { states: {} };
-  const html = panel._renderAlert(
-    { entity_id: "sensor.deleted", name: "Deleted", condition: "Test" },
-    true,
-  );
-  assert.doesNotMatch(html, /data-action="more-info"/);
-});
-
 test("panel renders French and English from backend translation resources", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -1609,40 +1510,6 @@ const historyEvent = (changes = {}) => ({
   acknowledged_at: "2026-08-26T12:00:30+00:00",
   acknowledged_by: "Loïc",
   ...changes,
-});
-
-test("history groups repeated device events while preserving newest-first order", () => {
-  const events = [
-    historyEvent(),
-    historyEvent({ event_id: "event-2", entity_id: "sensor.humidity" }),
-    historyEvent({ event_id: "event-3", device_id: null, entity_id: "sensor.ups" }),
-  ];
-  const items = buildHistoryItems(events);
-  assert.equal(items[0].kind, "history-device");
-  assert.deepEqual(items[0].events.map((event) => event.event_id), ["event-1", "event-2"]);
-  assert.equal(items[1].kind, "history");
-  assert.equal(items[1].event.event_id, "event-3");
-});
-
-test("historical cards are grey snapshots without runtime actions or countdowns", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
-  panel._packs = completePacks();
-  panel._historyConfig = { retention_limit: 100, enabled: true };
-  panel._history = { events: [historyEvent()], count: 1, retention_limit: 100, enabled: true };
-  panel._hass = { states: {} };
-  const html = panel._renderHistory();
-  assert.match(html, /Température baie élevée/);
-  assert.match(html, /Température baie/);
-  assert.match(html, /Sonde baie/);
-  assert.match(html, /Bureau/);
-  assert.match(html, /Refroidir la baie/);
-  assert.match(html, /Résolue le/);
-  assert.match(html, /1 min 15 s/);
-  assert.match(html, /Acquittée avant résolution/);
-  assert.match(html, /is-resolved/);
-  assert.doesNotMatch(html, /acknowledge-alert|unacknowledge-alert|data-due|Temps restant/);
 });
 
 test("history empty and disabled states are explicit and translated", () => {

@@ -80,6 +80,31 @@ def test_normal_to_pending_and_no_duplicate(hass, entry):
     assert len(manager.records) == 1
 
 
+def test_matching_updates_keep_the_original_trigger_value(hass, entry):
+    """A still-abnormal value cannot overwrite the occurrence trigger snapshot."""
+    hass.states.set("sensor.temperature", "11")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "High temperature",
+                "entity_ids": ["sensor.temperature"],
+                "operator": "above",
+                "value": 10,
+                "duration": 900,
+                "source": "state",
+            }
+        )
+    )
+    alert_id = f"rule:{rule['id']}:sensor.temperature"
+    assert manager.records[alert_id].details.value == "11"
+
+    hass.states.set("sensor.temperature", "12")
+    run(manager.async_evaluate_entity("sensor.temperature"))
+
+    assert manager.records[alert_id].details.value == "11"
+
+
 def test_pending_cancellation(hass, entry):
     """A recovered condition before due_at returns to normal without an event."""
     hass.states.set("sensor.test", "unavailable")

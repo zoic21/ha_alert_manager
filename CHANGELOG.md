@@ -2,6 +2,40 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev — 26 août 2026
+
+### Ajouté
+
+- Tableau compact commun au Dashboard et à l’Historique, inspiré de la liste des
+  entités Home Assistant, avec colonnes personnalisables et ouverture native de
+  « Plus d’informations ».
+- Recherche instantanée sur les métadonnées complètes, filtres cumulables et
+  réinitialisables, groupement repliable par appareil, zone, règle ou statut et
+  tri typé ascendant/décroissant.
+- Préférences locales distinctes par tableau pour l’ordre et la visibilité des
+  colonnes, le groupement, la clé de tri et son sens.
+- Mode de sélection multiple du Dashboard avec sélection des lignes visibles et
+  acquittement/désacquittement de masse limité aux alertes compatibles.
+- Archivage des anomalies revenues à la normale avant activation avec le statut
+  « Annulée avant activation ».
+
+### Modifié
+
+- Remplacement complet des cartes d’alertes et d’historique par des lignes de
+  tableau, y compris sur mobile où le défilement horizontal reste disponible.
+- Conservation de la valeur ayant initialement déclenché une occurrence, même si
+  la source prend ensuite une autre valeur toujours anormale.
+- Suspension visuelle du compte à rebours lorsque la surveillance est désactivée,
+  sans progression artificielle du délai.
+
+### Tests
+
+- Couverture frontend du rendu, de la recherche, des filtres, du groupement, du
+  tri, des colonnes, de la persistance locale, de la sélection mixte et des
+  actions de masse.
+- Couverture backend de l’historique annulé et de la valeur de déclenchement
+  immuable, en complément des suites de non-régression existantes.
+
 ## 1.6.3 — 26 août 2026
 
 ### Corrigé

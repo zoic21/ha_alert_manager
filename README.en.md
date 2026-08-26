@@ -25,16 +25,17 @@ project.
 - explicit exclusions by labels, entities and devices;
 - per-rule, per-entity, per-pack and global delays;
 - responsive administrator panel in French and English;
-- visual grouping, without merging records, when several alerts belong to one
-  device;
+- compact table with search, filters, sorting, collapsible grouping and
+  customizable columns, without merging alert records;
 - persistent per-alert acknowledgement from the panel and Home Assistant
   automations;
 - an `Alert Manager - Général` device, persistent monitoring switch and three
   sensors separating active, upcoming and acknowledged alerts;
 - visual or YAML editing of custom rules, plus complete YAML configuration
   export and replacement import;
-- persistent history of resolved active alerts, retaining 100 events by default
-  in a dedicated panel tab without adding a Home Assistant entity;
+- persistent history of resolved alerts and alerts cancelled before activation,
+  retaining 100 events by default in a dedicated panel tab without adding a Home
+  Assistant entity;
 - start, resolution, acknowledgement and unacknowledgement events;
 - one safety notification when monitoring is still disabled at load time and no
   frequent global polling.
@@ -74,36 +75,35 @@ in the sidebar and is available to administrators. Its language follows the
 current user's Home Assistant language. Entity, device, area and rule names, user
 messages and comparison values are user data and are never translated.
 
-## Overview and device grouping
+## Overview table
 
-The overview separates active alerts (red), upcoming alerts (orange) and
-acknowledged alerts (blue). Each card shows the source, current value,
-translated condition, device, area and timestamps. Selecting an existing source
-opens Home Assistant's native more-info dialog.
+One compact table combines active alerts (red), upcoming alerts (orange) and
+acknowledged alerts (blue). Its default columns are Status, Device, Entity,
+Value, Condition, Detected and Active since/Time remaining. Selecting an
+existing entity opens Home Assistant's native more-info dialog. The remaining
+time is calculated in the browser from `due_at` and becomes an explicit suspended
+delay while monitoring is disabled; Alert Manager never writes a per-second
+countdown to Recorder.
 
-Several alerts with the same `device_id` are grouped inside the same status
-section. This is display-only: alert IDs, lifecycle, sensor attributes and events
-remain independent. A lone device alert and an entity without a device use a
-compact individual card.
+The toolbar provides immediate search, cumulative filters, collapsible grouping
+by device, area, rule or status, and ascending or descending sorting. Optional
+columns (entity ID, area, rule and message among them) can be shown, hidden and
+reordered. Column order and visibility, grouping and sorting are kept locally for
+the user and never alter integration configuration.
 
-Hovering the red status icon on the left turns it into a dark-blue check on a
-light-blue background; selecting it acknowledges that alert. For an acknowledged
-alert, hovering the icon reveals a dark-red cross on a light-red background to
-remove acknowledgement. Every grouped row keeps its own action, and there is no
-device-wide acknowledgement action.
-
-The remaining time is calculated in the browser from `due_at`; Alert Manager does
-not write a countdown to Recorder every second.
+Selection mode replaces the normal toolbar with bulk actions. Selecting visible
+rows can acknowledge or unacknowledge several alerts at once. A mixed selection
+changes only compatible alerts: pending rows and rows already in the requested
+state are ignored, while feedback reports the number actually changed.
 
 ## History and retention
 
-The administrator-only **History** tab lists resolved active alerts from newest
-to oldest. Its grey cards reuse the Overview structure and device grouping while
-freezing the rule and entity names, device, area, message, triggering condition
-and value, detection/activation/resolution timestamps, durations and any
-acknowledgement metadata. Historical cards never expose acknowledgement actions,
-countdowns or remaining time. An anomaly that returns to normal while still
-`pending` was never active and is therefore not archived.
+The administrator-only **History** tab uses the same table for resolved alerts,
+alerts resolved after acknowledgement, and anomalies cancelled before
+activation. Every row freezes rule and entity names, device, area, message,
+triggering condition and value, and detection/resolution timestamps. Search,
+filters, grouping, sorting and column customization remain available. History
+deliberately exposes neither selection mode nor acknowledgement actions.
 
 In **Configuration → General settings**, directly below **Global delay**,
 **Number of historical events retained** controls retention. **Clear history**
@@ -454,10 +454,10 @@ pending alert, and sensors are written only when their structured content change
 ## Known limitations and deferred features
 
 - no snooze;
-- no resolved-alert history, CSV storage, repeat or escalation;
+- no CSV history export, repeat or escalation;
 - no combined conditions, Jinja templates or hysteresis (including in rule YAML);
 - no built-in alert-notification service;
-- device grouping is visual only;
+- no business action in History;
 - configuration is administrator-only;
 - the interface is available only in French and English in this release.
 

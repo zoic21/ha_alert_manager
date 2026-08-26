@@ -67,6 +67,7 @@
       "message": "Message",
       "open_settings": "Open Configuration",
       "resolved": "Resolved",
+      "resolved_acknowledged": "Resolved after acknowledgement",
       "resolved_at": "Resolved",
       "status": "Final status",
       "title": "Alert history"
@@ -227,6 +228,93 @@
       "rule_enabled": "Rule enabled",
       "rule_updated": "Rule updated",
       "settings_saved": "Settings saved"
+    },
+    "table": {
+      "columns": {
+        "area": "Area",
+        "condition": "Condition",
+        "detected": "Detected",
+        "device": "Device",
+        "duration": "Duration",
+        "entity": "Entity",
+        "entity_id": "Entity ID",
+        "message": "Message",
+        "move_down": "Move {column} down",
+        "move_up": "Move {column} up",
+        "reset": "Restore default columns",
+        "resolved": "Resolved",
+        "rule": "Rule",
+        "status": "Status",
+        "timeline": "Active since / Time remaining",
+        "title": "Columns",
+        "value": "Value"
+      },
+      "empty_current": "No current alerts.",
+      "empty_filtered": "No rows match the search and filters.",
+      "filters": {
+        "acknowledged": "Acknowledgement state",
+        "all": "All",
+        "detected_from": "Detected from",
+        "detected_to": "Detected to",
+        "no": "Not acknowledged",
+        "reset": "Reset filters",
+        "resolved_from": "Resolved from",
+        "resolved_to": "Resolved to",
+        "title": "Filters",
+        "yes": "Acknowledged"
+      },
+      "group": {
+        "area": "Area",
+        "device": "Device",
+        "none": "No grouping",
+        "rule": "Rule",
+        "status": "Status",
+        "title": "Group by"
+      },
+      "groups": {
+        "without_area": "No area",
+        "without_device": "No device",
+        "without_rule": "No rule",
+        "without_status": "No status"
+      },
+      "monitoring_suspended": "Delay suspended — monitoring disabled",
+      "search": "Search alerts",
+      "selection": {
+        "acknowledge": "Acknowledge ({count})",
+        "acknowledged_result": "Acknowledged {count} alert(s)",
+        "close": "Close selection mode",
+        "count": "{count} selected",
+        "open": "Enable multiple selection",
+        "partial": "Changed {count} alert(s), {failed} failure(s)",
+        "select": "Select",
+        "select_entity": "Select alert for {entity}",
+        "select_visible": "Select or clear visible rows",
+        "toolbar": "Selected alert actions",
+        "unacknowledge": "Unacknowledge ({count})",
+        "unacknowledged_result": "Removed acknowledgement from {count} alert(s)"
+      },
+      "sort": {
+        "activated": "Activation date",
+        "asc": "Ascending",
+        "desc": "Descending",
+        "detected": "Detection date",
+        "device": "Device",
+        "direction": "Order",
+        "entityName": "Entity",
+        "remaining": "Time remaining",
+        "resolved": "Resolution date",
+        "rule": "Rule",
+        "status": "Status",
+        "title": "Sort by",
+        "value": "Value"
+      },
+      "status": {
+        "acknowledged": "Acknowledged alert",
+        "active": "Active alert",
+        "pending": "Upcoming alert"
+      },
+      "toolbar": "Alert table tools",
+      "visible_count": "{visible} of {total}"
     },
     "tabs": {
       "automatic": "Automatic monitoring",

@@ -406,6 +406,10 @@ class AlertManager:
                 self.records[alert_id] = record
                 persisted_changed = True
             else:
+                # Keep the value that originally opened the alert. Registry and
+                # rule metadata may be refreshed, but a later matching state must
+                # not hide the actual trigger value shown in the panel/history.
+                details.value = record.details.value
                 record.details = details
                 if record.delay != delay:
                     record.delay = delay
@@ -438,6 +442,8 @@ class AlertManager:
                 self._pending_history.append(AlertHistoryEntry.resolved(record, now))
                 if emit_events:
                     self._fire_resolved(record, now)
+            elif record.status is AlertStatus.PENDING:
+                self._pending_history.append(AlertHistoryEntry.cancelled(record, now))
 
         if save and persisted_changed:
             await self._async_save_state()
@@ -1342,7 +1348,7 @@ class AlertManager:
             await self.history_storage.async_save(candidate)
         except Exception:
             _LOGGER.exception(
-                "Unable to persist resolved alert history; runtime resolution "
+                "Unable to persist completed alert history; runtime transition "
                 "remains valid"
             )
             return

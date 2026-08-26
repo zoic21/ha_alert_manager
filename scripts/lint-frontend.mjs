@@ -11,11 +11,15 @@ if (result.status !== 0) {
 }
 
 const source = await readFile(file, "utf8");
-const forbidden = ["eval(", "new Function(", "document.cookie", "localStorage"];
+const forbidden = ["eval(", "new Function(", "document.cookie"];
 for (const token of forbidden) {
   if (source.includes(token)) {
     throw new Error(`Forbidden frontend construct: ${token}`);
   }
+}
+const localStorageUses = source.match(/window\.localStorage/g) ?? [];
+if (localStorageUses.length !== 2 || source.includes("globalThis.localStorage")) {
+  throw new Error("Frontend storage must stay limited to the namespaced table preferences");
 }
 if (!source.includes("customElements.define")) {
   throw new Error("Panel custom element is not registered");

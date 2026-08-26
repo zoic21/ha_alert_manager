@@ -107,15 +107,19 @@ def test_active_resolution_preserves_snapshot_acknowledgement_and_persists(
     assert reloaded.history_snapshot()["events"] == [event]
 
 
-def test_pending_cancellation_is_not_archived(hass, entry):
-    """A condition recovered before activation creates no historical event."""
+def test_pending_cancellation_is_archived_with_an_explicit_status(hass, entry):
+    """A condition recovered before activation is archived as cancelled."""
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
     hass.states.set("sensor.test", "ok")
     run(manager.async_evaluate_entity("sensor.test"))
     assert manager.records == {}
-    assert manager.history_snapshot()["events"] == []
-    assert HISTORY_STORAGE_KEY not in hass.stores
+    events = manager.history_snapshot()["events"]
+    assert len(events) == 1
+    assert events[0]["final_status"] == "cancelled"
+    assert events[0]["active_duration_seconds"] == 0
+    assert events[0]["acknowledged"] is False
+    assert hass.stores[HISTORY_STORAGE_KEY]["events"] == events
 
 
 def test_retention_default_limit_zero_and_deterministic_trimming(hass, entry, set_now):
