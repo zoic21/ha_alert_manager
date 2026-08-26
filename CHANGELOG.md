@@ -12,6 +12,8 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
   d’alertes groupées.
 - Ajout des traductions françaises et anglaises du contrôle d’affichage des
   alertes supplémentaires.
+- Synchronisation de la version du manifest, du backend et du frontend en
+  `1.5.9-dev3`.
 ## 1.5.8 — 26 août 2026
 
 ### Corrigé
