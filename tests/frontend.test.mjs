@@ -796,7 +796,6 @@ test("selection mode selects visible rows and mixed bulk actions affect compatib
   const toolbar = panel._renderTableToolbar(
     "overview",
     panel._tableRows("overview"),
-    panel._tableRows("overview"),
   );
   assert.match(toolbar, /Acquitter \(1\)/);
   assert.match(toolbar, /Désacquitter \(1\)/);
@@ -833,15 +832,67 @@ test("history uses the same table tools without selection or runtime actions", (
   assert.equal(rows[0].value, "34.5 °C");
   assert.match(html, /<ha-data-table class="native-alert-table" data-native-alert-table="history">/);
   assert.doesNotMatch(html, /open-selection|bulk-acknowledge|bulk-unacknowledge|data-due=/);
-  assert.match(html, /data-menu="filters"/);
-  assert.match(html, /data-menu="group"/);
-  assert.match(html, /data-menu="sort"/);
-  assert.match(html, /data-menu="columns"/);
+  assert.match(html, /<ha-assist-chip data-action="toggle-filter-pane"/);
+  assert.match(html, /<ha-dropdown data-table-dropdown="group"/);
+  assert.match(html, /<ha-dropdown data-table-dropdown="sort"/);
+  assert.match(html, /<ha-dropdown data-table-dropdown="columns"/);
+  assert.match(html, /<ha-dropdown-item value="resolved"/);
+  assert.doesNotMatch(html, /<button|<select|type="radio"|type="checkbox"/);
+});
+
+test("table toolbar and filter pane use native Home Assistant controls", async () => {
+  const panel = tablePanel();
+  let html = panel._renderOverview();
+  assert.match(html, /<ha-assist-chip data-action="toggle-filter-pane"/);
+  assert.match(html, /<ha-dropdown data-table-dropdown="group"/);
+  assert.match(html, /<ha-dropdown-item value="device"/);
+  assert.doesNotMatch(html, /class="toolbar-button|class="toolbar-icon-button|<button|<select/);
+
+  panel._render = () => {};
+  await panel._handleClick(actionEvent("toggle-filter-pane", undefined, { tableKind: "overview" }));
+  assert.equal(panel._filterPaneKind, "overview");
+  html = panel._renderOverview();
+  assert.match(html, /<aside class="native-filter-pane"/);
+  assert.match(html, /<ha-expansion-panel left-chevron/);
+  assert.match(html, /<ha-check-list-item data-table-filter-option="status"/);
+  assert.match(html, /<ha-input type="date"/);
+});
+
+test("native dropdown selections update grouping sorting and columns", () => {
+  const panel = tablePanel();
+  panel._render = () => {};
+  const select = (menu, value) => panel._handleSelected({
+    detail: { item: { value } },
+    target: {},
+    composedPath: () => [{ dataset: { tableDropdown: menu, tableKind: "overview" } }],
+  });
+  select("group", "device");
+  assert.equal(panel._tableState.overview.groupBy, "device");
+  select("sort", "value");
+  assert.equal(panel._tableState.overview.sortBy, "value");
+  select("sort", "value");
+  assert.equal(panel._tableState.overview.sortDirection, "asc");
+  select("columns", "toggle:device");
+  assert.equal(panel._tableState.overview.columns.includes("device"), false);
+  select("columns", "reset");
+  assert.deepEqual(panel._tableState.overview.columns, [
+    "status", "device", "entity", "value", "condition", "detected", "timeline",
+  ]);
+  let editorSwitches = 0;
+  panel._switchRuleEditor = () => { editorSwitches += 1; };
+  panel._handleSelected({
+    detail: { item: { value: "switch-editor" } },
+    target: {},
+    composedPath: () => [{ dataset: { ruleEditorMenu: "" } }],
+  });
+  assert.equal(editorSwitches, 1);
 });
 
 test("native Home Assistant data table remains constrained and usable on mobile", () => {
   const styles = tablePanel()._styles();
+  assert.match(styles, /main\{width:100%;max-width:none;margin:0;padding:24px\}/);
   assert.match(styles, /\.native-alert-table\{[^}]*height:clamp/);
+  assert.match(styles, /\.native-table-layout\.has-filter-pane\{grid-template-columns:300px minmax\(0,1fr\)\}/);
   assert.match(styles, /--data-table-row-height:52px/);
   assert.match(styles, /@media\(max-width:560px\)/);
 });
@@ -1064,7 +1115,9 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(rules, /<ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start"/);
   assert.ok(rules.indexOf("</table>") < rules.indexOf('data-action="new-rule"'));
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
-  assert.match(editor, /slot="actionItems" class="rule-menu-wrap"/);
+  assert.match(editor, /<ha-dropdown slot="actionItems" data-rule-editor-menu/);
+  assert.match(editor, /<ha-icon-button slot="trigger"/);
+  assert.match(editor, /<ha-dropdown-item value="switch-editor">Modifier en YAML/);
   assert.doesNotMatch(editor, /slot="subtitle"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
@@ -1081,9 +1134,10 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
-  assert.doesNotMatch(panel._styles(), /main\.rules-page|main\{[^}]*max-width:none/);
+  assert.doesNotMatch(panel._styles(), /main\.rules-page/);
+  assert.match(panel._styles(), /main\{width:100%;max-width:none/);
   assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
-  assert.match(panel._styles(), /inset-inline-end:max\(24px,calc\(\(85vw - 1400px\)\/2 \+ 24px\)\)/);
+  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
 });

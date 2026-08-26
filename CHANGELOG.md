@@ -2,6 +2,27 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev3 — 26 août 2026
+
+### Corrigé
+
+- Toutes les pages du panel utilisent désormais toute la largeur disponible,
+  sans limite centrale à 1400 px.
+- La barre d’outils des tableaux repose sur les composants natifs Home
+  Assistant `ha-assist-chip`, `ha-dropdown`, `ha-dropdown-item`, `ha-button` et
+  `ha-icon-button` au lieu de boutons et menus HTML personnalisés.
+- Le filtre est présenté dans un volet latéral compact calqué sur la liste des
+  entités, avec `ha-expansion-panel`, `ha-list`, `ha-check-list-item` et les
+  champs de date natifs.
+- Les menus de groupement, de tri et de colonnes, ainsi que le menu trois-points
+  de l’éditeur de règle, utilisent désormais les menus déroulants Home
+  Assistant.
+
+### Tests
+
+- Ajout de contrôles frontend sur les composants natifs, l’ouverture du volet
+  de filtres, les événements des menus et la mise en page pleine largeur.
+
 ## 1.7.0-dev2 — 26 août 2026
 
 ### Corrigé

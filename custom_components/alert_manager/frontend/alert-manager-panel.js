@@ -46,6 +46,8 @@ const MDI_TABLE_COLUMN = "M4,3H20A2,2 0 0,1 22,5V19A2,2 0 0,1 20,21H4A2,2 0 0,1 
 const MDI_CHECKBOX_MULTIPLE = "M17,3H5A2,2 0 0,0 3,5V17H5V5H17V3M19,7H9A2,2 0 0,0 7,9V19A2,2 0 0,0 9,21H19A2,2 0 0,0 21,19V9A2,2 0 0,0 19,7M17,17H11V11H17V17Z";
 const MDI_ARROW_UP = "M4,12L5.41,13.41L11,7.83V20H13V7.83L18.59,13.42L20,12L12,4L4,12Z";
 const MDI_ARROW_DOWN = "M20,12L18.59,10.59L13,16.17V4H11V16.17L5.41,10.58L4,12L12,20L20,12Z";
+const MDI_MENU_DOWN = "M7,10L12,15L17,10H7Z";
+const MDI_CHECK = "M9,16.17L4.83,12L3.41,13.41L9,19L21,7L19.59,5.59L9,16.17Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_main_active",
@@ -188,7 +190,6 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
-    this._ruleMenuOpen = false;
     this._ruleDirty = false;
     this._loading = true;
     this._busy = false;
@@ -199,6 +200,7 @@ class AlertManagerPanel extends HTMLElement {
     this._tableState = this._loadTablePreferences();
     this._collapsedTableGroups = new Set();
     this._nativeGroupLabels = { overview: new Map(), history: new Map() };
+    this._filterPaneKind = "";
     this._selectionMode = false;
     this._selectedAlertIds = new Set();
     this._settingsDraft = null;
@@ -213,6 +215,7 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
     this.shadowRoot.addEventListener("input", (event) => this._handleInput(event));
     this.shadowRoot.addEventListener("change", (event) => this._handleChange(event));
+    this.shadowRoot.addEventListener("wa-select", (event) => this._handleSelected(event));
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
@@ -548,6 +551,12 @@ class AlertManagerPanel extends HTMLElement {
         search.placeholder = this._t("table.search");
       }
     }
+    this.shadowRoot.querySelectorAll('[data-action="move-column"]').forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._moveColumn(button.dataset.tableKind, button.dataset.column, button.dataset.direction);
+      });
+    });
   }
 
   _updateSelectionToolbar() {
@@ -592,6 +601,9 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _hydrateSelectors() {
+    this.shadowRoot.querySelectorAll("ha-icon-button[aria-label]").forEach((button) => {
+      button.label = button.getAttribute("aria-label");
+    });
     const shell = this.shadowRoot.querySelector("#panel-shell");
     if (shell && this._hass) {
       const activePage = TABS.find((tab) => tab.id === this._activeTab) ?? TABS[0];
@@ -610,8 +622,6 @@ class AlertManagerPanel extends HTMLElement {
         closeButton.label = this._t("rules.aria_close");
         closeButton.path = MDI_CLOSE;
       }
-      const menuButton = this.shadowRoot.querySelector('[data-action="toggle-rule-menu"]');
-      if (menuButton) menuButton.path = MDI_DOTS_VERTICAL;
       if (this._ruleEditorMode !== "visual") return;
       this._configureSelect(
         "rule-source",
@@ -902,62 +912,92 @@ class AlertManagerPanel extends HTMLElement {
     }
     const visibleRows = this._filteredTableRows(kind, sourceRows);
     const selection = kind === "overview" && this._selectionMode;
+    const filtersOpen = this._filterPaneKind === kind && !selection;
     return `<ha-card outlined class="data-table-card ${selection ? "selection-active" : ""}">
-      <ha-data-table class="native-alert-table" data-native-alert-table="${kind}">
-        <div slot="header">${this._renderTableToolbar(kind, sourceRows, visibleRows)}</div>
-      </ha-data-table>
+      <div class="native-table-layout ${filtersOpen ? "has-filter-pane" : ""}">
+        ${filtersOpen ? `<aside class="native-filter-pane" aria-label="${esc(this._t("table.filters.title"))}">
+          <div class="native-filter-header">${this._filterChip(kind, true)}</div>
+          <div class="native-filter-content">${this._renderFilterPane(kind, sourceRows)}</div>
+        </aside>` : ""}
+        <div class="native-table-content">
+          <ha-data-table class="native-alert-table" data-native-alert-table="${kind}">
+            <div slot="header">${this._renderTableToolbar(kind, sourceRows, filtersOpen)}</div>
+          </ha-data-table>
+        </div>
+      </div>
       <div class="table-footer">${esc(this._t("table.visible_count", { visible: visibleRows.length, total: sourceRows.length }))}</div>
     </ha-card>`;
   }
 
-  _renderTableToolbar(kind, sourceRows, visibleRows) {
+  _renderTableToolbar(kind, sourceRows, filtersOpen = false) {
     if (kind === "overview" && this._selectionMode) {
       const selectedRows = sourceRows.filter((row) => this._selectedAlertIds.has(row.id));
       const acknowledgeCount = selectedRows.filter((row) => row.status === "active").length;
       const unacknowledgeCount = selectedRows.filter((row) => row.status === "acknowledged").length;
       return `<div class="table-toolbar selection-toolbar" role="toolbar" aria-label="${esc(this._t("table.selection.toolbar"))}">
-        <button type="button" class="toolbar-icon-button" data-action="close-selection" title="${esc(this._t("table.selection.close"))}" aria-label="${esc(this._t("table.selection.close"))}"><ha-svg-icon path="${MDI_CLOSE}"></ha-svg-icon></button>
-        <button type="button" class="toolbar-button" data-action="select-visible">${esc(this._t("table.selection.select"))}</button>
+        <ha-icon-button data-action="close-selection" title="${esc(this._t("table.selection.close"))}" aria-label="${esc(this._t("table.selection.close"))}"><ha-svg-icon path="${MDI_CLOSE}"></ha-svg-icon></ha-icon-button>
+        <ha-button appearance="plain" variant="neutral" data-action="select-visible">${esc(this._t("table.selection.select"))}</ha-button>
         <strong class="selection-count" data-selection-count>${esc(this._t("table.selection.count", { count: selectedRows.length }))}</strong>
         <span class="toolbar-spacer"></span>
-        <button type="button" class="toolbar-button primary" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</button>
-        <button type="button" class="toolbar-button danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</button>
+        <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
+        <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
       </div>`;
     }
-    const filterCount = this._filterCount(kind);
-    const menu = this._openTableMenu?.startsWith(`${kind}:`) ? this._openTableMenu.split(":")[1] : "";
-    return `<div class="table-toolbar-wrap">
-      <div class="table-toolbar" role="toolbar" aria-label="${esc(this._t("table.toolbar"))}">
-        ${this._toolbarMenuButton(kind, "filters", MDI_FILTER_VARIANT, this._t("table.filters.title"), filterCount)}
+    return `<div class="table-toolbar" role="toolbar" aria-label="${esc(this._t("table.toolbar"))}">
+        ${filtersOpen ? "" : this._filterChip(kind, false)}
         <ha-input-search id="${kind}-table-search" class="table-search" data-table-search="${kind}" appearance="outlined"></ha-input-search>
         <span class="toolbar-spacer"></span>
-        ${this._toolbarMenuButton(kind, "group", MDI_GROUP, this._t("table.group.title"))}
-        ${this._toolbarMenuButton(kind, "sort", MDI_SORT, this._t("table.sort.title"))}
-        ${this._toolbarMenuButton(kind, "columns", MDI_TABLE_COLUMN, this._t("table.columns.title"))}
-        ${kind === "overview" ? `<button type="button" class="toolbar-icon-button" data-action="open-selection" title="${esc(this._t("table.selection.open"))}" aria-label="${esc(this._t("table.selection.open"))}"><ha-svg-icon path="${MDI_CHECKBOX_MULTIPLE}"></ha-svg-icon></button>` : ""}
-      </div>
-      ${menu ? `<div class="table-menu table-menu-${menu}">${this._renderTableMenu(kind, menu, sourceRows, visibleRows)}</div>` : ""}
+        ${this._renderGroupDropdown(kind)}
+        ${this._renderSortDropdown(kind)}
+        ${this._renderColumnDropdown(kind)}
+        ${kind === "overview" ? `<ha-assist-chip class="select-mode-chip" data-action="open-selection" title="${esc(this._t("table.selection.open"))}" aria-label="${esc(this._t("table.selection.open"))}" has-icon><ha-svg-icon slot="icon" path="${MDI_CHECKBOX_MULTIPLE}"></ha-svg-icon></ha-assist-chip>` : ""}
     </div>`;
   }
 
-  _toolbarMenuButton(kind, menu, icon, label, count = 0) {
-    const active = this._openTableMenu === `${kind}:${menu}`;
-    return `<button type="button" class="toolbar-button ${active ? "is-active" : ""}" data-action="toggle-table-menu" data-table-kind="${kind}" data-menu="${menu}" aria-expanded="${active}"><ha-svg-icon path="${icon}"></ha-svg-icon><span>${esc(label)}</span>${count ? `<span class="filter-count">${count}</span>` : ""}</button>`;
+  _filterChip(kind, active) {
+    const count = this._filterCount(kind);
+    const label = count ? `${this._t("table.filters.title")} (${count})` : this._t("table.filters.title");
+    return `<ha-assist-chip data-action="toggle-filter-pane" data-table-kind="${kind}" ${active ? "active" : ""} has-icon aria-expanded="${active}"><ha-svg-icon slot="icon" path="${MDI_FILTER_VARIANT}"></ha-svg-icon>${esc(label)}</ha-assist-chip>`;
   }
 
-  _renderTableMenu(kind, menu, rows) {
+  _renderGroupDropdown(kind) {
     const state = this._tableState[kind];
-    if (menu === "filters") return this._renderFilterMenu(kind, rows);
-    if (menu === "group") {
-      return `<fieldset><legend>${esc(this._t("table.group.title"))}</legend>${["none", "device", "area", "rule", "status"].map((value) => `<label><input type="radio" name="${kind}-group" data-table-setting="groupBy" data-table-kind="${kind}" value="${value}" ${state.groupBy === value ? "checked" : ""}>${esc(this._t(`table.group.${value}`))}</label>`).join("")}</fieldset>`;
-    }
-    if (menu === "sort") {
-      const options = kind === "history"
-        ? ["status", "device", "entityName", "rule", "value", "detected", "resolved"]
-        : ["status", "device", "entityName", "rule", "value", "detected", "activated", "remaining"];
-      return `<div class="menu-fields"><label>${esc(this._t("table.sort.title"))}<select data-table-setting="sortBy" data-table-kind="${kind}">${options.map((value) => `<option value="${value}" ${state.sortBy === value ? "selected" : ""}>${esc(this._t(`table.sort.${value === "entityName" ? "entity_name" : value}`))}</option>`).join("")}</select></label><label>${esc(this._t("table.sort.direction"))}<select data-table-setting="sortDirection" data-table-kind="${kind}"><option value="asc" ${state.sortDirection === "asc" ? "selected" : ""}>${esc(this._t("table.sort.asc"))}</option><option value="desc" ${state.sortDirection === "desc" ? "selected" : ""}>${esc(this._t("table.sort.desc"))}</option></select></label></div>`;
-    }
-    return this._renderColumnMenu(kind);
+    const options = ["none", "device", "area", "rule", "status"];
+    const current = this._t(`table.group.${state.groupBy}`);
+    return `<ha-dropdown data-table-dropdown="group" data-table-kind="${kind}" size="m" placement="bottom-start">
+      <ha-assist-chip slot="trigger" class="has-dropdown" has-icon><ha-svg-icon slot="icon" path="${MDI_GROUP}"></ha-svg-icon>${esc(`${this._t("table.group.title")}  ${current}`)}<ha-svg-icon slot="trailing-icon" path="${MDI_MENU_DOWN}"></ha-svg-icon></ha-assist-chip>
+      ${options.map((value) => `<ha-dropdown-item value="${value}" ${state.groupBy === value ? "selected" : ""}>${esc(this._t(`table.group.${value}`))}</ha-dropdown-item>`).join("")}
+    </ha-dropdown>`;
+  }
+
+  _renderSortDropdown(kind) {
+    const state = this._tableState[kind];
+    const options = kind === "history"
+      ? ["status", "device", "entityName", "rule", "value", "detected", "resolved"]
+      : ["status", "device", "entityName", "rule", "value", "detected", "activated", "remaining"];
+    const labelFor = (value) => this._t(`table.sort.${value === "entityName" ? "entity_name" : value}`);
+    return `<ha-dropdown data-table-dropdown="sort" data-table-kind="${kind}" size="m" placement="bottom-start">
+      <ha-assist-chip slot="trigger" class="has-dropdown" has-icon><ha-svg-icon slot="icon" path="${MDI_SORT}"></ha-svg-icon>${esc(`${this._t("table.sort.title")}  ${labelFor(state.sortBy)}`)}<ha-svg-icon slot="trailing-icon" path="${MDI_MENU_DOWN}"></ha-svg-icon></ha-assist-chip>
+      ${options.map((value) => `<ha-dropdown-item value="${value}" ${state.sortBy === value ? "selected" : ""}>${esc(labelFor(value))}${state.sortBy === value ? `<ha-svg-icon slot="end" path="${state.sortDirection === "asc" ? MDI_ARROW_UP : MDI_ARROW_DOWN}"></ha-svg-icon>` : ""}</ha-dropdown-item>`).join("")}
+    </ha-dropdown>`;
+  }
+
+  _renderColumnDropdown(kind) {
+    const columns = this._tableColumns(kind);
+    const visible = this._tableState[kind].columns;
+    return `<ha-dropdown data-table-dropdown="columns" data-table-kind="${kind}" size="m" placement="bottom-end">
+      <ha-assist-chip slot="trigger" class="select-mode-chip has-dropdown" title="${esc(this._t("table.columns.title"))}" aria-label="${esc(this._t("table.columns.title"))}" has-icon><ha-svg-icon slot="icon" path="${MDI_TABLE_COLUMN}"></ha-svg-icon></ha-assist-chip>
+      ${Object.entries(columns).map(([column, definition]) => {
+        const index = visible.indexOf(column);
+        const required = REQUIRED_COLUMNS.has(column);
+        return `<ha-dropdown-item value="toggle:${column}" ${index >= 0 ? "selected" : ""} ${required ? "disabled" : ""}>
+          ${index >= 0 ? `<ha-svg-icon slot="icon" path="${MDI_CHECK}"></ha-svg-icon>` : ""}${esc(definition.label)}
+          ${index >= 0 ? `<span slot="end" class="column-order-actions"><ha-icon-button data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="up" ${index === 0 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_up", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_UP}"></ha-svg-icon></ha-icon-button><ha-icon-button data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="down" ${index === visible.length - 1 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_down", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_DOWN}"></ha-svg-icon></ha-icon-button></span>` : ""}
+        </ha-dropdown-item>`;
+      }).join("")}
+      <wa-divider></wa-divider>
+      <ha-dropdown-item value="reset">${esc(this._t("table.columns.reset"))}</ha-dropdown-item>
+    </ha-dropdown>`;
   }
 
   _facetOptions(rows, key) {
@@ -965,38 +1005,34 @@ class AlertManagerPanel extends HTMLElement {
       .sort((left, right) => String(left).localeCompare(String(right), this._language, { numeric: true }));
   }
 
-  _filterSelect(kind, key, label, options) {
-    const value = this._tableState[kind].filters[key];
-    return `<label>${esc(label)}<select data-table-filter="${key}" data-table-kind="${kind}"><option value="">${esc(this._t("table.filters.all"))}</option>${options.map((option) => `<option value="${esc(option.value ?? option)}" ${value === String(option.value ?? option) ? "selected" : ""}>${esc(option.label ?? option)}</option>`).join("")}</select></label>`;
+  _renderFilterExpansion(kind, key, label, options) {
+    const current = this._tableState[kind].filters[key];
+    const normalized = options.map((option) => ({
+      value: String(option.value ?? option),
+      label: String(option.label ?? option),
+    }));
+    const selectedLabel = normalized.find((option) => option.value === current)?.label;
+    const allOptions = [{ value: "", label: this._t("table.filters.all") }, ...normalized];
+    return `<ha-expansion-panel left-chevron ${current ? "expanded" : ""}>
+      <div slot="header" class="filter-section-header"><span>${esc(label)}</span>${selectedLabel ? `<small>${esc(selectedLabel)}</small>` : ""}</div>
+      <ha-list>${allOptions.map((option) => `<ha-check-list-item data-table-filter-option="${key}" data-table-filter-value="${esc(option.value)}" data-table-kind="${kind}" ${current === option.value ? "selected" : ""} aria-selected="${current === option.value}">${esc(option.label)}</ha-check-list-item>`).join("")}</ha-list>
+    </ha-expansion-panel>`;
   }
 
-  _renderFilterMenu(kind, rows) {
+  _renderFilterPane(kind, rows) {
     const statuses = kind === "history"
       ? [{ value: "resolved", label: this._t("history.resolved") }]
       : ["active", "pending", "acknowledged"].map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     const filters = this._tableState[kind].filters;
-    return `<div class="filter-grid">
-      ${this._filterSelect(kind, "status", this._t("table.columns.status"), statuses)}
-      ${this._filterSelect(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
-      ${this._filterSelect(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
-      ${this._filterSelect(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
-      ${this._filterSelect(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
-      ${this._filterSelect(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
-      <label>${esc(this._t("table.filters.detected_from"))}<input type="date" data-table-filter="detectedFrom" data-table-kind="${kind}" value="${esc(filters.detectedFrom)}"></label>
-      <label>${esc(this._t("table.filters.detected_to"))}<input type="date" data-table-filter="detectedTo" data-table-kind="${kind}" value="${esc(filters.detectedTo)}"></label>
-      ${kind === "history" ? `<label>${esc(this._t("table.filters.resolved_from"))}<input type="date" data-table-filter="resolvedFrom" data-table-kind="history" value="${esc(filters.resolvedFrom)}"></label><label>${esc(this._t("table.filters.resolved_to"))}<input type="date" data-table-filter="resolvedTo" data-table-kind="history" value="${esc(filters.resolvedTo)}"></label>` : ""}
-      <div class="filter-actions"><button type="button" class="toolbar-button" data-action="reset-filters" data-table-kind="${kind}" ${this._filterCount(kind) ? "" : "disabled"}>${esc(this._t("table.filters.reset"))}</button></div>
-    </div>`;
-  }
-
-  _renderColumnMenu(kind) {
-    const columns = this._tableColumns(kind);
-    const visible = this._tableState[kind].columns;
-    return `<div class="column-list">${Object.entries(columns).map(([column, definition]) => {
-      const index = visible.indexOf(column);
-      const required = REQUIRED_COLUMNS.has(column);
-      return `<div class="column-option"><label><input type="checkbox" data-table-column="${column}" data-table-kind="${kind}" ${index >= 0 ? "checked" : ""} ${required ? "disabled" : ""}>${esc(definition.label)}</label><span>${index >= 0 ? `<button type="button" class="column-move" data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="up" ${index === 0 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_up", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_UP}"></ha-svg-icon></button><button type="button" class="column-move" data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="down" ${index === visible.length - 1 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_down", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_DOWN}"></ha-svg-icon></button>` : ""}</span></div>`;
-    }).join("")}<button type="button" class="toolbar-button" data-action="reset-columns" data-table-kind="${kind}">${esc(this._t("table.columns.reset"))}</button></div>`;
+    return `${this._renderFilterExpansion(kind, "status", this._t("table.columns.status"), statuses)}
+      ${this._renderFilterExpansion(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
+      ${this._renderFilterExpansion(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
+      ${this._renderFilterExpansion(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
+      ${this._renderFilterExpansion(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${this._renderFilterExpansion(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
+      <ha-expansion-panel left-chevron ${(filters.detectedFrom || filters.detectedTo) ? "expanded" : ""}><div slot="header" class="filter-section-header"><span>${esc(this._t("table.columns.detected"))}</span></div><div class="date-filter-fields"><ha-input type="date" label="${esc(this._t("table.filters.detected_from"))}" data-table-filter="detectedFrom" data-table-kind="${kind}" value="${esc(filters.detectedFrom)}"></ha-input><ha-input type="date" label="${esc(this._t("table.filters.detected_to"))}" data-table-filter="detectedTo" data-table-kind="${kind}" value="${esc(filters.detectedTo)}"></ha-input></div></ha-expansion-panel>
+      ${kind === "history" ? `<ha-expansion-panel left-chevron ${(filters.resolvedFrom || filters.resolvedTo) ? "expanded" : ""}><div slot="header" class="filter-section-header"><span>${esc(this._t("table.columns.resolved"))}</span></div><div class="date-filter-fields"><ha-input type="date" label="${esc(this._t("table.filters.resolved_from"))}" data-table-filter="resolvedFrom" data-table-kind="history" value="${esc(filters.resolvedFrom)}"></ha-input><ha-input type="date" label="${esc(this._t("table.filters.resolved_to"))}" data-table-filter="resolvedTo" data-table-kind="history" value="${esc(filters.resolvedTo)}"></ha-input></div></ha-expansion-panel>` : ""}
+      <div class="native-filter-actions"><ha-button appearance="plain" variant="neutral" data-action="reset-filters" data-table-kind="${kind}" ${this._filterCount(kind) ? "" : "disabled"}>${esc(this._t("table.filters.reset"))}</ha-button></div>`;
   }
 
   _nativeTableColumns(kind) {
@@ -1247,7 +1283,7 @@ class AlertManagerPanel extends HTMLElement {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
-        <div slot="actionItems" class="rule-menu-wrap"><ha-icon-button data-action="toggle-rule-menu" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"></ha-icon-button>${this._ruleMenuOpen ? `<div class="rule-editor-menu" role="menu"><ha-button appearance="plain" data-action="switch-rule-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-button></div>` : ""}</div>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item></ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}
@@ -1369,20 +1405,81 @@ class AlertManagerPanel extends HTMLElement {
     return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
   }
 
+  _moveColumn(kind, column, direction) {
+    const columns = this._tableState[kind]?.columns;
+    if (!columns) return;
+    const index = columns.indexOf(column);
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= columns.length) return;
+    [columns[index], columns[target]] = [columns[target], columns[index]];
+    this._saveTablePreferences();
+    this._render();
+  }
+
+  _handleSelected(event) {
+    const path = event.composedPath?.() ?? [event.target];
+    const dropdown = path.find((node) => node?.dataset?.tableDropdown);
+    if (dropdown) {
+      const kind = dropdown.dataset.tableKind;
+      const menu = dropdown.dataset.tableDropdown;
+      const value = String(event.detail?.item?.value ?? event.detail?.value ?? event.target?.value ?? "");
+      if (!this._tableState[kind] || !value) return;
+      if (menu === "group") {
+        this._tableState[kind].groupBy = value;
+      } else if (menu === "sort") {
+        if (this._tableState[kind].sortBy === value) {
+          this._tableState[kind].sortDirection = this._tableState[kind].sortDirection === "asc" ? "desc" : "asc";
+        } else {
+          this._tableState[kind].sortBy = value;
+        }
+      } else if (menu === "columns") {
+        if (value === "reset") {
+          this._tableState[kind].columns = [...DEFAULT_TABLE_STATE[kind].columns];
+        } else if (value.startsWith("toggle:")) {
+          const column = value.slice(7);
+          if (REQUIRED_COLUMNS.has(column)) return;
+          const columns = this._tableState[kind].columns;
+          this._tableState[kind].columns = columns.includes(column)
+            ? columns.filter((item) => item !== column)
+            : [...columns, column];
+        }
+      }
+      this._saveTablePreferences();
+      this._render();
+      return;
+    }
+    const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
+    const ruleValue = event.detail?.item?.value ?? event.detail?.value;
+    if (ruleMenu && ruleValue === "switch-editor") {
+      void this._switchRuleEditor();
+    }
+  }
+
   async _handleClick(event) {
+    const filterOption = event.target.closest?.("[data-table-filter-option]");
+    if (filterOption?.dataset?.tableFilterOption) {
+      const kind = filterOption.dataset.tableKind;
+      const key = filterOption.dataset.tableFilterOption;
+      const value = filterOption.dataset.tableFilterValue ?? "";
+      if (this._tableState[kind]?.filters && key in this._tableState[kind].filters) {
+        this._tableState[kind].filters[key] = value;
+        this._render();
+      }
+      return;
+    }
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
-    if (action === "toggle-table-menu") {
-      const key = `${button.dataset.tableKind}:${button.dataset.menu}`;
-      this._openTableMenu = this._openTableMenu === key ? "" : key;
+    if (action === "toggle-filter-pane") {
+      const kind = button.dataset.tableKind;
+      this._filterPaneKind = this._filterPaneKind === kind ? "" : kind;
       this._render();
       return;
     }
     if (action === "open-selection") {
       this._selectionMode = true;
       this._selectedAlertIds.clear();
-      this._openTableMenu = "";
+      this._filterPaneKind = "";
       this._render();
       return;
     }
@@ -1428,15 +1525,9 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (action === "move-column") {
+      event.stopPropagation?.();
       const { tableKind: kind, column, direction } = button.dataset;
-      const columns = this._tableState[kind].columns;
-      const index = columns.indexOf(column);
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (index >= 0 && target >= 0 && target < columns.length) {
-        [columns[index], columns[target]] = [columns[target], columns[index]];
-        this._saveTablePreferences();
-        this._render();
-      }
+      this._moveColumn(kind, column, direction);
       return;
     }
     if (action === "enable-monitoring") {
@@ -1511,18 +1602,12 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleEditorMode = "visual";
       this._ruleYaml = "";
       this._ruleYamlError = null;
-      this._ruleMenuOpen = false;
       this._ruleDirty = false;
       this._render();
       return;
     }
     if (action === "cancel-rule") {
       this._cancelRuleEditor();
-      return;
-    }
-    if (action === "toggle-rule-menu") {
-      this._ruleMenuOpen = !this._ruleMenuOpen;
-      this._render();
       return;
     }
     if (action === "switch-rule-editor") {
@@ -1573,7 +1658,6 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleEditorMode = "visual";
       this._ruleYaml = "";
       this._ruleYamlError = null;
-      this._ruleMenuOpen = false;
       this._ruleDirty = false;
       this._render();
     } else if (action === "toggle-rule") {
@@ -1716,13 +1800,11 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
-    this._ruleMenuOpen = false;
     this._ruleDirty = false;
     this._render();
   }
 
   async _switchRuleEditor() {
-    this._ruleMenuOpen = false;
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
       this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
@@ -2204,28 +2286,23 @@ class AlertManagerPanel extends HTMLElement {
   _styles() {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
-      *{box-sizing:border-box}main{max-width:1400px;margin:0 auto;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
+      *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
-      .data-table-card{display:block;overflow:visible;background:var(--card-background-color,#fff)}
-      .table-toolbar-wrap{position:relative}.table-toolbar{display:flex;align-items:center;gap:6px;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.toolbar-spacer{flex:1}
-      .toolbar-button,.toolbar-icon-button,.column-move{appearance:none;border:0;background:transparent;color:var(--primary-text-color,#212121);font:inherit;cursor:pointer}.toolbar-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 12px;border-radius:var(--ha-border-radius-m,8px);white-space:nowrap}.toolbar-icon-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:50%}.toolbar-button:hover,.toolbar-button.is-active,.toolbar-icon-button:hover,.column-move:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.toolbar-button:focus-visible,.toolbar-icon-button:focus-visible,.column-move:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.toolbar-button:disabled,.toolbar-icon-button:disabled,.column-move:disabled{cursor:default;opacity:.45}.toolbar-button ha-svg-icon,.toolbar-icon-button ha-svg-icon{width:21px;height:21px}.toolbar-button.primary{color:var(--primary-color,#03a9f4);font-weight:var(--ha-font-weight-medium,500)}.toolbar-button.danger{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}
-      .filter-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff);font-size:11px}
+      .data-table-card{display:block;overflow:visible;background:var(--card-background-color,#fff)}.native-table-layout{display:grid;grid-template-columns:minmax(0,1fr)}.native-table-layout.has-filter-pane{grid-template-columns:300px minmax(0,1fr)}.native-table-content{min-width:0}.native-filter-pane{min-width:0;border-inline-end:1px solid var(--divider-color,#ddd);background:var(--card-background-color,#fff)}.native-filter-header{display:flex;align-items:center;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.native-filter-content{max-height:clamp(320px,62vh,780px);overflow:auto}.native-filter-content ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;flex-direction:column}.filter-section-header small{overflow:hidden;margin:0;text-overflow:ellipsis;white-space:nowrap}.native-filter-content ha-list{display:block;max-height:260px;overflow:auto}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.native-filter-actions{padding:12px 16px;text-align:end}
+      .table-toolbar{display:flex;align-items:center;gap:6px;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.toolbar-spacer{flex:1}.table-toolbar ha-dropdown{flex:none}.table-toolbar ha-assist-chip{white-space:nowrap}.select-mode-chip{flex:none}.column-order-actions{display:inline-flex;align-items:center;margin-inline-start:12px}.column-order-actions ha-icon-button{--mdc-icon-button-size:34px}.column-order-actions ha-svg-icon{width:18px;height:18px}
       .table-search{display:block;min-width:220px;max-width:420px;flex:1}
-      .table-menu{position:absolute;z-index:4;top:57px;left:12px;right:12px;max-height:min(520px,70vh);overflow:auto;padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-l,12px);background:var(--card-background-color,#fff);box-shadow:var(--ha-card-box-shadow,0 4px 16px rgba(0,0,0,.22))}.table-menu fieldset{display:grid;gap:8px;margin:0;padding:0;border:0}.table-menu legend{margin-bottom:8px;font-weight:var(--ha-font-weight-medium,500)}.table-menu label{display:flex;flex-direction:column;gap:5px}.table-menu fieldset label{align-items:center;flex-direction:row}.table-menu select,.table-menu input[type="date"]{min-height:38px;padding:6px 9px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);font:inherit}
-      .filter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.filter-actions{display:flex;align-items:end}.menu-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-      .column-list{display:grid;gap:4px}.column-option{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;padding:4px 6px;border-bottom:1px solid var(--divider-color,#ddd)}.column-option label{align-items:center;flex-direction:row;gap:9px}.column-option>span{display:flex}.column-move{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%}.column-move ha-svg-icon{width:19px;height:19px}
-      .selection-toolbar{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 10%,var(--card-background-color,#fff)))}.selection-count{margin-inline-start:6px}
+      .selection-toolbar{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 10%,var(--card-background-color,#fff)))}.selection-count{margin-inline-start:6px}.selection-toolbar ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .native-alert-table{display:block;height:clamp(320px,62vh,780px);min-width:0;--data-table-row-height:52px}.table-footer{padding:8px 14px;color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);text-align:right}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
-      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:max(24px,calc((85vw - 1400px)/2 + 24px));width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-menu-wrap{position:relative}.rule-editor-menu{position:absolute;z-index:10;inset-inline-end:0;inset-block-start:40px;min-width:190px;padding:4px;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);box-shadow:var(--ha-card-box-shadow,0 3px 10px rgba(0,0,0,.2))}.rule-editor-menu ha-button{width:100%;justify-content:flex-start}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.monitoring-warning{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-radius:8px;margin-bottom:16px;background:color-mix(in srgb,var(--warning-color,#f5a623) 16%,transparent);color:var(--primary-text-color,#212121)}.monitoring-warning ha-button{flex:none}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:850px){.table-toolbar{flex-wrap:wrap}.table-search{order:10;max-width:none;min-width:100%;flex-basis:100%}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-menu{top:105px}.selection-toolbar .toolbar-spacer{display:none}.selection-toolbar{align-items:stretch}.selection-toolbar .toolbar-button{flex:1}.native-alert-table{height:calc(100vh - 250px);min-height:360px}}
+      @media(max-width:850px){.table-toolbar{flex-wrap:wrap}.table-search{order:10;max-width:none;min-width:100%;flex-basis:100%}.native-table-layout.has-filter-pane{grid-template-columns:1fr}.native-filter-pane{border-inline-end:0;border-bottom:1px solid var(--divider-color,#ddd)}.native-filter-content{max-height:46vh}.selection-toolbar .toolbar-spacer{display:none}.selection-toolbar{align-items:stretch}.selection-toolbar ha-button{flex:1}.native-alert-table{height:calc(100vh - 250px);min-height:360px}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.panel{padding:15px}.actions ha-button{width:100%}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
       @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}}
-      @media(max-width:560px){.toolbar-button span:not(.filter-count){display:none}.table-toolbar>.toolbar-button{width:40px;padding:0}.filter-grid,.menu-fields{grid-template-columns:1fr}.table-menu{left:6px;right:6px}.selection-toolbar .toolbar-button span{display:initial}.selection-count{width:100%;order:8;margin:0}.selection-toolbar .toolbar-spacer{display:none}}
+      @media(max-width:560px){.table-toolbar ha-dropdown ha-assist-chip{max-width:44px;overflow:hidden}.selection-count{width:100%;order:8;margin:0}.selection-toolbar .toolbar-spacer{display:none}}
     `;
   }
 }
