@@ -614,7 +614,7 @@ class AlertManagerPanel extends HTMLElement {
     return `<ha-card outlined class="alert-card is-${status}">
       <div class="alert-card-header">
         ${this._renderStatusIcon(alert, status)}
-        <div class="alert-title">${title}<code>${esc(alert.entity_id)}</code></div>
+        <div class="alert-title">${title}</div>
         <strong class="alert-current-value">${esc(value ?? "—")}</strong>
       </div>
       <div class="alert-card-content">
@@ -674,7 +674,7 @@ class AlertManagerPanel extends HTMLElement {
       : `<span data-due="${esc(alert.due_at)}">${esc(this._remaining(alert.due_at))}</span>`;
     return `<article class="device-alert-row is-${status}">
       ${this._renderStatusIcon(alert, status, true)}
-      <div class="device-alert-source">${title}<code>${esc(alert.entity_id)}</code></div>
+      <div class="device-alert-source">${title}</div>
       <strong class="device-alert-value">${esc(value ?? "—")}</strong>
       <div class="device-alert-condition"><small>${esc(this._t("overview.condition"))}</small><span>${esc(this._conditionText(alert))}</span></div>
       <div class="device-alert-time"><small>${esc(this._t(acknowledged ? "overview.acknowledged" : active ? "overview.active_since" : "overview.remaining"))}</small><span>${time}</span></div>
@@ -1506,6 +1506,7 @@ class AlertManagerPanel extends HTMLElement {
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
       @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}.alert-card-header{grid-template-columns:40px minmax(0,1fr) auto}.alert-current-value{grid-column:auto;text-align:right}.device-alert-row{grid-template-columns:32px minmax(0,1fr) auto}.device-alert-condition,.device-alert-time{grid-column:2/-1}}
+      .device-alert-condition,.device-alert-time{grid-column:2/-1;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;min-width:0}.device-alert-condition small,.device-alert-time small{margin-top:0}.device-alert-condition span,.device-alert-time span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-alert-time{text-align:right}.device-alert-time small{text-align:left}.device-alert-time span{text-align:right}@media(max-width:700px){.device-alert-time{text-align:left}.device-alert-time span{text-align:left}}
     `;
   }
 }

@@ -490,6 +490,36 @@ test("alert conditions stay on one line in the wider detail column", () => {
   assert.match(styles, /\.alert-condition dd\{[^}]*white-space:nowrap/);
 });
 
+test("overview cards hide entity IDs and keep grouped conditions on one line", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = {
+    states: {
+      "zone.home": { state: "0" },
+      "sensor.cloudflare": { state: "0.11" },
+    },
+  };
+
+  const standalone = panel._renderAlert({
+    entity_id: "zone.home",
+    name: "Maison",
+    condition: "État contient 0 pendant 1 min",
+  }, "active");
+  const grouped = panel._renderDeviceAlertRow({
+    entity_id: "sensor.cloudflare",
+    name: "Cloudflared Pourcentage du processeur",
+    condition: "État inférieur à 123 % pendant 30 s",
+  }, "active");
+  const styles = panel._styles();
+
+  assert.doesNotMatch(standalone, /<code>zone\.home<\/code>/);
+  assert.match(standalone, /data-entity-id="zone\.home"/);
+  assert.doesNotMatch(grouped, /<code>sensor\.cloudflare<\/code>/);
+  assert.match(grouped, /État inférieur à 123 % pendant 30 s/);
+  assert.match(styles, /\.device-alert-condition,\.device-alert-time\{[^}]*grid-column:2\/-1[^}]*display:grid/);
+  assert.match(styles, /\.device-alert-condition span,\.device-alert-time span\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
+});
+
 test("alert overview uses native Home Assistant cards without nested panels", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
