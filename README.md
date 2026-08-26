@@ -16,7 +16,7 @@ Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.6
+## Fonctionnalités V1.7
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -31,17 +31,19 @@ Assistant.
 - panel administrateur responsive, servi directement par l’intégration ;
 - interface, flux de configuration, packs et conditions disponibles en français
   et en anglais selon la langue de chaque utilisateur Home Assistant ;
-- tableau compact avec recherche, filtres, tri, groupement repliable et colonnes
-  personnalisables, sans fusion des alertes ;
+- tableau compact fondé sur le composant natif `ha-data-table` de Home Assistant,
+  avec recherche, filtres, tri, groupement repliable et colonnes personnalisables,
+  sans fusion des alertes ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
   automatisations Home Assistant ;
 - appareil `Alert Manager - Général`, switch de surveillance persistant et trois
   capteurs séparant les alertes actives, à venir et acquittées ;
 - édition visuelle ou YAML des règles personnalisées, export YAML complet et
   import YAML de remplacement de la configuration ;
-- historique persistant des alertes résolues ou annulées avant activation, limité
-  par défaut à 100 événements et consultable dans un onglet dédié sans nouvelle
-  entité ;
+- historique persistant des alertes réellement activées puis résolues, limité par
+  défaut à 100 événements et consultable dans un onglet dédié sans nouvelle
+  entité ; une alerte revenue à la normale pendant son délai `pending` n’est pas
+  historisée ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
@@ -114,12 +116,14 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    retour indique le nombre réellement modifié.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
-2. **Historique** : le même tableau liste les alertes résolues, les résolutions
-   après acquittement et les anomalies annulées avant activation. Chaque
+2. **Historique** : le même tableau natif liste les alertes résolues et les
+   résolutions après acquittement. Chaque
    événement fige le nom de règle et d’entité, l’appareil, la zone, le message,
    la condition, la valeur de déclenchement et les dates. Recherche, filtres,
    groupement, tri et colonnes personnalisables restent disponibles. Aucune
    sélection ni action métier d’acquittement n’est proposée dans l’Historique.
+   Les anomalies revenues à la normale avant leur activation ne sont pas des
+   alertes effectives et ne sont donc pas ajoutées à l’historique.
 3. **Surveillance automatique** : activation, délais et seuil de batterie. Les
    cartes sont produites depuis les métadonnées du backend et seuls les packs
    actuellement disponibles sont proposés.

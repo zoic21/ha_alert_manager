@@ -179,59 +179,6 @@ class AlertHistoryEntry:
         )
 
     @classmethod
-    def cancelled(
-        cls, record: AlertRecord, cancelled_at: datetime
-    ) -> AlertHistoryEntry:
-        """Freeze a pending alert whose condition recovered before activation."""
-        if record.status is not AlertStatus.PENDING or record.active_since is not None:
-            raise ValueError("Only pending alerts can be archived as cancelled")
-        detected = record.detected_at.astimezone(UTC)
-        cancelled = max(cancelled_at.astimezone(UTC), detected)
-        pending_seconds = max(
-            0.0, (cancelled - detected).total_seconds() - record.paused_seconds
-        )
-        identity = "\n".join(
-            (
-                record.details.id,
-                detected.isoformat(),
-                "cancelled",
-                cancelled.isoformat(),
-            )
-        )
-        return cls(
-            event_id=hashlib.sha256(identity.encode()).hexdigest()[:32],
-            id=record.details.id,
-            type=record.details.type,
-            rule_id=record.details.rule_id or record.details.type,
-            rule_name=record.details.rule_name or record.details.type,
-            entity_id=record.details.entity_id,
-            entity_name=record.details.name,
-            device_id=record.details.device_id,
-            device_name=record.details.device_name,
-            area=record.details.area,
-            message=record.details.message,
-            trigger_value=_json_safe(record.details.value),
-            source=record.details.source,
-            operator=record.details.operator,
-            comparison_value=_json_safe(record.details.comparison_value),
-            attribute=record.details.attribute,
-            condition=record.details.condition,
-            condition_key=record.details.condition_key,
-            condition_params=_json_safe(record.details.condition_params),
-            unit=record.details.unit,
-            detected_at=detected,
-            active_at=cancelled,
-            resolved_at=cancelled,
-            pending_duration_seconds=pending_seconds,
-            active_duration_seconds=0.0,
-            total_duration_seconds=pending_seconds,
-            final_status="cancelled",
-            acknowledged=False,
-            acknowledged_at=None,
-            acknowledged_by=None,
-        )
-
-    @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertHistoryEntry:
         """Deserialize one strictly shaped persisted history entry."""
         if not isinstance(data, dict):
@@ -270,7 +217,7 @@ class AlertHistoryEntry:
         condition_params = data.get("condition_params")
         if condition_params is not None and not isinstance(condition_params, dict):
             raise ValueError("History condition_params must be an object or null")
-        if data.get("final_status") not in {"resolved", "cancelled"}:
+        if data.get("final_status") != "resolved":
             raise ValueError("Unsupported history final status")
         detected_at = _parse_aware_datetime(data["detected_at"], "detected_at")
         active_at = _parse_aware_datetime(data["active_at"], "active_at")

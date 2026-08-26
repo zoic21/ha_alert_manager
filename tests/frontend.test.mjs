@@ -49,6 +49,18 @@ globalThis.CustomEvent = class {
     Object.assign(this, options);
   }
 };
+const fakeDomElement = (tagName) => ({
+  tagName: tagName.toUpperCase(),
+  attributes: {},
+  children: [],
+  dataset: {},
+  style: { cssText: "" },
+  textContent: "",
+  setAttribute(name, value) { this.attributes[name] = String(value); },
+  append(...children) { this.children.push(...children); },
+  addEventListener(name, callback) { this.listeners ??= {}; this.listeners[name] = callback; },
+});
+globalThis.document = { createElement: fakeDomElement };
 globalThis.customElements = {
   _items: new Map(),
   define(name, value) {
@@ -545,30 +557,55 @@ const tablePanel = () => {
 test("dashboard renders one compact table with the required default columns and statuses", () => {
   const panel = tablePanel();
   const html = panel._renderOverview();
-  const headers = [...html.matchAll(/<th data-column="([^"]+)">/g)].map((match) => match[1]);
-
-  assert.deepEqual(headers, [
+  assert.deepEqual(panel._tableState.overview.columns, [
     "status", "device", "entity", "value", "condition", "detected", "timeline",
   ]);
-  assert.equal((html.match(/class="alert-table-row/g) ?? []).length, 3);
-  assert.match(html, /class="alert-table" data-table-kind="overview"/);
-  assert.match(html, /is-active[^]*aria-label="Alerte active"/);
-  assert.match(html, /is-pending[^]*aria-label="Alerte à venir"/);
-  assert.match(html, /is-acknowledged[^]*aria-label="Alerte acquittée"/);
-  assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
-  assert.match(html, /34\.5 °C/);
-  assert.match(html, /État supérieur à 33 °C pendant 30 s/);
-  assert.doesNotMatch(html, /alert-card|device-alert-group/);
+  assert.match(html, /<ha-data-table class="native-alert-table" data-native-alert-table="overview">/);
+  assert.match(html, /<ha-input-search[^>]*data-table-search="overview"/);
+  assert.doesNotMatch(html, /<table|<thead|<tbody|alert-card|device-alert-group/);
+  const rows = panel._nativeTableData("overview", panel._tableRows("overview"));
+  assert.equal(rows.length, 3);
+  assert.deepEqual(new Set(rows.map((row) => row.statusLabel)), new Set([
+    "Alerte active", "Alerte à venir", "Alerte acquittée",
+  ]));
+  const active = rows.find((row) => row.status === "active");
+  assert.equal(active.value, "34.5 °C");
+  assert.equal(active.condition, "État supérieur à 33 °C pendant 30 s");
+  const status = panel._nativeStatusCell(active, "overview");
+  assert.equal(status.attributes["aria-label"], "Alerte active");
+  assert.equal(status.children[0].tagName, "HA-SVG-ICON");
+});
+
+test("native Home Assistant data table receives columns, rows, sort and visibility", () => {
+  const panel = tablePanel();
+  const table = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-native-alert-table="overview"]' ? table : null
+  );
+
+  panel._hydrateDataTables();
+
+  assert.equal(table.columns.status.title, "Statut");
+  assert.equal(table.columns.entity.main, true);
+  assert.equal(table.columns.entity.sortable, true);
+  assert.equal(table.data.length, 3);
+  assert.equal(table.id, "id");
+  assert.equal(table.sortColumn, "detected");
+  assert.equal(table.sortDirection, "desc");
+  assert.equal(table.selectable, false);
+  assert.deepEqual(table.columnOrder.slice(0, 7), panel._tableState.overview.columns);
+  assert.ok(table.hiddenColumns.includes("entity_id"));
 });
 
 test("pending countdown is dynamic only while monitoring is enabled", () => {
   const panel = tablePanel();
-  const enabled = panel._renderOverview();
-  assert.match(enabled, /data-due="2099-08-26T12:15:00Z"/);
+  const pending = panel._tableRows("overview").find((row) => row.status === "pending");
+  const enabled = panel._nativeTimelineCell(pending);
+  assert.equal(enabled.children[1].dataset.due, "2099-08-26T12:15:00Z");
   panel._monitoringEnabled = false;
-  const suspended = panel._renderOverview();
-  assert.doesNotMatch(suspended, /data-due=/);
-  assert.match(suspended, /Délai suspendu — surveillance désactivée/);
+  const suspended = panel._nativeTimelineCell(pending);
+  assert.equal(suspended.children[1].dataset.due, undefined);
+  assert.equal(suspended.children[1].textContent, "Délai suspendu — surveillance désactivée");
 
   const node = { dataset: { due: "2099-08-26T12:15:00Z" }, textContent: "stable" };
   panel.shadowRoot.querySelectorAll = () => [node];
@@ -645,16 +682,21 @@ test("grouping works for device, area, rule and status and remembers collapsed g
   const rows = panel._filteredTableRows("overview", panel._tableRows("overview"));
   for (const groupBy of ["device", "area", "rule", "status"]) {
     panel._tableState.overview.groupBy = groupBy;
-    const groups = panel._groupedTableRows("overview", rows);
-    assert.ok(groups.length >= 2);
-    assert.ok(groups.every((group) => group.rows.length >= 1));
+    const data = panel._nativeTableData("overview", rows);
+    assert.ok(new Set(data.map((row) => row._group)).size >= 2);
+    assert.ok(data.every((row) => / \(\d+\)$/.test(row._group)));
   }
   panel._tableState.overview.groupBy = "device";
-  const group = panel._groupedTableRows("overview", rows)[0];
-  panel._render = () => {};
-  await panel._handleClick(actionEvent("toggle-table-group", undefined, { groupKey: group.key }));
-  assert.equal(panel._collapsedTableGroups.has(group.key), true);
-  assert.match(panel._renderTableGroup("overview", group, ["status", "entity"], false), /alert-table-row[^>]* hidden/);
+  const listeners = {};
+  const table = { addEventListener(name, callback) { listeners[name] = callback; } };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-native-alert-table="overview"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  const group = table.data[0]._group;
+  const base = panel._nativeGroupLabels.overview.get(group);
+  listeners["collapsed-changed"]({ detail: { value: [group] } });
+  assert.equal(panel._collapsedTableGroups.has(`overview:${base}`), true);
 });
 
 test("sorting handles dates, numeric values and text in both directions", () => {
@@ -726,14 +768,18 @@ test("selection mode opens, selects individual and visible rows, and closes clea
   panel._render = () => {};
   await panel._handleClick(actionEvent("open-selection"));
   assert.equal(panel._selectionMode, true);
-  await panel._handleClick({
-    target: {
-      closest: () => ({
-        dataset: { action: "select-row", alertId: "rule:temperature:sensor.rack" },
-        checked: true,
-      }),
-    },
-  });
+  const listeners = {};
+  const allIds = panel._tableRows("overview").map((row) => row.id);
+  const table = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+    selectAll() { listeners["selection-changed"]({ detail: { value: allIds } }); },
+    clearSelection() { listeners["selection-changed"]({ detail: { value: [] } }); },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-native-alert-table="overview"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  listeners["selection-changed"]({ detail: { value: ["rule:temperature:sensor.rack"] } });
   assert.equal(panel._selectedAlertIds.has("rule:temperature:sensor.rack"), true);
   await panel._handleClick(actionEvent("select-visible"));
   assert.equal(panel._selectedAlertIds.size, 3);
@@ -776,27 +822,16 @@ test("history uses the same table tools without selection or runtime actions", (
   const panel = tablePanel();
   panel._historyConfig = { retention_limit: 100, enabled: true };
   panel._history = {
-    events: [
-      historyEvent(),
-      historyEvent({
-        event_id: "event-cancelled",
-        entity_id: "sensor.pending",
-        entity_name: "Batterie UPS",
-        final_status: "cancelled",
-        acknowledged: false,
-        acknowledged_at: null,
-        acknowledged_by: null,
-      }),
-    ],
+    events: [historyEvent()],
   };
   const html = panel._renderHistory();
-  const headers = [...html.matchAll(/<th data-column="([^"]+)">/g)].map((match) => match[1]);
-  assert.deepEqual(headers, [
+  assert.deepEqual(panel._tableState.history.columns, [
     "status", "device", "entity", "value", "condition", "detected", "resolved",
   ]);
-  assert.match(html, /Résolue après acquittement/);
-  assert.match(html, /Annulée avant activation/);
-  assert.match(html, /34\.5 °C/);
+  const rows = panel._nativeTableData("history", panel._tableRows("history", panel._history.events));
+  assert.equal(rows[0].statusLabel, "Résolue après acquittement");
+  assert.equal(rows[0].value, "34.5 °C");
+  assert.match(html, /<ha-data-table class="native-alert-table" data-native-alert-table="history">/);
   assert.doesNotMatch(html, /open-selection|bulk-acknowledge|bulk-unacknowledge|data-due=/);
   assert.match(html, /data-menu="filters"/);
   assert.match(html, /data-menu="group"/);
@@ -804,10 +839,10 @@ test("history uses the same table tools without selection or runtime actions", (
   assert.match(html, /data-menu="columns"/);
 });
 
-test("table remains horizontally scrollable and keeps status sticky on mobile", () => {
+test("native Home Assistant data table remains constrained and usable on mobile", () => {
   const styles = tablePanel()._styles();
-  assert.match(styles, /\.alert-table-scroll\{[^}]*overflow:auto/);
-  assert.match(styles, /th\[data-column="status"\],\.alert-table td\[data-column="status"\]\{[^}]*position:sticky/);
+  assert.match(styles, /\.native-alert-table\{[^}]*height:clamp/);
+  assert.match(styles, /--data-table-row-height:52px/);
   assert.match(styles, /@media\(max-width:560px\)/);
 });
 
@@ -1517,7 +1552,13 @@ test("history empty and disabled states are explicit and translated", () => {
   const panel = new Panel();
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
   panel._historyConfig = { retention_limit: 100, enabled: true };
-  assert.match(panel._renderHistory(), /Aucune alerte dans l’historique/);
+  assert.match(panel._renderHistory(), /data-native-alert-table="history"/);
+  const table = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-native-alert-table="history"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  assert.equal(table.noDataText, "Aucune alerte dans l’historique.");
   panel._historyConfig = { retention_limit: 0, enabled: false };
   const disabled = panel._renderHistory();
   assert.match(disabled, /L’historique est désactivé/);

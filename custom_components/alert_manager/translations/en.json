@@ -58,7 +58,6 @@
     "loading": "Loading Alert Manager…",
     "history": {
       "acknowledged_before_resolution": "Acknowledged before resolution",
-      "cancelled": "Cancelled before activation",
       "disabled_help": "Set a retention limit greater than 0 in Configuration to keep future resolved alerts.",
       "disabled_title": "History is disabled",
       "duration": "Alert duration",
@@ -287,8 +286,6 @@
         "open": "Enable multiple selection",
         "partial": "Changed {count} alert(s), {failed} failure(s)",
         "select": "Select",
-        "select_entity": "Select alert for {entity}",
-        "select_visible": "Select or clear visible rows",
         "toolbar": "Selected alert actions",
         "unacknowledge": "Unacknowledge ({count})",
         "unacknowledged_result": "Removed acknowledgement from {count} alert(s)"

@@ -442,9 +442,6 @@ class AlertManager:
                 self._pending_history.append(AlertHistoryEntry.resolved(record, now))
                 if emit_events:
                     self._fire_resolved(record, now)
-            elif record.status is AlertStatus.PENDING:
-                self._pending_history.append(AlertHistoryEntry.cancelled(record, now))
-
         if save and persisted_changed:
             await self._async_save_state()
         if publish:

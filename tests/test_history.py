@@ -107,19 +107,39 @@ def test_active_resolution_preserves_snapshot_acknowledgement_and_persists(
     assert reloaded.history_snapshot()["events"] == [event]
 
 
-def test_pending_cancellation_is_archived_with_an_explicit_status(hass, entry):
-    """A condition recovered before activation is archived as cancelled."""
+def test_pending_cancellation_is_not_archived(hass, entry):
+    """A condition recovered before activation leaves no history event."""
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
     hass.states.set("sensor.test", "ok")
     run(manager.async_evaluate_entity("sensor.test"))
     assert manager.records == {}
-    events = manager.history_snapshot()["events"]
-    assert len(events) == 1
-    assert events[0]["final_status"] == "cancelled"
-    assert events[0]["active_duration_seconds"] == 0
-    assert events[0]["acknowledged"] is False
-    assert hass.stores[HISTORY_STORAGE_KEY]["events"] == events
+    assert manager.history_snapshot()["events"] == []
+    assert manager._pending_history == []
+    assert hass.stores.get(HISTORY_STORAGE_KEY, {"events": []})["events"] == []
+
+
+def test_experimental_cancelled_history_entries_are_removed_on_load(
+    hass, entry, set_now
+):
+    """The dev1 cancelled status is migrated out of persisted history."""
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    _resolve_unavailable(
+        manager,
+        hass,
+        set_now,
+        datetime(2026, 8, 26, 9, tzinfo=UTC),
+        "sensor.legacy_cancelled",
+    )
+    legacy = manager.history[0].as_dict()
+    legacy["final_status"] = "cancelled"
+    hass.stores[HISTORY_STORAGE_KEY] = {"events": [legacy]}
+
+    reloaded = make_manager(hass, entry)
+
+    assert reloaded.history == []
+    assert hass.stores[HISTORY_STORAGE_KEY] == {"events": []}
 
 
 def test_retention_default_limit_zero_and_deterministic_trimming(hass, entry, set_now):

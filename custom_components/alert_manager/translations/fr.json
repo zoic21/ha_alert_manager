@@ -58,7 +58,6 @@
     "loading": "Chargement d’Alert Manager…",
     "history": {
       "acknowledged_before_resolution": "Acquittée avant résolution",
-      "cancelled": "Annulée avant activation",
       "disabled_help": "Définissez une limite supérieure à 0 dans Configuration pour conserver les prochaines alertes résolues.",
       "disabled_title": "L’historique est désactivé",
       "duration": "Durée de l’alerte",
@@ -287,8 +286,6 @@
         "open": "Activer la sélection multiple",
         "partial": "{count} alerte(s) modifiée(s), {failed} échec(s)",
         "select": "Sélectionner",
-        "select_entity": "Sélectionner l’alerte de {entity}",
-        "select_visible": "Sélectionner ou désélectionner les lignes visibles",
         "toolbar": "Actions sur les alertes sélectionnées",
         "unacknowledge": "Désacquitter ({count})",
         "unacknowledged_result": "Acquittement retiré pour {count} alerte(s)"

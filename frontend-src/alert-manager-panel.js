@@ -40,16 +40,12 @@ const MDI_DOTS_VERTICAL = "M12,8C13.1,8 14,7.1 14,6C14,4.9 13.1,4 12,4C10.9,4 10
 const MDI_DOWNLOAD = "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z";
 const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.56,3.08 4.78,3 5,3V3H19V3C19.22,3 19.44,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z";
-const MDI_MAGNIFY = "M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z";
 const MDI_GROUP = "M12,5A3,3 0 1,0 12,11A3,3 0 0,0 12,5M6,7A2,2 0 1,0 6,11A2,2 0 0,0 6,7M18,7A2,2 0 1,0 18,11A2,2 0 0,0 18,7M12,13C9.33,13 4,14.33 4,17V19H20V17C20,14.33 14.67,13 12,13M6,13C3.33,13 0,14.33 0,17V19H2V17C2,15.83 3.04,14.86 4.37,14.17C4.88,13.73 5.47,13.34 6.1,13.04L6,13M18,13L17.9,13.04C18.53,13.34 19.12,13.73 19.63,14.17C20.96,14.86 22,15.83 22,17V19H24V17C24,14.33 20.67,13 18,13Z";
 const MDI_SORT = "M3,18H9V16H3V18M3,13H15V11H3V13M3,6V8H21V6H3Z";
 const MDI_TABLE_COLUMN = "M4,3H20A2,2 0 0,1 22,5V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V5A2,2 0 0,1 4,3M4,5V19H8V5H4M10,5V19H14V5H10M16,5V19H20V5H16Z";
 const MDI_CHECKBOX_MULTIPLE = "M17,3H5A2,2 0 0,0 3,5V17H5V5H17V3M19,7H9A2,2 0 0,0 7,9V19A2,2 0 0,0 9,21H19A2,2 0 0,0 21,19V9A2,2 0 0,0 19,7M17,17H11V11H17V17Z";
-const MDI_CHEVRON_DOWN = "M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z";
-const MDI_CHEVRON_RIGHT = "M8.59,16.59L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.59Z";
 const MDI_ARROW_UP = "M4,12L5.41,13.41L11,7.83V20H13V7.83L18.59,13.42L20,12L12,4L4,12Z";
 const MDI_ARROW_DOWN = "M20,12L18.59,10.59L13,16.17V4H11V16.17L5.41,10.58L4,12L12,20L20,12Z";
-const MDI_CLOSE_CIRCLE_OUTLINE = "M12,2C17.52,2 22,6.48 22,12C22,17.52 17.52,22 12,22C6.48,22 2,17.52 2,12C2,6.48 6.48,2 12,2M12,4C7.58,4 4,7.58 4,12C4,16.42 7.58,20 12,20C16.42,20 20,16.42 20,12C20,7.58 16.42,4 12,4M15.59,7L17,8.41L13.41,12L17,15.59L15.59,17L12,13.41L8.41,17L7,15.59L10.59,12L7,8.41L8.41,7L12,10.59L15.59,7Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_main_active",
@@ -202,6 +198,7 @@ class AlertManagerPanel extends HTMLElement {
     this._entityStates = {};
     this._tableState = this._loadTablePreferences();
     this._collapsedTableGroups = new Set();
+    this._nativeGroupLabels = { overview: new Map(), history: new Map() };
     this._selectionMode = false;
     this._selectedAlertIds = new Set();
     this._settingsDraft = null;
@@ -482,8 +479,93 @@ class AlertManagerPanel extends HTMLElement {
       <style>${this._styles()}</style>
       ${this._hass ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
     this._hydrateSelectors();
+    this._hydrateDataTables();
     this._hydrateYamlEditor();
     this._updateCountdowns();
+  }
+
+  _hydrateDataTables() {
+    for (const kind of ["overview", "history"]) {
+      const table = this.shadowRoot.querySelector(`[data-native-alert-table="${kind}"]`);
+      if (!table) continue;
+      const sourceRows = kind === "overview"
+        ? this._tableRows("overview")
+        : this._tableRows("history", this._history?.events ?? []);
+      const visibleRows = this._filteredTableRows(kind, sourceRows);
+      const allowedColumns = Object.keys(this._tableColumns(kind));
+      const hiddenColumns = allowedColumns.filter((column) => !this._tableState[kind].columns.includes(column));
+      const orderedColumns = [...this._tableState[kind].columns, ...hiddenColumns];
+      const data = this._nativeTableData(kind, visibleRows);
+      table.id = "id";
+      table.columns = this._nativeTableColumns(kind);
+      table.columnOrder = orderedColumns;
+      table.hiddenColumns = hiddenColumns;
+      table.data = data;
+      table.filter = "";
+      table.groupColumn = this._tableState[kind].groupBy === "none" ? undefined : "_group";
+      table.sortColumn = this._nativeSortColumn(this._tableState[kind].sortBy);
+      table.sortDirection = this._tableState[kind].sortDirection;
+      table.initialCollapsedGroups = [...this._nativeGroupLabels[kind]].filter(([, base]) => (
+        this._collapsedTableGroups.has(`${kind}:${base}`)
+      )).map(([group]) => group);
+      table.selectable = kind === "overview" && this._selectionMode;
+      table.clickable = false;
+      table.noDataText = sourceRows.length
+        ? this._t("table.empty_filtered")
+        : this._t(kind === "history" ? "history.empty" : "table.empty_current");
+      table.addEventListener("collapsed-changed", (event) => {
+        for (const key of [...this._collapsedTableGroups]) {
+          if (key.startsWith(`${kind}:`)) this._collapsedTableGroups.delete(key);
+        }
+        for (const group of event.detail?.value ?? []) {
+          const base = this._nativeGroupLabels[kind].get(String(group));
+          if (base) this._collapsedTableGroups.add(`${kind}:${base}`);
+        }
+      });
+      table.addEventListener("sorting-changed", (event) => {
+        const column = this._tableSortStateColumn(event.detail?.column);
+        if (!column || !event.detail?.direction) return;
+        this._tableState[kind].sortBy = column;
+        this._tableState[kind].sortDirection = event.detail.direction;
+        this._saveTablePreferences();
+      });
+      if (kind === "overview") {
+        table.addEventListener("selection-changed", (event) => {
+          const selected = new Set((event.detail?.value ?? []).map(String));
+          if (selected.size === this._selectedAlertIds.size
+            && [...selected].every((id) => this._selectedAlertIds.has(id))) return;
+          this._selectedAlertIds = selected;
+          this._updateSelectionToolbar();
+        });
+        if (this._selectionMode && this._selectedAlertIds.size) {
+          const restore = () => table.isConnected && table.select?.([...this._selectedAlertIds], true);
+          Promise.resolve(table.updateComplete).then(() => globalThis.setTimeout(restore, 130));
+        }
+      }
+      const search = this.shadowRoot.querySelector(`#${kind}-table-search`);
+      if (search) {
+        search.value = this._tableState[kind].search;
+        search.placeholder = this._t("table.search");
+      }
+    }
+  }
+
+  _updateSelectionToolbar() {
+    const selectedRows = this._tableRows("overview").filter((row) => this._selectedAlertIds.has(row.id));
+    const acknowledgeCount = selectedRows.filter((row) => row.status === "active").length;
+    const unacknowledgeCount = selectedRows.filter((row) => row.status === "acknowledged").length;
+    const count = this.shadowRoot.querySelector("[data-selection-count]");
+    if (count) count.textContent = this._t("table.selection.count", { count: selectedRows.length });
+    const acknowledge = this.shadowRoot.querySelector('[data-selection-action="acknowledge"]');
+    if (acknowledge) {
+      acknowledge.hidden = acknowledgeCount === 0;
+      acknowledge.textContent = this._t("table.selection.acknowledge", { count: acknowledgeCount });
+    }
+    const unacknowledge = this.shadowRoot.querySelector('[data-selection-action="unacknowledge"]');
+    if (unacknowledge) {
+      unacknowledge.hidden = unacknowledgeCount === 0;
+      unacknowledge.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
+    }
   }
 
   _configureSelector(id, selector, value, onChange) {
@@ -719,7 +801,7 @@ class AlertManagerPanel extends HTMLElement {
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
       const finalLabel = history
-        ? this._t(source.final_status === "cancelled" ? "history.cancelled" : source.acknowledged ? "history.resolved_acknowledged" : "history.resolved")
+        ? this._t(source.acknowledged ? "history.resolved_acknowledged" : "history.resolved")
         : this._t(`table.status.${status}`);
       const row = {
         id: history ? source.event_id : source.id,
@@ -749,11 +831,7 @@ class AlertManagerPanel extends HTMLElement {
       return row;
     };
     if (kind === "history") {
-      return historyEvents.map((event) => create(
-        event,
-        event.final_status === "cancelled" ? "cancelled" : "resolved",
-        true,
-      ));
+      return historyEvents.map((event) => create(event, "resolved", true));
     }
     return [
       ...(this._alerts.alerts ?? []).map((alert) => create(alert, "active")),
@@ -797,7 +875,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _compareTableRows(left, right, key) {
     if (key === "status") {
-      const rank = { active: 0, pending: 1, acknowledged: 2, resolved: 3, cancelled: 4 };
+      const rank = { active: 0, pending: 1, acknowledged: 2, resolved: 3 };
       return (rank[left.status] ?? 99) - (rank[right.status] ?? 99);
     }
     if (["detected", "activated", "resolved", "due"].includes(key)) {
@@ -815,22 +893,6 @@ class AlertManagerPanel extends HTMLElement {
     });
   }
 
-  _groupedTableRows(kind, rows) {
-    const groupBy = this._tableState[kind].groupBy;
-    if (groupBy === "none") return [{ key: "", label: "", rows }];
-    const groups = new Map();
-    for (const row of rows) {
-      let value = groupBy === "status" ? row.statusLabel : row[groupBy];
-      if (!value) value = this._t(`table.groups.without_${groupBy}`);
-      const key = String(value);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(row);
-    }
-    return [...groups.entries()]
-      .sort(([left], [right]) => left.localeCompare(right, this._language, { numeric: true }))
-      .map(([label, groupedRows]) => ({ key: `${kind}:${groupBy}:${label}`, label, rows: groupedRows }));
-  }
-
   _renderAlertTable(kind, sourceRows) {
     const state = this._tableState[kind];
     const columns = this._tableColumns(kind);
@@ -839,22 +901,11 @@ class AlertManagerPanel extends HTMLElement {
       if (!state.columns.includes(required)) state.columns.push(required);
     }
     const visibleRows = this._filteredTableRows(kind, sourceRows);
-    const groups = this._groupedTableRows(kind, visibleRows);
     const selection = kind === "overview" && this._selectionMode;
-    const selectedVisible = visibleRows.filter((row) => this._selectedAlertIds.has(row.id));
-    const allVisibleSelected = visibleRows.length > 0 && selectedVisible.length === visibleRows.length;
     return `<ha-card outlined class="data-table-card ${selection ? "selection-active" : ""}">
-      ${this._renderTableToolbar(kind, sourceRows, visibleRows)}
-      <div class="alert-table-scroll"><table class="alert-table" data-table-kind="${kind}">
-        <thead><tr>
-          ${selection ? `<th class="selection-column"><input type="checkbox" data-action="select-visible" aria-label="${esc(this._t("table.selection.select_visible"))}" ${allVisibleSelected ? "checked" : ""}></th>` : ""}
-          ${state.columns.map((column) => `<th data-column="${column}">${esc(columns[column].label)}</th>`).join("")}
-        </tr></thead>
-        <tbody>${visibleRows.length
-          ? groups.map((group) => this._renderTableGroup(kind, group, state.columns, selection)).join("")
-          : `<tr><td class="table-empty" colspan="${state.columns.length + (selection ? 1 : 0)}">${esc(sourceRows.length ? this._t("table.empty_filtered") : kind === "history" ? this._t("history.empty") : this._t("table.empty_current"))}</td></tr>`}
-        </tbody>
-      </table></div>
+      <ha-data-table class="native-alert-table" data-native-alert-table="${kind}">
+        <div slot="header">${this._renderTableToolbar(kind, sourceRows, visibleRows)}</div>
+      </ha-data-table>
       <div class="table-footer">${esc(this._t("table.visible_count", { visible: visibleRows.length, total: sourceRows.length }))}</div>
     </ha-card>`;
   }
@@ -867,10 +918,10 @@ class AlertManagerPanel extends HTMLElement {
       return `<div class="table-toolbar selection-toolbar" role="toolbar" aria-label="${esc(this._t("table.selection.toolbar"))}">
         <button type="button" class="toolbar-icon-button" data-action="close-selection" title="${esc(this._t("table.selection.close"))}" aria-label="${esc(this._t("table.selection.close"))}"><ha-svg-icon path="${MDI_CLOSE}"></ha-svg-icon></button>
         <button type="button" class="toolbar-button" data-action="select-visible">${esc(this._t("table.selection.select"))}</button>
-        <strong class="selection-count">${esc(this._t("table.selection.count", { count: selectedRows.length }))}</strong>
+        <strong class="selection-count" data-selection-count>${esc(this._t("table.selection.count", { count: selectedRows.length }))}</strong>
         <span class="toolbar-spacer"></span>
-        ${acknowledgeCount ? `<button type="button" class="toolbar-button primary" data-action="bulk-acknowledge" ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</button>` : ""}
-        ${unacknowledgeCount ? `<button type="button" class="toolbar-button danger" data-action="bulk-unacknowledge" ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</button>` : ""}
+        <button type="button" class="toolbar-button primary" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</button>
+        <button type="button" class="toolbar-button danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</button>
       </div>`;
     }
     const filterCount = this._filterCount(kind);
@@ -878,7 +929,7 @@ class AlertManagerPanel extends HTMLElement {
     return `<div class="table-toolbar-wrap">
       <div class="table-toolbar" role="toolbar" aria-label="${esc(this._t("table.toolbar"))}">
         ${this._toolbarMenuButton(kind, "filters", MDI_FILTER_VARIANT, this._t("table.filters.title"), filterCount)}
-        <label class="table-search"><ha-svg-icon path="${MDI_MAGNIFY}"></ha-svg-icon><input id="${kind}-table-search" data-table-search="${kind}" type="search" value="${esc(this._tableState[kind].search)}" placeholder="${esc(this._t("table.search"))}" aria-label="${esc(this._t("table.search"))}"></label>
+        <ha-input-search id="${kind}-table-search" class="table-search" data-table-search="${kind}" appearance="outlined"></ha-input-search>
         <span class="toolbar-spacer"></span>
         ${this._toolbarMenuButton(kind, "group", MDI_GROUP, this._t("table.group.title"))}
         ${this._toolbarMenuButton(kind, "sort", MDI_SORT, this._t("table.sort.title"))}
@@ -921,7 +972,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderFilterMenu(kind, rows) {
     const statuses = kind === "history"
-      ? [{ value: "resolved", label: this._t("history.resolved") }, { value: "cancelled", label: this._t("history.cancelled") }]
+      ? [{ value: "resolved", label: this._t("history.resolved") }]
       : ["active", "pending", "acknowledged"].map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     const filters = this._tableState[kind].filters;
     return `<div class="filter-grid">
@@ -948,61 +999,196 @@ class AlertManagerPanel extends HTMLElement {
     }).join("")}<button type="button" class="toolbar-button" data-action="reset-columns" data-table-kind="${kind}">${esc(this._t("table.columns.reset"))}</button></div>`;
   }
 
-  _renderTableGroup(kind, group, columns, selection) {
-    const collapsed = group.key && this._collapsedTableGroups.has(group.key);
-    const groupRow = group.key ? `<tr class="table-group-row"><td colspan="${columns.length + (selection ? 1 : 0)}"><button type="button" data-action="toggle-table-group" data-group-key="${esc(group.key)}" aria-expanded="${!collapsed}"><ha-svg-icon path="${collapsed ? MDI_CHEVRON_RIGHT : MDI_CHEVRON_DOWN}"></ha-svg-icon><strong>${esc(group.label)}</strong><span>${group.rows.length}</span></button></td></tr>` : "";
-    return `${groupRow}${group.rows.map((row) => this._renderTableRow(
-      kind,
-      row,
-      columns,
-      selection,
-      group.key,
-      collapsed,
-    )).join("")}`;
+  _nativeTableColumns(kind) {
+    const widths = {
+      status: ["56px", "56px", 1],
+      device: ["150px", "230px", 1],
+      entity: ["180px", "280px", 1.4],
+      entity_id: ["190px", "280px", 1],
+      value: ["110px", "220px", 1],
+      condition: ["260px", "420px", 2],
+      detected: ["170px", "210px", 1],
+      timeline: ["210px", "260px", 1.2],
+      resolved: ["170px", "210px", 1],
+      duration: ["120px", "170px", 1],
+      area: ["130px", "220px", 1],
+      rule: ["160px", "260px", 1],
+      message: ["220px", "420px", 1.5],
+    };
+    const sortable = new Set(["status", "device", "entity", "value", "detected", "resolved", "rule"]);
+    const valueColumns = {
+      status: "statusSort",
+      entity: "entityName",
+      value: "valueSort",
+      detected: "detectedSort",
+      resolved: "resolvedSort",
+    };
+    const columns = Object.fromEntries(Object.entries(this._tableColumns(kind)).map(([column, definition]) => {
+      const [minWidth, maxWidth, flex] = widths[column] ?? ["120px", "260px", 1];
+      return [column, {
+        title: definition.label,
+        label: definition.label,
+        main: column === "entity",
+        type: column === "status" ? "icon" : undefined,
+        minWidth,
+        maxWidth,
+        flex,
+        sortable: sortable.has(column),
+        valueColumn: valueColumns[column],
+        template: (row) => this._nativeTableCell(kind, row, column),
+      }];
+    }));
+    columns.activated = { title: this._t("table.sort.activated"), hidden: true, sortable: true, valueColumn: "activatedSort" };
+    columns.remaining = { title: this._t("table.sort.remaining"), hidden: true, sortable: true, valueColumn: "remainingSort" };
+    return columns;
   }
 
-  _renderTableRow(kind, row, columns, selection, groupKey = "", hidden = false) {
-    return `<tr class="alert-table-row is-${row.status}" data-row-id="${esc(row.id)}"${groupKey ? ` data-group-key="${esc(groupKey)}"` : ""}${hidden ? " hidden" : ""}>
-      ${selection ? `<td class="selection-column"><input type="checkbox" data-action="select-row" data-alert-id="${esc(row.id)}" aria-label="${esc(this._t("table.selection.select_entity", { entity: row.entityName }))}" ${this._selectedAlertIds.has(row.id) ? "checked" : ""}></td>` : ""}
-      ${columns.map((column) => `<td data-column="${column}">${this._renderTableCell(kind, row, column)}</td>`).join("")}
-    </tr>`;
+  _nativeTableData(kind, visibleRows) {
+    const state = this._tableState[kind];
+    const statusRank = { active: 0, pending: 1, acknowledged: 2, resolved: 3 };
+    const rows = visibleRows.map(({ source: _source, ...row }) => ({
+      ...row,
+      statusSort: statusRank[row.status] ?? 99,
+      valueSort: String(row.rawValue ?? ""),
+      detectedSort: Date.parse(row.detected) || 0,
+      activatedSort: Date.parse(row.activated) || 0,
+      resolvedSort: Date.parse(row.resolved) || 0,
+      remainingSort: Date.parse(row.due) || 0,
+    }));
+    this._nativeGroupLabels[kind] = new Map();
+    if (state.groupBy === "none") return rows;
+    const bases = visibleRows.map((row) => this._nativeGroupBase(kind, row));
+    const counts = new Map();
+    for (const base of bases) counts.set(base, (counts.get(base) ?? 0) + 1);
+    return rows.map((row) => {
+      const base = this._nativeGroupBase(kind, row);
+      const group = `${base} (${counts.get(base) ?? 0})`;
+      this._nativeGroupLabels[kind].set(group, base);
+      return { ...row, _group: group };
+    });
   }
 
-  _renderTableCell(kind, row, column) {
-    if (column === "status") return this._renderTableStatus(row, kind);
-    if (column === "entity") {
-      return this._hass?.states?.[row.entityId]
-        ? `<button type="button" class="entity-link" data-action="more-info" data-entity-id="${esc(row.entityId)}">${esc(row.entityName)}</button>`
-        : `<span>${esc(row.entityName)}</span>`;
-    }
-    if (column === "entity_id") return `<code>${esc(row.entityId)}</code>`;
-    if (column === "device") return esc(row.device || "—");
-    if (column === "area") return esc(row.area || "—");
-    if (column === "rule") return esc(row.rule || "—");
-    if (column === "message") return esc(row.message || "—");
-    if (column === "value") return `<span class="table-value" title="${esc(row.value)}">${esc(row.value)}</span>`;
-    if (column === "condition") return `<span class="table-condition" title="${esc(row.condition)}">${esc(row.condition || "—")}</span>`;
-    if (column === "detected") return esc(this._date(row.detected));
-    if (column === "resolved") return esc(this._date(row.resolved));
-    if (column === "duration") return esc(this._historyDurationText(row.duration));
-    if (column === "timeline") {
-      if (row.status === "pending") {
-        return !this._monitoringEnabled
-          ? `<span class="timeline suspended"><small>${esc(this._t("overview.remaining"))}</small>${esc(this._t("table.monitoring_suspended"))}</span>`
-          : `<span class="timeline"><small>${esc(this._t("overview.remaining"))}</small><span data-due="${esc(row.due)}">${esc(this._remaining(row.due))}</span></span>`;
-      }
-      return `<span class="timeline"><small>${esc(this._t("overview.active_since"))}</small>${esc(this._date(row.activated))}</span>`;
-    }
+  _nativeGroupBase(kind, row) {
+    const groupBy = this._tableState[kind].groupBy;
+    const value = groupBy === "status" ? row.statusLabel : row[groupBy];
+    return value || this._t(`table.groups.without_${groupBy}`);
+  }
+
+  _nativeSortColumn(column) {
+    return column === "entityName" ? "entity" : column;
+  }
+
+  _tableSortStateColumn(column) {
+    return column === "entity" ? "entityName" : column;
+  }
+
+  _nativeTableCell(kind, row, column) {
+    if (column === "status") return this._nativeStatusCell(row, kind);
+    if (column === "entity") return this._nativeEntityCell(row);
+    if (column === "entity_id") return row.entityId || "—";
+    if (column === "device") return row.device || "—";
+    if (column === "area") return row.area || "—";
+    if (column === "rule") return row.rule || "—";
+    if (column === "message") return row.message || "—";
+    if (column === "value") return row.value;
+    if (column === "condition") return row.condition || "—";
+    if (column === "detected") return this._date(row.detected);
+    if (column === "resolved") return this._date(row.resolved);
+    if (column === "duration") return this._historyDurationText(row.duration);
+    if (column === "timeline") return this._nativeTimelineCell(row);
     return "—";
   }
 
-  _renderTableStatus(row, kind) {
+  _nativeStatusCell(row, kind) {
+    if (!globalThis.document?.createElement) return row.statusLabel;
     let path = MDI_ALERT_CIRCLE_OUTLINE;
-    if (row.status === "pending") path = MDI_CLOCK_OUTLINE;
-    if (row.status === "acknowledged" || (kind === "history" && row.acknowledged)) path = MDI_CHECK_CIRCLE_OUTLINE;
-    if (row.status === "resolved" && !row.acknowledged) path = MDI_CHECK_CIRCLE_OUTLINE;
-    if (row.status === "cancelled") path = MDI_CLOSE_CIRCLE_OUTLINE;
-    return `<span class="table-status is-${row.status}${kind === "history" ? " is-history" : ""}${kind === "history" && row.acknowledged ? " was-acknowledged" : ""}" role="img" aria-label="${esc(row.statusLabel)}" title="${esc(row.statusLabel)}"><ha-svg-icon path="${path}"></ha-svg-icon></span>`;
+    let color = "var(--error-color,#db4437)";
+    let background = "color-mix(in srgb,var(--error-color,#db4437) 12%,transparent)";
+    if (row.status === "pending") {
+      path = MDI_CLOCK_OUTLINE;
+      color = "var(--warning-color,#f5a623)";
+      background = "color-mix(in srgb,var(--warning-color,#f5a623) 14%,transparent)";
+    } else if (row.status === "acknowledged") {
+      path = MDI_CHECK_CIRCLE_OUTLINE;
+      color = "var(--blue-color,var(--primary-color,#03a9f4))";
+      background = "color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 12%,transparent)";
+    } else if (kind === "history") {
+      path = MDI_CHECK_CIRCLE_OUTLINE;
+      color = row.acknowledged
+        ? "color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 70%,var(--secondary-text-color,#727272))"
+        : "var(--secondary-text-color,#727272)";
+      background = row.acknowledged
+        ? "color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 9%,transparent)"
+        : "var(--secondary-background-color,#f5f5f5)";
+    }
+    const status = document.createElement("span");
+    status.setAttribute("role", "img");
+    status.setAttribute("aria-label", row.statusLabel);
+    status.title = row.statusLabel;
+    status.style.cssText = `display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;color:${color};background:${background}`;
+    const icon = document.createElement("ha-svg-icon");
+    icon.path = path;
+    icon.style.cssText = "width:21px;height:21px";
+    status.append(icon);
+    return status;
+  }
+
+  _nativeEntityCell(row) {
+    if (!globalThis.document?.createElement) return row.entityName;
+    if (!this._hass?.states?.[row.entityId]) {
+      const label = document.createElement("span");
+      label.textContent = row.entityName;
+      return label;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = row.entityName;
+    button.setAttribute("aria-label", row.entityName);
+    button.style.cssText = "border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this._openMoreInfo(row.entityId);
+    });
+    return button;
+  }
+
+  _nativeTimelineCell(row) {
+    if (!globalThis.document?.createElement) {
+      if (row.status === "pending") {
+        return this._monitoringEnabled ? this._remaining(row.due) : this._t("table.monitoring_suspended");
+      }
+      return this._date(row.activated);
+    }
+    const timeline = document.createElement("span");
+    timeline.style.cssText = "display:flex;flex-direction:column;line-height:1.35;white-space:nowrap";
+    const label = document.createElement("small");
+    label.style.cssText = "display:block;margin:0;color:var(--secondary-text-color,#727272)";
+    if (row.status === "pending") {
+      label.textContent = this._t("overview.remaining");
+      timeline.append(label);
+      const value = document.createElement("span");
+      if (!this._monitoringEnabled) {
+        timeline.style.color = "var(--warning-color,#9a6b00)";
+        value.textContent = this._t("table.monitoring_suspended");
+      } else {
+        value.dataset.due = row.due;
+        value.textContent = this._remaining(row.due);
+      }
+      timeline.append(value);
+      return timeline;
+    }
+    label.textContent = this._t("overview.active_since");
+    timeline.append(label, this._date(row.activated));
+    return timeline;
+  }
+
+  _openMoreInfo(entityId) {
+    if (!this._hass?.states?.[entityId]) return;
+    this.dispatchEvent(new CustomEvent("hass-more-info", {
+      bubbles: true,
+      composed: true,
+      detail: { entityId },
+    }));
   }
 
   _renderAutomatic() {
@@ -1207,37 +1393,23 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (action === "select-visible") {
+      const table = this.shadowRoot.querySelector('[data-native-alert-table="overview"]');
       const visible = this._filteredTableRows("overview", this._tableRows("overview"));
       const select = !visible.length || !visible.every((row) => this._selectedAlertIds.has(row.id));
+      if (table?.selectAll && table?.clearSelection) {
+        if (select) table.selectAll();
+        else table.clearSelection();
+        return;
+      }
       for (const row of visible) {
         if (select) this._selectedAlertIds.add(row.id);
         else this._selectedAlertIds.delete(row.id);
       }
-      this._render();
-      return;
-    }
-    if (action === "select-row") {
-      const id = button.dataset.alertId;
-      if (button.checked) this._selectedAlertIds.add(id);
-      else this._selectedAlertIds.delete(id);
-      this._render();
+      this._updateSelectionToolbar();
       return;
     }
     if (action === "bulk-acknowledge" || action === "bulk-unacknowledge") {
       await this._bulkAlertAction(action === "bulk-acknowledge" ? "acknowledge" : "unacknowledge");
-      return;
-    }
-    if (action === "toggle-table-group") {
-      const key = button.dataset.groupKey;
-      const collapsed = !this._collapsedTableGroups.has(key);
-      if (collapsed) this._collapsedTableGroups.add(key);
-      else this._collapsedTableGroups.delete(key);
-      button.setAttribute?.("aria-expanded", String(!collapsed));
-      const icon = button.querySelector?.("ha-svg-icon");
-      if (icon) icon.path = collapsed ? MDI_CHEVRON_RIGHT : MDI_CHEVRON_DOWN;
-      this.shadowRoot.querySelectorAll(".alert-table-row").forEach((row) => {
-        if (row.dataset.groupKey === key) row.hidden = collapsed;
-      });
       return;
     }
     if (action === "reset-filters") {
@@ -1286,13 +1458,7 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (action === "more-info") {
-      const entityId = button.dataset.entityId;
-      if (!this._hass?.states?.[entityId]) return;
-      this.dispatchEvent(new CustomEvent("hass-more-info", {
-        bubbles: true,
-        composed: true,
-        detail: { entityId },
-      }));
+      this._openMoreInfo(button.dataset.entityId);
       return;
     }
     if (action === "tab") {
@@ -1496,7 +1662,7 @@ class AlertManagerPanel extends HTMLElement {
     const kind = target?.dataset?.tableSearch;
     if (kind && this._tableState[kind]) {
       const cursor = target.selectionStart;
-      this._tableState[kind].search = String(target.value ?? "");
+      this._tableState[kind].search = String(event.detail?.value ?? target.value ?? "");
       this._render();
       const search = this.shadowRoot.querySelector(`#${kind}-table-search`);
       search?.focus?.();
@@ -2024,9 +2190,15 @@ class AlertManagerPanel extends HTMLElement {
 
   _updateCountdowns() {
     if (!this._monitoringEnabled) return;
-    this.shadowRoot?.querySelectorAll("[data-due]").forEach((node) => {
-      node.textContent = this._remaining(node.dataset.due);
+    const roots = [this.shadowRoot];
+    this.shadowRoot?.querySelectorAll("ha-data-table").forEach((table) => {
+      if (table.shadowRoot) roots.push(table.shadowRoot);
     });
+    for (const root of roots) {
+      root?.querySelectorAll("[data-due]").forEach((node) => {
+        node.textContent = this._remaining(node.dataset.due);
+      });
+    }
   }
 
   _styles() {
@@ -2036,28 +2208,24 @@ class AlertManagerPanel extends HTMLElement {
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
       .data-table-card{display:block;overflow:visible;background:var(--card-background-color,#fff)}
       .table-toolbar-wrap{position:relative}.table-toolbar{display:flex;align-items:center;gap:6px;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.toolbar-spacer{flex:1}
-      .toolbar-button,.toolbar-icon-button,.column-move,.table-group-row button{appearance:none;border:0;background:transparent;color:var(--primary-text-color,#212121);font:inherit;cursor:pointer}.toolbar-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 12px;border-radius:var(--ha-border-radius-m,8px);white-space:nowrap}.toolbar-icon-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:50%}.toolbar-button:hover,.toolbar-button.is-active,.toolbar-icon-button:hover,.column-move:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.toolbar-button:focus-visible,.toolbar-icon-button:focus-visible,.column-move:focus-visible,.table-group-row button:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.toolbar-button:disabled,.toolbar-icon-button:disabled,.column-move:disabled{cursor:default;opacity:.45}.toolbar-button ha-svg-icon,.toolbar-icon-button ha-svg-icon{width:21px;height:21px}.toolbar-button.primary{color:var(--primary-color,#03a9f4);font-weight:var(--ha-font-weight-medium,500)}.toolbar-button.danger{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}
+      .toolbar-button,.toolbar-icon-button,.column-move{appearance:none;border:0;background:transparent;color:var(--primary-text-color,#212121);font:inherit;cursor:pointer}.toolbar-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 12px;border-radius:var(--ha-border-radius-m,8px);white-space:nowrap}.toolbar-icon-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:50%}.toolbar-button:hover,.toolbar-button.is-active,.toolbar-icon-button:hover,.column-move:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.toolbar-button:focus-visible,.toolbar-icon-button:focus-visible,.column-move:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.toolbar-button:disabled,.toolbar-icon-button:disabled,.column-move:disabled{cursor:default;opacity:.45}.toolbar-button ha-svg-icon,.toolbar-icon-button ha-svg-icon{width:21px;height:21px}.toolbar-button.primary{color:var(--primary-color,#03a9f4);font-weight:var(--ha-font-weight-medium,500)}.toolbar-button.danger{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}
       .filter-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff);font-size:11px}
-      .table-search{display:flex;align-items:center;gap:8px;min-width:220px;max-width:420px;flex:1;height:40px;padding:0 12px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);background:var(--card-background-color,#fff)}.table-search:focus-within{border-color:var(--primary-color,#03a9f4);box-shadow:0 0 0 1px var(--primary-color,#03a9f4)}.table-search ha-svg-icon{flex:none;width:21px;height:21px;color:var(--secondary-text-color,#727272)}.table-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--primary-text-color,#212121);font:inherit}
+      .table-search{display:block;min-width:220px;max-width:420px;flex:1}
       .table-menu{position:absolute;z-index:4;top:57px;left:12px;right:12px;max-height:min(520px,70vh);overflow:auto;padding:16px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-l,12px);background:var(--card-background-color,#fff);box-shadow:var(--ha-card-box-shadow,0 4px 16px rgba(0,0,0,.22))}.table-menu fieldset{display:grid;gap:8px;margin:0;padding:0;border:0}.table-menu legend{margin-bottom:8px;font-weight:var(--ha-font-weight-medium,500)}.table-menu label{display:flex;flex-direction:column;gap:5px}.table-menu fieldset label{align-items:center;flex-direction:row}.table-menu select,.table-menu input[type="date"]{min-height:38px;padding:6px 9px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);background:var(--card-background-color,#fff);color:var(--primary-text-color,#212121);font:inherit}
       .filter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.filter-actions{display:flex;align-items:end}.menu-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
       .column-list{display:grid;gap:4px}.column-option{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;padding:4px 6px;border-bottom:1px solid var(--divider-color,#ddd)}.column-option label{align-items:center;flex-direction:row;gap:9px}.column-option>span{display:flex}.column-move{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%}.column-move ha-svg-icon{width:19px;height:19px}
       .selection-toolbar{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 10%,var(--card-background-color,#fff)))}.selection-count{margin-inline-start:6px}
-      .alert-table-scroll{width:100%;overflow:auto}.alert-table{width:100%;min-width:920px;border-collapse:separate;border-spacing:0}.alert-table th,.alert-table td{height:48px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd);text-align:left;vertical-align:middle}.alert-table th{position:sticky;z-index:2;top:0;background:var(--card-background-color,#fff);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);white-space:nowrap}.alert-table th[data-column="status"],.alert-table td[data-column="status"]{position:sticky;z-index:3;left:0;width:56px;min-width:56px;background:var(--card-background-color,#fff);text-align:center}.selection-active .alert-table th[data-column="status"],.selection-active .alert-table td[data-column="status"]{left:44px}.alert-table th.selection-column,.alert-table td.selection-column{position:sticky;z-index:4;left:0;width:44px;min-width:44px;padding-inline:14px 8px;background:var(--card-background-color,#fff)}.alert-table-row:hover td,.alert-table-row:hover td[data-column="status"],.alert-table-row:hover td.selection-column{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}
-      .table-group-row td{height:42px;padding:0;background:var(--secondary-background-color,#f5f5f5)}.table-group-row button{display:flex;align-items:center;gap:8px;width:100%;height:42px;padding:0 14px;text-align:left}.table-group-row button ha-svg-icon{width:20px;height:20px}.table-group-row button span{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--card-background-color,#fff);color:var(--secondary-text-color,#727272);font-size:12px}
-      .table-status{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%}.table-status ha-svg-icon{width:21px;height:21px}.table-status.is-active{color:var(--error-color,#db4437);background:color-mix(in srgb,var(--error-color,#db4437) 12%,transparent)}.table-status.is-pending{color:var(--warning-color,#f5a623);background:color-mix(in srgb,var(--warning-color,#f5a623) 14%,transparent)}.table-status.is-acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4));background:color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 12%,transparent)}.table-status.is-history{color:var(--secondary-text-color,#727272);background:var(--secondary-background-color,#f5f5f5)}.table-status.is-history.is-cancelled{color:var(--warning-color,#9a6b00)}
-      .entity-link{border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer}.entity-link:hover{color:var(--primary-color,#03a9f4);text-decoration:underline}.entity-link:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:3px}.table-value,.table-condition{display:block;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.timeline{display:flex;flex-direction:column;line-height:1.35;white-space:nowrap}.timeline small{margin:0}.timeline.suspended{color:var(--warning-color,#9a6b00)}.table-empty{height:96px!important;text-align:center!important;color:var(--secondary-text-color,#727272)}.table-footer{padding:8px 14px;color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);text-align:right}
-      .table-status.is-history.was-acknowledged{color:color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 70%,var(--secondary-text-color,#727272));background:color-mix(in srgb,var(--blue-color,var(--primary-color,#03a9f4)) 9%,transparent)}
+      .native-alert-table{display:block;height:clamp(320px,62vh,780px);min-width:0;--data-table-row-height:52px}.table-footer{padding:8px 14px;color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);text-align:right}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
       .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:max(24px,calc((85vw - 1400px)/2 + 24px));width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-menu-wrap{position:relative}.rule-editor-menu{position:absolute;z-index:10;inset-inline-end:0;inset-block-start:40px;min-width:190px;padding:4px;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);box-shadow:var(--ha-card-box-shadow,0 3px 10px rgba(0,0,0,.2))}.rule-editor-menu ha-button{width:100%;justify-content:flex-start}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.monitoring-warning{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-radius:8px;margin-bottom:16px;background:color-mix(in srgb,var(--warning-color,#f5a623) 16%,transparent);color:var(--primary-text-color,#212121)}.monitoring-warning ha-button{flex:none}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:850px){.table-toolbar{flex-wrap:wrap}.table-search{order:10;max-width:none;min-width:100%;flex-basis:100%}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-menu{top:105px}.selection-toolbar .toolbar-spacer{display:none}.selection-toolbar{align-items:stretch}.selection-toolbar .toolbar-button{flex:1}.alert-table{min-width:860px}}
+      @media(max-width:850px){.table-toolbar{flex-wrap:wrap}.table-search{order:10;max-width:none;min-width:100%;flex-basis:100%}.filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-menu{top:105px}.selection-toolbar .toolbar-spacer{display:none}.selection-toolbar{align-items:stretch}.selection-toolbar .toolbar-button{flex:1}.native-alert-table{height:calc(100vh - 250px);min-height:360px}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.panel{padding:15px}.actions ha-button{width:100%}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
       @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}}
-      @media(max-width:560px){.toolbar-button span:not(.filter-count){display:none}.table-toolbar>.toolbar-button{width:40px;padding:0}.table-search span{display:initial}.filter-grid,.menu-fields{grid-template-columns:1fr}.table-menu{left:6px;right:6px}.selection-toolbar .toolbar-button span{display:initial}.selection-count{width:100%;order:8;margin:0}.selection-toolbar .toolbar-spacer{display:none}.alert-table th,.alert-table td{padding-inline:9px}}
+      @media(max-width:560px){.toolbar-button span:not(.filter-count){display:none}.table-toolbar>.toolbar-button{width:40px;padding:0}.filter-grid,.menu-fields{grid-template-columns:1fr}.table-menu{left:6px;right:6px}.selection-toolbar .toolbar-button span{display:initial}.selection-count{width:100%;order:8;margin:0}.selection-toolbar .toolbar-spacer{display:none}}
     `;
   }
 }

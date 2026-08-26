@@ -2,6 +2,26 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev2 — 26 août 2026
+
+### Corrigé
+
+- Remplacement du tableau HTML personnalisé par le composant natif Home
+  Assistant `ha-data-table`, qui assure désormais la virtualisation des lignes,
+  les groupes repliables et les cases de sélection.
+- Utilisation du composant natif `ha-input-search` dans la barre d’outils des
+  tableaux.
+- Les anomalies revenues à la normale pendant leur délai `pending` ne sont plus
+  ajoutées à l’historique. Les éventuelles entrées expérimentales de ce type
+  enregistrées par `1.7.0-dev` sont supprimées au prochain chargement.
+
+### Tests
+
+- Adaptation des tests frontend au contrat de propriétés et d’événements de
+  `ha-data-table`.
+- Non-régression backend vérifiant explicitement qu’une alerte annulée avant
+  activation ne produit aucun événement historique.
+
 ## 1.7.0-dev — 26 août 2026
 
 ### Ajouté
@@ -16,8 +36,6 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
   colonnes, le groupement, la clé de tri et son sens.
 - Mode de sélection multiple du Dashboard avec sélection des lignes visibles et
   acquittement/désacquittement de masse limité aux alertes compatibles.
-- Archivage des anomalies revenues à la normale avant activation avec le statut
-  « Annulée avant activation ».
 
 ### Modifié
 
@@ -33,8 +51,8 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
 - Couverture frontend du rendu, de la recherche, des filtres, du groupement, du
   tri, des colonnes, de la persistance locale, de la sélection mixte et des
   actions de masse.
-- Couverture backend de l’historique annulé et de la valeur de déclenchement
-  immuable, en complément des suites de non-régression existantes.
+- Couverture backend de la valeur de déclenchement immuable, en complément des
+  suites de non-régression existantes.
 
 ## 1.6.3 — 26 août 2026
 

@@ -25,17 +25,19 @@ project.
 - explicit exclusions by labels, entities and devices;
 - per-rule, per-entity, per-pack and global delays;
 - responsive administrator panel in French and English;
-- compact table with search, filters, sorting, collapsible grouping and
-  customizable columns, without merging alert records;
+- compact table based on Home Assistant's native `ha-data-table` component,
+  with search, filters, sorting, collapsible grouping and customizable columns,
+  without merging alert records;
 - persistent per-alert acknowledgement from the panel and Home Assistant
   automations;
 - an `Alert Manager - Général` device, persistent monitoring switch and three
   sensors separating active, upcoming and acknowledged alerts;
 - visual or YAML editing of custom rules, plus complete YAML configuration
   export and replacement import;
-- persistent history of resolved alerts and alerts cancelled before activation,
-  retaining 100 events by default in a dedicated panel tab without adding a Home
-  Assistant entity;
+- persistent history of alerts that actually became active and were then
+  resolved, retaining 100 events by default in a dedicated panel tab without
+  adding a Home Assistant entity; anomalies that recover while still pending are
+  not archived;
 - start, resolution, acknowledgement and unacknowledgement events;
 - one safety notification when monitoring is still disabled at load time and no
   frequent global polling.
@@ -98,12 +100,14 @@ state are ignored, while feedback reports the number actually changed.
 
 ## History and retention
 
-The administrator-only **History** tab uses the same table for resolved alerts,
-alerts resolved after acknowledgement, and anomalies cancelled before
-activation. Every row freezes rule and entity names, device, area, message,
+The administrator-only **History** tab uses the same native table for resolved
+alerts and alerts resolved after acknowledgement. Every row freezes rule and
+entity names, device, area, message,
 triggering condition and value, and detection/resolution timestamps. Search,
 filters, grouping, sorting and column customization remain available. History
 deliberately exposes neither selection mode nor acknowledgement actions.
+An anomaly that recovers before activation is not an effective alert and is not
+added to history.
 
 In **Configuration → General settings**, directly below **Global delay**,
 **Number of historical events retained** controls retention. **Clear history**
