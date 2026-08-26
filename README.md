@@ -16,7 +16,7 @@ Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
 une intégration communautaire non officielle, sans lien avec le projet Home
 Assistant.
 
-## Fonctionnalités V1.5.8
+## Fonctionnalités V1.6
 
 - états internes `normal`, `pending` et `active` avec délais persistants ;
 - détection automatique des indisponibilités, pertes de connectivité, équipements
@@ -39,6 +39,8 @@ Assistant.
   capteurs séparant les alertes actives, à venir et acquittées ;
 - édition visuelle ou YAML des règles personnalisées, export YAML complet et
   import YAML de remplacement de la configuration ;
+- historique persistant des alertes actives résolues, limité par défaut à 100
+  événements et consultable dans un onglet dédié sans nouvelle entité ;
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
@@ -89,7 +91,7 @@ latérale et reste réservé aux administrateurs.
 
 ## Panneau Alert Manager
 
-Le panel est réservé aux administrateurs et contient quatre sections :
+Le panel est réservé aux administrateurs et contient cinq sections :
 
 1. **Vue d’ensemble** : sections distinctes pour les alertes actives en rouge, à
    venir en orange et acquittées en bleu, avec valeur, condition, équipement,
@@ -107,17 +109,37 @@ Le panel est réservé aux administrateurs et contient quatre sections :
    alertes d’un appareil.
    Le total suivi additionne les couples règle personnalisée/entité actifs et les
    entités uniques couvertes par au moins une surveillance automatique.
-2. **Surveillance automatique** : activation, délais et seuil de batterie. Les
+2. **Historique** : alertes actives résolues, de la plus récente à la plus
+   ancienne, dans des cartes grises reprenant la structure et le groupement du
+   Dashboard. Chaque événement fige le nom de règle et d’entité, l’appareil, la
+   pièce, le message, la condition et la valeur de déclenchement, les dates de
+   détection, activation et résolution, les durées et l’éventuel acquittement.
+   Il ne propose ni acquittement, ni compte à rebours, ni action runtime. Une
+   anomalie revenue à la normale pendant `pending` n’a jamais été active et
+   n’entre donc pas dans l’historique.
+3. **Surveillance automatique** : activation, délais et seuil de batterie. Les
    cartes sont produites depuis les métadonnées du backend et seuls les packs
    actuellement disponibles sont proposés.
-3. **Règles personnalisées** : création et modification dans un volet latéral
+4. **Règles personnalisées** : création et modification dans un volet latéral
    structuré en sections, composé des éléments natifs Home Assistant. Un clic sur
    la ligne ouvre le volet ; l’activation, les sources, la condition, les valeurs,
    la temporisation et le message y sont regroupés clairement. L’interrupteur
    natif en fin de ligne reste disponible pour une activation rapide.
-4. **Configuration** : labels, entités, appareils, délai global et délais
-   particuliers. Les sélections utilisent les sélecteurs et la recherche natifs de
-   Home Assistant.
+5. **Configuration** : labels, entités, appareils, délai global, délais
+   particuliers et rétention de l’historique. Les sélections utilisent les
+   sélecteurs et la recherche natifs de Home Assistant.
+
+### Rétention et effacement de l’historique
+
+Le réglage **Nombre d’événements historiques conservés** accepte de `0` à
+`1000`. Une nouvelle installation conserve `100` événements. `0` supprime les
+événements existants lors de l’enregistrement puis désactive la conservation des
+prochaines résolutions. À chaque résolution et à chaque diminution de la limite,
+les événements les plus anciens en excès sont supprimés immédiatement.
+
+**Effacer l’historique** demande une confirmation indiquant que l’opération est
+irréversible. Cette action ne touche jamais les alertes actives, à venir ou
+acquittées.
 
 ## Packs automatiques
 
@@ -234,6 +256,8 @@ les règles personnalisées. Les
 identifiants internes des règles ne sont pas exportés et sont recréés par le
 backend lors de l’import. Il n’exporte jamais les alertes actives ou à venir,
 acquittements, timers, dates de détection/activation ni historique d’exécution.
+La limite de rétention et les événements historiques ne sont ni exportés ni
+importés : un import conserve le réglage et l’historique locaux.
 
 L’import n’accepte que les versions complètes supportées et refuse les champs
 inconnus, dupliqués ou runtime. Le fichier est validé intégralement avant toute

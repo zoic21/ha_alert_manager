@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +41,11 @@ class AlertDetails:
     area: str | None = None
     integration: str | None = None
     unit: str | None = None
+    message: str | None = None
+    source: str | None = None
+    operator: str | None = None
+    comparison_value: Any = None
+    attribute: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertDetails:
@@ -59,6 +66,10 @@ class AlertDetails:
             "area",
             "integration",
             "unit",
+            "message",
+            "source",
+            "operator",
+            "attribute",
         ):
             if data.get(key) is not None and not isinstance(data[key], str):
                 raise ValueError(f"Alert detail {key} must be a string or null")
@@ -77,6 +88,232 @@ class AlertDetails:
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-safe details without empty optional fields."""
         return {key: value for key, value in asdict(self).items() if value is not None}
+
+
+@dataclass(slots=True)
+class AlertHistoryEntry:
+    """Immutable JSON-safe snapshot of one resolved active alert."""
+
+    event_id: str
+    id: str
+    type: str
+    rule_id: str
+    rule_name: str
+    entity_id: str
+    entity_name: str
+    device_id: str | None
+    device_name: str | None
+    area: str | None
+    message: str | None
+    trigger_value: Any
+    source: str | None
+    operator: str | None
+    comparison_value: Any
+    attribute: str | None
+    condition: str
+    condition_key: str | None
+    condition_params: dict[str, Any] | None
+    unit: str | None
+    detected_at: datetime
+    active_at: datetime
+    resolved_at: datetime
+    pending_duration_seconds: float
+    active_duration_seconds: float
+    total_duration_seconds: float
+    final_status: str
+    acknowledged: bool
+    acknowledged_at: datetime | None
+    acknowledged_by: str | None
+
+    @classmethod
+    def resolved(cls, record: AlertRecord, resolved_at: datetime) -> AlertHistoryEntry:
+        """Freeze a currently active record at its real resolution time."""
+        if record.status is not AlertStatus.ACTIVE or record.active_since is None:
+            raise ValueError("Only active alerts can be archived as resolved")
+        detected = record.detected_at.astimezone(UTC)
+        active = record.active_since.astimezone(UTC)
+        resolved = max(resolved_at.astimezone(UTC), active)
+        pending_seconds = max(
+            0.0, (active - detected).total_seconds() - record.paused_seconds
+        )
+        active_seconds = max(0.0, (resolved - active).total_seconds())
+        identity = "\n".join(
+            (
+                record.details.id,
+                detected.isoformat(),
+                active.isoformat(),
+                resolved.isoformat(),
+            )
+        )
+        return cls(
+            event_id=hashlib.sha256(identity.encode()).hexdigest()[:32],
+            id=record.details.id,
+            type=record.details.type,
+            rule_id=record.details.rule_id or record.details.type,
+            rule_name=record.details.rule_name or record.details.type,
+            entity_id=record.details.entity_id,
+            entity_name=record.details.name,
+            device_id=record.details.device_id,
+            device_name=record.details.device_name,
+            area=record.details.area,
+            message=record.details.message,
+            trigger_value=_json_safe(record.details.value),
+            source=record.details.source,
+            operator=record.details.operator,
+            comparison_value=_json_safe(record.details.comparison_value),
+            attribute=record.details.attribute,
+            condition=record.details.condition,
+            condition_key=record.details.condition_key,
+            condition_params=_json_safe(record.details.condition_params),
+            unit=record.details.unit,
+            detected_at=detected,
+            active_at=active,
+            resolved_at=resolved,
+            pending_duration_seconds=pending_seconds,
+            active_duration_seconds=active_seconds,
+            total_duration_seconds=pending_seconds + active_seconds,
+            final_status="resolved",
+            acknowledged=record.acknowledged,
+            acknowledged_at=record.acknowledged_at,
+            acknowledged_by=record.acknowledged_by,
+        )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AlertHistoryEntry:
+        """Deserialize one strictly shaped persisted history entry."""
+        if not isinstance(data, dict):
+            raise ValueError("History entry must be an object")
+        required_strings = (
+            "event_id",
+            "id",
+            "type",
+            "rule_id",
+            "rule_name",
+            "entity_id",
+            "entity_name",
+            "condition",
+        )
+        for key in required_strings:
+            if not isinstance(data.get(key), str) or not data[key]:
+                raise ValueError(f"History field {key} must be a non-empty string")
+        for key in (
+            "device_id",
+            "device_name",
+            "area",
+            "message",
+            "source",
+            "operator",
+            "attribute",
+            "condition_key",
+            "unit",
+            "acknowledged_by",
+        ):
+            if data.get(key) is not None and (
+                not isinstance(data[key], str) or not data[key]
+            ):
+                raise ValueError(f"History field {key} must be a string or null")
+        if "trigger_value" not in data:
+            raise ValueError("History trigger_value is required")
+        condition_params = data.get("condition_params")
+        if condition_params is not None and not isinstance(condition_params, dict):
+            raise ValueError("History condition_params must be an object or null")
+        if data.get("final_status") != "resolved":
+            raise ValueError("Unsupported history final status")
+        detected_at = _parse_aware_datetime(data["detected_at"], "detected_at")
+        active_at = _parse_aware_datetime(data["active_at"], "active_at")
+        resolved_at = _parse_aware_datetime(data["resolved_at"], "resolved_at")
+        if not detected_at <= active_at <= resolved_at:
+            raise ValueError("History timestamps are inconsistent")
+        durations = {}
+        for key in (
+            "pending_duration_seconds",
+            "active_duration_seconds",
+            "total_duration_seconds",
+        ):
+            value = data.get(key)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise ValueError(f"History field {key} must be non-negative")
+            durations[key] = float(value)
+        acknowledged = data.get("acknowledged")
+        if not isinstance(acknowledged, bool):
+            raise ValueError("History acknowledged must be a boolean")
+        acknowledged_at = data.get("acknowledged_at")
+        parsed_acknowledged_at = (
+            _parse_aware_datetime(acknowledged_at, "acknowledged_at")
+            if acknowledged_at is not None
+            else None
+        )
+        if acknowledged and parsed_acknowledged_at is None:
+            raise ValueError("Acknowledged history requires acknowledged_at")
+        if not acknowledged and (
+            parsed_acknowledged_at is not None
+            or data.get("acknowledged_by") is not None
+        ):
+            raise ValueError("Unacknowledged history cannot retain metadata")
+        if parsed_acknowledged_at is not None and not (
+            active_at <= parsed_acknowledged_at <= resolved_at
+        ):
+            raise ValueError("History acknowledgement timestamp is inconsistent")
+        if not math.isclose(
+            durations["total_duration_seconds"],
+            durations["pending_duration_seconds"]
+            + durations["active_duration_seconds"],
+            abs_tol=0.001,
+        ):
+            raise ValueError("History total duration is inconsistent")
+        values = {
+            key: data.get(key)
+            for key in cls.__dataclass_fields__
+            if key
+            not in {
+                "detected_at",
+                "active_at",
+                "resolved_at",
+                "pending_duration_seconds",
+                "active_duration_seconds",
+                "total_duration_seconds",
+                "acknowledged_at",
+            }
+        }
+        values.update(
+            detected_at=detected_at,
+            active_at=active_at,
+            resolved_at=resolved_at,
+            acknowledged_at=parsed_acknowledged_at,
+            **durations,
+        )
+        return cls(**values)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the exact public and persistent JSON-safe representation."""
+        result = asdict(self)
+        for key in ("detected_at", "active_at", "resolved_at", "acknowledged_at"):
+            if result[key] is not None:
+                result[key] = result[key].isoformat()
+        return result
+
+
+def _json_safe(value: Any) -> Any:
+    """Copy arbitrary state values into deterministic JSON-compatible data."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, set):
+        return sorted(
+            (_json_safe(item) for item in value),
+            key=lambda item: json.dumps(item, sort_keys=True),
+        )
+    return str(value)
 
 
 @dataclass(slots=True)

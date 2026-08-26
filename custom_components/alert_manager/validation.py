@@ -13,8 +13,10 @@ from .const import (
     CATEGORIES,
     DEFAULT_CONFIG,
     MAX_DELAY,
+    MAX_HISTORY_LIMIT,
     MAX_THRESHOLD,
     MIN_DELAY,
+    MIN_HISTORY_LIMIT,
     MIN_THRESHOLD,
 )
 from .models import Rule, safe_float
@@ -85,6 +87,14 @@ def validate_config(config: Any) -> dict[str, Any]:
     if not isinstance(monitoring_enabled, bool):
         raise ValueError("monitoring_enabled must be a boolean")
     result["monitoring_enabled"] = monitoring_enabled
+    history_limit = config.get("history_limit", result["history_limit"])
+    if isinstance(history_limit, bool) or not isinstance(history_limit, int):
+        raise ValueError("history_limit must be an integer")
+    if not MIN_HISTORY_LIMIT <= history_limit <= MAX_HISTORY_LIMIT:
+        raise ValueError(
+            f"history_limit must be between {MIN_HISTORY_LIMIT} and {MAX_HISTORY_LIMIT}"
+        )
+    result["history_limit"] = history_limit
     result["global_delay"] = validate_delay(
         config.get("global_delay", result["global_delay"]), "global_delay"
     )

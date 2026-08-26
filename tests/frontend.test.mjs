@@ -77,7 +77,7 @@ Object.defineProperty(globalThis, "navigator", {
   },
 });
 
-const { buildOverviewItems, lines, newRuleDefaults } = await import(
+const { buildHistoryItems, buildOverviewItems, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
 );
 
@@ -201,6 +201,7 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
 
 const completeConfig = () => ({
   monitoring_enabled: true,
+  history_limit: 100,
   automatic: {
     unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
@@ -345,6 +346,10 @@ test("initial load requests pack metadata from the backend", async () => {
       pending: [],
     },
     "alert_manager/packs/list": completePacks(),
+    "alert_manager/history/list": {
+      events: [], count: 0, retention_limit: 100, enabled: true,
+    },
+    "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
   };
   panel._hass = {
     states: {},
@@ -363,6 +368,8 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/config/get",
     "alert_manager/alerts/list",
     "alert_manager/packs/list",
+    "alert_manager/history/list",
+    "alert_manager/history/config/get",
     "frontend/get_translations",
     "frontend/get_translations",
   ]);
@@ -895,6 +902,7 @@ test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
   assert.deepEqual(shell.route, { prefix: "", path: "/alert-manager/overview" });
   assert.deepEqual(shell.tabs.map(({ path, name }) => ({ path, name })), [
     { path: "/alert-manager/overview", name: "Vue d’ensemble" },
+    { path: "/alert-manager/history", name: "Historique" },
     { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/rules", name: "Règles personnalisées" },
     { path: "/alert-manager/settings", name: "Configuration" },
@@ -1534,10 +1542,164 @@ test("panel renders French and English from backend translation resources", () =
   assert.match(panel._renderAutomatic(), /Unavailable entities/);
   assert.deepEqual(panel._tabs().map((tab) => tab.name), [
     "Overview",
+    "History",
     "Automatic monitoring",
     "Custom rules",
     "Configuration",
   ]);
+});
+
+const historyEvent = (changes = {}) => ({
+  event_id: "event-1",
+  id: "rule:stable:sensor.rack_temperature",
+  type: "rule",
+  rule_id: "stable",
+  rule_name: "Température baie élevée",
+  entity_id: "sensor.rack_temperature",
+  entity_name: "Température baie",
+  device_id: "device-1",
+  device_name: "Sonde baie",
+  area: "Bureau",
+  message: "Refroidir la baie",
+  trigger_value: 34.5,
+  source: "state",
+  operator: "above",
+  comparison_value: 33,
+  attribute: null,
+  condition: "État supérieur à 33 °C",
+  condition_key: "rule.generated",
+  condition_params: {
+    source: "state", operator: "above", expected: "33", unit: "°C", duration: 0,
+  },
+  unit: "°C",
+  detected_at: "2026-08-26T12:00:00+00:00",
+  active_at: "2026-08-26T12:00:00+00:00",
+  resolved_at: "2026-08-26T12:01:15+00:00",
+  pending_duration_seconds: 0,
+  active_duration_seconds: 75,
+  total_duration_seconds: 75,
+  final_status: "resolved",
+  acknowledged: true,
+  acknowledged_at: "2026-08-26T12:00:30+00:00",
+  acknowledged_by: "Loïc",
+  ...changes,
+});
+
+test("history groups repeated device events while preserving newest-first order", () => {
+  const events = [
+    historyEvent(),
+    historyEvent({ event_id: "event-2", entity_id: "sensor.humidity" }),
+    historyEvent({ event_id: "event-3", device_id: null, entity_id: "sensor.ups" }),
+  ];
+  const items = buildHistoryItems(events);
+  assert.equal(items[0].kind, "history-device");
+  assert.deepEqual(items[0].events.map((event) => event.event_id), ["event-1", "event-2"]);
+  assert.equal(items[1].kind, "history");
+  assert.equal(items[1].event.event_id, "event-3");
+});
+
+test("historical cards are grey snapshots without runtime actions or countdowns", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  panel._history = { events: [historyEvent()], count: 1, retention_limit: 100, enabled: true };
+  panel._hass = { states: {} };
+  const html = panel._renderHistory();
+  assert.match(html, /Température baie élevée/);
+  assert.match(html, /Température baie/);
+  assert.match(html, /Sonde baie/);
+  assert.match(html, /Bureau/);
+  assert.match(html, /Refroidir la baie/);
+  assert.match(html, /Résolue le/);
+  assert.match(html, /1 min 15 s/);
+  assert.match(html, /Acquittée avant résolution/);
+  assert.match(html, /is-resolved/);
+  assert.doesNotMatch(html, /acknowledge-alert|unacknowledge-alert|data-due|Temps restant/);
+});
+
+test("history empty and disabled states are explicit and translated", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  assert.match(panel._renderHistory(), /Aucune alerte dans l’historique/);
+  panel._historyConfig = { retention_limit: 0, enabled: false };
+  const disabled = panel._renderHistory();
+  assert.match(disabled, /L’historique est désactivé/);
+  assert.match(disabled, /open-history-settings/);
+});
+
+test("clearing history requires confirmation and sends the explicit marker", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._history = { events: [historyEvent()], count: 1, retention_limit: 100, enabled: true };
+  panel._render = () => {};
+  const calls = [];
+  panel._call = async (message) => {
+    calls.push(message);
+    return { events: [], count: 0, retention_limit: 100, enabled: true };
+  };
+  const previousConfirm = window.confirm;
+  window.confirm = () => false;
+  await panel._handleClick(actionEvent("clear-history"));
+  assert.deepEqual(calls, []);
+  window.confirm = (message) => {
+    assert.match(message, /irréversible/);
+    return true;
+  };
+  try {
+    await panel._handleClick(actionEvent("clear-history"));
+  } finally {
+    window.confirm = previousConfirm;
+  }
+  assert.deepEqual(calls, [{ type: "alert_manager/history/clear", confirmed: true }]);
+  assert.deepEqual(panel._history.events, []);
+});
+
+test("history retention control accepts zero through one thousand", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
+  panel._render = () => {};
+  panel.shadowRoot.querySelector = (selector) => selector === "#history-limit"
+    ? { value: "0", reportValidity: () => true }
+    : null;
+  let request;
+  panel._call = async (message) => {
+    request = message;
+    return { retention_limit: 0, enabled: false };
+  };
+  panel._refreshHistory = async () => panel._history;
+  await panel._handleClick(actionEvent("save-history-settings"));
+  assert.deepEqual(request, {
+    type: "alert_manager/history/config/update",
+    retention_limit: 0,
+  });
+  assert.deepEqual(panel._historyConfig, { retention_limit: 0, enabled: false });
+});
+
+test("a runtime sensor update refreshes the open history tab immediately", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "history";
+  panel._render = () => {};
+  let refreshes = 0;
+  panel._refreshHistory = () => { refreshes += 1; };
+  panel.hass = {
+    locale: { language: "fr" },
+    states: {
+      "sensor.alert_manager_main_active": { state: "0", attributes: { alerts: [] } },
+      "sensor.alert_manager_main_pending": { state: "0", attributes: { alerts: [] } },
+      "sensor.alert_manager_main_acknowledge": { state: "0", attributes: { alerts: [] } },
+      "switch.alert_manager_main_monitoring": { state: "on", attributes: {} },
+    },
+  };
+  assert.equal(refreshes, 1);
 });
 
 test("missing localized keys fall back to English backend resources", () => {

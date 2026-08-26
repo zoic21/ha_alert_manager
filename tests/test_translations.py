@@ -51,6 +51,11 @@ def test_translation_files_are_complete_independent_catalogs() -> None:
     assert "services.acknowledge.fields.alert_id.description" in english
     assert "services.unacknowledge.fields.alert_id.description" in english
     assert "config_panel.overview.acknowledged_system" in english
+    assert "config_panel.tabs.history" in english
+    assert "config_panel.history.empty" in english
+    assert "config_panel.history.disabled_title" in english
+    assert "config_panel.settings.history_limit" in english
+    assert "config_panel.settings.history_clear_confirm" in english
     assert any(key.startswith("config_panel.") for key in english)
     for key in english:
         assert _placeholders(english[key]) == _placeholders(french[key]), key

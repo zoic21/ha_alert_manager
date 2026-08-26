@@ -2,6 +2,31 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.6.0-dev — 26 août 2026
+
+### Ajouté
+
+- Historique persistant et atomique des alertes actives résolues dans un stockage
+  indépendant des alertes runtime.
+- Nouvel onglet administrateur **Historique**, avec cartes grises, groupement par
+  appareil, dépliage progressif et informations figées au moment de la résolution.
+- Rétention configurable de 0 à 1000 événements, valeur par défaut 100, réduction
+  immédiate des événements les plus anciens et action d’effacement irréversible
+  avec confirmation.
+- Commandes WebSocket administrateur pour lire l’historique, lire/modifier sa
+  configuration et l’effacer.
+- Traductions françaises et anglaises, documentation et tests backend/frontend.
+
+### Garanties
+
+- Les alertes annulées pendant `pending` ne sont pas archivées.
+- Une erreur d’écriture de l’historique ne bloque pas la résolution d’une alerte
+  et ne peut pas corrompre le stockage runtime.
+- Aucun changement des entités, événements et services existants ; aucune entité
+  Home Assistant supplémentaire.
+- L’historique et sa limite de rétention sont exclus de l’import/export YAML, qui
+  conserve ces données locales.
+
 ## 1.5.9-dev5 — 26 août 2026
 
 ### Corrigé

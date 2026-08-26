@@ -13,11 +13,14 @@ from homeassistant.helpers.storage import Store
 from .const import (
     DEFAULT_CONFIG,
     DEFAULT_EXCLUSION_LABEL,
+    DEFAULT_HISTORY_LIMIT,
+    HISTORY_STORAGE_KEY,
+    HISTORY_STORAGE_VERSION,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
-from .models import AlertRecord
+from .models import AlertHistoryEntry, AlertRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,6 +132,74 @@ class AlertManagerStorage:
         )
 
 
+class AlertManagerHistoryStorage:
+    """Own history persistence independently from live runtime alerts."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the dedicated atomic history store."""
+        self._store = Store(
+            hass,
+            HISTORY_STORAGE_VERSION,
+            HISTORY_STORAGE_KEY,
+            atomic_writes=True,
+        )
+
+    async def async_load(self) -> tuple[list[AlertHistoryEntry], bool]:
+        """Load valid history entries and discard malformed records safely."""
+        raw = await self._store.async_load()
+        if raw is None:
+            return [], False
+        if not isinstance(raw, dict) or not isinstance(raw.get("events"), list):
+            _LOGGER.warning("Ignoring invalid persisted alert history")
+            return [], True
+        entries: list[AlertHistoryEntry] = []
+        changed = False
+        seen: set[str] = set()
+        for raw_entry in raw["events"]:
+            try:
+                entry = AlertHistoryEntry.from_dict(raw_entry)
+            except (KeyError, TypeError, ValueError):
+                _LOGGER.warning("Ignoring invalid persisted alert history entry")
+                changed = True
+                continue
+            if entry.event_id in seen:
+                changed = True
+                continue
+            seen.add(entry.event_id)
+            entries.append(entry)
+        sorted_entries = sort_history(entries)
+        if sorted_entries != entries:
+            changed = True
+        return sorted_entries, changed
+
+    async def async_save(self, entries: list[AlertHistoryEntry]) -> None:
+        """Atomically save only the bounded historical event collection."""
+        await self._store.async_save(
+            {"events": [entry.as_dict() for entry in sort_history(entries)]}
+        )
+
+
+def sort_history(entries: list[AlertHistoryEntry]) -> list[AlertHistoryEntry]:
+    """Sort newest first with stable deterministic timestamp tie breakers."""
+    ordered = sorted(
+        entries,
+        key=lambda entry: (
+            entry.resolved_at,
+            entry.detected_at,
+            entry.event_id,
+        ),
+        reverse=True,
+    )
+    seen: set[str] = set()
+    unique: list[AlertHistoryEntry] = []
+    for entry in ordered:
+        if entry.event_id in seen:
+            continue
+        seen.add(entry.event_id)
+        unique.append(entry)
+    return unique
+
+
 def _merge_dict(defaults: dict[str, Any], stored: Any) -> dict[str, Any]:
     """Merge stored dictionaries over defaults without losing new keys."""
     if not isinstance(stored, dict):
@@ -154,6 +225,10 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
 
     if "monitoring_enabled" not in config:
         config["monitoring_enabled"] = True
+        changed = True
+
+    if "history_limit" not in config:
+        config["history_limit"] = DEFAULT_HISTORY_LIMIT
         changed = True
 
     rules = config.get("rules")

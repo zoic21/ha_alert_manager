@@ -1017,11 +1017,16 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert rule["version"] == 2
     assert manager.get_config()["excluded_labels"] == ["skip"]
     assert manager.get_config()["monitoring_enabled"] is True
+    assert manager.get_config()["history_limit"] == 100
+    assert manager.history == []
     assert "domains" not in manager.get_config()["automatic"]["unavailable"]
     assert "rule:legacy:sensor.test" in manager.records
     assert manager.records["rule:legacy:sensor.test"].detected_at == detected_at
     assert manager.records["rule:legacy:sensor.test"].details.rule_id == "legacy"
     assert manager.records["rule:legacy:sensor.test"].details.rule_name == "Legacy"
+    assert manager.records["rule:legacy:sensor.test"].details.source == "state"
+    assert manager.records["rule:legacy:sensor.test"].details.operator == "equals"
+    assert manager.records["rule:legacy:sensor.test"].details.comparison_value == "on"
     assert hass.stores["alert_manager"]["config"]["monitoring_enabled"] is True
 
     run(manager.async_unload())

@@ -68,6 +68,68 @@ def websocket_alerts_list(
         connection.send_result(msg["id"], manager.public_snapshot())
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command({vol.Required("type"): "alert_manager/history/list"})
+async def websocket_history_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the newest-first resolved history to an administrator."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.history_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/history/config/get"}
+)
+async def websocket_history_config_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return history retention configuration to an administrator."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.get_history_config())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/history/config/update",
+        vol.Required("retention_limit"): int,
+    }
+)
+async def websocket_history_config_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Validate and apply a bounded history retention limit."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_set_history_limit(msg["retention_limit"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/history/clear",
+        vol.Required("confirmed"): True,
+    }
+)
+async def websocket_history_clear(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Clear history only after an explicit client confirmation marker."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], await manager.async_clear_history())
+
+
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/packs/list"})
 @callback
 def websocket_packs_list(
@@ -285,6 +347,10 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_get,
         websocket_config_update,
         websocket_alerts_list,
+        websocket_history_list,
+        websocket_history_config_get,
+        websocket_history_config_update,
+        websocket_history_clear,
         websocket_packs_list,
         websocket_rules_list,
         websocket_rule_create,

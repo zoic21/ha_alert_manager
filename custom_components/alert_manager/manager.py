@@ -56,12 +56,16 @@ from .const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,
+    MAX_HISTORY_LIMIT,
+    MIN_HISTORY_LIMIT,
     MONITORING_NOTIFICATION_ID,
     SIGNAL_ALERTS_UPDATED,
+    SIGNAL_HISTORY_UPDATED,
     SIGNAL_MONITORING_UPDATED,
 )
 from .models import (
     AlertDetails,
+    AlertHistoryEntry,
     AlertRecord,
     AlertStatus,
     Rule,
@@ -69,7 +73,7 @@ from .models import (
     calculate_due_at,
 )
 from .packs import PACKS, PACKS_BY_ID
-from .storage import AlertManagerStorage
+from .storage import AlertManagerHistoryStorage, AlertManagerStorage, sort_history
 from .validation import (
     validate_config,
     validate_config_update,
@@ -105,11 +109,14 @@ class AlertManager:
         self.hass = hass
         self.entry = entry
         self.storage = AlertManagerStorage(hass)
+        self.history_storage = AlertManagerHistoryStorage(hass)
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
         self._area_registry = ar.async_get(hass)
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
+        self.history: list[AlertHistoryEntry] = []
+        self._pending_history: list[AlertHistoryEntry] = []
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
         self._unsubscribers: list[Callable[[], None]] = []
@@ -133,12 +140,22 @@ class AlertManager:
         """Load persisted state and start event-driven evaluation."""
         config, records, migrated = await self.storage.async_load()
         try:
+            history, history_migrated = await self.history_storage.async_load()
+        except Exception:
+            _LOGGER.exception(
+                "Unable to load alert history; starting with an empty view"
+            )
+            history, history_migrated = [], False
+        try:
             self.config = validate_config(config)
         except ValueError:
             _LOGGER.exception("Stored configuration is invalid; using defaults")
             self.config = validate_config({})
             migrated = True
         self.records = records
+        self.history = history
+        if self._trim_history():
+            history_migrated = True
         if self._remove_own_rule_sources():
             migrated = True
         if self._remove_own_records():
@@ -178,16 +195,21 @@ class AlertManager:
         if self.hass.is_running:
             changed = await self.async_evaluate_all(restoring=True, save=False)
             if migrated or changed:
-                await self.storage.async_save(self.config, self.records)
+                await self._async_save_state()
         else:
             if migrated:
-                await self.storage.async_save(self.config, self.records)
+                await self._async_save_state()
             self._unsubscribers.append(
                 self.hass.bus.async_listen_once(
                     EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
                 )
             )
             self._publish_if_changed(force=True)
+        if history_migrated:
+            try:
+                await self.history_storage.async_save(self.history)
+            except Exception:
+                _LOGGER.exception("Unable to persist migrated alert history")
         await self._async_sync_monitoring_notification()
 
     async def async_unload(self) -> None:
@@ -202,7 +224,7 @@ class AlertManager:
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
-        await self.storage.async_save(self.config, self.records)
+        await self._async_save_state()
 
     @callback
     def _home_assistant_started(self, _event: Event) -> None:
@@ -335,7 +357,7 @@ class AlertManager:
                 emit_events=emit_events,
             )
         if save and persisted_changed:
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         if publish:
             self._publish_if_changed(
                 force=restoring and self._last_public_snapshot is None
@@ -412,11 +434,13 @@ class AlertManager:
             record = self.records.pop(alert_id)
             self._cancel_timer(alert_id)
             persisted_changed = True
-            if record.status is AlertStatus.ACTIVE and emit_events:
-                self._fire_resolved(record, now)
+            if record.status is AlertStatus.ACTIVE:
+                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                if emit_events:
+                    self._fire_resolved(record, now)
 
         if save and persisted_changed:
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         if publish:
             self._publish_if_changed()
         return persisted_changed
@@ -475,6 +499,11 @@ class AlertManager:
                     condition_params=condition_params,
                     rule_id=rule.id,
                     rule_name=rule.name,
+                    message=rule.message,
+                    source=rule.source,
+                    operator=rule.operator,
+                    comparison_value=rule.value,
+                    attribute=rule.attribute,
                 ),
                 rule.duration,
             )
@@ -576,6 +605,11 @@ class AlertManager:
         condition_params: dict[str, Any] | None = None,
         rule_id: str | None = None,
         rule_name: str | None = None,
+        message: str | None = None,
+        source: str | None = None,
+        operator: str | None = None,
+        comparison_value: Any = None,
+        attribute: str | None = None,
     ) -> AlertDetails:
         """Resolve names, device, area and integration once per evaluation."""
         entity_entry = self._entity_registry.async_get(state.entity_id)
@@ -608,6 +642,11 @@ class AlertManager:
             condition_params=condition_params,
             rule_id=rule_id,
             rule_name=rule_name,
+            message=message,
+            source=source,
+            operator=operator,
+            comparison_value=comparison_value,
+            attribute=attribute,
         )
 
     def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
@@ -687,6 +726,16 @@ class AlertManager:
             if record.details.rule_name != rule.name:
                 record.details.rule_name = rule.name
                 changed = True
+            for field, value in (
+                ("message", rule.message),
+                ("source", rule.source),
+                ("operator", rule.operator),
+                ("comparison_value", rule.value),
+                ("attribute", rule.attribute),
+            ):
+                if getattr(record.details, field) != value:
+                    setattr(record.details, field, deepcopy(value))
+                    changed = True
         return changed
 
     def _is_own_entity(self, entity_id: str) -> bool:
@@ -849,6 +898,76 @@ class AlertManager:
         """Return a defensive copy for WebSocket clients."""
         return deepcopy(self.config)
 
+    def history_snapshot(self) -> dict[str, Any]:
+        """Return newest-first immutable history for the administrator panel."""
+        return {
+            "events": [entry.as_dict() for entry in sort_history(self.history)],
+            "count": len(self.history),
+            "retention_limit": self.config["history_limit"],
+            "enabled": self.config["history_limit"] > 0,
+        }
+
+    def get_history_config(self) -> dict[str, int | bool]:
+        """Return the bounded retention setting independently from YAML config."""
+        limit = self.config["history_limit"]
+        return {"retention_limit": limit, "enabled": limit > 0}
+
+    async def async_set_history_limit(self, limit: int) -> dict[str, int | bool]:
+        """Persist a new retention limit and immediately remove oldest excess."""
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValueError("retention_limit must be an integer")
+        if not MIN_HISTORY_LIMIT <= limit <= MAX_HISTORY_LIMIT:
+            raise ValueError(
+                f"retention_limit must be between {MIN_HISTORY_LIMIT} and "
+                f"{MAX_HISTORY_LIMIT}"
+            )
+        if limit == self.config["history_limit"]:
+            return self.get_history_config()
+
+        previous_config = deepcopy(self.config)
+        previous_history = list(self.history)
+        previous_pending = list(self._pending_history)
+        self.config["history_limit"] = limit
+        if limit == 0:
+            self._pending_history = []
+        history_changed = self._trim_history()
+        history_saved = False
+        try:
+            if history_changed:
+                await self.history_storage.async_save(self.history)
+                history_saved = True
+            await self.storage.async_save(self.config, self.records)
+        except Exception:
+            self.config = previous_config
+            self.history = previous_history
+            self._pending_history = previous_pending
+            if history_saved:
+                try:
+                    await self.history_storage.async_save(previous_history)
+                except Exception:
+                    _LOGGER.exception(
+                        "Unable to restore alert history after retention update failure"
+                    )
+            raise
+        if history_changed:
+            async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        return self.get_history_config()
+
+    async def async_clear_history(self) -> dict[str, Any]:
+        """Delete history only, preserving every current runtime record."""
+        previous_history = list(self.history)
+        previous_pending = list(self._pending_history)
+        self.history = []
+        self._pending_history = []
+        try:
+            await self.history_storage.async_save([])
+        except Exception:
+            self.history = previous_history
+            self._pending_history = previous_pending
+            raise
+        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        return self.history_snapshot()
+
     async def async_set_monitoring(self, enabled: bool) -> bool:
         """Persistently suspend or resume the main monitoring category."""
         if not isinstance(enabled, bool):
@@ -862,6 +981,7 @@ class AlertManager:
 
         previous_config = deepcopy(self.config)
         previous_records = deepcopy(self.records)
+        previous_pending_history = list(self._pending_history)
         self.config["monitoring_enabled"] = enabled
         try:
             if enabled:
@@ -873,10 +993,11 @@ class AlertManager:
                 )
             else:
                 self._freeze_pending_alerts(dt_util.now())
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self.config = previous_config
             self.records = previous_records
+            self._pending_history = previous_pending_history
             self._cancel_all_timers()
             self._reschedule_pending_timers()
             raise
@@ -979,7 +1100,7 @@ class AlertManager:
         record.acknowledged_at = now
         record.acknowledged_by = actor
         try:
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             record.clear_acknowledgement()
             raise
@@ -997,7 +1118,7 @@ class AlertManager:
         previous_by = record.acknowledged_by
         record.clear_acknowledgement()
         try:
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             record.acknowledged = True
             record.acknowledged_at = previous_at
@@ -1033,7 +1154,7 @@ class AlertManager:
             self.config = candidate
             self._rebuild_rule_index()
             await self.async_evaluate_all(save=False, publish=False)
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
@@ -1049,6 +1170,8 @@ class AlertManager:
         records and pending timers.
         """
         candidate = parse_config_yaml(raw_yaml)
+        # Retention is panel configuration, deliberately absent from YAML.
+        candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
         previous = self._configuration_snapshot()
@@ -1066,7 +1189,7 @@ class AlertManager:
                 publish=False,
                 emit_events=False,
             )
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
@@ -1096,7 +1219,7 @@ class AlertManager:
             self._rebuild_rule_index()
             for entity_id in rule.entity_ids:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
@@ -1132,7 +1255,7 @@ class AlertManager:
             affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
             for entity_id in affected_entities:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
@@ -1158,7 +1281,7 @@ class AlertManager:
                 self._remove_rule_instances(rule_id, set(rule.entity_ids))
             for entity_id in rule.entity_ids:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
@@ -1166,16 +1289,23 @@ class AlertManager:
 
     def _configuration_snapshot(
         self,
-    ) -> tuple[dict[str, Any], dict[str, AlertRecord]]:
+    ) -> tuple[dict[str, Any], dict[str, AlertRecord], list[AlertHistoryEntry]]:
         """Copy the state needed to roll back a failed configuration write."""
-        return deepcopy(self.config), deepcopy(self.records)
+        return (
+            deepcopy(self.config),
+            deepcopy(self.records),
+            list(self._pending_history),
+        )
 
     def _restore_configuration_snapshot(
-        self, snapshot: tuple[dict[str, Any], dict[str, AlertRecord]]
+        self,
+        snapshot: tuple[
+            dict[str, Any], dict[str, AlertRecord], list[AlertHistoryEntry]
+        ],
     ) -> None:
         """Restore configuration, records, indexes and pending timers."""
         self._cancel_all_timers()
-        self.config, self.records = snapshot
+        self.config, self.records, self._pending_history = snapshot
         self._rebuild_rule_index()
         self._refresh_tracking()
         self._reschedule_pending_timers()
@@ -1192,6 +1322,41 @@ class AlertManager:
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
+
+    async def _async_save_state(self) -> None:
+        """Persist runtime first, then archive without coupling business success."""
+        await self.storage.async_save(self.config, self.records)
+        await self._async_flush_history()
+
+    async def _async_flush_history(self) -> None:
+        """Best-effort archive queued resolutions after runtime is durable."""
+        if not self._pending_history:
+            return
+        if self.config["history_limit"] == 0:
+            self._pending_history.clear()
+            return
+        candidate = sort_history([*self.history, *self._pending_history])[
+            : self.config["history_limit"]
+        ]
+        try:
+            await self.history_storage.async_save(candidate)
+        except Exception:
+            _LOGGER.exception(
+                "Unable to persist resolved alert history; runtime resolution "
+                "remains valid"
+            )
+            return
+        self.history = candidate
+        self._pending_history.clear()
+        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+
+    def _trim_history(self) -> bool:
+        """Apply the configured retention limit deterministically in memory."""
+        trimmed = sort_history(self.history)[: self.config["history_limit"]]
+        if trimmed == self.history:
+            return False
+        self.history = trimmed
+        return True
 
     def _freeze_pending_alerts(self, now: datetime) -> bool:
         """Remember when each pending delay stopped consuming monitored time."""

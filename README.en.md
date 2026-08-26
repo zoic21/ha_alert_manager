@@ -33,12 +33,14 @@ project.
   sensors separating active, upcoming and acknowledged alerts;
 - visual or YAML editing of custom rules, plus complete YAML configuration
   export and replacement import;
+- persistent history of resolved active alerts, retaining 100 events by default
+  in a dedicated panel tab without adding a Home Assistant entity;
 - start, resolution, acknowledgement and unacknowledgement events;
 - one safety notification when monitoring is still disabled at load time and no
   frequent global polling.
 
 Alert Manager handles simple independent anomalies. It is not an external
-monitoring system, an alert history database or a notification service.
+monitoring system or a notification service.
 
 ## Installation
 
@@ -92,6 +94,23 @@ device-wide acknowledgement action.
 
 The remaining time is calculated in the browser from `due_at`; Alert Manager does
 not write a countdown to Recorder every second.
+
+## History and retention
+
+The administrator-only **History** tab lists resolved active alerts from newest
+to oldest. Its grey cards reuse the Overview structure and device grouping while
+freezing the rule and entity names, device, area, message, triggering condition
+and value, detection/activation/resolution timestamps, durations and any
+acknowledgement metadata. Historical cards never expose acknowledgement actions,
+countdowns or remaining time. An anomaly that returns to normal while still
+`pending` was never active and is therefore not archived.
+
+**Configuration → History** controls **Number of historical events retained**.
+The default is `100`, the accepted range is `0` to `1000`, and `0` clears stored
+events when saved and disables future history retention. Lowering the limit or
+adding an event removes the oldest excess entries immediately and
+deterministically. **Clear history** requires an explicit irreversible-action
+confirmation and never changes active, upcoming or acknowledged alerts.
 
 ## Automatic packs
 
@@ -212,6 +231,9 @@ Internal rule IDs are not
 exported and are recreated by the backend during import. It contains no active
 or pending alerts, acknowledgements, timers, detection or
 activation timestamps, or execution history.
+The history retention limit and historical events are neither exported nor
+imported: importing configuration preserves both local history settings and
+stored events.
 
 Import accepts only supported complete format versions and rejects unknown,
 duplicate or runtime fields. It is validated before any write, displays its rule,

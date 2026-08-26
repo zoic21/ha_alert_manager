@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "1.5.9-dev5"
+INTEGRATION_VERSION: Final = "1.6.0-dev"
 PLATFORMS: Final = [Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -19,6 +19,7 @@ EVENT_ALERT_ACKNOWLEDGED: Final = "alert_manager_alert_acknowledged"
 EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
 SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
+SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"
 
 MAIN_DEVICE_IDENTIFIER: Final = "main"
 MAIN_DEVICE_NAME: Final = "Alert Manager - Général"
@@ -44,8 +45,10 @@ PANEL_COMPONENT: Final = "alert-manager-panel"
 PANEL_STATIC_URL: Final = "/alert_manager_static"
 
 STORAGE_KEY: Final = DOMAIN
+HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 6
+STORAGE_MINOR_VERSION: Final = 7
+HISTORY_STORAGE_VERSION: Final = 1
 
 DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
 DATA_WEBSOCKET_REGISTERED: HassKey = HassKey(f"{DOMAIN}_websocket_registered")
@@ -54,6 +57,9 @@ DATA_STATIC_REGISTERED: HassKey = HassKey(f"{DOMAIN}_static_registered")
 DEFAULT_DELAY: Final = 900
 DEFAULT_BATTERY_THRESHOLD: Final = 15.0
 DEFAULT_EXCLUSION_LABEL: Final = "pas_d_alerte"
+DEFAULT_HISTORY_LIMIT: Final = 100
+MIN_HISTORY_LIMIT: Final = 0
+MAX_HISTORY_LIMIT: Final = 1000
 
 CATEGORY_UNAVAILABLE: Final = "unavailable"
 CATEGORY_CONNECTIVITY: Final = "connectivity"
@@ -68,6 +74,7 @@ CATEGORIES: Final = (
 
 DEFAULT_CONFIG: Final = {
     "monitoring_enabled": True,
+    "history_limit": DEFAULT_HISTORY_LIMIT,
     "global_delay": DEFAULT_DELAY,
     "excluded_labels": [],
     "excluded_entities": [],

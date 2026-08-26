@@ -12,6 +12,10 @@ from custom_components.alert_manager.websocket import (
     websocket_config_import,
     websocket_config_import_validate,
     websocket_config_update,
+    websocket_history_clear,
+    websocket_history_config_get,
+    websocket_history_config_update,
+    websocket_history_list,
     websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
@@ -176,9 +180,52 @@ def test_yaml_and_configuration_websocket_commands_are_admin_only(hass, entry):
         (websocket_config_export, {"id": 11}),
         (websocket_config_import_validate, {"id": 12, "yaml": "version: 1"}),
         (websocket_config_import, {"id": 13, "yaml": "version: 1", "confirmed": True}),
+        (websocket_history_list, {"id": 14}),
+        (websocket_history_config_get, {"id": 15}),
+        (websocket_history_config_update, {"id": 16, "retention_limit": 10}),
+        (websocket_history_clear, {"id": 17, "confirmed": True}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 4
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 8
+
+
+def test_history_websocket_configuration_and_clear(hass, entry):
+    """History reads, bounded updates and clearing use dedicated admin APIs."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_history_config_get(hass, connection, {"id": 30}))
+    assert connection.results[-1] == (
+        30,
+        {"retention_limit": 100, "enabled": True},
+    )
+    asyncio.run(
+        websocket_history_config_update(
+            hass,
+            connection,
+            {"id": 31, "retention_limit": 0},
+        )
+    )
+    assert connection.results[-1] == (
+        31,
+        {"retention_limit": 0, "enabled": False},
+    )
+    asyncio.run(
+        websocket_history_config_update(
+            hass,
+            connection,
+            {"id": 34, "retention_limit": 1001},
+        )
+    )
+    assert connection.errors[-1][1] == "invalid_format"
+    asyncio.run(websocket_history_list(hass, connection, {"id": 32}))
+    assert connection.results[-1][1]["events"] == []
+    asyncio.run(
+        websocket_history_clear(hass, connection, {"id": 33, "confirmed": True})
+    )
+    assert connection.results[-1][1]["events"] == []
 
 
 def test_configuration_export_validation_and_import_round_trip(hass, entry):

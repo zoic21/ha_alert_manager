@@ -56,6 +56,21 @@
       "unknown": "An unexpected error occurred."
     },
     "loading": "Loading Alert Manager…",
+    "history": {
+      "acknowledged_before_resolution": "Acknowledged before resolution",
+      "cancelled": "Cancelled before activation",
+      "disabled_help": "Set a retention limit greater than 0 in Configuration to keep future resolved alerts.",
+      "disabled_title": "History is disabled",
+      "duration": "Alert duration",
+      "empty": "No alerts in history.",
+      "event_count": "Events: {count}",
+      "message": "Message",
+      "open_settings": "Open Configuration",
+      "resolved": "Resolved",
+      "resolved_at": "Resolved",
+      "status": "Final status",
+      "title": "Alert history"
+    },
     "monitoring": {
       "disabled": "Alert Manager monitoring is disabled. Existing alerts are preserved, but no new alerts will be detected.",
       "enable": "Enable monitoring",
@@ -183,6 +198,13 @@
       "general": "General settings",
       "global_delay": "Global delay",
       "global_delay_help": "This delay is used when no entity-specific or pack delay is defined.",
+      "history_clear": "Clear history",
+      "history_clear_confirm": "Permanently clear the complete alert history?\n\nThis operation is irreversible. Current active, upcoming and acknowledged alerts will not be changed.",
+      "history_help": "Resolved active alerts are kept separately from current alerts and configuration exports.",
+      "history_limit": "Number of historical events retained",
+      "history_limit_help": "From 0 to 1000 events. The default is 100; 0 disables storage of future history.",
+      "history_save": "Save history settings",
+      "history_title": "History",
       "label_exclusions": "Labels excluded from automatic monitoring",
       "labels_help": "Custom rules ignore these labels.",
       "no_delay": "No entity-specific delays.",
@@ -200,6 +222,8 @@
       "automatic_saved": "Automatic monitoring saved",
       "config_exported": "Configuration exported",
       "config_imported": "Configuration imported",
+      "history_cleared": "History cleared",
+      "history_settings_saved": "History settings saved",
       "rule_created": "Rule created",
       "rule_deleted": "Rule deleted",
       "rule_disabled": "Rule disabled",
@@ -209,12 +233,14 @@
     },
     "tabs": {
       "automatic": "Automatic monitoring",
+      "history": "History",
       "overview": "Overview",
       "rules": "Custom rules",
       "settings": "Configuration"
     },
     "unavailable": "Configuration unavailable.",
     "units": {
+      "events": "events",
       "seconds": "seconds"
     }
   },
