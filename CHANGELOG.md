@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.9-dev4 — 26 août 2026
+
+### Modifié
+
+- Affichage vertical de la condition et de la date d’activation dans les lignes
+  d’alertes groupées, comme sur les cartes individuelles.
+- Bouton d’affichage des autres alertes réduit à un lien texte compact, placé en
+  bas à gauche sans encadrement au survol.
+- Source frontend et bundle distribué synchronisés pour cette version.
+
 ## 1.5.9-dev3 — 26 août 2026
 
 ### Modifié
