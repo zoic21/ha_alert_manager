@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.5 — 26 août 2026
+
+### Corrigé
+
+- Rapprochement du volet de création ou modification d’une règle et de la liste
+  des règles ; l’espace disponible est désormais conservé entre le volet et le
+  bord droit de l’écran sur les affichages larges.
+- Exclusion systématique des entités Alert Manager de la surveillance
+  automatique, même avant leur inscription dans le registre des entités.
+- Interdiction de sélectionner ou d’enregistrer une entité Alert Manager comme
+  source d’une règle personnalisée, y compris après renommage ou via YAML.
+- Nettoyage sans effet de bord des anciennes règles internes devenues invalides.
+
 ## 1.5.5-dev2 — 26 août 2026
 
 ### Corrigé

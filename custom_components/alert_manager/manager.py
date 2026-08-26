@@ -49,6 +49,7 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ALERT_MANAGER_ENTITY_IDS,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
     EVENT_ALERT_ACKNOWLEDGED,
@@ -138,6 +139,10 @@ class AlertManager:
             self.config = validate_config({})
             migrated = True
         self.records = records
+        if self._remove_own_rule_sources():
+            migrated = True
+        if self._remove_own_records():
+            migrated = True
         self._rebuild_rule_index()
         if self._enrich_rule_metadata():
             migrated = True
@@ -506,7 +511,7 @@ class AlertManager:
     def _is_base_eligible(self, entity_id: str) -> bool:
         """Reject Alert Manager's own and registry-disabled entities."""
         entity_entry = self._entity_registry.async_get(entity_id)
-        if entity_id == "sensor.alert_manager" or (
+        if entity_id in ALERT_MANAGER_ENTITY_IDS or (
             entity_entry is not None and entity_entry.platform == DOMAIN
         ):
             return False
@@ -683,6 +688,55 @@ class AlertManager:
                 record.details.rule_name = rule.name
                 changed = True
         return changed
+
+    def _is_own_entity(self, entity_id: str) -> bool:
+        """Identify every current or registry-renamed Alert Manager entity."""
+        if entity_id in ALERT_MANAGER_ENTITY_IDS:
+            return True
+        entity_entry = self._entity_registry.async_get(entity_id)
+        return entity_entry is not None and entity_entry.platform == DOMAIN
+
+    def _validate_rule_sources(self, rule: Rule) -> None:
+        """Reject custom rules targeting Alert Manager itself."""
+        if any(self._is_own_entity(entity_id) for entity_id in rule.entity_ids):
+            raise ValueError("Alert Manager entities cannot be monitored")
+
+    def _validate_config_rule_sources(self, config: dict[str, Any]) -> None:
+        """Apply self-monitoring rejection to a complete imported config."""
+        for raw_rule in config["rules"]:
+            self._validate_rule_sources(Rule.from_dict(raw_rule))
+
+    def _remove_own_rule_sources(self) -> bool:
+        """Clean inert self-references created by earlier versions."""
+        changed = False
+        cleaned_rules: list[dict[str, Any]] = []
+        for raw_rule in self.config.get("rules", []):
+            rule = Rule.from_dict(raw_rule)
+            allowed = [
+                entity_id
+                for entity_id in rule.entity_ids
+                if not self._is_own_entity(entity_id)
+            ]
+            if allowed != rule.entity_ids:
+                changed = True
+            if not allowed:
+                continue
+            rule.entity_ids = allowed
+            cleaned_rules.append(rule.as_dict())
+        if changed:
+            self.config["rules"] = cleaned_rules
+        return changed
+
+    def _remove_own_records(self) -> bool:
+        """Remove impossible self-alerts left by earlier runtime snapshots."""
+        own_ids = [
+            alert_id
+            for alert_id, record in self.records.items()
+            if self._is_own_entity(record.details.entity_id)
+        ]
+        for alert_id in own_ids:
+            self.records.pop(alert_id)
+        return bool(own_ids)
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
@@ -902,6 +956,7 @@ class AlertManager:
     ) -> dict[str, Any]:
         """Parse one YAML rule through the same validator as the visual form."""
         rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
+        self._validate_rule_sources(rule)
         return rule_to_yaml_data(rule)
 
     def export_config_yaml(self) -> str:
@@ -910,7 +965,9 @@ class AlertManager:
 
     def preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
         """Validate an import without touching the active configuration."""
-        return import_summary(parse_config_yaml(raw_yaml))
+        candidate = parse_config_yaml(raw_yaml)
+        self._validate_config_rule_sources(candidate)
+        return import_summary(candidate)
 
     async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Acknowledge one active alert and persist before publishing it."""
@@ -992,6 +1049,7 @@ class AlertManager:
         records and pending timers.
         """
         candidate = parse_config_yaml(raw_yaml)
+        self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
         previous = self._configuration_snapshot()
 
@@ -1031,6 +1089,7 @@ class AlertManager:
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
+        self._validate_rule_sources(rule)
         previous = self._configuration_snapshot()
         try:
             self.config["rules"].append(rule.as_dict())
@@ -1058,6 +1117,7 @@ class AlertManager:
         existing = self.config["rules"][index]
         old_rule = Rule.from_dict(existing)
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
+        self._validate_rule_sources(rule)
         previous = self._configuration_snapshot()
         try:
             self.config["rules"][index] = rule.as_dict()

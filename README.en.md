@@ -101,6 +101,8 @@ Every eligible domain is monitored for the exact `unavailable` state. `unknown`
 is not included. Alert Manager's own entities, registry-disabled entities,
 disabled devices and exclusions are ignored. `restored: true` alone is not a
 reason to ignore an entity.
+Alert Manager entities are also rejected as custom-rule sources, including when
+they have been renamed in Home Assistant.
 
 ### Connectivity
 

@@ -135,6 +135,8 @@ désactivées dans le registre, les appareils désactivés et les exclusions son
 ignorés. La seule présence de l’attribut
 `restored: true` n’est **pas** un motif d’exclusion : une entité active peut être
 restaurée légitimement après un redémarrage.
+Les entités créées par Alert Manager sont aussi refusées comme sources de règles
+personnalisées, y compris lorsqu’elles ont été renommées dans Home Assistant.
 
 ### Connectivité
 

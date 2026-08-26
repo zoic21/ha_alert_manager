@@ -1008,7 +1008,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
   assert.doesNotMatch(panel._styles(), /main\.rules-page|main\{[^}]*max-width:none/);
   assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
-  assert.match(panel._styles(), /inset-inline-end:16px/);
+  assert.match(panel._styles(), /inset-inline-end:max\(24px,calc\(\(100vw - 1400px\)\/2 \+ 24px\)\)/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
 });
@@ -1260,7 +1260,17 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
-  assert.deepEqual(selectors["#excluded-entities"].selector, { entity: { multiple: true } });
+  assert.deepEqual(selectors["#excluded-entities"].selector, {
+    entity: {
+      multiple: true,
+      exclude_entities: [
+        "sensor.alert_manager_main_active",
+        "sensor.alert_manager_main_pending",
+        "sensor.alert_manager_main_acknowledge",
+        "switch.alert_manager_main_monitoring",
+      ],
+    },
+  });
   assert.deepEqual(selectors["#excluded-devices"].selector, { device: { multiple: true } });
 });
 
@@ -1294,7 +1304,17 @@ test("custom rule sources use the native multiple entity selector", () => {
 
   panel._hydrateSelectors();
 
-  assert.deepEqual(selector.selector, { entity: { multiple: true } });
+  assert.deepEqual(selector.selector, {
+    entity: {
+      multiple: true,
+      exclude_entities: [
+        "sensor.alert_manager_main_active",
+        "sensor.alert_manager_main_pending",
+        "sensor.alert_manager_main_acknowledge",
+        "switch.alert_manager_main_monitoring",
+      ],
+    },
+  });
   assert.deepEqual(selector.value, ["sensor.one", "sensor.two"]);
 });
 

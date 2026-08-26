@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Event
 
 from custom_components.alert_manager.const import (
+    ALERT_MANAGER_ENTITY_IDS,
     DATA_MANAGER,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
@@ -440,11 +441,59 @@ def test_unavailable_monitors_every_domain_but_not_alert_manager(
     hass.states.set("sensor.relevant", "unavailable")
     registry_entry(hass, "sensor.alert_manager_copy", platform="alert_manager")
     hass.states.set("sensor.alert_manager_copy", "unavailable")
+    for entity_id in ALERT_MANAGER_ENTITY_IDS:
+        hass.states.set(entity_id, "unavailable")
     manager = make_manager(hass, entry)
     assert set(manager.records) == {
         "unavailable:automation.unrelated",
         "unavailable:sensor.relevant",
     }
+
+
+def test_custom_rules_reject_alert_manager_entities(hass, entry, registry_entry):
+    """Visual and YAML-backed rule APIs cannot monitor the integration itself."""
+    registry_entry(hass, "sensor.renamed_alerts", platform="alert_manager")
+    manager = make_manager(hass, entry)
+    payload = {
+        "name": "Self monitoring",
+        "entity_ids": ["sensor.alert_manager_main_active"],
+        "operator": "above",
+        "value": 0,
+        "duration": 0,
+        "enabled": True,
+        "source": "state",
+    }
+
+    with pytest.raises(ValueError, match="Alert Manager entities"):
+        run(manager.async_create_rule(payload))
+
+    payload["entity_ids"] = ["sensor.renamed_alerts"]
+    with pytest.raises(ValueError, match="Alert Manager entities"):
+        run(manager.async_create_rule(payload))
+
+
+def test_existing_self_rules_are_removed_during_migration(hass, entry):
+    """An inert self-rule from an earlier release is cleaned without data loss."""
+    hass.stores["alert_manager"] = {
+        "config": {
+            "rules": [
+                {
+                    "id": "self-rule",
+                    "name": "Self monitoring",
+                    "entity_ids": ["sensor.alert_manager_main_pending"],
+                    "operator": "above",
+                    "value": 0,
+                    "duration": 0,
+                }
+            ]
+        },
+        "alerts": {},
+    }
+
+    manager = make_manager(hass, entry)
+
+    assert manager.get_config()["rules"] == []
+    assert hass.stores["alert_manager"]["config"]["rules"] == []
 
 
 def test_state_listener_skips_irrelevant_entities(hass, entry):

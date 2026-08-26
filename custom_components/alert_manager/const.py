@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "1.5.5-dev2"
+INTEGRATION_VERSION: Final = "1.5.5"
 PLATFORMS: Final = [Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -23,6 +23,15 @@ SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 MAIN_DEVICE_IDENTIFIER: Final = "main"
 MAIN_DEVICE_NAME: Final = "Alert Manager - Général"
 MONITORING_NOTIFICATION_ID: Final = "alert_manager_main_monitoring_disabled"
+ALERT_MANAGER_ENTITY_IDS: Final = frozenset(
+    {
+        "sensor.alert_manager",
+        "sensor.alert_manager_main_active",
+        "sensor.alert_manager_main_pending",
+        "sensor.alert_manager_main_acknowledge",
+        "switch.alert_manager_main_monitoring",
+    }
+)
 
 SERVICE_ACKNOWLEDGE: Final = "acknowledge"
 SERVICE_UNACKNOWLEDGE: Final = "unacknowledge"

@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.core import valid_entity_id
 
 from .const import (
+    ALERT_MANAGER_ENTITY_IDS,
     CATEGORIES,
     DEFAULT_CONFIG,
     MAX_DELAY,
@@ -93,6 +94,11 @@ def validate_config(config: Any) -> dict[str, Any]:
     result["excluded_entities"] = validate_entity_list(
         config.get("excluded_entities", [])
     )
+    if any(
+        entity_id in ALERT_MANAGER_ENTITY_IDS
+        for entity_id in result["excluded_entities"]
+    ):
+        raise ValueError("Alert Manager entities cannot be configured")
     result["excluded_devices"] = validate_device_list(
         config.get("excluded_devices", [])
     )
@@ -103,6 +109,8 @@ def validate_config(config: Any) -> dict[str, Any]:
     normalized_delays: dict[str, int] = {}
     for entity_id, delay in entity_delays.items():
         validate_entity_id(entity_id)
+        if entity_id in ALERT_MANAGER_ENTITY_IDS:
+            raise ValueError("Alert Manager entities cannot be configured")
         normalized_delays[entity_id] = validate_delay(
             delay, f"entity_delays.{entity_id}"
         )
@@ -269,6 +277,8 @@ def validate_rule_entity_ids(value: Any) -> list[str]:
     if not isinstance(value, list) or not value:
         raise ValueError("entity_ids must be a non-empty list")
     result = [validate_entity_id(item) for item in value]
+    if any(entity_id in ALERT_MANAGER_ENTITY_IDS for entity_id in result):
+        raise ValueError("Alert Manager entities cannot be monitored")
     if len(set(result)) != len(result):
         raise ValueError("An entity cannot be repeated in the same rule")
     return result
