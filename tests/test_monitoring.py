@@ -81,6 +81,7 @@ def test_disabled_monitoring_preserves_records_and_stops_detection(
 
     run(manager.async_set_monitoring(False))
     assert timer["cancelled"] is True
+    assert manager.records[pending_id].paused_at == start
     hass.states.set("sensor.new", "unavailable")
     run(manager.async_evaluate_entity("sensor.new"))
     assert set(manager.records) == {pending_id}
@@ -108,32 +109,79 @@ def test_monitoring_persistence_failure_restores_state_and_timer(hass, entry):
     assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 1
 
 
-def test_resume_reconciles_once_without_duplicate_timers_or_events(
+def test_resume_preserves_pending_time_without_duplicate_timers_or_events(
     hass, entry, set_now
 ):
-    """Resume evaluates current state once and emits only real transitions."""
+    """Suspended wall time does not consume a pending alert's delay."""
     start = datetime(2026, 8, 26, 10, tzinfo=UTC)
     set_now(start)
     hass.states.set("sensor.pending", "unavailable")
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     pending_id = "unavailable:sensor.pending"
+    original_due_at = manager.records[pending_id].due_at
     run(manager.async_set_monitoring(False))
     hass.states.set("sensor.new", "unavailable")
     set_now(start + timedelta(seconds=901))
 
     assert run(manager.async_set_monitoring(True)) is True
-    assert manager.records[pending_id].status is AlertStatus.ACTIVE
+    assert manager.records[pending_id].status is AlertStatus.PENDING
+    assert manager.records[pending_id].paused_at is None
+    assert manager.records[pending_id].due_at == original_due_at + timedelta(
+        seconds=901
+    )
     assert manager.records["unavailable:sensor.new"].status is AlertStatus.PENDING
-    assert [data["id"] for data in event_data(hass, EVENT_ALERT_STARTED)] == [
-        pending_id
-    ]
+    assert event_data(hass, EVENT_ALERT_STARTED) == []
     live_timers = [timer for timer in hass.timers if not timer["cancelled"]]
-    assert len(live_timers) == 1
+    assert len(live_timers) == 2
 
     assert run(manager.async_set_monitoring(True)) is False
-    assert len(event_data(hass, EVENT_ALERT_STARTED)) == 1
-    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 1
+    assert event_data(hass, EVENT_ALERT_STARTED) == []
+    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 2
+
+
+def test_pending_pause_survives_disabled_restart(hass, entry, set_now):
+    """The frozen due time remains stable across a disabled integration reload."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.pending", "unavailable")
+    first = AlertManager(hass, entry)
+    run(first.async_setup())
+    alert_id = "unavailable:sensor.pending"
+    original_due_at = first.records[alert_id].due_at
+    run(first.async_set_monitoring(False))
+    run(first.async_unload())
+
+    set_now(start + timedelta(hours=2))
+    second = AlertManager(hass, entry)
+    run(second.async_setup())
+    assert second.records[alert_id].paused_at == start
+    assert second.records[alert_id].due_at == original_due_at
+
+    run(second.async_set_monitoring(True))
+    assert second.records[alert_id].status is AlertStatus.PENDING
+    assert second.records[alert_id].due_at == original_due_at + timedelta(hours=2)
+
+
+def test_delay_change_keeps_accumulated_pause_out_of_countdown(hass, entry, set_now):
+    """Recalculating a delay never starts consuming previously suspended time."""
+    start = datetime(2026, 8, 26, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.pending", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    alert_id = "unavailable:sensor.pending"
+
+    set_now(start + timedelta(seconds=100))
+    run(manager.async_set_monitoring(False))
+    set_now(start + timedelta(seconds=400))
+    run(manager.async_update_config({"global_delay": 1200}))
+    run(manager.async_set_monitoring(True))
+
+    record = manager.records[alert_id]
+    assert record.status is AlertStatus.PENDING
+    assert record.paused_seconds == 300
+    assert record.due_at == start + timedelta(seconds=1500)
 
 
 def test_resume_resolves_existing_active_alert_only_once(hass, entry, set_now):
@@ -222,6 +270,12 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         assert {alert["id"] for alert in alerts} == ids
         all_ids.extend(alert["id"] for alert in alerts)
     assert len(all_ids) == len(set(all_ids))
+
+    run(manager.async_set_monitoring(False))
+    assert len(manager.records) == 3
+    for sensor in sensors:
+        assert sensor.native_value == 0
+        assert sensor.extra_state_attributes == {"alerts": []}
 
 
 def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):

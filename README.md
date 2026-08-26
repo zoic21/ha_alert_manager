@@ -277,10 +277,12 @@ catégorie `main`, regroupe les quatre entités de cette version :
 
 Le switch est actif par défaut et son état est stocké avec la configuration. À
 `off`, le moteur ne crée plus d’alerte, ne fait pas progresser les alertes
-`pending`, annule leurs timers et conserve toutes les occurrences existantes. Le
-panneau affiche alors un avertissement avec un bouton de réactivation. À `on`, la
-situation courante est réévaluée, les timers utiles sont recréés une seule fois et
-seules les transitions réelles émettent un événement.
+`pending`, gèle leur temps restant, annule leurs timers et conserve toutes les
+occurrences existantes. Les trois capteurs affichent alors `0` avec une liste
+`alerts` vide, sans effacer les données internes. Le panneau affiche un
+avertissement avec un bouton de réactivation. À `on`, le décompte reprend au même
+point, la situation courante est réévaluée, les timers utiles sont recréés une
+seule fois et seules les transitions réelles émettent un événement.
 
 Si l’intégration est chargée alors que le switch est désactivé, Home Assistant
 crée la notification persistante

@@ -183,12 +183,17 @@ def test_storage_round_trip_preserves_structured_data():
         device_id="a" * 32,
         area="Cuisine",
     )
-    restored = AlertRecord.from_dict(
-        AlertRecord.pending(details, 15, now).as_storage_dict()
-    )
+    record = AlertRecord.pending(details, 15, now)
+    record.paused_at = now + timedelta(seconds=5)
+    record.paused_seconds = 30.5
+    restored = AlertRecord.from_dict(record.as_storage_dict())
     assert restored.details.as_dict()["area"] == "Cuisine"
     assert restored.details.as_dict()["device_id"] == "a" * 32
     assert restored.detected_at == now
+    assert restored.paused_at == now + timedelta(seconds=5)
+    assert restored.paused_seconds == 30.5
+    assert "paused_at" not in restored.as_public_dict()
+    assert "paused_seconds" not in restored.as_public_dict()
 
 
 def test_legacy_severity_is_removed_from_stored_alerts_and_rules():

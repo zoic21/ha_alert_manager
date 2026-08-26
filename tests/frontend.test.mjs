@@ -1006,7 +1006,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
-  assert.match(panel._styles(), /main\.rules-page\{max-width:none\}/);
+  assert.doesNotMatch(panel._styles(), /main\.rules-page|main\{[^}]*max-width:none/);
   assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
   assert.match(panel._styles(), /inset-inline-end:16px/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);

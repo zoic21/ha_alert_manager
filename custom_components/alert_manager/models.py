@@ -89,6 +89,8 @@ class AlertRecord:
     due_at: datetime
     delay: int
     active_since: datetime | None = None
+    paused_at: datetime | None = None
+    paused_seconds: float = 0.0
     acknowledged: bool = False
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
@@ -127,10 +129,28 @@ class AlertRecord:
             if active_since is not None
             else None
         )
+        paused_at = data.get("paused_at")
+        parsed_paused_at = (
+            _parse_aware_datetime(paused_at, "paused_at")
+            if paused_at is not None
+            else None
+        )
+        paused_seconds = data.get("paused_seconds", 0.0)
+        if (
+            isinstance(paused_seconds, bool)
+            or not isinstance(paused_seconds, int | float)
+            or not math.isfinite(paused_seconds)
+            or paused_seconds < 0
+        ):
+            raise ValueError(
+                "Alert paused_seconds must be a non-negative finite number"
+            )
         if status is AlertStatus.ACTIVE and parsed_active_since is None:
             raise ValueError("Active alerts require active_since")
         if status is AlertStatus.PENDING and parsed_active_since is not None:
             raise ValueError("Pending alerts must not have active_since")
+        if status is AlertStatus.ACTIVE and parsed_paused_at is not None:
+            raise ValueError("Active alerts cannot retain a monitoring pause")
         if parsed_active_since is not None and parsed_active_since.astimezone(
             UTC
         ) < detected_at.astimezone(UTC):
@@ -167,6 +187,8 @@ class AlertRecord:
             due_at=due_at,
             delay=delay,
             active_since=parsed_active_since,
+            paused_at=parsed_paused_at,
+            paused_seconds=float(paused_seconds),
             acknowledged=acknowledged,
             acknowledged_at=parsed_acknowledged_at,
             acknowledged_by=acknowledged_by,
@@ -185,6 +207,10 @@ class AlertRecord:
             ),
             "acknowledged": self.acknowledged,
         }
+        if self.paused_at is not None:
+            result["paused_at"] = self.paused_at.isoformat()
+        if self.paused_seconds:
+            result["paused_seconds"] = self.paused_seconds
         if self.acknowledged:
             result["acknowledged_at"] = self.acknowledged_at.isoformat()
             if self.acknowledged_by is not None:

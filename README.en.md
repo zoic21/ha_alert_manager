@@ -230,10 +230,13 @@ identifier and groups all four entities introduced by this release:
 - `sensor.alert_manager_main_acknowledge`.
 
 The switch defaults to on and is persisted with the configuration. Turning it
-off prevents new records, freezes pending transitions, cancels their timers and
-preserves every existing alert. The panel shows a visible warning with a resume
-button. Turning it back on reconciles current Home Assistant states, recreates
-each required timer once and emits events only for real lifecycle transitions.
+off prevents new records, freezes both pending transitions and their remaining
+time, cancels their timers and preserves every existing alert. All three sensors
+then report `0` with an empty `alerts` list without deleting internal records.
+The panel shows a visible warning with a resume button. Turning monitoring back
+on resumes each countdown where it stopped, reconciles current Home Assistant
+states, recreates each required timer once and emits events only for real
+lifecycle transitions.
 
 When the integration loads while monitoring is off, Home Assistant creates the
 stable persistent notification `alert_manager_main_monitoring_disabled`. It

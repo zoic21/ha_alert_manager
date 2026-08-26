@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.5-dev2 — 26 août 2026
+
+### Corrigé
+
+- Gel réel du temps restant des alertes `pending` pendant toute la désactivation
+  de la surveillance, y compris après un redémarrage ou un rechargement ; le
+  décompte reprend au même point lors de la réactivation.
+- Remise temporaire à zéro des trois capteurs d’alertes et de leur attribut
+  `alerts` lorsque la surveillance est désactivée, sans supprimer les occurrences
+  internes conservées pour la reprise.
+- Largeur de la page **Règles personnalisées** alignée sur les autres pages du
+  panneau.
+
 ## 1.5.5-dev — 26 août 2026
 
 ### Ajouté

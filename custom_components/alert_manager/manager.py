@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.persistent_notification import (
@@ -144,6 +144,8 @@ class AlertManager:
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
+        if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
+            migrated = True
 
         self._unsubscribers.extend(
             (
@@ -380,7 +382,9 @@ class AlertManager:
                 record.details = details
                 if record.delay != delay:
                     record.delay = delay
-                    record.due_at = calculate_due_at(record.detected_at, delay)
+                    record.due_at = calculate_due_at(
+                        record.detected_at, delay
+                    ) + timedelta(seconds=record.paused_seconds)
                     self._cancel_timer(alert_id)
                     if record.status is AlertStatus.ACTIVE and now.astimezone(
                         UTC
@@ -807,11 +811,14 @@ class AlertManager:
         self.config["monitoring_enabled"] = enabled
         try:
             if enabled:
+                self._resume_pending_alerts(dt_util.now())
                 await self.async_evaluate_all(
                     save=False,
                     publish=False,
                     emit_events=False,
                 )
+            else:
+                self._freeze_pending_alerts(dt_util.now())
             await self.storage.async_save(self.config, self.records)
         except Exception:
             self.config = previous_config
@@ -992,6 +999,10 @@ class AlertManager:
         try:
             self.config = candidate
             self._rebuild_rule_index()
+            if self.monitoring_enabled:
+                self._resume_pending_alerts(dt_util.now())
+            else:
+                self._freeze_pending_alerts(dt_util.now())
             await self.async_evaluate_all(
                 save=False,
                 publish=False,
@@ -1121,6 +1132,30 @@ class AlertManager:
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
+
+    def _freeze_pending_alerts(self, now: datetime) -> bool:
+        """Remember when each pending delay stopped consuming monitored time."""
+        changed = False
+        for record in self.records.values():
+            if record.status is AlertStatus.PENDING and record.paused_at is None:
+                record.paused_at = now
+                changed = True
+        return changed
+
+    def _resume_pending_alerts(self, now: datetime) -> bool:
+        """Move due dates by the suspension duration, preserving remaining time."""
+        changed = False
+        now_utc = now.astimezone(UTC)
+        for record in self.records.values():
+            if record.status is not AlertStatus.PENDING or record.paused_at is None:
+                continue
+            paused_for = now_utc - record.paused_at.astimezone(UTC)
+            if paused_for.total_seconds() > 0:
+                record.due_at += paused_for
+                record.paused_seconds += paused_for.total_seconds()
+            record.paused_at = None
+            changed = True
+        return changed
 
     def _reschedule_pending_timers(self) -> None:
         """Restore timers from records after an unsuccessful configuration swap."""

@@ -99,9 +99,13 @@ class AlertManagerSensor(SensorEntity):
     @property
     def native_value(self) -> int:
         """Return the number of alerts in this lifecycle partition."""
+        if not self.manager.monitoring_enabled:
+            return 0
         return self._snapshot[self._count_key]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return only the alerts represented by this sensor."""
+        if not self.manager.monitoring_enabled:
+            return {"alerts": []}
         return {"alerts": self._snapshot[self._alerts_key]}
