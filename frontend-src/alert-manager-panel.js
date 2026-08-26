@@ -955,7 +955,7 @@ class AlertManagerPanel extends HTMLElement {
       const options = kind === "history"
         ? ["status", "device", "entityName", "rule", "value", "detected", "resolved"]
         : ["status", "device", "entityName", "rule", "value", "detected", "activated", "remaining"];
-      return `<div class="menu-fields"><label>${esc(this._t("table.sort.title"))}<select data-table-setting="sortBy" data-table-kind="${kind}">${options.map((value) => `<option value="${value}" ${state.sortBy === value ? "selected" : ""}>${esc(this._t(`table.sort.${value}`))}</option>`).join("")}</select></label><label>${esc(this._t("table.sort.direction"))}<select data-table-setting="sortDirection" data-table-kind="${kind}"><option value="asc" ${state.sortDirection === "asc" ? "selected" : ""}>${esc(this._t("table.sort.asc"))}</option><option value="desc" ${state.sortDirection === "desc" ? "selected" : ""}>${esc(this._t("table.sort.desc"))}</option></select></label></div>`;
+      return `<div class="menu-fields"><label>${esc(this._t("table.sort.title"))}<select data-table-setting="sortBy" data-table-kind="${kind}">${options.map((value) => `<option value="${value}" ${state.sortBy === value ? "selected" : ""}>${esc(this._t(`table.sort.${value === "entityName" ? "entity_name" : value}`))}</option>`).join("")}</select></label><label>${esc(this._t("table.sort.direction"))}<select data-table-setting="sortDirection" data-table-kind="${kind}"><option value="asc" ${state.sortDirection === "asc" ? "selected" : ""}>${esc(this._t("table.sort.asc"))}</option><option value="desc" ${state.sortDirection === "desc" ? "selected" : ""}>${esc(this._t("table.sort.desc"))}</option></select></label></div>`;
     }
     return this._renderColumnMenu(kind);
   }

@@ -297,7 +297,7 @@
         "detected": "Detection date",
         "device": "Device",
         "direction": "Order",
-        "entityName": "Entity",
+        "entity_name": "Entity",
         "remaining": "Time remaining",
         "resolved": "Resolution date",
         "rule": "Rule",
