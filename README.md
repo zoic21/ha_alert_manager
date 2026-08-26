@@ -131,8 +131,10 @@ Le panel est réservé aux administrateurs et contient cinq sections :
 
 ### Rétention et effacement de l’historique
 
-Le réglage **Nombre d’événements historiques conservés** accepte de `0` à
-`1000`. Une nouvelle installation conserve `100` événements. `0` supprime les
+Dans **Configuration → Paramètres généraux**, juste sous **Délai global**, le
+réglage **Nombre d’événements historiques conservés** accepte de `0` à `1000`.
+Les actions d’enregistrement et d’effacement sont placées face au champ. Une
+nouvelle installation conserve `100` événements. `0` supprime les
 événements existants lors de l’enregistrement puis désactive la conservation des
 prochaines résolutions. À chaque résolution et à chaque diminution de la limite,
 les événements les plus anciens en excès sont supprimés immédiatement.

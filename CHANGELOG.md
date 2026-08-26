@@ -2,7 +2,7 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
-## 1.6.0-dev — 26 août 2026
+## 1.6.0 — 26 août 2026
 
 ### Ajouté
 
@@ -16,6 +16,8 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
 - Commandes WebSocket administrateur pour lire l’historique, lire/modifier sa
   configuration et l’effacer.
 - Traductions françaises et anglaises, documentation et tests backend/frontend.
+- Réglage de rétention placé dans **Paramètres généraux**, sous le délai global,
+  avec les actions d’enregistrement et d’effacement alignées face au champ.
 
 ### Garanties
 

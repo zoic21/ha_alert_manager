@@ -968,10 +968,14 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
+  assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="save-settings"/);
   assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
+  assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('class="history-settings full"'));
+  assert.ok(settings.indexOf('class="history-settings full"') < settings.indexOf('id="excluded-labels"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
