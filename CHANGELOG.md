@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.6.2 — 26 août 2026
+
+### Corrigé
+
+- Placement de l’aide du délai global directement sous son champ de saisie.
+- Alignement vertical exact de l’action **Effacer l’historique** avec le champ
+  de limite de rétention.
+- Simplification du balisage et des règles CSS de la section des paramètres
+  généraux, avec une grille explicite et responsive pour la rétention.
+
 ## 1.6.1 — 26 août 2026
 
 ### Corrigé
