@@ -987,7 +987,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
-  assert.match(styles, /\.history-actions\{grid-area:action;align-self:stretch;align-items:center/);
+  assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
   assert.match(styles, /\.settings-save-actions\{justify-content:flex-end;margin-top:4px\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);

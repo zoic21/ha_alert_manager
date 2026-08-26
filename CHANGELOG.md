@@ -2,6 +2,15 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.6.3 — 26 août 2026
+
+### Corrigé
+
+- Centrage vertical précis de l’action **Effacer l’historique** sur la surface
+  visible du champ de limite de rétention.
+- Alignement sur la hauteur visible de `56 px` du champ Home Assistant, sans
+  décaler le libellé ni le texte d’aide.
+
 ## 1.6.2 — 26 août 2026
 
 ### Corrigé
