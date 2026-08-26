@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.5.9-dev3 — 26 août 2026
+
+### Modifié
+
+- Affichage par défaut de la première alerte uniquement dans les groupes, avec
+  révélation progressive des alertes suivantes via un bouton.
+- Alignement à gauche du temps restant et de la date d’activation dans les lignes
+  d’alertes groupées.
+- Ajout des traductions françaises et anglaises du contrôle d’affichage des
+  alertes supplémentaires.
 ## 1.5.8 — 26 août 2026
 
 ### Corrigé

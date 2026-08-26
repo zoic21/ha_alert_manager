@@ -87,6 +87,8 @@
       "empty_acknowledged": "No acknowledged alerts.",
       "empty_upcoming": "No upcoming alerts.",
       "remaining": "Time remaining",
+      "show_other_alerts": "Show the others ({count})",
+      "hide_other_alerts": "Hide the others",
       "section_acknowledged": "Acknowledged alerts",
       "section_active": "Active alerts",
       "section_upcoming": "Upcoming alerts",

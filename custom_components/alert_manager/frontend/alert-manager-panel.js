@@ -164,6 +164,7 @@ class AlertManagerPanel extends HTMLElement {
     this._monitoringEnabled = true;
     this._timer = null;
     this._entityStates = {};
+    this._expandedDeviceGroups = new Map();
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ruleEditorWidth = 560;
@@ -646,6 +647,13 @@ class AlertManagerPanel extends HTMLElement {
       pendingCount ? this._t("overview.status_pending_count", { count: pendingCount }) : "",
       acknowledgedCount ? this._t("overview.status_acknowledged_count", { count: acknowledgedCount }) : "",
     ].filter(Boolean).join(" · ");
+    const groupKey = `${stateClass}:${group.device_id}`;
+    const alertCount = group.alerts.length;
+    const visibleAlertCount = alertCount === 0
+      ? 0
+      : Math.max(1, Math.min(this._expandedDeviceGroups.get(groupKey) ?? 1, alertCount));
+    const visibleAlerts = group.alerts.slice(0, visibleAlertCount);
+    const hiddenCount = group.alerts.length - visibleAlerts.length;
     return `<ha-card outlined class="device-alert-group ${stateClass}" data-device-id="${esc(group.device_id)}">
       <div class="device-group-header">
         <span class="alert-status-icon" aria-hidden="true"><ha-svg-icon path="${activeCount ? MDI_ALERT_CIRCLE_OUTLINE : acknowledgedCount ? MDI_CHECK_CIRCLE_OUTLINE : MDI_CLOCK_OUTLINE}"></ha-svg-icon></span>
@@ -653,8 +661,9 @@ class AlertManagerPanel extends HTMLElement {
         <strong>${esc(statusText)}</strong>
       </div>
       <div class="device-alert-rows">
-        ${group.alerts.map((item) => this._renderDeviceAlertRow(item.alert, item.status)).join("")}
+        ${visibleAlerts.map((item) => this._renderDeviceAlertRow(item.alert, item.status)).join("")}
       </div>
+      ${group.alerts.length > 1 ? `<div class="device-alert-group-actions"><ha-button appearance="plain" class="device-alert-toggle" data-action="toggle-device-alerts" data-device-group="${esc(groupKey)}" data-alert-count="${group.alerts.length}" aria-expanded="${hiddenCount === 0}">${esc(this._t(hiddenCount ? "overview.show_other_alerts" : "overview.hide_other_alerts", { count: hiddenCount }))}</ha-button></div>` : ""}
     </ha-card>`;
   }
 
@@ -893,6 +902,20 @@ class AlertManagerPanel extends HTMLElement {
         composed: true,
         detail: { entityId },
       }));
+      return;
+    }
+    if (action === "toggle-device-alerts") {
+      const groupKey = button.dataset.deviceGroup;
+      if (!groupKey) return;
+      const alertCount = Number(button.dataset.alertCount);
+      if (!Number.isInteger(alertCount) || alertCount < 2) return;
+      const visibleAlertCount = this._expandedDeviceGroups.get(groupKey) ?? 1;
+      if (visibleAlertCount >= alertCount) {
+        this._expandedDeviceGroups.delete(groupKey);
+      } else {
+        this._expandedDeviceGroups.set(groupKey, visibleAlertCount + 1);
+      }
+      this._render();
       return;
     }
     if (action === "acknowledge-alert" || action === "unacknowledge-alert") {
@@ -1506,7 +1529,7 @@ class AlertManagerPanel extends HTMLElement {
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.alert-list{grid-template-columns:1fr}.panel{padding:15px}.alert-card-header,.device-group-header{grid-template-columns:40px minmax(0,1fr)}.alert-current-value,.device-group-header>strong{grid-column:2;text-align:left}.alert-details{grid-template-columns:1fr}.alert-condition dd{white-space:normal}.device-alert-row{grid-template-columns:minmax(0,1fr) auto}.device-alert-status{grid-column:2}.device-alert-condition{grid-column:1/-1}.device-alert-time{grid-column:1/-1;text-align:left}.alert-controls{grid-template-columns:1fr}.copy-alert-id,.alert-controls>ha-button:last-child{justify-self:stretch}.acknowledgement-state{align-items:flex-start;flex-direction:column}.row.between{align-items:flex-start}.category-card .row.between>div{padding-right:8px}.actions ha-button{width:100%}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
       @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}.alert-card-header{grid-template-columns:40px minmax(0,1fr) auto}.alert-current-value{grid-column:auto;text-align:right}.device-alert-row{grid-template-columns:32px minmax(0,1fr) auto}.device-alert-condition,.device-alert-time{grid-column:2/-1}}
-      .device-alert-condition,.device-alert-time{grid-column:2/-1;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;min-width:0}.device-alert-condition small,.device-alert-time small{margin-top:0}.device-alert-condition span,.device-alert-time span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-alert-time{text-align:right}.device-alert-time small{text-align:left}.device-alert-time span{text-align:right}@media(max-width:700px){.device-alert-time{text-align:left}.device-alert-time span{text-align:left}}
+      .device-alert-condition,.device-alert-time{grid-column:2/-1;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;min-width:0}.device-alert-condition small,.device-alert-time small{margin-top:0}.device-alert-condition span,.device-alert-time span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.device-alert-time,.device-alert-time span{text-align:left}.device-alert-group-actions{display:flex;justify-content:flex-start;padding:0 16px 12px}.device-alert-toggle{--mdc-theme-primary:var(--primary-color,#03a9f4)}
     `;
   }
 }

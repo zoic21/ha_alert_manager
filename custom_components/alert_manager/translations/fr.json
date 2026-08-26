@@ -87,6 +87,8 @@
       "empty_acknowledged": "Aucune alerte acquittée.",
       "empty_upcoming": "Aucune alerte à venir.",
       "remaining": "Temps restant",
+      "show_other_alerts": "Afficher les autres ({count})",
+      "hide_other_alerts": "Masquer les autres",
       "section_acknowledged": "Alertes acquittées",
       "section_active": "Alertes actives",
       "section_upcoming": "Alertes à venir",

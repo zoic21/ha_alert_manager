@@ -646,6 +646,56 @@ test("multiple alerts from one device still form a group within one section", ()
   assert.deepEqual(items[0].alerts.map((item) => item.status), ["active", "active"]);
 });
 
+test("grouped alerts show the first alert and reveal the others one by one", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { states: {} };
+  const deviceId = "a".repeat(32);
+  const group = {
+    device_id: deviceId,
+    alerts: [
+      { status: "active", alert: { entity_id: "sensor.first", name: "First alert" } },
+      { status: "active", alert: { entity_id: "sensor.second", name: "Second alert" } },
+      { status: "active", alert: { entity_id: "sensor.third", name: "Third alert" } },
+    ],
+  };
+
+  const collapsed = panel._renderDeviceGroup(group);
+  assert.match(collapsed, /First alert/);
+  assert.doesNotMatch(collapsed, /Second alert/);
+  assert.doesNotMatch(collapsed, /Third alert/);
+  assert.match(collapsed, /data-action="toggle-device-alerts"/);
+  assert.match(collapsed, /aria-expanded="false"/);
+
+  panel._render = () => {};
+  const click = () => panel._handleClick({
+    target: {
+      closest: () => ({
+        dataset: {
+          action: "toggle-device-alerts",
+          deviceGroup: `is-active:${deviceId}`,
+          alertCount: "3",
+        },
+      }),
+    },
+  });
+  await click();
+
+  const partiallyExpanded = panel._renderDeviceGroup(group);
+  assert.match(partiallyExpanded, /Second alert/);
+  assert.doesNotMatch(partiallyExpanded, /Third alert/);
+  assert.match(partiallyExpanded, /aria-expanded="false"/);
+
+  await click();
+  const expanded = panel._renderDeviceGroup(group);
+  assert.match(expanded, /Third alert/);
+  assert.match(expanded, /aria-expanded="true"/);
+
+  await click();
+  const collapsedAgain = panel._renderDeviceGroup(group);
+  assert.doesNotMatch(collapsedAgain, /Second alert/);
+  assert.doesNotMatch(collapsedAgain, /Third alert/);
+});
 test("acknowledged alerts stay compact and expose the real unacknowledge action", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -780,6 +830,7 @@ test("grouped alerts retain one compact acknowledgement action per row", () => {
       },
     ],
   };
+  panel._expandedDeviceGroups.set(`is-active:${deviceId}`, group.alerts.length);
   const html = panel._renderDeviceGroup(group);
 
   assert.equal((html.match(/class="alert-status-icon alert-state-action is-compact"/g) ?? []).length, 2);
