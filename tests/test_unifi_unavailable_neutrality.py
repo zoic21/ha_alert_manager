@@ -21,7 +21,8 @@ def _event(old_state, new_state):
 
 
 def _state(hass, value, *, attributes=None):
-    hass.states.set(_ENTITY_ID, value, _ATTRIBUTES if attributes is None else attributes)
+    attrs = _ATTRIBUTES if attributes is None else attributes
+    hass.states.set(_ENTITY_ID, value, attrs)
     return hass.states.get(_ENTITY_ID)
 
 
