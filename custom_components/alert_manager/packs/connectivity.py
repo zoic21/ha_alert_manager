@@ -23,11 +23,7 @@ def _applies(_hass: HomeAssistant, state: State) -> bool:
 
 def _matches(hass: HomeAssistant, state: State | None) -> bool:
     """Treat off and unavailable as the same connectivity failure."""
-    return (
-        state is not None
-        and _applies(hass, state)
-        and state.state in _FAILURE_STATES
-    )
+    return state is not None and _applies(hass, state) and state.state in _FAILURE_STATES
 
 
 def _is_same_failure_transition(
