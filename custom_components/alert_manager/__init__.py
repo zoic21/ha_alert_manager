@@ -16,7 +16,7 @@ from .const import (
     DATA_STATIC_REGISTERED,
     DATA_WEBSOCKET_REGISTERED,
     DOMAIN,
-    INTEGRATION_VERSION,
+    FRONTEND_CACHE_VERSION,
     PANEL_COMPONENT,
     PANEL_ICON,
     PANEL_STATIC_URL,
@@ -61,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             sidebar_title=PANEL_TITLE,
             sidebar_icon=PANEL_ICON,
             module_url=(
-                f"{PANEL_STATIC_URL}/alert-manager-panel.js?v={INTEGRATION_VERSION}"
+                f"{PANEL_STATIC_URL}/alert-manager-panel.js?v={FRONTEND_CACHE_VERSION}"
             ),
             require_admin=True,
             config_panel_domain=DOMAIN,

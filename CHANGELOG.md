@@ -9,6 +9,8 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
 - Le bouton retour et son lien de secours figé vers les intégrations sont
   supprimés. Toutes les pages du panneau sont maintenant déclarées comme pages
   principales et affichent le bouton menu natif de Home Assistant.
+- La clé de cache du bundle frontend est renouvelée pour garantir le chargement
+  de ce correctif lors d’une réinstallation de la release dev18 republiée.
 
 ### Ajouté
 
