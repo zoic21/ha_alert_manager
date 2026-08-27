@@ -280,10 +280,11 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
     device_sensor = by_id["sensor.alert_manager_device_main_active"]
     assert device_sensor.native_value == 2
     devices = device_sensor.extra_state_attributes["devices"]
-    assert {device["device_id"] for device in devices} == {
-        "sensor.active",
-        "sensor.other",
+    assert {tuple(device["device_ids"]) for device in devices} == {
+        ("sensor.active",),
+        ("sensor.other",),
     }
+    assert all("device_id" not in device for device in devices)
     assert set(device_sensor.extra_state_attributes) == {"devices"}
 
     run(manager.async_set_monitoring(False))

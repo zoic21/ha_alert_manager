@@ -391,41 +391,27 @@ state: 1
 attributes:
   alerts:
     - id: rule:4f9d…:sensor.baie_temperature
-      type: rule
-      rule_id: 4f9d…
-      rule_name: Température baie élevée
       entity_id: sensor.baie_temperature
-      name: Température baie
-      device_id: 0123456789abcdef0123456789abcdef
-      device_name: Sonde baie
-      area: Bureau
-      integration: mqtt
       value: 34.2
-      unit: °C
       condition: État supérieur à 33 °C pendant 15 min
-      condition_key: rule.generated
-      condition_params:
-        source: state
-        attribute: null
-        operator: above
-        expected: "33"
-        unit: °C
-        duration: 900
+      message: Température baie élevée
+      rule: Température baie élevée
       detected_at: "2026-08-26T10:00:00+02:00"
       due_at: "2026-08-26T10:15:00+02:00"
-      delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
-      acknowledged: false
 ```
 
 Une alerte `pending` n’a ni `active_since` ni champ d’acquittement ; son temps
-restant se calcule à partir de `due_at` et `visible_at` indique à partir de quand
-elle peut être affichée. Une alerte acquittée ajoute
-`acknowledged: true`, `acknowledged_at` et, lorsqu’un utilisateur est connu,
-`acknowledged_by`. Les champs `rule_id` et `rule_name` ne sont présents que pour
-les règles personnalisées. Les métadonnées d’appareil, de zone, d’intégration et
-d’unité restent facultatives. Aucun historique résolu, groupe visuel ou compte à
-rebours périodique n’est enregistré dans les attributs.
+restant se calcule à partir de `due_at`. Une alerte acquittée ajoute
+`acknowledged_at` et, lorsqu’un utilisateur est connu, `acknowledged_by`. Les
+métadonnées récupérables depuis `entity_id` (nom, appareil, zone, intégration et
+unité) ne sont volontairement pas dupliquées. Le panneau récupère son détail
+complet par WebSocket.
+
+Chaque ensemble d’attributs est limité à 15 000 octets pour rester sous la
+limite Recorder de 16 Kio. Si une quantité exceptionnelle d’alertes dépasse ce
+budget, `alerts_omitted` indique le nombre d’éléments non inclus. L’état du
+capteur conserve toujours le nombre total exact.
 
 Le réglage `pending_display_delay`, égal à `10` secondes par défaut, retarde
 uniquement l’exposition d’une alerte **à venir** dans le panneau et
@@ -437,16 +423,15 @@ venir ». Les alertes actives ne subissent aucun délai d’affichage suppléme
 
 Le capteur d’appareils regroupe les alertes associées à un appareil du registre
 Home Assistant. Plusieurs appareils portant le même nom, sans tenir compte de la
-casse ou des espaces aux extrémités, forment un seul groupe. `device_id` conserve
-le premier identifiant trié pour compatibilité et `device_ids` contient tous les
-identifiants regroupés. Une entité sans appareil forme toujours son propre
-groupe : `device_id` prend alors la valeur de son `entity_id`, `device_name`
-son nom d’entité et `device_ids` contient cet identifiant unique. L’attribut
-`devices` contient également `area`, `started_at`, les compteurs d’alertes
+casse ou des espaces aux extrémités, forment un seul groupe. `device_ids`
+contient tous les identifiants regroupés. Une entité sans appareil forme toujours
+son propre groupe et `device_ids` contient alors son `entity_id`. L’attribut
+`devices` contient également `device_name`, `started_at`, les compteurs d’alertes
 acquittées/non acquittées, `alert_ids` et les tableaux `messages` et `rules`
 propres au groupe. Le capteur n’expose aucun tableau global `messages` ou
-`rules`. Un acquittement ne retire pas le
-groupe : il disparaît lorsque sa dernière alerte active est résolue.
+`rules`, ni champ singulier `device_id`. Un acquittement ne retire pas le groupe :
+il disparaît lorsque sa dernière alerte active est résolue. `devices_omitted`
+signale une éventuelle troncature de sécurité selon le même principe.
 
 Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
 le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
@@ -516,7 +501,8 @@ de l’entrée `attributes.devices`, notamment ses tableaux `messages` et `rules
 Après son émission, les alertes supplémentaires du même groupe ne le répètent
 pas. Après résolution de toutes ses alertes, une future
 alerte de ce groupe constitue un nouveau démarrage. Pour une entité sans appareil,
-`device_id` contient son `entity_id` et `device_name` son nom d’entité.
+`device_ids` contient son `entity_id` et `device_name` son nom d’entité. Le champ
+singulier `device_id` n’est pas émis.
 
 Un changement réel d’acquittement émet aussi :
 
@@ -559,7 +545,8 @@ actions:
         {{ trigger.event.data.alert_count }} alerte(s) active(s)
         dans {{ trigger.event.data.area | default('une zone inconnue', true) }}
       data:
-        tag: "alert_manager_device_{{ trigger.event.data.device_id }}"
+        tag: >-
+          alert_manager_device_{{ trigger.event.data.device_ids | join('_') }}
 mode: queued
 ```
 

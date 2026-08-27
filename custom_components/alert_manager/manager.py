@@ -1895,7 +1895,10 @@ class AlertManager:
                 return
             device = self._active_device_groups().get(group_id)
             if device is not None:
-                self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, device)
+                event_data = {
+                    key: value for key, value in device.items() if key != "device_id"
+                }
+                self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, event_data)
 
         self._device_event_timers[group_id] = async_track_point_in_utc_time(
             self.hass,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
@@ -20,6 +22,8 @@ from .const import (
     SIGNAL_ALERTS_UPDATED,
 )
 from .manager import AlertManager
+
+_ATTRIBUTE_SIZE_BUDGET = 15_000
 
 _SENSORS = (
     (
@@ -107,6 +111,7 @@ class AlertManagerSensor(SensorEntity):
         self._attr_unique_id = unique_id
         self.entity_id = f"sensor.{unique_id}"
         self._snapshot: dict[str, Any] = manager.public_snapshot()
+        self._last_written_partition: tuple[Any, ...] | None = None
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to meaningful manager changes."""
@@ -119,8 +124,17 @@ class AlertManagerSensor(SensorEntity):
 
     @callback
     def _async_manager_updated(self) -> None:
-        """Write only when the manager emitted a changed snapshot."""
-        self._snapshot = self.manager.public_snapshot()
+        """Write only when this sensor's own partition really changed."""
+        snapshot = self.manager.public_snapshot()
+        partition = (
+            self.manager.monitoring_enabled,
+            snapshot[self._count_key],
+            snapshot[self._items_key],
+        )
+        if partition == self._last_written_partition:
+            return
+        self._snapshot = snapshot
+        self._last_written_partition = partition
         self.async_write_ha_state()
 
     @property
@@ -132,10 +146,76 @@ class AlertManagerSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return only the alerts represented by this sensor."""
+        """Return compact, Recorder-safe data for this lifecycle partition."""
         if not self.manager.monitoring_enabled:
             if self._attribute_key == "devices":
                 return {"devices": []}
             return {self._attribute_key: []}
         items = self._snapshot[self._items_key]
-        return {self._attribute_key: items}
+        compactor = (
+            _compact_device if self._attribute_key == "devices" else _compact_alert
+        )
+        return _bounded_attributes(self._attribute_key, items, compactor)
+
+
+def _compact_alert(alert: dict[str, Any]) -> dict[str, Any]:
+    """Keep frozen alert data that cannot be recovered from the entity id."""
+    compact = {
+        "id": alert.get("id"),
+        "entity_id": alert.get("entity_id"),
+        "value": alert.get("value"),
+        "condition": alert.get("condition"),
+        "message": alert.get("message"),
+        "rule": alert.get("rule_name") or alert.get("type"),
+        "detected_at": alert.get("detected_at"),
+        "due_at": alert.get("due_at"),
+        "active_since": alert.get("active_since"),
+        "acknowledged_at": alert.get("acknowledged_at"),
+        "acknowledged_by": alert.get("acknowledged_by"),
+    }
+    return {key: value for key, value in compact.items() if value is not None}
+
+
+def _compact_device(device: dict[str, Any]) -> dict[str, Any]:
+    """Remove the singular device id and registry-derived area information."""
+    fields = (
+        "device_ids",
+        "device_name",
+        "started_at",
+        "alert_count",
+        "unacknowledged_alert_count",
+        "acknowledged_alert_count",
+        "alert_ids",
+        "messages",
+        "rules",
+    )
+    return {key: device[key] for key in fields if device.get(key) is not None}
+
+
+def _bounded_attributes(
+    attribute_key: str,
+    items: list[dict[str, Any]],
+    compactor: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    """Never exceed Recorder's state-attribute limit, even with many alerts."""
+    compacted: list[dict[str, Any]] = []
+    omitted_key = f"{attribute_key}_omitted"
+    for item in items:
+        candidate = [*compacted, compactor(item)]
+        omitted = len(items) - len(candidate)
+        attributes: dict[str, Any] = {attribute_key: candidate}
+        if omitted:
+            attributes[omitted_key] = omitted
+        encoded = json.dumps(
+            attributes,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        ).encode()
+        if len(encoded) > _ATTRIBUTE_SIZE_BUDGET:
+            break
+        compacted = candidate
+    result: dict[str, Any] = {attribute_key: compacted}
+    if omitted := len(items) - len(compacted):
+        result[omitted_key] = omitted
+    return result

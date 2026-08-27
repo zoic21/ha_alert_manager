@@ -206,6 +206,8 @@ class AlertManagerPanel extends HTMLElement {
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
     this._historyLoadPromise = null;
+    this._alertsRefreshPromise = null;
+    this._alertsRefreshRequested = false;
     this._activeTab = "overview";
     this._editingRule = null;
     this._ruleEditorMode = "visual";
@@ -284,6 +286,7 @@ class AlertManagerPanel extends HTMLElement {
       this._reloadTranslations();
     } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
       this._refreshOverviewData();
+      void this._refreshAlerts();
     } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
       this._refreshHistory();
     } else if (this.isConnected) {
@@ -308,6 +311,7 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = null;
       if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
+      if (activeTab === "overview") void this._refreshAlerts();
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
@@ -380,6 +384,32 @@ class AlertManagerPanel extends HTMLElement {
       if (this.isConnected) this._render();
     }
     return this._history;
+  }
+
+  async _refreshAlerts() {
+    if (!this._hass || !this._config) return this._alerts;
+    if (this._alertsRefreshPromise) {
+      this._alertsRefreshRequested = true;
+      return this._alertsRefreshPromise;
+    }
+    this._alertsRefreshPromise = this._hass.callWS({
+      type: "alert_manager/alerts/list",
+    });
+    try {
+      this._alerts = await this._alertsRefreshPromise;
+      if (this.isConnected && this._activeTab === "overview") {
+        this._refreshOverviewData();
+      }
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._alertsRefreshPromise = null;
+      if (this._alertsRefreshRequested) {
+        this._alertsRefreshRequested = false;
+        void this._refreshAlerts();
+      }
+    }
+    return this._alerts;
   }
 
   async _fetchTranslations(language) {
@@ -455,21 +485,19 @@ class AlertManagerPanel extends HTMLElement {
     if (monitoringState === "on" || monitoringState === "off") {
       this._monitoringEnabled = monitoringState === "on";
     }
-    // The three public sensors intentionally expose zero while monitoring is
-    // disabled. Keep the panel's last/WebSocket snapshot so pending rows can
-    // show their suspended delay instead of disappearing from the interface.
+    // Sensor attributes are intentionally compact and can be truncated to stay
+    // below Recorder's limit. Counts remain immediate; complete rows come from
+    // the coalesced WebSocket refresh triggered by this state change.
     if (this._monitoringEnabled) {
       const partitions = [
-        ["sensor.alert_manager_main_active", "active_count", "alerts"],
-        ["sensor.alert_manager_main_pending", "pending_count", "pending"],
-        ["sensor.alert_manager_main_acknowledge", "acknowledge_count", "acknowledge"],
+        ["sensor.alert_manager_main_active", "active_count"],
+        ["sensor.alert_manager_main_pending", "pending_count"],
+        ["sensor.alert_manager_main_acknowledge", "acknowledge_count"],
       ];
-      for (const [entityId, countKey, alertsKey] of partitions) {
+      for (const [entityId, countKey] of partitions) {
         const state = states[entityId];
-        const alerts = state?.attributes?.alerts;
-        if (!state || !Array.isArray(alerts)) continue;
-        this._alerts[countKey] = Number(state.state ?? alerts.length ?? 0);
-        this._alerts[alertsKey] = alerts;
+        if (!state) continue;
+        this._alerts[countKey] = Number(state.state ?? 0);
       }
     }
     return true;
@@ -868,8 +896,8 @@ class AlertManagerPanel extends HTMLElement {
   _configureSelector(id, selector, value, onChange) {
     const element = this.shadowRoot.querySelector(`#${id}`);
     if (!element) return;
-    element.hass = this._hass;
     if (this._configuredControls.has(element)) return;
+    element.hass = this._hass;
     element.selector = selector;
     element.value = value;
     element.addEventListener("value-changed", (event) => {
@@ -1960,6 +1988,7 @@ class AlertManagerPanel extends HTMLElement {
       this._editingRule = null;
       this._notice = null;
       this._render();
+      if (this._activeTab === "overview") void this._refreshAlerts();
       return;
     }
     if (action === "save-automatic") {

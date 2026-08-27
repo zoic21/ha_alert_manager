@@ -2,6 +2,37 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev27 — 27 août 2026
+
+### Corrigé
+
+- Les attributs des capteurs de cycle de vie n’embarquent plus les métadonnées
+  récupérables depuis `entity_id` : nom, identifiant et nom d’appareil, zone,
+  intégration et unité. Les informations figées utiles aux automatisations sont
+  conservées sous une forme compacte.
+- Les attributs des capteurs sont plafonnés à 15 000 octets. Si une quantité
+  exceptionnelle d’alertes dépasse encore ce budget, la liste est tronquée et
+  le nombre restant est exposé dans `alerts_omitted` ou `devices_omitted`, sans
+  jamais dépasser la limite Recorder de 16 Kio.
+- Le panneau récupère désormais les lignes complètes par WebSocket après un
+  changement des capteurs. Il ne dépend donc plus des attributs compacts ou
+  éventuellement tronqués pour afficher les alertes.
+- Chaque capteur écrit son état uniquement lorsque sa propre partition change ;
+  une modification des alertes actives ne réécrit plus inutilement les capteurs
+  à venir et acquittés, et inversement.
+- Un sélecteur Home Assistant déjà configuré ne reçoit plus un nouvel objet
+  `hass` à chaque changement d’état. Cela empêchait la sélection d’une entité de
+  rester stable sur les installations de production très actives.
+- L’événement `alert_manager_device_alert_started` expose uniquement
+  `device_ids` et ne contient plus le champ singulier redondant `device_id`.
+
+### Tests
+
+- Les tests couvrent un capteur contenant 100 alertes avec des messages de
+  1 024 caractères, le plafond Recorder, la récupération WebSocket complète,
+  la stabilité du sélecteur et l’absence de `device_id` dans les attributs et
+  événements appareil.
+
 ## 1.7.0-dev26 — 27 août 2026
 
 ### Corrigé

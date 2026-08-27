@@ -236,7 +236,7 @@ const completeConfig = () => ({
   entity_delays: {},
 });
 
-test("partitioned entities update their matching overview lists", () => {
+test("partitioned entities update counts without replacing full websocket rows", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -260,9 +260,36 @@ test("partitioned entities update their matching overview lists", () => {
   assert.equal(panel._alerts.active_count, 1);
   assert.equal(panel._alerts.pending_count, 2);
   assert.equal(panel._alerts.acknowledge_count, 1);
-  assert.deepEqual(panel._alerts.alerts, [{ id: "active" }]);
-  assert.deepEqual(panel._alerts.pending.map((alert) => alert.id), ["pending-1", "pending-2"]);
-  assert.deepEqual(panel._alerts.acknowledge, [{ id: "acknowledged" }]);
+  assert.deepEqual(panel._alerts.alerts, []);
+  assert.deepEqual(panel._alerts.pending, []);
+  assert.deepEqual(panel._alerts.acknowledge, []);
+});
+
+test("complete alert rows are refreshed through the websocket API", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  const snapshot = {
+    active_count: 1,
+    pending_count: 1,
+    acknowledge_count: 0,
+    tracked_count: 2,
+    alerts: [{ id: "active", entity_id: "sensor.active", device_name: "Rack" }],
+    pending: [{ id: "pending", entity_id: "sensor.pending", condition: "Hot" }],
+    acknowledge: [],
+  };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return snapshot;
+    },
+  };
+
+  await panel._refreshAlerts();
+
+  assert.deepEqual(calls, [{ type: "alert_manager/alerts/list" }]);
+  assert.deepEqual(panel._alerts, snapshot);
 });
 
 test("overview row changes update the native table without rebuilding the page", () => {
@@ -1898,6 +1925,32 @@ test("custom rule entity selector reads the control value when event detail omit
   selector.listener({ detail: {} });
 
   assert.deepEqual(panel._editingRule.entity_ids, ["binary_sensor.filtration_piscine"]);
+});
+
+test("configured selectors do not receive every Home Assistant state refresh", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = { entity_ids: ["binary_sensor.filtration_piscine"] };
+  panel._hass = { states: {} };
+  let hassAssignments = 0;
+  const selector = {
+    set hass(value) {
+      this._hass = value;
+      hassAssignments += 1;
+    },
+    addEventListener() {},
+  };
+  panel.shadowRoot.querySelector = (query) =>
+    query === "#rule-entity-ids" ? selector : null;
+
+  panel._hydrateSelectors();
+  panel._hass = { states: { "sensor.unrelated": { state: "changed" } } };
+  panel._hydrateSelectors();
+
+  assert.equal(hassAssignments, 1);
+  assert.deepEqual(selector.value, ["binary_sensor.filtration_piscine"]);
 });
 
 test("condition and message use multiline Home Assistant template selectors", () => {

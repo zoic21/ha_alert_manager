@@ -334,40 +334,26 @@ state: 1
 attributes:
   alerts:
     - id: rule:4f9d…:sensor.rack_temperature
-      type: rule
-      rule_id: 4f9d…
-      rule_name: Rack temperature high
       entity_id: sensor.rack_temperature
-      name: Rack temperature
-      device_id: 0123456789abcdef0123456789abcdef
-      device_name: Rack probe
-      area: Office
-      integration: mqtt
       value: 34.2
-      unit: °C
       condition: State greater than 33 °C for 15 min
-      condition_key: rule.generated
-      condition_params:
-        source: state
-        attribute: null
-        operator: above
-        expected: "33"
-        unit: °C
-        duration: 900
+      message: Rack temperature high
+      rule: Rack temperature high
       detected_at: "2026-08-26T10:00:00+02:00"
       due_at: "2026-08-26T10:15:00+02:00"
-      delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
-      acknowledged: false
 ```
 
 A pending alert has no `active_since` or acknowledgement fields; remaining time
-is derived from `due_at`, while `visible_at` indicates when it may be displayed.
-An acknowledged alert adds `acknowledged: true`,
-`acknowledged_at` and, when a user is known, `acknowledged_by`. `rule_id` and
-`rule_name` exist only for custom rules. Device, area, integration and unit
-metadata remain optional. Attributes contain no resolved history, visual group or
-periodically written countdown.
+is derived from `due_at`. An acknowledged alert adds `acknowledged_at` and, when
+a user is known, `acknowledged_by`. Metadata recoverable from `entity_id` (name,
+device, area, integration and unit) is intentionally not duplicated. The panel
+retrieves its complete detail through WebSocket.
+
+Each attribute set is limited to 15,000 bytes so it stays below Recorder's
+16 KiB limit. If an exceptional number of alerts exceeds that budget,
+`alerts_omitted` reports how many items were not included. The sensor state
+always retains the exact total count.
 
 `pending_display_delay`, set to `10` seconds by default, delays only the
 exposure of a **pending** alert in the panel and
@@ -379,14 +365,13 @@ alerts receive no additional display delay.
 
 The device sensor groups alerts associated with a Home Assistant registry device.
 Registry devices sharing the same name, ignoring case and surrounding spaces,
-form one group. `device_id` retains the first sorted identifier for compatibility,
-while `device_ids` contains every grouped identifier. A device-less entity still
-forms its own group: `device_id` is its `entity_id`, `device_name` is its entity
-name and `device_ids` contains that single identifier. Each item in
-`attributes.devices` also contains `area`, `started_at`,
+form one group. `device_ids` contains every grouped identifier. A device-less
+entity still forms its own group and `device_ids` then contains its `entity_id`.
+Each item in `attributes.devices` also contains `device_name`, `started_at`,
 acknowledged/unacknowledged counts, `alert_ids`, and group-specific `messages`
-and `rules` arrays. The sensor exposes no global `messages` or `rules` arrays.
-Acknowledgement does not remove a device; its last active alert must resolve.
+and `rules` arrays, nor a singular `device_id` field. Acknowledgement does not
+remove a device; its last active alert must resolve. `devices_omitted` reports
+any safety truncation using the same principle.
 
 Cards and automations reading `sensor.alert_manager` must target the appropriate
 new sensor and replace the old `alerts`, `pending` or `acknowledge` lists with its
@@ -449,8 +434,9 @@ Each new alert during that quiet period restarts the delay. The event therefore
 contains the stabilized `attributes.devices` data, including its `messages` and
 `rules` arrays. Later alerts do not repeat it. After all of its active alerts
 resolve, a future alert starts a
-new occurrence. For a device-less entity, `device_id` contains its `entity_id`
-and `device_name` contains its entity name.
+new occurrence. For a device-less entity, `device_ids` contains its `entity_id`
+and `device_name` contains its entity name. The singular `device_id` field is not
+emitted.
 
 `alert_manager_alert_acknowledged` fires only when an active alert becomes
 acknowledged. `alert_manager_alert_unacknowledged` fires only when that state is
@@ -491,7 +477,8 @@ actions:
         {{ trigger.event.data.alert_count }} active alert(s)
         in {{ trigger.event.data.area | default('an unknown area', true) }}
       data:
-        tag: "alert_manager_device_{{ trigger.event.data.device_id }}"
+        tag: >-
+          alert_manager_device_{{ trigger.event.data.device_ids | join('_') }}
 mode: queued
 ```
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -185,7 +186,8 @@ def test_pending_alert_is_exposed_after_configured_display_delay(
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
     assert len(events) == 1
-    assert events[0]["device_id"] == device.id
+    assert events[0]["device_ids"] == [device.id]
+    assert "device_id" not in events[0]
 
 
 def test_short_rule_delay_skips_pending_display_before_active(hass, entry, set_now):
@@ -1080,11 +1082,19 @@ def test_device_sensor_keeps_messages_and_rules_inside_each_device():
     devices = [
         {
             "device_id": "one",
+            "device_ids": ["one"],
+            "device_name": "UPS one",
+            "area": "Garage",
+            "alert_count": 2,
             "messages": ["Battery low", "Offline"],
             "rules": ["Battery", "Unavailable"],
         },
         {
             "device_id": "two",
+            "device_ids": ["two"],
+            "device_name": "UPS two",
+            "area": "Office",
+            "alert_count": 2,
             "messages": ["Offline", "Temperature high"],
             "rules": ["Unavailable", "Temperature"],
         },
@@ -1106,7 +1116,111 @@ def test_device_sensor_keeps_messages_and_rules_inside_each_device():
         "devices",
     )
 
-    assert sensor.extra_state_attributes == {"devices": devices}
+    assert sensor.extra_state_attributes == {
+        "devices": [
+            {
+                "device_ids": ["one"],
+                "device_name": "UPS one",
+                "alert_count": 2,
+                "messages": ["Battery low", "Offline"],
+                "rules": ["Battery", "Unavailable"],
+            },
+            {
+                "device_ids": ["two"],
+                "device_name": "UPS two",
+                "alert_count": 2,
+                "messages": ["Offline", "Temperature high"],
+                "rules": ["Unavailable", "Temperature"],
+            },
+        ]
+    }
+
+
+def test_lifecycle_sensor_attributes_are_compact_and_recorder_safe():
+    """Large alert collections stay below Recorder's 16 KiB attribute limit."""
+    alerts = [
+        {
+            "id": f"rule:identifier-{index}:sensor.long_entity_{index}",
+            "type": "rule",
+            "entity_id": f"sensor.long_entity_{index}",
+            "name": f"Redundant friendly name {index}",
+            "device_id": "a" * 32,
+            "device_name": "Redundant device name",
+            "area": "Redundant area",
+            "integration": "mqtt",
+            "unit": "%",
+            "value": index,
+            "condition": "Value is outside its configured range",
+            "message": "x" * 1024,
+            "rule_name": "Long rule",
+            "detected_at": "2026-08-27T10:00:00+00:00",
+            "due_at": "2026-08-27T10:15:00+00:00",
+        }
+        for index in range(100)
+    ]
+    manager = SimpleNamespace(
+        monitoring_enabled=True,
+        public_snapshot=lambda: {
+            "pending_count": len(alerts),
+            "pending": alerts,
+        },
+    )
+    sensor = AlertManagerSensor(
+        manager,
+        "main_pending",
+        "alert_manager_main_pending",
+        "mdi:clock-alert-outline",
+        "pending_count",
+        "pending",
+        "alerts",
+    )
+
+    attributes = sensor.extra_state_attributes
+    encoded = json.dumps(attributes, ensure_ascii=False, default=str).encode()
+
+    assert len(encoded) < 16_384
+    assert attributes["alerts_omitted"] > 0
+    assert attributes["alerts"]
+    assert {
+        "name",
+        "device_id",
+        "device_name",
+        "area",
+        "integration",
+        "unit",
+    }.isdisjoint(attributes["alerts"][0])
+
+
+def test_sensor_skips_writes_when_its_partition_did_not_change():
+    """A change in another lifecycle partition does not churn this sensor."""
+    snapshot = {
+        "active_count": 1,
+        "alerts": [{"id": "active", "entity_id": "sensor.active"}],
+        "pending_count": 0,
+        "pending": [],
+    }
+    manager = SimpleNamespace(
+        monitoring_enabled=True,
+        public_snapshot=lambda: deepcopy(snapshot),
+    )
+    sensor = AlertManagerSensor(
+        manager,
+        "main_active",
+        "alert_manager_main_active",
+        "mdi:alert-circle",
+        "active_count",
+        "alerts",
+        "alerts",
+    )
+    writes = []
+    sensor.async_write_ha_state = lambda: writes.append(True)
+
+    sensor._async_manager_updated()
+    snapshot["pending_count"] = 1
+    snapshot["pending"] = [{"id": "pending", "entity_id": "sensor.pending"}]
+    sensor._async_manager_updated()
+
+    assert len(writes) == 1
 
 
 def test_tracked_count_combines_custom_instances_and_automatic_entities(
@@ -1360,7 +1474,8 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
     assert len(device_started) == 1
-    assert device_started[0]["device_id"] == device.id
+    assert device_started[0]["device_ids"] == [device.id]
+    assert "device_id" not in device_started[0]
     assert set(device_started[0]["alert_ids"]) <= {
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
@@ -1407,6 +1522,7 @@ def test_devices_with_the_same_name_share_one_active_group(
     ]
     assert len(device_events) == 1
     assert device_events[0]["device_ids"] == [first_device.id]
+    assert "device_id" not in device_events[0]
 
     hass.states.set("sensor.ups_two", "unavailable")
     run(manager.async_evaluate_entity("sensor.ups_two"))
@@ -1476,10 +1592,11 @@ def test_entities_without_devices_are_counted_individually(hass, entry):
     events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
-    assert {event["device_id"] for event in events} == {
-        "sensor.one",
-        "sensor.two",
+    assert {tuple(event["device_ids"]) for event in events} == {
+        ("sensor.one",),
+        ("sensor.two",),
     }
+    assert all("device_id" not in event for event in events)
 
     run(manager.async_evaluate_entity("sensor.one"))
     assert (
