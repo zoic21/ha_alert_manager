@@ -53,13 +53,11 @@ def _should_evaluate(
     new_state: State | None,
     _config: dict[str, Any],
 ) -> bool:
-    """Ignore entry into unavailable and evaluate the next definitive state."""
+    """Ignore unavailable and let the next definitive state decide."""
     if _is_neutral(new_state):
         return False
     if _is_neutral(old_state):
-        if new_state is None:
-            return _is_unifi_tracker(hass, old_state)
-        return _is_unifi_tracker(hass, old_state) or _applies(hass, new_state)
+        return True
     return _matches(hass, old_state) != _matches(hass, new_state)
 
 
