@@ -1846,6 +1846,60 @@ test("custom rule sources use the native multiple entity selector", () => {
   assert.deepEqual(selector.value, ["sensor.one", "sensor.two"]);
 });
 
+test("custom rule entity selector keeps single and multiple selections", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = { entity_ids: ["sensor.previous"] };
+  panel._hass = { states: {} };
+  const selector = {
+    addEventListener(type, listener) {
+      if (type === "value-changed") this.listener = listener;
+    },
+  };
+  panel.shadowRoot.querySelector = (query) =>
+    query === "#rule-entity-ids" ? selector : null;
+
+  panel._hydrateSelectors();
+  selector.listener({ detail: { value: "binary_sensor.filtration_piscine" } });
+
+  assert.deepEqual(panel._editingRule.entity_ids, ["binary_sensor.filtration_piscine"]);
+  assert.equal(panel._ruleDirty, true);
+
+  selector.listener({
+    detail: {
+      value: ["binary_sensor.filtration_piscine", "sensor.temperature_piscine"],
+    },
+  });
+  assert.deepEqual(panel._editingRule.entity_ids, [
+    "binary_sensor.filtration_piscine",
+    "sensor.temperature_piscine",
+  ]);
+});
+
+test("custom rule entity selector reads the control value when event detail omits it", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = { entity_ids: ["sensor.previous"] };
+  panel._hass = { states: {} };
+  const selector = {
+    addEventListener(type, listener) {
+      if (type === "value-changed") this.listener = listener;
+    },
+  };
+  panel.shadowRoot.querySelector = (query) =>
+    query === "#rule-entity-ids" ? selector : null;
+
+  panel._hydrateSelectors();
+  selector.value = "binary_sensor.filtration_piscine";
+  selector.listener({ detail: {} });
+
+  assert.deepEqual(panel._editingRule.entity_ids, ["binary_sensor.filtration_piscine"]);
+});
+
 test("condition and message use multiline Home Assistant template selectors", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();

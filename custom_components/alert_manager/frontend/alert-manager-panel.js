@@ -872,8 +872,25 @@ class AlertManagerPanel extends HTMLElement {
     if (this._configuredControls.has(element)) return;
     element.selector = selector;
     element.value = value;
-    element.addEventListener("value-changed", (event) => onChange(event.detail?.value));
+    element.addEventListener("value-changed", (event) => {
+      const eventValue = event.detail && Object.hasOwn(event.detail, "value")
+        ? event.detail.value
+        : element.value;
+      if (eventValue !== undefined) onChange(eventValue);
+    });
     this._configuredControls.add(element);
+  }
+
+  _multipleSelectorValue(value, current = []) {
+    if (value === undefined) return [...current];
+    const values = Array.isArray(value)
+      ? value
+      : value instanceof Set
+        ? [...value]
+        : typeof value === "string"
+          ? (value ? [value] : [])
+          : [];
+    return [...new Set(values.filter((item) => typeof item === "string" && item))];
   }
 
   _configureSelect(id, options, value, onChange) {
@@ -952,7 +969,10 @@ class AlertManagerPanel extends HTMLElement {
         { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
         this._editingRule.entity_ids ?? [],
         (value) => {
-          this._editingRule.entity_ids = Array.isArray(value) ? value : [];
+          this._editingRule.entity_ids = this._multipleSelectorValue(
+            value,
+            this._editingRule.entity_ids,
+          );
           this._ruleDirty = true;
         },
       );
@@ -999,19 +1019,34 @@ class AlertManagerPanel extends HTMLElement {
       "excluded-labels",
       { label: { multiple: true } },
       this._settingsDraft.excluded_labels,
-      (value) => { this._settingsDraft.excluded_labels = Array.isArray(value) ? value : []; },
+      (value) => {
+        this._settingsDraft.excluded_labels = this._multipleSelectorValue(
+          value,
+          this._settingsDraft.excluded_labels,
+        );
+      },
     );
       this._configureSelector(
         "excluded-entities",
         { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
       this._settingsDraft.excluded_entities,
-      (value) => { this._settingsDraft.excluded_entities = Array.isArray(value) ? value : []; },
+      (value) => {
+        this._settingsDraft.excluded_entities = this._multipleSelectorValue(
+          value,
+          this._settingsDraft.excluded_entities,
+        );
+      },
     );
     this._configureSelector(
       "excluded-devices",
       { device: { multiple: true } },
       this._settingsDraft.excluded_devices,
-      (value) => { this._settingsDraft.excluded_devices = Array.isArray(value) ? value : []; },
+      (value) => {
+        this._settingsDraft.excluded_devices = this._multipleSelectorValue(
+          value,
+          this._settingsDraft.excluded_devices,
+        );
+      },
     );
     this._entityDelayDraft.forEach((row, index) => {
       this._configureSelector(

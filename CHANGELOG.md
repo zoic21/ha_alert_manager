@@ -2,6 +2,24 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev26 — 27 août 2026
+
+### Corrigé
+
+- Les modifications du sélecteur Entités d’une règle personnalisée sont
+  désormais conservées, aussi bien à la création qu’à l’édition. Le frontend
+  accepte les deux formats renvoyés par le composant Home Assistant pour une
+  sélection unique ou multiple et récupère la valeur directement depuis le
+  sélecteur lorsque l’événement ne la fournit pas.
+- La même normalisation protège les autres sélecteurs multiples de la page de
+  configuration contre un effacement involontaire.
+
+### Tests
+
+- Deux tests frontend couvrent l’ajout de
+  `binary_sensor.filtration_piscine`, le remplacement d’une ancienne entité,
+  une sélection multiple et l’événement sans valeur explicite.
+
 ## 1.7.0-dev25 — 27 août 2026
 
 ### Modifié
