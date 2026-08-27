@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev24 — 27 août 2026
+
+### Corrigé
+
+- La modification explicite du message d’une règle actualise désormais les
+  occurrences déjà actives. Le template Jinja est rendu une fois lors de
+  l’enregistrement, puis reste figé malgré les changements ultérieurs des
+  entités qu’il consulte.
+
+### Tests
+
+- Un test de non-régression couvre l’ajout d’un message Jinja à une alerte déjà
+  active et vérifie que son rendu reste ensuite figé.
+
 ## 1.7.0-dev22 — 27 août 2026
 
 ### Corrigé
