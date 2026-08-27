@@ -620,6 +620,11 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.columns.timeline.defaultHidden, false);
   assert.equal(table.columns.value.defaultHidden, true);
   assert.equal(table.columns.condition.defaultHidden, true);
+  assert.equal(table.columns.entity.minWidth, "180px");
+  assert.equal(table.columns.entity.maxWidth, undefined);
+  assert.equal(table.columns.entity.flex, 1.4);
+  assert.equal(table.columns.timeline.maxWidth, undefined);
+  assert.equal(table.columns.timeline.flex, 1.2);
   assert.equal(table.columns.condition.showNarrow, false);
   assert.equal(table.data.length, 3);
   assert.equal(table.filter, "garage");
@@ -637,6 +642,7 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   const historyColumns = panel._nativeTableColumns("history");
   assert.equal(historyColumns.detected.defaultHidden, false);
   assert.equal(historyColumns.resolved.defaultHidden, true);
+  assert.equal(historyColumns.detected.maxWidth, undefined);
 });
 
 test("pending countdown is dynamic only while monitoring is enabled", () => {

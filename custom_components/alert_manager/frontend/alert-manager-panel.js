@@ -1213,20 +1213,20 @@ class AlertManagerPanel extends HTMLElement {
 
   _nativeTableColumns(kind) {
     const widths = {
-      status: ["48px", "48px", 1],
-      device: ["150px", "230px", 1],
-      entity: ["180px", "280px", 1.4],
-      entity_id: ["190px", "280px", 1],
-      value: ["110px", "220px", 1],
-      condition: ["260px", "420px", 2],
-      detected: ["170px", "210px", 1],
-      timeline: ["210px", "260px", 1.2],
-      resolved: ["170px", "210px", 1],
-      duration: ["120px", "170px", 1],
-      area: ["130px", "220px", 1],
-      rule: ["160px", "260px", 1],
-      integration: ["150px", "240px", 1],
-      message: ["220px", "420px", 1.5],
+      status: ["48px", 1],
+      device: ["150px", 1],
+      entity: ["180px", 1.4],
+      entity_id: ["190px", 1],
+      value: ["110px", 1],
+      condition: ["260px", 2],
+      detected: ["170px", 1],
+      timeline: ["210px", 1.2],
+      resolved: ["170px", 1],
+      duration: ["120px", 1],
+      area: ["130px", 1],
+      rule: ["160px", 1],
+      integration: ["150px", 1],
+      message: ["220px", 1.5],
     };
     const sortable = new Set(["status", "device", "entity", "value", "detected", "resolved", "rule", "integration"]);
     const valueColumns = {
@@ -1238,7 +1238,7 @@ class AlertManagerPanel extends HTMLElement {
       integration: "integrationLabel",
     };
     const columns = Object.fromEntries(Object.entries(this._tableColumns(kind)).map(([column, definition]) => {
-      const [minWidth, maxWidth, flex] = widths[column] ?? ["120px", "260px", 1];
+      const [minWidth, flex] = widths[column] ?? ["120px", 1];
       return [column, {
         title: column === "status" ? "" : definition.label,
         label: definition.label,
@@ -1249,7 +1249,6 @@ class AlertManagerPanel extends HTMLElement {
         hideable: REQUIRED_COLUMNS.has(column) ? false : undefined,
         defaultHidden: !DEFAULT_TABLE_STATE[kind].columns.includes(column),
         minWidth,
-        maxWidth,
         flex,
         sortable: sortable.has(column),
         valueColumn: valueColumns[column],

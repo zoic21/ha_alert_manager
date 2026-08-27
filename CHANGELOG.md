@@ -2,6 +2,24 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev10 — 27 août 2026
+
+### Corrigé
+
+- Les colonnes du composant natif `ha-data-table` ne sont plus limitées par des
+  largeurs maximales fixes.
+- Les colonnes visibles se répartissent maintenant sur toute la largeur
+  disponible selon leur poids, aussi bien dans le Dashboard que dans
+  l’Historique.
+- Les largeurs minimales sont conservées pour garantir la lisibilité et le
+  défilement horizontal lorsque l’écran est étroit ou que de nombreuses colonnes
+  sont activées.
+
+### Tests
+
+- Couverture de la répartition flexible sans `maxWidth`, des largeurs minimales
+  et des proportions particulières des colonnes Entité et chronologiques.
+
 ## 1.7.0-dev9 — 27 août 2026
 
 ### Corrigé
