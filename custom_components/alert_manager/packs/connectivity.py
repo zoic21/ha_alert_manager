@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_CONNECTIVITY
 from .base import AutomaticPack, PackMatch
@@ -13,11 +14,18 @@ from .base import AutomaticPack, PackMatch
 _FAILURE_STATES = frozenset(("off", STATE_UNAVAILABLE))
 
 
-def _applies(_hass: HomeAssistant, state: State) -> bool:
+def _applies(hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a connectivity binary sensor."""
-    return (
-        state.entity_id.partition(".")[0] == "binary_sensor"
-        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
+    if state.entity_id.partition(".")[0] != "binary_sensor":
+        return False
+    if state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity":
+        return True
+    # Some integrations temporarily drop state attributes while reloading.
+    # Registry metadata remains stable and preserves the pack identity.
+    registry_entry = er.async_get(hass).async_get(state.entity_id)
+    return bool(
+        registry_entry is not None
+        and getattr(registry_entry, "original_device_class", None) == "connectivity"
     )
 
 
@@ -28,19 +36,6 @@ def _matches(hass: HomeAssistant, state: State | None) -> bool:
     )
 
 
-def _is_same_failure_transition(
-    hass: HomeAssistant, old_state: State | None, new_state: State | None
-) -> bool:
-    """Keep transient off/unavailable changes inside one failure occurrence."""
-    if old_state is None or new_state is None:
-        return False
-    if {old_state.state, new_state.state} != _FAILURE_STATES:
-        return False
-    # Some integrations briefly expose fewer attributes while reloading. The
-    # previous state is enough to identify the entity as a connectivity sensor.
-    return _applies(hass, old_state) or _applies(hass, new_state)
-
-
 def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
@@ -48,16 +43,14 @@ def _should_evaluate(
     _config: dict[str, Any],
 ) -> bool:
     """Evaluate only when the logical connectivity failure changes."""
-    if _is_same_failure_transition(hass, old_state, new_state):
-        return False
     return _matches(hass, old_state) != _matches(hass, new_state)
 
 
 def _evaluate(
-    _hass: HomeAssistant, state: State, _config: dict[str, Any]
+    hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
     """Match connectivity binary sensors that are off or unavailable."""
-    if not _applies(_hass, state) or state.state not in _FAILURE_STATES:
+    if not _applies(hass, state) or state.state not in _FAILURE_STATES:
         return None
     return PackMatch(
         condition_key="automatic.connectivity",
