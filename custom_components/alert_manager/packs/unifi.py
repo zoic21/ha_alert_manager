@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import STATE_HOME
+from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
@@ -26,7 +26,11 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
 
 def _matches(hass: HomeAssistant, state: State | None) -> bool:
     """Return whether the optional state currently matches this pack."""
-    return state is not None and _applies(hass, state) and state.state != STATE_HOME
+    return (
+        state is not None
+        and _applies(hass, state)
+        and state.state not in {STATE_HOME, STATE_UNAVAILABLE}
+    )
 
 
 def _should_evaluate(
@@ -42,8 +46,12 @@ def _should_evaluate(
 def _evaluate(
     hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
-    """Match router-backed UniFi trackers away from home."""
-    if not _applies(hass, state) or state.state == STATE_HOME:
+    """Match router-backed UniFi trackers that are explicitly away."""
+    if (
+        not _applies(hass, state)
+        or state.state == STATE_HOME
+        or state.state == STATE_UNAVAILABLE
+    ):
         return None
     return PackMatch(
         condition_key="automatic.unifi",
