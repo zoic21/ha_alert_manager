@@ -8,10 +8,9 @@ from collections.abc import Iterable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
 
-from .const import CATEGORY_UNAVAILABLE, DOMAIN
+from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
 from .packs import PACKS
@@ -266,36 +265,39 @@ class AlertManager(BaseAlertManager):
             return True
 
         # Home Assistant state_changed events include both states. Keep a
-        # conservative fallback for tests, startup shims, or future HA changes.
+        # conservative fallback for synthetic events or future HA API changes.
         if "old_state" not in event.data or "new_state" not in event.data:
             return self._is_relevant_entity_id(entity_id)
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
-        if old_state is None or new_state is None:
-            # Entity creation/removal must update automatic tracking and can open
-            # or resolve an alert even when its first/final state is ordinary.
-            return self._is_relevant_entity_id(entity_id)
-        if not isinstance(old_state, State) or not isinstance(new_state, State):
+        if (old_state is not None and not isinstance(old_state, State)) or (
+            new_state is not None and not isinstance(new_state, State)
+        ):
             return self._is_relevant_entity_id(entity_id)
         if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
             entity_id
         ):
             return False
 
+        # Exact state+attribute duplicates cannot affect automatic packs. Do not
+        # make this a global early return: custom stale rules and Jinja can depend
+        # on lifecycle timestamps even when the visible state is unchanged.
+        if (
+            old_state is not None
+            and new_state is not None
+            and old_state.state == new_state.state
+            and old_state.attributes == new_state.attributes
+        ):
+            return False
+
         automatic = self.config.get("automatic", {})
         for pack in PACKS:
-            if not automatic.get(pack.id, {}).get("enabled", False):
+            config = automatic.get(pack.id, {})
+            if not config.get("enabled", False):
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            if pack.id == CATEGORY_UNAVAILABLE:
-                if (
-                    old_state.state == STATE_UNAVAILABLE
-                    or new_state.state == STATE_UNAVAILABLE
-                ):
-                    return True
-                continue
-            if pack.applies(self.hass, old_state) or pack.applies(self.hass, new_state):
+            if pack.should_evaluate(self.hass, old_state, new_state, config):
                 return True
         return False
 
