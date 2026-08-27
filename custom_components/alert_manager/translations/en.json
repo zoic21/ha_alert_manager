@@ -251,20 +251,17 @@
       "empty_current": "No current alerts.",
       "empty_filtered": "No rows match the search and filters.",
       "filters": {
-        "acknowledged": "Acknowledgement state",
         "all": "All",
         "detected_from": "Detected from",
         "detected_to": "Detected to",
         "domain": "Domain",
         "integration": "Integration",
         "labels": "Labels",
-        "no": "Not acknowledged",
         "no_options": "No options available",
         "reset": "Reset filters",
         "resolved_from": "Resolved from",
         "resolved_to": "Resolved to",
-        "title": "Filters",
-        "yes": "Acknowledged"
+        "title": "Filters"
       },
       "group": {
         "area": "Area",

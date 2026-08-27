@@ -147,7 +147,6 @@ const makeTableState = (kind, preferences = {}) => {
       labels: [],
       domain: [],
       entity: [],
-      acknowledged: [],
       detectedFrom: "",
       detectedTo: "",
       resolvedFrom: "",
@@ -621,8 +620,18 @@ class AlertManagerPanel extends HTMLElement {
           this._render();
         });
       });
-      tablePage.querySelectorAll("ha-input[data-table-filter]").forEach((input) => {
-        input.value = this._tableState[kind].filters[input.dataset.tableFilter] ?? "";
+      tablePage.querySelectorAll("ha-selector[data-table-date-filter]").forEach((selector) => {
+        const key = selector.dataset.tableDateFilter;
+        selector.hass = this._hass;
+        selector.selector = { date: {} };
+        selector.value = this._tableState[kind].filters[key] || undefined;
+        selector.label = selector.dataset.tableDateLabel;
+        selector.required = false;
+        selector.addEventListener("value-changed", (event) => {
+          this._tableState[kind].filters[key] = String(event.detail?.value ?? "");
+          this._filterPaneKind = kind;
+          this._render();
+        });
       });
     }
   }
@@ -986,7 +995,7 @@ class AlertManagerPanel extends HTMLElement {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "acknowledged"]
+      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
@@ -999,7 +1008,6 @@ class AlertManagerPanel extends HTMLElement {
       if (selected.labels.size && !row.labelIds.some((label) => selected.labels.has(label))) return false;
       if (selected.domain.size && !selected.domain.has(row.domain)) return false;
       if (selected.entity.size && !selected.entity.has(row.entityId)) return false;
-      if (selected.acknowledged.size && !selected.acknowledged.has(String(row.acknowledged))) return false;
       if (!this._dateMatches(row.detected, filters.detectedFrom, filters.detectedTo)) return false;
       if (kind === "history" && !this._dateMatches(row.resolved, filters.resolvedFrom, filters.resolvedTo)) return false;
       return true;
@@ -1098,15 +1106,14 @@ class AlertManagerPanel extends HTMLElement {
         <span>${esc(label)}</span>
         ${active ? `<span class="filter-badge">${active}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${fromKey},${toKey}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
       </div>
-      <div class="date-filter-fields"><ha-input type="date" label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_from" : "resolved_from"}`))}" data-table-filter="${fromKey}" data-table-kind="${kind}" value="${esc(filters[fromKey])}"></ha-input><ha-input type="date" label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_to" : "resolved_to"}`))}" data-table-filter="${toKey}" data-table-kind="${kind}" value="${esc(filters[toKey])}"></ha-input></div>
+      <div class="date-filter-fields"><ha-selector data-table-date-filter="${fromKey}" data-table-date-label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_from" : "resolved_from"}`))}" data-table-kind="${kind}"></ha-selector><ha-selector data-table-date-filter="${toKey}" data-table-date-label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_to" : "resolved_to"}`))}" data-table-kind="${kind}"></ha-selector></div>
     </ha-expansion-panel>`;
   }
 
   _renderFilterPane(kind, rows) {
-    const statuses = kind === "history"
-      ? [{ value: "resolved", label: this._t("history.resolved") }]
-      : ["active", "pending", "acknowledged"].map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
-    return `${this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses)}
+    const statuses = ["active", "pending", "acknowledged"]
+      .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
+    return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
@@ -1114,7 +1121,6 @@ class AlertManagerPanel extends HTMLElement {
       ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
       ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
       ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
-      ${this._renderFacetFilter(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
       ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"))}
       ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved")) : ""}`;
   }
@@ -1767,14 +1773,6 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _handleChange(event) {
-    const target = event.target;
-    const kind = target?.dataset?.tableKind;
-    if (kind && target.dataset.tableFilter) {
-      this._tableState[kind].filters[target.dataset.tableFilter] = String(target.value ?? "");
-      this._filterPaneKind = kind;
-      this._render();
-      return;
-    }
     void this._handleImportSelection(event);
   }
 

@@ -106,8 +106,8 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    désactivée ; aucune valeur n’est écrite chaque seconde dans Recorder.
    Les étiquettes Home Assistant sont affichées sous le nom de l’entité. La barre
    d’outils permet une recherche immédiate et des filtres cumulables par statut,
-   appareil, règle, intégration, étiquette, domaine, zone, entité, acquittement et
-   dates, un groupement repliable par appareil, zone, règle ou statut et un tri
+   appareil, règle, intégration, étiquette, domaine, zone, entité et dates, un
+   groupement repliable par appareil, zone, règle ou statut et un tri
    ascendant ou descendant. Les colonnes facultatives (ID d’entité, zone, règle,
    message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur
    visibilité, le groupement et le tri sont conservés localement pour
@@ -125,7 +125,8 @@ Le panel est réservé aux administrateurs et contient cinq sections :
 2. **Historique** : le même tableau natif liste les alertes résolues et les
    résolutions après acquittement. Chaque
    événement fige le nom de règle et d’entité, l’appareil, la zone, le message,
-   la condition, la valeur de déclenchement et les dates. Recherche, filtres,
+   la condition, la valeur de déclenchement et les dates. L’Historique ne propose
+   ni filtre de statut ni filtre d’acquittement. Recherche, filtres,
    groupement, tri et colonnes personnalisables restent disponibles. Aucune
    sélection ni action métier d’acquittement n’est proposée dans l’Historique.
    Les anomalies revenues à la normale avant leur activation ne sont pas des

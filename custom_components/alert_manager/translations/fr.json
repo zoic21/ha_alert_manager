@@ -251,20 +251,17 @@
       "empty_current": "Aucune alerte en cours.",
       "empty_filtered": "Aucune ligne ne correspond à la recherche et aux filtres.",
       "filters": {
-        "acknowledged": "État d’acquittement",
         "all": "Tous",
         "detected_from": "Détectée à partir du",
         "detected_to": "Détectée jusqu’au",
         "domain": "Domaine",
         "integration": "Intégration",
         "labels": "Étiquettes",
-        "no": "Non acquittée",
         "no_options": "Aucune option disponible",
         "reset": "Réinitialiser les filtres",
         "resolved_from": "Résolue à partir du",
         "resolved_to": "Résolue jusqu’au",
-        "title": "Filtres",
-        "yes": "Acquittée"
+        "title": "Filtres"
       },
       "group": {
         "area": "Zone",

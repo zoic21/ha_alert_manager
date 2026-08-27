@@ -2,6 +2,23 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev6 — 27 août 2026
+
+### Corrigé
+
+- Le filtre d’état d’acquittement est retiré du Dashboard car il faisait doublon
+  avec les statuts Active et Acquittée.
+- L’Historique ne propose plus les filtres Statut et État d’acquittement, qui
+  n’apportaient aucune distinction utile sur des événements tous résolus.
+- Les bornes des filtres de dates utilisent désormais le sélecteur natif Home
+  Assistant `{ date: {} }`, qui charge `ha-date-input` et son dialogue calendrier
+  standard.
+
+### Tests
+
+- Couverture de l’absence des filtres redondants et de l’hydratation du sélecteur
+  de date natif.
+
 ## 1.7.0-dev5 — 27 août 2026
 
 ### Corrigé

@@ -672,11 +672,10 @@ test("filters combine and can be reset without changing table data", () => {
   const rows = panel._tableRows("overview");
   panel._tableState.overview.filters.status = ["pending"];
   panel._tableState.overview.filters.area = ["Garage"];
-  panel._tableState.overview.filters.acknowledged = ["false"];
   assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [
     "battery:sensor.pending",
   ]);
-  assert.equal(panel._filterCount("overview"), 3);
+  assert.equal(panel._filterCount("overview"), 2);
   panel._resetTableFilters("overview");
   assert.equal(panel._filterCount("overview"), 0);
   assert.equal(panel._filteredTableRows("overview", rows).length, 3);
@@ -693,7 +692,6 @@ test("individual facet and date filters target their exact fields", () => {
     ["labels", "critical", ["rule:temperature:sensor.rack"]],
     ["domain", "sensor", ["battery:sensor.pending", "rule:temperature:sensor.rack", "unavailable:sensor.acknowledged"]],
     ["entity", "sensor.acknowledged", ["unavailable:sensor.acknowledged"]],
-    ["acknowledged", "true", ["unavailable:sensor.acknowledged"]],
   ];
   for (const [key, value, expected] of cases) {
     Object.keys(panel._tableState.overview.filters).forEach((filter) => {
@@ -703,7 +701,7 @@ test("individual facet and date filters target their exact fields", () => {
     const matches = panel._filteredTableRows("overview", rows).map((row) => row.id);
     assert.deepEqual(matches.sort(), expected.sort());
   }
-  panel._tableState.overview.filters.acknowledged = [];
+  panel._resetTableFilters("overview");
   panel._tableState.overview.filters.detectedFrom = "2026-08-26";
   panel._tableState.overview.filters.detectedTo = "2026-08-26";
   assert.equal(panel._filteredTableRows("overview", rows).length, 3);
@@ -873,7 +871,8 @@ test("history uses the same table tools without selection or runtime actions", (
   assert.equal(rows[0].value, "34.5 °C");
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="history"/);
   assert.doesNotMatch(html, /selectable|slot="selection-bar"|bulk-acknowledge|bulk-unacknowledge|data-due=/);
-  assert.match(html, /data-table-filter-option="status"/);
+  assert.doesNotMatch(html, /data-table-filter-option="status"/);
+  assert.doesNotMatch(html, /data-table-filter-option="acknowledged"/);
   assert.doesNotMatch(html, /<button|<select|type="radio"|type="checkbox"/);
 });
 
@@ -889,8 +888,10 @@ test("filter pane uses native Home Assistant filters with reset controls in head
   assert.match(html, /data-table-filter-option="labels"/);
   assert.match(html, /data-table-filter-option="domain"/);
   assert.match(html, /data-table-filter-option="area"/);
+  assert.doesNotMatch(html, /data-table-filter-option="acknowledged"/);
   assert.match(html, /filter-badge">1<\/span><ha-icon-button data-action="clear-filter-section"/);
-  assert.match(html, /<ha-input type="date"/);
+  assert.match(html, /<ha-selector data-table-date-filter="detectedFrom"/);
+  assert.doesNotMatch(html, /<ha-input type="date"/);
   assert.doesNotMatch(html, /native-filter-actions|data-action="reset-filters"|class="table-toolbar"/);
 });
 
@@ -925,6 +926,41 @@ test("native facet filters support multiple values and global clearing", () => {
   assert.deepEqual(panel._tableState.overview.filters.status, ["active", "pending"]);
   pageListeners["clear-filter"]();
   assert.equal(panel._filterCount("overview"), 0);
+});
+
+test("date filters use the native Home Assistant date selector", () => {
+  const panel = tablePanel();
+  panel._tableState.overview.filters.detectedFrom = "2026-08-26";
+  panel._render = () => {};
+  const listeners = {};
+  const dateSelector = {
+    dataset: {
+      tableDateFilter: "detectedFrom",
+      tableDateLabel: "Détectée à partir du",
+    },
+    addEventListener(name, callback) { listeners[name] = callback; },
+  };
+  const table = {
+    dataset: {},
+    addEventListener() {},
+    querySelectorAll(selector) {
+      if (selector === "ha-selector[data-table-date-filter]") return [dateSelector];
+      return [];
+    },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? table : null
+  );
+
+  panel._hydrateDataTables();
+
+  assert.deepEqual(dateSelector.selector, { date: {} });
+  assert.equal(dateSelector.value, "2026-08-26");
+  assert.equal(dateSelector.label, "Détectée à partir du");
+  assert.equal(dateSelector.required, false);
+  assert.equal(dateSelector.hass, panel._hass);
+  listeners["value-changed"]({ detail: { value: "2026-08-27" } });
+  assert.equal(panel._tableState.overview.filters.detectedFrom, "2026-08-27");
 });
 
 test("native wrapper events update search grouping sorting and columns", () => {
