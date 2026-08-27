@@ -139,6 +139,32 @@ def test_runtime_battery_filter_respects_device_override(hass, entry, registry_e
     asyncio.run(scenario())
 
 
+def test_identical_automatic_event_skips_existing_alert_evaluation(hass, entry):
+    """Exact duplicate events stay filtered even after an automatic alert exists."""
+
+    async def scenario():
+        _battery_state(hass, "50")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        old_state = hass.states.get("sensor.battery")
+        new_state = _battery_state(hass, "10")
+        manager._state_changed(_state_event("sensor.battery", old_state, new_state))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert "battery:sensor.battery" in manager.records
+
+        old_state = hass.states.get("sensor.battery")
+        new_state = _battery_state(hass, "10")
+        before = list(entry.created_task_names)
+        manager._state_changed(_state_event("sensor.battery", old_state, new_state))
+
+        assert entry.created_task_names == before
+        assert manager._evaluation_flush_scheduled is False
+
+    asyncio.run(scenario())
+
+
 def test_same_primary_state_attribute_rule_is_not_filtered(hass, entry):
     """Pack filtering must not suppress custom rules driven by attribute changes."""
 
