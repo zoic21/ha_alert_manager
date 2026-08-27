@@ -90,8 +90,9 @@ countdown to Recorder.
 
 Home Assistant labels are displayed below the entity name. The toolbar provides
 immediate search and cumulative filters for status, device, rule, integration,
-label, domain, area, entity and dates, plus collapsible grouping
-by device, area, rule or status, and ascending or descending sorting. Optional
+label, domain, area, entity and date ranges. Each range uses a single native Home
+Assistant picker with presets, a calendar and start/end times, plus collapsible
+grouping by device, area, rule or status, and ascending or descending sorting. Optional
 columns (entity ID, area, rule and message among them) can be shown, hidden and
 reordered. Column order and visibility, grouping and sorting are kept locally for
 the user and never alter integration configuration.

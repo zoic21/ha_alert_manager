@@ -106,7 +106,9 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    désactivée ; aucune valeur n’est écrite chaque seconde dans Recorder.
    Les étiquettes Home Assistant sont affichées sous le nom de l’entité. La barre
    d’outils permet une recherche immédiate et des filtres cumulables par statut,
-   appareil, règle, intégration, étiquette, domaine, zone, entité et dates, un
+   appareil, règle, intégration, étiquette, domaine, zone, entité et périodes de
+   dates. Chaque période se choisit dans un unique sélecteur natif Home Assistant
+   avec raccourcis, calendrier et heures de début/fin. La barre propose aussi un
    groupement repliable par appareil, zone, règle ou statut et un tri
    ascendant ou descendant. Les colonnes facultatives (ID d’entité, zone, règle,
    message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur

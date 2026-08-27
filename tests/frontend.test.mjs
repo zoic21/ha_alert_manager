@@ -702,9 +702,24 @@ test("individual facet and date filters target their exact fields", () => {
     assert.deepEqual(matches.sort(), expected.sort());
   }
   panel._resetTableFilters("overview");
-  panel._tableState.overview.filters.detectedFrom = "2026-08-26";
-  panel._tableState.overview.filters.detectedTo = "2026-08-26";
+  panel._tableState.overview.filters.detectedFrom = "2026-08-26T08:00:00.000Z";
+  panel._tableState.overview.filters.detectedTo = "2026-08-26T23:00:00.000Z";
+  assert.equal(panel._filterCount("overview"), 1);
   assert.equal(panel._filteredTableRows("overview", rows).length, 3);
+});
+
+test("date range filtering preserves the selected start and end times", () => {
+  const panel = tablePanel();
+  assert.equal(panel._dateMatches(
+    "2026-08-27T10:30:00.000Z",
+    "2026-08-27T10:00:00.000Z",
+    "2026-08-27T11:00:00.000Z",
+  ), true);
+  assert.equal(panel._dateMatches(
+    "2026-08-27T11:30:00.000Z",
+    "2026-08-27T10:00:00.000Z",
+    "2026-08-27T11:00:00.000Z",
+  ), false);
 });
 
 test("native grouping works for device, area, rule and status and remembers collapsed groups", () => {
@@ -890,7 +905,9 @@ test("filter pane uses native Home Assistant filters with reset controls in head
   assert.match(html, /data-table-filter-option="area"/);
   assert.doesNotMatch(html, /data-table-filter-option="acknowledged"/);
   assert.match(html, /filter-badge">1<\/span><ha-icon-button data-action="clear-filter-section"/);
-  assert.match(html, /<ha-selector data-table-date-filter="detectedFrom"/);
+  assert.match(html, /<ha-date-range-picker[\s\S]*data-table-date-range="detected"/);
+  assert.match(html, /extended-presets[\s\S]*time-picker[\s\S]*backdrop/);
+  assert.doesNotMatch(html, /data-table-date-filter|<ha-selector/);
   assert.doesNotMatch(html, /<ha-input type="date"/);
   assert.doesNotMatch(html, /native-filter-actions|data-action="reset-filters"|class="table-toolbar"/);
 });
@@ -928,23 +945,26 @@ test("native facet filters support multiple values and global clearing", () => {
   assert.equal(panel._filterCount("overview"), 0);
 });
 
-test("date filters use the native Home Assistant date selector", () => {
+test("date filters use the native Home Assistant date range picker", () => {
   const panel = tablePanel();
-  panel._tableState.overview.filters.detectedFrom = "2026-08-26";
+  panel._tableState.overview.filters.detectedFrom = "2026-08-26T08:00:00.000Z";
+  panel._tableState.overview.filters.detectedTo = "2026-08-27T11:00:00.000Z";
   panel._render = () => {};
   const listeners = {};
-  const dateSelector = {
+  const datePicker = {
     dataset: {
-      tableDateFilter: "detectedFrom",
-      tableDateLabel: "Détectée à partir du",
+      tableDateRange: "detected",
+      tableRangeStart: "2026-08-26T08:00:00.000Z",
+      tableRangeEnd: "2026-08-27T11:00:00.000Z",
     },
+    isConnected: true,
     addEventListener(name, callback) { listeners[name] = callback; },
   };
   const table = {
     dataset: {},
     addEventListener() {},
     querySelectorAll(selector) {
-      if (selector === "ha-selector[data-table-date-filter]") return [dateSelector];
+      if (selector === "ha-date-range-picker[data-table-date-range]") return [datePicker];
       return [];
     },
   };
@@ -954,13 +974,17 @@ test("date filters use the native Home Assistant date selector", () => {
 
   panel._hydrateDataTables();
 
-  assert.deepEqual(dateSelector.selector, { date: {} });
-  assert.equal(dateSelector.value, "2026-08-26");
-  assert.equal(dateSelector.label, "Détectée à partir du");
-  assert.equal(dateSelector.required, false);
-  assert.equal(dateSelector.hass, panel._hass);
-  listeners["value-changed"]({ detail: { value: "2026-08-27" } });
-  assert.equal(panel._tableState.overview.filters.detectedFrom, "2026-08-27");
+  assert.equal(datePicker.startDate.toISOString(), "2026-08-26T08:00:00.000Z");
+  assert.equal(datePicker.endDate.toISOString(), "2026-08-27T11:00:00.000Z");
+  assert.equal(datePicker.extendedPresets, true);
+  assert.equal(datePicker.timePicker, true);
+  assert.equal(datePicker.backdrop, true);
+  listeners["value-changed"]({ detail: { value: {
+    startDate: new Date("2026-08-27T09:00:00.000Z"),
+    endDate: new Date("2026-08-27T12:30:00.000Z"),
+  } } });
+  assert.equal(panel._tableState.overview.filters.detectedFrom, "2026-08-27T09:00:00.000Z");
+  assert.equal(panel._tableState.overview.filters.detectedTo, "2026-08-27T12:30:00.000Z");
 });
 
 test("native wrapper events update search grouping sorting and columns", () => {

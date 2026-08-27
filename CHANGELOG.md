@@ -2,6 +2,24 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev7 — 27 août 2026
+
+### Corrigé
+
+- Chaque filtre de date utilise désormais un unique `ha-date-range-picker`, le
+  composant natif de la page Historique Home Assistant.
+- Le sélecteur propose les périodes rapides Home Assistant, un calendrier et les
+  heures de début et de fin dans la même fenêtre.
+- Une période début/fin compte comme un seul filtre actif et conserve la
+  précision horaire choisie.
+- Le composant natif est chargé à la demande lorsque le panel est ouvert sans
+  passage préalable par la page Historique.
+
+### Tests
+
+- Couverture du rendu, de l’hydratation et des événements du sélecteur de période
+  natif, du comptage unitaire et des limites horaires.
+
 ## 1.7.0-dev6 — 27 août 2026
 
 ### Corrigé

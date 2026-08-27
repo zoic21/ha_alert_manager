@@ -500,6 +500,44 @@ class AlertManagerPanel extends HTMLElement {
       ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}`;
   }
 
+  _loadNativeDateRangePicker() {
+    if (customElements.get("ha-date-range-picker")) return Promise.resolve();
+    if (this._dateRangePickerPromise) return this._dateRangePickerPromise;
+    const homeAssistant = document.querySelector?.("home-assistant");
+    const main = homeAssistant?.shadowRoot?.querySelector?.("home-assistant-main");
+    const resolver = main?.shadowRoot?.querySelector?.("partial-panel-resolver");
+    const historyPath = Object.values(this._hass?.panels ?? {})
+      .find((panel) => panel.component_name === "history")?.url_path;
+    const loadHistory = historyPath
+      ? resolver?.routerOptions?.routes?.[historyPath]?.load
+      : undefined;
+    this._dateRangePickerPromise = typeof loadHistory === "function"
+      ? Promise.resolve(loadHistory()).catch(() => undefined)
+      : Promise.resolve();
+    return this._dateRangePickerPromise;
+  }
+
+  _configureDateRangePicker(kind, picker) {
+    const prefix = picker.dataset.tableDateRange;
+    if (!prefix) return;
+    const fromKey = `${prefix}From`;
+    const toKey = `${prefix}To`;
+    picker.startDate = new Date(picker.dataset.tableRangeStart);
+    picker.endDate = new Date(picker.dataset.tableRangeEnd);
+    picker.extendedPresets = true;
+    picker.timePicker = true;
+    picker.backdrop = true;
+    picker.addEventListener("value-changed", (event) => {
+      const startDate = event.detail?.value?.startDate;
+      const endDate = event.detail?.value?.endDate;
+      if (!(startDate instanceof Date) || !(endDate instanceof Date)) return;
+      this._tableState[kind].filters[fromKey] = startDate.toISOString();
+      this._tableState[kind].filters[toKey] = endDate.toISOString();
+      this._filterPaneKind = kind;
+      this._render();
+    });
+  }
+
   _hydrateDataTables() {
     for (const kind of ["overview", "history"]) {
       const tablePage = this.shadowRoot.querySelector(`[data-alert-table-page="${kind}"]`);
@@ -620,17 +658,15 @@ class AlertManagerPanel extends HTMLElement {
           this._render();
         });
       });
-      tablePage.querySelectorAll("ha-selector[data-table-date-filter]").forEach((selector) => {
-        const key = selector.dataset.tableDateFilter;
-        selector.hass = this._hass;
-        selector.selector = { date: {} };
-        selector.value = this._tableState[kind].filters[key] || undefined;
-        selector.label = selector.dataset.tableDateLabel;
-        selector.required = false;
-        selector.addEventListener("value-changed", (event) => {
-          this._tableState[kind].filters[key] = String(event.detail?.value ?? "");
-          this._filterPaneKind = kind;
-          this._render();
+      tablePage.querySelectorAll("ha-date-range-picker[data-table-date-range]").forEach((picker) => {
+        if (customElements.get("ha-date-range-picker") || typeof customElements.whenDefined !== "function") {
+          this._configureDateRangePicker(kind, picker);
+          return;
+        }
+        this._loadNativeDateRangePicker().then(() => {
+          if (picker.isConnected && customElements.get("ha-date-range-picker")) {
+            this._configureDateRangePicker(kind, picker);
+          }
         });
       });
     }
@@ -972,9 +1008,12 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _filterCount(kind) {
-    return Object.values(this._tableState[kind].filters).filter((value) => (
-      Array.isArray(value) ? value.length > 0 : Boolean(value)
-    )).length;
+    const filters = this._tableState[kind].filters;
+    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity"]
+      .filter((key) => this._filterValues(filters[key]).length > 0).length;
+    const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
+    const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
+    return facets + detected + resolved;
   }
 
   _filterValues(value) {
@@ -1020,8 +1059,18 @@ class AlertManagerPanel extends HTMLElement {
     if (!from && !to) return true;
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp)) return false;
-    if (from && timestamp < Date.parse(`${from}T00:00:00`)) return false;
-    if (to && timestamp > Date.parse(`${to}T23:59:59.999`)) return false;
+    const boundary = (date, endOfDay) => {
+      if (!date) return undefined;
+      const valueToParse = /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? `${date}T${endOfDay ? "23:59:59.999" : "00:00:00"}`
+        : date;
+      const parsed = Date.parse(valueToParse);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const start = boundary(from, false);
+    const end = boundary(to, true);
+    if (start !== undefined && timestamp < start) return false;
+    if (end !== undefined && timestamp > end) return false;
     return true;
   }
 
@@ -1096,17 +1145,43 @@ class AlertManagerPanel extends HTMLElement {
     </ha-expansion-panel>`;
   }
 
-  _renderDateFilter(kind, prefix, label) {
+  _dateRangeDefaults(rows, prefix) {
+    const property = prefix === "resolved" ? "resolved" : "detected";
+    const timestamps = rows
+      .map((row) => Date.parse(row[property]))
+      .filter(Number.isFinite);
+    if (timestamps.length) {
+      return {
+        start: new Date(Math.min(...timestamps)).toISOString(),
+        end: new Date(Math.max(...timestamps)).toISOString(),
+      };
+    }
+    const end = new Date();
+    const start = new Date(end);
+    start.setHours(0, 0, 0, 0);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
+  _renderDateFilter(kind, prefix, label, rows) {
     const filters = this._tableState[kind].filters;
     const fromKey = `${prefix}From`;
     const toKey = `${prefix}To`;
-    const active = [filters[fromKey], filters[toKey]].filter(Boolean).length;
+    const active = filters[fromKey] || filters[toKey] ? 1 : 0;
+    const defaults = this._dateRangeDefaults(rows, prefix);
     return `<ha-expansion-panel left-chevron ${active ? "expanded" : ""}>
       <div slot="header" class="filter-section-header">
         <span>${esc(label)}</span>
         ${active ? `<span class="filter-badge">${active}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${fromKey},${toKey}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
       </div>
-      <div class="date-filter-fields"><ha-selector data-table-date-filter="${fromKey}" data-table-date-label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_from" : "resolved_from"}`))}" data-table-kind="${kind}"></ha-selector><ha-selector data-table-date-filter="${toKey}" data-table-date-label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_to" : "resolved_to"}`))}" data-table-kind="${kind}"></ha-selector></div>
+      <div class="date-filter-fields"><ha-date-range-picker
+        data-table-date-range="${prefix}"
+        data-table-range-start="${esc(filters[fromKey] || defaults.start)}"
+        data-table-range-end="${esc(filters[toKey] || defaults.end)}"
+        data-table-kind="${kind}"
+        extended-presets
+        time-picker
+        backdrop
+      ></ha-date-range-picker></div>
     </ha-expansion-panel>`;
   }
 
@@ -1121,8 +1196,8 @@ class AlertManagerPanel extends HTMLElement {
       ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
       ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
       ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
-      ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"))}
-      ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved")) : ""}`;
+      ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"), rows)}
+      ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved"), rows) : ""}`;
   }
 
   _nativeTableColumns(kind) {
@@ -2280,7 +2355,7 @@ class AlertManagerPanel extends HTMLElement {
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
-      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
+      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.date-filter-fields ha-date-range-picker{display:block;width:100%}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
