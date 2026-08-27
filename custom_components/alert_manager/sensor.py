@@ -110,7 +110,10 @@ class AlertManagerSensor(SensorEntity):
         self._attr_translation_key = translation_key
         self._attr_unique_id = unique_id
         self.entity_id = f"sensor.{unique_id}"
-        self._snapshot: dict[str, Any] = manager.public_snapshot()
+        snapshot = manager._last_public_snapshot
+        self._snapshot: dict[str, Any] = (
+            snapshot if snapshot is not None else manager.public_snapshot()
+        )
         self._last_written_partition: tuple[Any, ...] | None = None
 
     async def async_added_to_hass(self) -> None:
@@ -123,10 +126,9 @@ class AlertManagerSensor(SensorEntity):
         self._async_manager_updated()
 
     @callback
-    def _async_manager_updated(
-        self, snapshot: dict[str, Any] | None = None
-    ) -> None:
+    def _async_manager_updated(self) -> None:
         """Write only when this sensor's own partition really changed."""
+        snapshot = self.manager._last_public_snapshot
         if snapshot is None:
             snapshot = self.manager.public_snapshot()
         partition = (
