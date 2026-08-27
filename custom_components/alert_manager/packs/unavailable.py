@@ -16,6 +16,22 @@ def _applies(_hass: HomeAssistant, _state: State) -> bool:
     return True
 
 
+def _should_evaluate(
+    hass: HomeAssistant,
+    old_state: State | None,
+    new_state: State | None,
+    _config: dict[str, Any],
+) -> bool:
+    """Evaluate only lifecycle or transitions into/out of unavailable."""
+    if old_state is None:
+        return new_state is not None and _applies(hass, new_state)
+    if new_state is None:
+        return _applies(hass, old_state)
+    return (old_state.state == STATE_UNAVAILABLE) != (
+        new_state.state == STATE_UNAVAILABLE
+    )
+
+
 def _evaluate(
     _hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
@@ -33,4 +49,5 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
+    transition_filter=_should_evaluate,
 )
