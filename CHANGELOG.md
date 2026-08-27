@@ -2,6 +2,23 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev11 — 27 août 2026
+
+### Corrigé
+
+- Le compte à rebours des alertes en cours d’activation est de nouveau actualisé
+  automatiquement chaque seconde dans le tableau natif Home Assistant.
+- La mise à jour traverse maintenant les Shadow DOM de
+  `hass-tabs-subpage-data-table` et `ha-data-table` pour atteindre les cellules
+  virtualisées portant `data-due`.
+- Seul le texte du compte à rebours est modifié chaque seconde : le tableau
+  complet n’est pas recalculé ni rerendu.
+
+### Tests
+
+- Couverture d’une cellule `pending` imbriquée dans les deux composants natifs et
+  de l’absence de progression lorsque la surveillance est désactivée.
+
 ## 1.7.0-dev10 — 27 août 2026
 
 ### Corrigé

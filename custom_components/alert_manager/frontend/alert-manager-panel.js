@@ -2370,6 +2370,10 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot?.querySelectorAll("ha-data-table").forEach((table) => {
       if (table.shadowRoot) roots.push(table.shadowRoot);
     });
+    this.shadowRoot?.querySelectorAll("[data-alert-table-page]").forEach((tablePage) => {
+      const table = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+      if (table?.shadowRoot) roots.push(table.shadowRoot);
+    });
     for (const root of roots) {
       root?.querySelectorAll("[data-due]").forEach((node) => {
         node.textContent = this._remaining(node.dataset.due);

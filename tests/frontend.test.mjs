@@ -660,6 +660,26 @@ test("pending countdown is dynamic only while monitoring is enabled", () => {
   panel._updateCountdowns();
   assert.equal(node.textContent, "stable");
 
+  const nestedNode = { dataset: { due: "2099-08-26T12:15:00Z" }, textContent: "stable" };
+  const nativeTable = {
+    shadowRoot: {
+      querySelectorAll(selector) { return selector === "[data-due]" ? [nestedNode] : []; },
+    },
+  };
+  const tablePage = {
+    shadowRoot: {
+      querySelector(selector) { return selector === "ha-data-table" ? nativeTable : null; },
+    },
+  };
+  panel._monitoringEnabled = true;
+  panel._remaining = (due) => `updated:${due}`;
+  panel.shadowRoot.querySelectorAll = (selector) => {
+    if (selector === "[data-alert-table-page]") return [tablePage];
+    return [];
+  };
+  panel._updateCountdowns();
+  assert.equal(nestedNode.textContent, "updated:2099-08-26T12:15:00Z");
+
   panel._render = () => {};
   panel.hass = {
     states: {
