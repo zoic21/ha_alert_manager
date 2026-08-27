@@ -904,7 +904,13 @@ class AlertManagerPanel extends HTMLElement {
       const eventValue = event.detail && Object.hasOwn(event.detail, "value")
         ? event.detail.value
         : element.value;
-      if (eventValue !== undefined) onChange(eventValue);
+      if (eventValue !== undefined) {
+        // Home Assistant selectors are controlled components: their host
+        // value is not updated automatically when the inner selector emits
+        // value-changed. Mirror the value so later reads are never stale.
+        element.value = eventValue;
+        onChange(eventValue);
+      }
     });
     this._configuredControls.add(element);
   }
@@ -2576,13 +2582,13 @@ class AlertManagerPanel extends HTMLElement {
       value: comparisonValue,
       duration: Number(value("duration")),
       message: String(
-        this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? this._editingRule?.message
+        this._editingRule?.message
+          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
           ?? "",
       ).trim() || null,
       condition_template: String(
-        this.shadowRoot.querySelector("#rule-condition-template")?.value
-          ?? this._editingRule?.condition_template
+        this._editingRule?.condition_template
+          ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
           ?? "",
       ).trim() || null,
     };
@@ -2623,13 +2629,13 @@ class AlertManagerPanel extends HTMLElement {
         : String(value("value") ?? this._editingRule.value ?? ""),
       duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
       message: String(
-        this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? this._editingRule.message
+        this._editingRule.message
+          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
           ?? "",
       ),
       condition_template: String(
-        this.shadowRoot.querySelector("#rule-condition-template")?.value
-          ?? this._editingRule.condition_template
+        this._editingRule.condition_template
+          ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
           ?? "",
       ),
     };
