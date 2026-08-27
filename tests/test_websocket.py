@@ -8,7 +8,9 @@ from types import SimpleNamespace
 from custom_components.alert_manager.const import DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
+    websocket_alerts_list,
     websocket_config_export,
+    websocket_config_get,
     websocket_config_import,
     websocket_config_import_validate,
     websocket_config_update,
@@ -21,6 +23,7 @@ from custom_components.alert_manager.websocket import (
     websocket_rule_delete,
     websocket_rule_update,
     websocket_rule_yaml_validate,
+    websocket_rules_list,
 )
 from custom_components.alert_manager.yaml_io import dump_config_yaml
 
@@ -84,10 +87,12 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=True)
 
-    websocket_packs_list(
-        hass,
-        connection,
-        {"id": 8, "type": "alert_manager/packs/list"},
+    asyncio.run(
+        websocket_packs_list(
+            hass,
+            connection,
+            {"id": 8, "type": "alert_manager/packs/list"},
+        )
     )
 
     packs = connection.results[-1][1]
@@ -175,13 +180,17 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     assert manager.get_config()["rules"] == []
 
 
-def test_yaml_and_configuration_websocket_commands_are_admin_only(hass, entry):
-    """All new YAML and import/export paths inherit the panel's admin guard."""
+def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entry):
+    """Read, YAML, history and import/export APIs all inherit the admin guard."""
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=False)
     for command, message in (
+        (websocket_config_get, {"id": 6}),
+        (websocket_alerts_list, {"id": 7}),
+        (websocket_packs_list, {"id": 8}),
+        (websocket_rules_list, {"id": 9}),
         (websocket_rule_yaml_validate, {"id": 10, "yaml": "name: test"}),
         (websocket_config_export, {"id": 11}),
         (websocket_config_import_validate, {"id": 12, "yaml": "version: 1"}),
@@ -192,7 +201,8 @@ def test_yaml_and_configuration_websocket_commands_are_admin_only(hass, entry):
         (websocket_history_clear, {"id": 17, "confirmed": True}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 8
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 12
+    assert connection.results == []
 
 
 def test_history_websocket_configuration_and_clear(hass, entry):
