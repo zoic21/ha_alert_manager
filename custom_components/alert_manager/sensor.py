@@ -123,9 +123,12 @@ class AlertManagerSensor(SensorEntity):
         self._async_manager_updated()
 
     @callback
-    def _async_manager_updated(self) -> None:
+    def _async_manager_updated(
+        self, snapshot: dict[str, Any] | None = None
+    ) -> None:
         """Write only when this sensor's own partition really changed."""
-        snapshot = self.manager.public_snapshot()
+        if snapshot is None:
+            snapshot = self.manager.public_snapshot()
         partition = (
             self.manager.monitoring_enabled,
             snapshot[self._count_key],
