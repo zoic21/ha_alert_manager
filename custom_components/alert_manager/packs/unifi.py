@@ -24,24 +24,19 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
     )
 
 
+def _matches(hass: HomeAssistant, state: State | None) -> bool:
+    """Return whether the optional state currently matches this pack."""
+    return state is not None and _applies(hass, state) and state.state != STATE_HOME
+
+
 def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
     new_state: State | None,
     _config: dict[str, Any],
 ) -> bool:
-    """Evaluate lifecycle, applicability, or home/away transitions only."""
-    if old_state is None:
-        return new_state is not None and _applies(hass, new_state)
-    if new_state is None:
-        return _applies(hass, old_state)
-    old_applies = _applies(hass, old_state)
-    new_applies = _applies(hass, new_state)
-    if old_applies != new_applies:
-        return True
-    if not new_applies:
-        return False
-    return (old_state.state == STATE_HOME) != (new_state.state == STATE_HOME)
+    """Evaluate only transitions into or out of the away condition."""
+    return _matches(hass, old_state) != _matches(hass, new_state)
 
 
 def _evaluate(
