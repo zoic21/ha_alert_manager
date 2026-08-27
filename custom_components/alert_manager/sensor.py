@@ -151,9 +151,7 @@ class AlertManagerSensor(SensorEntity):
             ),
             "rules": list(
                 dict.fromkeys(
-                    rule
-                    for device in items
-                    for rule in device.get("rules", ())
+                    rule for device in items for rule in device.get("rules", ())
                 )
             ),
         }
