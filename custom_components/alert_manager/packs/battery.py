@@ -69,32 +69,26 @@ def _effective_threshold(
     )
 
 
+def _matches(
+    hass: HomeAssistant, state: State | None, config: dict[str, Any]
+) -> bool:
+    """Return whether the optional state currently matches this pack."""
+    if state is None or not _applies(hass, state):
+        return False
+    value = safe_float(state.state)
+    if value is None:
+        return False
+    return value <= _effective_threshold(hass, state, config)
+
+
 def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
     new_state: State | None,
     config: dict[str, Any],
 ) -> bool:
-    """Evaluate lifecycle, applicability, or effective threshold crossings only."""
-    if old_state is None:
-        return new_state is not None and _applies(hass, new_state)
-    if new_state is None:
-        return _applies(hass, old_state)
-
-    old_applies = _applies(hass, old_state)
-    new_applies = _applies(hass, new_state)
-    if old_applies != new_applies:
-        # Tracking changes even if the current percentage is above the threshold.
-        return True
-    if not new_applies:
-        return False
-
-    threshold = _effective_threshold(hass, new_state, config)
-    old_value = safe_float(old_state.state)
-    new_value = safe_float(new_state.state)
-    old_matches = old_value is not None and old_value <= threshold
-    new_matches = new_value is not None and new_value <= threshold
-    return old_matches != new_matches
+    """Evaluate only effective low-battery condition transitions."""
+    return _matches(hass, old_state, config) != _matches(hass, new_state, config)
 
 
 def _evaluate(
