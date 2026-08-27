@@ -104,6 +104,13 @@ _LEGACY_OPERATOR_LABELS = {
     "below": "Inférieur à",
 }
 
+_PACK_CONDITION_FALLBACKS = {
+    "automatic.battery": "Battery less than or equal to {threshold}%",
+    "automatic.connectivity": "Connectivity is off",
+    "automatic.unavailable": "State is unavailable",
+    "automatic.unifi": "UniFi device is away",
+}
+
 
 class AlertManager:
     """Own configuration, runtime records, listeners and timers."""
@@ -141,6 +148,7 @@ class AlertManager:
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
         self._rule_message_templates: dict[str, Template] = {}
         self._rule_message_render_info: dict[tuple[str, str], Any] = {}
+        self._condition_translations: dict[str, str] = {}
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -163,6 +171,7 @@ class AlertManager:
             _LOGGER.exception("Stored configuration is invalid; using defaults")
             self.config = validate_config({})
             migrated = True
+        await self._async_load_condition_translations()
         self.records = records
         self.history = history
         if self._trim_history():
@@ -573,18 +582,56 @@ class AlertManager:
         if match is None:
             return
         alert_id = f"{pack_id}:{state.entity_id}"
+        condition = self._localized_pack_condition(
+            match.condition_key, match.condition_params
+        )
         result[alert_id] = (
             self._details(
                 state,
                 alert_id,
                 pack_id,
-                match.condition,
+                condition,
                 value=match.value,
                 condition_key=match.condition_key,
                 condition_params=match.condition_params,
+                message=condition,
             ),
             self._delay_for(state, pack_id),
         )
+
+    async def _async_load_condition_translations(self) -> None:
+        """Cache configured-language pack messages with an English fallback."""
+        resources: dict[str, str] = {}
+        languages = dict.fromkeys((self.hass.config.language, "en"))
+        for language in languages:
+            try:
+                catalog = await async_get_translations(
+                    self.hass,
+                    language,
+                    "config_panel",
+                    integrations=[DOMAIN],
+                )
+            except Exception:  # pragma: no cover - Home Assistant loader failure
+                _LOGGER.exception(
+                    "Unable to load Alert Manager translations for %s", language
+                )
+                continue
+            for key, value in catalog.items():
+                resources.setdefault(key, value)
+        self._condition_translations = resources
+
+    def _localized_pack_condition(
+        self, condition_key: str, params: dict[str, Any]
+    ) -> str:
+        """Render one structured pack condition for sensors and event payloads."""
+        resource_key = f"component.{DOMAIN}.config_panel.conditions.{condition_key}"
+        template = self._condition_translations.get(
+            resource_key,
+            _PACK_CONDITION_FALLBACKS.get(condition_key, condition_key),
+        )
+        for key, value in params.items():
+            template = template.replace(f"{{{key}}}", str(value))
+        return template
 
     def _is_base_eligible(self, entity_id: str) -> bool:
         """Reject Alert Manager's own and registry-disabled entities."""

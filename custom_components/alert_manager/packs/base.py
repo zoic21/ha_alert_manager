@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntryState
@@ -14,10 +14,9 @@ from homeassistant.core import HomeAssistant, State
 class PackMatch:
     """A matching automatic condition returned by one pack."""
 
-    condition: str
+    condition_key: str
+    condition_params: dict[str, Any] = field(default_factory=dict)
     value: Any | None = None
-    condition_key: str | None = None
-    condition_params: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

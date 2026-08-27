@@ -361,6 +361,13 @@ def test_pack_declared_device_number_map_is_strictly_validated():
         )
 
 
+def test_pack_source_files_have_no_localized_fallback_text():
+    """Pack modules contain logic and translation keys, never localized prose."""
+    pack_directory = Path(__file__).parents[1] / "custom_components/alert_manager/packs"
+    for path in pack_directory.glob("*.py"):
+        assert path.read_text().isascii(), path
+
+
 def test_rule_entity_ids_must_be_unique():
     """One source cannot be evaluated twice inside the same rule."""
     with pytest.raises(ValueError, match="repeated"):

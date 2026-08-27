@@ -2,6 +2,25 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev22 — 27 août 2026
+
+### Corrigé
+
+- Les packs automatiques ne contiennent plus aucun texte localisé en dur. Ils
+  retournent uniquement une clé de traduction structurée et ses paramètres.
+- Le backend traduit les conditions et messages automatiques dans la langue
+  globale de Home Assistant pour les capteurs et événements, avec un repli
+  anglais si le catalogue est momentanément indisponible.
+- La colonne Message affiche maintenant la condition traduite des alertes
+  automatiques au lieu de `—`. Le panneau effectue sa propre traduction dans la
+  langue de l’utilisateur, y compris pour l’historique existant.
+
+### Tests
+
+- Les tests couvrent les messages français et anglais dans les enregistrements,
+  capteurs, événements et tableaux, ainsi que l’absence de texte localisé dans
+  les sources des packs.
+
 ## 1.7.0-dev21 — 27 août 2026
 
 ### Modifié

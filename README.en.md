@@ -134,6 +134,10 @@ confirmation and never changes active, upcoming or acknowledged alerts.
 
 ## Automatic packs
 
+Packs return structured translation keys and never hard-coded localized text. The
+backend uses Home Assistant's global language for sensor and event messages. The
+panel translates conditions and messages again for each signed-in user's locale.
+
 ### Unavailable entities
 
 Every eligible domain is monitored for the exact `unavailable` state. `unknown`

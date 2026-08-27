@@ -277,6 +277,7 @@ def test_active_resolution_and_events(hass, entry, set_now):
     assert len(started) == len(resolved) == 1
     assert started[0]["id"] == "unavailable:sensor.test"
     assert started[0]["condition"] == "État indisponible"
+    assert started[0]["message"] == "État indisponible"
     assert started[0]["condition_key"] == "automatic.unavailable"
     assert started[0]["condition_params"] == {}
     assert "severity" not in started[0]
@@ -404,6 +405,45 @@ def test_battery_global_threshold(hass, entry):
     hass.states.set("sensor.battery", "15", {"device_class": "battery"})
     manager = make_manager(hass, entry)
     assert manager.records["battery:sensor.battery"].details.value == 15.0
+
+
+def test_automatic_pack_messages_follow_home_assistant_language(hass, entry):
+    """Sensors and events receive localized pack messages, including English."""
+    hass.config.language = "en"
+    hass.states.set("sensor.offline", "unavailable")
+    hass.states.set("sensor.battery", "10", {"device_class": "battery"})
+    manager = make_manager(hass, entry)
+
+    unavailable = manager.records["unavailable:sensor.offline"].details
+    battery = manager.records["battery:sensor.battery"].details
+    assert unavailable.condition == unavailable.message == "State is unavailable"
+    assert battery.condition == battery.message == "Battery less than or equal to 15%"
+
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {
+                    "sensor.offline": 0,
+                    "sensor.battery": 0,
+                }
+            }
+        )
+    )
+    started_messages = {
+        event["message"]
+        for event_type, event in hass.bus.fired
+        if event_type == EVENT_ALERT_STARTED
+    }
+    assert started_messages == {
+        "State is unavailable",
+        "Battery less than or equal to 15%",
+    }
+    device_messages = {
+        message
+        for device in manager.public_snapshot()["active_devices"]
+        for message in device["messages"]
+    }
+    assert device_messages == started_messages
 
 
 def test_battery_ignores_low_battery_level_attribute(hass, entry):
@@ -1381,7 +1421,7 @@ def test_devices_with_the_same_name_share_one_active_group(
         "unavailable:sensor.ups_one",
         "unavailable:sensor.ups_two",
     }
-    assert device["messages"] == []
+    assert device["messages"] == ["État indisponible"]
     assert device["rules"] == ["unavailable"]
     device_events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED

@@ -620,6 +620,8 @@ const tablePanel = () => {
       value: 10,
       unit: "%",
       condition: "Batterie inférieure ou égale à 15%",
+      condition_key: "automatic.battery",
+      condition_params: { threshold: "15" },
       detected_at: "2026-08-26T12:05:00Z",
       due_at: "2099-08-26T12:15:00Z",
       active_since: null,
@@ -663,8 +665,10 @@ test("dashboard renders one compact table with the required default columns and 
     "Alerte active", "Alerte à venir", "Alerte acquittée",
   ]));
   const active = rows.find((row) => row.status === "active");
+  const pending = rows.find((row) => row.status === "pending");
   assert.equal(active.value, "34.5 °C");
   assert.equal(active.condition, "État supérieur à 33 °C pendant 30 s");
+  assert.equal(pending.message, "Batterie inférieure ou égale à 15 %");
   assert.equal(panel._nativeTableCell("overview", active, "integration"), "MQTT");
   const status = panel._nativeStatusCell(active, "overview");
   assert.equal(status.attributes["aria-label"], "Alerte active");
@@ -2184,4 +2188,11 @@ test("structured automatic and generated rule conditions are localized", () => {
     },
   }), "State greater than 9 °C for 15 min");
   assert.equal(panel._conditionText({ condition: "User text" }), "User text");
+
+  const table = tablePanel();
+  table._language = "en";
+  table._translations = TRANSLATIONS.en;
+  const automatic = table._tableRows("overview").find((row) => row.source.type === "battery");
+  assert.equal(automatic.condition, "Battery less than or equal to 15%");
+  assert.equal(automatic.message, "Battery less than or equal to 15%");
 });

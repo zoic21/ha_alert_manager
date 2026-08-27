@@ -23,9 +23,7 @@ def _evaluate(
     if state.state != STATE_UNAVAILABLE:
         return None
     return PackMatch(
-        "État indisponible",
         condition_key="automatic.unavailable",
-        condition_params={},
     )
 
 

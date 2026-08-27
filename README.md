@@ -169,6 +169,11 @@ acquittées.
 
 ## Packs automatiques
 
+Les packs retournent des clés de traduction structurées, jamais du texte localisé
+en dur. Le backend utilise la langue globale de Home Assistant pour les messages
+des capteurs et événements. Le panneau retraduit les conditions et messages dans
+la langue de chaque utilisateur connecté.
+
 Les packs génériques **Entités indisponibles**, **Connectivité** et **Batteries
 faibles** sont toujours disponibles. Le choix d’activation d’un pack est conservé
 même si son prérequis devient temporairement indisponible. Dans ce cas, le pack ne

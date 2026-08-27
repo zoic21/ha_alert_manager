@@ -26,9 +26,7 @@ def _evaluate(
     if not _applies(_hass, state) or state.state != "off":
         return None
     return PackMatch(
-        "Connectivité désactivée",
         condition_key="automatic.connectivity",
-        condition_params={},
     )
 
 

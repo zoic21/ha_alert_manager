@@ -31,9 +31,7 @@ def _evaluate(
     if not _applies(hass, state) or state.state == STATE_HOME:
         return None
     return PackMatch(
-        "Équipement UniFi absent",
         condition_key="automatic.unifi",
-        condition_params={},
     )
 
 

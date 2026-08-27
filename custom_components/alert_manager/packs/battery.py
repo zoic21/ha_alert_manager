@@ -46,10 +46,9 @@ def _evaluate(
     if value is None or value > threshold:
         return None
     return PackMatch(
-        condition=f"Batterie inférieure ou égale à {threshold:g} %",
-        value=value,
         condition_key="automatic.battery",
         condition_params={"threshold": f"{threshold:g}"},
+        value=value,
     )
 
 

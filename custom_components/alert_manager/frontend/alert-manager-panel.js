@@ -1163,6 +1163,9 @@ class AlertManagerPanel extends HTMLElement {
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
+      const message = source.type === "rule"
+        ? (source.message || "")
+        : (source.condition_key ? condition : (source.message || ""));
       const finalLabel = history
         ? this._t(source.acknowledged ? "history.resolved_acknowledged" : "history.resolved")
         : this._t(`table.status.${status}`);
@@ -1181,7 +1184,7 @@ class AlertManagerPanel extends HTMLElement {
         domain: metadata.domain,
         labels: metadata.labels,
         labelIds: metadata.labels.map((label) => label.id),
-        message: source.message || "",
+        message,
         value: this._displayValue(value, source.unit),
         rawValue: value,
         condition,
