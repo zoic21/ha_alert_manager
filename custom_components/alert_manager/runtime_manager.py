@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, State, callback
 
 from .const import DOMAIN
@@ -115,6 +116,73 @@ class AlertManager(BaseAlertManager):
             if key[0] in enabled_rule_ids
         }
         self._rebuild_template_dependency_index()
+
+    def _refresh_custom_tracking(self) -> None:
+        """Count custom rules independently from automatic-pack exclusions."""
+        self._custom_tracked_count = sum(
+            1
+            for rule in self._rules
+            if rule.enabled
+            for entity_id in rule.entity_ids
+            if self._is_base_eligible(entity_id)
+        )
+
+    def _build_candidates(self, state: State) -> dict[str, tuple[Any, int]]:
+        """Restore custom candidates hidden only by automatic-pack exclusions."""
+        result = super()._build_candidates(state)
+        entity_id = state.entity_id
+        if (
+            not self._is_explicitly_excluded(entity_id)
+            or not self._is_base_eligible(entity_id)
+            or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        ):
+            return result
+
+        # The base manager intentionally uses explicit entity/device exclusions
+        # for automatic packs. Custom rules are user-selected sources and must
+        # remain independent from those automatic-pack exclusions.
+        for rule in self._rules_by_entity.get(entity_id, ()):
+            if not rule.enabled:
+                continue
+            if rule.source == "attribute" and rule.attribute not in state.attributes:
+                continue
+            current = (
+                state.state
+                if rule.source == "state"
+                else state.attributes.get(rule.attribute or "")
+            )
+            if not rule.matches(current):
+                continue
+            if not self._rule_template_matches(rule, state, current):
+                continue
+            alert_id = f"rule:{rule.id}:{entity_id}"
+            rendered_message = self._render_rule_message(rule, state, current)
+            condition = rendered_message or self._rule_condition(rule, state)
+            condition_key = None
+            condition_params = None
+            if rendered_message is None:
+                condition_key = "rule.generated"
+                condition_params = self._rule_condition_params(rule, state)
+            result[alert_id] = (
+                self._details(
+                    state,
+                    alert_id,
+                    "rule",
+                    condition,
+                    value=current,
+                    condition_key=condition_key,
+                    condition_params=condition_params,
+                    rule_id=rule.id,
+                    rule_name=rule.name,
+                    message=rendered_message,
+                    source=rule.source,
+                    operator=rule.operator,
+                    comparison_value=rule.value,
+                    attribute=rule.attribute,
+                ),
+                rule.duration,
+            )
+        return result
 
     def _rebuild_template_dependency_index(self) -> None:
         """Build reverse indexes so state events avoid scanning every template."""
