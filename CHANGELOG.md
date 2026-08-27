@@ -2,6 +2,28 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev5 — 27 août 2026
+
+### Corrigé
+
+- Les filtres à choix multiples s’affichent désormais dans tous les contextes du
+  panel à partir de composants Home Assistant déjà chargés, sans dépendre des
+  filtres internes propres à la page Entités.
+- Les filtres couvrent en priorité le statut, l’appareil, la règle,
+  l’intégration, les étiquettes, le domaine et la zone, en plus de l’entité, de
+  l’acquittement et des dates.
+- Les étiquettes de l’entité sont affichées sous son nom et participent à la
+  recherche et au filtrage.
+- La colonne Entité précède désormais la colonne Appareil, y compris lors de la
+  migration des préférences par défaut de `dev4`.
+- La marge injectée par `ha-data-table` sur la première icône est neutralisée afin
+  de centrer exactement le pictogramme dans son fond circulaire.
+
+### Tests
+
+- Couverture des nouvelles facettes, des métadonnées de registre, des étiquettes,
+  de la migration de l’ordre des colonnes et du centrage de l’icône.
+
 ## 1.7.0-dev4 — 27 août 2026
 
 ### Corrigé

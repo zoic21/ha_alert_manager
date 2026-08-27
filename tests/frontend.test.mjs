@@ -368,6 +368,7 @@ test("initial load requests pack metadata from the backend", async () => {
       events: [], count: 0, retention_limit: 100, enabled: true,
     },
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
+    "config/label_registry/list": [],
   };
   panel._hass = {
     states: {},
@@ -388,6 +389,7 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/packs/list",
     "alert_manager/history/list",
     "alert_manager/history/config/get",
+    "config/label_registry/list",
     "frontend/get_translations",
     "frontend/get_translations",
   ]);
@@ -504,12 +506,27 @@ const tablePanel = () => {
   const panel = new Panel();
   panel._config = completeConfig();
   panel._packs = completePacks();
+  panel._labels = [{
+    label_id: "critical",
+    name: "Critique",
+    color: "purple",
+    description: "Alerte importante",
+  }];
   panel._hass = {
     states: {
       "sensor.rack": { state: "35" },
       "sensor.pending": { state: "10" },
       "sensor.acknowledged": { state: "unavailable" },
     },
+    entities: {
+      "sensor.rack": { platform: "mqtt", labels: ["critical"] },
+      "sensor.pending": { platform: "mqtt", labels: [] },
+      "sensor.acknowledged": { platform: "hassio", labels: [] },
+    },
+    localize: (key) => ({
+      "component.mqtt.title": "MQTT",
+      "component.hassio.title": "Home Assistant Supervisor",
+    })[key],
   };
   panel._alerts = {
     active_count: 1,
@@ -558,7 +575,7 @@ test("dashboard renders one compact table with the required default columns and 
   const panel = tablePanel();
   const html = panel._renderOverview();
   assert.deepEqual(panel._tableState.overview.columns, [
-    "status", "device", "entity", "value", "condition", "detected", "timeline",
+    "status", "entity", "device", "value", "condition", "detected", "timeline",
   ]);
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
   assert.match(html, /slot="filter-pane"/);
@@ -577,7 +594,8 @@ test("dashboard renders one compact table with the required default columns and 
   assert.equal(status.attributes["aria-label"], "Alerte active");
   assert.equal(status.children[0].tagName, "HA-SVG-ICON");
   assert.match(status.style.cssText, /align-items:center;justify-content:center/);
-  assert.match(status.children[0].style.cssText, /display:block/);
+  assert.match(status.children[0].style.cssText, /margin:0/);
+  assert.match(status.children[0].style.cssText, /translate\(-50%,-50%\)/);
 });
 
 test("native Home Assistant data table receives columns, rows, sort and visibility", () => {
@@ -635,12 +653,12 @@ test("pending countdown is dynamic only while monitoring is enabled", () => {
   assert.equal(panel._alerts.pending.length, 1);
 });
 
-test("search covers rule, entity ID, device, area, message, condition, value and status", () => {
+test("search covers alert fields and Home Assistant entity metadata", () => {
   const panel = tablePanel();
   const rows = panel._tableRows("overview");
   for (const query of [
     "Température baie", "sensor.rack", "Sonde rack", "Bureau", "Refroidir",
-    "supérieur à 33", "34.5", "Alerte active",
+    "supérieur à 33", "34.5", "Alerte active", "mqtt", "Critique", "sensor",
   ]) {
     panel._tableState.overview.search = query;
     assert.ok(panel._filteredTableRows("overview", rows).some((row) => (
@@ -668,18 +686,22 @@ test("individual facet and date filters target their exact fields", () => {
   const panel = tablePanel();
   const rows = panel._tableRows("overview");
   const cases = [
-    ["device", "Sonde rack", "rule:temperature:sensor.rack"],
-    ["area", "Garage", "battery:sensor.pending"],
-    ["rule", "Température baie", "rule:temperature:sensor.rack"],
-    ["entity", "sensor.acknowledged", "unavailable:sensor.acknowledged"],
-    ["acknowledged", "true", "unavailable:sensor.acknowledged"],
+    ["device", "Sonde rack", ["rule:temperature:sensor.rack"]],
+    ["area", "Garage", ["battery:sensor.pending"]],
+    ["rule", "Température baie", ["rule:temperature:sensor.rack"]],
+    ["integration", "mqtt", ["battery:sensor.pending", "rule:temperature:sensor.rack"]],
+    ["labels", "critical", ["rule:temperature:sensor.rack"]],
+    ["domain", "sensor", ["battery:sensor.pending", "rule:temperature:sensor.rack", "unavailable:sensor.acknowledged"]],
+    ["entity", "sensor.acknowledged", ["unavailable:sensor.acknowledged"]],
+    ["acknowledged", "true", ["unavailable:sensor.acknowledged"]],
   ];
   for (const [key, value, expected] of cases) {
     Object.keys(panel._tableState.overview.filters).forEach((filter) => {
       panel._tableState.overview.filters[filter] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(filter) ? "" : [];
     });
     panel._tableState.overview.filters[key] = [value];
-    assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [expected]);
+    const matches = panel._filteredTableRows("overview", rows).map((row) => row.id);
+    assert.deepEqual(matches.sort(), expected.sort());
   }
   panel._tableState.overview.filters.acknowledged = [];
   panel._tableState.overview.filters.detectedFrom = "2026-08-26";
@@ -750,6 +772,10 @@ test("column visibility, order and table preferences persist locally", () => {
   const invalid = makeTableState("overview", { columns: ["value"] });
   assert.ok(invalid.columns.includes("status"));
   assert.ok(invalid.columns.includes("entity"));
+  const migrated = makeTableState("overview", {
+    columns: ["status", "device", "entity", "value", "condition", "detected", "timeline"],
+  });
+  assert.deepEqual(migrated.columns.slice(0, 3), ["status", "entity", "device"]);
 });
 
 test("native settings dialog events hide, reorder and restore optional columns", () => {
@@ -770,7 +796,7 @@ test("native settings dialog events hide, reorder and restore optional columns",
   assert.deepEqual(panel._tableState.overview.columns.slice(0, 4), ["status", "entity", "value", "area"]);
   listeners["columns-changed"]({ detail: { columnOrder: undefined, hiddenColumns: undefined } });
   assert.deepEqual(panel._tableState.overview.columns, [
-    "status", "device", "entity", "value", "condition", "detected", "timeline",
+    "status", "entity", "device", "value", "condition", "detected", "timeline",
   ]);
 });
 
@@ -840,14 +866,14 @@ test("history uses the same table tools without selection or runtime actions", (
   };
   const html = panel._renderHistory();
   assert.deepEqual(panel._tableState.history.columns, [
-    "status", "device", "entity", "value", "condition", "detected", "resolved",
+    "status", "entity", "device", "value", "condition", "detected", "resolved",
   ]);
   const rows = panel._nativeTableData("history", panel._tableRows("history", panel._history.events));
   assert.equal(rows[0].statusLabel, "Résolue après acquittement");
   assert.equal(rows[0].value, "34.5 °C");
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="history"/);
   assert.doesNotMatch(html, /selectable|slot="selection-bar"|bulk-acknowledge|bulk-unacknowledge|data-due=/);
-  assert.match(html, /<ha-filter-states[\s\S]*data-table-filter-component="status"/);
+  assert.match(html, /data-table-filter-option="status"/);
   assert.doesNotMatch(html, /<button|<select|type="radio"|type="checkbox"/);
 });
 
@@ -856,8 +882,13 @@ test("filter pane uses native Home Assistant filters with reset controls in head
   panel._tableState.overview.filters.status = ["active"];
   panel._tableState.overview.filters.detectedFrom = "2026-08-26";
   const html = panel._renderOverview();
-  assert.match(html, /<ha-filter-states[\s\S]*data-table-filter-component="status"/);
-  assert.match(html, /data-table-filter-component="device"/);
+  assert.match(html, /data-table-filter-option="status"/);
+  assert.match(html, /data-table-filter-option="device"/);
+  assert.match(html, /data-table-filter-option="rule"/);
+  assert.match(html, /data-table-filter-option="integration"/);
+  assert.match(html, /data-table-filter-option="labels"/);
+  assert.match(html, /data-table-filter-option="domain"/);
+  assert.match(html, /data-table-filter-option="area"/);
   assert.match(html, /filter-badge">1<\/span><ha-icon-button data-action="clear-filter-section"/);
   assert.match(html, /<ha-input type="date"/);
   assert.doesNotMatch(html, /native-filter-actions|data-action="reset-filters"|class="table-toolbar"/);
@@ -868,33 +899,29 @@ test("native facet filters support multiple values and global clearing", () => {
   panel._tableState.overview.filters.status = ["active"];
   panel._render = () => {};
   const pageListeners = {};
-  const filterListeners = {};
-  const filter = {
+  const checkboxListeners = {};
+  const checkbox = {
     dataset: {
-      tableFilterComponent: "status",
-      tableFilterLabel: "Statut",
-      tableFilterOptions: JSON.stringify([
-        { value: "active", label: "Active" },
-        { value: "pending", label: "À venir" },
-      ]),
+      tableFilterOption: "status",
+      filterValue: "pending",
     },
-    addEventListener(name, callback) { filterListeners[name] = callback; },
+    checked: false,
+    addEventListener(name, callback) { checkboxListeners[name] = callback; },
   };
   const table = {
     dataset: {},
     addEventListener(name, callback) { pageListeners[name] = callback; },
     querySelectorAll(selector) {
-      return selector === "[data-table-filter-component]" ? [filter] : [];
+      return selector === "ha-checkbox[data-table-filter-option]" ? [checkbox] : [];
     },
   };
   panel.shadowRoot.querySelector = (selector) => (
     selector === '[data-alert-table-page="overview"]' ? table : null
   );
   panel._hydrateDataTables();
-  assert.equal(filter.label, "Statut");
-  assert.deepEqual(filter.value, ["active"]);
-  assert.deepEqual(filter.states.map(({ value }) => value), ["active", "pending"]);
-  filterListeners["data-table-filter-changed"]({ detail: { value: ["active", "pending"] } });
+  assert.equal(checkbox.checked, false);
+  checkbox.checked = true;
+  checkboxListeners.change({ stopPropagation() {} });
   assert.deepEqual(panel._tableState.overview.filters.status, ["active", "pending"]);
   pageListeners["clear-filter"]();
   assert.equal(panel._filterCount("overview"), 0);
@@ -943,7 +970,8 @@ test("native Home Assistant table uses full width and compact mobile entity rows
   assert.equal(columns.status.showNarrow, true);
   assert.equal(columns.entity.main, true);
   assert.equal(entity.children[0].textContent, active.entityName);
-  assert.equal(entity.children[1].textContent, active.condition);
+  assert.equal(entity.children[1].children[0].textContent, "Critique");
+  assert.equal(entity.children[2].textContent, active.condition);
 });
 
 test("table navigation delegates tabs and controls to hass-tabs-subpage-data-table", () => {

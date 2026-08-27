@@ -104,13 +104,13 @@ const TABLE_PREFERENCES_KEY = "alert-manager-table-preferences-v1";
 const REQUIRED_COLUMNS = new Set(["status", "entity"]);
 const DEFAULT_TABLE_STATE = Object.freeze({
   overview: Object.freeze({
-    columns: Object.freeze(["status", "device", "entity", "value", "condition", "detected", "timeline"]),
+    columns: Object.freeze(["status", "entity", "device", "value", "condition", "detected", "timeline"]),
     groupBy: "none",
     sortBy: "detected",
     sortDirection: "desc",
   }),
   history: Object.freeze({
-    columns: Object.freeze(["status", "device", "entity", "value", "condition", "detected", "resolved"]),
+    columns: Object.freeze(["status", "entity", "device", "value", "condition", "detected", "resolved"]),
     groupBy: "none",
     sortBy: "detected",
     sortDirection: "desc",
@@ -127,7 +127,12 @@ const makeTableState = (kind, preferences = {}) => {
       typeof column === "string" && columns.indexOf(column) === index
     ))
     : [];
-  const columns = savedColumns.length ? [...savedColumns] : [...defaults.columns];
+  const legacyDefault = kind === "overview"
+    ? ["status", "device", "entity", "value", "condition", "detected", "timeline"]
+    : ["status", "device", "entity", "value", "condition", "detected", "resolved"];
+  const isLegacyDefault = savedColumns.length === legacyDefault.length
+    && savedColumns.every((column, index) => column === legacyDefault[index]);
+  const columns = savedColumns.length && !isLegacyDefault ? [...savedColumns] : [...defaults.columns];
   for (const required of REQUIRED_COLUMNS) {
     if (!columns.includes(required)) columns.push(required);
   }
@@ -138,6 +143,9 @@ const makeTableState = (kind, preferences = {}) => {
       device: [],
       area: [],
       rule: [],
+      integration: [],
+      labels: [],
+      domain: [],
       entity: [],
       acknowledged: [],
       detectedFrom: "",
@@ -189,6 +197,7 @@ class AlertManagerPanel extends HTMLElement {
     this._monitoringEnabled = true;
     this._timer = null;
     this._entityStates = {};
+    this._labels = [];
     this._tableState = this._loadTablePreferences();
     this._collapsedTableGroups = new Set();
     this._filterPaneKind = "";
@@ -309,6 +318,7 @@ class AlertManagerPanel extends HTMLElement {
       this._hass.callWS({ type: "alert_manager/packs/list" }),
       this._hass.callWS({ type: "alert_manager/history/list" }),
       this._hass.callWS({ type: "alert_manager/history/config/get" }),
+      this._hass.callWS({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
     this._loading = true;
@@ -320,6 +330,7 @@ class AlertManagerPanel extends HTMLElement {
         this._packs,
         this._history,
         this._historyConfig,
+        this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
       this._resetSettingsDraft();
@@ -596,14 +607,16 @@ class AlertManagerPanel extends HTMLElement {
           Promise.resolve(tablePage.updateComplete).then(restoreSelection);
         }
       }
-      tablePage.querySelectorAll("[data-table-filter-component]").forEach((filter) => {
-        const key = filter.dataset.tableFilterComponent;
-        filter.label = filter.dataset.tableFilterLabel;
-        filter.states = JSON.parse(filter.dataset.tableFilterOptions || "[]");
-        filter.value = this._filterValues(this._tableState[kind].filters[key]);
-        filter.narrow = Boolean(this._narrow);
-        filter.addEventListener("data-table-filter-changed", (event) => {
-          this._tableState[kind].filters[key] = this._filterValues(event.detail?.value);
+      tablePage.querySelectorAll("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
+        const key = checkbox.dataset.tableFilterOption;
+        const value = checkbox.dataset.filterValue;
+        checkbox.checked = this._filterValues(this._tableState[kind].filters[key]).includes(value);
+        checkbox.addEventListener("change", (event) => {
+          event.stopPropagation();
+          const selected = new Set(this._filterValues(this._tableState[kind].filters[key]));
+          if (checkbox.checked) selected.add(value);
+          else selected.delete(value);
+          this._tableState[kind].filters[key] = [...selected];
           this._filterPaneKind = kind;
           this._render();
         });
@@ -865,8 +878,40 @@ class AlertManagerPanel extends HTMLElement {
     return unit ? `${rendered} ${unit}` : rendered;
   }
 
+  _entityMetadata(source) {
+    const entityId = source.entity_id || "";
+    const entity = this._hass?.entities?.[entityId];
+    const domain = entityId.includes(".") ? entityId.split(".", 1)[0] : "";
+    const integration = source.integration || entity?.platform || "";
+    const labelIds = [...new Set([
+      ...(Array.isArray(source.labels) ? source.labels : []),
+      ...(Array.isArray(entity?.labels) ? entity.labels : []),
+    ].map(String).filter(Boolean))];
+    const registry = new Map((Array.isArray(this._labels) ? this._labels : []).map((label) => (
+      [String(label.label_id), label]
+    )));
+    const labels = labelIds.map((labelId) => {
+      const entry = registry.get(labelId);
+      return {
+        id: labelId,
+        name: entry?.name || labelId,
+        color: entry?.color || "",
+        description: entry?.description || "",
+        icon: entry?.icon || "",
+      };
+    });
+    return { domain, integration, labels };
+  }
+
+  _integrationLabel(integration) {
+    if (!integration) return "";
+    return this._hass?.localize?.(`component.${integration}.title`)
+      || String(integration).replaceAll("_", " ");
+  }
+
   _tableRows(kind, historyEvents = []) {
     const create = (source, status, history = false) => {
+      const metadata = this._entityMetadata(source);
       const entityName = history ? (source.entity_name || source.entity_id) : (source.name || source.entity_id);
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
@@ -884,6 +929,11 @@ class AlertManagerPanel extends HTMLElement {
         device: source.device_name || "",
         area: source.area || "",
         rule,
+        integration: metadata.integration,
+        integrationLabel: this._integrationLabel(metadata.integration),
+        domain: metadata.domain,
+        labels: metadata.labels,
+        labelIds: metadata.labels.map((label) => label.id),
         message: source.message || "",
         value: this._displayValue(value, source.unit),
         rawValue: value,
@@ -897,7 +947,8 @@ class AlertManagerPanel extends HTMLElement {
       };
       row.search = [
         row.rule, row.entityName, row.entityId, row.device, row.area, row.message,
-        row.condition, row.value, row.statusLabel,
+        row.condition, row.value, row.statusLabel, row.integration, row.integrationLabel,
+        row.domain, ...row.labels.flatMap((label) => [label.id, label.name]),
       ].join(" ").toLocaleLowerCase(this._language);
       return row;
     };
@@ -935,7 +986,7 @@ class AlertManagerPanel extends HTMLElement {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "entity", "acknowledged"]
+      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "acknowledged"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
@@ -944,6 +995,9 @@ class AlertManagerPanel extends HTMLElement {
       if (selected.device.size && !selected.device.has(row.device)) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
       if (selected.rule.size && !selected.rule.has(row.rule)) return false;
+      if (selected.integration.size && !selected.integration.has(row.integration)) return false;
+      if (selected.labels.size && !row.labelIds.some((label) => selected.labels.has(label))) return false;
+      if (selected.domain.size && !selected.domain.has(row.domain)) return false;
       if (selected.entity.size && !selected.entity.has(row.entityId)) return false;
       if (selected.acknowledged.size && !selected.acknowledged.has(String(row.acknowledged))) return false;
       if (!this._dateMatches(row.detected, filters.detectedFrom, filters.detectedTo)) return false;
@@ -1022,12 +1076,16 @@ class AlertManagerPanel extends HTMLElement {
       value: String(option.value ?? option),
       label: String(option.label ?? option),
     }));
-    return `<ha-filter-states
-      data-table-filter-component="${key}"
-      data-table-filter-label="${esc(label)}"
-      data-table-filter-options="${esc(JSON.stringify(normalized))}"
-      data-table-kind="${kind}"
-    ></ha-filter-states>`;
+    const selected = new Set(this._filterValues(this._tableState[kind].filters[key]));
+    return `<ha-expansion-panel left-chevron ${selected.size ? "expanded" : ""}>
+      <div slot="header" class="filter-section-header">
+        <span>${esc(label)}</span>
+        ${selected.size ? `<span class="filter-badge">${selected.size}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${key}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
+      </div>
+      <div class="facet-filter-options" role="group" aria-label="${esc(label)}">
+        ${normalized.length ? normalized.map((option) => `<div class="filter-option" data-action="toggle-filter-option" data-table-kind="${kind}" data-filter-key="${key}" data-filter-value="${esc(option.value)}"><ha-checkbox data-table-filter-option="${key}" data-filter-value="${esc(option.value)}" ${selected.has(option.value) ? "checked" : ""} aria-label="${esc(option.label)}"></ha-checkbox><span>${esc(option.label)}</span></div>`).join("") : `<span class="filter-empty">${esc(this._t("table.filters.no_options"))}</span>`}
+      </div>
+    </ha-expansion-panel>`;
   }
 
   _renderDateFilter(kind, prefix, label) {
@@ -1050,8 +1108,11 @@ class AlertManagerPanel extends HTMLElement {
       : ["active", "pending", "acknowledged"].map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses)}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
-      ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
+      ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
+      ${this._renderFacetFilter(kind, "labels", this._t("table.filters.labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()])}
+      ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
+      ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
       ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
       ${this._renderFacetFilter(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
       ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"))}
@@ -1188,10 +1249,10 @@ class AlertManagerPanel extends HTMLElement {
     status.setAttribute("role", "img");
     status.setAttribute("aria-label", row.statusLabel);
     status.title = row.statusLabel;
-    status.style.cssText = `display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:32px;height:32px;padding:5px;border-radius:50%;line-height:0;color:${color};background:${background}`;
+    status.style.cssText = `position:relative;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:32px;height:32px;min-width:32px;min-height:32px;border-radius:50%;line-height:0;vertical-align:middle;color:${color};background:${background}`;
     const icon = document.createElement("ha-svg-icon");
     icon.path = path;
-    icon.style.cssText = "display:block;width:20px;height:20px;flex:0 0 20px";
+    icon.style.cssText = "position:absolute;inset:50% auto auto 50%;display:block;width:20px;height:20px;min-width:20px;min-height:20px;margin:0;padding:0;line-height:0;transform:translate(-50%,-50%)";
     status.append(icon);
     return status;
   }
@@ -1204,6 +1265,25 @@ class AlertManagerPanel extends HTMLElement {
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(name);
+    if (row.labels?.length) {
+      const labels = document.createElement("span");
+      labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
+      for (const metadata of row.labels) {
+        const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
+        label.textContent = metadata.name;
+        label.title = metadata.description || metadata.name;
+        if (label.tagName === "HA-LABEL") {
+          label.setAttribute("dense", "");
+          if (metadata.color) label.setAttribute("color", metadata.color);
+          if (metadata.description) label.setAttribute("description", metadata.description);
+          label.className = "text-ellipsis";
+        } else {
+          label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+        }
+        labels.append(label);
+      }
+      content.append(labels);
+    }
     if (narrow) {
       const condition = document.createElement("span");
       condition.textContent = row.condition || "—";
@@ -1452,8 +1532,21 @@ class AlertManagerPanel extends HTMLElement {
       event.stopPropagation?.();
       const kind = button.dataset.tableKind;
       for (const key of String(button.dataset.filterKeys ?? "").split(",").filter(Boolean)) {
-        this._tableState[kind].filters[key] = "";
+        this._tableState[kind].filters[key] = Array.isArray(this._tableState[kind].filters[key]) ? [] : "";
       }
+      this._filterPaneKind = kind;
+      this._render();
+      return;
+    }
+    if (action === "toggle-filter-option") {
+      if (event.target?.closest?.("ha-checkbox")) return;
+      const kind = button.dataset.tableKind;
+      const key = button.dataset.filterKey;
+      const value = button.dataset.filterValue;
+      const selected = new Set(this._filterValues(this._tableState[kind].filters[key]));
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+      this._tableState[kind].filters[key] = [...selected];
       this._filterPaneKind = kind;
       this._render();
       return;
@@ -2189,7 +2282,7 @@ class AlertManagerPanel extends HTMLElement {
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
-      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-filter-states,.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
+      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}

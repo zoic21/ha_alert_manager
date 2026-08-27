@@ -81,14 +81,16 @@ messages and comparison values are user data and are never translated.
 ## Overview table
 
 One compact table combines active alerts (red), upcoming alerts (orange) and
-acknowledged alerts (blue). Its default columns are Status, Device, Entity,
+acknowledged alerts (blue). Its default columns are Status, Entity, Device,
 Value, Condition, Detected and Active since/Time remaining. Selecting an
 existing entity opens Home Assistant's native more-info dialog. The remaining
 time is calculated in the browser from `due_at` and becomes an explicit suspended
 delay while monitoring is disabled; Alert Manager never writes a per-second
 countdown to Recorder.
 
-The toolbar provides immediate search, cumulative filters, collapsible grouping
+Home Assistant labels are displayed below the entity name. The toolbar provides
+immediate search and cumulative filters for status, device, rule, integration,
+label, domain, area, entity, acknowledgement and dates, plus collapsible grouping
 by device, area, rule or status, and ascending or descending sorting. Optional
 columns (entity ID, area, rule and message among them) can be shown, hidden and
 reordered. Column order and visibility, grouping and sorting are kept locally for
