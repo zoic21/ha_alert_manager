@@ -29,63 +29,52 @@ def _connectivity_state(hass, value, *, attributes=None):
     return hass.states.get("binary_sensor.link")
 
 
+def _should_evaluate(pack, hass, old_state, new_state):
+    return pack.should_evaluate(hass, old_state, new_state, {"enabled": True})
+
+
 def test_connectivity_treats_unavailable_as_off(hass):
     """Off and unavailable are one logical connectivity failure."""
-    config = {"enabled": True}
     on_state = _connectivity_state(hass, "on")
     off_state = _connectivity_state(hass, "off")
     unavailable_state = _connectivity_state(hass, STATE_UNAVAILABLE)
 
-    assert connectivity.PACK.should_evaluate(hass, on_state, off_state, config)
-    assert (
-        connectivity.PACK.should_evaluate(
-            hass, off_state, unavailable_state, config
-        )
-        is False
+    assert _should_evaluate(connectivity.PACK, hass, on_state, off_state)
+    assert not _should_evaluate(
+        connectivity.PACK, hass, off_state, unavailable_state
     )
-    assert (
-        connectivity.PACK.should_evaluate(
-            hass, unavailable_state, off_state, config
-        )
-        is False
+    assert not _should_evaluate(
+        connectivity.PACK, hass, unavailable_state, off_state
     )
-    assert connectivity.PACK.should_evaluate(hass, unavailable_state, on_state, config)
+    assert _should_evaluate(connectivity.PACK, hass, unavailable_state, on_state)
 
-    match = connectivity.PACK.evaluate(hass, unavailable_state, config)
+    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
     assert match is not None
     assert match.condition_key == "automatic.connectivity"
 
 
 def test_connectivity_reload_survives_temporary_attribute_loss(hass):
     """A reload remains one failure even if unavailable temporarily loses metadata."""
-    config = {"enabled": True}
     off_state = _connectivity_state(hass, "off")
     unavailable_without_attributes = _connectivity_state(
         hass, STATE_UNAVAILABLE, attributes={}
     )
 
-    assert (
-        connectivity.PACK.should_evaluate(
-            hass, off_state, unavailable_without_attributes, config
-        )
-        is False
+    assert not _should_evaluate(
+        connectivity.PACK, hass, off_state, unavailable_without_attributes
     )
-    assert (
-        unavailable.PACK.should_evaluate(
-            hass, off_state, unavailable_without_attributes, config
-        )
-        is False
+    assert not _should_evaluate(
+        unavailable.PACK, hass, off_state, unavailable_without_attributes
     )
 
 
 def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
     """Only off/unavailable churn is suppressed; normal unavailable edges remain."""
-    config = {"enabled": True}
     on_state = _connectivity_state(hass, "on")
     unavailable_state = _connectivity_state(hass, STATE_UNAVAILABLE)
 
-    assert unavailable.PACK.should_evaluate(hass, on_state, unavailable_state, config)
-    assert unavailable.PACK.should_evaluate(hass, unavailable_state, on_state, config)
+    assert _should_evaluate(unavailable.PACK, hass, on_state, unavailable_state)
+    assert _should_evaluate(unavailable.PACK, hass, unavailable_state, on_state)
 
 
 def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
@@ -99,7 +88,9 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
 
         old_state = hass.states.get("binary_sensor.link")
         off_state = _connectivity_state(hass, "off")
-        manager._state_changed(_state_event("binary_sensor.link", old_state, off_state))
+        manager._state_changed(
+            _state_event("binary_sensor.link", old_state, off_state)
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
