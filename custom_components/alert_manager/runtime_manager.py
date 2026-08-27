@@ -260,24 +260,20 @@ class AlertManager(BaseAlertManager):
         if entity_id in self._rules_by_entity:
             return True
 
-        has_existing_record = any(
-            record.details.entity_id == entity_id for record in self.records.values()
-        )
-
         # Home Assistant state_changed events include both states. Keep a
         # conservative fallback for synthetic events or future HA API changes.
         if "old_state" not in event.data or "new_state" not in event.data:
-            return has_existing_record or self._is_relevant_entity_id(entity_id)
+            return self._is_relevant_entity_id(entity_id)
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
         if (old_state is not None and not isinstance(old_state, State)) or (
             new_state is not None and not isinstance(new_state, State)
         ):
-            return has_existing_record or self._is_relevant_entity_id(entity_id)
+            return self._is_relevant_entity_id(entity_id)
 
-        # Exact state+attribute duplicates cannot change automatic output, even
-        # when an automatic alert already exists. Direct custom rules were kept
-        # above, and Jinja dependencies are queued independently by _state_changed.
+        # Exact state+attribute duplicates cannot change automatic output. Direct
+        # custom rules were kept above, and Jinja dependencies are queued
+        # independently by _state_changed.
         if (
             old_state is not None
             and new_state is not None
@@ -285,11 +281,6 @@ class AlertManager(BaseAlertManager):
             and old_state.attributes == new_state.attributes
         ):
             return False
-
-        # Existing occurrences still need normal transitions so their displayed
-        # value can update and so they can resolve when the condition clears.
-        if has_existing_record:
-            return True
 
         if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
             entity_id
@@ -307,6 +298,21 @@ class AlertManager(BaseAlertManager):
                 return True
         return False
 
+    def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
+        """Update automatic tracked membership without evaluating alert candidates."""
+        if "new_state" not in event.data:
+            return False
+        new_state = event.data.get("new_state")
+        if new_state is not None and not isinstance(new_state, State):
+            return False
+        was_tracked = entity_id in self._automatic_tracked_entities
+        is_tracked = new_state is not None and self._is_automatically_tracked(new_state)
+        if is_tracked:
+            self._automatic_tracked_entities.add(entity_id)
+        else:
+            self._automatic_tracked_entities.discard(entity_id)
+        return was_tracked != is_tracked
+
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state event, never our own entities."""
@@ -315,6 +321,9 @@ class AlertManager(BaseAlertManager):
         entity_id = event.data.get("entity_id")
         if not entity_id or self._is_own_entity(entity_id):
             return
+
+        if self._update_tracking_for_state_event(entity_id, event):
+            self._queued_public_refresh = True
 
         affected_entities = {
             dependency_key[2]
@@ -345,7 +354,7 @@ class AlertManager(BaseAlertManager):
             for entity_id in entity_ids
             if entity_id and not self._is_own_entity(entity_id)
         )
-        if not self._queued_evaluation_entities:
+        if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
         self._queued_evaluation_restoring |= restoring
         self._schedule_evaluation_flush()
@@ -399,7 +408,7 @@ class AlertManager(BaseAlertManager):
         finally:
             self._evaluation_flush_scheduled = False
             if (
-                self._queued_evaluation_entities
+                (self._queued_evaluation_entities or self._queued_public_refresh)
                 and not self._unloading
                 and self.monitoring_enabled
             ):
