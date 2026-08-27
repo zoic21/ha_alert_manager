@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
 
 from .const import DOMAIN
@@ -254,6 +255,21 @@ class AlertManager(BaseAlertManager):
             return None
         self._index_render_info("message", pair, render_info)
         return rendered
+
+    def _build_candidates(self, state: State) -> dict[str, Any]:
+        """Let automatic packs coexist when an entity is unavailable."""
+        if state.state != STATE_UNAVAILABLE:
+            return super()._build_candidates(state)
+        if not self._is_base_eligible(state.entity_id):
+            return {}
+
+        result: dict[str, Any] = {}
+        if self._is_automatic_eligible(state.entity_id):
+            for pack in PACKS:
+                self._add_pack_candidate(result, state, pack.id)
+        # Keep the existing rule semantics: custom rules are not evaluated while
+        # their source itself is unavailable.
+        return result
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
