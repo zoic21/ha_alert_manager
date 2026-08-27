@@ -11,8 +11,12 @@ from custom_components.alert_manager.packs.battery import (
     PACK as BATTERY_PACK,
     _cached_effective_threshold,
 )
-from custom_components.alert_manager.packs.connectivity import PACK as CONNECTIVITY_PACK
-from custom_components.alert_manager.packs.unavailable import PACK as UNAVAILABLE_PACK
+from custom_components.alert_manager.packs.connectivity import (
+    PACK as CONNECTIVITY_PACK,
+)
+from custom_components.alert_manager.packs.unavailable import (
+    PACK as UNAVAILABLE_PACK,
+)
 from custom_components.alert_manager.runtime_manager import AlertManager
 
 
@@ -117,7 +121,7 @@ def test_battery_threshold_cache_follows_config_and_device_changes(
 
 
 def test_runtime_battery_filter_respects_device_override(hass, entry, registry_entry):
-    """The runtime queues battery work only when the effective device threshold crosses."""
+    """Queue battery work only when the effective device threshold crosses."""
 
     async def scenario():
         device_id = "battery-device"
