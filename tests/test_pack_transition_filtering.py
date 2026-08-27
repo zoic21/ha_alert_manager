@@ -418,7 +418,7 @@ def test_removed_entity_clears_acknowledged_automatic_alert(hass, entry):
         await asyncio.sleep(0)
 
         assert alert_id not in manager.records
-        assert any(item.details.id == alert_id for item in manager.history)
+        assert any(item.id == alert_id for item in manager.history)
 
     asyncio.run(scenario())
 
