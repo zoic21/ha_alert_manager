@@ -560,8 +560,10 @@ test("dashboard renders one compact table with the required default columns and 
   assert.deepEqual(panel._tableState.overview.columns, [
     "status", "device", "entity", "value", "condition", "detected", "timeline",
   ]);
-  assert.match(html, /<ha-data-table class="native-alert-table" data-native-alert-table="overview">/);
-  assert.match(html, /<ha-input-search[^>]*data-table-search="overview"/);
+  assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
+  assert.match(html, /slot="filter-pane"/);
+  assert.match(html, /slot="selection-bar"/);
+  assert.doesNotMatch(html, /<ha-input-search|data-table-dropdown|class="table-toolbar"/);
   assert.doesNotMatch(html, /<table|<thead|<tbody|alert-card|device-alert-group/);
   const rows = panel._nativeTableData("overview", panel._tableRows("overview"));
   assert.equal(rows.length, 3);
@@ -574,27 +576,36 @@ test("dashboard renders one compact table with the required default columns and 
   const status = panel._nativeStatusCell(active, "overview");
   assert.equal(status.attributes["aria-label"], "Alerte active");
   assert.equal(status.children[0].tagName, "HA-SVG-ICON");
+  assert.match(status.style.cssText, /align-items:center;justify-content:center/);
+  assert.match(status.children[0].style.cssText, /display:block/);
 });
 
 test("native Home Assistant data table receives columns, rows, sort and visibility", () => {
   const panel = tablePanel();
-  const table = { addEventListener() {} };
+  panel._tableState.overview.search = "garage";
+  const table = { addEventListener() {}, querySelectorAll() { return []; }, dataset: {} };
   panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-native-alert-table="overview"]' ? table : null
+    selector === '[data-alert-table-page="overview"]' ? table : null
   );
 
   panel._hydrateDataTables();
 
-  assert.equal(table.columns.status.title, "Statut");
+  assert.equal(table.columns.status.title, "");
+  assert.equal(table.columns.status.label, "Statut");
+  assert.equal(table.columns.status.showNarrow, true);
   assert.equal(table.columns.entity.main, true);
   assert.equal(table.columns.entity.sortable, true);
+  assert.equal(table.columns.condition.showNarrow, false);
   assert.equal(table.data.length, 3);
+  assert.equal(table.filter, "garage");
   assert.equal(table.id, "id");
-  assert.equal(table.sortColumn, "detected");
-  assert.equal(table.sortDirection, "desc");
-  assert.equal(table.selectable, false);
+  assert.deepEqual(table.initialSorting, { column: "detected", direction: "desc" });
+  assert.equal(table.selectable, true);
+  assert.equal(table.clickable, true);
   assert.deepEqual(table.columnOrder.slice(0, 7), panel._tableState.overview.columns);
   assert.ok(table.hiddenColumns.includes("entity_id"));
+  assert.equal(table.columns.device_group.groupable, true);
+  assert.equal(table.columns.search_index.filterable, true);
 });
 
 test("pending countdown is dynamic only while monitoring is enabled", () => {
@@ -638,18 +649,17 @@ test("search covers rule, entity ID, device, area, message, condition, value and
   }
 });
 
-test("filters combine and can be reset without changing table data", async () => {
+test("filters combine and can be reset without changing table data", () => {
   const panel = tablePanel();
   const rows = panel._tableRows("overview");
-  panel._tableState.overview.filters.status = "pending";
-  panel._tableState.overview.filters.area = "Garage";
-  panel._tableState.overview.filters.acknowledged = "false";
+  panel._tableState.overview.filters.status = ["pending"];
+  panel._tableState.overview.filters.area = ["Garage"];
+  panel._tableState.overview.filters.acknowledged = ["false"];
   assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [
     "battery:sensor.pending",
   ]);
   assert.equal(panel._filterCount("overview"), 3);
-  panel._render = () => {};
-  await panel._handleClick(actionEvent("reset-filters", undefined, { tableKind: "overview" }));
+  panel._resetTableFilters("overview");
   assert.equal(panel._filterCount("overview"), 0);
   assert.equal(panel._filteredTableRows("overview", rows).length, 3);
 });
@@ -666,37 +676,43 @@ test("individual facet and date filters target their exact fields", () => {
   ];
   for (const [key, value, expected] of cases) {
     Object.keys(panel._tableState.overview.filters).forEach((filter) => {
-      panel._tableState.overview.filters[filter] = "";
+      panel._tableState.overview.filters[filter] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(filter) ? "" : [];
     });
-    panel._tableState.overview.filters[key] = value;
+    panel._tableState.overview.filters[key] = [value];
     assert.deepEqual(panel._filteredTableRows("overview", rows).map((row) => row.id), [expected]);
   }
-  panel._tableState.overview.filters.acknowledged = "";
+  panel._tableState.overview.filters.acknowledged = [];
   panel._tableState.overview.filters.detectedFrom = "2026-08-26";
   panel._tableState.overview.filters.detectedTo = "2026-08-26";
   assert.equal(panel._filteredTableRows("overview", rows).length, 3);
 });
 
-test("grouping works for device, area, rule and status and remembers collapsed groups", async () => {
+test("native grouping works for device, area, rule and status and remembers collapsed groups", () => {
   const panel = tablePanel();
   const rows = panel._filteredTableRows("overview", panel._tableRows("overview"));
-  for (const groupBy of ["device", "area", "rule", "status"]) {
-    panel._tableState.overview.groupBy = groupBy;
-    const data = panel._nativeTableData("overview", rows);
-    assert.ok(new Set(data.map((row) => row._group)).size >= 2);
-    assert.ok(data.every((row) => / \(\d+\)$/.test(row._group)));
-  }
+  const data = panel._nativeTableData("overview", rows);
+  assert.ok(new Set(data.map((row) => row.device_group)).size >= 2);
+  assert.ok(new Set(data.map((row) => row.area_group)).size >= 2);
+  assert.ok(new Set(data.map((row) => row.rule_group)).size >= 2);
+  assert.ok(new Set(data.map((row) => row.status_group)).size >= 2);
+  assert.equal(panel._nativeGroupColumn("device"), "device_group");
+  assert.equal(panel._tableStateGroupColumn("status_group"), "status");
   panel._tableState.overview.groupBy = "device";
   const listeners = {};
-  const table = { addEventListener(name, callback) { listeners[name] = callback; } };
+  const table = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+    querySelectorAll() { return []; },
+    dataset: {},
+  };
   panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-native-alert-table="overview"]' ? table : null
+    selector === '[data-alert-table-page="overview"]' ? table : null
   );
   panel._hydrateDataTables();
-  const group = table.data[0]._group;
-  const base = panel._nativeGroupLabels.overview.get(group);
+  const group = table.data[0].device_group;
   listeners["collapsed-changed"]({ detail: { value: [group] } });
-  assert.equal(panel._collapsedTableGroups.has(`overview:${base}`), true);
+  assert.equal(panel._collapsedTableGroups.has(`overview:${group}`), true);
+  listeners["grouping-changed"]({ detail: { value: "area_group" } });
+  assert.equal(panel._tableState.overview.groupBy, "area");
 });
 
 test("sorting handles dates, numeric values and text in both directions", () => {
@@ -736,64 +752,63 @@ test("column visibility, order and table preferences persist locally", () => {
   assert.ok(invalid.columns.includes("entity"));
 });
 
-test("column controls hide, show, move and restore optional columns", async () => {
+test("native settings dialog events hide, reorder and restore optional columns", () => {
   const panel = tablePanel();
-  panel._render = () => {};
-  panel._handleChange({
-    target: {
-      dataset: { tableKind: "overview", tableColumn: "device" },
-      checked: false,
-    },
-  });
+  const listeners = {};
+  const table = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+    querySelectorAll() { return []; },
+    dataset: {},
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  const order = ["status", "entity", "value", "area", "device", "condition", "detected", "timeline"];
+  listeners["columns-changed"]({ detail: { columnOrder: order, hiddenColumns: ["device"] } });
   assert.equal(panel._tableState.overview.columns.includes("device"), false);
-  panel._handleChange({
-    target: {
-      dataset: { tableKind: "overview", tableColumn: "area" },
-      checked: true,
-    },
-  });
-  assert.equal(panel._tableState.overview.columns.at(-1), "area");
-  await panel._handleClick(actionEvent("move-column", undefined, {
-    tableKind: "overview", column: "area", direction: "up",
-  }));
-  assert.equal(panel._tableState.overview.columns.at(-2), "area");
-  await panel._handleClick(actionEvent("reset-columns", undefined, { tableKind: "overview" }));
+  assert.deepEqual(panel._tableState.overview.columns.slice(0, 4), ["status", "entity", "value", "area"]);
+  listeners["columns-changed"]({ detail: { columnOrder: undefined, hiddenColumns: undefined } });
   assert.deepEqual(panel._tableState.overview.columns, [
     "status", "device", "entity", "value", "condition", "detected", "timeline",
   ]);
 });
 
-test("selection mode opens, selects individual and visible rows, and closes cleanly", async () => {
+test("selection mode is delegated to the native subpage table toolbar", async () => {
   const panel = tablePanel();
-  panel._render = () => {};
-  await panel._handleClick(actionEvent("open-selection"));
-  assert.equal(panel._selectionMode, true);
+  panel._selectionMode = true;
+  panel._selectedAlertIds = new Set(["rule:temperature:sensor.rack"]);
   const listeners = {};
-  const allIds = panel._tableRows("overview").map((row) => row.id);
+  let restoredSelection = [];
   const table = {
     addEventListener(name, callback) { listeners[name] = callback; },
-    selectAll() { listeners["selection-changed"]({ detail: { value: allIds } }); },
-    clearSelection() { listeners["selection-changed"]({ detail: { value: [] } }); },
+    querySelectorAll() { return []; },
+    dataset: {},
+    updateComplete: Promise.resolve(),
+    shadowRoot: {
+      querySelector() {
+        return { select(ids) { restoredSelection = ids; } };
+      },
+    },
   };
   panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-native-alert-table="overview"]' ? table : null
+    selector === '[data-alert-table-page="overview"]' ? table : null
   );
   panel._hydrateDataTables();
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  assert.equal(table.selectable, true);
+  assert.match(panel._renderOverview(), /slot="selection-bar"/);
+  assert.deepEqual(restoredSelection, ["rule:temperature:sensor.rack"]);
   listeners["selection-changed"]({ detail: { value: ["rule:temperature:sensor.rack"] } });
   assert.equal(panel._selectedAlertIds.has("rule:temperature:sensor.rack"), true);
-  await panel._handleClick(actionEvent("select-visible"));
-  assert.equal(panel._selectedAlertIds.size, 3);
-  await panel._handleClick(actionEvent("select-visible"));
-  assert.equal(panel._selectedAlertIds.size, 0);
-  await panel._handleClick(actionEvent("close-selection"));
-  assert.equal(panel._selectionMode, false);
+  assert.equal(table.selected, 1);
 });
 
 test("selection mode selects visible rows and mixed bulk actions affect compatible alerts only", async () => {
   const panel = tablePanel();
   panel._selectionMode = true;
   panel._selectedAlertIds = new Set(panel._tableRows("overview").map((row) => row.id));
-  const toolbar = panel._renderTableToolbar(
+  const toolbar = panel._renderAlertTable(
     "overview",
     panel._tableRows("overview"),
   );
@@ -830,54 +845,80 @@ test("history uses the same table tools without selection or runtime actions", (
   const rows = panel._nativeTableData("history", panel._tableRows("history", panel._history.events));
   assert.equal(rows[0].statusLabel, "Résolue après acquittement");
   assert.equal(rows[0].value, "34.5 °C");
-  assert.match(html, /<ha-data-table class="native-alert-table" data-native-alert-table="history">/);
-  assert.doesNotMatch(html, /open-selection|bulk-acknowledge|bulk-unacknowledge|data-due=/);
-  assert.match(html, /<ha-assist-chip data-action="toggle-filter-pane"/);
-  assert.match(html, /<ha-dropdown data-table-dropdown="group"/);
-  assert.match(html, /<ha-dropdown data-table-dropdown="sort"/);
-  assert.match(html, /<ha-dropdown data-table-dropdown="columns"/);
-  assert.match(html, /<ha-dropdown-item value="resolved"/);
+  assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="history"/);
+  assert.doesNotMatch(html, /selectable|slot="selection-bar"|bulk-acknowledge|bulk-unacknowledge|data-due=/);
+  assert.match(html, /<ha-filter-states[\s\S]*data-table-filter-component="status"/);
   assert.doesNotMatch(html, /<button|<select|type="radio"|type="checkbox"/);
 });
 
-test("table toolbar and filter pane use native Home Assistant controls", async () => {
+test("filter pane uses native Home Assistant filters with reset controls in headers", () => {
   const panel = tablePanel();
-  let html = panel._renderOverview();
-  assert.match(html, /<ha-assist-chip data-action="toggle-filter-pane"/);
-  assert.match(html, /<ha-dropdown data-table-dropdown="group"/);
-  assert.match(html, /<ha-dropdown-item value="device"/);
-  assert.doesNotMatch(html, /class="toolbar-button|class="toolbar-icon-button|<button|<select/);
-
-  panel._render = () => {};
-  await panel._handleClick(actionEvent("toggle-filter-pane", undefined, { tableKind: "overview" }));
-  assert.equal(panel._filterPaneKind, "overview");
-  html = panel._renderOverview();
-  assert.match(html, /<aside class="native-filter-pane"/);
-  assert.match(html, /<ha-expansion-panel left-chevron/);
-  assert.match(html, /<ha-check-list-item data-table-filter-option="status"/);
+  panel._tableState.overview.filters.status = ["active"];
+  panel._tableState.overview.filters.detectedFrom = "2026-08-26";
+  const html = panel._renderOverview();
+  assert.match(html, /<ha-filter-states[\s\S]*data-table-filter-component="status"/);
+  assert.match(html, /data-table-filter-component="device"/);
+  assert.match(html, /filter-badge">1<\/span><ha-icon-button data-action="clear-filter-section"/);
   assert.match(html, /<ha-input type="date"/);
+  assert.doesNotMatch(html, /native-filter-actions|data-action="reset-filters"|class="table-toolbar"/);
 });
 
-test("native dropdown selections update grouping sorting and columns", () => {
+test("native facet filters support multiple values and global clearing", () => {
   const panel = tablePanel();
+  panel._tableState.overview.filters.status = ["active"];
   panel._render = () => {};
-  const select = (menu, value) => panel._handleSelected({
-    detail: { item: { value } },
-    target: {},
-    composedPath: () => [{ dataset: { tableDropdown: menu, tableKind: "overview" } }],
-  });
-  select("group", "device");
+  const pageListeners = {};
+  const filterListeners = {};
+  const filter = {
+    dataset: {
+      tableFilterComponent: "status",
+      tableFilterLabel: "Statut",
+      tableFilterOptions: JSON.stringify([
+        { value: "active", label: "Active" },
+        { value: "pending", label: "À venir" },
+      ]),
+    },
+    addEventListener(name, callback) { filterListeners[name] = callback; },
+  };
+  const table = {
+    dataset: {},
+    addEventListener(name, callback) { pageListeners[name] = callback; },
+    querySelectorAll(selector) {
+      return selector === "[data-table-filter-component]" ? [filter] : [];
+    },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  assert.equal(filter.label, "Statut");
+  assert.deepEqual(filter.value, ["active"]);
+  assert.deepEqual(filter.states.map(({ value }) => value), ["active", "pending"]);
+  filterListeners["data-table-filter-changed"]({ detail: { value: ["active", "pending"] } });
+  assert.deepEqual(panel._tableState.overview.filters.status, ["active", "pending"]);
+  pageListeners["clear-filter"]();
+  assert.equal(panel._filterCount("overview"), 0);
+});
+
+test("native wrapper events update search grouping sorting and columns", () => {
+  const panel = tablePanel();
+  const listeners = {};
+  const table = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+    querySelectorAll() { return []; },
+    dataset: {},
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? table : null
+  );
+  panel._hydrateDataTables();
+  listeners["search-changed"]({ detail: { value: "garage" } });
+  assert.equal(panel._tableState.overview.search, "garage");
+  listeners["grouping-changed"]({ detail: { value: "device_group" } });
   assert.equal(panel._tableState.overview.groupBy, "device");
-  select("sort", "value");
+  listeners["sorting-changed"]({ detail: { column: "value", direction: "asc" } });
   assert.equal(panel._tableState.overview.sortBy, "value");
-  select("sort", "value");
   assert.equal(panel._tableState.overview.sortDirection, "asc");
-  select("columns", "toggle:device");
-  assert.equal(panel._tableState.overview.columns.includes("device"), false);
-  select("columns", "reset");
-  assert.deepEqual(panel._tableState.overview.columns, [
-    "status", "device", "entity", "value", "condition", "detected", "timeline",
-  ]);
   let editorSwitches = 0;
   panel._switchRuleEditor = () => { editorSwitches += 1; };
   panel._handleSelected({
@@ -888,16 +929,24 @@ test("native dropdown selections update grouping sorting and columns", () => {
   assert.equal(editorSwitches, 1);
 });
 
-test("native Home Assistant data table remains constrained and usable on mobile", () => {
-  const styles = tablePanel()._styles();
+test("native Home Assistant table uses full width and compact mobile entity rows", () => {
+  const panel = tablePanel();
+  panel._narrow = true;
+  const styles = panel._styles();
+  const columns = panel._nativeTableColumns("overview");
+  const active = panel._nativeTableData("overview", panel._tableRows("overview"))[0];
+  const entity = panel._nativeEntityCell(active, true);
   assert.match(styles, /main\{width:100%;max-width:none;margin:0;padding:24px\}/);
-  assert.match(styles, /\.native-alert-table\{[^}]*height:clamp/);
-  assert.match(styles, /\.native-table-layout\.has-filter-pane\{grid-template-columns:300px minmax\(0,1fr\)\}/);
-  assert.match(styles, /--data-table-row-height:52px/);
-  assert.match(styles, /@media\(max-width:560px\)/);
+  assert.match(styles, /hass-tabs-subpage-data-table\{display:block;width:100%;height:100%;--data-table-row-height:60px\}/);
+  assert.match(styles, /--data-table-row-height:72px/);
+  assert.equal(columns.status.title, "");
+  assert.equal(columns.status.showNarrow, true);
+  assert.equal(columns.entity.main, true);
+  assert.equal(entity.children[0].textContent, active.entityName);
+  assert.equal(entity.children[1].textContent, active.condition);
 });
 
-test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
+test("table navigation delegates tabs and controls to hass-tabs-subpage-data-table", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -909,7 +958,7 @@ test("navigation delegates the toolbar and tabs to hass-tabs-subpage", () => {
 
   panel._render();
 
-  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage id="panel-shell" back-path="\/config\/integrations">/);
+  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage-data-table[\s\S]*id="panel-shell"[\s\S]*data-alert-table-page="overview"/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-icon-button-arrow-prev/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-tab-group|ha-tab-group-tab|<ha-tab/);
   assert.equal(shell.hass, panel._hass);
@@ -1606,10 +1655,10 @@ test("history empty and disabled states are explicit and translated", () => {
   const panel = new Panel();
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
   panel._historyConfig = { retention_limit: 100, enabled: true };
-  assert.match(panel._renderHistory(), /data-native-alert-table="history"/);
-  const table = { addEventListener() {} };
+  assert.match(panel._renderHistory(), /data-alert-table-page="history"/);
+  const table = { addEventListener() {}, querySelectorAll() { return []; }, dataset: {} };
   panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-native-alert-table="history"]' ? table : null
+    selector === '[data-alert-table-page="history"]' ? table : null
   );
   panel._hydrateDataTables();
   assert.equal(table.noDataText, "Aucune alerte dans l’historique.");

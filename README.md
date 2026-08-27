@@ -31,7 +31,8 @@ Assistant.
 - panel administrateur responsive, servi directement par l’intégration ;
 - interface, flux de configuration, packs et conditions disponibles en français
   et en anglais selon la langue de chaque utilisateur Home Assistant ;
-- tableau compact fondé sur le composant natif `ha-data-table` de Home Assistant,
+- tableau compact fondé sur les composants natifs
+  `hass-tabs-subpage-data-table` et `ha-data-table` de Home Assistant,
   avec recherche, filtres, tri, groupement repliable et colonnes personnalisables,
   sans fusion des alertes ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
@@ -109,7 +110,10 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur
    visibilité, le groupement et le tri sont conservés localement pour
    l’utilisateur, sans modifier la configuration de l’intégration.
-   Le mode sélection remplace la barre d’outils par une barre d’actions. Il
+   Le mode sélection remplace la barre supérieure de la sous-page par une barre
+   d’actions. Le dialogue natif de personnalisation permet de masquer et
+   réordonner les colonnes. Sur mobile, la condition est affichée sous le nom de
+   l’entité tandis que les autres colonnes sont condensées. Il
    permet de sélectionner les lignes visibles et d’acquitter ou désacquitter en
    masse. Une sélection mixte n’agit que sur les alertes compatibles : les
    alertes `pending` et les alertes déjà dans l’état demandé sont ignorées, et le

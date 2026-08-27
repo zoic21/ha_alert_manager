@@ -39,15 +39,7 @@ const MDI_CHECK_CIRCLE_OUTLINE = "M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22
 const MDI_DOTS_VERTICAL = "M12,8C13.1,8 14,7.1 14,6C14,4.9 13.1,4 12,4C10.9,4 10,4.9 10,6C10,7.1 10.9,8 12,8M12,10C10.9,10 10,10.9 10,12C10,13.1 10.9,14 12,14C13.1,14 14,13.1 14,12C14,10.9 13.1,10 12,10M12,16C10.9,16 10,16.9 10,18C10,19.1 10.9,20 12,20C13.1,20 14,19.1 14,18C14,16.9 13.1,16 12,16Z";
 const MDI_DOWNLOAD = "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z";
 const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
-const MDI_FILTER_VARIANT = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.56,3.08 4.78,3 5,3V3H19V3C19.22,3 19.44,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z";
-const MDI_GROUP = "M12,5A3,3 0 1,0 12,11A3,3 0 0,0 12,5M6,7A2,2 0 1,0 6,11A2,2 0 0,0 6,7M18,7A2,2 0 1,0 18,11A2,2 0 0,0 18,7M12,13C9.33,13 4,14.33 4,17V19H20V17C20,14.33 14.67,13 12,13M6,13C3.33,13 0,14.33 0,17V19H2V17C2,15.83 3.04,14.86 4.37,14.17C4.88,13.73 5.47,13.34 6.1,13.04L6,13M18,13L17.9,13.04C18.53,13.34 19.12,13.73 19.63,14.17C20.96,14.86 22,15.83 22,17V19H24V17C24,14.33 20.67,13 18,13Z";
-const MDI_SORT = "M3,18H9V16H3V18M3,13H15V11H3V13M3,6V8H21V6H3Z";
-const MDI_TABLE_COLUMN = "M4,3H20A2,2 0 0,1 22,5V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V5A2,2 0 0,1 4,3M4,5V19H8V5H4M10,5V19H14V5H10M16,5V19H20V5H16Z";
-const MDI_CHECKBOX_MULTIPLE = "M17,3H5A2,2 0 0,0 3,5V17H5V5H17V3M19,7H9A2,2 0 0,0 7,9V19A2,2 0 0,0 9,21H19A2,2 0 0,0 21,19V9A2,2 0 0,0 19,7M17,17H11V11H17V17Z";
-const MDI_ARROW_UP = "M4,12L5.41,13.41L11,7.83V20H13V7.83L18.59,13.42L20,12L12,4L4,12Z";
-const MDI_ARROW_DOWN = "M20,12L18.59,10.59L13,16.17V4H11V16.17L5.41,10.58L4,12L12,20L20,12Z";
-const MDI_MENU_DOWN = "M7,10L12,15L17,10H7Z";
-const MDI_CHECK = "M9,16.17L4.83,12L3.41,13.41L9,19L21,7L19.59,5.59L9,16.17Z";
+const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_main_active",
@@ -142,12 +134,12 @@ const makeTableState = (kind, preferences = {}) => {
   return {
     search: "",
     filters: {
-      status: "",
-      device: "",
-      area: "",
-      rule: "",
-      entity: "",
-      acknowledged: "",
+      status: [],
+      device: [],
+      area: [],
+      rule: [],
+      entity: [],
+      acknowledged: [],
       detectedFrom: "",
       detectedTo: "",
       resolvedFrom: "",
@@ -199,7 +191,6 @@ class AlertManagerPanel extends HTMLElement {
     this._entityStates = {};
     this._tableState = this._loadTablePreferences();
     this._collapsedTableGroups = new Set();
-    this._nativeGroupLabels = { overview: new Map(), history: new Map() };
     this._filterPaneKind = "";
     this._selectionMode = false;
     this._selectedAlertIds = new Set();
@@ -292,7 +283,9 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set narrow(value) {
-    this._narrow = value;
+    this._narrow = Boolean(value);
+    const tablePage = this.shadowRoot?.querySelector("[data-alert-table-page]");
+    if (tablePage) tablePage.narrow = this._narrow;
   }
 
   connectedCallback() {
@@ -470,93 +463,155 @@ class AlertManagerPanel extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot) return;
+    const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
+    if (currentTablePage) {
+      const kind = currentTablePage.dataset.alertTablePage;
+      this._filterPaneKind = currentTablePage.showFilters ? kind : "";
+      if (kind === "overview") this._selectionMode = Boolean(currentTablePage._selectMode);
+    }
     const content = this._loading
       ? `<div class="loading">${esc(this._t("loading"))}</div>`
       : this._renderTab();
-    const page = `<main>
-      ${!this._monitoringEnabled ? `<div class="monitoring-warning" role="alert"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></div>` : ""}
-      ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}
-      ${content}
-    </main>`;
+    const nativeTablePage = !this._loading && this._config
+      && (this._activeTab === "overview"
+        || (this._activeTab === "history" && Number(this._historyConfig?.retention_limit ?? 100) !== 0));
+    const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      ${this._hass ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
+      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateYamlEditor();
     this._updateCountdowns();
   }
 
+  _renderPageMessages() {
+    return `${!this._monitoringEnabled ? `<div class="monitoring-warning" role="alert"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></div>` : ""}
+      ${this._notice ? `<div class="notice ${this._notice.kind}">${esc(this._notice.text)}</div>` : ""}`;
+  }
+
   _hydrateDataTables() {
     for (const kind of ["overview", "history"]) {
-      const table = this.shadowRoot.querySelector(`[data-native-alert-table="${kind}"]`);
-      if (!table) continue;
+      const tablePage = this.shadowRoot.querySelector(`[data-alert-table-page="${kind}"]`);
+      if (!tablePage) continue;
       const sourceRows = kind === "overview"
         ? this._tableRows("overview")
         : this._tableRows("history", this._history?.events ?? []);
-      const visibleRows = this._filteredTableRows(kind, sourceRows);
+      const visibleRows = this._filteredTableRows(kind, sourceRows, false);
       const allowedColumns = Object.keys(this._tableColumns(kind));
       const hiddenColumns = allowedColumns.filter((column) => !this._tableState[kind].columns.includes(column));
       const orderedColumns = [...this._tableState[kind].columns, ...hiddenColumns];
       const data = this._nativeTableData(kind, visibleRows);
-      table.id = "id";
-      table.columns = this._nativeTableColumns(kind);
-      table.columnOrder = orderedColumns;
-      table.hiddenColumns = hiddenColumns;
-      table.data = data;
-      table.filter = "";
-      table.groupColumn = this._tableState[kind].groupBy === "none" ? undefined : "_group";
-      table.sortColumn = this._nativeSortColumn(this._tableState[kind].sortBy);
-      table.sortDirection = this._tableState[kind].sortDirection;
-      table.initialCollapsedGroups = [...this._nativeGroupLabels[kind]].filter(([, base]) => (
-        this._collapsedTableGroups.has(`${kind}:${base}`)
-      )).map(([group]) => group);
-      table.selectable = kind === "overview" && this._selectionMode;
-      table.clickable = false;
-      table.noDataText = sourceRows.length
+      tablePage.hass = this._hass;
+      tablePage.narrow = Boolean(this._narrow);
+      tablePage.tabs = this._tabs();
+      tablePage.route = { prefix: "", path: TABS.find((tab) => tab.id === kind)?.path ?? TABS[0].path };
+      tablePage.backPath = "/config/integrations";
+      tablePage.backCallback = window.history?.state?.from !== undefined
+        ? () => window.history.back()
+        : undefined;
+      tablePage.id = "id";
+      tablePage.columns = this._nativeTableColumns(kind);
+      tablePage.columnOrder = orderedColumns;
+      tablePage.hiddenColumns = hiddenColumns;
+      tablePage.data = data;
+      tablePage.filter = this._tableState[kind].search;
+      tablePage.searchLabel = this._t("table.search");
+      tablePage.filters = this._filterCount(kind);
+      tablePage.selected = kind === "overview" ? this._selectedAlertIds.size : undefined;
+      tablePage.initialGroupColumn = this._nativeGroupColumn(this._tableState[kind].groupBy);
+      tablePage.initialSorting = {
+        column: this._nativeSortColumn(this._tableState[kind].sortBy),
+        direction: this._tableState[kind].sortDirection,
+      };
+      tablePage.initialCollapsedGroups = [...this._collapsedTableGroups]
+        .filter((key) => key.startsWith(`${kind}:`))
+        .map((key) => key.slice(kind.length + 1));
+      tablePage.selectable = kind === "overview";
+      tablePage.clickable = true;
+      tablePage.showFilters = this._filterPaneKind === kind;
+      if (kind === "overview" && this._selectionMode) tablePage._selectMode = true;
+      tablePage.noDataText = sourceRows.length
         ? this._t("table.empty_filtered")
         : this._t(kind === "history" ? "history.empty" : "table.empty_current");
-      table.addEventListener("collapsed-changed", (event) => {
+      tablePage.addEventListener("search-changed", (event) => {
+        this._tableState[kind].search = String(event.detail?.value ?? "");
+      });
+      tablePage.addEventListener("clear-filter", () => {
+        this._resetTableFilters(kind);
+        this._filterPaneKind = kind;
+        this._render();
+      });
+      tablePage.addEventListener("collapsed-changed", (event) => {
         for (const key of [...this._collapsedTableGroups]) {
           if (key.startsWith(`${kind}:`)) this._collapsedTableGroups.delete(key);
         }
-        for (const group of event.detail?.value ?? []) {
-          const base = this._nativeGroupLabels[kind].get(String(group));
-          if (base) this._collapsedTableGroups.add(`${kind}:${base}`);
-        }
+        for (const group of event.detail?.value ?? []) this._collapsedTableGroups.add(`${kind}:${group}`);
       });
-      table.addEventListener("sorting-changed", (event) => {
+      tablePage.addEventListener("sorting-changed", (event) => {
         const column = this._tableSortStateColumn(event.detail?.column);
         if (!column || !event.detail?.direction) return;
         this._tableState[kind].sortBy = column;
         this._tableState[kind].sortDirection = event.detail.direction;
         this._saveTablePreferences();
       });
+      tablePage.addEventListener("grouping-changed", (event) => {
+        this._tableState[kind].groupBy = this._tableStateGroupColumn(event.detail?.value);
+        this._saveTablePreferences();
+      });
+      tablePage.addEventListener("columns-changed", (event) => {
+        const order = event.detail?.columnOrder;
+        const hidden = new Set(event.detail?.hiddenColumns ?? []);
+        if (!Array.isArray(order)) {
+          this._tableState[kind].columns = [...DEFAULT_TABLE_STATE[kind].columns];
+        } else {
+          this._tableState[kind].columns = order.filter((column) => (
+            allowedColumns.includes(column) && !hidden.has(column)
+          ));
+          for (const required of REQUIRED_COLUMNS) {
+            if (!this._tableState[kind].columns.includes(required)) {
+              this._tableState[kind].columns.push(required);
+            }
+          }
+        }
+        this._saveTablePreferences();
+      });
+      tablePage.addEventListener("row-click", (event) => {
+        const row = data.find((item) => String(item.id) === String(event.detail?.id));
+        if (row?.entityId) this._openMoreInfo(row.entityId);
+      });
       if (kind === "overview") {
-        table.addEventListener("selection-changed", (event) => {
+        tablePage.addEventListener("selection-changed", (event) => {
           const selected = new Set((event.detail?.value ?? []).map(String));
           if (selected.size === this._selectedAlertIds.size
             && [...selected].every((id) => this._selectedAlertIds.has(id))) return;
           this._selectedAlertIds = selected;
           this._updateSelectionToolbar();
         });
-        if (this._selectionMode && this._selectedAlertIds.size) {
-          const restore = () => table.isConnected && table.select?.([...this._selectedAlertIds], true);
-          Promise.resolve(table.updateComplete).then(() => globalThis.setTimeout(restore, 130));
+        if (this._selectionMode && this._selectedAlertIds.size && tablePage.shadowRoot) {
+          const restoreSelection = () => {
+            const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+            nativeTable?.select?.([...this._selectedAlertIds], true);
+          };
+          Promise.resolve(tablePage.updateComplete).then(restoreSelection);
         }
       }
-      const search = this.shadowRoot.querySelector(`#${kind}-table-search`);
-      if (search) {
-        search.value = this._tableState[kind].search;
-        search.placeholder = this._t("table.search");
-      }
-    }
-    this.shadowRoot.querySelectorAll('[data-action="move-column"]').forEach((button) => {
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this._moveColumn(button.dataset.tableKind, button.dataset.column, button.dataset.direction);
+      tablePage.querySelectorAll("[data-table-filter-component]").forEach((filter) => {
+        const key = filter.dataset.tableFilterComponent;
+        filter.label = filter.dataset.tableFilterLabel;
+        filter.states = JSON.parse(filter.dataset.tableFilterOptions || "[]");
+        filter.value = this._filterValues(this._tableState[kind].filters[key]);
+        filter.narrow = Boolean(this._narrow);
+        filter.addEventListener("data-table-filter-changed", (event) => {
+          this._tableState[kind].filters[key] = this._filterValues(event.detail?.value);
+          this._filterPaneKind = kind;
+          this._render();
+        });
       });
-    });
+      tablePage.querySelectorAll("ha-input[data-table-filter]").forEach((input) => {
+        input.value = this._tableState[kind].filters[input.dataset.tableFilter] ?? "";
+      });
+    }
   }
 
   _updateSelectionToolbar() {
@@ -575,6 +630,8 @@ class AlertManagerPanel extends HTMLElement {
       unacknowledge.hidden = unacknowledgeCount === 0;
       unacknowledge.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
     }
+    const tablePage = this.shadowRoot.querySelector('[data-alert-table-page="overview"]');
+    if (tablePage) tablePage.selected = selectedRows.length;
   }
 
   _configureSelector(id, selector, value, onChange) {
@@ -731,14 +788,14 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderOverview() {
-    return `
+    const summary = `${this._renderPageMessages()}
       <section class="summary">
         <article><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></article>
         <article><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></article>
         <article><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></article>
         <article><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></article>
-      </section>
-      ${this._renderAlertTable("overview", this._tableRows("overview"))}`;
+      </section>`;
+    return this._renderAlertTable("overview", this._tableRows("overview"), summary);
   }
 
   _renderHistory() {
@@ -747,7 +804,11 @@ class AlertManagerPanel extends HTMLElement {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(this._t("history.disabled_title"))}</h2><p>${esc(this._t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(this._t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
-    return this._renderAlertTable("history", this._tableRows("history", events));
+    return this._renderAlertTable(
+      "history",
+      this._tableRows("history", events),
+      this._renderPageMessages(),
+    );
   }
 
   _historyRuleName(event) {
@@ -851,21 +912,40 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _filterCount(kind) {
-    return Object.values(this._tableState[kind].filters).filter(Boolean).length;
+    return Object.values(this._tableState[kind].filters).filter((value) => (
+      Array.isArray(value) ? value.length > 0 : Boolean(value)
+    )).length;
   }
 
-  _filteredTableRows(kind, rows) {
+  _filterValues(value) {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    return value === undefined || value === null || value === "" ? [] : [String(value)];
+  }
+
+  _resetTableFilters(kind) {
+    Object.keys(this._tableState[kind].filters).forEach((key) => {
+      this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(key)
+        ? ""
+        : [];
+    });
+  }
+
+  _filteredTableRows(kind, rows, includeSearch = true) {
     const state = this._tableState[kind];
-    const query = state.search.trim().toLocaleLowerCase(this._language);
+    const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
+    const selected = Object.fromEntries(
+      ["status", "device", "area", "rule", "entity", "acknowledged"]
+        .map((key) => [key, new Set(this._filterValues(filters[key]))]),
+    );
     const filtered = rows.filter((row) => {
       if (query && !row.search.includes(query)) return false;
-      if (filters.status && row.status !== filters.status) return false;
-      if (filters.device && row.device !== filters.device) return false;
-      if (filters.area && row.area !== filters.area) return false;
-      if (filters.rule && row.rule !== filters.rule) return false;
-      if (filters.entity && row.entityId !== filters.entity) return false;
-      if (filters.acknowledged && String(row.acknowledged) !== filters.acknowledged) return false;
+      if (selected.status.size && !selected.status.has(row.status)) return false;
+      if (selected.device.size && !selected.device.has(row.device)) return false;
+      if (selected.area.size && !selected.area.has(row.area)) return false;
+      if (selected.rule.size && !selected.rule.has(row.rule)) return false;
+      if (selected.entity.size && !selected.entity.has(row.entityId)) return false;
+      if (selected.acknowledged.size && !selected.acknowledged.has(String(row.acknowledged))) return false;
       if (!this._dateMatches(row.detected, filters.detectedFrom, filters.detectedTo)) return false;
       if (kind === "history" && !this._dateMatches(row.resolved, filters.resolvedFrom, filters.resolvedTo)) return false;
       return true;
@@ -903,101 +983,33 @@ class AlertManagerPanel extends HTMLElement {
     });
   }
 
-  _renderAlertTable(kind, sourceRows) {
+  _renderAlertTable(kind, sourceRows, topHeader = "") {
     const state = this._tableState[kind];
     const columns = this._tableColumns(kind);
     state.columns = state.columns.filter((column) => columns[column]);
     for (const required of REQUIRED_COLUMNS) {
       if (!state.columns.includes(required)) state.columns.push(required);
     }
-    const visibleRows = this._filteredTableRows(kind, sourceRows);
-    const selection = kind === "overview" && this._selectionMode;
-    const filtersOpen = this._filterPaneKind === kind && !selection;
-    return `<ha-card outlined class="data-table-card ${selection ? "selection-active" : ""}">
-      <div class="native-table-layout ${filtersOpen ? "has-filter-pane" : ""}">
-        ${filtersOpen ? `<aside class="native-filter-pane" aria-label="${esc(this._t("table.filters.title"))}">
-          <div class="native-filter-header">${this._filterChip(kind, true)}</div>
-          <div class="native-filter-content">${this._renderFilterPane(kind, sourceRows)}</div>
-        </aside>` : ""}
-        <div class="native-table-content">
-          <ha-data-table class="native-alert-table" data-native-alert-table="${kind}">
-            <div slot="header">${this._renderTableToolbar(kind, sourceRows, filtersOpen)}</div>
-          </ha-data-table>
-        </div>
-      </div>
-      <div class="table-footer">${esc(this._t("table.visible_count", { visible: visibleRows.length, total: sourceRows.length }))}</div>
-    </ha-card>`;
-  }
-
-  _renderTableToolbar(kind, sourceRows, filtersOpen = false) {
-    if (kind === "overview" && this._selectionMode) {
-      const selectedRows = sourceRows.filter((row) => this._selectedAlertIds.has(row.id));
-      const acknowledgeCount = selectedRows.filter((row) => row.status === "active").length;
-      const unacknowledgeCount = selectedRows.filter((row) => row.status === "acknowledged").length;
-      return `<div class="table-toolbar selection-toolbar" role="toolbar" aria-label="${esc(this._t("table.selection.toolbar"))}">
-        <ha-icon-button data-action="close-selection" title="${esc(this._t("table.selection.close"))}" aria-label="${esc(this._t("table.selection.close"))}"><ha-svg-icon path="${MDI_CLOSE}"></ha-svg-icon></ha-icon-button>
-        <ha-button appearance="plain" variant="neutral" data-action="select-visible">${esc(this._t("table.selection.select"))}</ha-button>
-        <strong class="selection-count" data-selection-count>${esc(this._t("table.selection.count", { count: selectedRows.length }))}</strong>
-        <span class="toolbar-spacer"></span>
+    const selectedRows = kind === "overview"
+      ? sourceRows.filter((row) => this._selectedAlertIds.has(row.id))
+      : [];
+    const acknowledgeCount = selectedRows.filter((row) => row.status === "active").length;
+    const unacknowledgeCount = selectedRows.filter((row) => row.status === "acknowledged").length;
+    return `<hass-tabs-subpage-data-table
+      id="panel-shell"
+      data-alert-table-page="${kind}"
+      has-filters
+      ${kind === "overview" ? "selectable" : ""}
+      clickable
+      back-path="/config/integrations"
+    >
+      ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
+      <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>
+      ${kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
         <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
         <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
-      </div>`;
-    }
-    return `<div class="table-toolbar" role="toolbar" aria-label="${esc(this._t("table.toolbar"))}">
-        ${filtersOpen ? "" : this._filterChip(kind, false)}
-        <ha-input-search id="${kind}-table-search" class="table-search" data-table-search="${kind}" appearance="outlined"></ha-input-search>
-        <span class="toolbar-spacer"></span>
-        ${this._renderGroupDropdown(kind)}
-        ${this._renderSortDropdown(kind)}
-        ${this._renderColumnDropdown(kind)}
-        ${kind === "overview" ? `<ha-assist-chip class="select-mode-chip" data-action="open-selection" title="${esc(this._t("table.selection.open"))}" aria-label="${esc(this._t("table.selection.open"))}" has-icon><ha-svg-icon slot="icon" path="${MDI_CHECKBOX_MULTIPLE}"></ha-svg-icon></ha-assist-chip>` : ""}
-    </div>`;
-  }
-
-  _filterChip(kind, active) {
-    const count = this._filterCount(kind);
-    const label = count ? `${this._t("table.filters.title")} (${count})` : this._t("table.filters.title");
-    return `<ha-assist-chip data-action="toggle-filter-pane" data-table-kind="${kind}" ${active ? "active" : ""} has-icon aria-expanded="${active}"><ha-svg-icon slot="icon" path="${MDI_FILTER_VARIANT}"></ha-svg-icon>${esc(label)}</ha-assist-chip>`;
-  }
-
-  _renderGroupDropdown(kind) {
-    const state = this._tableState[kind];
-    const options = ["none", "device", "area", "rule", "status"];
-    const current = this._t(`table.group.${state.groupBy}`);
-    return `<ha-dropdown data-table-dropdown="group" data-table-kind="${kind}" size="m" placement="bottom-start">
-      <ha-assist-chip slot="trigger" class="has-dropdown" has-icon><ha-svg-icon slot="icon" path="${MDI_GROUP}"></ha-svg-icon>${esc(`${this._t("table.group.title")}  ${current}`)}<ha-svg-icon slot="trailing-icon" path="${MDI_MENU_DOWN}"></ha-svg-icon></ha-assist-chip>
-      ${options.map((value) => `<ha-dropdown-item value="${value}" ${state.groupBy === value ? "selected" : ""}>${esc(this._t(`table.group.${value}`))}</ha-dropdown-item>`).join("")}
-    </ha-dropdown>`;
-  }
-
-  _renderSortDropdown(kind) {
-    const state = this._tableState[kind];
-    const options = kind === "history"
-      ? ["status", "device", "entityName", "rule", "value", "detected", "resolved"]
-      : ["status", "device", "entityName", "rule", "value", "detected", "activated", "remaining"];
-    const labelFor = (value) => this._t(`table.sort.${value === "entityName" ? "entity_name" : value}`);
-    return `<ha-dropdown data-table-dropdown="sort" data-table-kind="${kind}" size="m" placement="bottom-start">
-      <ha-assist-chip slot="trigger" class="has-dropdown" has-icon><ha-svg-icon slot="icon" path="${MDI_SORT}"></ha-svg-icon>${esc(`${this._t("table.sort.title")}  ${labelFor(state.sortBy)}`)}<ha-svg-icon slot="trailing-icon" path="${MDI_MENU_DOWN}"></ha-svg-icon></ha-assist-chip>
-      ${options.map((value) => `<ha-dropdown-item value="${value}" ${state.sortBy === value ? "selected" : ""}>${esc(labelFor(value))}${state.sortBy === value ? `<ha-svg-icon slot="end" path="${state.sortDirection === "asc" ? MDI_ARROW_UP : MDI_ARROW_DOWN}"></ha-svg-icon>` : ""}</ha-dropdown-item>`).join("")}
-    </ha-dropdown>`;
-  }
-
-  _renderColumnDropdown(kind) {
-    const columns = this._tableColumns(kind);
-    const visible = this._tableState[kind].columns;
-    return `<ha-dropdown data-table-dropdown="columns" data-table-kind="${kind}" size="m" placement="bottom-end">
-      <ha-assist-chip slot="trigger" class="select-mode-chip has-dropdown" title="${esc(this._t("table.columns.title"))}" aria-label="${esc(this._t("table.columns.title"))}" has-icon><ha-svg-icon slot="icon" path="${MDI_TABLE_COLUMN}"></ha-svg-icon></ha-assist-chip>
-      ${Object.entries(columns).map(([column, definition]) => {
-        const index = visible.indexOf(column);
-        const required = REQUIRED_COLUMNS.has(column);
-        return `<ha-dropdown-item value="toggle:${column}" ${index >= 0 ? "selected" : ""} ${required ? "disabled" : ""}>
-          ${index >= 0 ? `<ha-svg-icon slot="icon" path="${MDI_CHECK}"></ha-svg-icon>` : ""}${esc(definition.label)}
-          ${index >= 0 ? `<span slot="end" class="column-order-actions"><ha-icon-button data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="up" ${index === 0 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_up", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_UP}"></ha-svg-icon></ha-icon-button><ha-icon-button data-action="move-column" data-table-kind="${kind}" data-column="${column}" data-direction="down" ${index === visible.length - 1 ? "disabled" : ""} aria-label="${esc(this._t("table.columns.move_down", { column: definition.label }))}"><ha-svg-icon path="${MDI_ARROW_DOWN}"></ha-svg-icon></ha-icon-button></span>` : ""}
-        </ha-dropdown-item>`;
-      }).join("")}
-      <wa-divider></wa-divider>
-      <ha-dropdown-item value="reset">${esc(this._t("table.columns.reset"))}</ha-dropdown-item>
-    </ha-dropdown>`;
+      </div>` : ""}
+    </hass-tabs-subpage-data-table>`;
   }
 
   _facetOptions(rows, key) {
@@ -1005,17 +1017,30 @@ class AlertManagerPanel extends HTMLElement {
       .sort((left, right) => String(left).localeCompare(String(right), this._language, { numeric: true }));
   }
 
-  _renderFilterExpansion(kind, key, label, options) {
-    const current = this._tableState[kind].filters[key];
+  _renderFacetFilter(kind, key, label, options) {
     const normalized = options.map((option) => ({
       value: String(option.value ?? option),
       label: String(option.label ?? option),
     }));
-    const selectedLabel = normalized.find((option) => option.value === current)?.label;
-    const allOptions = [{ value: "", label: this._t("table.filters.all") }, ...normalized];
-    return `<ha-expansion-panel left-chevron ${current ? "expanded" : ""}>
-      <div slot="header" class="filter-section-header"><span>${esc(label)}</span>${selectedLabel ? `<small>${esc(selectedLabel)}</small>` : ""}</div>
-      <ha-list>${allOptions.map((option) => `<ha-check-list-item data-table-filter-option="${key}" data-table-filter-value="${esc(option.value)}" data-table-kind="${kind}" ${current === option.value ? "selected" : ""} aria-selected="${current === option.value}">${esc(option.label)}</ha-check-list-item>`).join("")}</ha-list>
+    return `<ha-filter-states
+      data-table-filter-component="${key}"
+      data-table-filter-label="${esc(label)}"
+      data-table-filter-options="${esc(JSON.stringify(normalized))}"
+      data-table-kind="${kind}"
+    ></ha-filter-states>`;
+  }
+
+  _renderDateFilter(kind, prefix, label) {
+    const filters = this._tableState[kind].filters;
+    const fromKey = `${prefix}From`;
+    const toKey = `${prefix}To`;
+    const active = [filters[fromKey], filters[toKey]].filter(Boolean).length;
+    return `<ha-expansion-panel left-chevron ${active ? "expanded" : ""}>
+      <div slot="header" class="filter-section-header">
+        <span>${esc(label)}</span>
+        ${active ? `<span class="filter-badge">${active}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${fromKey},${toKey}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
+      </div>
+      <div class="date-filter-fields"><ha-input type="date" label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_from" : "resolved_from"}`))}" data-table-filter="${fromKey}" data-table-kind="${kind}" value="${esc(filters[fromKey])}"></ha-input><ha-input type="date" label="${esc(this._t(`table.filters.${prefix === "detected" ? "detected_to" : "resolved_to"}`))}" data-table-filter="${toKey}" data-table-kind="${kind}" value="${esc(filters[toKey])}"></ha-input></div>
     </ha-expansion-panel>`;
   }
 
@@ -1023,21 +1048,19 @@ class AlertManagerPanel extends HTMLElement {
     const statuses = kind === "history"
       ? [{ value: "resolved", label: this._t("history.resolved") }]
       : ["active", "pending", "acknowledged"].map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
-    const filters = this._tableState[kind].filters;
-    return `${this._renderFilterExpansion(kind, "status", this._t("table.columns.status"), statuses)}
-      ${this._renderFilterExpansion(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
-      ${this._renderFilterExpansion(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
-      ${this._renderFilterExpansion(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
-      ${this._renderFilterExpansion(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
-      ${this._renderFilterExpansion(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
-      <ha-expansion-panel left-chevron ${(filters.detectedFrom || filters.detectedTo) ? "expanded" : ""}><div slot="header" class="filter-section-header"><span>${esc(this._t("table.columns.detected"))}</span></div><div class="date-filter-fields"><ha-input type="date" label="${esc(this._t("table.filters.detected_from"))}" data-table-filter="detectedFrom" data-table-kind="${kind}" value="${esc(filters.detectedFrom)}"></ha-input><ha-input type="date" label="${esc(this._t("table.filters.detected_to"))}" data-table-filter="detectedTo" data-table-kind="${kind}" value="${esc(filters.detectedTo)}"></ha-input></div></ha-expansion-panel>
-      ${kind === "history" ? `<ha-expansion-panel left-chevron ${(filters.resolvedFrom || filters.resolvedTo) ? "expanded" : ""}><div slot="header" class="filter-section-header"><span>${esc(this._t("table.columns.resolved"))}</span></div><div class="date-filter-fields"><ha-input type="date" label="${esc(this._t("table.filters.resolved_from"))}" data-table-filter="resolvedFrom" data-table-kind="history" value="${esc(filters.resolvedFrom)}"></ha-input><ha-input type="date" label="${esc(this._t("table.filters.resolved_to"))}" data-table-filter="resolvedTo" data-table-kind="history" value="${esc(filters.resolvedTo)}"></ha-input></div></ha-expansion-panel>` : ""}
-      <div class="native-filter-actions"><ha-button appearance="plain" variant="neutral" data-action="reset-filters" data-table-kind="${kind}" ${this._filterCount(kind) ? "" : "disabled"}>${esc(this._t("table.filters.reset"))}</ha-button></div>`;
+    return `${this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses)}
+      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
+      ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
+      ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
+      ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${this._renderFacetFilter(kind, "acknowledged", this._t("table.filters.acknowledged"), [{ value: "true", label: this._t("table.filters.yes") }, { value: "false", label: this._t("table.filters.no") }])}
+      ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"))}
+      ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved")) : ""}`;
   }
 
   _nativeTableColumns(kind) {
     const widths = {
-      status: ["56px", "56px", 1],
+      status: ["48px", "48px", 1],
       device: ["150px", "230px", 1],
       entity: ["180px", "280px", 1.4],
       entity_id: ["190px", "280px", 1],
@@ -1062,10 +1085,13 @@ class AlertManagerPanel extends HTMLElement {
     const columns = Object.fromEntries(Object.entries(this._tableColumns(kind)).map(([column, definition]) => {
       const [minWidth, maxWidth, flex] = widths[column] ?? ["120px", "260px", 1];
       return [column, {
-        title: definition.label,
+        title: column === "status" ? "" : definition.label,
         label: definition.label,
         main: column === "entity",
         type: column === "status" ? "icon" : undefined,
+        showNarrow: column === "status",
+        moveable: column === "status" ? false : undefined,
+        hideable: REQUIRED_COLUMNS.has(column) ? false : undefined,
         minWidth,
         maxWidth,
         flex,
@@ -1076,13 +1102,17 @@ class AlertManagerPanel extends HTMLElement {
     }));
     columns.activated = { title: this._t("table.sort.activated"), hidden: true, sortable: true, valueColumn: "activatedSort" };
     columns.remaining = { title: this._t("table.sort.remaining"), hidden: true, sortable: true, valueColumn: "remainingSort" };
+    columns.device_group = { title: this._t("table.columns.device"), hidden: true, groupable: true };
+    columns.area_group = { title: this._t("table.columns.area"), hidden: true, groupable: true };
+    columns.rule_group = { title: this._t("table.columns.rule"), hidden: true, groupable: true };
+    columns.status_group = { title: this._t("table.columns.status"), hidden: true, groupable: true };
+    columns.search_index = { title: "", hidden: true, filterable: true };
     return columns;
   }
 
   _nativeTableData(kind, visibleRows) {
-    const state = this._tableState[kind];
     const statusRank = { active: 0, pending: 1, acknowledged: 2, resolved: 3 };
-    const rows = visibleRows.map(({ source: _source, ...row }) => ({
+    return visibleRows.map(({ source: _source, ...row }) => ({
       ...row,
       statusSort: statusRank[row.status] ?? 99,
       valueSort: String(row.rawValue ?? ""),
@@ -1090,24 +1120,21 @@ class AlertManagerPanel extends HTMLElement {
       activatedSort: Date.parse(row.activated) || 0,
       resolvedSort: Date.parse(row.resolved) || 0,
       remainingSort: Date.parse(row.due) || 0,
+      device_group: row.device || this._t("table.groups.without_device"),
+      area_group: row.area || this._t("table.groups.without_area"),
+      rule_group: row.rule || "—",
+      status_group: row.statusLabel,
+      search_index: row.search,
     }));
-    this._nativeGroupLabels[kind] = new Map();
-    if (state.groupBy === "none") return rows;
-    const bases = visibleRows.map((row) => this._nativeGroupBase(kind, row));
-    const counts = new Map();
-    for (const base of bases) counts.set(base, (counts.get(base) ?? 0) + 1);
-    return rows.map((row) => {
-      const base = this._nativeGroupBase(kind, row);
-      const group = `${base} (${counts.get(base) ?? 0})`;
-      this._nativeGroupLabels[kind].set(group, base);
-      return { ...row, _group: group };
-    });
   }
 
-  _nativeGroupBase(kind, row) {
-    const groupBy = this._tableState[kind].groupBy;
-    const value = groupBy === "status" ? row.statusLabel : row[groupBy];
-    return value || this._t(`table.groups.without_${groupBy}`);
+  _nativeGroupColumn(groupBy) {
+    return groupBy === "none" ? undefined : `${groupBy}_group`;
+  }
+
+  _tableStateGroupColumn(column) {
+    const match = String(column ?? "").match(/^(device|area|rule|status)_group$/);
+    return match?.[1] ?? "none";
   }
 
   _nativeSortColumn(column) {
@@ -1120,7 +1147,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _nativeTableCell(kind, row, column) {
     if (column === "status") return this._nativeStatusCell(row, kind);
-    if (column === "entity") return this._nativeEntityCell(row);
+    if (column === "entity") return this._nativeEntityCell(row, Boolean(this._narrow));
     if (column === "entity_id") return row.entityId || "—";
     if (column === "device") return row.device || "—";
     if (column === "area") return row.area || "—";
@@ -1161,31 +1188,29 @@ class AlertManagerPanel extends HTMLElement {
     status.setAttribute("role", "img");
     status.setAttribute("aria-label", row.statusLabel);
     status.title = row.statusLabel;
-    status.style.cssText = `display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;color:${color};background:${background}`;
+    status.style.cssText = `display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:32px;height:32px;padding:5px;border-radius:50%;line-height:0;color:${color};background:${background}`;
     const icon = document.createElement("ha-svg-icon");
     icon.path = path;
-    icon.style.cssText = "width:21px;height:21px";
+    icon.style.cssText = "display:block;width:20px;height:20px;flex:0 0 20px";
     status.append(icon);
     return status;
   }
 
-  _nativeEntityCell(row) {
+  _nativeEntityCell(row, narrow = false) {
     if (!globalThis.document?.createElement) return row.entityName;
-    if (!this._hass?.states?.[row.entityId]) {
-      const label = document.createElement("span");
-      label.textContent = row.entityName;
-      return label;
+    const content = document.createElement("span");
+    content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
+    const name = document.createElement("span");
+    name.textContent = row.entityName;
+    name.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    content.append(name);
+    if (narrow) {
+      const condition = document.createElement("span");
+      condition.textContent = row.condition || "—";
+      condition.style.cssText = "overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
+      content.append(condition);
     }
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = row.entityName;
-    button.setAttribute("aria-label", row.entityName);
-    button.style.cssText = "border:0;background:transparent;padding:0;color:var(--primary-text-color,#212121);font:inherit;font-weight:var(--ha-font-weight-medium,500);text-align:left;cursor:pointer";
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._openMoreInfo(row.entityId);
-    });
-    return button;
+    return content;
   }
 
   _nativeTimelineCell(row) {
@@ -1405,49 +1430,8 @@ class AlertManagerPanel extends HTMLElement {
     return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
   }
 
-  _moveColumn(kind, column, direction) {
-    const columns = this._tableState[kind]?.columns;
-    if (!columns) return;
-    const index = columns.indexOf(column);
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || target < 0 || target >= columns.length) return;
-    [columns[index], columns[target]] = [columns[target], columns[index]];
-    this._saveTablePreferences();
-    this._render();
-  }
-
   _handleSelected(event) {
     const path = event.composedPath?.() ?? [event.target];
-    const dropdown = path.find((node) => node?.dataset?.tableDropdown);
-    if (dropdown) {
-      const kind = dropdown.dataset.tableKind;
-      const menu = dropdown.dataset.tableDropdown;
-      const value = String(event.detail?.item?.value ?? event.detail?.value ?? event.target?.value ?? "");
-      if (!this._tableState[kind] || !value) return;
-      if (menu === "group") {
-        this._tableState[kind].groupBy = value;
-      } else if (menu === "sort") {
-        if (this._tableState[kind].sortBy === value) {
-          this._tableState[kind].sortDirection = this._tableState[kind].sortDirection === "asc" ? "desc" : "asc";
-        } else {
-          this._tableState[kind].sortBy = value;
-        }
-      } else if (menu === "columns") {
-        if (value === "reset") {
-          this._tableState[kind].columns = [...DEFAULT_TABLE_STATE[kind].columns];
-        } else if (value.startsWith("toggle:")) {
-          const column = value.slice(7);
-          if (REQUIRED_COLUMNS.has(column)) return;
-          const columns = this._tableState[kind].columns;
-          this._tableState[kind].columns = columns.includes(column)
-            ? columns.filter((item) => item !== column)
-            : [...columns, column];
-        }
-      }
-      this._saveTablePreferences();
-      this._render();
-      return;
-    }
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
     if (ruleMenu && ruleValue === "switch-editor") {
@@ -1456,78 +1440,22 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   async _handleClick(event) {
-    const filterOption = event.target.closest?.("[data-table-filter-option]");
-    if (filterOption?.dataset?.tableFilterOption) {
-      const kind = filterOption.dataset.tableKind;
-      const key = filterOption.dataset.tableFilterOption;
-      const value = filterOption.dataset.tableFilterValue ?? "";
-      if (this._tableState[kind]?.filters && key in this._tableState[kind].filters) {
-        this._tableState[kind].filters[key] = value;
-        this._render();
-      }
-      return;
-    }
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
-    if (action === "toggle-filter-pane") {
-      const kind = button.dataset.tableKind;
-      this._filterPaneKind = this._filterPaneKind === kind ? "" : kind;
-      this._render();
-      return;
-    }
-    if (action === "open-selection") {
-      this._selectionMode = true;
-      this._selectedAlertIds.clear();
-      this._filterPaneKind = "";
-      this._render();
-      return;
-    }
-    if (action === "close-selection") {
-      this._selectionMode = false;
-      this._selectedAlertIds.clear();
-      this._render();
-      return;
-    }
-    if (action === "select-visible") {
-      const table = this.shadowRoot.querySelector('[data-native-alert-table="overview"]');
-      const visible = this._filteredTableRows("overview", this._tableRows("overview"));
-      const select = !visible.length || !visible.every((row) => this._selectedAlertIds.has(row.id));
-      if (table?.selectAll && table?.clearSelection) {
-        if (select) table.selectAll();
-        else table.clearSelection();
-        return;
-      }
-      for (const row of visible) {
-        if (select) this._selectedAlertIds.add(row.id);
-        else this._selectedAlertIds.delete(row.id);
-      }
-      this._updateSelectionToolbar();
-      return;
-    }
     if (action === "bulk-acknowledge" || action === "bulk-unacknowledge") {
       await this._bulkAlertAction(action === "bulk-acknowledge" ? "acknowledge" : "unacknowledge");
       return;
     }
-    if (action === "reset-filters") {
-      const kind = button.dataset.tableKind;
-      Object.keys(this._tableState[kind].filters).forEach((key) => {
-        this._tableState[kind].filters[key] = "";
-      });
-      this._render();
-      return;
-    }
-    if (action === "reset-columns") {
-      const kind = button.dataset.tableKind;
-      this._tableState[kind].columns = [...DEFAULT_TABLE_STATE[kind].columns];
-      this._saveTablePreferences();
-      this._render();
-      return;
-    }
-    if (action === "move-column") {
+    if (action === "clear-filter-section") {
+      event.preventDefault?.();
       event.stopPropagation?.();
-      const { tableKind: kind, column, direction } = button.dataset;
-      this._moveColumn(kind, column, direction);
+      const kind = button.dataset.tableKind;
+      for (const key of String(button.dataset.filterKeys ?? "").split(",").filter(Boolean)) {
+        this._tableState[kind].filters[key] = "";
+      }
+      this._filterPaneKind = kind;
+      this._render();
       return;
     }
     if (action === "enable-monitoring") {
@@ -1742,17 +1670,6 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _handleInput(event) {
-    const target = event.target;
-    const kind = target?.dataset?.tableSearch;
-    if (kind && this._tableState[kind]) {
-      const cursor = target.selectionStart;
-      this._tableState[kind].search = String(event.detail?.value ?? target.value ?? "");
-      this._render();
-      const search = this.shadowRoot.querySelector(`#${kind}-table-search`);
-      search?.focus?.();
-      search?.setSelectionRange?.(cursor, cursor);
-      return;
-    }
     this._handleRuleInput(event);
   }
 
@@ -1761,23 +1678,7 @@ class AlertManagerPanel extends HTMLElement {
     const kind = target?.dataset?.tableKind;
     if (kind && target.dataset.tableFilter) {
       this._tableState[kind].filters[target.dataset.tableFilter] = String(target.value ?? "");
-      this._render();
-      return;
-    }
-    if (kind && target.dataset.tableSetting) {
-      this._tableState[kind][target.dataset.tableSetting] = String(target.value ?? "");
-      this._saveTablePreferences();
-      this._render();
-      return;
-    }
-    if (kind && target.dataset.tableColumn) {
-      const column = target.dataset.tableColumn;
-      const columns = this._tableState[kind].columns;
-      if (target.checked && !columns.includes(column)) columns.push(column);
-      if (!target.checked && !REQUIRED_COLUMNS.has(column)) {
-        this._tableState[kind].columns = columns.filter((item) => item !== column);
-      }
-      this._saveTablePreferences();
+      this._filterPaneKind = kind;
       this._render();
       return;
     }
@@ -2288,21 +2189,15 @@ class AlertManagerPanel extends HTMLElement {
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
-      .data-table-card{display:block;overflow:visible;background:var(--card-background-color,#fff)}.native-table-layout{display:grid;grid-template-columns:minmax(0,1fr)}.native-table-layout.has-filter-pane{grid-template-columns:300px minmax(0,1fr)}.native-table-content{min-width:0}.native-filter-pane{min-width:0;border-inline-end:1px solid var(--divider-color,#ddd);background:var(--card-background-color,#fff)}.native-filter-header{display:flex;align-items:center;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.native-filter-content{max-height:clamp(320px,62vh,780px);overflow:auto}.native-filter-content ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;flex-direction:column}.filter-section-header small{overflow:hidden;margin:0;text-overflow:ellipsis;white-space:nowrap}.native-filter-content ha-list{display:block;max-height:260px;overflow:auto}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.native-filter-actions{padding:12px 16px;text-align:end}
-      .table-toolbar{display:flex;align-items:center;gap:6px;min-height:56px;padding:8px 12px;border-bottom:1px solid var(--divider-color,#ddd)}.toolbar-spacer{flex:1}.table-toolbar ha-dropdown{flex:none}.table-toolbar ha-assist-chip{white-space:nowrap}.select-mode-chip{flex:none}.column-order-actions{display:inline-flex;align-items:center;margin-inline-start:12px}.column-order-actions ha-icon-button{--mdc-icon-button-size:34px}.column-order-actions ha-svg-icon{width:18px;height:18px}
-      .table-search{display:block;min-width:220px;max-width:420px;flex:1}
-      .selection-toolbar{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 10%,var(--card-background-color,#fff)))}.selection-count{margin-inline-start:6px}.selection-toolbar ha-button[variant="danger"]{color:var(--error-color,#db4437)}
-      .native-alert-table{display:block;height:clamp(320px,62vh,780px);min-width:0;--data-table-row-height:52px}.table-footer{padding:8px 14px;color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px);text-align:right}
+      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-filter-states,.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-grid .category-card{margin-bottom:0}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}.switch-field{display:flex;align-items:center;justify-content:space-between;min-height:56px;gap:16px}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}
       .actions{display:flex;justify-content:flex-end;gap:10px}.table-wrap{overflow:auto;margin-top:16px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--divider-color,#ddd);vertical-align:middle}th{font-size:12px;color:var(--secondary-text-color,#727272)}td code{display:block}.rule-row{cursor:pointer}.rule-row:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.rule-row:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:-2px}.rule-row.is-selected{background:var(--ha-color-fill-primary-quiet-resting,color-mix(in srgb,var(--primary-color,#03a9f4) 12%,transparent))}.rule-toggle-cell{text-align:right;width:72px}.rule-toggle-cell ha-switch{display:inline-block;vertical-align:middle}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-name-field{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.monitoring-warning{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-radius:8px;margin-bottom:16px;background:color-mix(in srgb,var(--warning-color,#f5a623) 16%,transparent);color:var(--primary-text-color,#212121)}.monitoring-warning ha-button{flex:none}.notice{padding:12px 16px;border-radius:8px;margin-bottom:16px}.notice.success{background:color-mix(in srgb,var(--success-color,#43a047) 15%,transparent);color:var(--success-color,#2e7d32)}.notice.error{background:color-mix(in srgb,var(--error-color,#db4437) 15%,transparent);color:var(--error-color,#db4437)}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:850px){.table-toolbar{flex-wrap:wrap}.table-search{order:10;max-width:none;min-width:100%;flex-basis:100%}.native-table-layout.has-filter-pane{grid-template-columns:1fr}.native-filter-pane{border-inline-end:0;border-bottom:1px solid var(--divider-color,#ddd)}.native-filter-content{max-height:46vh}.selection-toolbar .toolbar-spacer{display:none}.selection-toolbar{align-items:stretch}.selection-toolbar ha-button{flex:1}.native-alert-table{height:calc(100vh - 250px);min-height:360px}}
       @media(max-width:700px){main{padding:12px}.summary,.automatic-grid{grid-template-columns:1fr}.summary article{padding:14px}.monitoring-warning{align-items:stretch;flex-direction:column}.monitoring-warning ha-button{width:100%}.fields{grid-template-columns:1fr}.panel{padding:15px}.actions ha-button{width:100%}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row{grid-template-columns:1fr}.delay-row ha-button{width:100%}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
-      @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}}
-      @media(max-width:560px){.table-toolbar ha-dropdown ha-assist-chip{max-width:44px;overflow:hidden}.selection-count{width:100%;order:8;margin:0}.selection-toolbar .toolbar-spacer{display:none}}
+      @media(max-width:700px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary article{padding:12px}.summary strong{font-size:24px}.table-page-top{padding:12px 12px 0}hass-tabs-subpage-data-table{--data-table-row-height:72px}.selection-actions{max-width:44vw;overflow-x:auto}}
     `;
   }
 }

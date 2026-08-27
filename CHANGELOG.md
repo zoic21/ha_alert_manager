@@ -2,6 +2,30 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev4 — 27 août 2026
+
+### Corrigé
+
+- Le Dashboard et l’Historique utilisent désormais le conteneur natif Home
+  Assistant `hass-tabs-subpage-data-table`, et non plus une barre d’outils
+  reconstruite dans Alert Manager.
+- Le volet de filtres affiche l’effacement global dans son en-tête ainsi qu’un
+  compteur et une action d’effacement sur chaque catégorie active.
+- La personnalisation des colonnes ouvre le dialogue natif Home Assistant avec
+  visibilité, glisser-déposer et restauration des valeurs par défaut.
+- Le mode sélection remplace la barre supérieure de la sous-page. Son bouton est
+  placé entre les filtres et la recherche, comme dans la liste des entités.
+- La recherche occupe automatiquement toute la largeur restante.
+- En affichage étroit, seules l’icône de statut et l’entité restent en colonnes,
+  avec la condition affichée en information secondaire sous le nom.
+- L’en-tête de la colonne Statut est vide et son icône est centrée dans son fond
+  circulaire.
+
+### Tests
+
+- Couverture du conteneur natif, de ses événements de recherche, tri, groupement,
+  sélection et personnalisation, des filtres réinitialisables et du rendu mobile.
+
 ## 1.7.0-dev3 — 26 août 2026
 
 ### Corrigé

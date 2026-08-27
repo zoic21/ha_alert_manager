@@ -25,7 +25,8 @@ project.
 - explicit exclusions by labels, entities and devices;
 - per-rule, per-entity, per-pack and global delays;
 - responsive administrator panel in French and English;
-- compact table based on Home Assistant's native `ha-data-table` component,
+- compact table based on Home Assistant's native
+  `hass-tabs-subpage-data-table` and `ha-data-table` components,
   with search, filters, sorting, collapsible grouping and customizable columns,
   without merging alert records;
 - persistent per-alert acknowledgement from the panel and Home Assistant
@@ -93,7 +94,10 @@ columns (entity ID, area, rule and message among them) can be shown, hidden and
 reordered. Column order and visibility, grouping and sorting are kept locally for
 the user and never alter integration configuration.
 
-Selection mode replaces the normal toolbar with bulk actions. Selecting visible
+Selection mode replaces the subpage toolbar with bulk actions. The native table
+settings dialog controls column visibility and drag-and-drop ordering. On mobile,
+the condition is shown below the entity name while other columns are condensed.
+Selecting visible
 rows can acknowledge or unacknowledge several alerts at once. A mixed selection
 changes only compatible alerts: pending rows and rows already in the requested
 state are ignored, while feedback reports the number actually changed.
