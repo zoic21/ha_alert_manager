@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import Event
@@ -46,16 +47,22 @@ def test_connectivity_treats_unavailable_as_off(hass):
 
 
 def test_connectivity_reload_survives_temporary_attribute_loss(hass):
-    """Unavailable reloads remain failures even if metadata briefly disappears."""
+    """Registry metadata preserves connectivity identity during reloads."""
+    hass.entity_registry.entries["binary_sensor.link"] = SimpleNamespace(
+        original_device_class="connectivity"
+    )
     off_state = _state(hass, "off")
     unavailable_state = _state(hass, STATE_UNAVAILABLE, attributes={})
 
     assert not _should(connectivity.PACK, hass, off_state, unavailable_state)
-    assert not _should(unavailable.PACK, hass, off_state, unavailable_state)
+    assert _should(unavailable.PACK, hass, off_state, unavailable_state)
+    assert connectivity.PACK.evaluate(
+        hass, unavailable_state, {"enabled": True}
+    ) is not None
 
 
 def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
-    """Only off/unavailable churn is suppressed; normal unavailable edges remain."""
+    """Unavailable remains independent from the connectivity failure state."""
     on_state = _state(hass, "on")
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
 
@@ -64,13 +71,15 @@ def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
 
 
 def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
-    """A transient integration reload must not restart the connectivity timer."""
+    """Connectivity keeps its timer while unavailable owns a separate alert."""
 
     async def scenario():
         _state(hass, "on")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
         manager.config["automatic"]["connectivity"]["delay"] = 300
+        manager.config["automatic"]["unavailable"]["enabled"] = True
+        manager.config["automatic"]["unavailable"]["delay"] = 300
 
         old_state = hass.states.get("binary_sensor.link")
         off_state = _state(hass, "off")
@@ -78,14 +87,14 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        alert_id = "connectivity:binary_sensor.link"
-        assert alert_id in manager.records
-        record = manager.records[alert_id]
+        connectivity_id = "connectivity:binary_sensor.link"
+        unavailable_id = "unavailable:binary_sensor.link"
+        assert connectivity_id in manager.records
+        record = manager.records[connectivity_id]
         assert record.status.value == "pending"
         detected_at = record.detected_at
         due_at = record.due_at
-        timer = manager._timers[alert_id]
-        tasks = list(entry.created_task_names)
+        timer = manager._timers[connectivity_id]
 
         unavailable_state = _state(hass, STATE_UNAVAILABLE)
         manager._state_changed(
@@ -94,12 +103,12 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        assert entry.created_task_names == tasks
-        assert manager.records[alert_id] is record
+        assert manager.records[connectivity_id] is record
         assert record.detected_at == detected_at
         assert record.due_at == due_at
-        assert manager._timers[alert_id] is timer
-        assert "unavailable:binary_sensor.link" not in manager.records
+        assert manager._timers[connectivity_id] is timer
+        assert unavailable_id in manager.records
+        assert manager.records[unavailable_id] is not record
 
         off_again = _state(hass, "off")
         manager._state_changed(
@@ -108,11 +117,10 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        assert entry.created_task_names == tasks
-        assert manager.records[alert_id] is record
+        assert manager.records[connectivity_id] is record
         assert record.detected_at == detected_at
         assert record.due_at == due_at
-        assert manager._timers[alert_id] is timer
-        assert "unavailable:binary_sensor.link" not in manager.records
+        assert manager._timers[connectivity_id] is timer
+        assert unavailable_id not in manager.records
 
     asyncio.run(scenario())
