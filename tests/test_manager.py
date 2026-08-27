@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-import json
 from types import SimpleNamespace
 
 import pytest
