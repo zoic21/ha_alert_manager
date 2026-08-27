@@ -42,9 +42,8 @@ def test_connectivity_treats_unavailable_as_neutral(hass):
     assert _should(connectivity.PACK, hass, unavailable_state, on_state)
     assert _should(connectivity.PACK, hass, unavailable_state, off_state)
 
-    assert connectivity.PACK.evaluate(
-        hass, unavailable_state, {"enabled": True}
-    ) is None
+    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
+    assert match is None
 
 
 def test_connectivity_reload_survives_temporary_attribute_loss(hass):
@@ -57,9 +56,8 @@ def test_connectivity_reload_survives_temporary_attribute_loss(hass):
 
     assert not _should(connectivity.PACK, hass, off_state, unavailable_state)
     assert _should(unavailable.PACK, hass, off_state, unavailable_state)
-    assert connectivity.PACK.evaluate(
-        hass, unavailable_state, {"enabled": True}
-    ) is None
+    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
+    assert match is None
 
 
 def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
