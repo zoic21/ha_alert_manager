@@ -65,6 +65,7 @@ class AutomaticPack:
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
     transition_filter: PackTransitionFilter | None = None
+    neutral_states: frozenset[str] = frozenset()
     config_fields: tuple[PackConfigField, ...] = ()
 
     def should_evaluate(

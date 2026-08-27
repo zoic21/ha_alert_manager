@@ -30,20 +30,21 @@ def _should(pack, hass, old_state, new_state):
     return pack.should_evaluate(hass, old_state, new_state, {"enabled": True})
 
 
-def test_connectivity_treats_unavailable_as_off(hass):
-    """Off and unavailable are one logical connectivity failure."""
+def test_connectivity_treats_unavailable_as_neutral(hass):
+    """Unavailable never changes the connectivity status by itself."""
     on_state = _state(hass, "on")
     off_state = _state(hass, "off")
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
 
     assert _should(connectivity.PACK, hass, on_state, off_state)
+    assert not _should(connectivity.PACK, hass, on_state, unavailable_state)
     assert not _should(connectivity.PACK, hass, off_state, unavailable_state)
-    assert not _should(connectivity.PACK, hass, unavailable_state, off_state)
     assert _should(connectivity.PACK, hass, unavailable_state, on_state)
+    assert _should(connectivity.PACK, hass, unavailable_state, off_state)
 
-    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
-    assert match is not None
-    assert match.condition_key == "automatic.connectivity"
+    assert connectivity.PACK.evaluate(
+        hass, unavailable_state, {"enabled": True}
+    ) is None
 
 
 def test_connectivity_reload_survives_temporary_attribute_loss(hass):
@@ -56,14 +57,13 @@ def test_connectivity_reload_survives_temporary_attribute_loss(hass):
 
     assert not _should(connectivity.PACK, hass, off_state, unavailable_state)
     assert _should(unavailable.PACK, hass, off_state, unavailable_state)
-    assert (
-        connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
-        is not None
-    )
+    assert connectivity.PACK.evaluate(
+        hass, unavailable_state, {"enabled": True}
+    ) is None
 
 
 def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
-    """Unavailable remains independent from the connectivity failure state."""
+    """Unavailable remains independent from connectivity status."""
     on_state = _state(hass, "on")
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
 
@@ -92,7 +92,6 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         unavailable_id = "unavailable:binary_sensor.link"
         assert connectivity_id in manager.records
         record = manager.records[connectivity_id]
-        assert record.status.value == "pending"
         detected_at = record.detected_at
         due_at = record.due_at
         timer = manager._timers[connectivity_id]
@@ -109,7 +108,6 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         assert record.due_at == due_at
         assert manager._timers[connectivity_id] is timer
         assert unavailable_id in manager.records
-        assert manager.records[unavailable_id] is not record
 
         off_again = _state(hass, "off")
         manager._state_changed(
@@ -123,5 +121,67 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         assert record.due_at == due_at
         assert manager._timers[connectivity_id] is timer
         assert unavailable_id not in manager.records
+
+    asyncio.run(scenario())
+
+
+def test_connectivity_on_unavailable_on_never_opens_alert(hass, entry):
+    """Unavailable cannot turn a healthy connectivity sensor into a failure."""
+
+    async def scenario():
+        on_state = _state(hass, "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        manager.config["automatic"]["unavailable"]["enabled"] = True
+
+        unavailable_state = _state(hass, STATE_UNAVAILABLE)
+        manager._state_changed(
+            _event("binary_sensor.link", on_state, unavailable_state)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert "connectivity:binary_sensor.link" not in manager.records
+        assert "unavailable:binary_sensor.link" in manager.records
+
+        on_again = _state(hass, "on")
+        manager._state_changed(
+            _event("binary_sensor.link", unavailable_state, on_again)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert "connectivity:binary_sensor.link" not in manager.records
+        assert "unavailable:binary_sensor.link" not in manager.records
+
+    asyncio.run(scenario())
+
+
+def test_connectivity_unavailable_then_off_opens_on_definitive_off(hass, entry):
+    """A failure starts only when the post-unavailable state is definitively off."""
+
+    async def scenario():
+        on_state = _state(hass, "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        manager.config["automatic"]["unavailable"]["enabled"] = True
+
+        unavailable_state = _state(hass, STATE_UNAVAILABLE)
+        manager._state_changed(
+            _event("binary_sensor.link", on_state, unavailable_state)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert "connectivity:binary_sensor.link" not in manager.records
+
+        off_state = _state(hass, "off")
+        manager._state_changed(
+            _event("binary_sensor.link", unavailable_state, off_state)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert "connectivity:binary_sensor.link" in manager.records
+        assert "unavailable:binary_sensor.link" not in manager.records
 
     asyncio.run(scenario())

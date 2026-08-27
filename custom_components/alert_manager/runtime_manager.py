@@ -257,7 +257,7 @@ class AlertManager(BaseAlertManager):
         return rendered
 
     def _build_candidates(self, state: State) -> dict[str, Any]:
-        """Let automatic packs coexist when an entity is unavailable."""
+        """Keep neutral automatic-pack states from changing their own status."""
         if state.state != STATE_UNAVAILABLE:
             return super()._build_candidates(state)
         if not self._is_base_eligible(state.entity_id):
@@ -265,7 +265,22 @@ class AlertManager(BaseAlertManager):
 
         result: dict[str, Any] = {}
         if self._is_automatic_eligible(state.entity_id):
+            automatic = self.config.get("automatic", {})
             for pack in PACKS:
+                config = automatic.get(pack.id, {})
+                if state.state in pack.neutral_states:
+                    if not config.get("enabled", False):
+                        continue
+                    if not self._pack_is_available(pack.id):
+                        continue
+                    alert_id = f"{pack.id}:{state.entity_id}"
+                    record = self.records.get(alert_id)
+                    if record is not None:
+                        result[alert_id] = (
+                            record.details,
+                            self._delay_for(state, pack.id),
+                        )
+                    continue
                 self._add_pack_candidate(result, state, pack.id)
         # Keep the existing rule semantics: custom rules are not evaluated while
         # their source itself is unavailable.
