@@ -2344,3 +2344,38 @@ test("structured automatic and generated rule conditions are localized", () => {
   assert.equal(automatic.condition, "Battery less than or equal to 15%");
   assert.equal(automatic.message, "Battery less than or equal to 15%");
 });
+
+
+test("new rule preserves Jinja condition from selector draft when selector value is unavailable", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    ...ruleValues(),
+    condition_template: "{{ states('sensor.example') == 'on' }}",
+  };
+  const ruleForm = form(ruleValues());
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "#rule-condition-template") return { value: undefined };
+    if (selector === "#rule-message-template") return { value: "" };
+    return null;
+  };
+  panel._render = () => {};
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "created-rule" };
+    },
+  };
+
+  await panel._saveRule(ruleForm);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].type, "alert_manager/rules/create");
+  assert.equal(
+    calls[0].rule.condition_template,
+    "{{ states('sensor.example') == 'on' }}",
+  );
+});
