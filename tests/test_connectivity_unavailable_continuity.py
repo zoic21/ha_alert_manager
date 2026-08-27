@@ -12,7 +12,9 @@ from custom_components.alert_manager.runtime_manager import AlertManager
 
 
 def _event(entity_id, old_state, new_state):
-    return Event({"entity_id": entity_id, "old_state": old_state, "new_state": new_state})
+    return Event(
+        {"entity_id": entity_id, "old_state": old_state, "new_state": new_state}
+    )
 
 
 def _state(hass, value, *, attributes=None):
@@ -86,7 +88,9 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         tasks = list(entry.created_task_names)
 
         unavailable_state = _state(hass, STATE_UNAVAILABLE)
-        manager._state_changed(_event("binary_sensor.link", off_state, unavailable_state))
+        manager._state_changed(
+            _event("binary_sensor.link", off_state, unavailable_state)
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
@@ -98,7 +102,9 @@ def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
         assert "unavailable:binary_sensor.link" not in manager.records
 
         off_again = _state(hass, "off")
-        manager._state_changed(_event("binary_sensor.link", unavailable_state, off_again))
+        manager._state_changed(
+            _event("binary_sensor.link", unavailable_state, off_again)
+        )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
