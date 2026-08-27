@@ -199,7 +199,12 @@ class AlertManager(BaseAlertManager):
         return result
 
     def _render_rule_message(
-        self, rule: Rule, state: State, current: Any
+        self,
+        rule: Rule,
+        state: State,
+        current: Any,
+        *,
+        force: bool = False,
     ) -> str | None:
         """Index message dependencies only while the occurrence can still change."""
         pair = (rule.id, state.entity_id)
@@ -209,10 +214,23 @@ class AlertManager(BaseAlertManager):
         if record is not None and record.status is AlertStatus.ACTIVE:
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(dependency_key)
-            return super()._render_rule_message(rule, state, current)
+            rendered = super()._render_rule_message(
+                rule,
+                state,
+                current,
+                force=force,
+            )
+            self._rule_message_render_info.pop(pair, None)
+            self._remove_dependency_key(dependency_key)
+            return rendered
 
         previous = self._rule_message_render_info.get(pair)
-        rendered = super()._render_rule_message(rule, state, current)
+        rendered = super()._render_rule_message(
+            rule,
+            state,
+            current,
+            force=force,
+        )
         render_info = self._rule_message_render_info.get(pair)
         if render_info is previous:
             if render_info is None:

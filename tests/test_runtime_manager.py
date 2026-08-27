@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from homeassistant.core import Event
 
+from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.runtime_manager import AlertManager
 
 
@@ -80,6 +81,41 @@ def test_plain_message_can_name_alert_manager_entity(hass, entry):
     )
 
     assert created["message"] == "See sensor.alert_manager_main_active for details"
+
+
+def test_explicit_message_edit_refreshes_active_alert_once(hass, entry):
+    """Editing a rule refreshes its active message without tracking it afterward."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "on")
+        hass.states.set("binary_sensor.cloudflared_running", "off")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(_rule(duration=0, message=None))
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert manager.records[alert_id].details.message is None
+
+        await manager.async_update_rule(
+            created["id"],
+            {"message": ("Status {{ states('binary_sensor.cloudflared_running') }}")},
+        )
+
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.ACTIVE
+        assert record.details.message == "Status off"
+        assert record.details.condition == "Status off"
+        assert "binary_sensor.cloudflared_running" not in manager._template_dependents
+
+        hass.states.set("binary_sensor.cloudflared_running", "on")
+        manager._state_changed(
+            Event({"entity_id": "binary_sensor.cloudflared_running"})
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert manager.records[alert_id].details.message == "Status off"
+
+    asyncio.run(scenario())
 
 
 def test_legacy_self_referential_rule_is_disabled(hass, entry):

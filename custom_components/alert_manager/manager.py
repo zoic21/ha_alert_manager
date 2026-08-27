@@ -848,14 +848,19 @@ class AlertManager:
             return False
 
     def _render_rule_message(
-        self, rule: Rule, state: State, current: Any
+        self,
+        rule: Rule,
+        state: State,
+        current: Any,
+        *,
+        force: bool = False,
     ) -> str | None:
         """Render an optional Jinja message until its alert becomes active."""
         if rule.message is None:
             return None
         alert_id = f"rule:{rule.id}:{state.entity_id}"
         record = self.records.get(alert_id)
-        if record is not None and record.status is AlertStatus.ACTIVE:
+        if not force and record is not None and record.status is AlertStatus.ACTIVE:
             return record.details.message
         try:
             render_info = self._rule_message_templates[rule.id].async_render_to_info(
@@ -876,6 +881,43 @@ class AlertManager:
                 err,
             )
             return None
+
+    def _refresh_active_rule_message(self, rule: Rule, entity_id: str) -> bool:
+        """Apply an explicit message edit once to a still-active occurrence."""
+        alert_id = f"rule:{rule.id}:{entity_id}"
+        record = self.records.get(alert_id)
+        state = self.hass.states.get(entity_id)
+        if record is None or record.status is not AlertStatus.ACTIVE or state is None:
+            return False
+        current = (
+            state.state
+            if rule.source == "state"
+            else state.attributes.get(rule.attribute or "")
+        )
+        rendered_message = self._render_rule_message(
+            rule,
+            state,
+            current,
+            force=True,
+        )
+        condition = rendered_message or self._rule_condition(rule, state)
+        condition_key = None if rendered_message is not None else "rule.generated"
+        condition_params = (
+            None
+            if rendered_message is not None
+            else self._rule_condition_params(rule, state)
+        )
+        changed = (
+            record.details.message != rendered_message
+            or record.details.condition != condition
+            or record.details.condition_key != condition_key
+            or record.details.condition_params != condition_params
+        )
+        record.details.message = rendered_message
+        record.details.condition = condition
+        record.details.condition_key = condition_key
+        record.details.condition_params = condition_params
+        return changed
 
     def _refresh_config_caches(self) -> None:
         """Cache exclusion membership used for every state change."""
@@ -1589,6 +1631,9 @@ class AlertManager:
             affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
             for entity_id in affected_entities:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            if old_rule.message != rule.message:
+                for entity_id in rule.entity_ids:
+                    self._refresh_active_rule_message(rule, entity_id)
             await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
