@@ -10,6 +10,7 @@ from homeassistant.core import Event
 
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.runtime_manager import AlertManager
+from custom_components.alert_manager.sensor import AlertManagerSensor
 
 
 def run(coroutine):
@@ -152,6 +153,38 @@ def test_own_state_change_never_schedules_evaluation(hass, entry):
     manager._state_changed(Event({"entity_id": "sensor.alert_manager_main_active"}))
 
     assert entry.created_task_names == before
+
+
+def test_sensors_reuse_last_published_snapshot(hass, entry, monkeypatch):
+    """Aggregate sensors consume the manager snapshot without rebuilding it."""
+    manager = make_manager(hass, entry)
+    calls = 0
+    original = manager.public_snapshot
+
+    def count_snapshot():
+        nonlocal calls
+        calls += 1
+        return original()
+
+    monkeypatch.setattr(manager, "public_snapshot", count_snapshot)
+    sensor = AlertManagerSensor(
+        manager,
+        "main_active",
+        "alert_manager_main_active",
+        "mdi:alert-circle",
+        "active_count",
+        "alerts",
+        "alerts",
+    )
+    snapshot = manager._last_public_snapshot
+    sensor._last_written_partition = (
+        manager.monitoring_enabled,
+        snapshot["active_count"],
+        snapshot["alerts"],
+    )
+    sensor._async_manager_updated()
+
+    assert calls == 0
 
 
 def test_ordinary_state_change_skips_unavailable_only_evaluation(hass, entry):
