@@ -107,8 +107,8 @@ const DEFAULT_TABLE_STATE = Object.freeze({
   overview: Object.freeze({
     columns: Object.freeze(["status", "entity", "device", "rule", "integration", "timeline"]),
     groupBy: "none",
-    sortBy: "detected",
-    sortDirection: "desc",
+    sortBy: "status",
+    sortDirection: "asc",
   }),
   history: Object.freeze({
     columns: Object.freeze(["status", "entity", "device", "rule", "integration", "detected"]),
@@ -144,6 +144,9 @@ const makeTableState = (kind, preferences = {}) => {
     savedColumns.length === legacyDefault.length
     && savedColumns.every((column, index) => column === legacyDefault[index])
   ));
+  const usesPreviousOverviewDefaultSort = kind === "overview"
+    && storedPreferences.sortBy === "detected"
+    && storedPreferences.sortDirection === "desc";
   const columns = savedColumns.length && !isLegacyDefault ? [...savedColumns] : [...defaults.columns];
   for (const required of REQUIRED_COLUMNS) {
     if (!columns.includes(required)) columns.push(required);
@@ -168,8 +171,13 @@ const makeTableState = (kind, preferences = {}) => {
     groupBy: ["none", "device", "area", "rule", "status"].includes(storedPreferences.groupBy)
       ? storedPreferences.groupBy
       : defaults.groupBy,
-    sortBy: sortOptions.includes(storedPreferences.sortBy) ? storedPreferences.sortBy : defaults.sortBy,
-    sortDirection: storedPreferences.sortDirection === "asc" ? "asc" : "desc",
+    sortBy: sortOptions.includes(storedPreferences.sortBy) && !usesPreviousOverviewDefaultSort
+      ? storedPreferences.sortBy
+      : defaults.sortBy,
+    sortDirection: ["asc", "desc"].includes(storedPreferences.sortDirection)
+      && !usesPreviousOverviewDefaultSort
+      ? storedPreferences.sortDirection
+      : defaults.sortDirection,
   };
 };
 

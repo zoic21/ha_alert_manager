@@ -623,6 +623,8 @@ test("dashboard renders one compact table with the required default columns and 
   assert.deepEqual(panel._tableState.overview.columns, [
     "status", "entity", "device", "rule", "integration", "timeline",
   ]);
+  assert.equal(panel._tableState.overview.sortBy, "status");
+  assert.equal(panel._tableState.overview.sortDirection, "asc");
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
   assert.match(html, /slot="filter-pane"/);
   assert.match(html, /slot="selection-bar"/);
@@ -675,7 +677,7 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.data.length, 3);
   assert.equal(table.filter, "garage");
   assert.equal(table.id, "id");
-  assert.deepEqual(table.initialSorting, { column: "detected", direction: "desc" });
+  assert.deepEqual(table.initialSorting, { column: "status", direction: "asc" });
   assert.equal(table.selectable, true);
   assert.equal(table.clickable, true);
   assert.deepEqual(
@@ -838,6 +840,10 @@ test("native grouping works for device, area, rule and status and remembers coll
 test("sorting handles dates, numeric values and text in both directions", () => {
   const panel = tablePanel();
   const rows = panel._tableRows("overview");
+  assert.deepEqual(
+    panel._filteredTableRows("overview", rows).map((row) => row.status),
+    ["active", "pending", "acknowledged"],
+  );
   panel._tableState.overview.sortBy = "value";
   panel._tableState.overview.sortDirection = "asc";
   assert.equal(panel._filteredTableRows("overview", rows)[0].rawValue, 10);
@@ -880,6 +886,12 @@ test("column visibility, order and table preferences persist locally", () => {
     columns: ["status", "entity", "device", "value", "condition", "detected", "timeline"],
   });
   assert.deepEqual(migratedDev7.columns, migrated.columns);
+  const migratedPreviousSort = makeTableState("overview", {
+    sortBy: "detected",
+    sortDirection: "desc",
+  });
+  assert.equal(migratedPreviousSort.sortBy, "status");
+  assert.equal(migratedPreviousSort.sortDirection, "asc");
 });
 
 test("malformed table preferences fall back without breaking panel startup", () => {

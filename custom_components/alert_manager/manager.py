@@ -131,7 +131,7 @@ class AlertManager:
         self._excluded_entities: frozenset[str] = frozenset()
         self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
-        self._active_device_ids: set[str] = set()
+        self._active_device_group_ids: set[str] = set()
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -168,9 +168,7 @@ class AlertManager:
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
-        self._active_device_ids = {
-            device["device_id"] for device in self._active_devices()
-        }
+        self._active_device_group_ids = set(self._active_device_groups())
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
 
@@ -900,7 +898,19 @@ class AlertManager:
     def _active_devices(
         self, active_records: list[AlertRecord] | None = None
     ) -> list[dict[str, Any]]:
-        """Group active occurrences by device, or by entity as a fallback."""
+        """Return sorted public summaries for active device-name groups."""
+        return sorted(
+            self._active_device_groups(active_records).values(),
+            key=lambda device: (
+                str(device["device_name"]).casefold(),
+                device["device_id"],
+            ),
+        )
+
+    def _active_device_groups(
+        self, active_records: list[AlertRecord] | None = None
+    ) -> dict[str, dict[str, Any]]:
+        """Group registry devices by name and device-less sources by entity."""
         records = active_records
         if records is None:
             records = [
@@ -910,15 +920,17 @@ class AlertManager:
             ]
         grouped: dict[str, list[AlertRecord]] = {}
         for record in records:
-            group_id = (
-                f"device:{record.details.device_id}"
-                if record.details.device_id
-                else f"entity:{record.details.entity_id}"
-            )
+            if record.details.device_id:
+                device_name = (
+                    record.details.device_name or record.details.device_id
+                ).strip()
+                group_id = f"device-name:{device_name.casefold()}"
+            else:
+                group_id = f"entity:{record.details.entity_id}"
             grouped.setdefault(group_id, []).append(record)
 
-        devices = []
-        for device_records in grouped.values():
+        devices: dict[str, dict[str, Any]] = {}
+        for group_id, device_records in grouped.items():
             ordered = sorted(
                 device_records,
                 key=lambda record: (record.active_since or record.due_at).astimezone(
@@ -926,33 +938,32 @@ class AlertManager:
                 ),
             )
             first = ordered[0]
-            device_id = first.details.device_id or first.details.entity_id
+            device_ids = sorted(
+                {
+                    record.details.device_id or record.details.entity_id
+                    for record in ordered
+                }
+            )
+            device_id = device_ids[0]
             device_name = (
                 first.details.device_name
                 or first.details.name
                 or first.details.entity_id
-            )
+            ).strip()
             alert_ids = [record.details.id for record in ordered]
             acknowledged = sum(record.acknowledged for record in ordered)
-            devices.append(
-                {
-                    "device_id": device_id,
-                    "device_name": device_name,
-                    "area": first.details.area,
-                    "started_at": (first.active_since or first.due_at).isoformat(),
-                    "alert_count": len(ordered),
-                    "unacknowledged_alert_count": len(ordered) - acknowledged,
-                    "acknowledged_alert_count": acknowledged,
-                    "alert_ids": alert_ids,
-                }
-            )
-        return sorted(
-            devices,
-            key=lambda device: (
-                str(device["device_name"]).casefold(),
-                device["device_id"],
-            ),
-        )
+            devices[group_id] = {
+                "device_id": device_id,
+                "device_ids": device_ids,
+                "device_name": device_name,
+                "area": first.details.area,
+                "started_at": (first.active_since or first.due_at).isoformat(),
+                "alert_count": len(ordered),
+                "unacknowledged_alert_count": len(ordered) - acknowledged,
+                "acknowledged_alert_count": acknowledged,
+                "alert_ids": alert_ids,
+            }
+        return devices
 
     def _tracked_count(self) -> int:
         """Count enabled custom instances and unique automatic sources."""
@@ -1598,21 +1609,19 @@ class AlertManager:
             data["previous_acknowledged_by"] = previous_by
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
-    def _fire_new_device_alerts(self, snapshot: dict[str, Any]) -> None:
-        """Emit one event when a device enters the visible active set."""
-        devices = {
-            device["device_id"]: device for device in snapshot.get("active_devices", [])
-        }
-        for device_id in sorted(devices.keys() - self._active_device_ids):
-            self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, devices[device_id])
-        self._active_device_ids = set(devices)
+    def _fire_new_device_alerts(self) -> None:
+        """Emit once when a device-name or device-less entity group becomes active."""
+        devices = self._active_device_groups()
+        for group_id in sorted(devices.keys() - self._active_device_group_ids):
+            self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, devices[group_id])
+        self._active_device_group_ids = set(devices)
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
         snapshot = self.public_snapshot()
         if not force and snapshot == self._last_public_snapshot:
             return
-        self._fire_new_device_alerts(snapshot)
+        self._fire_new_device_alerts()
         self._last_public_snapshot = deepcopy(snapshot)
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)
 

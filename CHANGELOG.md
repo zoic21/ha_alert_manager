@@ -2,6 +2,27 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev16 — 27 août 2026
+
+### Modifié
+
+- `sensor.alert_manager_device_main_active` regroupe désormais les appareils
+  portant le même nom dans une seule entrée `devices`. Le champ compatible
+  `device_id` conserve le premier identifiant trié et le nouveau champ
+  `device_ids` expose tous les appareils regroupés.
+- `alert_manager_device_alert_started` suit le même groupe nominal : l’arrivée
+  d’une alerte sur un second appareil de même nom ne réémet pas l’événement tant
+  que le groupe reste actif.
+- Le tri initial de la vue d’ensemble utilise le statut en ordre ascendant afin
+  d’afficher les alertes actives avant les alertes à venir et acquittées.
+  L’ancien tri par défaut « détectée le, décroissant » est migré vers ce nouvel
+  ordre ; les autres tris personnalisés restent conservés localement.
+
+### Tests
+
+- 146 tests backend et 69 tests frontend couvrent le regroupement de plusieurs
+  identifiants d’appareil sous un même nom et le nouvel ordre initial.
+
 ## 1.7.0-dev15 — 27 août 2026
 
 ### Corrigé

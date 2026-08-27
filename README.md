@@ -115,7 +115,8 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    dates. Chaque période se choisit dans un unique sélecteur natif Home Assistant
    avec raccourcis, calendrier et heures de début/fin. La barre propose aussi un
    groupement repliable par appareil, zone, règle ou statut et un tri
-   ascendant ou descendant. Les colonnes facultatives (ID d’entité, zone, règle,
+   ascendant ou descendant. Le tri initial est effectué par statut afin de placer
+   les alertes actives en premier. Les colonnes facultatives (ID d’entité, zone, règle,
    message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur
    visibilité, le groupement et le tri sont conservés localement pour
    l’utilisateur, sans modifier la configuration de l’intégration.
@@ -352,7 +353,7 @@ et remplacé sans capteur de compatibilité durable :
 | `sensor.alert_manager_main_active` | nombre d’actives non acquittées | actives non acquittées uniquement |
 | `sensor.alert_manager_main_pending` | nombre d’alertes à venir | `pending` uniquement |
 | `sensor.alert_manager_main_acknowledge` | nombre d’actives acquittées | actives acquittées uniquement |
-| `sensor.alert_manager_device_main_active` | nombre d’appareils, ou d’entités sans appareil, possédant au moins une alerte active | attribut `devices`, alertes acquittées comprises |
+| `sensor.alert_manager_device_main_active` | nombre de groupes d’appareils par nom, ou d’entités sans appareil, possédant au moins une alerte active | attribut `devices`, alertes acquittées comprises |
 
 Une occurrence n’apparaît jamais dans deux capteurs de cycle. Ceux-ci exposent
 un attribut `alerts` ; le capteur d’appareils expose `devices`. Ces attributs sont
@@ -408,11 +409,15 @@ apparaît immédiatement comme active, sans passer brièvement par la liste « 
 venir ». Les alertes actives ne subissent aucun délai d’affichage supplémentaire.
 
 Le capteur d’appareils regroupe les alertes associées à un appareil du registre
-Home Assistant. Une entité sans appareil forme son propre groupe : `device_id`
-prend alors la valeur de son `entity_id` et `device_name` son nom d’entité. Son
-attribut `devices` contient également `area`, `started_at`, les compteurs
-d’alertes acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas
-le groupe : il disparaît lorsque sa dernière alerte active est résolue.
+Home Assistant. Plusieurs appareils portant le même nom, sans tenir compte de la
+casse ou des espaces aux extrémités, forment un seul groupe. `device_id` conserve
+le premier identifiant trié pour compatibilité et `device_ids` contient tous les
+identifiants regroupés. Une entité sans appareil forme toujours son propre
+groupe : `device_id` prend alors la valeur de son `entity_id`, `device_name`
+son nom d’entité et `device_ids` contient cet identifiant unique. L’attribut
+`devices` contient également `area`, `started_at`, les compteurs d’alertes
+acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas le
+groupe : il disparaît lorsque sa dernière alerte active est résolue.
 
 Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
 le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
@@ -473,11 +478,11 @@ condition réapparaît, la nouvelle occurrence démarre non acquittée.
 `alert_manager_alert_resolved` avec `resolved_at`. Une alerte déjà active avant un
 redémarrage n’émet pas un second événement de démarrage.
 
-Lorsque le premier élément actif d’un appareil ou d’une entité sans appareil
-apparaît, l’événement
+Lorsque le premier élément actif d’un groupe d’appareils de même nom ou d’une
+entité sans appareil apparaît, l’événement
 `alert_manager_device_alert_started` est émis une seule fois avec les mêmes
 données que l’entrée de `attributes.devices`. Les alertes supplémentaires du même
-appareil ne le répètent pas. Après résolution de toutes ses alertes, une future
+groupe ne le répètent pas. Après résolution de toutes ses alertes, une future
 alerte de ce groupe constitue un nouveau démarrage. Pour une entité sans appareil,
 `device_id` contient son `entity_id` et `device_name` son nom d’entité.
 

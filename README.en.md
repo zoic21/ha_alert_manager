@@ -96,7 +96,8 @@ immediate search and cumulative filters for status, device, rule, integration,
 label, domain, area, entity and date ranges. Each range uses a single native Home
 Assistant picker with presets, a calendar and start/end times, plus collapsible
 grouping by device, area, rule or status, and ascending or descending sorting. Optional
-columns (entity ID, area, rule and message among them) can be shown, hidden and
+The initial status sort places active alerts first. Optional columns (entity ID,
+area, rule and message among them) can be shown, hidden and
 reordered. Column order and visibility, grouping and sorting are kept locally for
 the user and never alter integration configuration.
 
@@ -297,7 +298,7 @@ and no long-term compatibility sensor is created:
 | `sensor.alert_manager_main_active` | unacknowledged active count | unacknowledged active alerts only |
 | `sensor.alert_manager_main_pending` | upcoming count | pending alerts only |
 | `sensor.alert_manager_main_acknowledge` | acknowledged active count | acknowledged active alerts only |
-| `sensor.alert_manager_device_main_active` | devices, or individual device-less entities, with at least one active alert | `devices` attribute, including acknowledged alerts |
+| `sensor.alert_manager_device_main_active` | device-name groups, or individual device-less entities, with at least one active alert | `devices` attribute, including acknowledged alerts |
 
 An occurrence is never exposed by two lifecycle sensors. Those sensors expose an
 `alerts` list; the device sensor exposes `devices`. Example custom-rule alert:
@@ -351,9 +352,13 @@ immediately as active without briefly appearing in the pending list. Active
 alerts receive no additional display delay.
 
 The device sensor groups alerts associated with a Home Assistant registry device.
-A device-less entity forms its own group: `device_id` is then its `entity_id`
-and `device_name` is its entity name. Each item in `attributes.devices` also
-contains `area`, `started_at`, acknowledged/unacknowledged counts and `alert_ids`.
+Registry devices sharing the same name, ignoring case and surrounding spaces,
+form one group. `device_id` retains the first sorted identifier for compatibility,
+while `device_ids` contains every grouped identifier. A device-less entity still
+forms its own group: `device_id` is its `entity_id`, `device_name` is its entity
+name and `device_ids` contains that single identifier. Each item in
+`attributes.devices` also contains `area`, `started_at`,
+acknowledged/unacknowledged counts and `alert_ids`.
 Acknowledgement does not remove a device; its last active alert must resolve.
 
 Cards and automations reading `sensor.alert_manager` must target the appropriate
@@ -411,11 +416,11 @@ acknowledgement with that occurrence; a later occurrence starts unacknowledged.
 start event. Event data keeps the existing `condition` field and adds structured
 condition fields when available.
 
-`alert_manager_device_alert_started` fires once when a device's or device-less
-entity's first active alert appears. Further alerts in that group do not repeat
-it. After all of its active alerts resolve, a future alert starts a new
-occurrence. For a device-less entity, `device_id` contains its `entity_id` and
-`device_name` contains its entity name.
+`alert_manager_device_alert_started` fires once when a same-name device group's
+or device-less entity's first active alert appears. Further alerts in that group
+do not repeat it. After all of its active alerts resolve, a future alert starts a
+new occurrence. For a device-less entity, `device_id` contains its `entity_id`
+and `device_name` contains its entity name.
 
 `alert_manager_alert_acknowledged` fires only when an active alert becomes
 acknowledged. `alert_manager_alert_unacknowledged` fires only when that state is

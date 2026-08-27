@@ -1058,6 +1058,70 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
     }
 
 
+def test_devices_with_the_same_name_share_one_active_group(
+    hass, entry, registry_entry, device_entry
+):
+    """Duplicate registry devices keep one counter and one lifecycle event."""
+    first_device = device_entry(hass, "a" * 32, name="Onduleur")
+    second_device = device_entry(hass, "b" * 32, name=" onduleur ")
+    registry_entry(hass, "sensor.ups_one", device_id=first_device.id)
+    registry_entry(hass, "sensor.ups_two", device_id=second_device.id)
+    hass.states.set("sensor.ups_one", "unavailable")
+    hass.states.set("sensor.ups_two", "ok")
+    manager = make_manager(hass, entry)
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {"sensor.ups_one": 0, "sensor.ups_two": 0},
+                "pending_display_delay": 0,
+            }
+        )
+    )
+
+    initial = manager.public_snapshot()
+    assert initial["device_active_count"] == 1
+    assert initial["active_devices"][0]["device_ids"] == [first_device.id]
+    device_events = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert len(device_events) == 1
+    assert device_events[0]["device_ids"] == [first_device.id]
+
+    hass.states.set("sensor.ups_two", "unavailable")
+    run(manager.async_evaluate_entity("sensor.ups_two"))
+    snapshot = manager.public_snapshot()
+    assert snapshot["device_active_count"] == 1
+    device = snapshot["active_devices"][0]
+    assert device["device_id"] == first_device.id
+    assert device["device_ids"] == [first_device.id, second_device.id]
+    assert device["device_name"] == "Onduleur"
+    assert device["alert_count"] == 2
+    assert set(device["alert_ids"]) == {
+        "unavailable:sensor.ups_one",
+        "unavailable:sensor.ups_two",
+    }
+    device_events = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert len(device_events) == 1
+
+    hass.states.set("sensor.ups_one", "ok")
+    run(manager.async_evaluate_entity("sensor.ups_one"))
+    remaining = manager.public_snapshot()["active_devices"][0]
+    assert remaining["device_id"] == second_device.id
+    assert remaining["device_ids"] == [second_device.id]
+    assert (
+        len(
+            [
+                event
+                for event, _data in hass.bus.fired
+                if event == EVENT_DEVICE_ALERT_STARTED
+            ]
+        )
+        == 1
+    )
+
+
 def test_entities_without_devices_are_counted_individually(hass, entry):
     """Each device-less entity acts as one stable fallback device."""
     hass.states.set("sensor.one", "unavailable", {"friendly_name": "Capteur un"})
@@ -1081,6 +1145,10 @@ def test_entities_without_devices_are_counted_individually(hass, entry):
         ("sensor.one", "Capteur un"),
         ("sensor.two", "sensor.two"),
     }
+    assert all(
+        device["device_ids"] == [device["device_id"]]
+        for device in snapshot["active_devices"]
+    )
     events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
