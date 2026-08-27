@@ -609,9 +609,7 @@ class AlertManagerPanel extends HTMLElement {
       tablePage.tabs = this._tabs();
       tablePage.route = { prefix: "", path: TABS.find((tab) => tab.id === kind)?.path ?? TABS[0].path };
       tablePage.backPath = "/config/integrations";
-      tablePage.backCallback = window.history?.state?.from !== undefined
-        ? () => window.history.back()
-        : undefined;
+      tablePage.backCallback = () => window.history?.back?.();
       tablePage.id = "id";
       tablePage.columns = this._nativeTableColumns(kind);
       tablePage.columnOrder = orderedColumns;
@@ -896,9 +894,7 @@ class AlertManagerPanel extends HTMLElement {
       shell.tabs = this._tabs();
       shell.route = { prefix: "", path: activePage.path };
       shell.backPath = "/config/integrations";
-      shell.backCallback = window.history?.state?.from !== undefined
-        ? () => window.history.back()
-        : undefined;
+      shell.backCallback = () => window.history?.back?.();
     }
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
@@ -1464,7 +1460,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _nativeTableCell(kind, row, column) {
     if (column === "status") return this._nativeStatusCell(row, kind);
-    if (column === "entity") return this._nativeEntityCell(row, Boolean(this._narrow));
+    if (column === "entity") return this._nativeEntityCell(row, Boolean(this._narrow), kind);
     if (column === "entity_id") return row.entityId || "—";
     if (column === "device") return row.device || "—";
     if (column === "area") return row.area || "—";
@@ -1514,7 +1510,7 @@ class AlertManagerPanel extends HTMLElement {
     return status;
   }
 
-  _nativeEntityCell(row, narrow = false) {
+  _nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (!globalThis.document?.createElement) return row.entityName;
     const content = document.createElement("span");
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
@@ -1522,7 +1518,7 @@ class AlertManagerPanel extends HTMLElement {
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(name);
-    if (row.labels?.length) {
+    if (!narrow && row.labels?.length) {
       const labels = document.createElement("span");
       labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
       for (const metadata of row.labels) {
@@ -1542,10 +1538,28 @@ class AlertManagerPanel extends HTMLElement {
       content.append(labels);
     }
     if (narrow) {
-      const condition = document.createElement("span");
-      condition.textContent = row.condition || "—";
-      condition.style.cssText = "overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
-      content.append(condition);
+      const secondaryColumns = (this._tableState[kind]?.columns ?? [])
+        .filter((column) => !REQUIRED_COLUMNS.has(column));
+      if (secondaryColumns.length) {
+        const secondary = document.createElement("span");
+        secondary.style.cssText = "display:block;min-width:0;overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
+        secondaryColumns.forEach((column, index) => {
+          if (index) secondary.append(" · ");
+          const item = document.createElement("span");
+          if (column === "timeline" && row.status === "pending" && this._monitoringEnabled) {
+            item.dataset.due = row.due;
+            item.textContent = this._remaining(row.due);
+          } else if (column === "timeline") {
+            item.textContent = row.status === "pending"
+              ? this._t("table.monitoring_suspended")
+              : this._date(row.activated);
+          } else {
+            item.textContent = String(this._nativeTableCell(kind, row, column));
+          }
+          secondary.append(item);
+        });
+        content.append(secondary);
+      }
     }
     return content;
   }

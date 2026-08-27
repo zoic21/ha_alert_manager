@@ -1151,7 +1151,7 @@ test("native wrapper events update search grouping sorting and columns", () => {
   assert.equal(editorSwitches, 1);
 });
 
-test("native Home Assistant table uses full width and compact mobile entity rows", () => {
+test("native Home Assistant table uses full width and all visible columns in compact mobile rows", () => {
   const panel = tablePanel();
   panel._narrow = true;
   const styles = panel._styles();
@@ -1165,8 +1165,34 @@ test("native Home Assistant table uses full width and compact mobile entity rows
   assert.equal(columns.status.showNarrow, true);
   assert.equal(columns.entity.main, true);
   assert.equal(entity.children[0].textContent, active.entityName);
-  assert.equal(entity.children[1].children[0].textContent, "Critique");
-  assert.equal(entity.children[2].textContent, active.condition);
+  assert.deepEqual(entity.children[1].children.map((child) => (
+    typeof child === "string" ? child : child.textContent
+  )), [
+    active.device,
+    " · ",
+    active.rule,
+    " · ",
+    active.integrationLabel,
+    " · ",
+    panel._date(active.activated),
+  ]);
+  assert.equal(entity.children.length, 2);
+
+  panel._tableState.overview.columns = [
+    "status", "entity", "value", "area", "condition", "detected",
+  ];
+  const customized = panel._nativeEntityCell(active, true, "overview");
+  assert.deepEqual(customized.children[1].children.map((child) => (
+    typeof child === "string" ? child : child.textContent
+  )), [
+    active.value,
+    " · ",
+    active.area,
+    " · ",
+    active.condition,
+    " · ",
+    panel._date(active.detected),
+  ]);
 });
 
 test("table navigation delegates tabs and controls to hass-tabs-subpage-data-table", () => {
@@ -1200,7 +1226,7 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
-test("native toolbar back callback returns to the previous Home Assistant page", () => {
+test("native toolbar back callback returns to the previous Home Assistant page without route state", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -1211,7 +1237,7 @@ test("native toolbar back callback returns to the previous Home Assistant page",
   panel.shadowRoot.querySelector = (selector) => selector === "#panel-shell" ? shell : null;
   let backCalls = 0;
   window.history = {
-    state: { from: "/lovelace/home" },
+    state: null,
     back() { backCalls += 1; },
   };
 

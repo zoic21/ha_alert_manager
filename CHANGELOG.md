@@ -2,6 +2,24 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev17 — 27 août 2026
+
+### Corrigé
+
+- Sur mobile, la seconde ligne de chaque alerte reprend désormais toutes les
+  colonnes secondaires choisies dans « Personnaliser la vue », dans leur ordre
+  d’affichage et séparées par un point médian. Cela s’applique à la vue
+  d’ensemble comme à l’historique, y compris au compte à rebours dynamique.
+- Le bouton retour utilise systématiquement l’historique réel du navigateur. Il
+  revient donc à la page Home Assistant précédemment consultée même lorsque
+  celle-ci n’est pas renseignée dans `history.state`.
+
+### Tests
+
+- 146 tests backend et 69 tests frontend couvrent la composition mobile selon
+  les colonnes visibles et le retour sans métadonnée de navigation Home
+  Assistant.
+
 ## 1.7.0-dev16 — 27 août 2026
 
 ### Modifié
