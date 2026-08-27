@@ -34,12 +34,8 @@ def test_unavailable_pack_owns_transition_filtering(hass):
     config = {"enabled": True}
 
     assert unavailable.PACK.should_evaluate(hass, normal, changed, config) is False
-    assert unavailable.PACK.should_evaluate(
-        hass, changed, unavailable_state, config
-    )
-    assert unavailable.PACK.should_evaluate(
-        hass, unavailable_state, changed, config
-    )
+    assert unavailable.PACK.should_evaluate(hass, changed, unavailable_state, config)
+    assert unavailable.PACK.should_evaluate(hass, unavailable_state, changed, config)
     assert unavailable.PACK.should_evaluate(hass, None, normal, config) is True
     assert unavailable.PACK.should_evaluate(hass, normal, None, config) is True
 
