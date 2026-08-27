@@ -120,6 +120,7 @@ def test_resume_preserves_pending_time_without_duplicate_timers_or_events(
     run(manager.async_setup())
     pending_id = "unavailable:sensor.pending"
     original_due_at = manager.records[pending_id].due_at
+    original_visible_at = manager.records[pending_id].visible_at
     run(manager.async_set_monitoring(False))
     hass.states.set("sensor.new", "unavailable")
     set_now(start + timedelta(seconds=901))
@@ -128,6 +129,9 @@ def test_resume_preserves_pending_time_without_duplicate_timers_or_events(
     assert manager.records[pending_id].status is AlertStatus.PENDING
     assert manager.records[pending_id].paused_at is None
     assert manager.records[pending_id].due_at == original_due_at + timedelta(
+        seconds=901
+    )
+    assert manager.records[pending_id].visible_at == original_visible_at + timedelta(
         seconds=901
     )
     assert manager.records["unavailable:sensor.new"].status is AlertStatus.PENDING
@@ -235,7 +239,10 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
     run(manager.async_setup())
     run(
         manager.async_update_config(
-            {"entity_delays": {"sensor.active": 0, "sensor.pending": 900}}
+            {
+                "entity_delays": {"sensor.active": 0, "sensor.pending": 900},
+                "pending_display_delay": 0,
+            }
         )
     )
     run(manager.async_acknowledge("unavailable:sensor.active", "Loïc"))
@@ -271,8 +278,12 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         all_ids.extend(alert["id"] for alert in alerts)
     assert len(all_ids) == len(set(all_ids))
     device_sensor = by_id["sensor.alert_manager_device_main_active"]
-    assert device_sensor.native_value == 0
-    assert device_sensor.extra_state_attributes == {"devices": []}
+    assert device_sensor.native_value == 2
+    devices = device_sensor.extra_state_attributes["devices"]
+    assert {device["device_id"] for device in devices} == {
+        "sensor.active",
+        "sensor.other",
+    }
 
     run(manager.async_set_monitoring(False))
     assert len(manager.records) == 3
@@ -290,7 +301,14 @@ def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):
     hass.states.set("sensor.pending", "unavailable")
     first = AlertManager(hass, entry)
     run(first.async_setup())
-    run(first.async_update_config({"entity_delays": {"sensor.active": 0}}))
+    run(
+        first.async_update_config(
+            {
+                "entity_delays": {"sensor.active": 0},
+                "pending_display_delay": 0,
+            }
+        )
+    )
     run(first.async_unload())
 
     second = AlertManager(hass, entry)

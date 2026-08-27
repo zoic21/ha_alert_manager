@@ -395,9 +395,7 @@ class AlertManager:
         if restoring and (state is None or state.state == STATE_UNKNOWN):
             for alert_id in existing_ids:
                 record = self.records[alert_id]
-                if record.status is AlertStatus.PENDING or not self._active_is_visible(
-                    record, now
-                ):
+                if record.status is AlertStatus.PENDING:
                     self._schedule_timer(record)
             if publish:
                 self._publish_if_changed()
@@ -410,6 +408,10 @@ class AlertManager:
             record = self.records.get(alert_id)
             if record is None:
                 record = AlertRecord.pending(details, delay, now)
+                record.visible_at = calculate_due_at(
+                    now,
+                    min(self.config["pending_display_delay"], delay),
+                )
                 self.records[alert_id] = record
                 persisted_changed = True
             else:
@@ -419,6 +421,7 @@ class AlertManager:
                 details.value = record.details.value
                 record.details = details
                 if record.delay != delay:
+                    pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
                     record.due_at = calculate_due_at(
                         record.detected_at, delay
@@ -429,28 +432,23 @@ class AlertManager:
                     ) < record.due_at.astimezone(UTC):
                         record.status = AlertStatus.PENDING
                         record.active_since = None
-                        record.visible_at = None
+                        # An alert already exposed as active must stay visible if
+                        # a configuration change moves it back to pending.
+                        record.visible_at = record.detected_at
                         record.clear_acknowledgement()
-                    elif record.status is AlertStatus.ACTIVE:
-                        self._recalculate_hidden_visibility(record, now)
+                    elif (
+                        record.status is AlertStatus.PENDING and not pending_was_visible
+                    ):
+                        self._recalculate_hidden_pending_visibility(record, now)
                     persisted_changed = True
 
             became_active = advance_record(record, now)
             if became_active:
                 persisted_changed = True
                 self._cancel_timer(alert_id)
-                record.visible_at = calculate_due_at(
-                    record.active_since,
-                    min(self.config["active_display_delay"], record.delay),
-                )
-                if not self._active_is_visible(record, now):
-                    self._schedule_timer(record)
                 if emit_events:
                     self._fire_started(record)
-            elif (
-                record.status is AlertStatus.PENDING
-                or not self._active_is_visible(record, now)
-            ) and alert_id not in self._timers:
+            elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
                 self._schedule_timer(record)
 
         for alert_id in existing_ids - candidates.keys():
@@ -844,7 +842,6 @@ class AlertManager:
                 record
                 for record in self.records.values()
                 if record.status is AlertStatus.ACTIVE
-                and self._active_is_visible(record, now)
             ),
             key=lambda record: (record.active_since or record.due_at).astimezone(UTC),
         )
@@ -853,6 +850,7 @@ class AlertManager:
                 record
                 for record in self.records.values()
                 if record.status is AlertStatus.PENDING
+                and self._pending_is_visible(record, now)
             ),
             key=lambda record: record.due_at.astimezone(UTC),
         )
@@ -875,48 +873,52 @@ class AlertManager:
             "active_devices": active_devices,
         }
 
-    def _active_is_visible(
+    def _pending_is_visible(
         self, record: AlertRecord, now: datetime | None = None
     ) -> bool:
-        """Return whether an active occurrence reached its presentation time."""
-        if record.status is not AlertStatus.ACTIVE:
+        """Return whether a pending occurrence reached its presentation time."""
+        if record.status is not AlertStatus.PENDING:
             return False
         if record.visible_at is None:
             return True
         current = now or dt_util.now()
         return current.astimezone(UTC) >= record.visible_at.astimezone(UTC)
 
-    def _recalculate_hidden_visibility(
+    def _recalculate_hidden_pending_visibility(
         self, record: AlertRecord, now: datetime
     ) -> None:
-        """Apply current delay settings only while an alert is still hidden."""
-        if record.active_since is None or self._active_is_visible(record, now):
+        """Apply current settings only while a pending alert is still hidden."""
+        if record.status is not AlertStatus.PENDING or self._pending_is_visible(
+            record, now
+        ):
             return
         record.visible_at = calculate_due_at(
-            record.active_since,
-            min(self.config["active_display_delay"], record.delay),
-        )
+            record.detected_at,
+            min(self.config["pending_display_delay"], record.delay),
+        ) + timedelta(seconds=record.paused_seconds)
 
     def _active_devices(
         self, active_records: list[AlertRecord] | None = None
     ) -> list[dict[str, Any]]:
-        """Group visible active occurrences by Home Assistant device."""
+        """Group active occurrences by device, or by entity as a fallback."""
         records = active_records
         if records is None:
-            now = dt_util.now()
             records = [
                 record
                 for record in self.records.values()
                 if record.status is AlertStatus.ACTIVE
-                and self._active_is_visible(record, now)
             ]
         grouped: dict[str, list[AlertRecord]] = {}
         for record in records:
-            if record.details.device_id:
-                grouped.setdefault(record.details.device_id, []).append(record)
+            group_id = (
+                f"device:{record.details.device_id}"
+                if record.details.device_id
+                else f"entity:{record.details.entity_id}"
+            )
+            grouped.setdefault(group_id, []).append(record)
 
         devices = []
-        for device_id, device_records in grouped.items():
+        for device_records in grouped.values():
             ordered = sorted(
                 device_records,
                 key=lambda record: (record.active_since or record.due_at).astimezone(
@@ -924,12 +926,18 @@ class AlertManager:
                 ),
             )
             first = ordered[0]
+            device_id = first.details.device_id or first.details.entity_id
+            device_name = (
+                first.details.device_name
+                or first.details.name
+                or first.details.entity_id
+            )
             alert_ids = [record.details.id for record in ordered]
             acknowledged = sum(record.acknowledged for record in ordered)
             devices.append(
                 {
                     "device_id": device_id,
-                    "device_name": first.details.device_name or device_id,
+                    "device_name": device_name,
                     "area": first.details.area,
                     "started_at": (first.active_since or first.due_at).isoformat(),
                     "alert_count": len(ordered),
@@ -1238,6 +1246,11 @@ class AlertManager:
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
         validate_config_update(changes)
+        changes = dict(changes)
+        if "active_display_delay" in changes:
+            changes.setdefault(
+                "pending_display_delay", changes.pop("active_display_delay")
+            )
         if "rules" in changes:
             raise ValueError("Rules must be changed through the rules API")
         candidate = _deep_merge(self.get_config(), changes)
@@ -1252,8 +1265,8 @@ class AlertManager:
             self.config = candidate
             self._rebuild_rule_index()
             await self.async_evaluate_all(save=False, publish=False)
-            if "active_display_delay" in changes:
-                self._reschedule_hidden_active_visibility(dt_util.now())
+            if "pending_display_delay" in changes:
+                self._reschedule_hidden_pending_visibility(dt_util.now())
             await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
@@ -1289,7 +1302,7 @@ class AlertManager:
                 publish=False,
                 emit_events=False,
             )
-            self._reschedule_hidden_active_visibility(dt_util.now())
+            self._reschedule_hidden_pending_visibility(dt_util.now())
             await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
@@ -1478,30 +1491,29 @@ class AlertManager:
             paused_for = now_utc - record.paused_at.astimezone(UTC)
             if paused_for.total_seconds() > 0:
                 record.due_at += paused_for
+                if record.visible_at is not None:
+                    record.visible_at += paused_for
                 record.paused_seconds += paused_for.total_seconds()
             record.paused_at = None
             changed = True
         return changed
 
     def _reschedule_record_timers(self) -> None:
-        """Restore transition and visibility timers after a configuration swap."""
+        """Restore pending transition and presentation timers."""
         if not self.monitoring_enabled:
             return
         for record in self.records.values():
-            if record.status is AlertStatus.PENDING or not self._active_is_visible(
-                record
-            ):
+            if record.status is AlertStatus.PENDING:
                 self._schedule_timer(record)
 
-    def _reschedule_hidden_active_visibility(self, now: datetime) -> None:
-        """Recalculate only not-yet-exposed active alerts and their timers."""
+    def _reschedule_hidden_pending_visibility(self, now: datetime) -> None:
+        """Recalculate only not-yet-exposed pending alerts and their timers."""
         for record in self.records.values():
-            if record.status is not AlertStatus.ACTIVE:
+            if record.status is not AlertStatus.PENDING:
                 continue
-            self._recalculate_hidden_visibility(record, now)
+            self._recalculate_hidden_pending_visibility(record, now)
             self._cancel_timer(record.details.id)
-            if not self._active_is_visible(record, now):
-                self._schedule_timer(record)
+            self._schedule_timer(record)
 
     def _rule_index(self, rule_id: str) -> int:
         """Find a rule or raise a stable API error."""
@@ -1516,12 +1528,11 @@ class AlertManager:
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
-        if record.status is AlertStatus.PENDING:
-            when = record.due_at.astimezone(UTC)
-        elif record.visible_at is not None and not self._active_is_visible(record):
-            when = record.visible_at.astimezone(UTC)
-        else:
+        if record.status is not AlertStatus.PENDING:
             return
+        when = record.due_at.astimezone(UTC)
+        if record.visible_at is not None and not self._pending_is_visible(record):
+            when = min(when, record.visible_at.astimezone(UTC))
 
         @callback
         def timer_due(_now: datetime) -> None:

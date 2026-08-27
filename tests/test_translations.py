@@ -57,6 +57,11 @@ def test_translation_files_are_complete_independent_catalogs() -> None:
     assert "config_panel.history.disabled_title" in english
     assert "config_panel.settings.history_limit" in english
     assert "config_panel.settings.history_clear_confirm" in english
+    assert (
+        french["config_panel.settings.pending_display_delay"]
+        == "Délai d\u2019affichage des alertes à venir"
+    )
+    assert "config_panel.settings.active_display_delay" not in french
     assert any(key.startswith("config_panel.") for key in english)
     for key in english:
         assert _placeholders(english[key]) == _placeholders(french[key]), key

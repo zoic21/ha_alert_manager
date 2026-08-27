@@ -147,7 +147,7 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    la temporisation et le message y sont regroupés clairement. L’interrupteur
    natif en fin de ligne reste disponible pour une activation rapide.
 5. **Configuration** : labels, entités, appareils, délai global, délai
-   d’affichage des alertes actives, délais particuliers et rétention de
+   d’affichage des alertes à venir, délais particuliers et rétention de
    l’historique. Les sélections utilisent les
    sélecteurs et la recherche natifs de Home Assistant.
 
@@ -352,7 +352,7 @@ et remplacé sans capteur de compatibilité durable :
 | `sensor.alert_manager_main_active` | nombre d’actives non acquittées | actives non acquittées uniquement |
 | `sensor.alert_manager_main_pending` | nombre d’alertes à venir | `pending` uniquement |
 | `sensor.alert_manager_main_acknowledge` | nombre d’actives acquittées | actives acquittées uniquement |
-| `sensor.alert_manager_device_main_active` | nombre d’appareils possédant au moins une alerte active affichée | attribut `devices`, alertes acquittées comprises |
+| `sensor.alert_manager_device_main_active` | nombre d’appareils, ou d’entités sans appareil, possédant au moins une alerte active | attribut `devices`, alertes acquittées comprises |
 
 Une occurrence n’apparaît jamais dans deux capteurs de cycle. Ceux-ci exposent
 un attribut `alerts` ; le capteur d’appareils expose `devices`. Ces attributs sont
@@ -387,31 +387,32 @@ attributes:
       due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
-      visible_at: "2026-08-26T10:15:10+02:00"
       acknowledged: false
 ```
 
 Une alerte `pending` n’a ni `active_since` ni champ d’acquittement ; son temps
-restant se calcule à partir de `due_at`. Une alerte acquittée ajoute
+restant se calcule à partir de `due_at` et `visible_at` indique à partir de quand
+elle peut être affichée. Une alerte acquittée ajoute
 `acknowledged: true`, `acknowledged_at` et, lorsqu’un utilisateur est connu,
 `acknowledged_by`. Les champs `rule_id` et `rule_name` ne sont présents que pour
 les règles personnalisées. Les métadonnées d’appareil, de zone, d’intégration et
 d’unité restent facultatives. Aucun historique résolu, groupe visuel ou compte à
 rebours périodique n’est enregistré dans les attributs.
 
-Le réglage `active_display_delay`, égal à `10` secondes par défaut, retarde
-uniquement l’exposition d’une alerte déjà active dans le panneau et les capteurs.
-Le délai réellement ajouté est le plus petit entre ce réglage et le délai de
-détection de l’alerte. Une règle temporisée `5` secondes attend donc `5` secondes
-supplémentaires, tandis qu’une règle sans temporisation est affichée
-immédiatement. `visible_at` conserve cette échéance. Si la condition se résout
-avant celle-ci, aucune ligne active ni événement d’appareil n’est produit.
+Le réglage `pending_display_delay`, égal à `10` secondes par défaut, retarde
+uniquement l’exposition d’une alerte **à venir** dans le panneau et
+`sensor.alert_manager_main_pending`. Le délai est plafonné par le délai de
+détection de l’alerte. Une condition instable qui disparaît avant cette échéance
+n’est donc jamais affichée. Si l’alerte atteint son échéance plus tôt, elle
+apparaît immédiatement comme active, sans passer brièvement par la liste « à
+venir ». Les alertes actives ne subissent aucun délai d’affichage supplémentaire.
 
-Le capteur d’appareils regroupe uniquement les alertes associées à un appareil du
-registre Home Assistant. Son attribut `devices` contient pour chaque appareil
-`device_id`, `device_name`, `area`, `started_at`, les compteurs d’alertes
-acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas l’appareil :
-il disparaît lorsque sa dernière alerte active est résolue.
+Le capteur d’appareils regroupe les alertes associées à un appareil du registre
+Home Assistant. Une entité sans appareil forme son propre groupe : `device_id`
+prend alors la valeur de son `entity_id` et `device_name` son nom d’entité. Son
+attribut `devices` contient également `area`, `started_at`, les compteurs
+d’alertes acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas
+le groupe : il disparaît lorsque sa dernière alerte active est résolue.
 
 Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
 le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
@@ -472,12 +473,13 @@ condition réapparaît, la nouvelle occurrence démarre non acquittée.
 `alert_manager_alert_resolved` avec `resolved_at`. Une alerte déjà active avant un
 redémarrage n’émet pas un second événement de démarrage.
 
-Lorsque le premier élément actif affiché d’un appareil apparaît, l’événement
+Lorsque le premier élément actif d’un appareil ou d’une entité sans appareil
+apparaît, l’événement
 `alert_manager_device_alert_started` est émis une seule fois avec les mêmes
 données que l’entrée de `attributes.devices`. Les alertes supplémentaires du même
 appareil ne le répètent pas. Après résolution de toutes ses alertes, une future
-alerte de cet appareil constitue un nouveau démarrage. Les entités sans appareil
-associé ne déclenchent pas cet événement.
+alerte de ce groupe constitue un nouveau démarrage. Pour une entité sans appareil,
+`device_id` contient son `entity_id` et `device_name` son nom d’entité.
 
 Un changement réel d’acquittement émet aussi :
 

@@ -120,7 +120,7 @@ neither selection mode nor acknowledgement actions.
 An anomaly that recovers before activation is not an effective alert and is not
 added to history.
 
-In **Configuration → General settings**, the active-alert display delay defaults
+In **Configuration → General settings**, the pending-alert display delay defaults
 to 10 seconds. Directly below **Global delay**,
 **Number of historical events retained** controls retention. **Clear history**
 is aligned beside the field; the single common configuration save button at the
@@ -297,7 +297,7 @@ and no long-term compatibility sensor is created:
 | `sensor.alert_manager_main_active` | unacknowledged active count | unacknowledged active alerts only |
 | `sensor.alert_manager_main_pending` | upcoming count | pending alerts only |
 | `sensor.alert_manager_main_acknowledge` | acknowledged active count | acknowledged active alerts only |
-| `sensor.alert_manager_device_main_active` | devices with at least one displayed active alert | `devices` attribute, including acknowledged alerts |
+| `sensor.alert_manager_device_main_active` | devices, or individual device-less entities, with at least one active alert | `devices` attribute, including acknowledged alerts |
 
 An occurrence is never exposed by two lifecycle sensors. Those sensors expose an
 `alerts` list; the device sensor exposes `devices`. Example custom-rule alert:
@@ -331,26 +331,29 @@ attributes:
       due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
-      visible_at: "2026-08-26T10:15:10+02:00"
       acknowledged: false
 ```
 
 A pending alert has no `active_since` or acknowledgement fields; remaining time
-is derived from `due_at`. An acknowledged alert adds `acknowledged: true`,
+is derived from `due_at`, while `visible_at` indicates when it may be displayed.
+An acknowledged alert adds `acknowledged: true`,
 `acknowledged_at` and, when a user is known, `acknowledged_by`. `rule_id` and
 `rule_name` exist only for custom rules. Device, area, integration and unit
 metadata remain optional. Attributes contain no resolved history, visual group or
 periodically written countdown.
 
-`active_display_delay` delays only the exposure of an already active alert in
-the panel and sensors. It defaults to `10` seconds. The added wait is capped by
-the alert's own detection delay: a five-second rule waits five more seconds,
-while a zero-delay rule is displayed immediately. `visible_at` stores that
-deadline. If the condition recovers first, no active row or device event appears.
+`pending_display_delay`, set to `10` seconds by default, delays only the
+exposure of a **pending** alert in the panel and
+`sensor.alert_manager_main_pending`. Its effective value is capped by the
+alert's own detection delay. An unstable condition that clears before this
+deadline is never displayed. If the alert becomes active sooner, it is displayed
+immediately as active without briefly appearing in the pending list. Active
+alerts receive no additional display delay.
 
-The device sensor groups only alerts associated with a Home Assistant registry
-device. Each item in `attributes.devices` contains `device_id`, `device_name`,
-`area`, `started_at`, acknowledged/unacknowledged counts and `alert_ids`.
+The device sensor groups alerts associated with a Home Assistant registry device.
+A device-less entity forms its own group: `device_id` is then its `entity_id`
+and `device_name` is its entity name. Each item in `attributes.devices` also
+contains `area`, `started_at`, acknowledged/unacknowledged counts and `alert_ids`.
 Acknowledgement does not remove a device; its last active alert must resolve.
 
 Cards and automations reading `sensor.alert_manager` must target the appropriate
@@ -408,10 +411,11 @@ acknowledgement with that occurrence; a later occurrence starts unacknowledged.
 start event. Event data keeps the existing `condition` field and adds structured
 condition fields when available.
 
-`alert_manager_device_alert_started` fires once when a device's first displayed
-active alert appears. Further alerts on that device do not repeat it. After all
-of its active alerts resolve, a future alert starts a new device occurrence.
-Entities without an associated registry device do not fire this event.
+`alert_manager_device_alert_started` fires once when a device's or device-less
+entity's first active alert appears. Further alerts in that group do not repeat
+it. After all of its active alerts resolve, a future alert starts a new
+occurrence. For a device-less entity, `device_id` contains its `entity_id` and
+`device_name` contains its entity name.
 
 `alert_manager_alert_acknowledged` fires only when an active alert becomes
 acknowledged. `alert_manager_alert_unacknowledged` fires only when that state is

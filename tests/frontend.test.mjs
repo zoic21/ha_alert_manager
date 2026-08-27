@@ -228,7 +228,7 @@ const completeConfig = () => ({
   },
   rules: [],
   global_delay: 900,
-  active_display_delay: 10,
+  pending_display_delay: 10,
   excluded_labels: [],
   excluded_entities: [],
   excluded_devices: [],
@@ -1409,6 +1409,10 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
   assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
+  assert.doesNotMatch(
+    panel._styles(),
+    /#rules-table\{[^}]*--data-table-row-height/,
+  );
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
   assert.doesNotMatch(panel._styles(), /main\.rules-page/);
   assert.match(panel._styles(), /main\{width:100%;max-width:none/);
@@ -1644,7 +1648,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   ];
   const controls = {
     "#global-delay": { value: "300" },
-    "#active-display-delay": { value: "15" },
+    "#pending-display-delay": { value: "15" },
     "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
@@ -1665,7 +1669,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     type: "alert_manager/config/update",
     config: {
       global_delay: 300,
-      active_display_delay: 15,
+      pending_display_delay: 15,
       excluded_labels: ["sans_alerte"],
       excluded_entities: ["sensor.skip", "light.skip"],
       excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1973,7 +1977,7 @@ test("common settings save accepts a zero history retention limit", async () => 
   panel._render = () => {};
   const controls = {
     "#global-delay": { value: "900" },
-    "#active-display-delay": { value: "10" },
+    "#pending-display-delay": { value: "10" },
     "#history-limit": { value: "0", reportValidity: () => true },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];

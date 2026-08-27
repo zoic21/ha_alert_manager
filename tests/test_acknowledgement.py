@@ -34,7 +34,7 @@ def active_manager(hass, entry, set_now, entity_id="sensor.test"):
     hass.states.set(entity_id, "unavailable", {"friendly_name": "Test"})
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
-    run(manager.async_update_config({"active_display_delay": 0}))
+    run(manager.async_update_config({"pending_display_delay": 0}))
     set_now(start + timedelta(seconds=901))
     run(manager.async_evaluate_entity(entity_id))
     return manager, f"unavailable:{entity_id}"
@@ -176,10 +176,8 @@ def test_pending_and_unknown_alerts_are_rejected(hass, entry, set_now):
         run(manager.async_unacknowledge("unavailable:sensor.test", None))
 
 
-def test_v13_record_without_acknowledgement_fields_migrates_idempotently(
-    hass, entry, set_now
-):
-    """V1.3 active records become explicitly unacknowledged without data loss."""
+def test_legacy_active_record_migrates_idempotently(hass, entry, set_now):
+    """Legacy acknowledgement data migrates and dev14 active delay is removed."""
     start = datetime(2026, 8, 25, 14, tzinfo=UTC)
     set_now(start + timedelta(seconds=901))
     hass.states.set("sensor.test", "unavailable", {"friendly_name": "Legacy"})
@@ -200,6 +198,7 @@ def test_v13_record_without_acknowledgement_fields_migrates_idempotently(
                 "due_at": (start + timedelta(seconds=900)).isoformat(),
                 "delay": 900,
                 "active_since": (start + timedelta(seconds=900)).isoformat(),
+                "visible_at": (start + timedelta(seconds=910)).isoformat(),
             }
         },
     }
@@ -207,11 +206,16 @@ def test_v13_record_without_acknowledgement_fields_migrates_idempotently(
     first = AlertManager(hass, entry)
     run(first.async_setup())
     assert first.public_snapshot()["alerts"][0]["acknowledged"] is False
+    assert first.records["unavailable:sensor.test"].visible_at is None
     assert (
         hass.stores["alert_manager"]["alerts"]["unavailable:sensor.test"][
             "acknowledged"
         ]
         is False
+    )
+    assert (
+        "visible_at"
+        not in hass.stores["alert_manager"]["alerts"]["unavailable:sensor.test"]
     )
     run(first.async_unload())
     saves = hass.store_save_count

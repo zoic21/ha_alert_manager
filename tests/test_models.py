@@ -150,12 +150,14 @@ def test_pending_record_advances_at_due_time():
         condition="Low",
     )
     record = AlertRecord.pending(details, 900, now)
+    record.visible_at = now + timedelta(seconds=10)
     assert record.status is AlertStatus.PENDING
     assert not advance_record(record, now + timedelta(seconds=899))
     activated_at = now + timedelta(seconds=930)
     assert advance_record(record, activated_at)
     assert record.status is AlertStatus.ACTIVE
     assert record.active_since == activated_at
+    assert record.visible_at is None
 
 
 def test_delay_is_elapsed_time_across_daylight_saving_change():
@@ -185,6 +187,7 @@ def test_storage_round_trip_preserves_structured_data():
         area="Cuisine",
     )
     record = AlertRecord.pending(details, 15, now)
+    record.visible_at = now + timedelta(seconds=10)
     record.paused_at = now + timedelta(seconds=5)
     record.paused_seconds = 30.5
     restored = AlertRecord.from_dict(record.as_storage_dict())
@@ -193,6 +196,11 @@ def test_storage_round_trip_preserves_structured_data():
     assert restored.detected_at == now
     assert restored.paused_at == now + timedelta(seconds=5)
     assert restored.paused_seconds == 30.5
+    assert restored.visible_at == now + timedelta(seconds=10)
+    assert (
+        restored.as_public_dict()["visible_at"]
+        == (now + timedelta(seconds=10)).isoformat()
+    )
     assert "paused_at" not in restored.as_public_dict()
     assert "paused_seconds" not in restored.as_public_dict()
 

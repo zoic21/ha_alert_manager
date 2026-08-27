@@ -41,6 +41,7 @@ class AlertManagerStore(Store[dict[str, Any]]):
         config, _changed = _migrate_config_shape(migrated.get("config", {}))
         migrated["config"] = config
         _migrate_acknowledgement_shape(migrated.get("alerts", {}))
+        _migrate_pending_visibility_shape(migrated.get("alerts", {}))
         return migrated
 
 
@@ -80,6 +81,8 @@ class AlertManagerStorage:
                 migrated = True
                 continue
             if _migrate_acknowledgement_shape({alert_id: record_data}):
+                migrated = True
+            if _migrate_pending_visibility_shape({alert_id: record_data}):
                 migrated = True
             try:
                 record = AlertRecord.from_dict(record_data)
@@ -231,8 +234,13 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
         config["history_limit"] = DEFAULT_HISTORY_LIMIT
         changed = True
 
-    if "active_display_delay" not in config:
-        config["active_display_delay"] = DEFAULT_CONFIG["active_display_delay"]
+    if "pending_display_delay" not in config:
+        config["pending_display_delay"] = config.get(
+            "active_display_delay", DEFAULT_CONFIG["pending_display_delay"]
+        )
+        changed = True
+    if "active_display_delay" in config:
+        config.pop("active_display_delay")
         changed = True
 
     rules = config.get("rules")
@@ -274,5 +282,21 @@ def _migrate_acknowledgement_shape(stored: Any) -> bool:
             continue
         if "acknowledged" not in record:
             record["acknowledged"] = False
+            changed = True
+    return changed
+
+
+def _migrate_pending_visibility_shape(stored: Any) -> bool:
+    """Discard the dev14 delay mistakenly persisted on active alerts."""
+    if not isinstance(stored, dict):
+        return False
+    changed = False
+    for record in stored.values():
+        if (
+            isinstance(record, dict)
+            and record.get("status") == "active"
+            and "visible_at" in record
+        ):
+            record.pop("visible_at")
             changed = True
     return changed

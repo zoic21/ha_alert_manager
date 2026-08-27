@@ -199,7 +199,14 @@ def test_clear_history_preserves_all_runtime_partitions(hass, entry, set_now):
     hass.states.set("sensor.acknowledged", "unavailable")
     run(manager.async_evaluate_entity("sensor.acknowledged"))
     run(manager.async_acknowledge("unavailable:sensor.acknowledged", "Loïc"))
-    run(manager.async_update_config({"entity_delays": {"sensor.pending": 900}}))
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {"sensor.pending": 900},
+                "pending_display_delay": 0,
+            }
+        )
+    )
     hass.states.set("sensor.pending", "unavailable")
     run(manager.async_evaluate_entity("sensor.pending"))
     before = deepcopy(manager.records)

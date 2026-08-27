@@ -185,8 +185,8 @@
       "yaml_title": "Règle YAML"
     },
     "settings": {
-      "active_display_delay": "Délai d’affichage des alertes actives",
-      "active_display_delay_help": "Une alerte activée attend ce délai avant d’apparaître dans les alertes actives. Si son propre délai de détection est plus court, ce délai plus court est utilisé.",
+      "pending_display_delay": "Délai d’affichage des alertes à venir",
+      "pending_display_delay_help": "Une alerte à venir attend ce délai avant d’être affichée. Si elle devient active plus tôt, elle apparaît immédiatement comme active sans passer par la liste des alertes à venir.",
       "aria_delay": "Délai en secondes",
       "aria_remove_delay": "Supprimer ce délai",
       "delay_help": "Prioritaire sur le délai du pack et le délai global.",

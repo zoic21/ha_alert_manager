@@ -2,6 +2,31 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev15 — 27 août 2026
+
+### Corrigé
+
+- Le délai de 10 secondes concerne maintenant uniquement l’affichage des alertes
+  **à venir**. Une condition transitoire qui disparaît avant cette échéance ne
+  fait plus clignoter la liste pending, tandis qu’une alerte arrivée à échéance
+  est affichée immédiatement comme active.
+- Le réglage est renommé `pending_display_delay` et les configurations
+  `active_display_delay` créées par la dev14 sont migrées automatiquement, y
+  compris dans les imports YAML.
+- Les entités sans appareil sont désormais comptées individuellement par
+  `sensor.alert_manager_device_main_active`. Leur identifiant et leur nom
+  d’entité servent de repli dans `devices` et dans l’événement
+  `alert_manager_device_alert_started`.
+- La dernière ligne des règles personnalisées conserve la même hauteur que les
+  autres. La surcharge locale de 60 px, incompatible avec le calcul natif
+  `autoHeight` de Home Assistant, a été retirée.
+
+### Tests
+
+- 145 tests backend et 69 tests frontend couvrent notamment les conditions
+  transitoires, la migration dev14, les entités sans appareil et la hauteur
+  native du tableau.
+
 ## 1.7.0-dev14 — 27 août 2026
 
 ### Ajouté

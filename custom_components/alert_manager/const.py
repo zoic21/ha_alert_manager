@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "1.7.0-dev14"
+INTEGRATION_VERSION: Final = "1.7.0-dev15"
 PLATFORMS: Final = [Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -49,7 +49,7 @@ PANEL_STATIC_URL: Final = "/alert_manager_static"
 STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 8
+STORAGE_MINOR_VERSION: Final = 9
 HISTORY_STORAGE_VERSION: Final = 1
 
 DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
@@ -57,7 +57,7 @@ DATA_WEBSOCKET_REGISTERED: HassKey = HassKey(f"{DOMAIN}_websocket_registered")
 DATA_STATIC_REGISTERED: HassKey = HassKey(f"{DOMAIN}_static_registered")
 
 DEFAULT_DELAY: Final = 900
-DEFAULT_ACTIVE_DISPLAY_DELAY: Final = 10
+DEFAULT_PENDING_DISPLAY_DELAY: Final = 10
 DEFAULT_BATTERY_THRESHOLD: Final = 15.0
 DEFAULT_EXCLUSION_LABEL: Final = "pas_d_alerte"
 DEFAULT_HISTORY_LIMIT: Final = 100
@@ -79,7 +79,7 @@ DEFAULT_CONFIG: Final = {
     "monitoring_enabled": True,
     "history_limit": DEFAULT_HISTORY_LIMIT,
     "global_delay": DEFAULT_DELAY,
-    "active_display_delay": DEFAULT_ACTIVE_DISPLAY_DELAY,
+    "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
     "excluded_labels": [],
     "excluded_entities": [],
     "excluded_devices": [],

@@ -34,7 +34,7 @@ _RULE_YAML_KEYS = {
 _CONFIG_YAML_KEY_ORDER = (
     "monitoring_enabled",
     "global_delay",
-    "active_display_delay",
+    "pending_display_delay",
     "excluded_labels",
     "excluded_entities",
     "excluded_devices",
@@ -184,14 +184,26 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
     config = document.get("config")
     if not isinstance(config, dict):
         raise ValueError("Configuration config must be an object")
-    _reject_unknown(config, _CONFIG_YAML_KEYS, prefix="config")
+    _reject_unknown(
+        config,
+        _CONFIG_YAML_KEYS | {"active_display_delay"},
+        prefix="config",
+    )
+    if "active_display_delay" in config:
+        if "pending_display_delay" in config:
+            raise ValueError(
+                "config cannot contain both active_display_delay and "
+                "pending_display_delay"
+            )
+        config = dict(config)
+        config["pending_display_delay"] = config.pop("active_display_delay")
     # V1.5 exports predate the persistent category switch. They remain safe to
     # import and default monitoring to enabled.
     missing_config = (
         _CONFIG_YAML_KEYS
         - {
             "monitoring_enabled",
-            "active_display_delay",
+            "pending_display_delay",
         }
         - set(config)
     )

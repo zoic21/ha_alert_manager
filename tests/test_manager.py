@@ -136,10 +136,10 @@ def test_pending_to_active(hass, entry, set_now):
     assert record.active_since == record.due_at
 
 
-def test_active_alert_is_exposed_after_configured_display_delay(
+def test_pending_alert_is_exposed_after_configured_display_delay(
     hass, entry, set_now, registry_entry, device_entry
 ):
-    """Current counters and device events wait for the presentation deadline."""
+    """Only the transient pending row waits for the presentation deadline."""
     start = datetime(2026, 8, 27, 10, tzinfo=UTC)
     set_now(start)
     device = device_entry(hass, name="Onduleur")
@@ -147,21 +147,26 @@ def test_active_alert_is_exposed_after_configured_display_delay(
     hass.states.set("sensor.ups", "unavailable")
     manager = make_manager(hass, entry)
     run(manager.async_update_config({"entity_delays": {"sensor.ups": 30}}))
-
-    set_now(start + timedelta(seconds=30))
-    run(manager.async_evaluate_entity("sensor.ups"))
     record = manager.records["unavailable:sensor.ups"]
-    assert record.status is AlertStatus.ACTIVE
-    assert record.visible_at == start + timedelta(seconds=40)
+    assert record.status is AlertStatus.PENDING
+    assert record.visible_at == start + timedelta(seconds=10)
+    assert manager.public_snapshot()["pending_count"] == 0
+
+    set_now(start + timedelta(seconds=10))
+    run(manager.async_evaluate_entity("sensor.ups"))
     assert manager.public_snapshot()["active_count"] == 0
+    assert manager.public_snapshot()["pending_count"] == 1
     assert not [
         event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
 
-    set_now(start + timedelta(seconds=40))
+    set_now(start + timedelta(seconds=30))
     run(manager.async_evaluate_entity("sensor.ups"))
     snapshot = manager.public_snapshot()
+    assert record.status is AlertStatus.ACTIVE
+    assert record.visible_at is None
     assert snapshot["active_count"] == 1
+    assert snapshot["pending_count"] == 0
     assert snapshot["device_active_count"] == 1
     assert snapshot["active_devices"][0]["device_name"] == "Onduleur"
     assert snapshot["active_devices"][0]["alert_ids"] == ["unavailable:sensor.ups"]
@@ -172,13 +177,13 @@ def test_active_alert_is_exposed_after_configured_display_delay(
     assert events[0]["device_id"] == device.id
 
 
-def test_short_rule_delay_caps_active_display_wait(hass, entry, set_now):
-    """A rule's shorter delay also caps its extra active presentation wait."""
+def test_short_rule_delay_skips_pending_display_before_active(hass, entry, set_now):
+    """A short rule becomes active without briefly exposing a pending row."""
     start = datetime(2026, 8, 27, 10, tzinfo=UTC)
     set_now(start)
     hass.states.set("sensor.test", "on")
     manager = make_manager(hass, entry)
-    run(manager.async_update_config({"active_display_delay": 10}))
+    run(manager.async_update_config({"pending_display_delay": 10}))
     rule = run(
         manager.async_create_rule(
             {
@@ -190,16 +195,38 @@ def test_short_rule_delay_caps_active_display_wait(hass, entry, set_now):
             }
         )
     )
+    record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.visible_at == start + timedelta(seconds=5)
+    assert manager.public_snapshot()["pending_count"] == 0
 
     set_now(start + timedelta(seconds=5))
     run(manager.async_evaluate_entity("sensor.test"))
-    record = manager.records[f"rule:{rule['id']}:sensor.test"]
-    assert record.visible_at == start + timedelta(seconds=10)
-    assert manager.public_snapshot()["active_count"] == 0
-
-    set_now(start + timedelta(seconds=10))
-    run(manager.async_evaluate_entity("sensor.test"))
+    assert record.visible_at is None
     assert manager.public_snapshot()["active_count"] == 1
+
+
+def test_transient_pending_alert_never_reaches_public_lists(hass, entry, set_now):
+    """A flapping condition that clears within ten seconds stays invisible."""
+    start = datetime(2026, 8, 27, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+
+    for offset in (2, 6):
+        set_now(start + timedelta(seconds=offset))
+        hass.states.set("sensor.test", "ok")
+        run(manager.async_evaluate_entity("sensor.test"))
+        snapshot = manager.public_snapshot()
+        assert snapshot["pending_count"] == 0
+        assert snapshot["active_count"] == 0
+        if offset == 2:
+            set_now(start + timedelta(seconds=4))
+            hass.states.set("sensor.test", "unavailable")
+            run(manager.async_evaluate_entity("sensor.test"))
+
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
 
 
 def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
@@ -704,7 +731,7 @@ def test_custom_rule_entities_have_independent_lifecycles(hass, entry, set_now):
     hass.states.set("sensor.two", "on", {"friendly_name": "Capteur deux"})
     hass.states.set("sensor.three", "off")
     manager = make_manager(hass, entry)
-    run(manager.async_update_config({"active_display_delay": 0}))
+    run(manager.async_update_config({"pending_display_delay": 0}))
     rule = run(
         manager.async_create_rule(
             {
@@ -980,7 +1007,8 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
                 "entity_delays": {
                     "sensor.ups_status": 0,
                     "sensor.ups_battery": 60,
-                }
+                },
+                "pending_display_delay": 0,
             }
         )
     )
@@ -1028,6 +1056,50 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
     }
+
+
+def test_entities_without_devices_are_counted_individually(hass, entry):
+    """Each device-less entity acts as one stable fallback device."""
+    hass.states.set("sensor.one", "unavailable", {"friendly_name": "Capteur un"})
+    hass.states.set("sensor.two", "unavailable")
+    manager = make_manager(hass, entry)
+    run(
+        manager.async_update_config(
+            {
+                "entity_delays": {"sensor.one": 0, "sensor.two": 0},
+                "pending_display_delay": 0,
+            }
+        )
+    )
+
+    snapshot = manager.public_snapshot()
+    assert snapshot["device_active_count"] == 2
+    assert {
+        (device["device_id"], device["device_name"])
+        for device in snapshot["active_devices"]
+    } == {
+        ("sensor.one", "Capteur un"),
+        ("sensor.two", "sensor.two"),
+    }
+    events = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert {event["device_id"] for event in events} == {
+        "sensor.one",
+        "sensor.two",
+    }
+
+    run(manager.async_evaluate_entity("sensor.one"))
+    assert (
+        len(
+            [
+                event
+                for event, _data in hass.bus.fired
+                if event == EVENT_DEVICE_ALERT_STARTED
+            ]
+        )
+        == 2
+    )
 
 
 def test_rule_configuration_cleanup_is_silent(hass, entry):
@@ -1088,6 +1160,7 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     hass.stores["alert_manager"] = {
         "config": {
             "exclusion_label": "pas_d_alerte",
+            "active_display_delay": 7,
             "automatic": {"unavailable": {"domains": ["sensor"]}},
             "rules": [
                 {
@@ -1127,6 +1200,8 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert manager.get_config()["excluded_labels"] == ["skip"]
     assert manager.get_config()["monitoring_enabled"] is True
     assert manager.get_config()["history_limit"] == 100
+    assert manager.get_config()["pending_display_delay"] == 7
+    assert "active_display_delay" not in manager.get_config()
     assert manager.history == []
     assert "domains" not in manager.get_config()["automatic"]["unavailable"]
     assert "rule:legacy:sensor.test" in manager.records
@@ -1137,6 +1212,7 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert manager.records["rule:legacy:sensor.test"].details.operator == "equals"
     assert manager.records["rule:legacy:sensor.test"].details.comparison_value == "on"
     assert hass.stores["alert_manager"]["config"]["monitoring_enabled"] is True
+    assert hass.stores["alert_manager"]["config"]["pending_display_delay"] == 7
 
     run(manager.async_unload())
     reloaded = make_manager(hass, entry)
