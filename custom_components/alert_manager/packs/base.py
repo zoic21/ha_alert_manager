@@ -76,14 +76,16 @@ class AutomaticPack:
         config: dict[str, Any],
     ) -> bool:
         """Return whether one state transition can change this pack's output."""
+        old_applies = old_state is not None and self.applies(hass, old_state)
+        new_applies = new_state is not None and self.applies(hass, new_state)
+        if not old_applies and not new_applies:
+            return False
         if self.transition_filter is not None:
             return self.transition_filter(hass, old_state, new_state, config)
         # Keep future packs conservative unless they explicitly provide a
-        # transition-aware filter. This avoids silently missing new pack logic.
-        return any(
-            state is not None and self.applies(hass, state)
-            for state in (old_state, new_state)
-        )
+        # transition-aware filter. At least one side is known to belong to the
+        # pack, so creation and resolution transitions are both preserved.
+        return True
 
     def available(self, hass: HomeAssistant) -> bool:
         """Return whether every required integration has one usable entry."""
