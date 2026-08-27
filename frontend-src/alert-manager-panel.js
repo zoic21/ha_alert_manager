@@ -57,6 +57,16 @@ const esc = (value) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+const mainWindow = () => {
+  try {
+    if (window.name === "ha-main-window") return window;
+    if (window.parent?.name === "ha-main-window") return window.parent;
+    return window.top ?? window;
+  } catch (_error) {
+    return window;
+  }
+};
+
 const lines = (value) =>
   String(value ?? "")
     .split(/[\n,]+/)
@@ -609,7 +619,7 @@ class AlertManagerPanel extends HTMLElement {
       tablePage.tabs = this._tabs();
       tablePage.route = { prefix: "", path: TABS.find((tab) => tab.id === kind)?.path ?? TABS[0].path };
       tablePage.backPath = "/config/integrations";
-      tablePage.backCallback = () => window.history?.back?.();
+      tablePage.backCallback = () => mainWindow().history?.back?.();
       tablePage.id = "id";
       tablePage.columns = this._nativeTableColumns(kind);
       tablePage.columnOrder = orderedColumns;
@@ -894,7 +904,7 @@ class AlertManagerPanel extends HTMLElement {
       shell.tabs = this._tabs();
       shell.route = { prefix: "", path: activePage.path };
       shell.backPath = "/config/integrations";
-      shell.backCallback = () => window.history?.back?.();
+      shell.backCallback = () => mainWindow().history?.back?.();
     }
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {

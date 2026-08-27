@@ -2,6 +2,21 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev18 — 27 août 2026
+
+### Corrigé
+
+- Le bouton retour cible désormais l’historique de la fenêtre principale Home
+  Assistant, comme le fait le frontend officiel. Dans un panneau chargé en
+  iframe, il n’utilise plus l’historique isolé de l’iframe, qui ne permettait
+  pas de revenir à la page réellement consultée auparavant.
+
+### Tests
+
+- 146 tests backend et 69 tests frontend, avec une non-régression simulant le
+  panneau dans une iframe et vérifiant que seul l’historique de la fenêtre
+  `ha-main-window` reçoit l’action retour.
+
 ## 1.7.0-dev17 — 27 août 2026
 
 ### Corrigé

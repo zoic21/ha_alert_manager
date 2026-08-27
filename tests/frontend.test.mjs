@@ -1226,7 +1226,7 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
-test("native toolbar back callback returns to the previous Home Assistant page without route state", () => {
+test("native toolbar back callback uses the main Home Assistant window from an iframe", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -1235,18 +1235,33 @@ test("native toolbar back callback returns to the previous Home Assistant page w
   panel._hass = { states: {} };
   const shell = {};
   panel.shadowRoot.querySelector = (selector) => selector === "#panel-shell" ? shell : null;
-  let backCalls = 0;
+  let iframeBackCalls = 0;
+  let mainBackCalls = 0;
+  const mainWindow = {
+    name: "ha-main-window",
+    history: {
+      state: null,
+      back() { mainBackCalls += 1; },
+    },
+  };
+  window.name = "alert-manager-panel";
   window.history = {
     state: null,
-    back() { backCalls += 1; },
+    back() { iframeBackCalls += 1; },
   };
+  window.parent = mainWindow;
+  window.top = mainWindow;
 
   panel._render();
   shell.backCallback();
 
-  assert.equal(backCalls, 1);
+  assert.equal(mainBackCalls, 1);
+  assert.equal(iframeBackCalls, 0);
   assert.equal(shell.backPath, "/config/integrations");
+  window.name = undefined;
   window.history = undefined;
+  window.parent = undefined;
+  window.top = undefined;
 });
 
 test("native panel routes select the matching tab", () => {
