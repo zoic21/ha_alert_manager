@@ -27,21 +27,23 @@ def _state_event(entity_id, old_state, new_state):
 
 
 def test_unavailable_pack_owns_transition_filtering(hass):
-    """Unavailable ignores ordinary churn and handles its own state edges."""
+    """Unavailable treats missing/normal states alike and keeps alert edges."""
     normal = hass.states.set("sensor.source", "1")
     changed = hass.states.set("sensor.source", "2")
     unavailable_state = hass.states.set("sensor.source", "unavailable")
     config = {"enabled": True}
 
     assert unavailable.PACK.should_evaluate(hass, normal, changed, config) is False
+    assert unavailable.PACK.should_evaluate(hass, None, normal, config) is False
+    assert unavailable.PACK.should_evaluate(hass, normal, None, config) is False
+    assert unavailable.PACK.should_evaluate(hass, None, unavailable_state, config)
+    assert unavailable.PACK.should_evaluate(hass, unavailable_state, None, config)
     assert unavailable.PACK.should_evaluate(hass, changed, unavailable_state, config)
     assert unavailable.PACK.should_evaluate(hass, unavailable_state, changed, config)
-    assert unavailable.PACK.should_evaluate(hass, None, normal, config) is True
-    assert unavailable.PACK.should_evaluate(hass, normal, None, config) is True
 
 
 def test_connectivity_pack_only_keeps_relevant_edges(hass):
-    """Connectivity ignores on-to-on changes but keeps off crossings."""
+    """Connectivity evaluates only transitions into or out of its off match."""
     attributes = {ATTR_DEVICE_CLASS: "connectivity"}
     on_old = hass.states.set("binary_sensor.link", "on", attributes)
     on_new = hass.states.set("binary_sensor.link", "on", attributes)
@@ -49,6 +51,10 @@ def test_connectivity_pack_only_keeps_relevant_edges(hass):
     config = {"enabled": True}
 
     assert connectivity.PACK.should_evaluate(hass, on_old, on_new, config) is False
+    assert connectivity.PACK.should_evaluate(hass, None, on_new, config) is False
+    assert connectivity.PACK.should_evaluate(hass, on_new, None, config) is False
+    assert connectivity.PACK.should_evaluate(hass, None, off, config) is True
+    assert connectivity.PACK.should_evaluate(hass, off, None, config) is True
     assert connectivity.PACK.should_evaluate(hass, on_new, off, config) is True
     assert connectivity.PACK.should_evaluate(hass, off, on_new, config) is True
 
@@ -63,6 +69,10 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
         "device_thresholds": {device_id: 30},
     }
 
+    high = _battery_state(hass, "40")
+    assert battery.PACK.should_evaluate(hass, None, high, config) is False
+    assert battery.PACK.should_evaluate(hass, high, None, config) is False
+
     old_state = _battery_state(hass, "40")
     new_state = _battery_state(hass, "35")
     assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is False
@@ -70,6 +80,8 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
     old_state = _battery_state(hass, "31")
     new_state = _battery_state(hass, "30")
     assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is True
+    assert battery.PACK.should_evaluate(hass, None, new_state, config) is True
+    assert battery.PACK.should_evaluate(hass, new_state, None, config) is True
 
     old_state = _battery_state(hass, "30")
     new_state = _battery_state(hass, "29")
@@ -139,6 +151,38 @@ def test_runtime_battery_filter_respects_device_override(hass, entry, registry_e
     asyncio.run(scenario())
 
 
+def test_existing_battery_record_still_uses_transition_filter(hass, entry):
+    """An existing occurrence does not force evaluation while it remains matching."""
+
+    async def scenario():
+        _battery_state(hass, "50")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        old_state = hass.states.get("sensor.battery")
+        new_state = _battery_state(hass, "10")
+        manager._state_changed(_state_event("sensor.battery", old_state, new_state))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert "battery:sensor.battery" in manager.records
+
+        old_state = hass.states.get("sensor.battery")
+        new_state = _battery_state(hass, "9")
+        before = list(entry.created_task_names)
+        manager._state_changed(_state_event("sensor.battery", old_state, new_state))
+        assert entry.created_task_names == before
+        assert manager._evaluation_flush_scheduled is False
+
+        old_state = hass.states.get("sensor.battery")
+        new_state = _battery_state(hass, "20")
+        manager._state_changed(_state_event("sensor.battery", old_state, new_state))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert "battery:sensor.battery" not in manager.records
+
+    asyncio.run(scenario())
+
+
 def test_identical_automatic_event_skips_existing_alert_evaluation(hass, entry):
     """Exact duplicate events stay filtered even after an automatic alert exists."""
 
@@ -161,6 +205,43 @@ def test_identical_automatic_event_skips_existing_alert_evaluation(hass, entry):
 
         assert entry.created_task_names == before
         assert manager._evaluation_flush_scheduled is False
+
+    asyncio.run(scenario())
+
+
+def test_tracking_lifecycle_does_not_evaluate_normal_unavailable_source(hass, entry):
+    """Entity creation/removal updates tracked_count without candidate evaluation."""
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        initial_count = manager._tracked_count()
+        evaluated: list[str] = []
+        original_evaluate = manager.async_evaluate_entity
+
+        async def tracked_evaluate(entity_id, **kwargs):
+            evaluated.append(entity_id)
+            return await original_evaluate(entity_id, **kwargs)
+
+        manager.async_evaluate_entity = tracked_evaluate
+
+        hass.states.set("sensor.lifecycle", "normal")
+        normal = hass.states.get("sensor.lifecycle")
+        manager._state_changed(_state_event("sensor.lifecycle", None, normal))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert manager._tracked_count() == initial_count + 1
+        assert evaluated == []
+
+        old_state = hass.states.get("sensor.lifecycle")
+        hass.states.remove("sensor.lifecycle")
+        manager._state_changed(_state_event("sensor.lifecycle", old_state, None))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert manager._tracked_count() == initial_count
+        assert evaluated == []
 
     asyncio.run(scenario())
 
