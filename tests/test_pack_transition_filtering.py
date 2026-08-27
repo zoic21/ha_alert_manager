@@ -235,7 +235,6 @@ def test_tracking_lifecycle_does_not_evaluate_normal_unavailable_source(hass, en
         assert evaluated == []
 
         old_state = hass.states.get("sensor.lifecycle")
-        hass.states.remove("sensor.lifecycle")
         manager._state_changed(_state_event("sensor.lifecycle", old_state, None))
         await asyncio.sleep(0)
         await asyncio.sleep(0)
