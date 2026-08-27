@@ -259,34 +259,40 @@ class AlertManager(BaseAlertManager):
         """Return whether this state transition can change source-owned output."""
         if entity_id in self._rules_by_entity:
             return True
-        if any(
+
+        has_existing_record = any(
             record.details.entity_id == entity_id for record in self.records.values()
-        ):
-            return True
+        )
 
         # Home Assistant state_changed events include both states. Keep a
         # conservative fallback for synthetic events or future HA API changes.
         if "old_state" not in event.data or "new_state" not in event.data:
-            return self._is_relevant_entity_id(entity_id)
+            return has_existing_record or self._is_relevant_entity_id(entity_id)
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
         if (old_state is not None and not isinstance(old_state, State)) or (
             new_state is not None and not isinstance(new_state, State)
         ):
-            return self._is_relevant_entity_id(entity_id)
-        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
-            entity_id
-        ):
-            return False
+            return has_existing_record or self._is_relevant_entity_id(entity_id)
 
-        # Exact state+attribute duplicates cannot affect automatic packs. Do not
-        # make this a global early return: custom stale rules and Jinja can depend
-        # on lifecycle timestamps even when the visible state is unchanged.
+        # Exact state+attribute duplicates cannot change automatic output, even
+        # when an automatic alert already exists. Direct custom rules were kept
+        # above, and Jinja dependencies are queued independently by _state_changed.
         if (
             old_state is not None
             and new_state is not None
             and old_state.state == new_state.state
             and old_state.attributes == new_state.attributes
+        ):
+            return False
+
+        # Existing occurrences still need normal transitions so their displayed
+        # value can update and so they can resolve when the condition clears.
+        if has_existing_record:
+            return True
+
+        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
+            entity_id
         ):
             return False
 
