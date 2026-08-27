@@ -5,15 +5,13 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterable
-from copy import deepcopy
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import CATEGORY_UNAVAILABLE, DOMAIN, SIGNAL_ALERTS_UPDATED
+from .const import CATEGORY_UNAVAILABLE, DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
 from .packs import PACKS
@@ -400,20 +398,14 @@ class AlertManager(BaseAlertManager):
                 self._schedule_evaluation_flush()
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
-        """Publish one shared snapshot after dropping frozen dependencies."""
+        """Drop frozen message dependencies before publishing a new snapshot."""
         for record in self.records.values():
             if record.status is not AlertStatus.ACTIVE or not record.details.rule_id:
                 continue
             pair = (record.details.rule_id, record.details.entity_id)
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(("message", pair[0], pair[1]))
-
-        snapshot = self.public_snapshot()
-        if not force and snapshot == self._last_public_snapshot:
-            return
-        self._schedule_new_device_alerts()
-        self._last_public_snapshot = deepcopy(snapshot)
-        async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED, snapshot)
+        super()._publish_if_changed(force=force)
 
     @callback
     def _timer_due(self, alert_id: str) -> None:
