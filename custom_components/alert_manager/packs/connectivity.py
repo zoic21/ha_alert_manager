@@ -43,15 +43,11 @@ def _should_evaluate(
     new_state: State | None,
     _config: dict[str, Any],
 ) -> bool:
-    """Ignore entry into unavailable and evaluate the next definitive state."""
+    """Ignore unavailable and let the next definitive state decide."""
     if _is_neutral(new_state):
         return False
     if _is_neutral(old_state):
-        if new_state is None:
-            # Entity removal is rare; stay conservative so a preserved occurrence
-            # cannot survive after its source disappears.
-            return old_state.entity_id.partition(".")[0] == "binary_sensor"
-        return _applies(hass, old_state) or _applies(hass, new_state)
+        return True
     return _matches(hass, old_state) != _matches(hass, new_state)
 
 
