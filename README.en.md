@@ -217,6 +217,11 @@ both the comparison and the template must remain true for the configured delay.
 Jinja functions. An entity referenced by the template automatically re-evaluates
 the rule when it changes.
 
+The `message` field also accepts a Jinja template with the same variables. Its
+rendered result is used in the panel, sensors, history and events. An entity
+referenced by the message refreshes it when that entity changes; plain text keeps
+the existing behavior unchanged.
+
 Examples include `binary_sensor.service equals off`, `sensor.ups_status contains
 CHRG or ERROR`, `sensor.mode not_equals off or idle`, and
 `sensor.fridge_temperature above 9` for 1,800 seconds.
@@ -239,7 +244,8 @@ source: state
 operator: above
 value: 33
 duration: 900
-message: null
+message: >-
+  Temperature of {{ state.name }}: {{ value }} °C
 condition_template: >-
   {{ is_state('input_boolean.rack_maintenance', 'off') }}
 ```

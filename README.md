@@ -239,6 +239,11 @@ pendant la temporisation. Les variables `entity_id`, `state` et `value` sont
 disponibles en plus des fonctions Jinja de Home Assistant. Une entité référencée
 par le template réévalue automatiquement la règle lorsqu’elle change.
 
+Le champ `message` accepte également un template Jinja avec les mêmes variables.
+Le résultat rendu est utilisé dans l’interface, les capteurs, l’historique et les
+événements. Une entité référencée dans le message provoque son actualisation dès
+qu’elle change ; un texte sans Jinja conserve exactement le comportement existant.
+
 Exemples :
 
 - `binary_sensor.chrony_en_cours_d_execution equals off` ;
@@ -267,7 +272,8 @@ source: state
 operator: above
 value: 33
 duration: 900
-message: null
+message: >-
+  Température de {{ state.name }} : {{ value }} °C
 condition_template: >-
   {{ is_state('input_boolean.maintenance_baie', 'off') }}
 ```

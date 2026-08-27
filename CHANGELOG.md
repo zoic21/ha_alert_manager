@@ -2,6 +2,29 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev20 — 27 août 2026
+
+### Ajouté
+
+- Le champ `message` des règles personnalisées accepte désormais les templates
+  Jinja Home Assistant. Le rendu fournit `entity_id`, `state` et `value`, est
+  validé avant enregistrement et se réactualise lorsqu’une entité référencée
+  change. Les messages simples restent compatibles sans modification.
+
+### Corrigé
+
+- Les libellés et l’aide de la condition Jinja s’affichent correctement dans le
+  volet d’ajout et d’édition au lieu de montrer leurs clés de traduction.
+- L’aide « Laisser le délai vide pour utiliser le délai global. » est maintenant
+  attachée au champ « Délai propre au pack » et s’affiche immédiatement sous son
+  input, y compris lorsque le pack expose d’autres options.
+
+### Tests
+
+- 156 tests backend et 69 tests frontend couvrent notamment le rendu Jinja du
+  message, ses dépendances et sa validation, les traductions de l’éditeur et le
+  placement de l’aide du délai.
+
 ## 1.7.0-dev19 — 27 août 2026
 
 ### Ajouté

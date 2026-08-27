@@ -331,6 +331,22 @@ class Template:
             result = "false"
         else:
             result = expression
+            result = re.sub(
+                r"{{\s*states\(\s*['\"]([^'\"]+)['\"]\s*\)\s*}}",
+                lambda match: states(match.group(1)),
+                result,
+            )
+            replacements = {
+                "entity_id": variables.get("entity_id", ""),
+                "value": variables.get("value", ""),
+                "state.state": getattr(variables.get("state"), "state", ""),
+            }
+            for name, value in replacements.items():
+                result = re.sub(
+                    rf"{{{{\s*{re.escape(name)}\s*}}}}",
+                    str(value),
+                    result,
+                )
         return RenderInfo(result, entities)
 
 

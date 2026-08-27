@@ -1309,6 +1309,14 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille l’état unavailable/);
   assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
+  const batteryDelay = automatic.indexOf('id="auto-battery-delay"');
+  const batteryDelayHelp = automatic.indexOf(
+    "Laisser le délai vide pour utiliser le délai global.",
+    batteryDelay,
+  );
+  const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
+  assert.ok(batteryDelay < batteryDelayHelp);
+  assert.ok(batteryDelayHelp < batteryThreshold);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
@@ -1465,6 +1473,9 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
+  assert.match(editor, /Condition Jinja supplémentaire/);
+  assert.match(editor, /Compatible Jinja\. Variables disponibles/);
+  assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);

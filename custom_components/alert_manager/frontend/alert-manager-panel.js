@@ -1650,10 +1650,9 @@ class AlertManagerPanel extends HTMLElement {
           </div>
           <p>${esc(this._t(`packs.${packKey}.description`))}</p>
           <div class="fields">
-            ${this._numberField(`auto-${pack.id}-delay`, this._t("automatic.pack_delay"), config.delay, this._t("units.seconds"), 0, 31536000, { required: false })}
+            ${this._numberField(`auto-${pack.id}-delay`, this._t("automatic.pack_delay"), config.delay, this._t("units.seconds"), 0, 31536000, { required: false, help: this._t("automatic.empty_delay_help") })}
             ${(pack.config_fields ?? []).map((field) => this._renderPackField(pack, field, config)).join("")}
           </div>
-          <small>${esc(this._t("automatic.empty_delay_help"))}</small>
         </ha-card>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>${esc(this._t("automatic.save"))}</ha-button></div>
@@ -1747,7 +1746,7 @@ class AlertManagerPanel extends HTMLElement {
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_trigger"))}</h3><small>${esc(this._t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
             ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, { nameMode: "name" })}
-            ${this._textField("message", this._t("rules.message_optional"), rule.message || "", false, "name", "full rule-message-field")}
+            <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-input name="message" data-field="message" type="text" value="${esc(rule.message || "")}" aria-label="${esc(this._t("rules.message_optional"))}"></ha-input><small>${esc(this._t("rules.message_help"))}</small></div>
           </div>
         </section>`;
   }

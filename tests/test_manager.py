@@ -503,6 +503,67 @@ def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
         )
 
 
+def test_custom_rule_message_renders_jinja_and_tracks_dependencies(hass, entry):
+    """A message renders variables and refreshes when its dependencies change."""
+    hass.states.set("sensor.source", "on")
+    hass.states.set("sensor.context", "warm")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Templated message",
+                "entity_ids": ["sensor.source"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "message": (
+                    "{{ entity_id }} vaut {{ value }} et le contexte est "
+                    "{{ states('sensor.context') }}"
+                ),
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        expected = "sensor.source vaut on et le contexte est warm"
+        assert manager.records[alert_id].details.message == expected
+        assert manager.records[alert_id].details.condition == expected
+
+        hass.states.set("sensor.context", "hot")
+        manager._state_changed(Event({"entity_id": "sensor.context"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        updated = "sensor.source vaut on et le contexte est hot"
+        assert manager.records[alert_id].details.message == updated
+        assert manager.records[alert_id].details.condition == updated
+        assert (
+            hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
+            == updated
+        )
+
+    run(scenario())
+
+
+def test_custom_rule_rejects_invalid_message_jinja_syntax(hass, entry):
+    """An invalid Jinja message is rejected before it reaches storage."""
+    hass.states.set("sensor.source", "on")
+    manager = make_manager(hass, entry)
+    with pytest.raises(ValueError, match="Invalid rule message template"):
+        run(
+            manager.async_create_rule(
+                {
+                    "name": "Invalid message",
+                    "entity_ids": ["sensor.source"],
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 0,
+                    "message": "{% if %}",
+                }
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("operator", "state", "expected"),
     [

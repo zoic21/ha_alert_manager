@@ -139,6 +139,8 @@ class AlertManager:
         self._device_event_alert_ids: dict[str, frozenset[str]] = {}
         self._rule_templates: dict[str, Template] = {}
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
+        self._rule_message_templates: dict[str, Template] = {}
+        self._rule_message_render_info: dict[tuple[str, str], Any] = {}
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -254,13 +256,16 @@ class AlertManager:
         entity_id = event.data.get("entity_id")
         if not entity_id:
             return
-        affected_entities = {
-            source_entity_id
-            for (_rule_id, source_entity_id), render_info in (
-                self._rule_template_render_info.items()
+        affected_entities = set()
+        for render_infos in (
+            self._rule_template_render_info,
+            self._rule_message_render_info,
+        ):
+            affected_entities.update(
+                source_entity_id
+                for (_rule_id, source_entity_id), render_info in render_infos.items()
+                if render_info.filter(entity_id)
             )
-            if render_info.filter(entity_id)
-        }
         if self._is_relevant_entity_id(entity_id):
             affected_entities.add(entity_id)
         for affected_entity_id in sorted(affected_entities):
@@ -438,7 +443,9 @@ class AlertManager:
                 # rule metadata may be refreshed, but a later matching state must
                 # not hide the actual trigger value shown in the panel/history.
                 details.value = record.details.value
-                record.details = details
+                if record.details != details:
+                    record.details = details
+                    persisted_changed = True
                 if record.delay != delay:
                     pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
@@ -523,10 +530,11 @@ class AlertManager:
             if not self._rule_template_matches(rule, state, current):
                 continue
             alert_id = f"rule:{rule.id}:{entity_id}"
-            condition = rule.message or self._rule_condition(rule, state)
+            rendered_message = self._render_rule_message(rule, state, current)
+            condition = rendered_message or self._rule_condition(rule, state)
             condition_key = None
             condition_params = None
-            if rule.message is None:
+            if rendered_message is None:
                 condition_key = "rule.generated"
                 condition_params = self._rule_condition_params(rule, state)
             result[alert_id] = (
@@ -540,7 +548,7 @@ class AlertManager:
                     condition_params=condition_params,
                     rule_id=rule.id,
                     rule_name=rule.name,
-                    message=rule.message,
+                    message=rendered_message,
                     source=rule.source,
                     operator=rule.operator,
                     comparison_value=rule.value,
@@ -731,12 +739,16 @@ class AlertManager:
         self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
         self._rule_templates = {}
+        self._rule_message_templates = {}
         for rule in self._rules:
-            if rule.condition_template is None:
-                continue
-            template = Template(rule.condition_template, self.hass)
-            template.ensure_valid()
-            self._rule_templates[rule.id] = template
+            if rule.condition_template is not None:
+                template = Template(rule.condition_template, self.hass)
+                template.ensure_valid()
+                self._rule_templates[rule.id] = template
+            if rule.message is not None:
+                message_template = Template(rule.message, self.hass)
+                message_template.ensure_valid()
+                self._rule_message_templates[rule.id] = message_template
         valid_render_keys = {
             (rule.id, entity_id)
             for rule in self._rules
@@ -747,6 +759,17 @@ class AlertManager:
             key: info
             for key, info in self._rule_template_render_info.items()
             if key in valid_render_keys
+        }
+        valid_message_render_keys = {
+            (rule.id, entity_id)
+            for rule in self._rules
+            if rule.message is not None
+            for entity_id in rule.entity_ids
+        }
+        self._rule_message_render_info = {
+            key: info
+            for key, info in self._rule_message_render_info.items()
+            if key in valid_message_render_keys
         }
         self._rules_by_entity = {}
         for rule in self._rules:
@@ -767,7 +790,7 @@ class AlertManager:
                 }
             )
             self._rule_template_render_info[(rule.id, state.entity_id)] = render_info
-            return render_info.result().lower() == "true"
+            return str(render_info.result()).lower() == "true"
         except TemplateError as err:
             _LOGGER.warning(
                 "Jinja condition failed for rule %s and entity %s: %s",
@@ -776,6 +799,32 @@ class AlertManager:
                 err,
             )
             return False
+
+    def _render_rule_message(
+        self, rule: Rule, state: State, current: Any
+    ) -> str | None:
+        """Render an optional message as a Home Assistant Jinja template."""
+        if rule.message is None:
+            return None
+        try:
+            render_info = self._rule_message_templates[rule.id].async_render_to_info(
+                {
+                    "entity_id": state.entity_id,
+                    "state": state,
+                    "value": current,
+                }
+            )
+            self._rule_message_render_info[(rule.id, state.entity_id)] = render_info
+            rendered = str(render_info.result()).strip()
+            return rendered or None
+        except TemplateError as err:
+            _LOGGER.warning(
+                "Jinja message failed for rule %s and entity %s: %s",
+                rule.id,
+                state.entity_id,
+                err,
+            )
+            return None
 
     def _refresh_config_caches(self) -> None:
         """Cache exclusion membership used for every state change."""
@@ -834,12 +883,17 @@ class AlertManager:
 
     def _validate_rule_template(self, rule: Rule) -> None:
         """Reject invalid Jinja syntax before changing persisted configuration."""
-        if rule.condition_template is None:
-            return
-        try:
-            Template(rule.condition_template, self.hass).ensure_valid()
-        except TemplateError as err:
-            raise ValueError(f"Invalid rule condition_template: {err}") from err
+        templates = (
+            ("condition_template", rule.condition_template),
+            ("message template", rule.message),
+        )
+        for field, source in templates:
+            if source is None:
+                continue
+            try:
+                Template(source, self.hass).ensure_valid()
+            except TemplateError as err:
+                raise ValueError(f"Invalid rule {field}: {err}") from err
 
     def _validate_config_rule_sources(self, config: dict[str, Any]) -> None:
         """Apply self-monitoring rejection to a complete imported config."""
