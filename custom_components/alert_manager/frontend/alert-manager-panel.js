@@ -965,6 +965,15 @@ class AlertManagerPanel extends HTMLElement {
           this._ruleDirty = true;
         },
       );
+      this._configureSelector(
+        "rule-message-template",
+        { template: {} },
+        this._editingRule.message ?? "",
+        (value) => {
+          this._editingRule.message = String(value ?? "");
+          this._ruleDirty = true;
+        },
+      );
     }
     if (this._activeTab === "automatic") {
       this._ensureAutomaticDraft();
@@ -1749,7 +1758,7 @@ class AlertManagerPanel extends HTMLElement {
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_trigger"))}</h3><small>${esc(this._t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
             ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, { nameMode: "name" })}
-            <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-input name="message" data-field="message" type="text" value="${esc(rule.message || "")}" aria-label="${esc(this._t("rules.message_optional"))}"></ha-input><small>${esc(this._t("rules.message_help"))}</small></div>
+            <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(this._t("rules.message_help"))}</small></div>
           </div>
         </section>`;
   }
@@ -2502,7 +2511,11 @@ class AlertManagerPanel extends HTMLElement {
       operator,
       value: comparisonValue,
       duration: Number(value("duration")),
-      message: String(value("message")).trim() || null,
+      message: String(
+        this.shadowRoot.querySelector("#rule-message-template")?.value
+          ?? this._editingRule?.message
+          ?? "",
+      ).trim() || null,
       condition_template: String(
         this.shadowRoot.querySelector("#rule-condition-template")?.value ?? "",
       ).trim() || null,
@@ -2543,7 +2556,11 @@ class AlertManagerPanel extends HTMLElement {
         ? valueInputs.map((input) => String(input.value))
         : String(value("value") ?? this._editingRule.value ?? ""),
       duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
-      message: String(value("message") ?? this._editingRule.message ?? ""),
+      message: String(
+        this.shadowRoot.querySelector("#rule-message-template")?.value
+          ?? this._editingRule.message
+          ?? "",
+      ),
       condition_template: String(
         this.shadowRoot.querySelector("#rule-condition-template")?.value
           ?? this._editingRule.condition_template

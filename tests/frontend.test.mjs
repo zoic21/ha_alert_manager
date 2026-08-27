@@ -481,6 +481,9 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
   panel.shadowRoot.querySelector = (selector) => {
     if (selector === "#rule-form") return ruleForm;
     if (selector === "#rule-condition-template") return { value: "{{ true }}" };
+    if (selector === "#rule-message-template") {
+      return { value: "État :\n{{ states('todo.liste_d_achats') }}" };
+    }
     return null;
   };
   panel._render = () => {};
@@ -499,7 +502,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         operator: "equals",
         value: ["0"],
         duration: 900,
-        message: null,
+        message: "État :\n{{ states('todo.liste_d_achats') }}",
         condition_template: "{{ true }}",
       },
     },
@@ -1477,7 +1480,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(editor, /slot="subtitle"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
-  assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
+  assert.match(editor, /class="field full rule-message-field"[\s\S]*<ha-selector id="rule-message-template"><\/ha-selector>/);
   assert.match(editor, /Condition Jinja supplémentaire/);
   assert.match(editor, /Toutes les fonctions Jinja et entités de Home Assistant sont accessibles/);
   assert.match(editor, /Le rendu est figé lorsque l’alerte devient active/);
@@ -1841,6 +1844,44 @@ test("custom rule sources use the native multiple entity selector", () => {
     },
   });
   assert.deepEqual(selector.value, ["sensor.one", "sensor.two"]);
+});
+
+test("condition and message use multiline Home Assistant template selectors", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "rules";
+  panel._editingRule = {
+    ...ruleValues(),
+    condition_template: "{{ true }}",
+    message: "Ligne 1\n{{ value }}",
+  };
+  panel._hass = { states: {} };
+  const condition = {
+    addEventListener(type, listener) {
+      if (type === "value-changed") this.listener = listener;
+    },
+  };
+  const message = {
+    addEventListener(type, listener) {
+      if (type === "value-changed") this.listener = listener;
+    },
+  };
+  panel.shadowRoot.querySelector = (query) => ({
+    "#rule-condition-template": condition,
+    "#rule-message-template": message,
+  })[query] ?? null;
+
+  panel._hydrateSelectors();
+
+  assert.deepEqual(condition.selector, { template: {} });
+  assert.equal(condition.value, "{{ true }}");
+  assert.deepEqual(message.selector, { template: {} });
+  assert.equal(message.value, "Ligne 1\n{{ value }}");
+
+  message.listener({ detail: { value: "Nouvelle ligne 1\nNouvelle ligne 2" } });
+  assert.equal(panel._editingRule.message, "Nouvelle ligne 1\nNouvelle ligne 2");
+  assert.equal(panel._ruleDirty, true);
 });
 
 test("custom rule choices use native Home Assistant selects", () => {

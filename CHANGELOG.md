@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev25 — 27 août 2026
+
+### Modifié
+
+- Le champ Message des règles personnalisées utilise désormais le sélecteur
+  `template` natif de Home Assistant, comme la condition Jinja supplémentaire.
+  Il accepte une saisie multiligne et conserve les retours à la ligne lors de
+  l’enregistrement et de la réouverture du volet.
+
+### Tests
+
+- Les tests frontend vérifient la configuration des deux éditeurs Jinja natifs
+  et la sérialisation d’un message multiligne.
+
 ## 1.7.0-dev24 — 27 août 2026
 
 ### Corrigé
