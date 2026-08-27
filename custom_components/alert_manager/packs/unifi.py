@@ -47,11 +47,7 @@ def _evaluate(
     hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
     """Match router-backed UniFi trackers that are explicitly away."""
-    if (
-        not _applies(hass, state)
-        or state.state == STATE_HOME
-        or state.state == STATE_UNAVAILABLE
-    ):
+    if not _matches(hass, state):
         return None
     return PackMatch(
         condition_key="automatic.unifi",
