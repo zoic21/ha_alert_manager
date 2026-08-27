@@ -2581,7 +2581,9 @@ class AlertManagerPanel extends HTMLElement {
           ?? "",
       ).trim() || null,
       condition_template: String(
-        this.shadowRoot.querySelector("#rule-condition-template")?.value ?? "",
+        this.shadowRoot.querySelector("#rule-condition-template")?.value
+          ?? this._editingRule?.condition_template
+          ?? "",
       ).trim() || null,
     };
     const id = String(this._editingRule?.id ?? "");

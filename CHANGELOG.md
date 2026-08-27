@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.1 — 27 août 2026
+
+### Corrigé
+
+- Lors de la création d’une règle personnalisée, la condition Jinja supplémentaire
+  est désormais récupérée depuis le brouillon de l’éditeur lorsque le composant
+  `ha-selector` de Home Assistant n’expose pas encore sa nouvelle valeur via sa
+  propriété `.value` au moment de la sauvegarde. Le texte saisi n’est donc plus
+  remplacé par une valeur vide à la création de la règle.
+
+### Tests
+
+- Un test frontend reproduit le cas où le sélecteur Jinja a déjà mis à jour le
+  brouillon mais expose encore une propriété `.value` indisponible au moment de
+  la sauvegarde.
+
 ## 1.7.0-dev27 — 27 août 2026
 
 ### Corrigé
