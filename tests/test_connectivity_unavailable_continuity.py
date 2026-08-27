@@ -37,8 +37,18 @@ def test_connectivity_treats_unavailable_as_off(hass):
     unavailable_state = _connectivity_state(hass, STATE_UNAVAILABLE)
 
     assert connectivity.PACK.should_evaluate(hass, on_state, off_state, config)
-    assert connectivity.PACK.should_evaluate(hass, off_state, unavailable_state, config) is False
-    assert connectivity.PACK.should_evaluate(hass, unavailable_state, off_state, config) is False
+    assert (
+        connectivity.PACK.should_evaluate(
+            hass, off_state, unavailable_state, config
+        )
+        is False
+    )
+    assert (
+        connectivity.PACK.should_evaluate(
+            hass, unavailable_state, off_state, config
+        )
+        is False
+    )
     assert connectivity.PACK.should_evaluate(hass, unavailable_state, on_state, config)
 
     match = connectivity.PACK.evaluate(hass, unavailable_state, config)
