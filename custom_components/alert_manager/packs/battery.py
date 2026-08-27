@@ -69,9 +69,7 @@ def _effective_threshold(
     )
 
 
-def _matches(
-    hass: HomeAssistant, state: State | None, config: dict[str, Any]
-) -> bool:
+def _matches(hass: HomeAssistant, state: State | None, config: dict[str, Any]) -> bool:
     """Return whether the optional state currently matches this pack."""
     if state is None or not _applies(hass, state):
         return False
