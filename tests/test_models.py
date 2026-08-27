@@ -12,6 +12,7 @@ import pytest
 from custom_components.alert_manager.const import INTEGRATION_VERSION
 from custom_components.alert_manager.models import (
     AlertDetails,
+    AlertHistoryEntry,
     AlertRecord,
     AlertStatus,
     Rule,
@@ -196,6 +197,34 @@ def test_storage_round_trip_preserves_structured_data():
     assert "paused_seconds" not in restored.as_public_dict()
 
 
+def test_history_preserves_integration_and_survives_a_backward_clock_step():
+    """Resolution stays loadable when the clock moves behind acknowledgement."""
+    detected_at = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    details = AlertDetails(
+        id="unavailable:sensor.test",
+        type="unavailable",
+        entity_id="sensor.test",
+        name="Test",
+        value="unavailable",
+        condition="Unavailable",
+        integration="mqtt",
+    )
+    record = AlertRecord.pending(details, 0, detected_at)
+    assert advance_record(record, detected_at)
+    record.acknowledged = True
+    record.acknowledged_at = detected_at + timedelta(minutes=2)
+    record.acknowledged_by = "Loïc"
+
+    history = AlertHistoryEntry.resolved(
+        record,
+        detected_at + timedelta(minutes=1),
+    )
+
+    assert history.integration == "mqtt"
+    assert history.resolved_at == record.acknowledged_at
+    assert AlertHistoryEntry.from_dict(history.as_dict()) == history
+
+
 def test_legacy_severity_is_removed_from_stored_alerts_and_rules():
     """Beta data loads without exposing the removed alert-level concept."""
     details = AlertDetails.from_dict(
@@ -319,6 +348,31 @@ def test_rule_entity_ids_must_be_unique():
                 "duration": 60,
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"name": "   "}, "name"),
+        ({"enabled": "false"}, "enabled"),
+        ({"version": True}, "version"),
+        ({"source": "attribute", "attribute": 42}, "Attribute"),
+        ({"message": 42}, "message"),
+    ],
+)
+def test_rule_metadata_types_are_strict(changes, message):
+    """Malformed rule metadata cannot become truthy or fail during evaluation."""
+    rule = {
+        "id": "strict-rule",
+        "name": "Strict",
+        "entity_ids": ["sensor.test"],
+        "operator": "equals",
+        "value": "on",
+        "duration": 60,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        Rule.from_dict({**rule, **changes})
 
 
 def test_backend_and_frontend_versions_stay_in_sync():

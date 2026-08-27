@@ -192,18 +192,6 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
             raise ValueError("Rule id is immutable")
         rule = Rule.from_dict({**data, "id": rule_id})
     rule.entity_ids = validate_rule_entity_ids(rule.entity_ids)
-    if len(rule.name) > 255:
-        raise ValueError("Rule name is too long")
-    if rule.attribute is not None and (
-        not isinstance(rule.attribute, str)
-        or not rule.attribute.strip()
-        or len(rule.attribute) > 255
-    ):
-        raise ValueError("Invalid attribute name")
-    if rule.message is not None and (
-        not isinstance(rule.message, str) or len(rule.message) > 1024
-    ):
-        raise ValueError("Rule message must not exceed 1024 characters")
     return rule
 
 

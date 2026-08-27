@@ -275,7 +275,8 @@ test("disabled monitoring warning can turn the switch back on", async () => {
     callService: async (...args) => { calls.push(args); },
   };
   panel._render();
-  assert.match(panel.shadowRoot.innerHTML, /<div class="monitoring-warning"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-alert class="page-alert" alert-type="warning"/);
+  assert.match(panel.shadowRoot.innerHTML, /<ha-button slot="action"/);
   assert.match(panel.shadowRoot.innerHTML, /La surveillance Alert Manager est désactivée/);
 
   await panel._handleClick(actionEvent("enable-monitoring"));
@@ -285,7 +286,7 @@ test("disabled monitoring warning can turn the switch back on", async () => {
     { entity_id: "switch.alert_manager_main_monitoring" },
   ]]);
   assert.equal(panel._monitoringEnabled, true);
-  assert.doesNotMatch(panel.shadowRoot.innerHTML, /<div class="monitoring-warning"/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /alert-type="warning"/);
 });
 
 const completePacks = () => [
@@ -836,6 +837,17 @@ test("column visibility, order and table preferences persist locally", () => {
   assert.deepEqual(migratedDev7.columns, migrated.columns);
 });
 
+test("malformed table preferences fall back without breaking panel startup", () => {
+  assert.deepEqual(
+    makeTableState("overview", null).columns,
+    ["status", "entity", "device", "rule", "integration", "timeline"],
+  );
+  assert.deepEqual(
+    makeTableState("history", "invalid").columns,
+    ["status", "entity", "device", "rule", "integration", "detected"],
+  );
+});
+
 test("native settings dialog events hide, reorder and restore optional columns", () => {
   const panel = tablePanel();
   const listeners = {};
@@ -941,6 +953,8 @@ test("history uses the same table tools without selection or runtime actions", (
   ]);
   const rows = panel._nativeTableData("history", panel._tableRows("history", panel._history.events));
   assert.equal(rows[0].statusLabel, "Résolue après acquittement");
+  assert.equal(rows[0].integration, "mqtt");
+  assert.equal(rows[0].integrationLabel, "MQTT");
   assert.equal(rows[0].value, "34.5 °C");
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="history"/);
   assert.doesNotMatch(html, /selectable|slot="selection-bar"|bulk-acknowledge|bulk-unacknowledge|data-due=/);
@@ -1043,6 +1057,12 @@ test("date filters use the native Home Assistant date range picker", () => {
   } } });
   assert.equal(panel._tableState.overview.filters.detectedFrom, "2026-08-27T09:00:00.000Z");
   assert.equal(panel._tableState.overview.filters.detectedTo, "2026-08-27T12:30:00.000Z");
+  listeners["value-changed"]({ detail: { value: {
+    startDate: new Date("invalid"),
+    endDate: new Date("2026-08-28T12:30:00.000Z"),
+  } } });
+  assert.equal(panel._tableState.overview.filters.detectedFrom, "2026-08-27T09:00:00.000Z");
+  assert.equal(panel._tableState.overview.filters.detectedTo, "2026-08-27T12:30:00.000Z");
 });
 
 test("native wrapper events update search grouping sorting and columns", () => {
@@ -1119,7 +1139,7 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /<h1>Alertes<|class="header-count"|Détection centralisée des anomalies/);
-  assert.match(panel._styles(), /font-family:var\(--ha-font-family-body/);
+  assert.doesNotMatch(panel._styles(), /paper-font|font-family:var\(--ha-font-family-body/);
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
@@ -1296,26 +1316,41 @@ test("rule rows and editor use native Home Assistant components", () => {
   };
 
   const rules = panel._renderRules();
+  const listeners = {};
+  const table = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+  };
+  panel._hass = { states: {} };
+  panel.shadowRoot.querySelector = (selector) => selector === "#rules-table" ? table : null;
+  panel._hydrateRuleTable();
   panel._editingRule = { ...panel._config.rules[0] };
   const editor = panel._renderRuleEditor();
   panel._ensureSettingsDraft();
   panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
   const settings = panel._renderSettings();
 
-  assert.match(rules, /<tr class="rule-row [^"]*" data-action="edit-rule" data-id="enabled"/);
-  assert.match(rules, /<ha-switch haptic data-action="toggle-rule" data-id="enabled"[^>]* checked/);
-  assert.match(rules, /<ha-switch haptic data-action="toggle-rule" data-id="disabled"(?![^>]* checked)/);
-  assert.doesNotMatch(rules, /<ha-button[^>]+data-action="edit-rule"/);
+  assert.match(rules, /<ha-data-table id="rules-table" clickable><\/ha-data-table>/);
+  assert.doesNotMatch(rules, /<table|<thead|<tbody|<tr|<td|<th/);
+  assert.deepEqual(table.columnOrder, ["name", "entities", "condition", "duration", "enabled"]);
+  assert.deepEqual(table.data.map((row) => row.id), ["enabled", "disabled"]);
+  assert.equal(table.columns.name.main, true);
+  assert.equal(table.columns.name.sortable, true);
+  assert.equal(table.columns.enabled.template(table.data[0]).checked, true);
+  assert.equal(table.columns.enabled.template(table.data[1]).checked, false);
+  assert.deepEqual(
+    table.columns.entities.template(table.data[0]).children.map((child) => child.textContent),
+    ["sensor.one"],
+  );
   assert.doesNotMatch(rules, /data-action="delete-rule"/);
   assert.match(rules, /<ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start"/);
-  assert.ok(rules.indexOf("</table>") < rules.indexOf('data-action="new-rule"'));
+  assert.ok(rules.indexOf("</ha-data-table>") < rules.indexOf('data-action="new-rule"'));
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
   assert.match(editor, /<ha-dropdown slot="actionItems" data-rule-editor-menu/);
   assert.match(editor, /<ha-icon-button slot="trigger"/);
   assert.match(editor, /<ha-dropdown-item value="switch-editor">Modifier en YAML/);
   assert.doesNotMatch(editor, /slot="subtitle"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
-  assert.match(editor, /class="field full rule-name-field"[\s\S]*data-field="name"/);
+  assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
@@ -1402,7 +1437,7 @@ test("overview status summaries filter the table directly", async () => {
   assert.deepEqual(panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status), ["pending"]);
   assert.match(panel._styles(), /\.acknowledged\{color:var\(--blue-color/);
   assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(panel._styles(), /@media\(max-width:700px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(panel._styles(), /@media\(max-width:1000px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {
@@ -1522,6 +1557,22 @@ test("submit keeps the form identity across an asynchronous rerender", async () 
 
   assert.equal(automaticSaves, 1);
   assert.equal(settingsSaves, 0);
+});
+
+test("keyboard form submission respects native Home Assistant validation", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  let saves = 0;
+  panel._saveAutomatic = async () => { saves += 1; };
+  const invalidForm = {
+    id: "automatic-form",
+    reportValidity: () => false,
+    querySelectorAll: () => [],
+  };
+
+  await panel._handleSubmit({ preventDefault() {}, target: invalidForm });
+
+  assert.equal(saves, 0);
 });
 
 test("settings action serializes exclusions and entity delays", async () => {
@@ -1778,6 +1829,7 @@ const historyEvent = (changes = {}) => ({
   device_id: "device-1",
   device_name: "Sonde baie",
   area: "Bureau",
+  integration: "mqtt",
   message: "Refroidir la baie",
   trigger_value: 34.5,
   source: "state",
@@ -1937,6 +1989,33 @@ test("changing the Home Assistant locale reloads backend translations", async ()
     category: "config_panel",
     integration: "alert_manager",
   }]);
+});
+
+test("a locale change is not lost while translations are loading", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._loading = false;
+  panel._render = () => {};
+  const calls = [];
+  let releaseFirstRequests;
+  const firstRequests = new Promise((resolve) => { releaseFirstRequests = resolve; });
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message.language);
+      if (calls.length <= 2) await firstRequests;
+      return { resources: TRANSLATIONS[message.language] };
+    },
+  };
+  panel._language = "fr";
+  const firstReload = panel._reloadTranslations();
+  panel._language = "en";
+  releaseFirstRequests();
+  await firstReload;
+  while (panel._translationPromise) await panel._translationPromise;
+
+  assert.deepEqual(calls, ["fr", "en", "en"]);
+  assert.equal(panel._t("tabs.overview"), "Overview");
 });
 
 test("structured automatic and generated rule conditions are localized", () => {

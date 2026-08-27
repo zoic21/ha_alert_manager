@@ -2,6 +2,45 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev12 — 27 août 2026
+
+### Corrigé
+
+- L’intégration source est désormais conservée dans l’historique lors de la
+  résolution d’une alerte et reste donc disponible après la disparition de
+  l’entité.
+- Une correction d’horloge NTP vers le passé après un acquittement ne produit
+  plus d’entrée d’historique temporellement incohérente et illisible au
+  redémarrage.
+- Les règles refusent strictement les types invalides pour leur activation,
+  leur version, leur nom, leur attribut et leur message ; la chaîne `"false"`
+  ne peut notamment plus activer une règle par effet de vérité implicite.
+- Des préférences de tableau locales absentes ou corrompues ne bloquent plus le
+  démarrage du panel.
+- Une période contenant une date JavaScript invalide est ignorée sans
+  exception ni perte du filtre précédent.
+- La soumission d’un formulaire au clavier respecte maintenant la validation
+  native Home Assistant, comme le clic sur son bouton d’enregistrement.
+- Un changement de langue pendant le chargement des traductions déclenche bien
+  le chargement de la dernière langue demandée.
+
+### Interface et optimisation
+
+- Les messages d’état utilisent `ha-alert`, les panneaux et compteurs utilisent
+  `ha-card`, et la liste des règles utilise désormais `ha-data-table` avec tri,
+  navigation au clavier et interrupteurs Home Assistant natifs.
+- L’ancien tableau HTML, les styles personnalisés de cartes et de messages,
+  les sélecteurs inutilisés et les règles mobiles redondantes ont été retirés.
+- Le contrôle statique du frontend interdit désormais le retour des principaux
+  contrôles HTML personnalisés et des anciennes règles CSS remplacées par les
+  composants Home Assistant.
+
+### Tests
+
+- 139 tests backend et 68 tests frontend couvrent notamment les nouvelles
+  validations, l’historique, les dates invalides, les préférences corrompues,
+  les changements rapides de langue et les composants natifs.
+
 ## 1.7.0-dev11 — 27 août 2026
 
 ### Corrigé

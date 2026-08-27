@@ -104,6 +104,7 @@ class AlertHistoryEntry:
     device_id: str | None
     device_name: str | None
     area: str | None
+    integration: str | None
     message: str | None
     trigger_value: Any
     source: str | None
@@ -132,7 +133,16 @@ class AlertHistoryEntry:
             raise ValueError("Only active alerts can be archived as resolved")
         detected = record.detected_at.astimezone(UTC)
         active = record.active_since.astimezone(UTC)
-        resolved = max(resolved_at.astimezone(UTC), active)
+        # A controller clock can move backwards after an acknowledgement (for
+        # example after an NTP correction).  Keep the archived timeline valid
+        # instead of creating an entry that will be rejected on the next load.
+        resolved = max(
+            resolved_at.astimezone(UTC),
+            active,
+            record.acknowledged_at.astimezone(UTC)
+            if record.acknowledged_at is not None
+            else active,
+        )
         pending_seconds = max(
             0.0, (active - detected).total_seconds() - record.paused_seconds
         )
@@ -156,6 +166,7 @@ class AlertHistoryEntry:
             device_id=record.details.device_id,
             device_name=record.details.device_name,
             area=record.details.area,
+            integration=record.details.integration,
             message=record.details.message,
             trigger_value=_json_safe(record.details.value),
             source=record.details.source,
@@ -200,6 +211,7 @@ class AlertHistoryEntry:
             "device_id",
             "device_name",
             "area",
+            "integration",
             "message",
             "source",
             "operator",
@@ -534,10 +546,12 @@ class Rule:
 
     def validate(self) -> None:
         """Validate invariants shared by storage and the WebSocket API."""
-        if not self.id or not isinstance(self.id, str):
+        if not isinstance(self.id, str) or not self.id.strip():
             raise ValueError("Rule id is required")
-        if not self.name or not isinstance(self.name, str):
+        if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("Rule name is required")
+        if len(self.name) > 255:
+            raise ValueError("Rule name is too long")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")
         if any(not isinstance(entity_id, str) for entity_id in self.entity_ids):
@@ -548,10 +562,26 @@ class Rule:
             raise ValueError(f"Unsupported operator: {self.operator}")
         if self.source not in VALUE_SOURCES:
             raise ValueError(f"Unsupported value source: {self.source}")
-        if self.source == "attribute" and not self.attribute:
+        if self.source == "attribute" and (
+            not isinstance(self.attribute, str)
+            or not self.attribute.strip()
+            or len(self.attribute) > 255
+        ):
             raise ValueError("Attribute is required for attribute rules")
         if self.source == "state" and self.attribute is not None:
             raise ValueError("Attribute must be empty for state rules")
+        if self.message is not None and (
+            not isinstance(self.message, str) or len(self.message) > 1024
+        ):
+            raise ValueError("Rule message must not exceed 1024 characters")
+        if not isinstance(self.enabled, bool):
+            raise ValueError("Rule enabled must be a boolean")
+        if (
+            isinstance(self.version, bool)
+            or not isinstance(self.version, int)
+            or self.version < 2
+        ):
+            raise ValueError("Rule version must be an integer of at least 2")
         if not isinstance(self.duration, int) or isinstance(self.duration, bool):
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
