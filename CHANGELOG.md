@@ -2,6 +2,23 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev9 — 27 août 2026
+
+### Corrigé
+
+- Les colonnes optionnelles déclarent maintenant leur état Home Assistant natif
+  `defaultHidden` pour le Dashboard et l’Historique.
+- « Rétablir les valeurs par défaut » applique immédiatement les six colonnes
+  prévues, sans afficher temporairement toutes les colonnes jusqu’au rechargement
+  de la page.
+- L’ordre natif sans préférence reste identique à l’ordre par défaut Alert
+  Manager.
+
+### Tests
+
+- Couverture des colonnes visibles et masquées nativement après restauration,
+  séparément pour le Dashboard et l’Historique.
+
 ## 1.7.0-dev8 — 27 août 2026
 
 ### Modifié

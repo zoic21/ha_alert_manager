@@ -616,6 +616,10 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.columns.entity.sortable, true);
   assert.equal(table.columns.integration.title, "Intégration");
   assert.equal(table.columns.integration.sortable, true);
+  assert.equal(table.columns.integration.defaultHidden, false);
+  assert.equal(table.columns.timeline.defaultHidden, false);
+  assert.equal(table.columns.value.defaultHidden, true);
+  assert.equal(table.columns.condition.defaultHidden, true);
   assert.equal(table.columns.condition.showNarrow, false);
   assert.equal(table.data.length, 3);
   assert.equal(table.filter, "garage");
@@ -630,6 +634,9 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.ok(table.hiddenColumns.includes("entity_id"));
   assert.equal(table.columns.device_group.groupable, true);
   assert.equal(table.columns.search_index.filterable, true);
+  const historyColumns = panel._nativeTableColumns("history");
+  assert.equal(historyColumns.detected.defaultHidden, false);
+  assert.equal(historyColumns.resolved.defaultHidden, true);
 });
 
 test("pending countdown is dynamic only while monitoring is enabled", () => {

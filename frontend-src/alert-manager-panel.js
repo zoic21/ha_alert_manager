@@ -1247,6 +1247,7 @@ class AlertManagerPanel extends HTMLElement {
         showNarrow: column === "status",
         moveable: column === "status" ? false : undefined,
         hideable: REQUIRED_COLUMNS.has(column) ? false : undefined,
+        defaultHidden: !DEFAULT_TABLE_STATE[kind].columns.includes(column),
         minWidth,
         maxWidth,
         flex,
