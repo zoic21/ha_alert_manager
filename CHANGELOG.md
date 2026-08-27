@@ -2,6 +2,42 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev14 — 27 août 2026
+
+### Ajouté
+
+- Le nouveau réglage persistant `active_display_delay`, fixé à 10 secondes par
+  défaut, retarde l’exposition d’une alerte déjà active dans le Dashboard et
+  `sensor.alert_manager_main_active`. Le délai ajouté est plafonné par le délai
+  propre de l’alerte ; une règle sans temporisation reste donc immédiate.
+- Le capteur `sensor.alert_manager_device_main_active` compte les appareils du
+  registre possédant au moins une alerte active affichée. Son attribut `devices`
+  fournit les identifiants, noms, zones, compteurs et alertes de chaque appareil.
+- L’événement `alert_manager_device_alert_started` est émis uniquement lorsqu’un
+  appareil entre dans l’ensemble actif. Une alerte supplémentaire sur le même
+  appareil ne crée aucun doublon. La documentation inclut une automatisation de
+  notification mobile basée sur cet événement.
+
+### Corrigé et optimisé
+
+- Le Dashboard met désormais à jour les compteurs et les données du composant
+  natif en place lors de l’ajout ou du retrait d’une ligne, sans reconstruire la
+  page et faire clignoter le tableau.
+- L’ouverture et la fermeture du volet d’une règle personnalisée conservent
+  l’instance existante de `ha-data-table`, son tri et sa position de défilement.
+- La table des règles active le mode natif `autoHeight` de Home Assistant, ce qui
+  supprime la ligne vide résiduelle après la dernière règle sans règle CSS
+  spécifique.
+- Les nouvelles échéances `visible_at` sont persistées, restaurées et
+  replanifiées après redémarrage ou import de configuration. Une alerte résolue
+  avant son exposition ne génère ni ligne active ni événement d’appareil.
+
+### Tests
+
+- 142 tests backend et 69 tests frontend couvrent le délai d’exposition, sa
+  compatibilité avec les anciens exports, le compteur d’appareils, la
+  déduplication des événements et les mises à jour natives des tableaux.
+
 ## 1.7.0-dev12 — 27 août 2026
 
 ### Corrigé

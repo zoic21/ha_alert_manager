@@ -228,6 +228,7 @@ const completeConfig = () => ({
   },
   rules: [],
   global_delay: 900,
+  active_display_delay: 10,
   excluded_labels: [],
   excluded_entities: [],
   excluded_devices: [],
@@ -261,6 +262,50 @@ test("partitioned entities update their matching overview lists", () => {
   assert.deepEqual(panel._alerts.alerts, [{ id: "active" }]);
   assert.deepEqual(panel._alerts.pending.map((alert) => alert.id), ["pending-1", "pending-2"]);
   assert.deepEqual(panel._alerts.acknowledge, [{ id: "acknowledged" }]);
+});
+
+test("overview row changes update the native table without rebuilding the page", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._alerts = {
+    active_count: 1,
+    acknowledge_count: 0,
+    pending_count: 0,
+    tracked_count: 1,
+    alerts: [{
+      id: "unavailable:sensor.test",
+      type: "unavailable",
+      entity_id: "sensor.test",
+      name: "Test",
+      condition: "Unavailable",
+      detected_at: "2026-08-27T10:00:00Z",
+      active_since: "2026-08-27T10:00:10Z",
+    }],
+    pending: [],
+    acknowledge: [],
+  };
+  panel._hass = { entities: {}, states: {} };
+  const summaries = Object.fromEntries(["active", "pending", "acknowledged", "tracked"].map(
+    (key) => [key, { textContent: "" }],
+  ));
+  const tablePage = {
+    querySelector(selector) {
+      const key = selector.match(/data-summary="([^"]+)/)?.[1];
+      return summaries[key] ?? null;
+    },
+  };
+  panel.shadowRoot.querySelector = (selector) =>
+    selector === '[data-alert-table-page="overview"]' ? tablePage : null;
+  panel._updateCountdowns = () => {};
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+
+  panel._refreshOverviewData();
+
+  assert.equal(renders, 0);
+  assert.equal(summaries.active.textContent, "1");
+  assert.deepEqual(tablePage.data.map((row) => row.id), ["unavailable:sensor.test"]);
 });
 
 test("disabled monitoring warning can turn the switch back on", async () => {
@@ -1329,7 +1374,8 @@ test("rule rows and editor use native Home Assistant components", () => {
   panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
   const settings = panel._renderSettings();
 
-  assert.match(rules, /<ha-data-table id="rules-table" clickable><\/ha-data-table>/);
+  assert.match(rules, /<ha-data-table id="rules-table" clickable auto-height><\/ha-data-table>/);
+  assert.equal(table.autoHeight, true);
   assert.doesNotMatch(rules, /<table|<thead|<tbody|<tr|<td|<th/);
   assert.deepEqual(table.columnOrder, ["name", "entities", "condition", "duration", "enabled"]);
   assert.deepEqual(table.data.map((row) => row.id), ["enabled", "disabled"]);
@@ -1370,6 +1416,13 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
   assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
+  let fullRenders = 0;
+  let editorRefreshes = 0;
+  panel._render = () => { fullRenders += 1; };
+  panel._refreshRuleEditor = () => { editorRefreshes += 1; };
+  listeners["row-click"]({ detail: { id: "enabled" } });
+  assert.equal(editorRefreshes, 1);
+  assert.equal(fullRenders, 0);
 });
 
 test("attribute input follows the selected rule source without rerendering", () => {
@@ -1591,6 +1644,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   ];
   const controls = {
     "#global-delay": { value: "300" },
+    "#active-display-delay": { value: "15" },
     "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
@@ -1611,6 +1665,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     type: "alert_manager/config/update",
     config: {
       global_delay: 300,
+      active_display_delay: 15,
       excluded_labels: ["sans_alerte"],
       excluded_entities: ["sensor.skip", "light.skip"],
       excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1647,6 +1702,7 @@ test("native Home Assistant selectors are configured for multiple values", () =>
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
+        "sensor.alert_manager_device_main_active",
         "switch.alert_manager_main_monitoring",
       ],
     },
@@ -1691,6 +1747,7 @@ test("custom rule sources use the native multiple entity selector", () => {
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
+        "sensor.alert_manager_device_main_active",
         "switch.alert_manager_main_monitoring",
       ],
     },
@@ -1916,6 +1973,7 @@ test("common settings save accepts a zero history retention limit", async () => 
   panel._render = () => {};
   const controls = {
     "#global-delay": { value: "900" },
+    "#active-display-delay": { value: "10" },
     "#history-limit": { value: "0", reportValidity: () => true },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];

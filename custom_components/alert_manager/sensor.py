@@ -22,13 +22,37 @@ from .const import (
 from .manager import AlertManager
 
 _SENSORS = (
-    ("active", "mdi:alert-circle", "active_count", "alerts"),
-    ("pending", "mdi:clock-alert-outline", "pending_count", "pending"),
     (
-        "acknowledge",
+        "main_active",
+        "alert_manager_main_active",
+        "mdi:alert-circle",
+        "active_count",
+        "alerts",
+        "alerts",
+    ),
+    (
+        "main_pending",
+        "alert_manager_main_pending",
+        "mdi:clock-alert-outline",
+        "pending_count",
+        "pending",
+        "alerts",
+    ),
+    (
+        "main_acknowledge",
+        "alert_manager_main_acknowledge",
         "mdi:check-circle-outline",
         "acknowledge_count",
         "acknowledge",
+        "alerts",
+    ),
+    (
+        "device_main_active",
+        "alert_manager_device_main_active",
+        "mdi:devices",
+        "device_active_count",
+        "active_devices",
+        "devices",
     ),
 )
 
@@ -38,7 +62,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Replace the legacy aggregate sensor with the three category sensors."""
+    """Replace the legacy aggregate sensor with lifecycle and device sensors."""
     entity_registry = er.async_get(hass)
     legacy_entity_id = entity_registry.async_get_entity_id(
         "sensor", DOMAIN, "alert_manager"
@@ -66,19 +90,22 @@ class AlertManagerSensor(SensorEntity):
     def __init__(
         self,
         manager: AlertManager,
-        key: str,
+        translation_key: str,
+        unique_id: str,
         icon: str,
         count_key: str,
-        alerts_key: str,
+        items_key: str,
+        attribute_key: str,
     ) -> None:
         """Initialize one stable sensor."""
         self.manager = manager
         self._count_key = count_key
-        self._alerts_key = alerts_key
+        self._items_key = items_key
+        self._attribute_key = attribute_key
         self._attr_icon = icon
-        self._attr_translation_key = f"main_{key}"
-        self._attr_unique_id = f"alert_manager_main_{key}"
-        self.entity_id = f"sensor.alert_manager_main_{key}"
+        self._attr_translation_key = translation_key
+        self._attr_unique_id = unique_id
+        self.entity_id = f"sensor.{unique_id}"
         self._snapshot: dict[str, Any] = manager.public_snapshot()
 
     async def async_added_to_hass(self) -> None:
@@ -107,5 +134,5 @@ class AlertManagerSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return only the alerts represented by this sensor."""
         if not self.manager.monitoring_enabled:
-            return {"alerts": []}
-        return {"alerts": self._snapshot[self._alerts_key]}
+            return {self._attribute_key: []}
+        return {self._attribute_key: self._snapshot[self._items_key]}

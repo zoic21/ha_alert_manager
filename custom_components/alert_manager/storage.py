@@ -231,6 +231,10 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
         config["history_limit"] = DEFAULT_HISTORY_LIMIT
         changed = True
 
+    if "active_display_delay" not in config:
+        config["active_display_delay"] = DEFAULT_CONFIG["active_display_delay"]
+        changed = True
+
     rules = config.get("rules")
     if isinstance(rules, list):
         for rule in rules:

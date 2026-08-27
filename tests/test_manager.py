@@ -16,6 +16,7 @@ from custom_components.alert_manager.const import (
     DATA_MANAGER,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
+    EVENT_DEVICE_ALERT_STARTED,
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
@@ -38,7 +39,7 @@ def make_manager(hass, entry):
 
 
 def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
-    """The sensor platform replaces the legacy sensor with three partitions."""
+    """The sensor platform exposes three partitions and one device counter."""
     registry_entry(
         hass,
         "sensor.legacy_alerts",
@@ -49,20 +50,27 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     hass.data[DATA_MANAGER] = manager
     entities = []
     run(async_setup_sensor(hass, entry, entities.extend))
-    assert len(entities) == 3
+    assert len(entities) == 4
     assert all(isinstance(entity, AlertManagerSensor) for entity in entities)
     assert {entity.entity_id for entity in entities} == {
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
+        "sensor.alert_manager_device_main_active",
     }
     assert {entity._attr_unique_id for entity in entities} == {
         "alert_manager_main_active",
         "alert_manager_main_pending",
         "alert_manager_main_acknowledge",
+        "alert_manager_device_main_active",
     }
     assert all(entity.native_value == 0 for entity in entities)
-    assert all(entity.extra_state_attributes == {"alerts": []} for entity in entities)
+    assert {entity.entity_id: entity.extra_state_attributes for entity in entities} == {
+        "sensor.alert_manager_main_active": {"alerts": []},
+        "sensor.alert_manager_main_pending": {"alerts": []},
+        "sensor.alert_manager_main_acknowledge": {"alerts": []},
+        "sensor.alert_manager_device_main_active": {"devices": []},
+    }
     assert all(
         entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
         for entity in entities
@@ -126,6 +134,72 @@ def test_pending_to_active(hass, entry, set_now):
     record = manager.records["unavailable:sensor.test"]
     assert record.status is AlertStatus.ACTIVE
     assert record.active_since == record.due_at
+
+
+def test_active_alert_is_exposed_after_configured_display_delay(
+    hass, entry, set_now, registry_entry, device_entry
+):
+    """Current counters and device events wait for the presentation deadline."""
+    start = datetime(2026, 8, 27, 10, tzinfo=UTC)
+    set_now(start)
+    device = device_entry(hass, name="Onduleur")
+    registry_entry(hass, "sensor.ups", device_id=device.id)
+    hass.states.set("sensor.ups", "unavailable")
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"entity_delays": {"sensor.ups": 30}}))
+
+    set_now(start + timedelta(seconds=30))
+    run(manager.async_evaluate_entity("sensor.ups"))
+    record = manager.records["unavailable:sensor.ups"]
+    assert record.status is AlertStatus.ACTIVE
+    assert record.visible_at == start + timedelta(seconds=40)
+    assert manager.public_snapshot()["active_count"] == 0
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+
+    set_now(start + timedelta(seconds=40))
+    run(manager.async_evaluate_entity("sensor.ups"))
+    snapshot = manager.public_snapshot()
+    assert snapshot["active_count"] == 1
+    assert snapshot["device_active_count"] == 1
+    assert snapshot["active_devices"][0]["device_name"] == "Onduleur"
+    assert snapshot["active_devices"][0]["alert_ids"] == ["unavailable:sensor.ups"]
+    events = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert len(events) == 1
+    assert events[0]["device_id"] == device.id
+
+
+def test_short_rule_delay_caps_active_display_wait(hass, entry, set_now):
+    """A rule's shorter delay also caps its extra active presentation wait."""
+    start = datetime(2026, 8, 27, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"active_display_delay": 10}))
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Short rule",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 5,
+            }
+        )
+    )
+
+    set_now(start + timedelta(seconds=5))
+    run(manager.async_evaluate_entity("sensor.test"))
+    record = manager.records[f"rule:{rule['id']}:sensor.test"]
+    assert record.visible_at == start + timedelta(seconds=10)
+    assert manager.public_snapshot()["active_count"] == 0
+
+    set_now(start + timedelta(seconds=10))
+    run(manager.async_evaluate_entity("sensor.test"))
+    assert manager.public_snapshot()["active_count"] == 1
 
 
 def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
@@ -630,6 +704,7 @@ def test_custom_rule_entities_have_independent_lifecycles(hass, entry, set_now):
     hass.states.set("sensor.two", "on", {"friendly_name": "Capteur deux"})
     hass.states.set("sensor.three", "off")
     manager = make_manager(hass, entry)
+    run(manager.async_update_config({"active_display_delay": 0}))
     rule = run(
         manager.async_create_rule(
             {
@@ -930,6 +1005,15 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
     )
     started = [data for event, data in hass.bus.fired if event == EVENT_ALERT_STARTED]
     assert {data["id"] for data in started} == {
+        "unavailable:sensor.ups_status",
+        "unavailable:sensor.ups_battery",
+    }
+    device_started = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert len(device_started) == 1
+    assert device_started[0]["device_id"] == device.id
+    assert set(device_started[0]["alert_ids"]) <= {
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
     }

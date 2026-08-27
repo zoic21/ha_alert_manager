@@ -338,6 +338,7 @@ class AlertRecord:
     due_at: datetime
     delay: int
     active_since: datetime | None = None
+    visible_at: datetime | None = None
     paused_at: datetime | None = None
     paused_seconds: float = 0.0
     acknowledged: bool = False
@@ -361,6 +362,7 @@ class AlertRecord:
         if not isinstance(data, dict):
             raise ValueError("Alert record must be an object")
         active_since = data.get("active_since")
+        visible_at = data.get("visible_at")
         status = AlertStatus(data["status"])
         if status is AlertStatus.NORMAL:
             raise ValueError("Normal alerts must not be persisted")
@@ -377,6 +379,11 @@ class AlertRecord:
             _parse_aware_datetime(active_since, "active_since")
             if active_since is not None
             else None
+        )
+        parsed_visible_at = (
+            _parse_aware_datetime(visible_at, "visible_at")
+            if visible_at is not None
+            else parsed_active_since
         )
         paused_at = data.get("paused_at")
         parsed_paused_at = (
@@ -398,12 +405,18 @@ class AlertRecord:
             raise ValueError("Active alerts require active_since")
         if status is AlertStatus.PENDING and parsed_active_since is not None:
             raise ValueError("Pending alerts must not have active_since")
+        if status is AlertStatus.PENDING and parsed_visible_at is not None:
+            raise ValueError("Pending alerts must not have visible_at")
         if status is AlertStatus.ACTIVE and parsed_paused_at is not None:
             raise ValueError("Active alerts cannot retain a monitoring pause")
         if parsed_active_since is not None and parsed_active_since.astimezone(
             UTC
         ) < detected_at.astimezone(UTC):
             raise ValueError("Alert active_since must not precede detected_at")
+        if parsed_visible_at is not None and parsed_visible_at.astimezone(
+            UTC
+        ) < parsed_active_since.astimezone(UTC):
+            raise ValueError("Alert visible_at must not precede active_since")
         acknowledged = data.get("acknowledged", False)
         if not isinstance(acknowledged, bool):
             raise ValueError("Alert acknowledged must be a boolean")
@@ -436,6 +449,7 @@ class AlertRecord:
             due_at=due_at,
             delay=delay,
             active_since=parsed_active_since,
+            visible_at=parsed_visible_at,
             paused_at=parsed_paused_at,
             paused_seconds=float(paused_seconds),
             acknowledged=acknowledged,
@@ -456,6 +470,8 @@ class AlertRecord:
             ),
             "acknowledged": self.acknowledged,
         }
+        if self.visible_at is not None:
+            result["visible_at"] = self.visible_at.isoformat()
         if self.paused_at is not None:
             result["paused_at"] = self.paused_at.isoformat()
         if self.paused_seconds:
@@ -478,6 +494,8 @@ class AlertRecord:
         )
         if self.active_since is not None:
             result["active_since"] = self.active_since.isoformat()
+            if self.visible_at is not None:
+                result["visible_at"] = self.visible_at.isoformat()
             result["acknowledged"] = self.acknowledged
             if self.acknowledged:
                 result["acknowledged_at"] = self.acknowledged_at.isoformat()

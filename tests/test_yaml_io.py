@@ -118,6 +118,13 @@ def test_v15_export_without_monitoring_state_defaults_to_enabled() -> None:
     assert parse_config_yaml(legacy)["monitoring_enabled"] is True
 
 
+def test_pre_dev14_export_without_active_display_delay_uses_default() -> None:
+    """Earlier complete exports gain the ten-second presentation delay safely."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace("  active_display_delay: 10\n", "")
+    assert parse_config_yaml(legacy)["active_display_delay"] == 10
+
+
 def test_config_import_accepts_legacy_ids_and_rejects_duplicates_and_runtime() -> None:
     """Legacy ids remain importable, but collisions and runtime are rejected."""
     config = dump_config_yaml({**deepcopy(DEFAULT_CONFIG), "rules": []})

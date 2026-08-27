@@ -9,7 +9,7 @@
 # Alert Manager for Home Assistant
 
 Alert Manager centralizes Home Assistant anomalies in an event-driven engine, a
-dedicated panel and one service device grouping three alert sensors and one
+dedicated panel and one service device grouping four alert sensors and one
 monitoring switch.
 
 Minimum supported version: **Home Assistant 2026.8**. Alert Manager is an
@@ -31,15 +31,17 @@ project.
   without merging alert records;
 - persistent per-alert acknowledgement from the panel and Home Assistant
   automations;
-- an `Alert Manager - Général` device, persistent monitoring switch and three
-  sensors separating active, upcoming and acknowledged alerts;
+- an `Alert Manager - Général` device, persistent monitoring switch, three
+  sensors separating active, upcoming and acknowledged alerts, and one device
+  alert counter;
 - visual or YAML editing of custom rules, plus complete YAML configuration
   export and replacement import;
 - persistent history of alerts that actually became active and were then
   resolved, retaining 100 events by default in a dedicated panel tab without
   adding a Home Assistant entity; anomalies that recover while still pending are
   not archived;
-- start, resolution, acknowledgement and unacknowledgement events;
+- start, resolution, acknowledgement and unacknowledgement events, plus one
+  `alert_manager_device_alert_started` event for a newly active device;
 - one safety notification when monitoring is still disabled at load time and no
   frequent global polling.
 
@@ -118,7 +120,8 @@ neither selection mode nor acknowledgement actions.
 An anomaly that recovers before activation is not an effective alert and is not
 added to history.
 
-In **Configuration → General settings**, directly below **Global delay**,
+In **Configuration → General settings**, the active-alert display delay defaults
+to 10 seconds. Directly below **Global delay**,
 **Number of historical events retained** controls retention. **Clear history**
 is aligned beside the field; the single common configuration save button at the
 bottom right also saves this setting. The default is `100`, the accepted range
@@ -262,17 +265,18 @@ and defaults monitoring to on.
 ## Device and monitoring switch
 
 The `Alert Manager - Général` service device uses the stable `main` category
-identifier and groups all four entities introduced by this release:
+identifier and groups all five entities introduced by this release:
 
 - `switch.alert_manager_main_monitoring`;
 - `sensor.alert_manager_main_active`;
 - `sensor.alert_manager_main_pending`;
-- `sensor.alert_manager_main_acknowledge`.
+- `sensor.alert_manager_main_acknowledge`;
+- `sensor.alert_manager_device_main_active`.
 
 The switch defaults to on and is persisted with the configuration. Turning it
 off prevents new records, freezes both pending transitions and their remaining
-time, cancels their timers and preserves every existing alert. All three sensors
-then report `0` with an empty `alerts` list without deleting internal records.
+time, cancels their timers and preserves every existing alert. All four sensors
+then report `0` with an empty `alerts` or `devices` list without deleting internal records.
 The panel shows a visible warning with a resume button. Turning monitoring back
 on resumes each countdown where it stopped, reconciles current Home Assistant
 states, recreates each required timer once and emits events only for real
@@ -288,14 +292,15 @@ reloads and is dismissed as soon as monitoring resumes.
 The entity registry entry for `sensor.alert_manager` is removed during migration
 and no long-term compatibility sensor is created:
 
-| New entity | State | `attributes.alerts` contents |
+| New entity | State | Attribute contents |
 | --- | ---: | --- |
 | `sensor.alert_manager_main_active` | unacknowledged active count | unacknowledged active alerts only |
 | `sensor.alert_manager_main_pending` | upcoming count | pending alerts only |
 | `sensor.alert_manager_main_acknowledge` | acknowledged active count | acknowledged active alerts only |
+| `sensor.alert_manager_device_main_active` | devices with at least one displayed active alert | `devices` attribute, including acknowledged alerts |
 
-An occurrence is never exposed by two sensors. Each sensor has exactly one
-`alerts` list attribute. Example custom-rule alert:
+An occurrence is never exposed by two lifecycle sensors. Those sensors expose an
+`alerts` list; the device sensor exposes `devices`. Example custom-rule alert:
 
 ```yaml
 state: 1
@@ -326,6 +331,7 @@ attributes:
       due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
+      visible_at: "2026-08-26T10:15:10+02:00"
       acknowledged: false
 ```
 
@@ -335,6 +341,17 @@ is derived from `due_at`. An acknowledged alert adds `acknowledged: true`,
 `rule_name` exist only for custom rules. Device, area, integration and unit
 metadata remain optional. Attributes contain no resolved history, visual group or
 periodically written countdown.
+
+`active_display_delay` delays only the exposure of an already active alert in
+the panel and sensors. It defaults to `10` seconds. The added wait is capped by
+the alert's own detection delay: a five-second rule waits five more seconds,
+while a zero-delay rule is displayed immediately. `visible_at` stores that
+deadline. If the condition recovers first, no active row or device event appears.
+
+The device sensor groups only alerts associated with a Home Assistant registry
+device. Each item in `attributes.devices` contains `device_id`, `device_name`,
+`area`, `started_at`, acknowledged/unacknowledged counts and `alert_ids`.
+Acknowledgement does not remove a device; its last active alert must resolve.
 
 Cards and automations reading `sensor.alert_manager` must target the appropriate
 new sensor and replace the old `alerts`, `pending` or `acknowledge` lists with its
@@ -391,6 +408,11 @@ acknowledgement with that occurrence; a later occurrence starts unacknowledged.
 start event. Event data keeps the existing `condition` field and adds structured
 condition fields when available.
 
+`alert_manager_device_alert_started` fires once when a device's first displayed
+active alert appears. Further alerts on that device do not repeat it. After all
+of its active alerts resolve, a future alert starts a new device occurrence.
+Entities without an associated registry device do not fire this event.
+
 `alert_manager_alert_acknowledged` fires only when an active alert becomes
 acknowledged. `alert_manager_alert_unacknowledged` fires only when that state is
 actually removed. They contain the complete public alert data, the stable `id`,
@@ -412,6 +434,25 @@ actions:
       name: Alert Manager
       message: >-
         {{ trigger.event.event_type }}: {{ trigger.event.data.id }}
+mode: queued
+```
+
+Stabilized per-device notification example:
+
+```yaml
+alias: Alert Manager device notification
+triggers:
+  - trigger: event
+    event_type: alert_manager_device_alert_started
+actions:
+  - action: notify.mobile_app_my_phone
+    data:
+      title: "{{ trigger.event.data.device_name }} is in alert"
+      message: >-
+        {{ trigger.event.data.alert_count }} active alert(s)
+        in {{ trigger.event.data.area | default('an unknown area', true) }}
+      data:
+        tag: "alert_manager_device_{{ trigger.event.data.device_id }}"
 mode: queued
 ```
 

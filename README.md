@@ -9,7 +9,7 @@
 # Alert Manager pour Home Assistant
 
 Alert Manager centralise les anomalies Home Assistant dans un moteur événementiel,
-un panel **Alertes** et un appareil de service regroupant trois capteurs d’alertes
+un panel **Alertes** et un appareil de service regroupant quatre capteurs d’alertes
 et un switch de surveillance.
 
 Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
@@ -37,8 +37,9 @@ Assistant.
   sans fusion des alertes ;
 - acquittement persistant de chaque alerte active depuis le panneau ou les
   automatisations Home Assistant ;
-- appareil `Alert Manager - Général`, switch de surveillance persistant et trois
-  capteurs séparant les alertes actives, à venir et acquittées ;
+- appareil `Alert Manager - Général`, switch de surveillance persistant, trois
+  capteurs séparant les alertes actives, à venir et acquittées et un compteur
+  des appareils en alerte ;
 - édition visuelle ou YAML des règles personnalisées, export YAML complet et
   import YAML de remplacement de la configuration ;
 - historique persistant des alertes réellement activées puis résolues, limité par
@@ -48,7 +49,9 @@ Assistant.
 - événements `alert_manager_alert_started` et
   `alert_manager_alert_resolved`, complétés par
   `alert_manager_alert_acknowledged` et
-  `alert_manager_alert_unacknowledged` ;
+  `alert_manager_alert_unacknowledged`, ainsi que
+  `alert_manager_device_alert_started` lors de l’arrivée d’un nouvel appareil
+  dans l’ensemble actif ;
 - notification persistante de sécurité uniquement lorsque la surveillance est
   encore désactivée au chargement, et aucun polling global fréquent.
 
@@ -143,8 +146,9 @@ Le panel est réservé aux administrateurs et contient cinq sections :
    la ligne ouvre le volet ; l’activation, les sources, la condition, les valeurs,
    la temporisation et le message y sont regroupés clairement. L’interrupteur
    natif en fin de ligne reste disponible pour une activation rapide.
-5. **Configuration** : labels, entités, appareils, délai global, délais
-   particuliers et rétention de l’historique. Les sélections utilisent les
+5. **Configuration** : labels, entités, appareils, délai global, délai
+   d’affichage des alertes actives, délais particuliers et rétention de
+   l’historique. Les sélections utilisent les
    sélecteurs et la recherche natifs de Home Assistant.
 
 ### Rétention et effacement de l’historique
@@ -315,18 +319,19 @@ réutilisés tels quels, sans migration destructive.
 ## Appareil et switch de surveillance
 
 L’appareil de service `Alert Manager - Général`, identifié de façon stable par la
-catégorie `main`, regroupe les quatre entités de cette version :
+catégorie `main`, regroupe les cinq entités de cette version :
 
 - `switch.alert_manager_main_monitoring` ;
 - `sensor.alert_manager_main_active` ;
 - `sensor.alert_manager_main_pending` ;
-- `sensor.alert_manager_main_acknowledge`.
+- `sensor.alert_manager_main_acknowledge` ;
+- `sensor.alert_manager_device_main_active`.
 
 Le switch est actif par défaut et son état est stocké avec la configuration. À
 `off`, le moteur ne crée plus d’alerte, ne fait pas progresser les alertes
 `pending`, gèle leur temps restant, annule leurs timers et conserve toutes les
-occurrences existantes. Les trois capteurs affichent alors `0` avec une liste
-`alerts` vide, sans effacer les données internes. Le panneau affiche un
+occurrences existantes. Les quatre capteurs affichent alors `0` avec leur liste
+`alerts` ou `devices` vide, sans effacer les données internes. Le panneau affiche un
 avertissement avec un bouton de réactivation. À `on`, le décompte reprend au même
 point, la situation courante est réévaluée, les timers utiles sont recréés une
 seule fois et seules les transitions réelles émettent un événement.
@@ -342,14 +347,16 @@ supprimée dès la reprise.
 `sensor.alert_manager` est supprimé du registre des entités lors de la migration
 et remplacé sans capteur de compatibilité durable :
 
-| Nouvelle entité | État | Contenu de `attributes.alerts` |
+| Nouvelle entité | État | Contenu de l’attribut |
 | --- | ---: | --- |
 | `sensor.alert_manager_main_active` | nombre d’actives non acquittées | actives non acquittées uniquement |
 | `sensor.alert_manager_main_pending` | nombre d’alertes à venir | `pending` uniquement |
 | `sensor.alert_manager_main_acknowledge` | nombre d’actives acquittées | actives acquittées uniquement |
+| `sensor.alert_manager_device_main_active` | nombre d’appareils possédant au moins une alerte active affichée | attribut `devices`, alertes acquittées comprises |
 
-Une occurrence n’apparaît jamais dans deux capteurs. Chaque capteur n’expose
-qu’un attribut `alerts`, toujours une liste. Exemple d’alerte de règle :
+Une occurrence n’apparaît jamais dans deux capteurs de cycle. Ceux-ci exposent
+un attribut `alerts` ; le capteur d’appareils expose `devices`. Ces attributs sont
+toujours des listes. Exemple d’alerte de règle :
 
 ```yaml
 state: 1
@@ -380,6 +387,7 @@ attributes:
       due_at: "2026-08-26T10:15:00+02:00"
       delay: 900
       active_since: "2026-08-26T10:15:00+02:00"
+      visible_at: "2026-08-26T10:15:10+02:00"
       acknowledged: false
 ```
 
@@ -390,6 +398,20 @@ restant se calcule à partir de `due_at`. Une alerte acquittée ajoute
 les règles personnalisées. Les métadonnées d’appareil, de zone, d’intégration et
 d’unité restent facultatives. Aucun historique résolu, groupe visuel ou compte à
 rebours périodique n’est enregistré dans les attributs.
+
+Le réglage `active_display_delay`, égal à `10` secondes par défaut, retarde
+uniquement l’exposition d’une alerte déjà active dans le panneau et les capteurs.
+Le délai réellement ajouté est le plus petit entre ce réglage et le délai de
+détection de l’alerte. Une règle temporisée `5` secondes attend donc `5` secondes
+supplémentaires, tandis qu’une règle sans temporisation est affichée
+immédiatement. `visible_at` conserve cette échéance. Si la condition se résout
+avant celle-ci, aucune ligne active ni événement d’appareil n’est produit.
+
+Le capteur d’appareils regroupe uniquement les alertes associées à un appareil du
+registre Home Assistant. Son attribut `devices` contient pour chaque appareil
+`device_id`, `device_name`, `area`, `started_at`, les compteurs d’alertes
+acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas l’appareil :
+il disparaît lorsque sa dernière alerte active est résolue.
 
 Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
 le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
@@ -450,6 +472,13 @@ condition réapparaît, la nouvelle occurrence démarre non acquittée.
 `alert_manager_alert_resolved` avec `resolved_at`. Une alerte déjà active avant un
 redémarrage n’émet pas un second événement de démarrage.
 
+Lorsque le premier élément actif affiché d’un appareil apparaît, l’événement
+`alert_manager_device_alert_started` est émis une seule fois avec les mêmes
+données que l’entrée de `attributes.devices`. Les alertes supplémentaires du même
+appareil ne le répètent pas. Après résolution de toutes ses alertes, une future
+alerte de cet appareil constitue un nouveau démarrage. Les entités sans appareil
+associé ne déclenchent pas cet événement.
+
 Un changement réel d’acquittement émet aussi :
 
 - `alert_manager_alert_acknowledged`, avec les données publiques complètes et
@@ -473,6 +502,25 @@ actions:
       name: Alert Manager
       message: >-
         {{ trigger.event.event_type }} : {{ trigger.event.data.id }}
+mode: queued
+```
+
+Exemple de notification stabilisée par appareil :
+
+```yaml
+alias: Notification appareil Alert Manager
+triggers:
+  - trigger: event
+    event_type: alert_manager_device_alert_started
+actions:
+  - action: notify.mobile_app_mon_telephone
+    data:
+      title: "{{ trigger.event.data.device_name }} en alerte"
+      message: >-
+        {{ trigger.event.data.alert_count }} alerte(s) active(s)
+        dans {{ trigger.event.data.area | default('une zone inconnue', true) }}
+      data:
+        tag: "alert_manager_device_{{ trigger.event.data.device_id }}"
 mode: queued
 ```
 

@@ -56,6 +56,7 @@ from .const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,
+    EVENT_DEVICE_ALERT_STARTED,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
     MONITORING_NOTIFICATION_ID,
@@ -130,6 +131,7 @@ class AlertManager:
         self._excluded_entities: frozenset[str] = frozenset()
         self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
+        self._active_device_ids: set[str] = set()
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -166,6 +168,9 @@ class AlertManager:
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
+        self._active_device_ids = {
+            device["device_id"] for device in self._active_devices()
+        }
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
 
@@ -390,7 +395,9 @@ class AlertManager:
         if restoring and (state is None or state.state == STATE_UNKNOWN):
             for alert_id in existing_ids:
                 record = self.records[alert_id]
-                if record.status is AlertStatus.PENDING:
+                if record.status is AlertStatus.PENDING or not self._active_is_visible(
+                    record, now
+                ):
                     self._schedule_timer(record)
             if publish:
                 self._publish_if_changed()
@@ -422,16 +429,28 @@ class AlertManager:
                     ) < record.due_at.astimezone(UTC):
                         record.status = AlertStatus.PENDING
                         record.active_since = None
+                        record.visible_at = None
                         record.clear_acknowledgement()
+                    elif record.status is AlertStatus.ACTIVE:
+                        self._recalculate_hidden_visibility(record, now)
                     persisted_changed = True
 
             became_active = advance_record(record, now)
             if became_active:
                 persisted_changed = True
                 self._cancel_timer(alert_id)
+                record.visible_at = calculate_due_at(
+                    record.active_since,
+                    min(self.config["active_display_delay"], record.delay),
+                )
+                if not self._active_is_visible(record, now):
+                    self._schedule_timer(record)
                 if emit_events:
                     self._fire_started(record)
-            elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
+            elif (
+                record.status is AlertStatus.PENDING
+                or not self._active_is_visible(record, now)
+            ) and alert_id not in self._timers:
                 self._schedule_timer(record)
 
         for alert_id in existing_ids - candidates.keys():
@@ -819,11 +838,13 @@ class AlertManager:
 
     def public_snapshot(self) -> dict[str, Any]:
         """Return active and pending lists without resolved history."""
+        now = dt_util.now()
         active_records = sorted(
             (
                 record
                 for record in self.records.values()
                 if record.status is AlertStatus.ACTIVE
+                and self._active_is_visible(record, now)
             ),
             key=lambda record: (record.active_since or record.due_at).astimezone(UTC),
         )
@@ -841,6 +862,7 @@ class AlertManager:
         ]
         acknowledged = [alert for alert in active if alert.get("acknowledged") is True]
         pending = [record.as_public_dict() for record in pending_records]
+        active_devices = self._active_devices(active_records)
         return {
             "active_count": len(unacknowledged),
             "acknowledge_count": len(acknowledged),
@@ -849,7 +871,80 @@ class AlertManager:
             "alerts": unacknowledged,
             "acknowledge": acknowledged,
             "pending": pending,
+            "device_active_count": len(active_devices),
+            "active_devices": active_devices,
         }
+
+    def _active_is_visible(
+        self, record: AlertRecord, now: datetime | None = None
+    ) -> bool:
+        """Return whether an active occurrence reached its presentation time."""
+        if record.status is not AlertStatus.ACTIVE:
+            return False
+        if record.visible_at is None:
+            return True
+        current = now or dt_util.now()
+        return current.astimezone(UTC) >= record.visible_at.astimezone(UTC)
+
+    def _recalculate_hidden_visibility(
+        self, record: AlertRecord, now: datetime
+    ) -> None:
+        """Apply current delay settings only while an alert is still hidden."""
+        if record.active_since is None or self._active_is_visible(record, now):
+            return
+        record.visible_at = calculate_due_at(
+            record.active_since,
+            min(self.config["active_display_delay"], record.delay),
+        )
+
+    def _active_devices(
+        self, active_records: list[AlertRecord] | None = None
+    ) -> list[dict[str, Any]]:
+        """Group visible active occurrences by Home Assistant device."""
+        records = active_records
+        if records is None:
+            now = dt_util.now()
+            records = [
+                record
+                for record in self.records.values()
+                if record.status is AlertStatus.ACTIVE
+                and self._active_is_visible(record, now)
+            ]
+        grouped: dict[str, list[AlertRecord]] = {}
+        for record in records:
+            if record.details.device_id:
+                grouped.setdefault(record.details.device_id, []).append(record)
+
+        devices = []
+        for device_id, device_records in grouped.items():
+            ordered = sorted(
+                device_records,
+                key=lambda record: (record.active_since or record.due_at).astimezone(
+                    UTC
+                ),
+            )
+            first = ordered[0]
+            alert_ids = [record.details.id for record in ordered]
+            acknowledged = sum(record.acknowledged for record in ordered)
+            devices.append(
+                {
+                    "device_id": device_id,
+                    "device_name": first.details.device_name or device_id,
+                    "area": first.details.area,
+                    "started_at": (first.active_since or first.due_at).isoformat(),
+                    "alert_count": len(ordered),
+                    "unacknowledged_alert_count": len(ordered) - acknowledged,
+                    "acknowledged_alert_count": acknowledged,
+                    "alert_ids": alert_ids,
+                }
+            )
+        return sorted(
+            devices,
+            key=lambda device: (
+                str(device["device_name"]).casefold(),
+                device["device_id"],
+            ),
+        )
 
     def _tracked_count(self) -> int:
         """Count enabled custom instances and unique automatic sources."""
@@ -1002,7 +1097,7 @@ class AlertManager:
             self.records = previous_records
             self._pending_history = previous_pending_history
             self._cancel_all_timers()
-            self._reschedule_pending_timers()
+            self._reschedule_record_timers()
             raise
 
         if enabled:
@@ -1157,6 +1252,8 @@ class AlertManager:
             self.config = candidate
             self._rebuild_rule_index()
             await self.async_evaluate_all(save=False, publish=False)
+            if "active_display_delay" in changes:
+                self._reschedule_hidden_active_visibility(dt_util.now())
             await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
@@ -1192,6 +1289,7 @@ class AlertManager:
                 publish=False,
                 emit_events=False,
             )
+            self._reschedule_hidden_active_visibility(dt_util.now())
             await self._async_save_state()
         except Exception:
             self._restore_configuration_snapshot(previous)
@@ -1311,7 +1409,7 @@ class AlertManager:
         self.config, self.records, self._pending_history = snapshot
         self._rebuild_rule_index()
         self._refresh_tracking()
-        self._reschedule_pending_timers()
+        self._reschedule_record_timers()
 
     def _remove_rule_instances(self, rule_id: str, entity_ids: set[str]) -> None:
         """Remove configuration-owned instances without user resolution events."""
@@ -1385,12 +1483,24 @@ class AlertManager:
             changed = True
         return changed
 
-    def _reschedule_pending_timers(self) -> None:
-        """Restore timers from records after an unsuccessful configuration swap."""
+    def _reschedule_record_timers(self) -> None:
+        """Restore transition and visibility timers after a configuration swap."""
         if not self.monitoring_enabled:
             return
         for record in self.records.values():
-            if record.status is AlertStatus.PENDING:
+            if record.status is AlertStatus.PENDING or not self._active_is_visible(
+                record
+            ):
+                self._schedule_timer(record)
+
+    def _reschedule_hidden_active_visibility(self, now: datetime) -> None:
+        """Recalculate only not-yet-exposed active alerts and their timers."""
+        for record in self.records.values():
+            if record.status is not AlertStatus.ACTIVE:
+                continue
+            self._recalculate_hidden_visibility(record, now)
+            self._cancel_timer(record.details.id)
+            if not self._active_is_visible(record, now):
                 self._schedule_timer(record)
 
     def _rule_index(self, rule_id: str) -> int:
@@ -1401,12 +1511,17 @@ class AlertManager:
         raise ValueError(f"Unknown rule id: {rule_id}")
 
     def _schedule_timer(self, record: AlertRecord) -> None:
-        """Schedule exactly one timer for a pending alert."""
+        """Schedule exactly one lifecycle or presentation timer for an alert."""
         if not self.monitoring_enabled:
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
-        when = record.due_at.astimezone(UTC)
+        if record.status is AlertStatus.PENDING:
+            when = record.due_at.astimezone(UTC)
+        elif record.visible_at is not None and not self._active_is_visible(record):
+            when = record.visible_at.astimezone(UTC)
+        else:
+            return
 
         @callback
         def timer_due(_now: datetime) -> None:
@@ -1472,11 +1587,21 @@ class AlertManager:
             data["previous_acknowledged_by"] = previous_by
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
+    def _fire_new_device_alerts(self, snapshot: dict[str, Any]) -> None:
+        """Emit one event when a device enters the visible active set."""
+        devices = {
+            device["device_id"]: device for device in snapshot.get("active_devices", [])
+        }
+        for device_id in sorted(devices.keys() - self._active_device_ids):
+            self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, devices[device_id])
+        self._active_device_ids = set(devices)
+
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
         snapshot = self.public_snapshot()
         if not force and snapshot == self._last_public_snapshot:
             return
+        self._fire_new_device_alerts(snapshot)
         self._last_public_snapshot = deepcopy(snapshot)
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)
 

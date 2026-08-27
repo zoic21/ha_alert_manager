@@ -185,6 +185,8 @@
       "yaml_title": "YAML rule"
     },
     "settings": {
+      "active_display_delay": "Active alert display delay",
+      "active_display_delay_help": "An activated alert waits for this delay before appearing as active. When its own detection delay is shorter, that shorter delay is used.",
       "aria_delay": "Delay in seconds",
       "aria_remove_delay": "Delete this delay",
       "delay_help": "Takes priority over the pack delay and global delay.",
@@ -352,6 +354,9 @@
   },
   "entity": {
     "sensor": {
+      "device_main_active": {
+        "name": "Devices in alert"
+      },
       "main_acknowledge": {
         "name": "Acknowledged alerts"
       },

@@ -45,6 +45,7 @@ const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_main_active",
   "sensor.alert_manager_main_pending",
   "sensor.alert_manager_main_acknowledge",
+  "sensor.alert_manager_device_main_active",
   "switch.alert_manager_main_monitoring",
 ];
 
@@ -271,7 +272,7 @@ class AlertManagerPanel extends HTMLElement {
     } else if (this.isConnected && languageChanged && !this._translationPromise) {
       this._reloadTranslations();
     } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._render();
+      this._refreshOverviewData();
     } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
       this._refreshHistory();
     } else if (this.isConnected) {
@@ -511,6 +512,34 @@ class AlertManagerPanel extends HTMLElement {
     this._updateCountdowns();
   }
 
+  _refreshOverviewData() {
+    const tablePage = this.shadowRoot?.querySelector('[data-alert-table-page="overview"]');
+    if (!tablePage) {
+      this._render();
+      return;
+    }
+    const counts = {
+      active: this._alerts.active_count,
+      pending: this._alerts.pending_count,
+      acknowledged: this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0,
+      tracked: this._alerts.tracked_count ?? 0,
+    };
+    for (const [key, count] of Object.entries(counts)) {
+      const value = tablePage.querySelector?.(`[data-summary="${key}"] strong`);
+      if (value) value.textContent = String(count);
+    }
+    const sourceRows = this._tableRows("overview");
+    const visibleRows = this._filteredTableRows("overview", sourceRows, false);
+    tablePage.hass = this._hass;
+    tablePage.data = this._nativeTableData("overview", visibleRows);
+    tablePage._alertManagerRows = tablePage.data;
+    tablePage.selected = this._selectedAlertIds.size;
+    tablePage.noDataText = sourceRows.length
+      ? this._t("table.empty_filtered")
+      : this._t("table.empty_current");
+    this._updateCountdowns();
+  }
+
   _renderPageMessages() {
     return `${!this._monitoringEnabled ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
@@ -580,6 +609,7 @@ class AlertManagerPanel extends HTMLElement {
       tablePage.columnOrder = orderedColumns;
       tablePage.hiddenColumns = hiddenColumns;
       tablePage.data = data;
+      tablePage._alertManagerRows = data;
       tablePage.filter = this._tableState[kind].search;
       tablePage.searchLabel = this._t("table.search");
       tablePage.filters = this._filterCount(kind);
@@ -642,7 +672,9 @@ class AlertManagerPanel extends HTMLElement {
         this._saveTablePreferences();
       });
       tablePage.addEventListener("row-click", (event) => {
-        const row = data.find((item) => String(item.id) === String(event.detail?.id));
+        const row = tablePage._alertManagerRows?.find(
+          (item) => String(item.id) === String(event.detail?.id),
+        );
         if (row?.entityId) this._openMoreInfo(row.entityId);
       });
       if (kind === "overview") {
@@ -696,6 +728,7 @@ class AlertManagerPanel extends HTMLElement {
     table.hass = this._hass;
     table.id = "id";
     table.clickable = true;
+    table.autoHeight = true;
     table.columns = {
       name: {
         title: this._t("rules.name"),
@@ -752,8 +785,24 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleYaml = "";
       this._ruleYamlError = null;
       this._ruleDirty = false;
-      this._render();
+      this._refreshRuleEditor();
     });
+  }
+
+  _refreshRuleEditor() {
+    const layout = this.shadowRoot?.querySelector(".rules-layout");
+    if (!layout || this._activeTab !== "rules") {
+      this._render();
+      return;
+    }
+    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer").forEach((node) => node.remove());
+    layout.classList.toggle("has-editor", this._editingRule !== null);
+    layout.style.setProperty("--rule-editor-width", `${this._ruleEditorWidth}px`);
+    if (this._editingRule !== null) {
+      layout.insertAdjacentHTML("beforeend", this._renderRuleEditor());
+    }
+    this._hydrateSelectors();
+    this._hydrateYamlEditor();
   }
 
   _nativeRuleEntitiesCell(row) {
@@ -885,7 +934,7 @@ class AlertManagerPanel extends HTMLElement {
           } else {
             this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
           }
-          this._render();
+          this._refreshRuleEditor();
         },
       );
       this._configureSelector(
@@ -963,10 +1012,10 @@ class AlertManagerPanel extends HTMLElement {
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
     const summary = `${this._renderPageMessages()}
       <section class="summary">
-        <ha-card outlined data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></ha-card>
-        <ha-card outlined data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></ha-card>
-        <ha-card outlined data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></ha-card>
+        <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></ha-card>
+        <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></ha-card>
       </section>`;
     return this._renderAlertTable("overview", this._tableRows("overview"), summary);
   }
@@ -1561,7 +1610,7 @@ class AlertManagerPanel extends HTMLElement {
     const editor = editorOpen ? this._renderRuleEditor() : "";
     return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px"><ha-card outlined class="panel rules-list-panel">
       <div><h2>${esc(this._t("rules.title"))}</h2><p>${esc(this._t("rules.description"))}</p></div>
-      <ha-data-table id="rules-table" clickable></ha-data-table>
+      <ha-data-table id="rules-table" clickable auto-height></ha-data-table>
       <div class="actions new-rule-action"><ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("rules.new"))}</ha-button></div>
     </ha-card>${editor}</div>`;
   }
@@ -1648,6 +1697,7 @@ class AlertManagerPanel extends HTMLElement {
     return `<form id="settings-form" class="stack">
       <ha-card outlined class="panel"><h2>${esc(this._t("settings.general"))}</h2><div class="fields">
         ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
+        ${this._numberField("active-display-delay", this._t("settings.active_display_delay"), this._config.active_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.active_display_delay_help") })}
         <div class="field"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
         <div class="history-settings full">
           <div class="history-settings-row">
@@ -1824,7 +1874,7 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleYaml = "";
       this._ruleYamlError = null;
       this._ruleDirty = false;
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     if (action === "cancel-rule") {
@@ -1839,7 +1889,7 @@ class AlertManagerPanel extends HTMLElement {
       this._captureRuleDraft();
       this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
       this._ruleDirty = true;
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     if (action === "remove-rule-value") {
@@ -1848,7 +1898,7 @@ class AlertManagerPanel extends HTMLElement {
       values.splice(Number(button.dataset.index), 1);
       this._editingRule.value = values.length ? values : [""];
       this._ruleDirty = true;
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     if (action === "add-entity-delay") {
@@ -1880,7 +1930,7 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleYaml = "";
       this._ruleYamlError = null;
       this._ruleDirty = false;
-      this._render();
+      this._refreshRuleEditor();
     } else if (action === "toggle-rule") {
       await this._toggleRule(rule.id);
     } else if (action === "delete-rule") {
@@ -1993,7 +2043,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
-    this._render();
+    this._refreshRuleEditor();
   }
 
   async _switchRuleEditor() {
@@ -2002,7 +2052,7 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
       this._ruleYamlError = null;
       this._ruleEditorMode = "yaml";
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     const ruleId = this._editingRule?.id;
@@ -2256,6 +2306,7 @@ class AlertManagerPanel extends HTMLElement {
     }
     const changes = {
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
+      active_display_delay: Number(this.shadowRoot.querySelector("#active-display-delay").value),
       excluded_labels: [...this._settingsDraft.excluded_labels],
       excluded_entities: [...this._settingsDraft.excluded_entities],
       excluded_devices: [...this._settingsDraft.excluded_devices],

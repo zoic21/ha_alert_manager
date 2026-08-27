@@ -30,8 +30,8 @@ def event_data(hass, event_type):
     return [data for event, data in hass.bus.fired if event == event_type]
 
 
-def test_main_device_groups_all_four_entities(hass, entry):
-    """The three sensors and switch use one deterministic service device."""
+def test_main_device_groups_all_five_entities(hass, entry):
+    """The four sensors and switch use one deterministic service device."""
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
@@ -39,7 +39,7 @@ def test_main_device_groups_all_four_entities(hass, entry):
     run(setup_sensors(hass, entry, entities.extend))
     run(setup_switch(hass, entry, entities.extend))
 
-    assert len(entities) == 4
+    assert len(entities) == 5
     for entity in entities:
         assert entity._attr_device_info == {
             "identifiers": {("alert_manager", "main")},
@@ -270,12 +270,16 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         assert {alert["id"] for alert in alerts} == ids
         all_ids.extend(alert["id"] for alert in alerts)
     assert len(all_ids) == len(set(all_ids))
+    device_sensor = by_id["sensor.alert_manager_device_main_active"]
+    assert device_sensor.native_value == 0
+    assert device_sensor.extra_state_attributes == {"devices": []}
 
     run(manager.async_set_monitoring(False))
     assert len(manager.records) == 3
     for sensor in sensors:
         assert sensor.native_value == 0
-        assert sensor.extra_state_attributes == {"alerts": []}
+        expected_attribute = "devices" if sensor is device_sensor else "alerts"
+        assert sensor.extra_state_attributes == {expected_attribute: []}
 
 
 def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):

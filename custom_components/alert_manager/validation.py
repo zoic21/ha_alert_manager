@@ -24,6 +24,7 @@ from .models import Rule, safe_float
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
     "global_delay",
+    "active_display_delay",
     "excluded_labels",
     # Accepted only so a cached V1 panel can update safely during migration.
     "exclusion_label",
@@ -97,6 +98,10 @@ def validate_config(config: Any) -> dict[str, Any]:
     result["history_limit"] = history_limit
     result["global_delay"] = validate_delay(
         config.get("global_delay", result["global_delay"]), "global_delay"
+    )
+    result["active_display_delay"] = validate_delay(
+        config.get("active_display_delay", result["active_display_delay"]),
+        "active_display_delay",
     )
 
     result["excluded_labels"] = validate_label_list(config.get("excluded_labels", []))

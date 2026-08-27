@@ -185,6 +185,8 @@
       "yaml_title": "Règle YAML"
     },
     "settings": {
+      "active_display_delay": "Délai d’affichage des alertes actives",
+      "active_display_delay_help": "Une alerte activée attend ce délai avant d’apparaître dans les alertes actives. Si son propre délai de détection est plus court, ce délai plus court est utilisé.",
       "aria_delay": "Délai en secondes",
       "aria_remove_delay": "Supprimer ce délai",
       "delay_help": "Prioritaire sur le délai du pack et le délai global.",
@@ -352,6 +354,9 @@
   },
   "entity": {
     "sensor": {
+      "device_main_active": {
+        "name": "Appareils en alerte"
+      },
       "main_acknowledge": {
         "name": "Alertes acquittées"
       },

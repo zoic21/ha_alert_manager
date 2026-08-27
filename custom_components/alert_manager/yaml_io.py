@@ -34,6 +34,7 @@ _RULE_YAML_KEYS = {
 _CONFIG_YAML_KEY_ORDER = (
     "monitoring_enabled",
     "global_delay",
+    "active_display_delay",
     "excluded_labels",
     "excluded_entities",
     "excluded_devices",
@@ -186,7 +187,14 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
     _reject_unknown(config, _CONFIG_YAML_KEYS, prefix="config")
     # V1.5 exports predate the persistent category switch. They remain safe to
     # import and default monitoring to enabled.
-    missing_config = _CONFIG_YAML_KEYS - {"monitoring_enabled"} - set(config)
+    missing_config = (
+        _CONFIG_YAML_KEYS
+        - {
+            "monitoring_enabled",
+            "active_display_delay",
+        }
+        - set(config)
+    )
     if missing_config:
         raise ValueError(f"Missing config field: {sorted(missing_config)[0]}")
     automatic = config.get("automatic")

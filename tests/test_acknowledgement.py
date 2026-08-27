@@ -34,6 +34,7 @@ def active_manager(hass, entry, set_now, entity_id="sensor.test"):
     hass.states.set(entity_id, "unavailable", {"friendly_name": "Test"})
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
+    run(manager.async_update_config({"active_display_delay": 0}))
     set_now(start + timedelta(seconds=901))
     run(manager.async_evaluate_entity(entity_id))
     return manager, f"unavailable:{entity_id}"
@@ -60,7 +61,13 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert snapshot["alerts"] == []
     assert (
         AlertManagerSensor(
-            manager, "active", "mdi:alert-circle", "active_count", "alerts"
+            manager,
+            "main_active",
+            "alert_manager_main_active",
+            "mdi:alert-circle",
+            "active_count",
+            "alerts",
+            "alerts",
         ).native_value
         == 0
     )
@@ -86,7 +93,13 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert snapshot["acknowledge_count"] == 0
     assert (
         AlertManagerSensor(
-            manager, "active", "mdi:alert-circle", "active_count", "alerts"
+            manager,
+            "main_active",
+            "alert_manager_main_active",
+            "mdi:alert-circle",
+            "active_count",
+            "alerts",
+            "alerts",
         ).native_value
         == 1
     )

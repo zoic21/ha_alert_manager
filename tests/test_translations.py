@@ -46,6 +46,7 @@ def test_translation_files_are_complete_independent_catalogs() -> None:
     assert "entity.sensor.main_active.name" in english
     assert "entity.sensor.main_pending.name" in english
     assert "entity.sensor.main_acknowledge.name" in english
+    assert "entity.sensor.device_main_active.name" in english
     assert "entity.switch.main_monitoring.name" in english
     assert "config_panel.monitoring.notification_message" in english
     assert "services.acknowledge.fields.alert_id.description" in english
