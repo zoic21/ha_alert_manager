@@ -14,12 +14,11 @@ from .const import (
     DEFAULT_CONFIG,
     MAX_DELAY,
     MAX_HISTORY_LIMIT,
-    MAX_THRESHOLD,
     MIN_DELAY,
     MIN_HISTORY_LIMIT,
-    MIN_THRESHOLD,
 )
 from .models import Rule, safe_float
+from .packs import PACKS, PACKS_BY_ID
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
@@ -37,11 +36,11 @@ _CONFIG_UPDATE_KEYS = {
     "rules",
 }
 _AUTOMATIC_KEYS = {
-    "unavailable": {"enabled", "delay", "domains"},
-    "connectivity": {"enabled", "delay"},
-    "unifi": {"enabled", "delay"},
-    "battery": {"enabled", "delay", "threshold"},
+    pack.id: {"enabled", "delay", *(field.id for field in pack.config_fields)}
+    for pack in PACKS
 }
+# Accepted only so a cached V1 panel can finish one safe migration update.
+_AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
     "name",
     "entity_ids",
@@ -52,6 +51,7 @@ _RULE_CLIENT_KEYS = {
     "value",
     "duration",
     "message",
+    "condition_template",
 }
 _REQUIRED_RULE_KEYS = {"name", "entity_ids", "operator", "value", "duration"}
 
@@ -155,16 +155,19 @@ def validate_config(config: Any) -> dict[str, Any]:
             else validate_delay(pack_delay, f"automatic.{category}.delay")
         )
 
-        if category == "battery":
-            threshold = safe_float(
-                incoming.get("threshold", category_config["threshold"])
+        for field in PACKS_BY_ID[category].config_fields:
+            raw_value = incoming.get(
+                field.id,
+                category_config.get(field.id, deepcopy(field.default)),
             )
-            if threshold is None or not MIN_THRESHOLD <= threshold <= MAX_THRESHOLD:
-                raise ValueError(
-                    "automatic.battery.threshold must be a finite number "
-                    f"between {MIN_THRESHOLD:g} and {MAX_THRESHOLD:g}"
-                )
-            category_config["threshold"] = threshold
+            category_config[field.id] = _normalize_pack_field(
+                category,
+                field.id,
+                field.type,
+                raw_value,
+                field.minimum,
+                field.maximum,
+            )
 
     rules = config.get("rules", [])
     if not isinstance(rules, list):
@@ -182,6 +185,56 @@ def validate_config(config: Any) -> dict[str, Any]:
         normalized_rules.append(rule.as_dict())
     result["rules"] = normalized_rules
     return result
+
+
+def _normalize_pack_field(
+    pack_id: str,
+    field_id: str,
+    field_type: str,
+    value: Any,
+    minimum: float | None,
+    maximum: float | None,
+) -> Any:
+    """Normalize one backend-declared pack field."""
+    path = f"automatic.{pack_id}.{field_id}"
+    if field_type == "number":
+        return _validate_pack_number(value, path, minimum, maximum)
+    if field_type == "device_number_map":
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be an object")
+        normalized: dict[str, float] = {}
+        for device_id, threshold in value.items():
+            if not isinstance(device_id, str) or not _DEVICE_ID_RE.fullmatch(device_id):
+                raise ValueError(f"{path} contains an invalid device id")
+            normalized[device_id] = _validate_pack_number(
+                threshold,
+                f"{path}.{device_id}",
+                minimum,
+                maximum,
+            )
+        return normalized
+    raise ValueError(f"Unsupported pack configuration field type: {field_type}")
+
+
+def _validate_pack_number(
+    value: Any,
+    path: str,
+    minimum: float | None,
+    maximum: float | None,
+) -> float:
+    """Return a finite pack number inside its declared bounds."""
+    number = safe_float(value)
+    if (
+        number is None
+        or (minimum is not None and number < minimum)
+        or (maximum is not None and number > maximum)
+    ):
+        if minimum is not None and maximum is not None:
+            raise ValueError(
+                f"{path} must be a finite number between {minimum:g} and {maximum:g}"
+            )
+        raise ValueError(f"{path} must be a finite number")
+    return number
 
 
 def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:

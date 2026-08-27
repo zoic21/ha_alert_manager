@@ -2,6 +2,36 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev19 — 27 août 2026
+
+### Ajouté
+
+- Les règles personnalisées acceptent une `condition_template` Jinja facultative.
+  Lorsqu’elle est définie, elle doit rendre `true` en plus de la comparaison
+  existante pour créer ou maintenir l’alerte. Le backend valide sa syntaxe,
+  fournit `entity_id`, `state` et `value`, et réévalue la règle quand une entité
+  référencée par le template change.
+- Le pack batteries déclare désormais lui-même ses champs supplémentaires dans
+  ses métadonnées. Il expose notamment `device_thresholds`, une table
+  appareil → seuil éditable avec les sélecteurs Home Assistant. Le seuil propre
+  à l’appareil est prioritaire sur `low_battery_level`, puis sur le seuil global.
+
+### Modifié
+
+- `sensor.alert_manager_device_main_active` n’expose plus les tableaux globaux
+  `messages` et `rules`. Chaque entrée de `devices` conserve ses propres tableaux,
+  correspondant exactement aux alertes de ce groupe.
+- `alert_manager_device_alert_started` attend désormais 10 secondes sans nouvelle
+  alerte pour le même groupe avant son émission. Toute alerte supplémentaire
+  pendant ce délai redémarre la temporisation ; l’événement final contient les
+  tableaux stabilisés `messages` et `rules` du groupe.
+
+### Tests
+
+- 154 tests backend et 69 tests frontend couvrent les seuils batterie par
+  appareil, les métadonnées déclaratives du pack, la condition Jinja et ses
+  dépendances, le debounce d’événement ainsi que la nouvelle forme du capteur.
+
 ## 1.7.0-dev18 — 27 août 2026
 
 ### Corrigé

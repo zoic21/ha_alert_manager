@@ -344,6 +344,23 @@ def test_unknown_frontend_fields_are_rejected():
         )
 
 
+def test_pack_declared_device_number_map_is_strictly_validated():
+    """Pack metadata fields reject malformed device IDs and numeric values."""
+    device_id = "a" * 32
+    normalized = validate_config(
+        {"automatic": {"battery": {"device_thresholds": {device_id: "22"}}}}
+    )
+    assert normalized["automatic"]["battery"]["device_thresholds"] == {device_id: 22.0}
+    with pytest.raises(ValueError, match="invalid device id"):
+        validate_config(
+            {"automatic": {"battery": {"device_thresholds": {"invalid": 20}}}}
+        )
+    with pytest.raises(ValueError, match="finite number"):
+        validate_config(
+            {"automatic": {"battery": {"device_thresholds": {device_id: float("nan")}}}}
+        )
+
+
 def test_rule_entity_ids_must_be_unique():
     """One source cannot be evaluated twice inside the same rule."""
     with pytest.raises(ValueError, match="repeated"):
@@ -366,6 +383,8 @@ def test_rule_entity_ids_must_be_unique():
         ({"version": True}, "version"),
         ({"source": "attribute", "attribute": 42}, "Attribute"),
         ({"message": 42}, "message"),
+        ({"condition_template": ""}, "condition_template"),
+        ({"condition_template": 42}, "condition_template"),
     ],
 )
 def test_rule_metadata_types_are_strict(changes, message):

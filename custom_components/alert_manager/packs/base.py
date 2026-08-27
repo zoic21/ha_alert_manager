@@ -21,6 +21,37 @@ class PackMatch:
 
 
 @dataclass(frozen=True, slots=True)
+class PackConfigField:
+    """Describe one pack-owned configuration field for validation and the UI."""
+
+    id: str
+    type: str
+    translation_key: str
+    default: Any
+    minimum: float | None = None
+    maximum: float | None = None
+    step: str | float = "any"
+    unit: str | None = None
+
+    def as_public_dict(self) -> dict[str, Any]:
+        """Expose a serializable description without frontend pack special cases."""
+        return {
+            key: value
+            for key, value in {
+                "id": self.id,
+                "type": self.type,
+                "translation_key": self.translation_key,
+                "default": self.default,
+                "minimum": self.minimum,
+                "maximum": self.maximum,
+                "step": self.step,
+                "unit": self.unit,
+            }.items()
+            if value is not None
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class AutomaticPack:
     """Stable metadata and isolated evaluation function for an automatic pack."""
 
@@ -29,6 +60,7 @@ class AutomaticPack:
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
+    config_fields: tuple[PackConfigField, ...] = ()
 
     def available(self, hass: HomeAssistant) -> bool:
         """Return whether every required integration has one usable entry."""
@@ -46,9 +78,14 @@ class AutomaticPack:
 
     def as_public_dict(self, hass: HomeAssistant) -> dict[str, Any]:
         """Expose stable metadata and current runtime availability to the panel."""
-        return {
+        result = {
             "id": self.id,
             "translation_key": self.translation_key,
             "prerequisites": list(self.prerequisites),
             "available": self.available(hass),
         }
+        if self.config_fields:
+            result["config_fields"] = [
+                field.as_public_dict() for field in self.config_fields
+            ]
+        return result

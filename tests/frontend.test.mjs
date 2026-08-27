@@ -151,6 +151,7 @@ test("new rules start enabled with safe defaults", () => {
     value: [""],
     duration: 900,
     message: "",
+    condition_template: "",
   });
 });
 
@@ -224,7 +225,7 @@ const completeConfig = () => ({
     unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
     unifi: { enabled: true, delay: 900 },
-    battery: { enabled: true, delay: 900, threshold: 15 },
+    battery: { enabled: true, delay: 900, threshold: 15, device_thresholds: {} },
   },
   rules: [],
   global_delay: 900,
@@ -358,6 +359,28 @@ const completePacks = () => [
     translation_key: "battery",
     prerequisites: [],
     available: true,
+    config_fields: [
+      {
+        id: "threshold",
+        type: "number",
+        translation_key: "threshold",
+        default: 15,
+        minimum: -1000000000,
+        maximum: 1000000000,
+        step: "any",
+        unit: "%",
+      },
+      {
+        id: "device_thresholds",
+        type: "device_number_map",
+        translation_key: "device_thresholds",
+        default: {},
+        minimum: -1000000000,
+        maximum: 1000000000,
+        step: "any",
+        unit: "%",
+      },
+    ],
   },
 ];
 
@@ -455,8 +478,11 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
     },
   };
   const ruleForm = form(ruleValues());
-  panel.shadowRoot.querySelector = (selector) =>
-    selector === "#rule-form" ? ruleForm : null;
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "#rule-form") return ruleForm;
+    if (selector === "#rule-condition-template") return { value: "{{ true }}" };
+    return null;
+  };
   panel._render = () => {};
 
   await panel._handleClick(actionEvent("save-rule"));
@@ -474,6 +500,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         value: ["0"],
         duration: 900,
         message: null,
+        condition_template: "{{ true }}",
       },
     },
   ]);
@@ -1579,7 +1606,7 @@ test("automatic monitoring action serializes all category controls", async () =>
     "#auto-unifi-delay": { value: "180" },
     "#auto-battery-enabled": { checked: true },
     "#auto-battery-delay": { value: "240" },
-    "#battery-threshold": { value: "12" },
+    "#auto-battery-threshold": { value: "12" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   let call;
@@ -1591,7 +1618,7 @@ test("automatic monitoring action serializes all category controls", async () =>
     unavailable: { enabled: true, delay: 60 },
     connectivity: { enabled: false, delay: 120 },
     unifi: { enabled: true, delay: 180 },
-    battery: { enabled: true, delay: 240, threshold: 12 },
+    battery: { enabled: true, delay: 240, threshold: 12, device_thresholds: {} },
   });
 });
 

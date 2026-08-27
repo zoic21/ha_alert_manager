@@ -106,7 +106,12 @@ class ServiceValidationError(Exception):
     pass
 
 
+class TemplateError(Exception):
+    pass
+
+
 exceptions.ServiceValidationError = ServiceValidationError
+exceptions.TemplateError = TemplateError
 
 config_entries = _module("homeassistant.config_entries")
 
@@ -265,6 +270,71 @@ def async_track_point_in_utc_time(hass, action, point):
 
 
 event_helper.async_track_point_in_utc_time = async_track_point_in_utc_time
+
+template_helper = _module("homeassistant.helpers.template")
+
+
+class RenderInfo:
+    def __init__(self, result, entities):
+        self._result = result
+        self.entities = frozenset(entities)
+
+    def result(self):
+        return self._result
+
+    def filter(self, entity_id):
+        return entity_id in self.entities
+
+
+class Template:
+    def __init__(self, template, hass):
+        self.template = template.strip()
+        self.hass = hass
+        self._compiled = None
+
+    def ensure_valid(self):
+        if (
+            self.template.count("{{") != self.template.count("}}")
+            or "{% if %}" in self.template
+        ):
+            raise TemplateError("invalid template syntax")
+        self._compiled = self.template
+
+    def async_render_to_info(self, variables=None):
+        if self._compiled is None:
+            self.ensure_valid()
+        variables = dict(variables or {})
+
+        def states(entity_id):
+            state = self.hass.states.get(entity_id)
+            return state.state if state is not None else "unknown"
+
+        def is_state(entity_id, value):
+            return states(entity_id) == value
+
+        entities = set(
+            re.findall(
+                r"(?:states|is_state)\(\s*['\"]([a-z0-9_]+\.[a-z0-9_]+)['\"]",
+                self.template,
+            )
+        )
+        expression = self.template.strip()
+        is_state_match = re.fullmatch(
+            r"{{\s*is_state\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)\s*}}",
+            expression,
+        )
+        if is_state_match:
+            result = str(is_state(*is_state_match.groups())).lower()
+        elif expression in ("{{ true }}", "true", "True"):
+            result = "true"
+        elif expression in ("{{ false }}", "false", "False"):
+            result = "false"
+        else:
+            result = expression
+        return RenderInfo(result, entities)
+
+
+template_helper.Template = Template
 
 storage = _module("homeassistant.helpers.storage")
 

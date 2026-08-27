@@ -161,7 +161,10 @@ temporarily unavailable.
 
 A `sensor` with `device_class: battery` is in alert when its numeric value is less
 than or equal to the configured threshold (15% by default). A numeric
-`low_battery_level` attribute overrides the global threshold for that entity.
+`low_battery_level` attribute overrides the global threshold for that entity. The
+pack also declares `device_thresholds`, a panel-managed device-to-threshold map.
+A device threshold takes precedence over `low_battery_level` and the global
+threshold.
 Invalid numbers, booleans, `NaN`, infinity, `unknown` and `unavailable` are ignored
 by this pack.
 
@@ -208,6 +211,12 @@ Duplicate or empty text values are rejected. Numeric comparisons reject booleans
 invalid values, `NaN` and infinity. A missing attribute does not match. Main
 states `unknown` and `unavailable` are left to automatic detection.
 
+An optional Jinja `condition_template` can complement the comparison. When set,
+both the comparison and the template must remain true for the configured delay.
+`entity_id`, `state` and `value` are available alongside Home Assistant's usual
+Jinja functions. An entity referenced by the template automatically re-evaluates
+the rule when it changes.
+
 Examples include `binary_sensor.service equals off`, `sensor.ups_status contains
 CHRG or ERROR`, `sensor.mode not_equals off or idle`, and
 `sensor.fridge_temperature above 9` for 1,800 seconds.
@@ -231,15 +240,18 @@ operator: above
 value: 33
 duration: 900
 message: null
+condition_template: >-
+  {{ is_state('input_boolean.rack_maintenance', 'off') }}
 ```
 
 `entity_ids` is a required list and each source is evaluated independently.
 `source` is `state` or `attribute`; `attribute` is required only for the latter.
 `duration` is seconds. `equals`, `not_equals`, `contains` and `not_contains`
 accept either one scalar value or a YAML list; `above` and `below` require one
-finite numeric value. This syntax intentionally is **not** Home Assistant
-automation-condition YAML: it has no templates, `and`/`or`/`not` groups,
-arbitrary conditions or the automation condition engine.
+finite numeric value. `condition_template` is optional and must render `true`.
+This syntax intentionally is **not** Home Assistant automation-condition YAML:
+it has no `and`/`or`/`not` groups, arbitrary conditions or the automation
+condition engine.
 
 ### Full configuration export and import
 
@@ -358,7 +370,8 @@ while `device_ids` contains every grouped identifier. A device-less entity still
 forms its own group: `device_id` is its `entity_id`, `device_name` is its entity
 name and `device_ids` contains that single identifier. Each item in
 `attributes.devices` also contains `area`, `started_at`,
-acknowledged/unacknowledged counts and `alert_ids`.
+acknowledged/unacknowledged counts, `alert_ids`, and group-specific `messages`
+and `rules` arrays. The sensor exposes no global `messages` or `rules` arrays.
 Acknowledgement does not remove a device; its last active alert must resolve.
 
 Cards and automations reading `sensor.alert_manager` must target the appropriate
@@ -416,9 +429,12 @@ acknowledgement with that occurrence; a later occurrence starts unacknowledged.
 start event. Event data keeps the existing `condition` field and adds structured
 condition fields when available.
 
-`alert_manager_device_alert_started` fires once when a same-name device group's
-or device-less entity's first active alert appears. Further alerts in that group
-do not repeat it. After all of its active alerts resolve, a future alert starts a
+`alert_manager_device_alert_started` waits until a same-name device group or
+device-less entity has received no new alert for 10 seconds, then fires once.
+Each new alert during that quiet period restarts the delay. The event therefore
+contains the stabilized `attributes.devices` data, including its `messages` and
+`rules` arrays. Later alerts do not repeat it. After all of its active alerts
+resolve, a future alert starts a
 new occurrence. For a device-less entity, `device_id` contains its `entity_id`
 and `device_name` contains its entity name.
 

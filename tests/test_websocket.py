@@ -105,6 +105,12 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "prerequisites": ["unifi"],
         "available": False,
     }
+    battery = next(pack for pack in packs if pack["id"] == "battery")
+    assert [field["id"] for field in battery["config_fields"]] == [
+        "threshold",
+        "device_thresholds",
+    ]
+    assert battery["config_fields"][1]["type"] == "device_number_map"
 
 
 def test_websocket_rule_actions_create_update_and_delete(hass, entry):

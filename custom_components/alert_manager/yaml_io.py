@@ -30,6 +30,7 @@ _RULE_YAML_KEYS = {
     "value",
     "duration",
     "message",
+    "condition_template",
 }
 _CONFIG_YAML_KEY_ORDER = (
     "monitoring_enabled",
@@ -118,6 +119,7 @@ def rule_to_yaml_data(
             "value": data.get("value"),
             "duration": data.get("duration"),
             "message": data.get("message"),
+            "condition_template": data.get("condition_template"),
         }
     )
     if include_id:

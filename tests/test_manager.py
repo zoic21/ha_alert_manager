@@ -38,6 +38,16 @@ def make_manager(hass, entry):
     return manager
 
 
+def fire_device_event_timers(hass):
+    """Run every pending 10-second device-event debounce timer."""
+    for timer in list(hass.timers):
+        if timer["cancelled"]:
+            continue
+        if "_schedule_device_event_timer" not in timer["action"].__qualname__:
+            continue
+        timer["action"](timer["point"])
+
+
 def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     """The sensor platform exposes three partitions and one device counter."""
     registry_entry(
@@ -69,11 +79,7 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         "sensor.alert_manager_main_active": {"alerts": []},
         "sensor.alert_manager_main_pending": {"alerts": []},
         "sensor.alert_manager_main_acknowledge": {"alerts": []},
-        "sensor.alert_manager_device_main_active": {
-            "devices": [],
-            "messages": [],
-            "rules": [],
-        },
+        "sensor.alert_manager_device_main_active": {"devices": []},
     }
     assert all(
         entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
@@ -174,6 +180,7 @@ def test_pending_alert_is_exposed_after_configured_display_delay(
     assert snapshot["device_active_count"] == 1
     assert snapshot["active_devices"][0]["device_name"] == "Onduleur"
     assert snapshot["active_devices"][0]["alert_ids"] == ["unavailable:sensor.ups"]
+    fire_device_event_timers(hass)
     events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
@@ -408,6 +415,92 @@ def test_battery_entity_low_level_override(hass, entry):
     )
     manager = make_manager(hass, entry)
     assert "25 %" in manager.records["battery:sensor.battery"].details.condition
+
+
+def test_battery_device_threshold_overrides_entity_and_global_thresholds(
+    hass, entry, registry_entry, device_entry
+):
+    """The battery pack owns a replaceable per-device threshold mapping."""
+    device = device_entry(hass, name="Télécommande")
+    registry_entry(hass, "sensor.remote_battery", device_id=device.id)
+    hass.states.set(
+        "sensor.remote_battery",
+        "20",
+        {"device_class": "battery", "low_battery_level": 10},
+    )
+    manager = make_manager(hass, entry)
+    assert "battery:sensor.remote_battery" not in manager.records
+
+    run(
+        manager.async_update_config(
+            {"automatic": {"battery": {"device_thresholds": {device.id: 25}}}}
+        )
+    )
+    record = manager.records["battery:sensor.remote_battery"]
+    assert "25 %" in record.details.condition
+
+    run(
+        manager.async_update_config(
+            {"automatic": {"battery": {"device_thresholds": {}}}}
+        )
+    )
+    assert manager.config["automatic"]["battery"]["device_thresholds"] == {}
+    assert "battery:sensor.remote_battery" not in manager.records
+
+
+def test_custom_rule_requires_its_optional_jinja_condition(hass, entry):
+    """A tracked Jinja dependency can open and resolve a matching rule."""
+    hass.states.set("sensor.source", "on")
+    hass.states.set("input_boolean.guard", "off")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Guarded rule",
+                "entity_ids": ["sensor.source"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "condition_template": "{{ is_state('input_boolean.guard', 'on') }}",
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        assert alert_id not in manager.records
+
+        hass.states.set("input_boolean.guard", "on")
+        manager._state_changed(Event({"entity_id": "input_boolean.guard"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+        hass.states.set("input_boolean.guard", "off")
+        manager._state_changed(Event({"entity_id": "input_boolean.guard"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in manager.records
+
+    run(scenario())
+
+
+def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
+    """Invalid templates never reach storage or runtime evaluation."""
+    hass.states.set("sensor.source", "on")
+    manager = make_manager(hass, entry)
+    with pytest.raises(ValueError, match="Invalid rule condition_template"):
+        run(
+            manager.async_create_rule(
+                {
+                    "name": "Invalid Jinja",
+                    "entity_ids": ["sensor.source"],
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 0,
+                    "condition_template": "{% if %}",
+                }
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -801,8 +894,65 @@ def test_same_entity_can_belong_to_multiple_rules(hass, entry):
     assert snapshot["active_devices"][0]["rules"] == ["First", "Second"]
 
 
-def test_device_sensor_flattens_unique_messages_and_rules():
-    """Top-level attributes aggregate device details without duplicates."""
+def test_device_event_debounces_new_alerts_and_includes_rule_message_arrays(
+    hass, entry, registry_entry, device_entry
+):
+    """The device event waits for ten quiet seconds and emits the final group."""
+    device = device_entry(hass, name="Baie")
+    registry_entry(hass, "sensor.rack", device_id=device.id)
+    hass.states.set("sensor.rack", "hot")
+    manager = make_manager(hass, entry)
+
+    first = run(
+        manager.async_create_rule(
+            {
+                "name": "Temperature",
+                "entity_ids": ["sensor.rack"],
+                "operator": "equals",
+                "value": "hot",
+                "duration": 0,
+                "message": "Rack hot",
+            }
+        )
+    )
+    first_timer = next(
+        timer
+        for timer in reversed(hass.timers)
+        if not timer["cancelled"]
+        and "_schedule_device_event_timer" in timer["action"].__qualname__
+    )
+    assert not [
+        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+
+    second = run(
+        manager.async_create_rule(
+            {
+                "name": "Ventilation",
+                "entity_ids": ["sensor.rack"],
+                "operator": "equals",
+                "value": "hot",
+                "duration": 0,
+                "message": "Fan stopped",
+            }
+        )
+    )
+    assert first_timer["cancelled"] is True
+    fire_device_event_timers(hass)
+    events = [
+        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
+    ]
+    assert len(events) == 1
+    assert set(events[0]["alert_ids"]) == {
+        f"rule:{first['id']}:sensor.rack",
+        f"rule:{second['id']}:sensor.rack",
+    }
+    assert events[0]["messages"] == ["Rack hot", "Fan stopped"]
+    assert events[0]["rules"] == ["Temperature", "Ventilation"]
+
+
+def test_device_sensor_keeps_messages_and_rules_inside_each_device():
+    """The device sensor exposes no misleading global message/rule arrays."""
     devices = [
         {
             "device_id": "one",
@@ -832,11 +982,7 @@ def test_device_sensor_flattens_unique_messages_and_rules():
         "devices",
     )
 
-    assert sensor.extra_state_attributes == {
-        "devices": devices,
-        "messages": ["Battery low", "Offline", "Temperature high"],
-        "rules": ["Battery", "Unavailable", "Temperature"],
-    }
+    assert sensor.extra_state_attributes == {"devices": devices}
 
 
 def test_tracked_count_combines_custom_instances_and_automatic_entities(
@@ -1085,6 +1231,7 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
     }
+    fire_device_event_timers(hass)
     device_started = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
@@ -1130,6 +1277,7 @@ def test_devices_with_the_same_name_share_one_active_group(
     initial = manager.public_snapshot()
     assert initial["device_active_count"] == 1
     assert initial["active_devices"][0]["device_ids"] == [first_device.id]
+    fire_device_event_timers(hass)
     device_events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]
@@ -1200,6 +1348,7 @@ def test_entities_without_devices_are_counted_individually(hass, entry):
         device["device_ids"] == [device["device_id"]]
         for device in snapshot["active_devices"]
     )
+    fire_device_event_timers(hass)
     events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]

@@ -13,10 +13,20 @@
   "config_panel": {
     "automatic": {
       "aria_enable": "Enable {name}",
+      "device_threshold_validation": "Each row must contain a device and a valid numeric threshold.",
+      "duplicate_device_threshold": "A device can have only one custom threshold.",
       "empty_delay_help": "Leave the delay empty to use the global delay.",
+      "fields": {
+        "device_thresholds": {
+          "help": "The device threshold takes precedence over low_battery_level and the global threshold.",
+          "label": "Custom thresholds by device"
+        },
+        "threshold": {
+          "label": "Global threshold"
+        }
+      },
       "pack_delay": "Pack delay",
-      "save": "Save automatic monitoring",
-      "threshold": "Threshold"
+      "save": "Save automatic monitoring"
     },
     "buttons": {
       "add": "Add",
@@ -95,6 +105,8 @@
       "aria_acknowledge": "Acknowledge alert {id}",
       "aria_unacknowledge": "Remove acknowledgement from alert {id}",
       "condition": "Condition",
+      "condition_template": "Additional Jinja condition",
+      "condition_template_help": "Optional. The template must return true in addition to the comparison. Available variables: entity_id, state and value.",
       "detected": "Detected",
       "device": "Device",
       "device_fallback": "Device",
@@ -180,7 +192,7 @@
       "title": "Custom rules",
       "value": "Comparison value",
       "values": "Comparison values",
-      "yaml_help": "Only Alert Manager comparison fields are supported. This is not an automation condition and does not support templates, and/or or not groups.",
+      "yaml_help": "The rule supports the Alert Manager comparison and an optional Jinja condition_template. Automation and, or and not groups are not supported.",
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule"
     },

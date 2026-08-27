@@ -135,23 +135,7 @@ class AlertManagerSensor(SensorEntity):
         """Return only the alerts represented by this sensor."""
         if not self.manager.monitoring_enabled:
             if self._attribute_key == "devices":
-                return {"devices": [], "messages": [], "rules": []}
+                return {"devices": []}
             return {self._attribute_key: []}
         items = self._snapshot[self._items_key]
-        if self._attribute_key != "devices":
-            return {self._attribute_key: items}
-        return {
-            "devices": items,
-            "messages": list(
-                dict.fromkeys(
-                    message
-                    for device in items
-                    for message in device.get("messages", ())
-                )
-            ),
-            "rules": list(
-                dict.fromkeys(
-                    rule for device in items for rule in device.get("rules", ())
-                )
-            ),
-        }
+        return {self._attribute_key: items}

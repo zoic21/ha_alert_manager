@@ -10,10 +10,8 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "1.7.0-dev18"
-# The dev18 release was republished in place; keep a distinct frontend cache key
-# so browsers do not retain the bundle from the earlier dev18 build.
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}-2"
+INTEGRATION_VERSION: Final = "1.7.0-dev19"
+FRONTEND_CACHE_VERSION: Final = INTEGRATION_VERSION
 PLATFORMS: Final = [Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -21,6 +19,7 @@ EVENT_ALERT_RESOLVED: Final = "alert_manager_alert_resolved"
 EVENT_ALERT_ACKNOWLEDGED: Final = "alert_manager_alert_acknowledged"
 EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
 EVENT_DEVICE_ALERT_STARTED: Final = "alert_manager_device_alert_started"
+DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
 SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"
@@ -52,7 +51,7 @@ PANEL_STATIC_URL: Final = "/alert_manager_static"
 STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 9
+STORAGE_MINOR_VERSION: Final = 10
 HISTORY_STORAGE_VERSION: Final = 1
 
 DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
@@ -98,6 +97,7 @@ DEFAULT_CONFIG: Final = {
             "enabled": True,
             "delay": None,
             "threshold": DEFAULT_BATTERY_THRESHOLD,
+            "device_thresholds": {},
         },
     },
     "rules": [],

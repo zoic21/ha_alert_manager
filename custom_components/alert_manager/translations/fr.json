@@ -13,10 +13,20 @@
   "config_panel": {
     "automatic": {
       "aria_enable": "Activer {name}",
+      "device_threshold_validation": "Chaque ligne doit contenir un appareil et un seuil numérique valide.",
+      "duplicate_device_threshold": "Un appareil ne peut avoir qu’un seul seuil personnalisé.",
       "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
+      "fields": {
+        "device_thresholds": {
+          "help": "Le seuil de l’appareil est prioritaire sur low_battery_level et sur le seuil global.",
+          "label": "Seuils personnalisés par appareil"
+        },
+        "threshold": {
+          "label": "Seuil global"
+        }
+      },
       "pack_delay": "Délai propre au pack",
-      "save": "Enregistrer la surveillance automatique",
-      "threshold": "Seuil"
+      "save": "Enregistrer la surveillance automatique"
     },
     "buttons": {
       "add": "Ajouter",
@@ -95,6 +105,8 @@
       "aria_acknowledge": "Acquitter l’alerte {id}",
       "aria_unacknowledge": "Retirer l’acquittement de l’alerte {id}",
       "condition": "Condition",
+      "condition_template": "Condition Jinja supplémentaire",
+      "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Variables disponibles : entity_id, state et value.",
       "detected": "Détectée",
       "device": "Équipement",
       "device_fallback": "Appareil",
@@ -180,7 +192,7 @@
       "title": "Règles personnalisées",
       "value": "Valeur de comparaison",
       "values": "Valeurs de comparaison",
-      "yaml_help": "Seuls les champs de comparaison Alert Manager sont pris en charge. Ce n’est pas une condition d’automatisation : pas de templates ni de groupes and, or ou not.",
+      "yaml_help": "La règle prend en charge la comparaison Alert Manager et une condition_template Jinja facultative. Les groupes d’automatisation and, or et not ne sont pas pris en charge.",
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML"
     },

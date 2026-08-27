@@ -526,6 +526,7 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
+    condition_template: str | None = None
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -594,6 +595,15 @@ class Rule:
             not isinstance(self.message, str) or len(self.message) > 1024
         ):
             raise ValueError("Rule message must not exceed 1024 characters")
+        if self.condition_template is not None and (
+            not isinstance(self.condition_template, str)
+            or not self.condition_template.strip()
+            or len(self.condition_template) > 65_536
+        ):
+            raise ValueError(
+                "Rule condition_template must be non-empty text of at most "
+                "65536 characters"
+            )
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
         if (

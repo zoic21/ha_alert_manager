@@ -28,6 +28,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers import (
     area_registry as ar,
 )
@@ -45,12 +46,14 @@ from homeassistant.helpers.dispatcher import (
     async_dispatcher_send,
 )
 from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.template import Template
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
     CATEGORY_UNAVAILABLE,
+    DEVICE_EVENT_DEBOUNCE_SECONDS,
     DOMAIN,
     EVENT_ALERT_ACKNOWLEDGED,
     EVENT_ALERT_RESOLVED,
@@ -132,6 +135,10 @@ class AlertManager:
         self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
         self._active_device_group_ids: set[str] = set()
+        self._device_event_timers: dict[str, Callable[[], None]] = {}
+        self._device_event_alert_ids: dict[str, frozenset[str]] = {}
+        self._rule_templates: dict[str, Template] = {}
+        self._rule_template_render_info: dict[tuple[str, str], Any] = {}
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -227,6 +234,7 @@ class AlertManager:
         for cancel in self._timers.values():
             cancel()
         self._timers.clear()
+        self._cancel_all_device_event_timers()
         await self._async_save_state()
 
     @callback
@@ -240,17 +248,30 @@ class AlertManager:
 
     @callback
     def _state_changed(self, event: Event) -> None:
-        """Evaluate only the entity whose state changed."""
+        """Evaluate the changed source and Jinja rules depending on it."""
         if not self.monitoring_enabled:
             return
         entity_id = event.data.get("entity_id")
-        if not entity_id or not self._is_relevant_entity_id(entity_id):
+        if not entity_id:
             return
-        self.entry.async_create_task(
-            self.hass,
-            self.async_evaluate_entity(entity_id, restoring=not self.hass.is_running),
-            name=f"{DOMAIN} evaluate {entity_id}",
-        )
+        affected_entities = {
+            source_entity_id
+            for (_rule_id, source_entity_id), render_info in (
+                self._rule_template_render_info.items()
+            )
+            if render_info.filter(entity_id)
+        }
+        if self._is_relevant_entity_id(entity_id):
+            affected_entities.add(entity_id)
+        for affected_entity_id in sorted(affected_entities):
+            self.entry.async_create_task(
+                self.hass,
+                self.async_evaluate_entity(
+                    affected_entity_id,
+                    restoring=not self.hass.is_running,
+                ),
+                name=f"{DOMAIN} evaluate {affected_entity_id}",
+            )
 
     @callback
     def _registry_changed(self, _event: Event) -> None:
@@ -499,6 +520,8 @@ class AlertManager:
             )
             if not rule.matches(current):
                 continue
+            if not self._rule_template_matches(rule, state, current):
+                continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             condition = rule.message or self._rule_condition(rule, state)
             condition_key = None
@@ -707,11 +730,52 @@ class AlertManager:
         """Cache validated rule objects by entity for hot-path evaluations."""
         self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        self._rule_templates = {}
+        for rule in self._rules:
+            if rule.condition_template is None:
+                continue
+            template = Template(rule.condition_template, self.hass)
+            template.ensure_valid()
+            self._rule_templates[rule.id] = template
+        valid_render_keys = {
+            (rule.id, entity_id)
+            for rule in self._rules
+            if rule.condition_template is not None
+            for entity_id in rule.entity_ids
+        }
+        self._rule_template_render_info = {
+            key: info
+            for key, info in self._rule_template_render_info.items()
+            if key in valid_render_keys
+        }
         self._rules_by_entity = {}
         for rule in self._rules:
             for entity_id in rule.entity_ids:
                 self._rules_by_entity.setdefault(entity_id, []).append(rule)
         self._refresh_custom_tracking()
+
+    def _rule_template_matches(self, rule: Rule, state: State, current: Any) -> bool:
+        """Require an optional Home Assistant Jinja condition to render true."""
+        if rule.condition_template is None:
+            return True
+        try:
+            render_info = self._rule_templates[rule.id].async_render_to_info(
+                {
+                    "entity_id": state.entity_id,
+                    "state": state,
+                    "value": current,
+                }
+            )
+            self._rule_template_render_info[(rule.id, state.entity_id)] = render_info
+            return render_info.result().lower() == "true"
+        except TemplateError as err:
+            _LOGGER.warning(
+                "Jinja condition failed for rule %s and entity %s: %s",
+                rule.id,
+                state.entity_id,
+                err,
+            )
+            return False
 
     def _refresh_config_caches(self) -> None:
         """Cache exclusion membership used for every state change."""
@@ -768,10 +832,21 @@ class AlertManager:
         if any(self._is_own_entity(entity_id) for entity_id in rule.entity_ids):
             raise ValueError("Alert Manager entities cannot be monitored")
 
+    def _validate_rule_template(self, rule: Rule) -> None:
+        """Reject invalid Jinja syntax before changing persisted configuration."""
+        if rule.condition_template is None:
+            return
+        try:
+            Template(rule.condition_template, self.hass).ensure_valid()
+        except TemplateError as err:
+            raise ValueError(f"Invalid rule condition_template: {err}") from err
+
     def _validate_config_rule_sources(self, config: dict[str, Any]) -> None:
         """Apply self-monitoring rejection to a complete imported config."""
         for raw_rule in config["rules"]:
-            self._validate_rule_sources(Rule.from_dict(raw_rule))
+            rule = Rule.from_dict(raw_rule)
+            self._validate_rule_sources(rule)
+            self._validate_rule_template(rule)
 
     def _remove_own_rule_sources(self) -> bool:
         """Clean inert self-references created by earlier versions."""
@@ -1139,6 +1214,7 @@ class AlertManager:
             self._emit_resume_events(previous_records)
         else:
             self._cancel_all_timers()
+            self._cancel_all_device_event_timers()
         self._refresh_tracking()
         self._publish_if_changed(force=True)
         async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
@@ -1210,6 +1286,7 @@ class AlertManager:
         """Parse one YAML rule through the same validator as the visual form."""
         rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
         self._validate_rule_sources(rule)
+        self._validate_rule_template(rule)
         return rule_to_yaml_data(rule)
 
     def export_config_yaml(self) -> str:
@@ -1284,6 +1361,12 @@ class AlertManager:
         # partial nested update. Replacing it allows removed rows to disappear.
         if "entity_delays" in changes:
             candidate["entity_delays"] = deepcopy(changes["entity_delays"])
+        for pack_id, pack_changes in changes.get("automatic", {}).items():
+            for field in PACKS_BY_ID[pack_id].config_fields:
+                if field.type == "device_number_map" and field.id in pack_changes:
+                    candidate["automatic"][pack_id][field.id] = deepcopy(
+                        pack_changes[field.id]
+                    )
         candidate["rules"] = self.config["rules"]
         candidate = validate_config(candidate)
         previous = self._configuration_snapshot()
@@ -1316,6 +1399,7 @@ class AlertManager:
         previous = self._configuration_snapshot()
 
         self._cancel_all_timers()
+        self._cancel_all_device_event_timers()
         try:
             self.config = candidate
             self._rebuild_rule_index()
@@ -1345,6 +1429,7 @@ class AlertManager:
                 self._emit_resume_events(previous[1])
             else:
                 self._cancel_all_timers()
+                self._cancel_all_device_event_timers()
             async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
@@ -1353,6 +1438,7 @@ class AlertManager:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
         self._validate_rule_sources(rule)
+        self._validate_rule_template(rule)
         previous = self._configuration_snapshot()
         try:
             self.config["rules"].append(rule.as_dict())
@@ -1381,6 +1467,7 @@ class AlertManager:
         old_rule = Rule.from_dict(existing)
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
         self._validate_rule_sources(rule)
+        self._validate_rule_template(rule)
         previous = self._configuration_snapshot()
         try:
             self.config["rules"][index] = rule.as_dict()
@@ -1624,19 +1711,67 @@ class AlertManager:
             data["previous_acknowledged_by"] = previous_by
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
-    def _fire_new_device_alerts(self) -> None:
-        """Emit once when a device-name or device-less entity group becomes active."""
+    def _schedule_new_device_alerts(self) -> None:
+        """Debounce the first device event until its alert set is quiet."""
         devices = self._active_device_groups()
-        for group_id in sorted(devices.keys() - self._active_device_group_ids):
-            self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, devices[group_id])
+        current_group_ids = set(devices)
+        for group_id in self._active_device_group_ids - current_group_ids:
+            self._cancel_device_event_timer(group_id)
+        for group_id, device in devices.items():
+            current_alert_ids = frozenset(device["alert_ids"])
+            is_new_group = group_id not in self._active_device_group_ids
+            pending_alert_ids = self._device_event_alert_ids.get(group_id)
+            has_new_pending_alert = bool(
+                pending_alert_ids is not None and current_alert_ids - pending_alert_ids
+            )
+            if is_new_group or has_new_pending_alert:
+                self._schedule_device_event_timer(group_id, current_alert_ids)
         self._active_device_group_ids = set(devices)
+
+    def _schedule_device_event_timer(
+        self, group_id: str, alert_ids: frozenset[str]
+    ) -> None:
+        """Restart one per-device quiet-period timer."""
+        self._cancel_device_event_timer(group_id)
+        self._device_event_alert_ids[group_id] = alert_ids
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._device_event_timers.pop(group_id, None)
+            self._device_event_alert_ids.pop(group_id, None)
+            if self._unloading or not self.monitoring_enabled:
+                return
+            device = self._active_device_groups().get(group_id)
+            if device is not None:
+                self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, device)
+
+        self._device_event_timers[group_id] = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            (
+                dt_util.now() + timedelta(seconds=DEVICE_EVENT_DEBOUNCE_SECONDS)
+            ).astimezone(UTC),
+        )
+
+    def _cancel_device_event_timer(self, group_id: str) -> None:
+        """Cancel one pending device event and forget its debounce snapshot."""
+        if cancel := self._device_event_timers.pop(group_id, None):
+            cancel()
+        self._device_event_alert_ids.pop(group_id, None)
+
+    def _cancel_all_device_event_timers(self) -> None:
+        """Cancel every pending device event during unload or suspension."""
+        for cancel in self._device_event_timers.values():
+            cancel()
+        self._device_event_timers.clear()
+        self._device_event_alert_ids.clear()
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
         snapshot = self.public_snapshot()
         if not force and snapshot == self._last_public_snapshot:
             return
-        self._fire_new_device_alerts()
+        self._schedule_new_device_alerts()
         self._last_public_snapshot = deepcopy(snapshot)
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)
 

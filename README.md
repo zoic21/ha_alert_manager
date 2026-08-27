@@ -204,7 +204,10 @@ configuration UniFi chargée, non désactivée et utilisable.
 
 Un `sensor` ayant `device_class: battery` est en anomalie lorsque sa valeur
 numérique est inférieure ou égale au seuil configuré (15 % par défaut). Un attribut
-numérique `low_battery_level` remplace le seuil global pour cette entité. Les états
+numérique `low_battery_level` remplace le seuil global pour cette entité. Le pack
+déclare aussi `device_thresholds`, une table configurable dans le panneau qui
+associe un appareil à son seuil. Ce seuil par appareil est prioritaire sur
+`low_battery_level` et sur le seuil global. Les états
 `unknown`, `unavailable`, non numériques, `NaN` et infinis sont ignorés par cette
 catégorie.
 
@@ -229,6 +232,12 @@ numériques acceptent exactement une valeur. Les conversions numériques refusen
 les booléens, valeurs invalides, `NaN` et infinis. Une règle portant sur un attribut
 absent n’est pas déclenchée. Les états principaux `unknown` et `unavailable` sont
 laissés aux détections automatiques.
+
+Une `condition_template` Jinja facultative peut compléter la comparaison. Si elle
+est renseignée, la comparaison et le template doivent tous les deux rester vrais
+pendant la temporisation. Les variables `entity_id`, `state` et `value` sont
+disponibles en plus des fonctions Jinja de Home Assistant. Une entité référencée
+par le template réévalue automatiquement la règle lorsqu’elle change.
 
 Exemples :
 
@@ -259,6 +268,8 @@ operator: above
 value: 33
 duration: 900
 message: null
+condition_template: >-
+  {{ is_state('input_boolean.maintenance_baie', 'off') }}
 ```
 
 `entity_ids` est une liste obligatoire : chaque source est suivie
@@ -266,10 +277,10 @@ indépendamment. `source` vaut `state` ou `attribute` ; `attribute` est requis
 uniquement dans ce second cas. `duration` est exprimée en secondes. `equals`,
 `not_equals`, `contains` et `not_contains` acceptent une valeur scalaire ou une
 liste YAML ; `above` et `below` exigent une unique valeur numérique finie. Cette
-syntaxe ne correspond volontairement **pas** aux conditions YAML des
-automatisations Home Assistant : aucun template, groupe `and`/`or`/`not`, aucune
-condition arbitraire et aucun moteur de conditions d’automatisation ne sont
-utilisés.
+`condition_template` est facultatif et doit rendre `true`. Cette syntaxe ne
+correspond volontairement **pas** aux conditions YAML des automatisations Home
+Assistant : aucun groupe `and`/`or`/`not`, aucune condition arbitraire et aucun
+moteur de conditions d’automatisation ne sont utilisés.
 
 ### Export et import complet de configuration
 
@@ -416,7 +427,9 @@ identifiants regroupés. Une entité sans appareil forme toujours son propre
 groupe : `device_id` prend alors la valeur de son `entity_id`, `device_name`
 son nom d’entité et `device_ids` contient cet identifiant unique. L’attribut
 `devices` contient également `area`, `started_at`, les compteurs d’alertes
-acquittées/non acquittées et `alert_ids`. Un acquittement ne retire pas le
+acquittées/non acquittées, `alert_ids` et les tableaux `messages` et `rules`
+propres au groupe. Le capteur n’expose aucun tableau global `messages` ou
+`rules`. Un acquittement ne retire pas le
 groupe : il disparaît lorsque sa dernière alerte active est résolue.
 
 Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
@@ -480,9 +493,12 @@ redémarrage n’émet pas un second événement de démarrage.
 
 Lorsque le premier élément actif d’un groupe d’appareils de même nom ou d’une
 entité sans appareil apparaît, l’événement
-`alert_manager_device_alert_started` est émis une seule fois avec les mêmes
-données que l’entrée de `attributes.devices`. Les alertes supplémentaires du même
-groupe ne le répètent pas. Après résolution de toutes ses alertes, une future
+`alert_manager_device_alert_started` attend 10 secondes sans nouvelle alerte
+pour ce groupe avant d’être émis une seule fois. Une nouvelle alerte pendant ce
+délai redémarre les 10 secondes. L’événement contient donc les données stabilisées
+de l’entrée `attributes.devices`, notamment ses tableaux `messages` et `rules`.
+Après son émission, les alertes supplémentaires du même groupe ne le répètent
+pas. Après résolution de toutes ses alertes, une future
 alerte de ce groupe constitue un nouveau démarrage. Pour une entité sans appareil,
 `device_id` contient son `entity_id` et `device_name` son nom d’entité.
 
