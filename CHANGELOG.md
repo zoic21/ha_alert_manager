@@ -2,6 +2,28 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev8 — 27 août 2026
+
+### Modifié
+
+- Les colonnes par défaut du Dashboard sont désormais Statut, Entité, Appareil,
+  Règle, Intégration et Active depuis/Temps restant.
+- Les colonnes par défaut de l’Historique sont Statut, Entité, Appareil, Règle,
+  Intégration et Détectée le.
+- La colonne Intégration est ajoutée au tableau et au dialogue natif de
+  personnalisation des colonnes.
+- L’action « Restaurer les colonnes par défaut » et la migration des anciens
+  défauts utilisent cette nouvelle configuration sans écraser les préférences
+  réellement personnalisées.
+- Les compteurs Alertes actives, Alertes à venir et Alertes acquittées du
+  Dashboard sont cliquables et appliquent immédiatement le filtre Statut
+  correspondant.
+
+### Tests
+
+- Couverture des nouveaux défauts, de leur restauration, de la migration des
+  préférences, de la colonne Intégration et du filtrage depuis les compteurs.
+
 ## 1.7.0-dev7 — 27 août 2026
 
 ### Corrigé

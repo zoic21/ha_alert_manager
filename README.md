@@ -99,12 +99,14 @@ Le panel est réservé aux administrateurs et contient cinq sections :
 
 1. **Vue d’ensemble** : un tableau compact unique réunit les alertes actives en
    rouge, à venir en orange et acquittées en bleu. Ses colonnes par défaut sont
-   Statut, Entité, Appareil, Valeur, Condition, Détectée le et
-   Active depuis/Temps restant. Le nom de l’entité ouvre le dialogue natif
-   « Plus d’informations ». Le temps restant est calculé dans le navigateur
+   Statut, Entité, Appareil, Règle, Intégration et Active depuis/Temps restant.
+   Dans l’Historique, la dernière colonne est Détectée le. Le nom de l’entité
+   ouvre le dialogue natif « Plus d’informations ». Le temps restant est calculé dans le navigateur
    depuis `due_at` et affiche un délai suspendu lorsque la surveillance est
    désactivée ; aucune valeur n’est écrite chaque seconde dans Recorder.
-   Les étiquettes Home Assistant sont affichées sous le nom de l’entité. La barre
+   Les compteurs Actives, À venir et Acquittées appliquent directement le filtre
+   Statut correspondant lorsqu’ils sont sélectionnés. Les étiquettes Home
+   Assistant sont affichées sous le nom de l’entité. La barre
    d’outils permet une recherche immédiate et des filtres cumulables par statut,
    appareil, règle, intégration, étiquette, domaine, zone, entité et périodes de
    dates. Chaque période se choisit dans un unique sélecteur natif Home Assistant

@@ -575,7 +575,7 @@ test("dashboard renders one compact table with the required default columns and 
   const panel = tablePanel();
   const html = panel._renderOverview();
   assert.deepEqual(panel._tableState.overview.columns, [
-    "status", "entity", "device", "value", "condition", "detected", "timeline",
+    "status", "entity", "device", "rule", "integration", "timeline",
   ]);
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
   assert.match(html, /slot="filter-pane"/);
@@ -590,6 +590,7 @@ test("dashboard renders one compact table with the required default columns and 
   const active = rows.find((row) => row.status === "active");
   assert.equal(active.value, "34.5 °C");
   assert.equal(active.condition, "État supérieur à 33 °C pendant 30 s");
+  assert.equal(panel._nativeTableCell("overview", active, "integration"), "MQTT");
   const status = panel._nativeStatusCell(active, "overview");
   assert.equal(status.attributes["aria-label"], "Alerte active");
   assert.equal(status.children[0].tagName, "HA-SVG-ICON");
@@ -613,6 +614,8 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.columns.status.showNarrow, true);
   assert.equal(table.columns.entity.main, true);
   assert.equal(table.columns.entity.sortable, true);
+  assert.equal(table.columns.integration.title, "Intégration");
+  assert.equal(table.columns.integration.sortable, true);
   assert.equal(table.columns.condition.showNarrow, false);
   assert.equal(table.data.length, 3);
   assert.equal(table.filter, "garage");
@@ -620,7 +623,10 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.deepEqual(table.initialSorting, { column: "detected", direction: "desc" });
   assert.equal(table.selectable, true);
   assert.equal(table.clickable, true);
-  assert.deepEqual(table.columnOrder.slice(0, 7), panel._tableState.overview.columns);
+  assert.deepEqual(
+    table.columnOrder.slice(0, panel._tableState.overview.columns.length),
+    panel._tableState.overview.columns,
+  );
   assert.ok(table.hiddenColumns.includes("entity_id"));
   assert.equal(table.columns.device_group.groupable, true);
   assert.equal(table.columns.search_index.filterable, true);
@@ -788,20 +794,34 @@ test("column visibility, order and table preferences persist locally", () => {
   const migrated = makeTableState("overview", {
     columns: ["status", "device", "entity", "value", "condition", "detected", "timeline"],
   });
-  assert.deepEqual(migrated.columns.slice(0, 3), ["status", "entity", "device"]);
+  assert.deepEqual(migrated.columns, [
+    "status", "entity", "device", "rule", "integration", "timeline",
+  ]);
+  const migratedDev7 = makeTableState("overview", {
+    columns: ["status", "entity", "device", "value", "condition", "detected", "timeline"],
+  });
+  assert.deepEqual(migratedDev7.columns, migrated.columns);
 });
 
 test("native settings dialog events hide, reorder and restore optional columns", () => {
   const panel = tablePanel();
   const listeners = {};
+  const historyListeners = {};
   const table = {
     addEventListener(name, callback) { listeners[name] = callback; },
     querySelectorAll() { return []; },
     dataset: {},
   };
-  panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-alert-table-page="overview"]' ? table : null
-  );
+  const historyTable = {
+    addEventListener(name, callback) { historyListeners[name] = callback; },
+    querySelectorAll() { return []; },
+    dataset: {},
+  };
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === '[data-alert-table-page="overview"]') return table;
+    if (selector === '[data-alert-table-page="history"]') return historyTable;
+    return null;
+  };
   panel._hydrateDataTables();
   const order = ["status", "entity", "value", "area", "device", "condition", "detected", "timeline"];
   listeners["columns-changed"]({ detail: { columnOrder: order, hiddenColumns: ["device"] } });
@@ -809,7 +829,12 @@ test("native settings dialog events hide, reorder and restore optional columns",
   assert.deepEqual(panel._tableState.overview.columns.slice(0, 4), ["status", "entity", "value", "area"]);
   listeners["columns-changed"]({ detail: { columnOrder: undefined, hiddenColumns: undefined } });
   assert.deepEqual(panel._tableState.overview.columns, [
-    "status", "entity", "device", "value", "condition", "detected", "timeline",
+    "status", "entity", "device", "rule", "integration", "timeline",
+  ]);
+  panel._tableState.history.columns = ["status", "entity", "resolved"];
+  historyListeners["columns-changed"]({ detail: { columnOrder: undefined, hiddenColumns: undefined } });
+  assert.deepEqual(panel._tableState.history.columns, [
+    "status", "entity", "device", "rule", "integration", "detected",
   ]);
 });
 
@@ -879,7 +904,7 @@ test("history uses the same table tools without selection or runtime actions", (
   };
   const html = panel._renderHistory();
   assert.deepEqual(panel._tableState.history.columns, [
-    "status", "entity", "device", "value", "condition", "detected", "resolved",
+    "status", "entity", "device", "rule", "integration", "detected",
   ]);
   const rows = panel._nativeTableData("history", panel._tableRows("history", panel._history.events));
   assert.equal(rows[0].statusLabel, "Résolue après acquittement");
@@ -1317,7 +1342,7 @@ test("rule editor width is adjustable and clamped", () => {
   assert.equal(panel._ruleEditorWidth, 800);
 });
 
-test("overview displays the backend tracked total", () => {
+test("overview status summaries filter the table directly", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._alerts = {
@@ -1335,6 +1360,13 @@ test("overview displays the backend tracked total", () => {
   assert.match(html, /Alertes à venir<\/span><strong class="pending">3<\/strong>/);
   assert.match(html, /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
   assert.ok(html.indexOf("Alertes à venir") < html.indexOf("Alertes acquittées"));
+  assert.match(html, /data-action="filter-summary-status" data-status="active"[^>]*aria-pressed="false"/);
+  assert.match(html, /data-action="filter-summary-status" data-status="pending"/);
+  panel._render = () => {};
+  await panel._handleClick(actionEvent("filter-summary-status", undefined, { status: "pending" }));
+  assert.deepEqual(panel._tableState.overview.filters.status, ["pending"]);
+  panel._alerts.pending = [currentAlert({ id: "pending:test", entity_id: "sensor.pending" })];
+  assert.deepEqual(panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status), ["pending"]);
   assert.match(panel._styles(), /\.acknowledged\{color:var\(--blue-color/);
   assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
   assert.match(panel._styles(), /@media\(max-width:700px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);

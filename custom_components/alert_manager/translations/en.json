@@ -237,6 +237,7 @@
         "duration": "Duration",
         "entity": "Entity",
         "entity_id": "Entity ID",
+        "integration": "Integration",
         "message": "Message",
         "move_down": "Move {column} down",
         "move_up": "Move {column} up",

@@ -104,13 +104,13 @@ const TABLE_PREFERENCES_KEY = "alert-manager-table-preferences-v1";
 const REQUIRED_COLUMNS = new Set(["status", "entity"]);
 const DEFAULT_TABLE_STATE = Object.freeze({
   overview: Object.freeze({
-    columns: Object.freeze(["status", "entity", "device", "value", "condition", "detected", "timeline"]),
+    columns: Object.freeze(["status", "entity", "device", "rule", "integration", "timeline"]),
     groupBy: "none",
     sortBy: "detected",
     sortDirection: "desc",
   }),
   history: Object.freeze({
-    columns: Object.freeze(["status", "entity", "device", "value", "condition", "detected", "resolved"]),
+    columns: Object.freeze(["status", "entity", "device", "rule", "integration", "detected"]),
     groupBy: "none",
     sortBy: "detected",
     sortDirection: "desc",
@@ -120,18 +120,26 @@ const DEFAULT_TABLE_STATE = Object.freeze({
 const makeTableState = (kind, preferences = {}) => {
   const defaults = DEFAULT_TABLE_STATE[kind];
   const sortOptions = kind === "history"
-    ? ["status", "device", "entityName", "rule", "value", "detected", "resolved"]
-    : ["status", "device", "entityName", "rule", "value", "detected", "activated", "remaining"];
+    ? ["status", "device", "entityName", "rule", "integration", "value", "detected", "resolved"]
+    : ["status", "device", "entityName", "rule", "integration", "value", "detected", "activated", "remaining"];
   const savedColumns = Array.isArray(preferences.columns)
     ? preferences.columns.filter((column, index, columns) => (
       typeof column === "string" && columns.indexOf(column) === index
     ))
     : [];
-  const legacyDefault = kind === "overview"
-    ? ["status", "device", "entity", "value", "condition", "detected", "timeline"]
-    : ["status", "device", "entity", "value", "condition", "detected", "resolved"];
-  const isLegacyDefault = savedColumns.length === legacyDefault.length
-    && savedColumns.every((column, index) => column === legacyDefault[index]);
+  const legacyDefaults = kind === "overview"
+    ? [
+      ["status", "device", "entity", "value", "condition", "detected", "timeline"],
+      ["status", "entity", "device", "value", "condition", "detected", "timeline"],
+    ]
+    : [
+      ["status", "device", "entity", "value", "condition", "detected", "resolved"],
+      ["status", "entity", "device", "value", "condition", "detected", "resolved"],
+    ];
+  const isLegacyDefault = legacyDefaults.some((legacyDefault) => (
+    savedColumns.length === legacyDefault.length
+    && savedColumns.every((column, index) => column === legacyDefault[index])
+  ));
   const columns = savedColumns.length && !isLegacyDefault ? [...savedColumns] : [...defaults.columns];
   for (const required of REQUIRED_COLUMNS) {
     if (!columns.includes(required)) columns.push(required);
@@ -846,11 +854,13 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderOverview() {
+    const selectedStatuses = this._filterValues(this._tableState.overview.filters.status);
+    const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
     const summary = `${this._renderPageMessages()}
       <section class="summary">
-        <article><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></article>
-        <article><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></article>
-        <article><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></article>
+        <article data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></article>
+        <article data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></article>
+        <article data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></article>
         <article><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></article>
       </section>`;
     return this._renderAlertTable("overview", this._tableRows("overview"), summary);
@@ -900,14 +910,15 @@ class AlertManagerPanel extends HTMLElement {
       detected: { label: this._t("table.columns.detected") },
       area: { label: this._t("table.columns.area") },
       rule: { label: this._t("table.columns.rule") },
+      integration: { label: this._t("table.columns.integration") },
       message: { label: this._t("table.columns.message") },
       timeline: { label: this._t("table.columns.timeline") },
       resolved: { label: this._t("table.columns.resolved") },
       duration: { label: this._t("table.columns.duration") },
     };
     const allowed = kind === "overview"
-      ? ["status", "device", "entity", "entity_id", "value", "condition", "detected", "timeline", "area", "rule", "message"]
-      : ["status", "device", "entity", "entity_id", "value", "condition", "detected", "resolved", "duration", "area", "rule", "message"];
+      ? ["status", "entity", "device", "rule", "integration", "timeline", "entity_id", "value", "condition", "detected", "area", "message"]
+      : ["status", "entity", "device", "rule", "integration", "detected", "entity_id", "value", "condition", "resolved", "duration", "area", "message"];
     return Object.fromEntries(allowed.map((column) => [column, all[column]]));
   }
 
@@ -1214,15 +1225,17 @@ class AlertManagerPanel extends HTMLElement {
       duration: ["120px", "170px", 1],
       area: ["130px", "220px", 1],
       rule: ["160px", "260px", 1],
+      integration: ["150px", "240px", 1],
       message: ["220px", "420px", 1.5],
     };
-    const sortable = new Set(["status", "device", "entity", "value", "detected", "resolved", "rule"]);
+    const sortable = new Set(["status", "device", "entity", "value", "detected", "resolved", "rule", "integration"]);
     const valueColumns = {
       status: "statusSort",
       entity: "entityName",
       value: "valueSort",
       detected: "detectedSort",
       resolved: "resolvedSort",
+      integration: "integrationLabel",
     };
     const columns = Object.fromEntries(Object.entries(this._tableColumns(kind)).map(([column, definition]) => {
       const [minWidth, maxWidth, flex] = widths[column] ?? ["120px", "260px", 1];
@@ -1294,6 +1307,7 @@ class AlertManagerPanel extends HTMLElement {
     if (column === "device") return row.device || "—";
     if (column === "area") return row.area || "—";
     if (column === "rule") return row.rule || "—";
+    if (column === "integration") return row.integrationLabel || row.integration || "—";
     if (column === "message") return row.message || "—";
     if (column === "value") return row.value;
     if (column === "condition") return row.condition || "—";
@@ -1629,6 +1643,13 @@ class AlertManagerPanel extends HTMLElement {
       else selected.add(value);
       this._tableState[kind].filters[key] = [...selected];
       this._filterPaneKind = kind;
+      this._render();
+      return;
+    }
+    if (action === "filter-summary-status") {
+      const status = button.dataset.status;
+      if (!["active", "pending", "acknowledged"].includes(status)) return;
+      this._tableState.overview.filters.status = [status];
       this._render();
       return;
     }
@@ -2039,6 +2060,12 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
+    const summary = event.target.closest?.('.summary [data-action="filter-summary-status"]');
+    if (summary) {
+      event.preventDefault();
+      void this._handleClick({ target: summary });
+      return;
+    }
     const row = event.target.closest?.(".rule-row[data-action=\"edit-rule\"]");
     if (!row || event.target.closest?.("ha-switch")) return;
     event.preventDefault();
@@ -2354,7 +2381,7 @@ class AlertManagerPanel extends HTMLElement {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,Noto,sans-serif));font-size:var(--ha-font-size-m,14px);line-height:var(--ha-line-height-normal,1.6)}
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
-      .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
+      .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary article,.panel{background:var(--card-background-color,#fff);border-radius:14px;box-shadow:var(--ha-card-box-shadow,0 2px 4px rgba(0,0,0,.08));padding:20px}.summary article{display:flex;align-items:center;justify-content:space-between}.summary article[data-action="filter-summary-status"]{cursor:pointer;transition:background-color 180ms ease-in-out,box-shadow 180ms ease-in-out}.summary article[data-action="filter-summary-status"]:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.summary article[data-action="filter-summary-status"]:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.summary article[data-action="filter-summary-status"][aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--primary-color,#03a9f4)}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
       hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.date-filter-fields ha-date-range-picker{display:block;width:100%}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .panel{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}

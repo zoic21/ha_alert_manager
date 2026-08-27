@@ -237,6 +237,7 @@
         "duration": "Durée",
         "entity": "Entité",
         "entity_id": "ID de l’entité",
+        "integration": "Intégration",
         "message": "Message",
         "move_down": "Descendre la colonne {column}",
         "move_up": "Monter la colonne {column}",
