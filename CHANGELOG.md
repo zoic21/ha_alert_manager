@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.2 — 27 août 2026
+
+### Corrigé
+
+- Correction de la sauvegarde des champs **Message** et **Condition Jinja supplémentaire** des règles personnalisées. Les `ha-selector` de Home Assistant sont des composants contrôlés : leur propriété `value` ne se met pas à jour automatiquement lorsque l’éditeur Jinja interne émet `value-changed`. Alert Manager réinjecte maintenant explicitement la nouvelle valeur dans le sélecteur et utilise le brouillon de règle comme source de vérité lors de la sauvegarde.
+- La suppression volontaire du contenu de ces champs reste correctement enregistrée comme valeur vide (`null` côté stockage).
+
+### Tests
+
+- Ajout d’un test reproduisant le comportement réel du sélecteur Template Home Assistant avec une propriété hôte restée vide après saisie.
+- Ajout d’un test vérifiant la synchronisation de la valeur des sélecteurs contrôlés.
+
 ## 1.7.1 — 27 août 2026
 
 ### Corrigé

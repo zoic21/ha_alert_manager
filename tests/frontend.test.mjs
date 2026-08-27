@@ -2379,3 +2379,64 @@ test("new rule preserves Jinja condition from selector draft when selector value
     "{{ states('sensor.example') == 'on' }}",
   );
 });
+
+
+test("controlled selectors mirror emitted values back to their host", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = {};
+  const selector = {
+    value: "",
+    addEventListener(type, listener) {
+      if (type === "value-changed") this.listener = listener;
+    },
+  };
+  panel.shadowRoot.querySelector = (query) => query === "#template-test" ? selector : null;
+  let changed;
+
+  panel._configureSelector(
+    "template-test",
+    { template: {} },
+    "",
+    (value) => { changed = value; },
+  );
+  selector.listener({ detail: { value: "{{ true }}" } });
+
+  assert.equal(selector.value, "{{ true }}");
+  assert.equal(changed, "{{ true }}");
+});
+
+test("new rule saves message and condition drafts when selector hosts still expose empty initial values", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    ...ruleValues(),
+    message: "Alerte {{ states('sensor.example') }}",
+    condition_template: "{{ is_state('binary_sensor.example', 'on') }}",
+  };
+  const ruleForm = form(ruleValues());
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "#rule-message-template") return { value: "" };
+    if (selector === "#rule-condition-template") return { value: "" };
+    return null;
+  };
+  panel._render = () => {};
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "created-rule", version: 2 };
+    },
+  };
+
+  await panel._saveRule(ruleForm);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.message, "Alerte {{ states('sensor.example') }}");
+  assert.equal(
+    calls[0].rule.condition_template,
+    "{{ is_state('binary_sensor.example', 'on') }}",
+  );
+});
