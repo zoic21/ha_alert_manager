@@ -1,0 +1,130 @@
+name: Apply Jinja persistence fix
+
+on:
+  push:
+    branches:
+      - fix/jinja-new-rule-1.7.1
+    paths:
+      - .github/workflows/apply-jinja-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/jinja-new-rule-1.7.1
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Patch source, add regression test and changelog
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          panel_path = Path("frontend-src/alert-manager-panel.js")
+          panel = panel_path.read_text()
+          old = '''      condition_template: String(
+                  this.shadowRoot.querySelector("#rule-condition-template")?.value ?? "",
+                ).trim() || null,'''
+          new = '''      condition_template: String(
+                  this.shadowRoot.querySelector("#rule-condition-template")?.value
+                    ?? this._editingRule?.condition_template
+                    ?? "",
+                ).trim() || null,'''
+          if old not in panel:
+              raise SystemExit("Expected condition_template save block not found")
+          panel_path.write_text(panel.replace(old, new, 1))
+
+          tests_path = Path("tests/frontend.test.mjs")
+          tests = tests_path.read_text()
+          test_name = "new rule preserves Jinja condition from selector draft when selector value is unavailable"
+          if test_name not in tests:
+              tests += r'''
+
+          test("new rule preserves Jinja condition from selector draft when selector value is unavailable", async () => {
+            const Panel = customElements.get("alert-manager-panel");
+            const panel = new Panel();
+            panel._config = completeConfig();
+            panel._editingRule = {
+              ...newRuleDefaults(),
+              ...ruleValues(),
+              condition_template: "{{ states('sensor.example') == 'on' }}",
+            };
+            const ruleForm = form(ruleValues());
+            panel.shadowRoot.querySelector = (selector) => {
+              if (selector === "#rule-condition-template") return { value: undefined };
+              if (selector === "#rule-message-template") return { value: "" };
+              return null;
+            };
+            panel._render = () => {};
+            const calls = [];
+            panel._hass = {
+              callWS: async (message) => {
+                calls.push(message);
+                return { ...message.rule, id: "created-rule" };
+              },
+            };
+
+            await panel._saveRule(ruleForm);
+
+            assert.equal(calls.length, 1);
+            assert.equal(calls[0].type, "alert_manager/rules/create");
+            assert.equal(
+              calls[0].rule.condition_template,
+              "{{ states('sensor.example') == 'on' }}",
+            );
+          });
+          '''
+              tests_path.write_text(tests)
+
+          changelog_path = Path("CHANGELOG.md")
+          changelog = changelog_path.read_text()
+          marker = "# Changelog\n\nToutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.\n\n"
+          section = """## 1.7.1 — 27 août 2026
+
+### Corrigé
+
+- Lors de la création d’une règle personnalisée, la condition Jinja supplémentaire
+  est désormais récupérée depuis le brouillon de l’éditeur lorsque le composant
+  `ha-selector` de Home Assistant ne reflète pas encore sa valeur dans la
+  propriété `.value` au moment de la sauvegarde. Le texte saisi n’est donc plus
+  remplacé par une valeur vide à la création de la règle.
+
+### Tests
+
+- Un test frontend reproduit le cas où le sélecteur Jinja émet sa nouvelle valeur
+  mais expose encore une propriété `.value` indisponible lors de la sauvegarde.
+
+"""
+          if "## 1.7.1 — 27 août 2026" not in changelog:
+              if marker not in changelog:
+                  raise SystemExit("Changelog header not found")
+              changelog_path.write_text(changelog.replace(marker, marker + section, 1))
+          PY
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Lint frontend
+        run: npm run lint:frontend
+
+      - name: Test frontend
+        run: npm run test:frontend
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-jinja-fix.yml
+          git add frontend-src/alert-manager-panel.js custom_components/alert_manager/frontend/alert-manager-panel.js tests/frontend.test.mjs CHANGELOG.md
+          git commit -m "Fix new rule Jinja condition persistence"
+          git push origin HEAD:${GITHUB_REF_NAME}
