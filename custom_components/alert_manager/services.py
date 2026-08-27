@@ -22,13 +22,17 @@ SERVICE_SCHEMA = vol.Schema(
 
 
 async def _actor_name(hass: HomeAssistant, call: ServiceCall) -> str | None:
-    """Resolve a Home Assistant user name without exposing its internal id."""
+    """Resolve an administrator display name without exposing its internal id."""
     user_id = call.context.user_id
     if user_id is None:
+        # Calls without a user context are internal Home Assistant calls. Keep
+        # those available so automations/scripts can use the actions normally.
         return None
     user = await hass.auth.async_get_user(user_id)
-    if user is None:
-        return None
+    if user is None or not user.is_admin:
+        raise ServiceValidationError(
+            "Alert Manager acknowledge actions require an administrator"
+        )
     return user.name or None
 
 
