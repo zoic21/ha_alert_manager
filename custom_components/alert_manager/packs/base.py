@@ -50,6 +50,11 @@ class PackConfigField:
         }
 
 
+PackTransitionFilter = Callable[
+    [HomeAssistant, State | None, State | None, dict[str, Any]], bool
+]
+
+
 @dataclass(frozen=True, slots=True)
 class AutomaticPack:
     """Stable metadata and isolated evaluation function for an automatic pack."""
@@ -59,7 +64,25 @@ class AutomaticPack:
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
+    transition_filter: PackTransitionFilter | None = None
     config_fields: tuple[PackConfigField, ...] = ()
+
+    def should_evaluate(
+        self,
+        hass: HomeAssistant,
+        old_state: State | None,
+        new_state: State | None,
+        config: dict[str, Any],
+    ) -> bool:
+        """Return whether one state transition can change this pack's output."""
+        if self.transition_filter is not None:
+            return self.transition_filter(hass, old_state, new_state, config)
+        # Keep future packs conservative unless they explicitly provide a
+        # transition-aware filter. This avoids silently missing new pack logic.
+        return any(
+            state is not None and self.applies(hass, state)
+            for state in (old_state, new_state)
+        )
 
     def available(self, hass: HomeAssistant) -> bool:
         """Return whether every required integration has one usable entry."""
