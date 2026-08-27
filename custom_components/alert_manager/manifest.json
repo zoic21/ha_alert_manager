@@ -3,7 +3,13 @@
   "name": "Alert Manager",
   "codeowners": ["@zoic21"],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "persistent_notification", "websocket_api"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "persistent_notification",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/zoic21/ha_alert_manager",
   "integration_type": "service",
   "iot_class": "local_push",

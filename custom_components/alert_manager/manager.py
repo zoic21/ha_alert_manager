@@ -951,6 +951,19 @@ class AlertManager:
                 or first.details.entity_id
             ).strip()
             alert_ids = [record.details.id for record in ordered]
+            messages = list(
+                dict.fromkeys(
+                    record.details.message
+                    for record in ordered
+                    if record.details.message
+                )
+            )
+            rules = list(
+                dict.fromkeys(
+                    record.details.rule_name or record.details.type
+                    for record in ordered
+                )
+            )
             acknowledged = sum(record.acknowledged for record in ordered)
             devices[group_id] = {
                 "device_id": device_id,
@@ -962,6 +975,8 @@ class AlertManager:
                 "unacknowledged_alert_count": len(ordered) - acknowledged,
                 "acknowledged_alert_count": acknowledged,
                 "alert_ids": alert_ids,
+                "messages": messages,
+                "rules": rules,
             }
         return devices
 

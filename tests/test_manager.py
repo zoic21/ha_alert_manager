@@ -69,7 +69,11 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         "sensor.alert_manager_main_active": {"alerts": []},
         "sensor.alert_manager_main_pending": {"alerts": []},
         "sensor.alert_manager_main_acknowledge": {"alerts": []},
-        "sensor.alert_manager_device_main_active": {"devices": []},
+        "sensor.alert_manager_device_main_active": {
+            "devices": [],
+            "messages": [],
+            "rules": [],
+        },
     }
     assert all(
         entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
@@ -781,13 +785,58 @@ def test_same_entity_can_belong_to_multiple_rules(hass, entry):
                     "operator": "equals",
                     "value": "on",
                     "duration": 0,
+                    "message": f"{name} message",
                 }
             )
         )
         for name in ("First", "Second")
     ]
     assert set(manager.records) == {f"rule:{rule['id']}:sensor.test" for rule in rules}
-    assert manager.public_snapshot()["active_count"] == 2
+    snapshot = manager.public_snapshot()
+    assert snapshot["active_count"] == 2
+    assert snapshot["active_devices"][0]["messages"] == [
+        "First message",
+        "Second message",
+    ]
+    assert snapshot["active_devices"][0]["rules"] == ["First", "Second"]
+
+
+def test_device_sensor_flattens_unique_messages_and_rules():
+    """Top-level attributes aggregate device details without duplicates."""
+    devices = [
+        {
+            "device_id": "one",
+            "messages": ["Battery low", "Offline"],
+            "rules": ["Battery", "Unavailable"],
+        },
+        {
+            "device_id": "two",
+            "messages": ["Offline", "Temperature high"],
+            "rules": ["Unavailable", "Temperature"],
+        },
+    ]
+    manager = SimpleNamespace(
+        monitoring_enabled=True,
+        public_snapshot=lambda: {
+            "device_active_count": 2,
+            "active_devices": devices,
+        },
+    )
+    sensor = AlertManagerSensor(
+        manager,
+        "device_main_active",
+        "alert_manager_device_main_active",
+        "mdi:devices",
+        "device_active_count",
+        "active_devices",
+        "devices",
+    )
+
+    assert sensor.extra_state_attributes == {
+        "devices": devices,
+        "messages": ["Battery low", "Offline", "Temperature high"],
+        "rules": ["Battery", "Unavailable", "Temperature"],
+    }
 
 
 def test_tracked_count_combines_custom_instances_and_automatic_entities(
@@ -1100,6 +1149,8 @@ def test_devices_with_the_same_name_share_one_active_group(
         "unavailable:sensor.ups_one",
         "unavailable:sensor.ups_two",
     }
+    assert device["messages"] == []
+    assert device["rules"] == ["unavailable"]
     device_events = [
         data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
     ]

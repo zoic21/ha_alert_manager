@@ -284,13 +284,21 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         "sensor.active",
         "sensor.other",
     }
+    assert device_sensor.extra_state_attributes["messages"] == []
+    assert device_sensor.extra_state_attributes["rules"] == ["unavailable"]
 
     run(manager.async_set_monitoring(False))
     assert len(manager.records) == 3
     for sensor in sensors:
         assert sensor.native_value == 0
-        expected_attribute = "devices" if sensor is device_sensor else "alerts"
-        assert sensor.extra_state_attributes == {expected_attribute: []}
+        if sensor is device_sensor:
+            assert sensor.extra_state_attributes == {
+                "devices": [],
+                "messages": [],
+                "rules": [],
+            }
+        else:
+            assert sensor.extra_state_attributes == {"alerts": []}
 
 
 def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):

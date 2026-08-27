@@ -6,16 +6,22 @@ Toutes les évolutions notables d’Alert Manager sont documentées dans ce fich
 
 ### Corrigé
 
-- Le bouton retour cible désormais l’historique de la fenêtre principale Home
-  Assistant, comme le fait le frontend officiel. Dans un panneau chargé en
-  iframe, il n’utilise plus l’historique isolé de l’iframe, qui ne permettait
-  pas de revenir à la page réellement consultée auparavant.
+- Le bouton retour et son lien de secours figé vers les intégrations sont
+  supprimés. Toutes les pages du panneau sont maintenant déclarées comme pages
+  principales et affichent le bouton menu natif de Home Assistant.
+
+### Ajouté
+
+- `sensor.alert_manager_device_main_active` expose les attributs globaux
+  `messages` et `rules`, sous forme de tableaux uniques pour toutes les alertes
+  appareil actives. Chaque entrée de `devices` contient également ses propres
+  tableaux `messages` et `rules` afin de conserver le détail par appareil.
 
 ### Tests
 
-- 146 tests backend et 69 tests frontend, avec une non-régression simulant le
-  panneau dans une iframe et vérifiant que seul l’historique de la fenêtre
-  `ha-main-window` reçoit l’action retour.
+- 147 tests backend et 69 tests frontend couvrent l’absence complète de lien de
+  retour, l’affichage du menu natif et les nouveaux tableaux d’attributs,
+  notamment lorsque plusieurs identifiants d’appareil partagent le même nom.
 
 ## 1.7.0-dev17 — 27 août 2026
 

@@ -57,16 +57,6 @@ const esc = (value) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
-const mainWindow = () => {
-  try {
-    if (window.name === "ha-main-window") return window;
-    if (window.parent?.name === "ha-main-window") return window.parent;
-    return window.top ?? window;
-  } catch (_error) {
-    return window;
-  }
-};
-
 const lines = (value) =>
   String(value ?? "")
     .split(/[\n,]+/)
@@ -522,7 +512,7 @@ class AlertManagerPanel extends HTMLElement {
     const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" back-path="/config/integrations">${page}</hass-tabs-subpage>` : page}`;
+      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}`;
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
@@ -618,8 +608,9 @@ class AlertManagerPanel extends HTMLElement {
       tablePage.narrow = Boolean(this._narrow);
       tablePage.tabs = this._tabs();
       tablePage.route = { prefix: "", path: TABS.find((tab) => tab.id === kind)?.path ?? TABS[0].path };
-      tablePage.backPath = "/config/integrations";
-      tablePage.backCallback = () => mainWindow().history?.back?.();
+      tablePage.mainPage = true;
+      tablePage.backPath = undefined;
+      tablePage.backCallback = undefined;
       tablePage.id = "id";
       tablePage.columns = this._nativeTableColumns(kind);
       tablePage.columnOrder = orderedColumns;
@@ -903,8 +894,9 @@ class AlertManagerPanel extends HTMLElement {
       shell.hass = this._hass;
       shell.tabs = this._tabs();
       shell.route = { prefix: "", path: activePage.path };
-      shell.backPath = "/config/integrations";
-      shell.backCallback = () => mainWindow().history?.back?.();
+      shell.mainPage = true;
+      shell.backPath = undefined;
+      shell.backCallback = undefined;
     }
     if (!this._hass || !this._config) return;
     if (this._editingRule !== null) {
@@ -1291,7 +1283,7 @@ class AlertManagerPanel extends HTMLElement {
       has-filters
       ${kind === "overview" ? "selectable" : ""}
       clickable
-      back-path="/config/integrations"
+      main-page
     >
       ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
       <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>

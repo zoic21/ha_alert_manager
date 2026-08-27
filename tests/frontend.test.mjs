@@ -1209,9 +1209,13 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
 
   assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage-data-table[\s\S]*id="panel-shell"[\s\S]*data-alert-table-page="overview"/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-icon-button-arrow-prev/);
+  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage-data-table[\s\S]*main-page/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /back-path=/);
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /ha-tab-group|ha-tab-group-tab|<ha-tab/);
   assert.equal(shell.hass, panel._hass);
-  assert.equal(shell.backPath, "/config/integrations");
+  assert.equal(shell.mainPage, true);
+  assert.equal(shell.backPath, undefined);
+  assert.equal(shell.backCallback, undefined);
   assert.deepEqual(shell.route, { prefix: "", path: "/alert-manager/overview" });
   assert.deepEqual(shell.tabs.map(({ path, name }) => ({ path, name })), [
     { path: "/alert-manager/overview", name: "Vue d’ensemble" },
@@ -1226,7 +1230,7 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
-test("native toolbar back callback uses the main Home Assistant window from an iframe", () => {
+test("all native panel pages use the Home Assistant menu without back navigation", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -1235,33 +1239,16 @@ test("native toolbar back callback uses the main Home Assistant window from an i
   panel._hass = { states: {} };
   const shell = {};
   panel.shadowRoot.querySelector = (selector) => selector === "#panel-shell" ? shell : null;
-  let iframeBackCalls = 0;
-  let mainBackCalls = 0;
-  const mainWindow = {
-    name: "ha-main-window",
-    history: {
-      state: null,
-      back() { mainBackCalls += 1; },
-    },
-  };
-  window.name = "alert-manager-panel";
-  window.history = {
-    state: null,
-    back() { iframeBackCalls += 1; },
-  };
-  window.parent = mainWindow;
-  window.top = mainWindow;
 
   panel._render();
-  shell.backCallback();
+  assert.equal(shell.mainPage, true);
+  assert.equal(shell.backPath, undefined);
+  assert.equal(shell.backCallback, undefined);
 
-  assert.equal(mainBackCalls, 1);
-  assert.equal(iframeBackCalls, 0);
-  assert.equal(shell.backPath, "/config/integrations");
-  window.name = undefined;
-  window.history = undefined;
-  window.parent = undefined;
-  window.top = undefined;
+  panel._activeTab = "settings";
+  panel._render();
+  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage id="panel-shell" main-page>/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /back-path=/);
 });
 
 test("native panel routes select the matching tab", () => {
