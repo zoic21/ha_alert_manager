@@ -1317,6 +1317,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
   assert.ok(batteryDelay < batteryDelayHelp);
   assert.ok(batteryDelayHelp < batteryThreshold);
+  assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
@@ -1474,7 +1475,8 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*data-field="message"/);
   assert.match(editor, /Condition Jinja supplémentaire/);
-  assert.match(editor, /Compatible Jinja\. Variables disponibles/);
+  assert.match(editor, /Toutes les fonctions Jinja et entités de Home Assistant sont accessibles/);
+  assert.match(editor, /Le rendu est figé lorsque l’alerte devient active/);
   assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);

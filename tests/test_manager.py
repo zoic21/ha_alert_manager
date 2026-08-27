@@ -406,15 +406,15 @@ def test_battery_global_threshold(hass, entry):
     assert manager.records["battery:sensor.battery"].details.value == 15.0
 
 
-def test_battery_entity_low_level_override(hass, entry):
-    """low_battery_level replaces the category threshold for one sensor."""
+def test_battery_ignores_low_battery_level_attribute(hass, entry):
+    """Only pack-owned global and device thresholds affect battery alerts."""
     hass.states.set(
         "sensor.battery",
         "20",
         {"device_class": "battery", "low_battery_level": 25},
     )
     manager = make_manager(hass, entry)
-    assert "25 %" in manager.records["battery:sensor.battery"].details.condition
+    assert "battery:sensor.battery" not in manager.records
 
 
 def test_battery_device_threshold_overrides_entity_and_global_thresholds(
@@ -503,8 +503,12 @@ def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
         )
 
 
-def test_custom_rule_message_renders_jinja_and_tracks_dependencies(hass, entry):
-    """A message renders variables and refreshes when its dependencies change."""
+def test_custom_rule_message_updates_pending_then_freezes_when_active(
+    hass, entry, set_now
+):
+    """A Jinja message follows dependencies only until activation."""
+    start = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    set_now(start)
     hass.states.set("sensor.source", "on")
     hass.states.set("sensor.context", "warm")
 
@@ -517,7 +521,7 @@ def test_custom_rule_message_renders_jinja_and_tracks_dependencies(hass, entry):
                 "entity_ids": ["sensor.source"],
                 "operator": "equals",
                 "value": "on",
-                "duration": 0,
+                "duration": 60,
                 "message": (
                     "{{ entity_id }} vaut {{ value }} et le contexte est "
                     "{{ states('sensor.context') }}"
@@ -526,6 +530,7 @@ def test_custom_rule_message_renders_jinja_and_tracks_dependencies(hass, entry):
         )
         alert_id = f"rule:{rule['id']}:sensor.source"
         expected = "sensor.source vaut on et le contexte est warm"
+        assert manager.records[alert_id].status is AlertStatus.PENDING
         assert manager.records[alert_id].details.message == expected
         assert manager.records[alert_id].details.condition == expected
 
@@ -537,10 +542,28 @@ def test_custom_rule_message_renders_jinja_and_tracks_dependencies(hass, entry):
         updated = "sensor.source vaut on et le contexte est hot"
         assert manager.records[alert_id].details.message == updated
         assert manager.records[alert_id].details.condition == updated
+
+        set_now(start + timedelta(seconds=60))
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+        hass.states.set("sensor.context", "cold")
+        manager._state_changed(Event({"entity_id": "sensor.context"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert manager.records[alert_id].details.message == updated
+        assert manager.records[alert_id].details.condition == updated
         assert (
             hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
             == updated
         )
+
+        await manager.async_unload()
+        reloaded = AlertManager(hass, entry)
+        await reloaded.async_setup()
+        assert reloaded.records[alert_id].details.message == updated
+        assert reloaded.records[alert_id].details.condition == updated
 
     run(scenario())
 

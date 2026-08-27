@@ -18,7 +18,7 @@
       "empty_delay_help": "Leave the delay empty to use the global delay.",
       "fields": {
         "device_thresholds": {
-          "help": "The device threshold takes precedence over low_battery_level and the global threshold.",
+          "help": "The device threshold takes precedence over the global threshold.",
           "label": "Custom thresholds by device"
         },
         "threshold": {
@@ -162,7 +162,7 @@
       "attribute_name": "Attribute name",
       "condition": "Condition",
       "condition_template": "Additional Jinja condition",
-      "condition_template_help": "Optional. The template must return true in addition to the comparison. Available variables: entity_id, state and value.",
+      "condition_template_help": "Optional. The template must return true in addition to the comparison. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
       "create": "Create",
       "delete_confirm": "Delete rule “{name}”?",
       "description": "Simple comparisons on the state or an attribute.",
@@ -179,7 +179,7 @@
       "entities": "Entities",
       "entities_help": "Each entity is evaluated independently.",
       "message_optional": "Optional message",
-      "message_help": "Supports Jinja. Available variables: entity_id, state and value.",
+      "message_help": "Supports Jinja. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value. The rendered message is frozen when the alert becomes active.",
       "modify": "Edit",
       "multiple_any": "The alert triggers as soon as one value matches.",
       "multiple_none": "The alert triggers only when none of the values match.",

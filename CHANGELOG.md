@@ -2,6 +2,25 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 1.7.0-dev21 — 27 août 2026
+
+### Modifié
+
+- Le pack batterie n’utilise plus l’attribut `low_battery_level`. Son seuil
+  effectif suit désormais uniquement la priorité seuil par appareil → seuil
+  global, dans le moteur comme dans les métadonnées et l’interface.
+- Le message Jinja d’une règle reste dynamique pendant l’état à venir, puis son
+  dernier rendu est figé au passage en actif. Les changements ultérieurs des
+  entités référencées ne modifient plus le message de cette occurrence.
+- L’aide des champs Jinja précise qu’ils utilisent l’environnement complet de
+  templates Home Assistant et peuvent consulter toutes les entités, sans pour
+  autant permettre l’appel de services ou l’exécution de code Python.
+
+### Tests
+
+- Les tests couvrent l’absence de prise en compte de `low_battery_level`, la mise
+  à jour du message à venir et son immutabilité après activation.
+
 ## 1.7.0-dev20 — 27 août 2026
 
 ### Ajouté

@@ -803,9 +803,13 @@ class AlertManager:
     def _render_rule_message(
         self, rule: Rule, state: State, current: Any
     ) -> str | None:
-        """Render an optional message as a Home Assistant Jinja template."""
+        """Render an optional Jinja message until its alert becomes active."""
         if rule.message is None:
             return None
+        alert_id = f"rule:{rule.id}:{state.entity_id}"
+        record = self.records.get(alert_id)
+        if record is not None and record.status is AlertStatus.ACTIVE:
+            return record.details.message
         try:
             render_info = self._rule_message_templates[rule.id].async_render_to_info(
                 {
@@ -857,13 +861,15 @@ class AlertManager:
             if record.details.rule_name != rule.name:
                 record.details.rule_name = rule.name
                 changed = True
-            for field, value in (
-                ("message", rule.message),
+            metadata = [
                 ("source", rule.source),
                 ("operator", rule.operator),
                 ("comparison_value", rule.value),
                 ("attribute", rule.attribute),
-            ):
+            ]
+            if record.status is not AlertStatus.ACTIVE:
+                metadata.insert(0, ("message", rule.message))
+            for field, value in metadata:
                 if getattr(record.details, field) != value:
                     setattr(record.details, field, deepcopy(value))
                     changed = True

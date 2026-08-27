@@ -40,13 +40,8 @@ def _evaluate(
         if entity_entry is not None and entity_entry.device_id
         else None
     )
-    entity_threshold = safe_float(state.attributes.get("low_battery_level"))
     threshold = (
-        device_threshold
-        if device_threshold is not None
-        else entity_threshold
-        if entity_threshold is not None
-        else config["threshold"]
+        device_threshold if device_threshold is not None else config["threshold"]
     )
     if value is None or value > threshold:
         return None

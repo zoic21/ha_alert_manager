@@ -160,11 +160,10 @@ temporarily unavailable.
 ### Low batteries
 
 A `sensor` with `device_class: battery` is in alert when its numeric value is less
-than or equal to the configured threshold (15% by default). A numeric
-`low_battery_level` attribute overrides the global threshold for that entity. The
-pack also declares `device_thresholds`, a panel-managed device-to-threshold map.
-A device threshold takes precedence over `low_battery_level` and the global
-threshold.
+than or equal to the configured threshold (15% by default). The pack also declares
+`device_thresholds`, a panel-managed device-to-threshold map. A device threshold
+takes precedence over the global threshold. The entity's `low_battery_level`
+attribute is not used.
 Invalid numbers, booleans, `NaN`, infinity, `unknown` and `unavailable` are ignored
 by this pack.
 
@@ -219,8 +218,13 @@ the rule when it changes.
 
 The `message` field also accepts a Jinja template with the same variables. Its
 rendered result is used in the panel, sensors, history and events. An entity
-referenced by the message refreshes it when that entity changes; plain text keeps
-the existing behavior unchanged.
+referenced by the message refreshes it while the alert is pending. The last result
+is frozen when the alert becomes active and remains unchanged until resolution.
+Plain text keeps the existing behavior unchanged.
+
+Both fields use Home Assistant's complete Jinja environment: all template
+functions, filters and tests can read any entity. They cannot call a service or
+execute Python code.
 
 Examples include `binary_sensor.service equals off`, `sensor.ups_status contains
 CHRG or ERROR`, `sensor.mode not_equals off or idle`, and

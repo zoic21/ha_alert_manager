@@ -18,7 +18,7 @@
       "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
       "fields": {
         "device_thresholds": {
-          "help": "Le seuil de l’appareil est prioritaire sur low_battery_level et sur le seuil global.",
+          "help": "Le seuil de l’appareil est prioritaire sur le seuil global.",
           "label": "Seuils personnalisés par appareil"
         },
         "threshold": {
@@ -162,7 +162,7 @@
       "attribute_name": "Nom de l’attribut",
       "condition": "Condition",
       "condition_template": "Condition Jinja supplémentaire",
-      "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Variables disponibles : entity_id, state et value.",
+      "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
       "create": "Créer",
       "delete_confirm": "Supprimer la règle « {name} » ?",
       "description": "Comparaisons simples sur l’état ou un attribut.",
@@ -179,7 +179,7 @@
       "entities": "Entités",
       "entities_help": "Chaque entité est évaluée indépendamment.",
       "message_optional": "Message facultatif",
-      "message_help": "Compatible Jinja. Variables disponibles : entity_id, state et value.",
+      "message_help": "Compatible Jinja. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value. Le rendu est figé lorsque l’alerte devient active.",
       "modify": "Modifier",
       "multiple_any": "L’alerte se déclenche dès qu’une valeur correspond.",
       "multiple_none": "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.",

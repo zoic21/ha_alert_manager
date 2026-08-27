@@ -203,11 +203,10 @@ configuration UniFi chargée, non désactivée et utilisable.
 ### Batteries
 
 Un `sensor` ayant `device_class: battery` est en anomalie lorsque sa valeur
-numérique est inférieure ou égale au seuil configuré (15 % par défaut). Un attribut
-numérique `low_battery_level` remplace le seuil global pour cette entité. Le pack
+numérique est inférieure ou égale au seuil configuré (15 % par défaut). Le pack
 déclare aussi `device_thresholds`, une table configurable dans le panneau qui
-associe un appareil à son seuil. Ce seuil par appareil est prioritaire sur
-`low_battery_level` et sur le seuil global. Les états
+associe un appareil à son seuil. Ce seuil par appareil est prioritaire sur le
+seuil global. L’attribut d’entité `low_battery_level` n’est pas utilisé. Les états
 `unknown`, `unavailable`, non numériques, `NaN` et infinis sont ignorés par cette
 catégorie.
 
@@ -241,8 +240,14 @@ par le template réévalue automatiquement la règle lorsqu’elle change.
 
 Le champ `message` accepte également un template Jinja avec les mêmes variables.
 Le résultat rendu est utilisé dans l’interface, les capteurs, l’historique et les
-événements. Une entité référencée dans le message provoque son actualisation dès
-qu’elle change ; un texte sans Jinja conserve exactement le comportement existant.
+événements. Une entité référencée dans le message provoque son actualisation tant
+que l’alerte est à venir. Le dernier rendu est figé lorsqu’elle devient active et
+reste inchangé jusqu’à sa résolution. Un texte sans Jinja conserve exactement le
+comportement existant.
+
+Ces deux champs utilisent l’environnement Jinja complet de Home Assistant : toutes
+ses fonctions, filtres et tests de template peuvent consulter n’importe quelle
+entité. Ils ne permettent pas d’appeler un service ni d’exécuter du code Python.
 
 Exemples :
 
