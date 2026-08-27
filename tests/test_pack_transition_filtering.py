@@ -7,16 +7,7 @@ import asyncio
 from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import Event
 
-from custom_components.alert_manager.packs.battery import (
-    PACK as BATTERY_PACK,
-    _cached_effective_threshold,
-)
-from custom_components.alert_manager.packs.connectivity import (
-    PACK as CONNECTIVITY_PACK,
-)
-from custom_components.alert_manager.packs.unavailable import (
-    PACK as UNAVAILABLE_PACK,
-)
+from custom_components.alert_manager.packs import battery, connectivity, unavailable
 from custom_components.alert_manager.runtime_manager import AlertManager
 
 
@@ -39,14 +30,18 @@ def test_unavailable_pack_owns_transition_filtering(hass):
     """Unavailable ignores ordinary churn and handles its own state edges."""
     normal = hass.states.set("sensor.source", "1")
     changed = hass.states.set("sensor.source", "2")
-    unavailable = hass.states.set("sensor.source", "unavailable")
+    unavailable_state = hass.states.set("sensor.source", "unavailable")
     config = {"enabled": True}
 
-    assert UNAVAILABLE_PACK.should_evaluate(hass, normal, changed, config) is False
-    assert UNAVAILABLE_PACK.should_evaluate(hass, changed, unavailable, config) is True
-    assert UNAVAILABLE_PACK.should_evaluate(hass, unavailable, changed, config) is True
-    assert UNAVAILABLE_PACK.should_evaluate(hass, None, normal, config) is True
-    assert UNAVAILABLE_PACK.should_evaluate(hass, normal, None, config) is True
+    assert unavailable.PACK.should_evaluate(hass, normal, changed, config) is False
+    assert (
+        unavailable.PACK.should_evaluate(hass, changed, unavailable_state, config) is True
+    )
+    assert (
+        unavailable.PACK.should_evaluate(hass, unavailable_state, changed, config) is True
+    )
+    assert unavailable.PACK.should_evaluate(hass, None, normal, config) is True
+    assert unavailable.PACK.should_evaluate(hass, normal, None, config) is True
 
 
 def test_connectivity_pack_only_keeps_relevant_edges(hass):
@@ -57,9 +52,9 @@ def test_connectivity_pack_only_keeps_relevant_edges(hass):
     off = hass.states.set("binary_sensor.link", "off", attributes)
     config = {"enabled": True}
 
-    assert CONNECTIVITY_PACK.should_evaluate(hass, on_old, on_new, config) is False
-    assert CONNECTIVITY_PACK.should_evaluate(hass, on_new, off, config) is True
-    assert CONNECTIVITY_PACK.should_evaluate(hass, off, on_new, config) is True
+    assert connectivity.PACK.should_evaluate(hass, on_old, on_new, config) is False
+    assert connectivity.PACK.should_evaluate(hass, on_new, off, config) is True
+    assert connectivity.PACK.should_evaluate(hass, off, on_new, config) is True
 
 
 def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
@@ -74,26 +69,26 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
 
     old_state = _battery_state(hass, "40")
     new_state = _battery_state(hass, "35")
-    assert BATTERY_PACK.should_evaluate(hass, old_state, new_state, config) is False
+    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is False
 
     old_state = _battery_state(hass, "31")
     new_state = _battery_state(hass, "30")
-    assert BATTERY_PACK.should_evaluate(hass, old_state, new_state, config) is True
+    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is True
 
     old_state = _battery_state(hass, "30")
     new_state = _battery_state(hass, "29")
-    assert BATTERY_PACK.should_evaluate(hass, old_state, new_state, config) is False
+    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is False
 
     old_state = _battery_state(hass, "29")
     new_state = _battery_state(hass, "31")
-    assert BATTERY_PACK.should_evaluate(hass, old_state, new_state, config) is True
+    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is True
 
 
 def test_battery_threshold_cache_follows_config_and_device_changes(
     hass, registry_entry
 ):
     """Cached thresholds cannot survive a changed override or device assignment."""
-    _cached_effective_threshold.cache_clear()
+    battery._cached_effective_threshold.cache_clear()
     registry = registry_entry(hass, "sensor.battery", device_id="device-a")
     config = {
         "enabled": True,
@@ -102,20 +97,20 @@ def test_battery_threshold_cache_follows_config_and_device_changes(
     }
     state = _battery_state(hass, "40")
 
-    assert BATTERY_PACK.evaluate(hass, state, config) is None
-    first_info = _cached_effective_threshold.cache_info()
-    assert BATTERY_PACK.evaluate(hass, state, config) is None
-    second_info = _cached_effective_threshold.cache_info()
+    assert battery.PACK.evaluate(hass, state, config) is None
+    first_info = battery._cached_effective_threshold.cache_info()
+    assert battery.PACK.evaluate(hass, state, config) is None
+    second_info = battery._cached_effective_threshold.cache_info()
     assert second_info.hits == first_info.hits + 1
 
     config["device_thresholds"]["device-a"] = 45
-    match = BATTERY_PACK.evaluate(hass, state, config)
+    match = battery.PACK.evaluate(hass, state, config)
     assert match is not None
     assert match.condition_params == {"threshold": "45"}
 
     config["device_thresholds"]["device-a"] = 30
     registry.device_id = "device-b"
-    match = BATTERY_PACK.evaluate(hass, state, config)
+    match = battery.PACK.evaluate(hass, state, config)
     assert match is not None
     assert match.condition_params == {"threshold": "50"}
 
