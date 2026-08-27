@@ -5,14 +5,18 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterable
+from copy import deepcopy
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN
+from .const import CATEGORY_UNAVAILABLE, DOMAIN, SIGNAL_ALERTS_UPDATED
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
+from .packs import PACKS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +40,7 @@ class AlertManager(BaseAlertManager):
         self._template_entities_by_key: dict[DependencyKey, frozenset[str]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
+        self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
         self._registry_evaluation_dirty = False
@@ -253,6 +258,49 @@ class AlertManager(BaseAlertManager):
         self._index_render_info("message", pair, render_info)
         return rendered
 
+    def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
+        """Return whether this state transition can change source-owned output."""
+        if entity_id in self._rules_by_entity:
+            return True
+        if any(
+            record.details.entity_id == entity_id for record in self.records.values()
+        ):
+            return True
+
+        # Home Assistant state_changed events include both states. Keep a
+        # conservative fallback for tests, startup shims, or future HA changes.
+        if "old_state" not in event.data or "new_state" not in event.data:
+            return self._is_relevant_entity_id(entity_id)
+        old_state = event.data.get("old_state")
+        new_state = event.data.get("new_state")
+        if old_state is None or new_state is None:
+            # Entity creation/removal must update automatic tracking and can open
+            # or resolve an alert even when its first/final state is ordinary.
+            return self._is_relevant_entity_id(entity_id)
+        if not isinstance(old_state, State) or not isinstance(new_state, State):
+            return self._is_relevant_entity_id(entity_id)
+        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
+            entity_id
+        ):
+            return False
+
+        automatic = self.config.get("automatic", {})
+        for pack in PACKS:
+            if not automatic.get(pack.id, {}).get("enabled", False):
+                continue
+            if not self._pack_is_available(pack.id):
+                continue
+            if pack.id == CATEGORY_UNAVAILABLE:
+                if (
+                    old_state.state == STATE_UNAVAILABLE
+                    or new_state.state == STATE_UNAVAILABLE
+                ):
+                    return True
+                continue
+            if pack.applies(self.hass, old_state) or pack.applies(self.hass, new_state):
+                return True
+        return False
+
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state event, never our own entities."""
@@ -272,7 +320,7 @@ class AlertManager(BaseAlertManager):
                     affected_entities.add(dependency_key[2])
             except Exception:  # pragma: no cover - defensive HA API guard
                 _LOGGER.exception("Unable to filter Jinja dependency for %s", entity_id)
-        if self._is_relevant_entity_id(entity_id):
+        if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
         self._queue_entity_evaluations(
             affected_entities,
@@ -314,11 +362,15 @@ class AlertManager(BaseAlertManager):
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
                 self._queued_evaluation_restoring = False
+                self._queued_public_refresh = False
                 return
             entity_ids = sorted(self._queued_evaluation_entities)
             self._queued_evaluation_entities.clear()
             restoring = self._queued_evaluation_restoring
             self._queued_evaluation_restoring = False
+            public_refresh = self._queued_public_refresh
+            self._queued_public_refresh = False
+            tracked_count_before = self._tracked_count()
             persisted_changed = False
             for entity_id in entity_ids:
                 try:
@@ -332,7 +384,12 @@ class AlertManager(BaseAlertManager):
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
             if persisted_changed:
                 await self._async_save_state()
-            self._publish_if_changed()
+            if (
+                persisted_changed
+                or public_refresh
+                or self._tracked_count() != tracked_count_before
+            ):
+                self._publish_if_changed()
         finally:
             self._evaluation_flush_scheduled = False
             if (
@@ -343,14 +400,20 @@ class AlertManager(BaseAlertManager):
                 self._schedule_evaluation_flush()
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
-        """Drop frozen message dependencies before publishing a new snapshot."""
+        """Publish one shared snapshot after dropping frozen dependencies."""
         for record in self.records.values():
             if record.status is not AlertStatus.ACTIVE or not record.details.rule_id:
                 continue
             pair = (record.details.rule_id, record.details.entity_id)
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(("message", pair[0], pair[1]))
-        super()._publish_if_changed(force=force)
+
+        snapshot = self.public_snapshot()
+        if not force and snapshot == self._last_public_snapshot:
+            return
+        self._schedule_new_device_alerts()
+        self._last_public_snapshot = deepcopy(snapshot)
+        async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED, snapshot)
 
     @callback
     def _timer_due(self, alert_id: str) -> None:
@@ -361,6 +424,9 @@ class AlertManager(BaseAlertManager):
         record = self.records.get(alert_id)
         if record is None:
             return
+        # A timer may exist only to expose a still-pending alert. That changes
+        # the public snapshot without changing persisted record data.
+        self._queued_public_refresh = True
         self._queue_entity_evaluations((record.details.entity_id,))
 
     @callback
