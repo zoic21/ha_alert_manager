@@ -232,7 +232,7 @@ def test_services_use_user_context_and_system_calls_keep_author_absent(
     """Service handlers resolve display names and validate pending/unknown ids."""
     manager, alert_id = active_manager(hass, entry, set_now, "sensor.user")
     hass.data[DATA_MANAGER] = manager
-    hass.auth.users["user-1"] = SimpleNamespace(name="Loïc")
+    hass.auth.users["user-1"] = SimpleNamespace(name="Loïc", is_admin=True)
     run(async_setup_services(hass))
 
     run(
@@ -276,6 +276,46 @@ def test_services_use_user_context_and_system_calls_keep_author_absent(
 
     assert ("alert_manager", "acknowledge") in hass.services.handlers
     assert ("alert_manager", "unacknowledge") in hass.services.handlers
+
+
+def test_services_reject_non_admin_user_context(hass, entry, set_now):
+    """Authenticated non-admin users cannot change acknowledgement state."""
+    manager, alert_id = active_manager(hass, entry, set_now, "sensor.restricted")
+    hass.data[DATA_MANAGER] = manager
+    hass.auth.users["user-2"] = SimpleNamespace(name="Reader", is_admin=False)
+    run(async_setup_services(hass))
+
+    with pytest.raises(ServiceValidationError, match="administrator"):
+        run(
+            hass.services.async_call(
+                "alert_manager",
+                "acknowledge",
+                {"alert_id": alert_id},
+                context=Context(user_id="user-2"),
+            )
+        )
+    assert manager.records[alert_id].acknowledged is False
+
+    run(
+        hass.services.async_call(
+            "alert_manager",
+            "acknowledge",
+            {"alert_id": alert_id},
+            context=Context(),
+        )
+    )
+    assert manager.records[alert_id].acknowledged is True
+
+    with pytest.raises(ServiceValidationError, match="administrator"):
+        run(
+            hass.services.async_call(
+                "alert_manager",
+                "unacknowledge",
+                {"alert_id": alert_id},
+                context=Context(user_id="user-2"),
+            )
+        )
+    assert manager.records[alert_id].acknowledged is True
 
 
 def test_services_remain_discoverable_without_a_loaded_entry(hass):

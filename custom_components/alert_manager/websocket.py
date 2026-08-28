@@ -7,7 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 
 from .const import DATA_MANAGER
 from .manager import AlertManager
@@ -26,12 +26,13 @@ def _manager(
     return manager
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/config/get"})
-@callback
-def websocket_config_get(
+async def websocket_config_get(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return complete configuration."""
+    """Return complete configuration to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.get_config())
 
@@ -58,12 +59,13 @@ async def websocket_config_update(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/alerts/list"})
-@callback
-def websocket_alerts_list(
+async def websocket_alerts_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return active and pending alerts."""
+    """Return active and pending alerts to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.public_snapshot())
 
@@ -130,22 +132,24 @@ async def websocket_history_clear(
         connection.send_result(msg["id"], await manager.async_clear_history())
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/packs/list"})
-@callback
-def websocket_packs_list(
+async def websocket_packs_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return backend-owned automatic pack metadata and availability."""
+    """Return automatic pack metadata and availability to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.get_packs())
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/rules/list"})
-@callback
-def websocket_rules_list(
+async def websocket_rules_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return custom rules."""
+    """Return custom rules to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.get_config()["rules"])
 
