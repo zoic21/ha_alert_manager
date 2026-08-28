@@ -69,10 +69,8 @@ def _effective_threshold(
     )
 
 
-def _matches(hass: HomeAssistant, state: State | None, config: dict[str, Any]) -> bool:
-    """Return whether the optional state currently matches this pack."""
-    if state is None or not _applies(hass, state):
-        return False
+def _matches(hass: HomeAssistant, state: State, config: dict[str, Any]) -> bool:
+    """Return whether this battery state is below its effective threshold."""
     value = safe_float(state.state)
     if value is None:
         return False
@@ -81,12 +79,12 @@ def _matches(hass: HomeAssistant, state: State | None, config: dict[str, Any]) -
 
 def _should_evaluate(
     hass: HomeAssistant,
-    old_state: State | None,
-    new_state: State | None,
+    new_state: State,
     config: dict[str, Any],
+    record_exists: bool,
 ) -> bool:
-    """Evaluate only effective low-battery condition transitions."""
-    return _matches(hass, old_state, config) != _matches(hass, new_state, config)
+    """Evaluate only when the stored occurrence and new battery state disagree."""
+    return record_exists != _matches(hass, new_state, config)
 
 
 def _evaluate(
