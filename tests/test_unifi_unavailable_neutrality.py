@@ -26,22 +26,17 @@ def _state(hass, value, *, attributes=None):
     return hass.states.get(_ENTITY_ID)
 
 
-def test_unifi_treats_unavailable_as_neutral(hass, registry_entry):
-    """Unavailable neither opens nor closes the UniFi away condition."""
+def test_unifi_filters_only_unavailable(hass, registry_entry):
+    """Home and away are interesting; unavailable is left to neutral handling."""
     registry_entry(hass, _ENTITY_ID, platform="unifi")
     home = _state(hass, STATE_HOME)
     away = _state(hass, "not_home")
     unavailable = _state(hass, STATE_UNAVAILABLE)
     config = {"enabled": True}
 
-    assert not unifi.PACK.should_evaluate(hass, home, config, record_exists=False)
-    assert unifi.PACK.should_evaluate(hass, away, config, record_exists=False)
-    assert not unifi.PACK.should_evaluate(hass, away, config, record_exists=True)
-    assert unifi.PACK.should_evaluate(hass, home, config, record_exists=True)
-    assert not unifi.PACK.should_evaluate(
-        hass, unavailable, config, record_exists=False
-    )
-    assert not unifi.PACK.should_evaluate(hass, unavailable, config, record_exists=True)
+    assert unifi.PACK.should_evaluate(hass, home, config)
+    assert unifi.PACK.should_evaluate(hass, away, config)
+    assert not unifi.PACK.should_evaluate(hass, unavailable, config)
     assert unifi.PACK.evaluate(hass, unavailable, config) is None
 
 
