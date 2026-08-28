@@ -14,7 +14,7 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
-from .packs import PACKS, PACKS_BY_ID, PACK_NEUTRAL
+from .packs import PACKS, PACKS_BY_ID, PackNeutral
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -285,7 +285,7 @@ class AlertManager(BaseAlertManager):
 
         evaluation = pack.evaluate(self.hass, state, config)
         alert_id = f"{pack_id}:{state.entity_id}"
-        if evaluation is PACK_NEUTRAL:
+        if isinstance(evaluation, PackNeutral):
             record = self.records.get(alert_id)
             if record is not None:
                 result[alert_id] = (record.details, record.delay)
