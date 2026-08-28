@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from homeassistant.const import ATTR_DEVICE_CLASS
+from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
@@ -69,22 +69,14 @@ def _effective_threshold(
     )
 
 
-def _matches(hass: HomeAssistant, state: State, config: dict[str, Any]) -> bool:
-    """Return whether this battery state is below its effective threshold."""
-    value = safe_float(state.state)
-    if value is None:
-        return False
-    return value <= _effective_threshold(hass, state, config)
-
-
 def _should_evaluate(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     new_state: State,
-    config: dict[str, Any],
-    record_exists: bool,
+    _config: dict[str, Any],
+    _record_exists: bool,
 ) -> bool:
-    """Evaluate only when the stored occurrence and new battery state disagree."""
-    return record_exists != _matches(hass, new_state, config)
+    """Evaluate applicable battery states except unavailable."""
+    return new_state.state != STATE_UNAVAILABLE
 
 
 def _evaluate(
