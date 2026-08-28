@@ -41,9 +41,7 @@ def test_unifi_treats_unavailable_as_neutral(hass, registry_entry):
     assert not unifi.PACK.should_evaluate(
         hass, unavailable, config, record_exists=False
     )
-    assert not unifi.PACK.should_evaluate(
-        hass, unavailable, config, record_exists=True
-    )
+    assert not unifi.PACK.should_evaluate(hass, unavailable, config, record_exists=True)
     assert unifi.PACK.evaluate(hass, unavailable, config) is None
 
 
