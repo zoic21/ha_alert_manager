@@ -291,6 +291,13 @@ class AlertManager(BaseAlertManager):
         if entity_id in self._rules_by_entity:
             return True
 
+        # Once any alert occurrence exists for this source, always evaluate the
+        # entity. Candidate generation/evaluate() owns all keep/resolve decisions.
+        if any(
+            record.details.entity_id == entity_id for record in self.records.values()
+        ):
+            return True
+
         # Home Assistant state_changed events include both states. Keep a
         # conservative fallback for synthetic events or future HA API changes.
         if "old_state" not in event.data or "new_state" not in event.data:
@@ -302,9 +309,8 @@ class AlertManager(BaseAlertManager):
         ):
             return self._is_relevant_entity_id(entity_id)
 
-        # Exact state+attribute duplicates cannot change automatic output. Direct
-        # custom rules were kept above, and Jinja dependencies are queued
-        # independently by _state_changed.
+        # Exact duplicate events are irrelevant only while the entity has no
+        # current alert occurrence. Jinja dependencies are queued independently.
         if (
             old_state is not None
             and new_state is not None
@@ -325,13 +331,7 @@ class AlertManager(BaseAlertManager):
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            alert_id = f"{pack.id}:{entity_id}"
-            if pack.should_evaluate(
-                self.hass,
-                new_state,
-                config,
-                record_exists=alert_id in self.records,
-            ):
+            if pack.should_evaluate(self.hass, new_state, config):
                 return True
         return False
 
