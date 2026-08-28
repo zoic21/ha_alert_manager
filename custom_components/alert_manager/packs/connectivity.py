@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_CONNECTIVITY
 from .base import AutomaticPack, PackMatch, PackNeutral
@@ -13,9 +14,16 @@ from .base import AutomaticPack, PackMatch, PackNeutral
 
 def _applies(hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a connectivity binary sensor."""
-    return (
-        state.entity_id.partition(".")[0] == "binary_sensor"
-        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
+    if state.entity_id.partition(".")[0] != "binary_sensor":
+        return False
+    if state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity":
+        return True
+    if state.state != STATE_UNAVAILABLE:
+        return False
+    registry_entry = er.async_get(hass).async_get(state.entity_id)
+    return bool(
+        registry_entry is not None
+        and getattr(registry_entry, "original_device_class", None) == "connectivity"
     )
 
 
