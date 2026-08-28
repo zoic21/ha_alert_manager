@@ -325,7 +325,13 @@ class AlertManager(BaseAlertManager):
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            if pack.should_evaluate(self.hass, old_state, new_state, config):
+            alert_id = f"{pack.id}:{entity_id}"
+            if pack.should_evaluate(
+                self.hass,
+                new_state,
+                config,
+                record_exists=alert_id in self.records,
+            ):
                 return True
         return False
 
