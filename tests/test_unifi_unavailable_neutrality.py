@@ -7,8 +7,8 @@ import asyncio
 from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE
 from homeassistant.core import Event
 
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.packs import PackNeutral, unifi
-from custom_components.alert_manager.runtime_manager import AlertManager
 
 _ENTITY_ID = "device_tracker.unifi_client"
 _ATTRIBUTES = {"source_type": "router"}

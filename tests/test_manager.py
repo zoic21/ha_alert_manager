@@ -261,7 +261,7 @@ def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
     run(fire_timer())
     record = manager.records["unavailable:sensor.test"]
     assert record.status is AlertStatus.ACTIVE
-    assert entry.created_task_names == ["alert_manager timer unavailable:sensor.test"]
+    assert entry.created_task_names == ["alert_manager state-change batch"]
 
 
 def test_active_resolution_and_events(hass, entry, set_now):
@@ -1456,7 +1456,7 @@ def test_pack_entry_state_listener_re_evaluates_automatically(
         await asyncio.sleep(0)
 
         assert "unifi:device_tracker.ap" not in manager.records
-        assert entry.created_task_names[-1] == "alert_manager pack availability"
+        assert entry.created_task_names[-1] == "alert_manager pack-availability batch"
 
     run(scenario())
 

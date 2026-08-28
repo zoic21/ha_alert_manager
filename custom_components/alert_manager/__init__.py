@@ -24,7 +24,7 @@ from .const import (
     PANEL_URL,
     PLATFORMS,
 )
-from .runtime_manager import AlertManager
+from .manager import AlertManager
 from .services import async_setup_services
 from .websocket import async_register_websocket_commands
 

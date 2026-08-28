@@ -8,8 +8,8 @@ from types import SimpleNamespace
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import Event
 
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.packs import PackNeutral, connectivity, unavailable
-from custom_components.alert_manager.runtime_manager import AlertManager
 
 
 def _event(entity_id, old_state, new_state):
