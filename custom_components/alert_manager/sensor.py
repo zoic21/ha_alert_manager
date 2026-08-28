@@ -205,21 +205,27 @@ def _bounded_attributes(
     """Never exceed Recorder's state-attribute limit, even with many alerts."""
     compacted: list[dict[str, Any]] = []
     omitted_key = f"{attribute_key}_omitted"
-    for item in items:
-        candidate = [*compacted, compactor(item)]
-        omitted = len(items) - len(candidate)
-        attributes: dict[str, Any] = {attribute_key: candidate}
+    json_options = {
+        "ensure_ascii": False,
+        "separators": (",", ":"),
+        "default": str,
+    }
+    encoded_size = len(json.dumps({attribute_key: []}, **json_options).encode())
+    for index, item in enumerate(items):
+        compact = compactor(item)
+        item_size = len(json.dumps(compact, **json_options).encode())
+        candidate_size = encoded_size + item_size + (1 if compacted else 0)
+        omitted = len(items) - index - 1
         if omitted:
-            attributes[omitted_key] = omitted
-        encoded = json.dumps(
-            attributes,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            default=str,
-        ).encode()
-        if len(encoded) > _ATTRIBUTE_SIZE_BUDGET:
+            # Drop both braces from the one-member object and add the comma;
+            # relative to its serialized size, that costs one byte less.
+            candidate_size += (
+                len(json.dumps({omitted_key: omitted}, **json_options).encode()) - 1
+            )
+        if candidate_size > _ATTRIBUTE_SIZE_BUDGET:
             break
-        compacted = candidate
+        compacted.append(compact)
+        encoded_size += item_size + (1 if len(compacted) > 1 else 0)
     result: dict[str, Any] = {attribute_key: compacted}
     if omitted := len(items) - len(compacted):
         result[omitted_key] = omitted

@@ -1054,8 +1054,10 @@ class AlertManager:
             or (domain == "sensor" and "battery" in pack_ids)
         )
 
-    def public_snapshot(self) -> dict[str, Any]:
-        """Return active and pending lists without resolved history."""
+    def _build_public_snapshot(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        """Build one public snapshot and its already-grouped active devices."""
         now = dt_util.now()
         active_records = sorted(
             (
@@ -1074,24 +1076,38 @@ class AlertManager:
             ),
             key=lambda record: record.due_at.astimezone(UTC),
         )
-        active = [record.as_public_dict() for record in active_records]
-        unacknowledged = [
-            alert for alert in active if alert.get("acknowledged") is not True
-        ]
-        acknowledged = [alert for alert in active if alert.get("acknowledged") is True]
+        unacknowledged: list[dict[str, Any]] = []
+        acknowledged: list[dict[str, Any]] = []
+        for record in active_records:
+            target = acknowledged if record.acknowledged else unacknowledged
+            target.append(record.as_public_dict())
         pending = [record.as_public_dict() for record in pending_records]
-        active_devices = self._active_devices(active_records)
-        return {
-            "active_count": len(unacknowledged),
-            "acknowledge_count": len(acknowledged),
-            "pending_count": len(pending),
-            "tracked_count": self._tracked_count(),
-            "alerts": unacknowledged,
-            "acknowledge": acknowledged,
-            "pending": pending,
-            "device_active_count": len(active_devices),
-            "active_devices": active_devices,
-        }
+        device_groups = self._active_device_groups(active_records)
+        active_devices = sorted(
+            device_groups.values(),
+            key=lambda device: (
+                str(device["device_name"]).casefold(),
+                device["device_id"],
+            ),
+        )
+        return (
+            {
+                "active_count": len(unacknowledged),
+                "acknowledge_count": len(acknowledged),
+                "pending_count": len(pending),
+                "tracked_count": self._tracked_count(),
+                "alerts": unacknowledged,
+                "acknowledge": acknowledged,
+                "pending": pending,
+                "device_active_count": len(active_devices),
+                "active_devices": active_devices,
+            },
+            device_groups,
+        )
+
+    def public_snapshot(self) -> dict[str, Any]:
+        """Return active and pending lists without resolved history."""
+        return self._build_public_snapshot()[0]
 
     def _pending_is_visible(
         self, record: AlertRecord, now: datetime | None = None
@@ -1117,29 +1133,22 @@ class AlertManager:
             min(self.config["pending_display_delay"], record.delay),
         ) + timedelta(seconds=record.paused_seconds)
 
-    def _active_devices(
-        self, active_records: list[AlertRecord] | None = None
-    ) -> list[dict[str, Any]]:
-        """Return sorted public summaries for active device-name groups."""
-        return sorted(
-            self._active_device_groups(active_records).values(),
-            key=lambda device: (
-                str(device["device_name"]).casefold(),
-                device["device_id"],
-            ),
-        )
-
     def _active_device_groups(
         self, active_records: list[AlertRecord] | None = None
     ) -> dict[str, dict[str, Any]]:
         """Group registry devices by name and device-less sources by entity."""
         records = active_records
         if records is None:
-            records = [
-                record
-                for record in self.records.values()
-                if record.status is AlertStatus.ACTIVE
-            ]
+            records = sorted(
+                (
+                    record
+                    for record in self.records.values()
+                    if record.status is AlertStatus.ACTIVE
+                ),
+                key=lambda record: (record.active_since or record.due_at).astimezone(
+                    UTC
+                ),
+            )
         grouped: dict[str, list[AlertRecord]] = {}
         for record in records:
             if record.details.device_id:
@@ -1153,12 +1162,9 @@ class AlertManager:
 
         devices: dict[str, dict[str, Any]] = {}
         for group_id, device_records in grouped.items():
-            ordered = sorted(
-                device_records,
-                key=lambda record: (record.active_since or record.due_at).astimezone(
-                    UTC
-                ),
-            )
+            # Records are already chronological, either from public snapshot
+            # construction or from the one sort above.
+            ordered = device_records
             first = ordered[0]
             device_ids = sorted(
                 {
@@ -1860,9 +1866,8 @@ class AlertManager:
             data["previous_acknowledged_by"] = previous_by
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
-    def _schedule_new_device_alerts(self) -> None:
+    def _schedule_new_device_alerts(self, devices: dict[str, dict[str, Any]]) -> None:
         """Debounce the first device event until its alert set is quiet."""
-        devices = self._active_device_groups()
         current_group_ids = set(devices)
         for group_id in self._active_device_group_ids - current_group_ids:
             self._cancel_device_event_timer(group_id)
@@ -1920,11 +1925,11 @@ class AlertManager:
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
-        snapshot = self.public_snapshot()
+        snapshot, device_groups = self._build_public_snapshot()
         if not force and snapshot == self._last_public_snapshot:
             return
-        self._schedule_new_device_alerts()
-        self._last_public_snapshot = deepcopy(snapshot)
+        self._schedule_new_device_alerts(device_groups)
+        self._last_public_snapshot = snapshot
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)
 
 

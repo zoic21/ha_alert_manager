@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any
 
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
@@ -19,26 +18,6 @@ from ..models import safe_float
 from .base import AutomaticPack, PackConfigField, PackMatch
 
 
-@lru_cache(maxsize=512)
-def _cached_effective_threshold(
-    entity_id: str,
-    device_id: str | None,
-    global_threshold: float | int | str,
-    device_threshold: float | int | str | None,
-) -> float:
-    """Cache the normalized effective threshold for one entity/config tuple."""
-    del entity_id, device_id
-    normalized_device = safe_float(device_threshold)
-    if normalized_device is not None:
-        return normalized_device
-    normalized_global = safe_float(global_threshold)
-    return (
-        normalized_global
-        if normalized_global is not None
-        else float(DEFAULT_BATTERY_THRESHOLD)
-    )
-
-
 def _applies(_hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a battery sensor."""
     return (
@@ -50,7 +29,7 @@ def _applies(_hass: HomeAssistant, state: State) -> bool:
 def _effective_threshold(
     hass: HomeAssistant, state: State, config: dict[str, Any]
 ) -> float:
-    """Return the cached global/device threshold effective for this entity."""
+    """Return the global or device-specific threshold for this entity."""
     entity_entry = er.async_get(hass).async_get(state.entity_id)
     device_id = (
         entity_entry.device_id
@@ -58,14 +37,16 @@ def _effective_threshold(
         else None
     )
     device_thresholds = config.get("device_thresholds", {})
-    device_threshold = (
+    device_threshold = safe_float(
         device_thresholds.get(device_id) if device_id is not None else None
     )
-    return _cached_effective_threshold(
-        state.entity_id,
-        device_id,
-        config.get("threshold", DEFAULT_BATTERY_THRESHOLD),
-        device_threshold,
+    if device_threshold is not None:
+        return device_threshold
+    global_threshold = safe_float(config.get("threshold", DEFAULT_BATTERY_THRESHOLD))
+    return (
+        global_threshold
+        if global_threshold is not None
+        else float(DEFAULT_BATTERY_THRESHOLD)
     )
 
 
