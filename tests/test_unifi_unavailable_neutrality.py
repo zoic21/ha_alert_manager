@@ -34,11 +34,24 @@ def test_unifi_treats_unavailable_as_neutral(hass, registry_entry):
     unavailable = _state(hass, STATE_UNAVAILABLE)
     config = {"enabled": True}
 
-    assert unifi.PACK.should_evaluate(hass, home, away, config)
-    assert not unifi.PACK.should_evaluate(hass, home, unavailable, config)
-    assert not unifi.PACK.should_evaluate(hass, away, unavailable, config)
-    assert unifi.PACK.should_evaluate(hass, unavailable, home, config)
-    assert unifi.PACK.should_evaluate(hass, unavailable, away, config)
+    assert not unifi.PACK.should_evaluate(
+        hass, home, config, record_exists=False
+    )
+    assert unifi.PACK.should_evaluate(
+        hass, away, config, record_exists=False
+    )
+    assert not unifi.PACK.should_evaluate(
+        hass, away, config, record_exists=True
+    )
+    assert unifi.PACK.should_evaluate(
+        hass, home, config, record_exists=True
+    )
+    assert not unifi.PACK.should_evaluate(
+        hass, unavailable, config, record_exists=False
+    )
+    assert not unifi.PACK.should_evaluate(
+        hass, unavailable, config, record_exists=True
+    )
     assert unifi.PACK.evaluate(hass, unavailable, config) is None
 
 
