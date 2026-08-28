@@ -13,6 +13,12 @@ const DEFAULT_COHERENCE_TABLE_STATE = Object.freeze({
   sortDirection: "asc",
   groupBy: "",
 });
+const ACTION_ICONS = Object.freeze({
+  "save-automatic": "mdi:content-save",
+  "save-rule": "mdi:content-save",
+  "save-settings": "mdi:content-save",
+  "scan-coherence": "mdi:refresh",
+});
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -21,6 +27,21 @@ const escapeHtml = (value) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+
+const decorateActionIcons = (panel) => {
+  if (!globalThis.document?.createElement) return;
+  for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
+    const buttons = panel.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? [];
+    for (const button of buttons) {
+      if (button.querySelector?.("[data-alert-manager-action-icon]")) continue;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", iconName);
+      icon.setAttribute("data-alert-manager-action-icon", "");
+      button.prepend(icon);
+    }
+  }
+};
 
 const ensureCoherenceTableState = (panel) => {
   if (panel._coherenceTableState) return panel._coherenceTableState;
@@ -173,6 +194,7 @@ AlertManagerPanel.prototype._render = function() {
     || !this._coherence
   ) {
     baseRender.call(this);
+    decorateActionIcons(this);
     return;
   }
   if (!this.shadowRoot) return;
@@ -186,6 +208,7 @@ AlertManagerPanel.prototype._render = function() {
   this._hydrateCoherenceTable();
   this._hydrateYamlEditor();
   this._updateCountdowns();
+  decorateActionIcons(this);
 };
 
 AlertManagerPanel.prototype._hydrateCoherenceTable = function() {
