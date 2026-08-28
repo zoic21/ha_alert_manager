@@ -36,7 +36,6 @@ def _should_evaluate(
     _hass: HomeAssistant,
     new_state: State,
     _config: dict[str, Any],
-    _record_exists: bool,
 ) -> bool:
     """Evaluate applicable UniFi states except unavailable."""
     return new_state.state != STATE_UNAVAILABLE
