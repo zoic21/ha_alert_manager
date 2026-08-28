@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import AutomaticPack, PACK_NEUTRAL, PackConfigField, PackNeutral
+from .base import AutomaticPack, PackConfigField, PackNeutral
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
 from .unavailable import PACK as UNAVAILABLE_PACK
@@ -19,7 +19,6 @@ PACKS_BY_ID = {pack.id: pack for pack in PACKS}
 __all__ = [
     "PACKS",
     "PACKS_BY_ID",
-    "PACK_NEUTRAL",
     "AutomaticPack",
     "PackConfigField",
     "PackNeutral",
