@@ -74,17 +74,16 @@ class AutomaticPack:
         *,
         record_exists: bool,
     ) -> bool:
-        """Return whether the current record and new state disagree."""
-        if new_state is not None and new_state.state in self.neutral_states:
+        """Return whether this event is worth running the pack evaluator."""
+        # Once a pack owns an occurrence for this entity, always re-evaluate it.
+        # evaluate() remains the sole authority for whether the alert still matches.
+        if record_exists:
+            return True
+        if new_state is None or not self.applies(hass, new_state):
             return False
-        if new_state is None:
-            return record_exists
-        if not self.applies(hass, new_state):
-            return record_exists
         if self.transition_filter is not None:
             return self.transition_filter(hass, new_state, config, record_exists)
-        # Keep future packs conservative unless they explicitly provide a
-        # transition-aware filter. New applicable states may change their output.
+        # Future packs without a filter stay conservative for applicable states.
         return True
 
     def available(self, hass: HomeAssistant) -> bool:
