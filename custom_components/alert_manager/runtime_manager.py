@@ -14,7 +14,7 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
-from .packs import PACKS
+from .packs import PACKS, PACK_NEUTRAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -257,7 +257,7 @@ class AlertManager(BaseAlertManager):
         return rendered
 
     def _build_candidates(self, state: State) -> dict[str, Any]:
-        """Keep neutral automatic-pack states from changing their own status."""
+        """Let each pack evaluate unavailable, including neutral outcomes."""
         if state.state != STATE_UNAVAILABLE:
             return super()._build_candidates(state)
         if not self._is_base_eligible(state.entity_id):
@@ -268,20 +268,19 @@ class AlertManager(BaseAlertManager):
             automatic = self.config.get("automatic", {})
             for pack in PACKS:
                 config = automatic.get(pack.id, {})
-                if state.state in pack.neutral_states:
-                    if not config.get("enabled", False):
-                        continue
-                    if not self._pack_is_available(pack.id):
-                        continue
+                if not config.get("enabled", False):
+                    continue
+                if not self._pack_is_available(pack.id):
+                    continue
+                evaluation = pack.evaluate(self.hass, state, config)
+                if evaluation is PACK_NEUTRAL:
                     alert_id = f"{pack.id}:{state.entity_id}"
                     record = self.records.get(alert_id)
                     if record is not None:
-                        result[alert_id] = (
-                            record.details,
-                            self._delay_for(state, pack.id),
-                        )
+                        result[alert_id] = (record.details, record.delay)
                     continue
-                self._add_pack_candidate(result, state, pack.id)
+                if evaluation is not None:
+                    super()._add_pack_candidate(result, state, pack.id)
         # Keep the existing rule semantics: custom rules are not evaluated while
         # their source itself is unavailable.
         return result
