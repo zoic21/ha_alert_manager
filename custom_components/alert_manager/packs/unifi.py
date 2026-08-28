@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_UNIFI
-from .base import AutomaticPack, PACK_NEUTRAL, PackMatch, PackNeutral
+from .base import AutomaticPack, PackMatch, PackNeutral
 
 
 def _is_unifi_tracker(hass: HomeAssistant, state: State) -> bool:
@@ -48,7 +48,7 @@ def _evaluate(
     if not _applies(hass, state):
         return None
     if state.state == STATE_UNAVAILABLE:
-        return PACK_NEUTRAL
+        return PackNeutral()
     if state.state == STATE_HOME:
         return None
     return PackMatch(
