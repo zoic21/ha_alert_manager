@@ -26,55 +26,33 @@ def _state_event(entity_id, old_state, new_state):
     )
 
 
-def test_unavailable_pack_owns_transition_filtering(hass):
-    """Unavailable compares its stored occurrence only with the new state."""
+def test_unavailable_pack_filters_only_interesting_new_state(hass):
+    """Unavailable is interesting only when the new state is unavailable."""
     normal = hass.states.set("sensor.source", "1")
     unavailable_state = hass.states.set("sensor.source", "unavailable")
     config = {"enabled": True}
 
-    assert not unavailable.PACK.should_evaluate(
-        hass, normal, config, record_exists=False
-    )
-    assert unavailable.PACK.should_evaluate(
-        hass, unavailable_state, config, record_exists=False
-    )
-    assert not unavailable.PACK.should_evaluate(
-        hass, unavailable_state, config, record_exists=True
-    )
-    assert unavailable.PACK.should_evaluate(hass, normal, config, record_exists=True)
-    assert unavailable.PACK.should_evaluate(hass, None, config, record_exists=True)
-    assert not unavailable.PACK.should_evaluate(hass, None, config, record_exists=False)
+    assert not unavailable.PACK.should_evaluate(hass, normal, config)
+    assert unavailable.PACK.should_evaluate(hass, unavailable_state, config)
+    assert not unavailable.PACK.should_evaluate(hass, None, config)
 
 
-def test_connectivity_pack_only_keeps_relevant_edges(hass):
-    """Connectivity compares its stored occurrence with the definitive new state."""
+def test_connectivity_pack_filters_only_unavailable(hass):
+    """Every applicable definitive connectivity state is worth evaluating."""
     attributes = {ATTR_DEVICE_CLASS: "connectivity"}
     on_state = hass.states.set("binary_sensor.link", "on", attributes)
     off_state = hass.states.set("binary_sensor.link", "off", attributes)
     unavailable_state = hass.states.set("binary_sensor.link", "unavailable", attributes)
     config = {"enabled": True}
 
-    assert not connectivity.PACK.should_evaluate(
-        hass, on_state, config, record_exists=False
-    )
-    assert connectivity.PACK.should_evaluate(
-        hass, off_state, config, record_exists=False
-    )
-    assert not connectivity.PACK.should_evaluate(
-        hass, off_state, config, record_exists=True
-    )
-    assert connectivity.PACK.should_evaluate(hass, on_state, config, record_exists=True)
-    assert not connectivity.PACK.should_evaluate(
-        hass, unavailable_state, config, record_exists=False
-    )
-    assert not connectivity.PACK.should_evaluate(
-        hass, unavailable_state, config, record_exists=True
-    )
-    assert connectivity.PACK.should_evaluate(hass, None, config, record_exists=True)
+    assert connectivity.PACK.should_evaluate(hass, on_state, config)
+    assert connectivity.PACK.should_evaluate(hass, off_state, config)
+    assert not connectivity.PACK.should_evaluate(hass, unavailable_state, config)
+    assert not connectivity.PACK.should_evaluate(hass, None, config)
 
 
-def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
-    """Battery transitions use the configured device threshold, not the global one."""
+def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_entry):
+    """Battery should_evaluate only filters unavailable, never the threshold."""
     device_id = "battery-device"
     registry_entry(hass, "sensor.battery", device_id=device_id)
     config = {
@@ -83,23 +61,12 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
         "device_thresholds": {device_id: 30},
     }
 
-    high = _battery_state(hass, "40")
-    assert not battery.PACK.should_evaluate(hass, high, config, record_exists=False)
-    assert battery.PACK.should_evaluate(hass, high, config, record_exists=True)
-
-    at_threshold = _battery_state(hass, "30")
-    assert battery.PACK.should_evaluate(hass, at_threshold, config, record_exists=False)
+    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "40"), config)
+    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "30"), config)
+    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "29"), config)
+    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "31"), config)
     assert not battery.PACK.should_evaluate(
-        hass, at_threshold, config, record_exists=True
-    )
-
-    still_low = _battery_state(hass, "29")
-    assert not battery.PACK.should_evaluate(hass, still_low, config, record_exists=True)
-
-    recovered = _battery_state(hass, "31")
-    assert battery.PACK.should_evaluate(hass, recovered, config, record_exists=True)
-    assert not battery.PACK.should_evaluate(
-        hass, recovered, config, record_exists=False
+        hass, _battery_state(hass, "unavailable"), config
     )
 
 
@@ -134,8 +101,8 @@ def test_battery_threshold_cache_follows_config_and_device_changes(
     assert match.condition_params == {"threshold": "50"}
 
 
-def test_runtime_battery_filter_respects_device_override(hass, entry, registry_entry):
-    """Queue battery work only when the effective device threshold crosses."""
+def test_runtime_battery_filter_evaluates_definitive_states(hass, entry, registry_entry):
+    """Battery values are evaluated even when they do not cross the threshold."""
 
     async def scenario():
         device_id = "battery-device"
@@ -147,9 +114,12 @@ def test_runtime_battery_filter_respects_device_override(hass, entry, registry_e
 
         old_state = _battery_state(hass, "40")
         new_state = _battery_state(hass, "35")
-        before = list(entry.created_task_names)
+        before = len(entry.created_task_names)
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
-        assert entry.created_task_names == before
+        assert len(entry.created_task_names) == before + 1
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert "battery:sensor.battery" not in manager.records
 
         old_state = _battery_state(hass, "31")
         new_state = _battery_state(hass, "30")
@@ -162,8 +132,8 @@ def test_runtime_battery_filter_respects_device_override(hass, entry, registry_e
     asyncio.run(scenario())
 
 
-def test_existing_battery_record_still_uses_transition_filter(hass, entry):
-    """An existing occurrence does not force evaluation while it remains matching."""
+def test_existing_battery_record_always_forces_evaluation(hass, entry):
+    """Any existing occurrence makes every following source event relevant."""
 
     async def scenario():
         _battery_state(hass, "50")
@@ -175,27 +145,30 @@ def test_existing_battery_record_still_uses_transition_filter(hass, entry):
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert "battery:sensor.battery" in manager.records
+        alert_id = "battery:sensor.battery"
+        record = manager.records[alert_id]
 
         old_state = hass.states.get("sensor.battery")
         new_state = _battery_state(hass, "9")
-        before = list(entry.created_task_names)
+        before = len(entry.created_task_names)
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
-        assert entry.created_task_names == before
-        assert manager._evaluation_flush_scheduled is False
+        assert len(entry.created_task_names) == before + 1
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert manager.records[alert_id] is record
 
         old_state = hass.states.get("sensor.battery")
         new_state = _battery_state(hass, "20")
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert "battery:sensor.battery" not in manager.records
+        assert alert_id not in manager.records
 
     asyncio.run(scenario())
 
 
-def test_identical_automatic_event_skips_existing_alert_evaluation(hass, entry):
-    """Exact duplicate events stay filtered even after an automatic alert exists."""
+def test_identical_event_evaluates_when_record_exists(hass, entry):
+    """The existing-record shortcut intentionally wins over duplicate filtering."""
 
     async def scenario():
         _battery_state(hass, "50")
@@ -207,15 +180,18 @@ def test_identical_automatic_event_skips_existing_alert_evaluation(hass, entry):
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert "battery:sensor.battery" in manager.records
+        alert_id = "battery:sensor.battery"
+        assert alert_id in manager.records
 
         old_state = hass.states.get("sensor.battery")
         new_state = _battery_state(hass, "10")
-        before = list(entry.created_task_names)
+        before = len(entry.created_task_names)
         manager._state_changed(_state_event("sensor.battery", old_state, new_state))
 
-        assert entry.created_task_names == before
-        assert manager._evaluation_flush_scheduled is False
+        assert len(entry.created_task_names) == before + 1
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id in manager.records
 
     asyncio.run(scenario())
 
