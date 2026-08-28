@@ -62,6 +62,10 @@ _IGNORED_ENTITY_REFERENCES: Final = frozenset(
     {
         "script.execute",
         "script.run",
+        "script.start",
+        "script.stop",
+        "select.set",
+        "script.is_running",
     }
 )
 _ENTITY_DOMAINS: Final = frozenset(
