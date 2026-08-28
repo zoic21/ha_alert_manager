@@ -15,7 +15,8 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a connectivity binary sensor."""
     return (
         state.entity_id.partition(".")[0] == "binary_sensor"
-        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity")
+        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
+    )
 
 def _should_evaluate(
     _hass: HomeAssistant,
