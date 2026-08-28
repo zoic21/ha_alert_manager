@@ -1,0 +1,77 @@
+name: Temporary frontend cache fix
+
+on:
+  push:
+    branches:
+      - fix/frontend-cache-busting
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'Propagate frontend cache version') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/frontend-cache-busting
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Apply cache fix and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          entry = Path("frontend-src/alert-manager-panel-entry.js")
+          text = entry.read_text()
+          old = 'import { AlertManagerPanel } from "./alert-manager-panel.js";'
+          new = '''const panelModuleUrl = new URL("./alert-manager-panel.js", import.meta.url);
+panelModuleUrl.search = new URL(import.meta.url).search;
+const { AlertManagerPanel } = await import(panelModuleUrl.href);'''
+          if old not in text:
+              raise SystemExit("Expected static panel import was not found")
+          entry.write_text(text.replace(old, new, 1))
+
+          tests = Path("tests/frontend-coherence-mobile.test.mjs")
+          test_text = tests.read_text()
+          if 'import { readFileSync } from "node:fs";' not in test_text:
+              test_text = test_text.replace(
+                  'import assert from "node:assert/strict";\n',
+                  'import assert from "node:assert/strict";\nimport { readFileSync } from "node:fs";\n',
+                  1,
+              )
+          marker = 'test("panel entry propagates the frontend cache query"'
+          if marker not in test_text:
+              test_text += r'''
+
+test("panel entry propagates the frontend cache query", () => {
+  const source = readFileSync(
+    new URL("../frontend-src/alert-manager-panel-entry.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /const panelModuleUrl = new URL\("\.\/alert-manager-panel\.js", import\.meta\.url\);/,
+  );
+  assert.match(source, /panelModuleUrl\.search = new URL\(import\.meta\.url\)\.search;/);
+  assert.match(source, /await import\(panelModuleUrl\.href\)/);
+  assert.doesNotMatch(source, /from "\.\/alert-manager-panel\.js"/);
+});
+'''
+          tests.write_text(test_text)
+          PY
+          npm run build
+          npm run lint:frontend
+          npm run test:frontend
+      - name: Commit final branch state
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temporary-frontend-cache-fix.yml
+          git add frontend-src/alert-manager-panel-entry.js custom_components/alert_manager/frontend/alert-manager-panel-entry.js tests/frontend-coherence-mobile.test.mjs
+          git commit -m "Propagate frontend cache version to panel bundle"
+          git push origin HEAD:fix/frontend-cache-busting
