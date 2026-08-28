@@ -3,636 +3,168 @@
 </p>
 
 <p align="center">
-  🇫🇷 <strong>Français</strong> | 🇬🇧 <a href="README.en.md">English</a>
+  🇬🇧 <strong>English</strong> · 🇫🇷 <a href="README.fr.md">Français</a>
 </p>
 
-# Alert Manager pour Home Assistant
+# Alert Manager for Home Assistant
 
-Alert Manager centralise les anomalies Home Assistant dans un moteur événementiel,
-un panel **Alertes** et un appareil de service regroupant quatre capteurs d’alertes
-et un switch de surveillance.
+**Know when something is wrong in Home Assistant — and keep it visible until it is fixed.**
 
-Version minimale prise en charge : **Home Assistant 2026.8**. Alert Manager est
-une intégration communautaire non officielle, sans lien avec le projet Home
-Assistant.
+Alert Manager gives you one place to monitor abnormal situations in your Home Assistant installation. Instead of maintaining many templates, automations, notifications and dashboard cards, you define what should be considered abnormal and Alert Manager keeps track of it for you.
 
-## Fonctionnalités V1.7
+Typical examples:
 
-- états internes `normal`, `pending` et `active` avec délais persistants ;
-- détection automatique des indisponibilités, pertes de connectivité, équipements
-  UniFi absents et batteries faibles ;
-- packs automatiques décrits par le backend et activés uniquement lorsque leurs
-  intégrations prérequises sont réellement disponibles ;
-- règles personnalisées multi-entités `equals`, `not_equals`, `contains`,
-  `not_contains`, `above` et `below` sur l’état ou un attribut, avec plusieurs
-  valeurs possibles pour les comparaisons textuelles et une alerte indépendante
-  par source ;
-- exclusions automatiques par plusieurs labels, entités ou appareils ;
-- panel administrateur responsive, servi directement par l’intégration ;
-- interface, flux de configuration, packs et conditions disponibles en français
-  et en anglais selon la langue de chaque utilisateur Home Assistant ;
-- tableau compact fondé sur les composants natifs
-  `hass-tabs-subpage-data-table` et `ha-data-table` de Home Assistant,
-  avec recherche, filtres, tri, groupement repliable et colonnes personnalisables,
-  sans fusion des alertes ;
-- acquittement persistant de chaque alerte active depuis le panneau ou les
-  automatisations Home Assistant ;
-- appareil `Alert Manager - Général`, switch de surveillance persistant, trois
-  capteurs séparant les alertes actives, à venir et acquittées et un compteur
-  des appareils en alerte ;
-- édition visuelle ou YAML des règles personnalisées, export YAML complet et
-  import YAML de remplacement de la configuration ;
-- historique persistant des alertes réellement activées puis résolues, limité par
-  défaut à 100 événements et consultable dans un onglet dédié sans nouvelle
-  entité ; une alerte revenue à la normale pendant son délai `pending` n’est pas
-  historisée ;
-- événements `alert_manager_alert_started` et
-  `alert_manager_alert_resolved`, complétés par
-  `alert_manager_alert_acknowledged` et
-  `alert_manager_alert_unacknowledged`, ainsi que
-  `alert_manager_device_alert_started` lors de l’arrivée d’un nouvel appareil
-  dans l’ensemble actif ;
-- notification persistante de sécurité uniquement lorsque la surveillance est
-  encore désactivée au chargement, et aucun polling global fréquent.
+- an entity has been `unavailable` for more than 15 minutes;
+- a battery drops below 15%;
+- a connectivity sensor stays `off`;
+- a UniFi device stays `not_home`;
+- a fridge consumes more than 200 W for 2 hours;
+- a fridge temperature stays above 8 °C for 30 minutes;
+- any custom state, attribute or Jinja-based condition you want to monitor.
 
-Alert Manager centralise des anomalies simples et indépendantes. Il ne remplace
-ni un système de supervision externe, ni l’historique de Home Assistant, ni une
-solution de notification : les automatisations restent sous le contrôle de
-l’utilisateur.
+The important difference from a simple notification is that the problem **remains visible until it is resolved**.
+
+## What you get
+
+- **Central alert dashboard** with active, upcoming and acknowledged alerts.
+- **Automatic monitoring** for unavailable entities, connectivity, low batteries and UniFi devices.
+- **Custom rules** on entity states or attributes with delays.
+- **Jinja conditions and messages** using Home Assistant templates.
+- **Acknowledgement** without losing track of the underlying problem.
+- **History** of resolved alerts.
+- **Search, filters, sorting and grouping** in the dashboard.
+- **Exclusions** by entity, device or label.
+- **Per-rule, per-entity and global delays** so short glitches do not become noise.
+- **Home Assistant events and sensors** for your own dashboards and automations.
+- **Event-driven monitoring** without frequent global polling.
+- **French and English UI**.
+
+Alert Manager does **not** force a notification system on you. Notifications remain regular Home Assistant automations, so you decide who gets notified, how, and when.
+
+## Screenshots
+
+The current UI screenshots and the original beta-test discussion are available here:
+
+**[Reddit — Integration alarm manager: need beta test](https://www.reddit.com/r/homeassistant/comments/1vzyqg1/integration_alarm_manager_need_beta_test/)**
 
 ## Installation
 
-### Installation manuelle
-
-1. Copier `custom_components/alert_manager` dans le dossier
-   `/config/custom_components/alert_manager` de Home Assistant.
-2. Redémarrer Home Assistant.
-3. Ouvrir **Paramètres → Appareils et services → Ajouter une intégration**.
-4. Rechercher **Alert Manager** et confirmer l’ajout.
-5. Ouvrir **Alertes** dans la barre latérale.
-
-Aucune ressource Lovelace et aucune configuration YAML ne sont nécessaires.
-
 ### HACS
 
-Le dépôt est compatible avec HACS comme **dépôt personnalisé** :
+Until Alert Manager is available in the default HACS catalog:
 
-1. Dans HACS, ouvrir **Dépôts personnalisés**.
-2. Ajouter `https://github.com/zoic21/ha_alert_manager` avec la catégorie
-   **Integration**.
-3. Installer Alert Manager, redémarrer Home Assistant et ajouter l’intégration.
+1. Open **HACS → Custom repositories**.
+2. Add `https://github.com/zoic21/ha_alert_manager` as an **Integration**.
+3. Install **Alert Manager**.
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & services → Add integration** and search for **Alert Manager**.
 
-Chaque version publiée possède un tag `vX.Y.Z` et une release GitHub avec son
-changelog. HACS affiche ainsi la version fonctionnelle publiée et ses notes, et
-non l’identifiant du dernier commit de la branche principale.
+The **Alert Manager** panel then appears in the Home Assistant sidebar.
 
-Tant que le dépôt n’est pas publié dans le catalogue HACS par défaut, il doit être
-ajouté manuellement comme dépôt personnalisé.
+### Manual installation
 
-## Ajout de l’intégration et accès au panneau
+1. Copy `custom_components/alert_manager` to `/config/custom_components/alert_manager`.
+2. Restart Home Assistant.
+3. Add **Alert Manager** from **Settings → Devices & services**.
 
-Après installation et redémarrage, ouvrir **Paramètres → Appareils et services →
-Ajouter une intégration**, rechercher **Alert Manager**, puis confirmer. Une seule
-instance est autorisée. Le panneau **Alert Manager** apparaît ensuite dans la barre
-latérale et reste réservé aux administrateurs.
+No Lovelace resource and no YAML configuration are required to get started.
 
-## Panneau Alert Manager
+## Notifications without getting spammed
 
-Le panel est réservé aux administrateurs et contient cinq sections :
+Alert Manager emits `alert_manager_device_alert_started` when a device enters an alert state. Alerts that arrive close together for the same device are grouped before the event is emitted, which makes it useful for sending **one useful notification for the device instead of one notification per rule**.
 
-1. **Vue d’ensemble** : un tableau compact unique réunit les alertes actives en
-   rouge, à venir en orange et acquittées en bleu. Ses colonnes par défaut sont
-   Statut, Entité, Appareil, Règle, Intégration et Active depuis/Temps restant.
-   Dans l’Historique, la dernière colonne est Détectée le. Le nom de l’entité
-   ouvre le dialogue natif « Plus d’informations ». Le temps restant est calculé dans le navigateur
-   depuis `due_at` et affiche un délai suspendu lorsque la surveillance est
-   désactivée ; aucune valeur n’est écrite chaque seconde dans Recorder.
-   Les compteurs Actives, À venir et Acquittées appliquent directement le filtre
-   Statut correspondant lorsqu’ils sont sélectionnés. Les étiquettes Home
-   Assistant sont affichées sous le nom de l’entité. La barre
-   d’outils permet une recherche immédiate et des filtres cumulables par statut,
-   appareil, règle, intégration, étiquette, domaine, zone, entité et périodes de
-   dates. Chaque période se choisit dans un unique sélecteur natif Home Assistant
-   avec raccourcis, calendrier et heures de début/fin. La barre propose aussi un
-   groupement repliable par appareil, zone, règle ou statut et un tri
-   ascendant ou descendant. Le tri initial est effectué par statut afin de placer
-   les alertes actives en premier. Les colonnes facultatives (ID d’entité, zone, règle,
-   message…) peuvent être affichées, masquées et réordonnées. Leur ordre, leur
-   visibilité, le groupement et le tri sont conservés localement pour
-   l’utilisateur, sans modifier la configuration de l’intégration.
-   Le mode sélection remplace la barre supérieure de la sous-page par une barre
-   d’actions. Le dialogue natif de personnalisation permet de masquer et
-   réordonner les colonnes. Sur mobile, la condition est affichée sous le nom de
-   l’entité tandis que les autres colonnes sont condensées. Il
-   permet de sélectionner les lignes visibles et d’acquitter ou désacquitter en
-   masse. Une sélection mixte n’agit que sur les alertes compatibles : les
-   alertes `pending` et les alertes déjà dans l’état demandé sont ignorées, et le
-   retour indique le nombre réellement modifié.
-   Le total suivi additionne les couples règle personnalisée/entité actifs et les
-   entités uniques couvertes par au moins une surveillance automatique.
-2. **Historique** : le même tableau natif liste les alertes résolues et les
-   résolutions après acquittement. Chaque
-   événement fige le nom de règle et d’entité, l’appareil, la zone, le message,
-   la condition, la valeur de déclenchement et les dates. L’Historique ne propose
-   ni filtre de statut ni filtre d’acquittement. Recherche, filtres,
-   groupement, tri et colonnes personnalisables restent disponibles. Aucune
-   sélection ni action métier d’acquittement n’est proposée dans l’Historique.
-   Les anomalies revenues à la normale avant leur activation ne sont pas des
-   alertes effectives et ne sont donc pas ajoutées à l’historique.
-3. **Surveillance automatique** : activation, délais et seuil de batterie. Les
-   cartes sont produites depuis les métadonnées du backend et seuls les packs
-   actuellement disponibles sont proposés.
-4. **Règles personnalisées** : création et modification dans un volet latéral
-   structuré en sections, composé des éléments natifs Home Assistant. Un clic sur
-   la ligne ouvre le volet ; l’activation, les sources, la condition, les valeurs,
-   la temporisation et le message y sont regroupés clairement. L’interrupteur
-   natif en fin de ligne reste disponible pour une activation rapide.
-5. **Configuration** : labels, entités, appareils, délai global, délai
-   d’affichage des alertes à venir, délais particuliers et rétention de
-   l’historique. Les sélections utilisent les
-   sélecteurs et la recherche natifs de Home Assistant.
-
-### Rétention et effacement de l’historique
-
-Dans **Configuration → Paramètres généraux**, juste sous **Délai global**, le
-réglage **Nombre d’événements historiques conservés** accepte de `0` à `1000`.
-L’action **Effacer l’historique** est placée face au champ ; l’unique bouton
-commun d’enregistrement de la configuration, en bas à droite, sauvegarde aussi
-ce réglage. Une nouvelle installation conserve `100` événements. `0` supprime les
-événements existants lors de l’enregistrement puis désactive la conservation des
-prochaines résolutions. À chaque résolution et à chaque diminution de la limite,
-les événements les plus anciens en excès sont supprimés immédiatement.
-
-**Effacer l’historique** demande une confirmation indiquant que l’opération est
-irréversible. Cette action ne touche jamais les alertes actives, à venir ou
-acquittées.
-
-## Packs automatiques
-
-Les packs retournent des clés de traduction structurées, jamais du texte localisé
-en dur. Le backend utilise la langue globale de Home Assistant pour les messages
-des capteurs et événements. Le panneau retraduit les conditions et messages dans
-la langue de chaque utilisateur connecté.
-
-Les packs génériques **Entités indisponibles**, **Connectivité** et **Batteries
-faibles** sont toujours disponibles. Le choix d’activation d’un pack est conservé
-même si son prérequis devient temporairement indisponible. Dans ce cas, le pack ne
-surveille aucune entité, ne conserve aucun timer et ne génère aucune alerte. Son
-dernier réglage est repris automatiquement lorsque le prérequis redevient utilisable.
-
-### Entités indisponibles
-
-Une alerte est créée lorsqu’une entité de n’importe quel domaine passe exactement à
-`unavailable` ; `unknown` n’est pas inclus. Les entités d’Alert Manager, les entrées
-désactivées dans le registre, les appareils désactivés et les exclusions sont
-ignorés. La seule présence de l’attribut
-`restored: true` n’est **pas** un motif d’exclusion : une entité active peut être
-restaurée légitimement après un redémarrage.
-Les entités créées par Alert Manager sont aussi refusées comme sources de règles
-personnalisées, y compris lorsqu’elles ont été renommées dans Home Assistant.
-
-### Connectivité
-
-Un `binary_sensor` ayant `device_class: connectivity` est en anomalie à `off`.
-Un état `unavailable` est exclusivement traité par la détection des
-indisponibilités, sans doublon.
-
-### UniFi
-
-Un `device_tracker` fourni par l’intégration `unifi`, ayant
-`source_type: router`, est en anomalie lorsque son état n’est plus `home`.
-`unavailable` reste traité par la catégorie des indisponibilités. Le pack UniFi
-n’est proposé et exécuté que si Home Assistant possède au moins une entrée de
-configuration UniFi chargée, non désactivée et utilisable.
-
-### Batteries
-
-Un `sensor` ayant `device_class: battery` est en anomalie lorsque sa valeur
-numérique est inférieure ou égale au seuil configuré (15 % par défaut). Le pack
-déclare aussi `device_thresholds`, une table configurable dans le panneau qui
-associe un appareil à son seuil. Ce seuil par appareil est prioritaire sur le
-seuil global. L’attribut d’entité `low_battery_level` n’est pas utilisé. Les états
-`unknown`, `unavailable`, non numériques, `NaN` et infinis sont ignorés par cette
-catégorie.
-
-## Règles personnalisées
-
-Chaque règle possède un identifiant immuable généré par le backend. Elle compare
-l’état principal ou un attribut de plusieurs entités avec une ou plusieurs valeurs.
-Chaque
-couple règle/entité a son propre cycle, son délai et son identifiant stable
-`rule:<rule_uuid>:<entity_id>` :
-
-- `equals` : égalité textuelle exacte avec au moins une valeur configurée, après
-  suppression des espaces externes ;
-- `not_equals` : aucune des valeurs configurées n’est égale à l’état courant ;
-- `contains` : l’état courant contient au moins une des valeurs configurées ;
-- `not_contains` : l’état courant ne contient aucune des valeurs configurées ;
-- `above` : valeur numérique strictement supérieure ;
-- `below` : valeur numérique strictement inférieure.
-
-Les quatre opérateurs textuels acceptent une ou plusieurs valeurs ; les opérateurs
-numériques acceptent exactement une valeur. Les conversions numériques refusent
-les booléens, valeurs invalides, `NaN` et infinis. Une règle portant sur un attribut
-absent n’est pas déclenchée. Les états principaux `unknown` et `unavailable` sont
-laissés aux détections automatiques.
-
-Une `condition_template` Jinja facultative peut compléter la comparaison. Si elle
-est renseignée, la comparaison et le template doivent tous les deux rester vrais
-pendant la temporisation. Les variables `entity_id`, `state` et `value` sont
-disponibles en plus des fonctions Jinja de Home Assistant. Une entité référencée
-par le template réévalue automatiquement la règle lorsqu’elle change.
-
-Le champ `message` accepte également un template Jinja avec les mêmes variables.
-Le résultat rendu est utilisé dans l’interface, les capteurs, l’historique et les
-événements. Une entité référencée dans le message provoque son actualisation tant
-que l’alerte est à venir. Le dernier rendu est figé lorsqu’elle devient active et
-reste inchangé jusqu’à sa résolution. Un texte sans Jinja conserve exactement le
-comportement existant.
-
-Ces deux champs utilisent l’environnement Jinja complet de Home Assistant : toutes
-ses fonctions, filtres et tests de template peuvent consulter n’importe quelle
-entité. Ils ne permettent pas d’appeler un service ni d’exécuter du code Python.
-
-Exemples :
-
-- `binary_sensor.chrony_en_cours_d_execution equals off` ;
-- `sensor.solarflow_2400_pro_is_error equals 1` ;
-- `sensor.ups_code_d_etat contains CHRG ou ERROR` ;
-- `sensor.mode not_equals off ou idle` ;
-- `sensor.frigo_temperature above 9` pendant 1 800 secondes ;
-- `sensor.eas_bai_waterpressure_press below 1`.
-
-### Édition visuelle et YAML
-
-L’éditeur visuel reste le mode par défaut. Dans le volet de création ou de
-modification, ouvrir le menu trois points en haut à droite puis choisir
-**Modifier en YAML**. Le même volet affiche alors l’éditeur YAML Home Assistant ;
-**Modifier visuellement** analyse et valide le YAML avant de remplir le
-formulaire. Un YAML invalide reste dans l’éditeur YAML et n’est jamais
-enregistré. L’identifiant d’une règle existante reste géré par le backend,
-immuable et volontairement absent du YAML éditable.
-
-```yaml
-name: Température baie élevée
-enabled: true
-entity_ids:
-  - sensor.hygrometrie_baie_informatique_temperature
-source: state
-operator: above
-value: 33
-duration: 900
-message: >-
-  Température de {{ state.name }} : {{ value }} °C
-condition_template: >-
-  {{ is_state('input_boolean.maintenance_baie', 'off') }}
-```
-
-`entity_ids` est une liste obligatoire : chaque source est suivie
-indépendamment. `source` vaut `state` ou `attribute` ; `attribute` est requis
-uniquement dans ce second cas. `duration` est exprimée en secondes. `equals`,
-`not_equals`, `contains` et `not_contains` acceptent une valeur scalaire ou une
-liste YAML ; `above` et `below` exigent une unique valeur numérique finie. Cette
-`condition_template` est facultatif et doit rendre `true`. Cette syntaxe ne
-correspond volontairement **pas** aux conditions YAML des automatisations Home
-Assistant : aucun groupe `and`/`or`/`not`, aucune condition arbitraire et aucun
-moteur de conditions d’automatisation ne sont utilisés.
-
-### Export et import complet de configuration
-
-Dans **Configuration**, les actions **Exporter en YAML** et
-**Importer un YAML** gèrent la configuration entière. L’export télécharge
-`alert-manager-config.yaml`, encodé en UTF-8, avec le format `version: 1`, les
-paramètres généraux, tags d’exclusion, délais globaux et particuliers,
-état du switch de surveillance, configuration des packs automatiques et toutes
-les règles personnalisées. Les
-identifiants internes des règles ne sont pas exportés et sont recréés par le
-backend lors de l’import. Il n’exporte jamais les alertes actives ou à venir,
-acquittements, timers, dates de détection/activation ni historique d’exécution.
-La limite de rétention et les événements historiques ne sont ni exportés ni
-importés : un import conserve le réglage et l’historique locaux.
-
-L’import n’accepte que les versions complètes supportées et refuse les champs
-inconnus, dupliqués ou runtime. Le fichier est validé intégralement avant toute
-écriture, affiche le nombre de règles, packs activés et délais particuliers, puis
-demande une confirmation explicite. **L’import remplace entièrement la
-configuration actuelle : ce n’est pas une fusion.** Les alertes runtime ne sont
-réconciliées qu’après un import valide et la persistance est atomique. Un export
-V1.5 dépourvu de `monitoring_enabled` reste accepté et active la surveillance par
-défaut.
-
-## Exclusions et priorité des délais
-
-Plusieurs labels d’exclusion peuvent être sélectionnés depuis le registre Home
-Assistant. Lors de la migration, `pas_d_alerte` est présélectionné s’il existe, sans
-être créé automatiquement. Une alerte automatique est exclue si au moins un label
-sélectionné est posé sur l’entité ou son appareil. Les règles personnalisées
-ignorent ces labels. Les listes explicites d’entités et d’appareils sont appliquées
-en plus.
-
-Ordre de priorité des délais :
-
-1. durée de la règle personnalisée ;
-2. délai particulier configuré pour l’entité ;
-3. délai propre au pack automatique ;
-4. délai global.
-
-Tous les délais sont stockés en secondes. Un délai de pack laissé vide utilise le
-délai global. Modifier un délai recalcule `due_at` depuis le `detected_at` original :
-une alerte en attente devient immédiatement active si l’échéance est dépassée, et
-une alerte active redevient en attente si sa nouvelle échéance est future. Son
-identifiant et son cycle de vie sont conservés. Les délais particuliers V1.1 sont
-réutilisés tels quels, sans migration destructive.
-
-## Appareil et switch de surveillance
-
-L’appareil de service `Alert Manager - Général`, identifié de façon stable par la
-catégorie `main`, regroupe les cinq entités de cette version :
-
-- `switch.alert_manager_main_monitoring` ;
-- `sensor.alert_manager_main_active` ;
-- `sensor.alert_manager_main_pending` ;
-- `sensor.alert_manager_main_acknowledge` ;
-- `sensor.alert_manager_device_main_active`.
-
-Le switch est actif par défaut et son état est stocké avec la configuration. À
-`off`, le moteur ne crée plus d’alerte, ne fait pas progresser les alertes
-`pending`, gèle leur temps restant, annule leurs timers et conserve toutes les
-occurrences existantes. Les quatre capteurs affichent alors `0` avec leur liste
-`alerts` ou `devices` vide, sans effacer les données internes. Le panneau affiche un
-avertissement avec un bouton de réactivation. À `on`, le décompte reprend au même
-point, la situation courante est réévaluée, les timers utiles sont recréés une
-seule fois et seules les transitions réelles émettent un événement.
-
-Si l’intégration est chargée alors que le switch est désactivé, Home Assistant
-crée la notification persistante
-`alert_manager_main_monitoring_disabled`. Elle indique comment réactiver
-`Surveillance Alert Manager`, ne se duplique pas lors des rechargements et est
-supprimée dès la reprise.
-
-## Capteurs, attributs et migration V1.5
-
-`sensor.alert_manager` est supprimé du registre des entités lors de la migration
-et remplacé sans capteur de compatibilité durable :
-
-| Nouvelle entité | État | Contenu de l’attribut |
-| --- | ---: | --- |
-| `sensor.alert_manager_main_active` | nombre d’actives non acquittées | actives non acquittées uniquement |
-| `sensor.alert_manager_main_pending` | nombre d’alertes à venir | `pending` uniquement |
-| `sensor.alert_manager_main_acknowledge` | nombre d’actives acquittées | actives acquittées uniquement |
-| `sensor.alert_manager_device_main_active` | nombre de groupes d’appareils par nom, ou d’entités sans appareil, possédant au moins une alerte active | attribut `devices`, alertes acquittées comprises |
-
-Une occurrence n’apparaît jamais dans deux capteurs de cycle. Ceux-ci exposent
-un attribut `alerts` ; le capteur d’appareils expose `devices`. Ces attributs sont
-toujours des listes. Exemple d’alerte de règle :
-
-```yaml
-state: 1
-attributes:
-  alerts:
-    - id: rule:4f9d…:sensor.baie_temperature
-      entity_id: sensor.baie_temperature
-      value: 34.2
-      condition: État supérieur à 33 °C pendant 15 min
-      message: Température baie élevée
-      rule: Température baie élevée
-      detected_at: "2026-08-26T10:00:00+02:00"
-      due_at: "2026-08-26T10:15:00+02:00"
-      active_since: "2026-08-26T10:15:00+02:00"
-```
-
-Une alerte `pending` n’a ni `active_since` ni champ d’acquittement ; son temps
-restant se calcule à partir de `due_at`. Une alerte acquittée ajoute
-`acknowledged_at` et, lorsqu’un utilisateur est connu, `acknowledged_by`. Les
-métadonnées récupérables depuis `entity_id` (nom, appareil, zone, intégration et
-unité) ne sont volontairement pas dupliquées. Le panneau récupère son détail
-complet par WebSocket.
-
-Chaque ensemble d’attributs est limité à 15 000 octets pour rester sous la
-limite Recorder de 16 Kio. Si une quantité exceptionnelle d’alertes dépasse ce
-budget, `alerts_omitted` indique le nombre d’éléments non inclus. L’état du
-capteur conserve toujours le nombre total exact.
-
-Le réglage `pending_display_delay`, égal à `10` secondes par défaut, retarde
-uniquement l’exposition d’une alerte **à venir** dans le panneau et
-`sensor.alert_manager_main_pending`. Le délai est plafonné par le délai de
-détection de l’alerte. Une condition instable qui disparaît avant cette échéance
-n’est donc jamais affichée. Si l’alerte atteint son échéance plus tôt, elle
-apparaît immédiatement comme active, sans passer brièvement par la liste « à
-venir ». Les alertes actives ne subissent aucun délai d’affichage supplémentaire.
-
-Le capteur d’appareils regroupe les alertes associées à un appareil du registre
-Home Assistant. Plusieurs appareils portant le même nom, sans tenir compte de la
-casse ou des espaces aux extrémités, forment un seul groupe. `device_ids`
-contient tous les identifiants regroupés. Une entité sans appareil forme toujours
-son propre groupe et `device_ids` contient alors son `entity_id`. L’attribut
-`devices` contient également `device_name`, `started_at`, les compteurs d’alertes
-acquittées/non acquittées, `alert_ids` et les tableaux `messages` et `rules`
-propres au groupe. Le capteur n’expose aucun tableau global `messages` ou
-`rules`, ni champ singulier `device_id`. Un acquittement ne retire pas le groupe :
-il disparaît lorsque sa dernière alerte active est résolue. `devices_omitted`
-signale une éventuelle troncature de sécurité selon le même principe.
-
-Les automatisations et cartes qui lisaient `sensor.alert_manager` doivent cibler
-le nouveau capteur correspondant et remplacer les anciennes listes `alerts`,
-`pending` ou `acknowledge` par l’unique `attributes.alerts`. Par exemple :
-
-```jinja
-{{ state_attr('sensor.alert_manager_main_pending', 'alerts') | default([], true) }}
-```
-
-Exemple d’automatisation basée sur le nouveau compteur actif :
-
-```yaml
-triggers:
-  - trigger: numeric_state
-    entity_id: sensor.alert_manager_main_active
-    above: 0
-actions:
-  - action: persistent_notification.create
-    data:
-      title: Alert Manager
-      message: >-
-        {{ states('sensor.alert_manager_main_active') }} alerte(s) active(s)
-```
-
-## Acquittement et services
-
-L’acquittement porte toujours sur une seule alerte `active`, ciblée par son
-identifiant stable. Il ne résout pas l’alerte, mais la retire du compteur des
-alertes non acquittées. Une
-alerte `pending`, inconnue ou déjà résolue est refusée avec une erreur explicite.
-Les actions répétées sont idempotentes : acquitter deux fois ou retirer deux fois
-l’acquittement n’émet pas de nouvel événement.
-
-Les deux services sont disponibles dans **Outils de développement → Actions** et
-dans les automatisations :
-
-```yaml
-action: alert_manager.acknowledge
-data:
-  alert_id: unavailable:sensor.unas_cpu_usage
-```
-
-```yaml
-action: alert_manager.unacknowledge
-data:
-  alert_id: unavailable:sensor.unas_cpu_usage
-```
-
-Le contexte Home Assistant détermine l’auteur affiché. Sans utilisateur associé,
-le panneau affiche le libellé traduit « Automatisation ou système ». À la
-résolution, les informations d’acquittement disparaissent avec l’occurrence. Si la
-condition réapparaît, la nouvelle occurrence démarre non acquittée.
-
-## Événements et notifications
-
-À l’activation d’une alerte, Alert Manager émet
-`alert_manager_alert_started`. À sa résolution, il émet
-`alert_manager_alert_resolved` avec `resolved_at`. Une alerte déjà active avant un
-redémarrage n’émet pas un second événement de démarrage.
-
-Lorsque le premier élément actif d’un groupe d’appareils de même nom ou d’une
-entité sans appareil apparaît, l’événement
-`alert_manager_device_alert_started` attend 10 secondes sans nouvelle alerte
-pour ce groupe avant d’être émis une seule fois. Une nouvelle alerte pendant ce
-délai redémarre les 10 secondes. L’événement contient donc les données stabilisées
-de l’entrée `attributes.devices`, notamment ses tableaux `messages` et `rules`.
-Après son émission, les alertes supplémentaires du même groupe ne le répètent
-pas. Après résolution de toutes ses alertes, une future
-alerte de ce groupe constitue un nouveau démarrage. Pour une entité sans appareil,
-`device_ids` contient son `entity_id` et `device_name` son nom d’entité. Le champ
-singulier `device_id` n’est pas émis.
-
-Un changement réel d’acquittement émet aussi :
-
-- `alert_manager_alert_acknowledged`, avec les données publiques complètes et
-  `acknowledged_at`/`acknowledged_by` lorsque l’auteur est connu ;
-- `alert_manager_alert_unacknowledged`, avec `unacknowledged_at`, l’auteur de
-  l’action lorsqu’il est connu et les précédentes informations d’acquittement.
-
-Ces événements ne sont jamais rejoués au redémarrage. Exemple d’automatisation
-qui journalise les deux changements :
-
-```yaml
-alias: Journal des acquittements Alert Manager
-triggers:
-  - trigger: event
-    event_type: alert_manager_alert_acknowledged
-  - trigger: event
-    event_type: alert_manager_alert_unacknowledged
-actions:
-  - action: logbook.log
-    data:
-      name: Alert Manager
-      message: >-
-        {{ trigger.event.event_type }} : {{ trigger.event.data.id }}
-mode: queued
-```
-
-Exemple de notification stabilisée par appareil :
-
-```yaml
-alias: Notification appareil Alert Manager
-triggers:
-  - trigger: event
-    event_type: alert_manager_device_alert_started
-actions:
-  - action: notify.mobile_app_mon_telephone
-    data:
-      title: "{{ trigger.event.data.device_name }} en alerte"
-      message: >-
-        {{ trigger.event.data.alert_count }} alerte(s) active(s)
-        dans {{ trigger.event.data.area | default('une zone inconnue', true) }}
-      data:
-        tag: >-
-          alert_manager_device_{{ trigger.event.data.device_ids | join('_') }}
-mode: queued
-```
-
-Exemple d’automatisation mobile :
+Example:
 
 ```yaml
 alias: Notification Alert Manager
 triggers:
   - trigger: event
-    event_type: alert_manager_alert_started
+    event_type: alert_manager_device_alert_started
 actions:
-  - action: notify.mobile_app_mon_telephone
+  - action: script.notification
+    metadata: {}
     data:
-      title: "{{ trigger.event.data.name }}"
-      message: >-
-        {{ trigger.event.data.condition }}
-        ({{ trigger.event.data.entity_id }})
-      data:
-        tag: "{{ trigger.event.data.id }}"
+      title: '{{ trigger.event.data.device_name }} en alerte'
+      message: |-
+        {% for message in trigger.event.data.messages | default([], true) %}
+        - {{ message }}
+        {% endfor %}
+      recipients:
+        - loic
 mode: queued
 ```
 
-L’intégration n’envoie aucune notification d’alerte. La seule notification créée
-directement est l’avertissement de sécurité lorsque la surveillance est encore
-désactivée au chargement.
+`script.notification` is only an example here: replace it with your own notification script or any Home Assistant notification action.
 
-## Dépannage courant
+## Automatic monitoring
 
-- **Le panneau n’apparaît pas** : vérifier que l’intégration est ajoutée, que
-  l’utilisateur est administrateur, puis vider le cache du navigateur après une
-  mise à jour du frontend.
-- **Le pack UniFi est absent** : au moins une entrée de l’intégration UniFi doit
-  être chargée et non désactivée. Un `device_tracker` d’un autre fournisseur ne
-  suffit pas.
-- **Une entité désactivée remonte** : contrôler son entrée dans le registre des
-  entités et l’appareil parent. L’attribut `restored: true` ne signifie pas que
-  l’entité est désactivée.
-- **Une alerte ne démarre pas immédiatement** : vérifier, dans cet ordre, la durée
-  de règle, le délai particulier de l’entité, le délai du pack et le délai global.
-- **Aucune alerte ne progresse** : vérifier que
-  `switch.alert_manager_main_monitoring` est à `on`.
-- **La langue ne change pas** : recharger le panneau après avoir changé la langue
-  du profil Home Assistant. Les noms d’entités, d’appareils, de pièces, de règles
-  et les messages personnalisés restent volontairement inchangés.
+Alert Manager can automatically watch common Home Assistant problems:
 
-## Persistance et performances
+| Monitor | Alert condition |
+| --- | --- |
+| Unavailable entities | entity stays `unavailable` |
+| Connectivity | `binary_sensor` with `device_class: connectivity` stays `off` |
+| Low battery | battery sensor reaches the configured threshold |
+| UniFi | UniFi network `device_tracker` stays away from `home` |
 
-La configuration, les états `pending`/`active` et l’acquittement sont enregistrés
-dans un `Store` Home Assistant versionné avec écritures atomiques. Au démarrage, la condition est
-revérifiée avant de reprendre le délai ou l’état actif. Un état momentanément
-absent ou `unknown` pendant le démarrage ne résout pas une alerte persistée ; une
-valeur définitive ultérieure la confirme ou la résout. Une anomalie déjà présente
-lors de la première installation commence avec son délai normal.
-Les enregistrements V1.3 sans champs d’acquittement sont migrés de manière
-idempotente et considérés comme non acquittés.
+Automatic checks can be enabled independently and adjusted from the UI.
 
-Le moteur écoute les changements d’état et les registres. Il ne réévalue que
-l’entité concernée, sauf au démarrage, après une modification de configuration ou
-un changement de registre ou de disponibilité d’un pack. Un seul timer est
-planifié par alerte en attente. Les capteurs ne sont réécrits que si leur contenu
-structuré change réellement.
+## Custom rules
 
-## Développement et tests
+For everything else, create your own rules directly from the Alert Manager panel.
 
-```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements_test.txt
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
-.venv/bin/pytest -q
+Rules can:
 
-npm run build
-npm run lint:frontend
-npm run test:frontend
-```
+- monitor one or several entities independently;
+- use the entity state or an attribute;
+- compare with `equals`, `not equals`, `contains`, `not contains`, `above` or `below`;
+- require the condition to remain true for a configurable duration;
+- add an optional Home Assistant Jinja condition;
+- generate a custom Jinja message with live entity data.
 
-Les workflows exécutent également Hassfest et la validation HACS.
+Example use cases include temperature limits, abnormal power consumption, backup age, device error codes or almost any state Home Assistant exposes.
 
-## Limites connues et fonctions reportées
+Rules can be edited visually or in YAML. The full Alert Manager configuration can also be exported and imported as YAML.
 
-- pas de snooze, répétition ou escalade ;
-- pas d’export CSV de l’historique ;
-- pas de template Jinja, condition combinée ou hystérésis, y compris en YAML ;
-- pas d’import automatique des anciennes automatisations ;
-- pas de notification d’alerte directe, application mobile, add-on, MQTT ou
-  entité par alerte ;
-- aucune action métier dans l’Historique ;
-- configuration réservée aux administrateurs ;
-- interface fournie uniquement en français et en anglais dans cette version.
+## Active, upcoming and acknowledged alerts
+
+Alert Manager exposes dedicated entities so you can also use its state outside the built-in panel:
+
+- `switch.alert_manager_main_monitoring`
+- `sensor.alert_manager_main_active`
+- `sensor.alert_manager_main_pending`
+- `sensor.alert_manager_main_acknowledge`
+- `sensor.alert_manager_device_main_active`
+
+This makes it easy to create a conditional card on your normal dashboard, drive a notification automation, or expose a simple health indicator for your Home Assistant installation.
+
+## Events and actions
+
+Useful events include:
+
+- `alert_manager_alert_started`
+- `alert_manager_alert_resolved`
+- `alert_manager_device_alert_started`
+- `alert_manager_alert_acknowledged`
+- `alert_manager_alert_unacknowledged`
+
+Alert acknowledgement is also available through:
+
+- `alert_manager.acknowledge`
+- `alert_manager.unacknowledge`
+
+## Requirements
+
+- Home Assistant **2026.8 or newer**.
+- One Alert Manager instance per Home Assistant installation.
+- Administrator access is required for the Alert Manager panel.
+
+Alert Manager is an unofficial community integration and is not affiliated with the Home Assistant project.
+
+## Feedback and beta testing
+
+Alert Manager is actively evolving and real-world installations are the best way to find edge cases.
+
+If you test it, bug reports and use cases are very welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
+
+If you have an unusual thing you monitor today with a template or automation, feel free to describe it too — it may be a good candidate for a future built-in rule.
