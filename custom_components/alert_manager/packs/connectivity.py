@@ -27,35 +27,21 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
     )
 
 
-def _is_neutral(state: State | None) -> bool:
-    """Return whether the state must not change connectivity status."""
-    return state is not None and state.state == STATE_UNAVAILABLE
-
-
-def _matches(hass: HomeAssistant, state: State | None) -> bool:
-    """Return whether a definitive state is a connectivity failure."""
-    return state is not None and _applies(hass, state) and state.state == "off"
-
-
 def _should_evaluate(
-    hass: HomeAssistant,
-    old_state: State | None,
-    new_state: State | None,
+    _hass: HomeAssistant,
+    new_state: State,
     _config: dict[str, Any],
+    record_exists: bool,
 ) -> bool:
-    """Ignore unavailable and let the next definitive state decide."""
-    if _is_neutral(new_state):
-        return False
-    if _is_neutral(old_state):
-        return True
-    return _matches(hass, old_state) != _matches(hass, new_state)
+    """Evaluate only when the stored occurrence and definitive state disagree."""
+    return record_exists != (new_state.state == "off")
 
 
 def _evaluate(
     hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
     """Match connectivity binary sensors only when definitively off."""
-    if not _matches(hass, state):
+    if not _applies(hass, state) or state.state != "off":
         return None
     return PackMatch(
         condition_key="automatic.connectivity",
