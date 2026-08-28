@@ -254,3 +254,16 @@ second:
 
     assert result["missing_count"] == 3
     assert result["missing_entity_count"] == 2
+
+
+def test_scan_ignores_function_calls_that_resemble_entity_ids(tmp_path):
+    """Method calls such as date.getTime() are not Home Assistant entities."""
+    _write(
+        tmp_path / "templates.yaml",
+        "value: \"{{ date.getTime() }} {{ states('sensor.gone') }}\"\n",
+    )
+
+    result = scan_configuration(tmp_path, frozenset())
+
+    assert [row["entity_id"] for row in result["results"]] == ["sensor.gone"]
+    assert result["references_checked"] == 1
