@@ -1,0 +1,54 @@
+name: Refactor helper
+
+on:
+  push:
+    branches:
+      - refactor/merge-runtime-manager
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/merge-runtime-manager
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Finalize manager consolidation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          for path in (
+              "tests/test_runtime_manager.py",
+              "tests/test_unifi_unavailable_neutrality.py",
+              "tests/test_pack_transition_filtering.py",
+              "tests/test_connectivity_unavailable_continuity.py",
+          ):
+              file = Path(path)
+              text = file.read_text()
+              old = "from custom_components.alert_manager.runtime_manager import AlertManager"
+              new = "from custom_components.alert_manager.manager import AlertManager"
+              if old not in text:
+                  raise SystemExit(f"Expected runtime manager import missing from {path}")
+              file.write_text(text.replace(old, new))
+
+          runtime_manager = Path("custom_components/alert_manager/runtime_manager.py")
+          if not runtime_manager.exists():
+              raise SystemExit("runtime_manager.py is already missing")
+          runtime_manager.unlink()
+          PY
+          python -m pip install ruff==0.12.11
+          ruff format custom_components/alert_manager/manager.py custom_components/alert_manager/__init__.py tests/test_runtime_manager.py tests/test_unifi_unavailable_neutrality.py tests/test_pack_transition_filtering.py tests/test_connectivity_unavailable_continuity.py
+          ruff check --fix custom_components/alert_manager/manager.py custom_components/alert_manager/__init__.py tests/test_runtime_manager.py tests/test_unifi_unavailable_neutrality.py tests/test_pack_transition_filtering.py tests/test_connectivity_unavailable_continuity.py
+          git rm .github/workflows/refactor-helper.yml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Finalize manager consolidation"
+          git push origin HEAD:refactor/merge-runtime-manager
