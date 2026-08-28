@@ -24,9 +24,6 @@ class PackNeutral:
     """Signal that one pack must preserve its current occurrence unchanged."""
 
 
-PACK_NEUTRAL = PackNeutral()
-
-
 @dataclass(frozen=True, slots=True)
 class PackConfigField:
     """Describe one pack-owned configuration field for validation and the UI."""
