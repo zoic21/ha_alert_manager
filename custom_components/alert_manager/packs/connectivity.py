@@ -6,7 +6,6 @@ from typing import Any
 
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_CONNECTIVITY
 from .base import AutomaticPack, PackMatch, PackNeutral
