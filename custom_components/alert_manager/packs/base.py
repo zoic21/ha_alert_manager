@@ -20,6 +20,14 @@ class PackMatch:
 
 
 @dataclass(frozen=True, slots=True)
+class PackNeutral:
+    """Signal that one pack must preserve its current occurrence unchanged."""
+
+
+PACK_NEUTRAL = PackNeutral()
+
+
+@dataclass(frozen=True, slots=True)
 class PackConfigField:
     """Describe one pack-owned configuration field for validation and the UI."""
 
@@ -51,6 +59,7 @@ class PackConfigField:
 
 
 PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any]], bool]
+PackEvaluation = PackMatch | PackNeutral | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,9 +70,8 @@ class AutomaticPack:
     translation_key: str
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
-    evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
+    evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
     transition_filter: PackTransitionFilter | None = None
-    neutral_states: frozenset[str] = frozenset()
     config_fields: tuple[PackConfigField, ...] = ()
 
     def should_evaluate(
