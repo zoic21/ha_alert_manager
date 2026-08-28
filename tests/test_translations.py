@@ -117,7 +117,7 @@ def test_documented_brand_assets_exist_and_are_referenced() -> None:
     assert icon.is_file()
     assert "prefers-color-scheme: dark" in mark.read_text()
     assert "prefers-color-scheme: dark" in logo.read_text()
-    for readme in (ROOT / "README.md", ROOT / "README.en.md"):
+    for readme in (ROOT / "README.md", ROOT / "README.fr.md"):
         content = readme.read_text()
         assert "docs/assets/alert-manager-logo.svg" in content
         assert "🇫🇷" in content and "🇬🇧" in content
