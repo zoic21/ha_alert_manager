@@ -50,7 +50,7 @@ class PackConfigField:
         }
 
 
-PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any], bool], bool]
+PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any]], bool]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,18 +71,12 @@ class AutomaticPack:
         hass: HomeAssistant,
         new_state: State | None,
         config: dict[str, Any],
-        *,
-        record_exists: bool,
     ) -> bool:
-        """Return whether this event is worth running the pack evaluator."""
-        # Once a pack owns an occurrence for this entity, always re-evaluate it.
-        # evaluate() remains the sole authority for whether the alert still matches.
-        if record_exists:
-            return True
+        """Return whether a record-free entity state is worth evaluating."""
         if new_state is None or not self.applies(hass, new_state):
             return False
         if self.transition_filter is not None:
-            return self.transition_filter(hass, new_state, config, record_exists)
+            return self.transition_filter(hass, new_state, config)
         # Future packs without a filter stay conservative for applicable states.
         return True
 
