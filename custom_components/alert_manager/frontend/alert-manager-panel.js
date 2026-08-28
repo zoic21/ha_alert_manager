@@ -913,7 +913,7 @@ class AlertManagerPanel extends HTMLElement {
       if (row.link.type === "more_info") {
         this._openMoreInfo(row.link.entity_id);
       } else if (row.link.type === "navigate") {
-        this._navigate(row.link.path);
+        this._navigate(row.link.path, true);
       }
     });
     return button;
@@ -1836,8 +1836,17 @@ class AlertManagerPanel extends HTMLElement {
     }));
   }
 
-  _navigate(path) {
+  _navigate(path, newTabInBrowser = false) {
     if (!path) return;
+    const inCompanionApp = Boolean(
+      globalThis.window?.externalApp
+      || globalThis.window?.externalAppV2
+      || globalThis.window?.webkit?.messageHandlers?.externalBus
+    );
+    if (newTabInBrowser && !inCompanionApp && typeof window.open === "function") {
+      window.open(path, "_blank", "noopener,noreferrer");
+      return;
+    }
     window.history?.pushState?.(null, "", path);
     window.dispatchEvent?.(new CustomEvent("location-changed", {
       detail: { replace: false },
