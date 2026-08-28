@@ -53,6 +53,38 @@
         "state": "State"
       }
     },
+    "coherence": {
+      "columns": {
+        "entity": "Missing entity",
+        "file": "File",
+        "line": "Line",
+        "source": "Configuration",
+        "type": "Type"
+      },
+      "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files.",
+      "empty": "No references to missing entities.",
+      "not_scanned": "The scan has not been run yet.",
+      "open": "Open",
+      "scan": "Run scan",
+      "scanning": "Scanning…",
+      "stats": {
+        "duration": "Duration: {duration} ms",
+        "files": "Files scanned: {count}",
+        "missing": "Invalid references: {count}",
+        "references": "References checked: {count}",
+        "skipped": "Unreadable or invalid files skipped: {count}"
+      },
+      "title": "Configuration coherence",
+      "types": {
+        "automation": "Automation",
+        "dashboard": "Dashboard",
+        "file": "YAML file",
+        "integration": "Integration",
+        "scene": "Scene",
+        "script": "Script",
+        "template": "Template"
+      }
+    },
     "duration": {
       "activation": "Activating…",
       "hours": "{count} h",
@@ -332,6 +364,7 @@
     },
     "tabs": {
       "automatic": "Automatic monitoring",
+      "coherence": "Coherence",
       "history": "History",
       "overview": "Overview",
       "rules": "Custom rules",

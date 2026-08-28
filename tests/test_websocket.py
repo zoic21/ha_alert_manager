@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 from types import SimpleNamespace
 
 from custom_components.alert_manager.const import DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
     websocket_alerts_list,
+    websocket_coherence_scan,
     websocket_config_export,
     websocket_config_get,
     websocket_config_import,
@@ -199,10 +201,39 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_history_config_get, {"id": 15}),
         (websocket_history_config_update, {"id": 16, "retention_limit": 10}),
         (websocket_history_clear, {"id": 17, "confirmed": True}),
+        (websocket_coherence_scan, {"id": 18}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 12
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 13
     assert connection.results == []
+
+
+def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypatch):
+    """The admin-only endpoint returns the isolated scanner payload unchanged."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    expected = {
+        "results": [],
+        "missing_count": 0,
+        "files_scanned": 3,
+        "files_skipped": 0,
+        "references_checked": 7,
+        "duration_ms": 4,
+    }
+
+    async def scan(_hass):
+        return expected
+
+    websocket_module = importlib.import_module(
+        "custom_components.alert_manager.websocket"
+    )
+    monkeypatch.setattr(websocket_module, "async_scan_configuration", scan)
+    asyncio.run(websocket_coherence_scan(hass, connection, {"id": 40}))
+
+    assert connection.errors == []
+    assert connection.results == [(40, expected)]
 
 
 def test_history_websocket_configuration_and_clear(hass, entry):
