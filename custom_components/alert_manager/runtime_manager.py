@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
@@ -371,8 +371,8 @@ class AlertManager(BaseAlertManager):
         return rendered
 
     def _build_candidates(self, state: State) -> dict[str, Any]:
-        """Let every automatic pack evaluate unavailable states."""
-        if state.state != STATE_UNAVAILABLE:
+        """Let every automatic pack evaluate unavailable and unknown states."""
+        if state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return super()._build_candidates(state)
         if not self._is_base_eligible(state.entity_id):
             return {}
@@ -382,7 +382,7 @@ class AlertManager(BaseAlertManager):
             for pack in PACKS:
                 self._add_pack_candidate(result, state, pack.id)
         # Keep the existing rule semantics: custom rules are not evaluated while
-        # their source itself is unavailable.
+        # their source itself is unavailable or unknown.
         return result
 
     def _add_pack_candidate(
@@ -397,7 +397,11 @@ class AlertManager(BaseAlertManager):
         if not config["enabled"] or not self._pack_is_available(pack_id):
             return
 
-        evaluation = pack.evaluate(self.hass, state, config)
+        evaluation = (
+            PackNeutral()
+            if state.state == STATE_UNKNOWN
+            else pack.evaluate(self.hass, state, config)
+        )
         alert_id = f"{pack_id}:{state.entity_id}"
         if isinstance(evaluation, PackNeutral):
             record = self.records.get(alert_id)
