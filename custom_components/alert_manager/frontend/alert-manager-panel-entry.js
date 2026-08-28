@@ -112,6 +112,26 @@ Object.defineProperty(AlertManagerPanel.prototype, "narrow", {
   },
 });
 
+const baseTabs = AlertManagerPanel.prototype._tabs;
+AlertManagerPanel.prototype._tabs = function() {
+  const tabs = baseTabs.call(this);
+  const automaticIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/automatic");
+  const rulesIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/rules");
+  if (automaticIndex < 0 || rulesIndex < 0 || rulesIndex < automaticIndex) return tabs;
+
+  const reorderedTabs = [...tabs];
+  const [rulesTab] = reorderedTabs.splice(rulesIndex, 1);
+  reorderedTabs.splice(automaticIndex, 0, rulesTab);
+  return reorderedTabs;
+};
+
+const baseStyles = AlertManagerPanel.prototype._styles;
+AlertManagerPanel.prototype._styles = function() {
+  return `${baseStyles.call(this)}
+    .automatic-grid{width:100%;max-width:1120px;margin-inline:auto}
+  `;
+};
+
 AlertManagerPanel.prototype._nativeCoherenceEntityCell = function(row, narrow = false) {
   if (!narrow || !globalThis.document?.createElement) return row.entity;
   const state = ensureCoherenceTableState(this);
