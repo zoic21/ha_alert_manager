@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import Event
 
-from custom_components.alert_manager.packs import connectivity, unavailable
+from custom_components.alert_manager.packs import PACK_NEUTRAL, connectivity, unavailable
 from custom_components.alert_manager.runtime_manager import AlertManager
 
 
@@ -30,8 +30,8 @@ def _should(pack, hass, new_state):
     return pack.should_evaluate(hass, new_state, {"enabled": True})
 
 
-def test_connectivity_treats_unavailable_as_uninteresting(hass):
-    """Connectivity filters only unavailable; evaluate decides on/off matching."""
+def test_connectivity_returns_neutral_for_unavailable(hass):
+    """Filtering ignores unavailable while evaluate explicitly marks it neutral."""
     on_state = _state(hass, "on")
     off_state = _state(hass, "off")
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
@@ -40,8 +40,10 @@ def test_connectivity_treats_unavailable_as_uninteresting(hass):
     assert _should(connectivity.PACK, hass, off_state)
     assert not _should(connectivity.PACK, hass, unavailable_state)
 
-    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
-    assert match is None
+    evaluation = connectivity.PACK.evaluate(
+        hass, unavailable_state, {"enabled": True}
+    )
+    assert evaluation is PACK_NEUTRAL
 
 
 def test_connectivity_reload_survives_temporary_attribute_loss(hass):
@@ -53,8 +55,10 @@ def test_connectivity_reload_survives_temporary_attribute_loss(hass):
 
     assert not _should(connectivity.PACK, hass, unavailable_state)
     assert _should(unavailable.PACK, hass, unavailable_state)
-    match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
-    assert match is None
+    evaluation = connectivity.PACK.evaluate(
+        hass, unavailable_state, {"enabled": True}
+    )
+    assert evaluation is PACK_NEUTRAL
 
 
 def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
