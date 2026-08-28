@@ -1341,7 +1341,9 @@ class AlertManager:
             if not force:
                 return record.details.message
             try:
-                render_info = self._rule_message_templates[rule.id].async_render_to_info(
+                render_info = self._rule_message_templates[
+                    rule.id
+                ].async_render_to_info(
                     {
                         "entity_id": state.entity_id,
                         "state": state,
@@ -1961,7 +1963,10 @@ class AlertManager:
             ):
                 self._fire_started(current)
         for alert_id, current in self.records.items():
-            if alert_id not in previous_records and current.status is AlertStatus.ACTIVE:
+            if (
+                alert_id not in previous_records
+                and current.status is AlertStatus.ACTIVE
+            ):
                 self._fire_started(current)
 
     def get_packs(self) -> list[dict[str, Any]]:

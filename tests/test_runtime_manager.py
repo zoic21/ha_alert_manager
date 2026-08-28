@@ -11,8 +11,8 @@ from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import Event, State
 
 from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
-from custom_components.alert_manager.runtime_manager import AlertManager
 from custom_components.alert_manager.sensor import AlertManagerSensor
 
 

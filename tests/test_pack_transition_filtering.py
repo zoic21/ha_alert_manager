@@ -7,8 +7,8 @@ import asyncio
 from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import Event
 
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.packs import battery, connectivity, unavailable
-from custom_components.alert_manager.runtime_manager import AlertManager
 
 
 def _battery_state(hass, value: str, *, entity_id: str = "sensor.battery"):
