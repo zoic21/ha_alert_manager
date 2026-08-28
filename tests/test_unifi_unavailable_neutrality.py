@@ -7,7 +7,7 @@ import asyncio
 from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE
 from homeassistant.core import Event
 
-from custom_components.alert_manager.packs import PACK_NEUTRAL, unifi
+from custom_components.alert_manager.packs import PackNeutral, unifi
 from custom_components.alert_manager.runtime_manager import AlertManager
 
 _ENTITY_ID = "device_tracker.unifi_client"
@@ -37,7 +37,7 @@ def test_unifi_returns_neutral_for_unavailable(hass, registry_entry):
     assert unifi.PACK.should_evaluate(hass, home, config)
     assert unifi.PACK.should_evaluate(hass, away, config)
     assert not unifi.PACK.should_evaluate(hass, unavailable, config)
-    assert unifi.PACK.evaluate(hass, unavailable, config) is PACK_NEUTRAL
+    assert isinstance(unifi.PACK.evaluate(hass, unavailable, config), PackNeutral)
 
 
 def test_unifi_pending_survives_away_unavailable_then_resolves_home(
