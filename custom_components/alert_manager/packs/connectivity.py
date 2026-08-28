@@ -14,18 +14,9 @@ from .base import AutomaticPack, PackMatch, PackNeutral
 
 def _applies(hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a connectivity binary sensor."""
-    if state.entity_id.partition(".")[0] != "binary_sensor":
-        return False
-    if state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity":
-        return True
-    # Some integrations temporarily drop state attributes while reloading.
-    # Registry metadata remains stable and preserves the pack identity.
-    registry_entry = er.async_get(hass).async_get(state.entity_id)
-    return bool(
-        registry_entry is not None
-        and getattr(registry_entry, "original_device_class", None) == "connectivity"
-    )
-
+    return (
+        state.entity_id.partition(".")[0] == "binary_sensor"
+        and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity")
 
 def _should_evaluate(
     _hass: HomeAssistant,
