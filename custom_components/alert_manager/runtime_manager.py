@@ -14,7 +14,7 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
-from .packs import PACKS, PACK_NEUTRAL
+from .packs import PACKS, PACKS_BY_ID, PACK_NEUTRAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -257,7 +257,7 @@ class AlertManager(BaseAlertManager):
         return rendered
 
     def _build_candidates(self, state: State) -> dict[str, Any]:
-        """Let each pack evaluate unavailable, including neutral outcomes."""
+        """Let every automatic pack evaluate unavailable states."""
         if state.state != STATE_UNAVAILABLE:
             return super()._build_candidates(state)
         if not self._is_base_eligible(state.entity_id):
@@ -265,25 +265,50 @@ class AlertManager(BaseAlertManager):
 
         result: dict[str, Any] = {}
         if self._is_automatic_eligible(state.entity_id):
-            automatic = self.config.get("automatic", {})
             for pack in PACKS:
-                config = automatic.get(pack.id, {})
-                if not config.get("enabled", False):
-                    continue
-                if not self._pack_is_available(pack.id):
-                    continue
-                evaluation = pack.evaluate(self.hass, state, config)
-                if evaluation is PACK_NEUTRAL:
-                    alert_id = f"{pack.id}:{state.entity_id}"
-                    record = self.records.get(alert_id)
-                    if record is not None:
-                        result[alert_id] = (record.details, record.delay)
-                    continue
-                if evaluation is not None:
-                    super()._add_pack_candidate(result, state, pack.id)
+                self._add_pack_candidate(result, state, pack.id)
         # Keep the existing rule semantics: custom rules are not evaluated while
         # their source itself is unavailable.
         return result
+
+    def _add_pack_candidate(
+        self,
+        result: dict[str, Any],
+        state: State,
+        pack_id: str,
+    ) -> None:
+        """Apply one pack's Match, Neutral or None evaluation result."""
+        config = self.config["automatic"][pack_id]
+        pack = PACKS_BY_ID[pack_id]
+        if not config["enabled"] or not self._pack_is_available(pack_id):
+            return
+
+        evaluation = pack.evaluate(self.hass, state, config)
+        alert_id = f"{pack_id}:{state.entity_id}"
+        if evaluation is PACK_NEUTRAL:
+            record = self.records.get(alert_id)
+            if record is not None:
+                result[alert_id] = (record.details, record.delay)
+            return
+        if evaluation is None:
+            return
+
+        condition = self._localized_pack_condition(
+            evaluation.condition_key, evaluation.condition_params
+        )
+        result[alert_id] = (
+            self._details(
+                state,
+                alert_id,
+                pack_id,
+                condition,
+                value=evaluation.value,
+                condition_key=evaluation.condition_key,
+                condition_params=evaluation.condition_params,
+                message=condition,
+            ),
+            self._delay_for(state, pack_id),
+        )
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
