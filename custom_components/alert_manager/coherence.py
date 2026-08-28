@@ -321,8 +321,9 @@ def _derive_context(
 
     has_trigger = "trigger" in values or "triggers" in values
     has_action = "action" in values or "actions" in values
-    if has_trigger and has_action:
-        automation_id = _scalar(values.get("id"))
+    automation_id = _scalar(values.get("id"))
+    uses_blueprint = "use_blueprint" in values
+    if (has_trigger and has_action) or (uses_blueprint and automation_id):
         name = _scalar(values.get("alias")) or automation_id or parent.name
         return (
             _Context(
