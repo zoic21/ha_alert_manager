@@ -244,6 +244,7 @@ class AlertManagerPanel extends HTMLElement {
     this._selectedAlertIds = new Set();
     this._settingsDraft = null;
     this._entityDelayDraft = null;
+    this._ignoredReferenceDraft = "";
     this._automaticMapDraft = null;
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
@@ -1194,18 +1195,16 @@ class AlertManagerPanel extends HTMLElement {
       })),
       this._config.coherence_schedule ?? "none",
     );
-    this._configureSelector(
-      "coherence-ignored-entity-references",
-      { text: { multiple: true } },
-      this._settingsDraft.coherence_ignored_entity_references,
-      (value) => {
-        this._settingsDraft.coherence_ignored_entity_references =
-          this._multipleSelectorValue(
-            value,
-            this._settingsDraft.coherence_ignored_entity_references,
-          );
-      },
-    );
+    this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
+      if (this._configuredControls.has(chip)) return;
+      chip.label = chip.dataset.ignoredReference;
+      chip.selected = true;
+      chip.addEventListener("remove", (event) => {
+        event.stopPropagation();
+        this._removeIgnoredReference(chip.dataset.ignoredReference);
+      });
+      this._configuredControls.add(chip);
+    });
     this._configureSelector(
       "excluded-labels",
       { label: { multiple: true } },
@@ -2062,15 +2061,28 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderSettings() {
     this._ensureSettingsDraft();
-    return `<form id="settings-form" class="stack">
-      <ha-card outlined class="panel"><h2>${esc(this._t("settings.general"))}</h2><div class="fields">
+    const ignoredReferences = this._settingsDraft.coherence_ignored_entity_references;
+    return `<form id="settings-form" class="stack settings-form">
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.alert_display"))}</h2><div class="settings-grid">
         ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
         ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
         <div class="field"><div class="switch-field-row"><span class="field-label">${esc(this._t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(this._t("settings.coherence_scan_esphome"))}" ${this._settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(this._t("settings.coherence_scan_esphome_help"))}</small></div>
-        <div class="field full"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span><ha-selector id="coherence-ignored-entity-references"></ha-selector><small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small></div>
+        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span>
+          ${ignoredReferences.length ? `<ha-chip-set class="ignored-reference-chips">${ignoredReferences.map((reference) => `<ha-input-chip selected label="${esc(reference)}" data-ignored-reference="${esc(reference)}">${esc(reference)}</ha-input-chip>`).join("")}</ha-chip-set>` : ""}
+          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(this._ignoredReferenceDraft)}" placeholder="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+          <small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small>
+        </div>
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
-        <div class="history-settings full">
+        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.history_settings"))}</h2>
+        <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(this._t("settings.history_limit"))}</span>
             <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(this._historyConfig.retention_limit)}" required aria-label="${esc(this._t("settings.history_limit"))}"><span slot="end">${esc(this._t("units.events"))}</span></ha-input>
@@ -2078,11 +2090,7 @@ class AlertManagerPanel extends HTMLElement {
           </div>
           <small class="history-limit-help">${esc(this._t("settings.history_limit_help"))}</small>
         </div>
-      </div></ha-card>
-      <ha-card outlined class="panel"><h2>${esc(this._t("settings.explicit_exclusions"))}</h2><div class="fields">
-        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
-      </div></ha-card>
+      </ha-card>
       <ha-card outlined class="panel"><div><h2>${esc(this._t("settings.entity_delay"))}</h2><small>${esc(this._t("settings.delay_help"))}</small></div>
         <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
@@ -2097,6 +2105,38 @@ class AlertManagerPanel extends HTMLElement {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
     </form>`;
+  }
+
+  _commitIgnoredReferenceInput() {
+    const input = this.shadowRoot.querySelector("#ignored-reference-input");
+    const rawReference = String(input?.value ?? this._ignoredReferenceDraft);
+    this._ignoredReferenceDraft = rawReference;
+    const reference = rawReference.trim().toLowerCase();
+    if (!reference) return true;
+    if (!/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(reference)) {
+      this._notice = {
+        kind: "error",
+        text: this._t("settings.coherence_ignored_entity_reference_validation"),
+      };
+      return false;
+    }
+    this._ensureSettingsDraft();
+    if (!this._settingsDraft.coherence_ignored_entity_references.includes(reference)) {
+      this._settingsDraft.coherence_ignored_entity_references.push(reference);
+    }
+    this._ignoredReferenceDraft = "";
+    if (input) input.value = "";
+    return true;
+  }
+
+  _removeIgnoredReference(reference) {
+    this._ensureSettingsDraft();
+    this._settingsDraft.coherence_ignored_entity_references =
+      this._settingsDraft.coherence_ignored_entity_references.filter(
+        (item) => item !== reference,
+      );
+    this._notice = null;
+    this._render();
   }
 
   _numberField(id, label, value, suffix, min, max, options = {}) {
@@ -2219,6 +2259,13 @@ class AlertManagerPanel extends HTMLElement {
       if (form && this._reportFormValidity(form) && !this._busy) {
         await this._saveSettings();
       }
+      return;
+    }
+    if (action === "add-ignored-reference") {
+      if (this._commitIgnoredReferenceInput()) {
+        this._notice = null;
+      }
+      this._render();
       return;
     }
     if (action === "clear-history") {
@@ -2441,6 +2488,9 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _handleInput(event) {
+    if (event.target?.id === "ignored-reference-input") {
+      this._ignoredReferenceDraft = String(event.target.value ?? "");
+    }
     this._handleRuleInput(event);
   }
 
@@ -2635,6 +2685,14 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _handleKeydown(event) {
+    if (event.target?.id === "ignored-reference-input" && ["Enter", ","].includes(event.key)) {
+      event.preventDefault();
+      if (this._commitIgnoredReferenceInput()) {
+        this._notice = null;
+      }
+      this._render();
+      return;
+    }
     if (event.target.closest?.(".rule-editor-resize") && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
       event.preventDefault();
       this._setRuleEditorWidth(this._ruleEditorWidth + (event.key === "ArrowLeft" ? 16 : -16));
@@ -2736,6 +2794,10 @@ class AlertManagerPanel extends HTMLElement {
 
   async _saveSettings() {
     this._ensureSettingsDraft();
+    if (!this._commitIgnoredReferenceInput()) {
+      this._render();
+      return;
+    }
     this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
@@ -2899,6 +2961,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetSettingsDraft() {
     this._settingsDraft = null;
     this._entityDelayDraft = null;
+    this._ignoredReferenceDraft = "";
   }
 
   _resetAutomaticDraft() {
@@ -3052,14 +3115,14 @@ class AlertManagerPanel extends HTMLElement {
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary ha-card,.panel{padding:20px}.summary ha-card{display:flex;align-items:center;justify-content:space-between}.summary ha-card[data-action="filter-summary-status"]{cursor:pointer}.summary ha-card[data-action="filter-summary-status"]:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.summary ha-card[data-action="filter-summary-status"]:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.summary ha-card[data-action="filter-summary-status"][aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--primary-color,#03a9f4)}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
       hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.date-filter-fields ha-date-range-picker{display:block;width:100%}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
-      .history-empty{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
+      .history-empty{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.settings-form{width:100%;max-width:1120px;margin-inline:auto}.settings-card{display:grid;gap:18px}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 24px;max-width:920px}.settings-wide{grid-column:1/-1}.ignored-reference-chips{display:flex;flex-wrap:wrap;gap:8px;max-width:100%;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:var(--secondary-background-color,#f5f5f5)}.ignored-reference-add{display:grid;grid-template-columns:minmax(220px,420px) auto;align-items:start;gap:8px}.ignored-reference-add ha-button{margin-top:8px}.history-settings{display:grid;gap:8px;max-width:720px}.history-settings-row{display:grid;grid-template-columns:minmax(260px,420px) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0;max-width:620px}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       .coherence-panel{padding:0}.coherence-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:20px}.coherence-header>div{min-width:0}.coherence-header ha-button{flex:none}.coherence-stats{display:flex;flex-wrap:wrap;gap:8px 20px;padding:12px 20px;border-block:1px solid var(--divider-color,#ddd);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px)}.coherence-stats .warning{color:var(--warning-color,#9a6b00)}.coherence-scan-date.stale{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}#coherence-table{display:block;width:100%}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
       .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.switch-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;min-height:48px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.pack-map-list{display:grid;gap:10px;margin-top:8px}.pack-map-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,180px) auto;gap:10px;align-items:start}.pack-map-row>ha-button{margin-top:8px}.pack-map-add-action{justify-content:flex-start}
       .actions{display:flex;justify-content:flex-end;gap:10px}#rules-table{display:block;width:100%;margin-top:16px}.rule-entities{display:flex;min-width:0;flex-direction:column}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.page-alert{display:block;margin-bottom:16px}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:700px){main{padding:12px}.automatic-grid{grid-template-columns:1fr}.summary ha-card{padding:12px}.summary strong{font-size:24px}.fields{grid-template-columns:1fr}.panel{padding:15px}.coherence-panel{padding:0}.coherence-header{align-items:stretch;flex-direction:column;padding:15px}.coherence-header ha-button{width:100%}.coherence-stats{padding-inline:15px}.actions ha-button{width:100%}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row,.pack-map-row{grid-template-columns:1fr}.delay-row ha-button,.pack-map-row>ha-button{width:100%;margin-top:0}.table-page-top{padding:12px 12px 0}hass-tabs-subpage-data-table{--data-table-row-height:72px}.selection-actions{max-width:44vw;overflow-x:auto}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:700px){main{padding:12px}.automatic-grid{grid-template-columns:1fr}.summary ha-card{padding:12px}.summary strong{font-size:24px}.fields,.settings-grid{grid-template-columns:1fr}.settings-wide{grid-column:auto}.panel{padding:15px}.coherence-panel{padding:0}.coherence-header{align-items:stretch;flex-direction:column;padding:15px}.coherence-header ha-button{width:100%}.coherence-stats{padding-inline:15px}.actions ha-button{width:100%}.ignored-reference-add{grid-template-columns:1fr}.ignored-reference-add ha-button{width:100%;margin-top:0}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row,.pack-map-row{grid-template-columns:1fr}.delay-row ha-button,.pack-map-row>ha-button{width:100%;margin-top:0}.table-page-top{padding:12px 12px 0}hass-tabs-subpage-data-table{--data-table-row-height:72px}.selection-actions{max-width:44vw;overflow-x:auto}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
     `;
   }
 }

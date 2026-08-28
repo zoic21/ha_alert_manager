@@ -231,12 +231,16 @@
       "yaml_title": "YAML rule"
     },
     "settings": {
+      "alert_display": "Alert display",
       "coherence_schedule": "Automatic coherence scan",
       "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
       "coherence_scan_esphome": "Scan the ESPHome folder",
       "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
       "coherence_ignored_entity_references": "References ignored by the coherence scan",
       "coherence_ignored_entity_references_help": "Add exact references to ignore, for example toto.plop.",
+      "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",
+      "coherence_ignored_entity_reference_validation": "Enter a valid complete reference, for example toto.plop.",
+      "coherence_settings": "Coherence analysis",
       "coherence_schedules": {
         "daily": "Once a day",
         "monthly": "Once a month",
@@ -254,6 +258,7 @@
       "duplicate_delay_save": "Entity {entity_id} appears twice in entity-specific delays.",
       "entity_delay": "Entity-specific delays",
       "entity_exclusions": "Excluded entities",
+      "exclusions": "Monitoring exclusions",
       "explicit_exclusions": "Explicit exclusions",
       "general": "General settings",
       "global_delay": "Global delay",
@@ -263,6 +268,7 @@
       "history_limit": "Number of historical events retained",
       "history_limit_help": "From 0 to 1000 events. The default is 100; 0 disables storage of future history.",
       "history_limit_validation": "The number of historical events must be an integer from 0 to 1000.",
+      "history_settings": "History",
       "label_exclusions": "Labels excluded from automatic monitoring",
       "labels_help": "Custom rules ignore these labels.",
       "no_delay": "No entity-specific delays.",

@@ -1508,6 +1508,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
+  panel._config.coherence_ignored_entity_references = ["toto.plop"];
   panel._packs = completePacks();
   const automatic = panel._renderAutomatic();
   panel._ensureSettingsDraft();
@@ -1532,7 +1533,15 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
-  assert.match(settings, /<ha-selector id="coherence-ignored-entity-references"/);
+  assert.match(settings, /<form id="settings-form" class="stack settings-form"/);
+  assert.match(settings, /<h2>Affichage des alertes<\/h2>/);
+  assert.match(settings, /<h2>Analyse de cohérence<\/h2>/);
+  assert.match(settings, /<h2>Exclusions de la surveillance<\/h2>/);
+  assert.match(settings, /<h2>Historique<\/h2>/);
+  assert.match(settings, /<ha-chip-set class="ignored-reference-chips">[\s\S]*<ha-input-chip[^>]+data-ignored-reference="toto\.plop"/);
+  assert.match(settings, /<ha-input id="ignored-reference-input"[^>]+placeholder="Exemple : toto\.plop"/);
+  assert.match(settings, /data-action="add-ignored-reference"/);
+  assert.doesNotMatch(settings, /coherence-ignored-entity-references[^>]*><\/ha-selector>/);
   assert.match(settings, /Références ignorées par l’analyse de cohérence/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
@@ -1544,7 +1553,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
   assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));
-  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings full"'));
+  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings"'));
   assert.ok(settings.indexOf('data-action="clear-history"') < settings.indexOf('class="actions settings-save-actions"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
@@ -1552,6 +1561,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
   assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(styles, /\.settings-form\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
+  assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
+  assert.match(styles, /\.ignored-reference-chips\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
   assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
@@ -1949,6 +1961,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     "#pending-display-delay": { value: "15" },
     "#coherence-schedule": { value: "weekly" },
     "#coherence-scan-esphome": { checked: false },
+    "#ignored-reference-input": { value: " Another.Ref " },
     "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
@@ -1972,7 +1985,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       pending_display_delay: 15,
       coherence_schedule: "weekly",
       coherence_scan_esphome: false,
-      coherence_ignored_entity_references: ["toto.plop"],
+      coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
       excluded_entities: ["sensor.skip", "light.skip"],
       excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1993,7 +2006,6 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hass = { states: {} };
   const selectors = Object.fromEntries(
     [
-      "#coherence-ignored-entity-references",
       "#excluded-labels",
       "#excluded-entities",
       "#excluded-devices",
@@ -2008,9 +2020,6 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
-  assert.deepEqual(selectors["#coherence-ignored-entity-references"].selector, {
-    text: { multiple: true },
-  });
   assert.equal(selectors["#coherence-schedule"].value, "none");
   assert.deepEqual(
     selectors["#coherence-schedule"].options.map((option) => option.value),
@@ -2044,6 +2053,68 @@ test("ESPHome scan switch keeps its draft value before saving", () => {
   const settings = panel._renderSettings();
   assert.match(settings, /id="coherence-scan-esphome"/);
   assert.doesNotMatch(settings, /id="coherence-scan-esphome"[^>]+checked/);
+});
+
+test("ignored coherence references use compact chips with safe add and remove behavior", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._ensureSettingsDraft();
+  let renders = 0;
+  const input = {
+    value: " Toto.Plop ",
+  };
+  panel.shadowRoot.querySelector = (selector) =>
+    selector === "#ignored-reference-input" ? input : null;
+  panel._render = () => { renders += 1; };
+
+  await panel._handleClick(actionEvent("add-ignored-reference"));
+  assert.deepEqual(panel._settingsDraft.coherence_ignored_entity_references, ["toto.plop"]);
+  assert.equal(input.value, "");
+  assert.equal(renders, 1);
+
+  input.value = "toto.plop";
+  await panel._handleClick(actionEvent("add-ignored-reference"));
+  assert.deepEqual(panel._settingsDraft.coherence_ignored_entity_references, ["toto.plop"]);
+
+  input.value = "not a reference";
+  assert.equal(panel._commitIgnoredReferenceInput(), false);
+  assert.equal(panel._notice.kind, "error");
+  assert.equal(panel._ignoredReferenceDraft, "not a reference");
+
+  panel._removeIgnoredReference("toto.plop");
+  assert.deepEqual(panel._settingsDraft.coherence_ignored_entity_references, []);
+});
+
+test("native ignored-reference chip removal updates the settings draft", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = {
+    ...completeConfig(),
+    coherence_ignored_entity_references: ["toto.plop"],
+  };
+  panel._activeTab = "settings";
+  panel._hass = { states: {} };
+  panel._ensureSettingsDraft();
+  const chip = {
+    dataset: { ignoredReference: "toto.plop" },
+    addEventListener(name, callback) {
+      if (name === "remove") this.removeListener = callback;
+    },
+  };
+  panel.shadowRoot.querySelector = () => null;
+  panel.shadowRoot.querySelectorAll = (selector) =>
+    selector === "ha-input-chip[data-ignored-reference]" ? [chip] : [];
+  panel._render = () => {};
+
+  panel._hydrateSelectors();
+  assert.equal(chip.label, "toto.plop");
+  assert.equal(chip.selected, true);
+  let stopped = false;
+  chip.removeListener({ stopPropagation() { stopped = true; } });
+
+  assert.equal(stopped, true);
+  assert.deepEqual(panel._settingsDraft.coherence_ignored_entity_references, []);
 });
 
 test("entity delay selector refuses a duplicate entity", () => {

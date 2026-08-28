@@ -231,12 +231,16 @@
       "yaml_title": "Règle YAML"
     },
     "settings": {
+      "alert_display": "Affichage des alertes",
       "coherence_schedule": "Analyse automatique de cohérence",
       "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
       "coherence_scan_esphome": "Analyser le dossier ESPHome",
       "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
       "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
       "coherence_ignored_entity_references_help": "Ajoutez les références exactes à ignorer, par exemple toto.plop.",
+      "coherence_ignored_entity_reference_placeholder": "Exemple : toto.plop",
+      "coherence_ignored_entity_reference_validation": "Saisissez une référence complète valide, par exemple toto.plop.",
+      "coherence_settings": "Analyse de cohérence",
       "coherence_schedules": {
         "daily": "Une fois par jour",
         "monthly": "Une fois par mois",
@@ -254,6 +258,7 @@
       "duplicate_delay_save": "L’entité {entity_id} est présente deux fois dans les délais.",
       "entity_delay": "Délais particuliers par entité",
       "entity_exclusions": "Entités exclues",
+      "exclusions": "Exclusions de la surveillance",
       "explicit_exclusions": "Exclusions explicites",
       "general": "Paramètres généraux",
       "global_delay": "Délai global",
@@ -263,6 +268,7 @@
       "history_limit": "Nombre d’événements historiques conservés",
       "history_limit_help": "De 0 à 1000 événements. La valeur par défaut est 100 ; 0 désactive la conservation du nouvel historique.",
       "history_limit_validation": "Le nombre d’événements historiques doit être un entier compris entre 0 et 1000.",
+      "history_settings": "Historique",
       "label_exclusions": "Labels exclus des surveillances automatiques",
       "labels_help": "Une règle personnalisée ignore ces labels.",
       "no_delay": "Aucun délai particulier.",

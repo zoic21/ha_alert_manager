@@ -2,6 +2,26 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.0.0-dev13 — 28 août 2026
+
+### Modifié
+
+- La page Configuration est maintenant organisée en blocs distincts pour
+  l’affichage des alertes, l’analyse de cohérence, les exclusions et
+  l’historique. Sa largeur est plafonnée sur les grands écrans et la mise en
+  page repasse en une colonne sur mobile.
+- Les références ignorées par l’analyse de cohérence utilisent les chips
+  natives de Home Assistant. Une référence peut être ajoutée avec le bouton,
+  la touche Entrée ou une virgule, puis supprimée directement depuis sa chip.
+- Les labels, entités et appareils exclus sont regroupés dans le même bloc afin
+  de ne plus mélanger les réglages de cohérence, d’alerte et d’historique.
+
+### Tests
+
+- Ajout de tests frontend couvrant le rendu compact, l’ajout normalisé, la
+  déduplication, la validation, la suppression et la sérialisation des
+  références ignorées.
+
 ## 1.7.2 — 27 août 2026
 
 ### Corrigé
