@@ -266,6 +266,44 @@ test("reconnecting during initial load does not duplicate WebSocket requests", (
   assert.equal(intervals, 1);
 });
 
+test("a directly loaded panel replays pre-upgrade Home Assistant properties", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const hass = { locale: { language: "fr" }, states: {} };
+  const route = { prefix: "/alert-manager", path: "/settings" };
+  const panelConfig = { title: "Alert Manager" };
+  Object.defineProperties(panel, {
+    hass: { configurable: true, writable: true, value: hass },
+    route: { configurable: true, writable: true, value: route },
+    panel: { configurable: true, writable: true, value: panelConfig },
+    narrow: { configurable: true, writable: true, value: true },
+  });
+  panel._render = () => {};
+  let loads = 0;
+  panel._load = () => {
+    loads += 1;
+    panel._loadPromise = Promise.resolve();
+  };
+  const previousSetInterval = window.setInterval;
+  window.setInterval = () => 1;
+  try {
+    panel.connectedCallback();
+  } finally {
+    window.setInterval = previousSetInterval;
+  }
+
+  assert.equal(Object.hasOwn(panel, "hass"), false);
+  assert.equal(Object.hasOwn(panel, "route"), false);
+  assert.equal(Object.hasOwn(panel, "panel"), false);
+  assert.equal(Object.hasOwn(panel, "narrow"), false);
+  assert.equal(panel._hass, hass);
+  assert.equal(panel._route, route);
+  assert.equal(panel._panel, panelConfig);
+  assert.equal(panel._narrow, true);
+  assert.equal(panel._activeTab, "settings");
+  assert.equal(loads, 1);
+});
+
 test("new rules start enabled with safe defaults", () => {
   assert.deepEqual(newRuleDefaults(), {
     name: "",

@@ -348,7 +348,21 @@ class AlertManagerPanel extends HTMLElement {
     if (tablePage) tablePage.narrow = this._narrow;
   }
 
+  _upgradeProperty(name) {
+    if (!Object.prototype.hasOwnProperty.call(this, name)) return;
+    const value = this[name];
+    delete this[name];
+    this[name] = value;
+  }
+
   connectedCallback() {
+    // On a direct page load Home Assistant can set panel properties before this
+    // custom element is defined. Replay those values through their setters once
+    // the element is upgraded, otherwise the own properties shadow the setters
+    // and the initial WebSocket load never starts.
+    for (const property of ["panel", "route", "narrow", "hass"]) {
+      this._upgradeProperty(property);
+    }
     this._render();
     if (this._hass && !this._config && !this._loadPromise) this._load();
     if (!this._timer) {
