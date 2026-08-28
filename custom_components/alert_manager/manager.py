@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import Any
 
 from homeassistant.components.persistent_notification import (
@@ -113,6 +115,19 @@ _ENTITY_ID_PATTERN = re.compile(
 type DependencyKey = tuple[str, str, str]
 
 
+def _serialize_config_mutation(
+    method: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
+    """Serialize a complete configuration transaction on one manager."""
+
+    @wraps(method)
+    async def locked(self: Any, *args: Any, **kwargs: Any) -> Any:
+        async with self._config_mutation_lock:
+            return await method(self, *args, **kwargs)
+
+    return locked
+
+
 class AlertManager:
     """Own configuration, runtime records, listeners and timers."""
 
@@ -125,6 +140,7 @@ class AlertManager:
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
         self._area_registry = ar.async_get(hass)
+        self._config_mutation_lock = asyncio.Lock()
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
         self.history: list[AlertHistoryEntry] = []
@@ -551,6 +567,7 @@ class AlertManager:
             self._reschedule_record_timers()
         return changed
 
+    @_serialize_config_mutation
     async def _async_flush_registry_evaluation(self) -> None:
         """Apply renames and run one durable scan for each registry burst."""
         try:
@@ -1816,6 +1833,7 @@ class AlertManager:
         limit = self.config["history_limit"]
         return {"retention_limit": limit, "enabled": limit > 0}
 
+    @_serialize_config_mutation
     async def async_set_history_limit(self, limit: int) -> dict[str, int | bool]:
         """Persist a new retention limit and immediately remove oldest excess."""
         if isinstance(limit, bool) or not isinstance(limit, int):
@@ -1872,6 +1890,7 @@ class AlertManager:
         async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.history_snapshot()
 
+    @_serialize_config_mutation
     async def async_set_monitoring(self, enabled: bool) -> bool:
         """Persistently suspend or resume the main monitoring category."""
         if not isinstance(enabled, bool):
@@ -2043,6 +2062,7 @@ class AlertManager:
             raise ValueError(f"Pending alert cannot be acknowledged: {alert_id}")
         return record
 
+    @_serialize_config_mutation
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
         validate_config_update(changes)
@@ -2078,6 +2098,7 @@ class AlertManager:
         self._publish_if_changed()
         return self.get_config()
 
+    @_serialize_config_mutation
     async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
         """Atomically replace configuration after fully parsing its YAML document.
 
@@ -2128,6 +2149,7 @@ class AlertManager:
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 
+    @_serialize_config_mutation
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
         rule = validate_rule_payload(data)
@@ -2151,6 +2173,7 @@ class AlertManager:
         rule = parse_rule_yaml(raw_yaml)
         return await self.async_create_rule(rule_to_yaml_data(rule))
 
+    @_serialize_config_mutation
     async def async_update_rule(
         self, rule_id: str, data: dict[str, Any]
     ) -> dict[str, Any]:
@@ -2193,6 +2216,7 @@ class AlertManager:
         rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
         return await self.async_update_rule(rule_id, rule_to_yaml_data(rule))
 
+    @_serialize_config_mutation
     async def async_delete_rule(self, rule_id: str) -> None:
         """Delete a rule and silently clean only the instances it owns."""
         index = self._rule_index(rule_id)
