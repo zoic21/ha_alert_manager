@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_CONNECTIVITY
-from .base import AutomaticPack, PackMatch
+from .base import AutomaticPack, PACK_NEUTRAL, PackMatch, PackNeutral
 
 
 def _applies(hass: HomeAssistant, state: State) -> bool:
@@ -38,9 +38,13 @@ def _should_evaluate(
 
 def _evaluate(
     hass: HomeAssistant, state: State, _config: dict[str, Any]
-) -> PackMatch | None:
-    """Match connectivity binary sensors only when definitively off."""
-    if not _applies(hass, state) or state.state != "off":
+) -> PackMatch | PackNeutral | None:
+    """Return alert, neutral or healthy connectivity status."""
+    if not _applies(hass, state):
+        return None
+    if state.state == STATE_UNAVAILABLE:
+        return PACK_NEUTRAL
+    if state.state != "off":
         return None
     return PackMatch(
         condition_key="automatic.connectivity",
@@ -54,5 +58,4 @@ PACK = AutomaticPack(
     applies=_applies,
     evaluate=_evaluate,
     transition_filter=_should_evaluate,
-    neutral_states=frozenset((STATE_UNAVAILABLE,)),
 )
