@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
-from .const import ALERT_MANAGER_ENTITY_IDS, DOMAIN
+from .const import ALERT_MANAGER_ENTITY_IDS, CUSTOM_RULE_ALLOWED_ENTITY_IDS, DOMAIN
 from .models import AlertStatus, Rule
 
 _LOGGER = logging.getLogger(__name__)
@@ -273,11 +273,11 @@ class _TemplatesMixin:
         return False
 
     def _render_info_has_own_dependency(self, render_info: Any) -> set[str]:
-        """Return runtime-discovered dependencies that belong to this integration."""
+        """Return runtime dependencies that can feed back into Alert Manager."""
         return {
             entity_id
             for entity_id in (getattr(render_info, "entities", ()) or ())
-            if self._is_own_entity(entity_id)
+            if not self._is_allowed_rule_source(entity_id)
         }
 
     def _rule_template_matches(self, rule: Rule, state: State, current: Any) -> bool:
@@ -482,9 +482,17 @@ class _TemplatesMixin:
         entity_entry = self._entity_registry.async_get(entity_id)
         return entity_entry is not None and entity_entry.platform == DOMAIN
 
+    def _is_allowed_rule_source(self, entity_id: str) -> bool:
+        """Allow normal entities and the loop-safe coherence issue sensor."""
+        return entity_id in CUSTOM_RULE_ALLOWED_ENTITY_IDS or not self._is_own_entity(
+            entity_id
+        )
+
     def _validate_rule_sources(self, rule: Rule) -> None:
         """Reject custom rules targeting Alert Manager itself."""
-        if any(self._is_own_entity(entity_id) for entity_id in rule.entity_ids):
+        if any(
+            not self._is_allowed_rule_source(entity_id) for entity_id in rule.entity_ids
+        ):
             raise ValueError("Alert Manager entities cannot be monitored")
 
     def _validate_rule_template(self, rule: Rule) -> None:
@@ -522,7 +530,11 @@ class _TemplatesMixin:
                     entity_match.group(1).lower()
                     for entity_match in _ENTITY_ID_PATTERN.finditer(block)
                 )
-        return {entity_id for entity_id in referenced if self._is_own_entity(entity_id)}
+        return {
+            entity_id
+            for entity_id in referenced
+            if not self._is_allowed_rule_source(entity_id)
+        }
 
     def _validate_config_rule_sources(self, config: dict[str, Any]) -> None:
         """Apply self-monitoring rejection to a complete imported config."""
@@ -540,7 +552,7 @@ class _TemplatesMixin:
             allowed = [
                 entity_id
                 for entity_id in rule.entity_ids
-                if not self._is_own_entity(entity_id)
+                if self._is_allowed_rule_source(entity_id)
             ]
             if allowed != rule.entity_ids:
                 changed = True
@@ -567,7 +579,7 @@ class _TemplatesMixin:
         own_ids = [
             alert_id
             for alert_id, record in self.records.items()
-            if self._is_own_entity(record.details.entity_id)
+            if not self._is_allowed_rule_source(record.details.entity_id)
         ]
         for alert_id in own_ids:
             self.records.pop(alert_id)

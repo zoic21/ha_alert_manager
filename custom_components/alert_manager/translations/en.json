@@ -231,6 +231,14 @@
       "yaml_title": "YAML rule"
     },
     "settings": {
+      "coherence_schedule": "Automatic coherence scan",
+      "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
+      "coherence_schedules": {
+        "daily": "Once a day",
+        "monthly": "Once a month",
+        "none": "None",
+        "weekly": "Once a week"
+      },
       "pending_display_delay": "Pending alert display delay",
       "pending_display_delay_help": "A pending alert waits for this delay before being displayed. If it becomes active sooner, it appears immediately as active without first appearing in the pending list.",
       "aria_delay": "Delay in seconds",

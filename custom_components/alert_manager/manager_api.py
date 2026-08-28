@@ -336,6 +336,9 @@ class _ApiMixin:
                     )
         candidate["rules"] = self.config["rules"]
         candidate = validate_config(candidate)
+        coherence_schedule_changed = (
+            candidate["coherence_schedule"] != self.config["coherence_schedule"]
+        )
         previous = self._configuration_snapshot()
         try:
             self.config = candidate
@@ -347,6 +350,8 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        if coherence_schedule_changed:
+            self._refresh_coherence_schedule()
         self._publish_if_changed()
         return self.get_config()
 
@@ -388,6 +393,10 @@ class _ApiMixin:
         monitoring_changed = (
             previous[0].get("monitoring_enabled", True) != self.monitoring_enabled
         )
+        coherence_schedule_changed = (
+            previous[0].get("coherence_schedule", "none")
+            != self.config["coherence_schedule"]
+        )
         if monitoring_changed:
             if self.monitoring_enabled:
                 async_dismiss_persistent_notification(
@@ -398,6 +407,8 @@ class _ApiMixin:
                 self._cancel_all_timers()
                 self._cancel_all_device_event_timers()
             async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
+        if coherence_schedule_changed:
+            self._refresh_coherence_schedule()
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 

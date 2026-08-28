@@ -19,6 +19,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
+from .coherence import schedule_coherence_scans
 from .manager_api import _ApiMixin
 from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
@@ -84,6 +85,7 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
+        self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -172,11 +174,24 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
             except Exception:
                 _LOGGER.exception("Unable to persist migrated alert history")
         await self._async_sync_monitoring_notification()
+        self._refresh_coherence_schedule()
+
+    def _refresh_coherence_schedule(self) -> None:
+        """Replace the optional low-frequency coherence scan listener."""
+        if self._coherence_schedule_unsubscribe is not None:
+            self._coherence_schedule_unsubscribe()
+            self._coherence_schedule_unsubscribe = None
+        self._coherence_schedule_unsubscribe = schedule_coherence_scans(
+            self.hass, self.config["coherence_schedule"]
+        )
 
     async def async_unload(self) -> None:
         """Remove listeners and timers, persisting a final snapshot."""
         self._cancel_template_dependency_timers()
         self._unloading = True
+        if self._coherence_schedule_unsubscribe is not None:
+            self._coherence_schedule_unsubscribe()
+            self._coherence_schedule_unsubscribe = None
         for unsubscribe in self._unsubscribers:
             unsubscribe()
         self._unsubscribers.clear()

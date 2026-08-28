@@ -11,6 +11,7 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    DEFAULT_COHERENCE_SCHEDULE,
     DEFAULT_CONFIG,
     DEFAULT_EXCLUSION_LABEL,
     DEFAULT_HISTORY_LIMIT,
@@ -232,6 +233,10 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
 
     if "history_limit" not in config:
         config["history_limit"] = DEFAULT_HISTORY_LIMIT
+        changed = True
+
+    if "coherence_schedule" not in config:
+        config["coherence_schedule"] = DEFAULT_COHERENCE_SCHEDULE
         changed = True
 
     if "pending_display_delay" not in config:

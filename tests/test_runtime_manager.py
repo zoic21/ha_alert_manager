@@ -158,6 +158,36 @@ def test_own_state_change_never_schedules_evaluation(hass, entry):
     assert entry.created_task_names == before
 
 
+def test_coherence_sensor_state_change_evaluates_its_custom_rule(hass, entry):
+    """The sole loop-safe integration sensor remains event driven."""
+
+    async def scenario():
+        entity_id = "sensor.alert_manager_coherence_issue"
+        hass.states.set(entity_id, "0", {"scanned_at": "2026-08-24T12:00:00+00:00"})
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(
+                name="Coherence",
+                entity_ids=[entity_id],
+                operator="above",
+                value=0,
+                duration=0,
+            )
+        )
+        old_state = hass.states.get(entity_id)
+        hass.states.set(entity_id, "1", {"scanned_at": "2026-08-24T13:00:00+00:00"})
+        manager._state_changed(
+            _state_event(entity_id, old_state, hass.states.get(entity_id))
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert f"rule:{created['id']}:{entity_id}" in manager.records
+
+    asyncio.run(scenario())
+
+
 def test_sensors_reuse_last_published_snapshot(hass, entry, monkeypatch):
     """Aggregate sensors consume the manager snapshot without rebuilding it."""
     manager = make_manager(hass, entry)
