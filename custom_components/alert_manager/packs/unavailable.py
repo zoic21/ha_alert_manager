@@ -20,10 +20,10 @@ def _should_evaluate(
     _hass: HomeAssistant,
     new_state: State,
     _config: dict[str, Any],
-    record_exists: bool,
+    _record_exists: bool,
 ) -> bool:
-    """Evaluate only when the stored occurrence and new state disagree."""
-    return record_exists != (new_state.state == STATE_UNAVAILABLE)
+    """Evaluate applicable entities only when they become unavailable."""
+    return new_state.state == STATE_UNAVAILABLE
 
 
 def _evaluate(
