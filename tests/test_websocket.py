@@ -6,10 +6,11 @@ import asyncio
 import importlib
 from types import SimpleNamespace
 
-from custom_components.alert_manager.const import DATA_MANAGER
+from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
     websocket_alerts_list,
+    websocket_coherence_get,
     websocket_coherence_scan,
     websocket_config_export,
     websocket_config_get,
@@ -201,10 +202,11 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_history_config_get, {"id": 15}),
         (websocket_history_config_update, {"id": 16, "retention_limit": 10}),
         (websocket_history_clear, {"id": 17, "confirmed": True}),
-        (websocket_coherence_scan, {"id": 18}),
+        (websocket_coherence_get, {"id": 18}),
+        (websocket_coherence_scan, {"id": 19}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 13
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 14
     assert connection.results == []
 
 
@@ -234,6 +236,27 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
 
     assert connection.errors == []
     assert connection.results == [(40, expected)]
+
+
+def test_coherence_get_websocket_restores_last_result_without_scanning(hass, entry):
+    """Opening the panel retrieves the retained report without a new scan."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_coherence_get(hass, connection, {"id": 41}))
+    assert connection.results == [(41, None)]
+
+    expected = {
+        "scanned_at": "2026-08-24T12:00:00+00:00",
+        "missing_entity_count": 1,
+        "results": [{"entity_id": "sensor.gone"}],
+    }
+    hass.data[DATA_COHERENCE_RESULT] = expected
+    asyncio.run(websocket_coherence_get(hass, connection, {"id": 42}))
+
+    assert connection.results[-1] == (42, expected)
 
 
 def test_history_websocket_configuration_and_clear(hass, entry):

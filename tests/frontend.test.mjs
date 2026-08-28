@@ -138,6 +138,7 @@ test("coherence scan runs only from its explicit action", async () => {
     files_skipped: 0,
     references_checked: 12,
     duration_ms: 8,
+    scanned_at: "2026-08-24T12:00:00+00:00",
   };
   const calls = [];
   panel._hass = {
@@ -156,6 +157,33 @@ test("coherence scan runs only from its explicit action", async () => {
   assert.deepEqual(calls, [{ type: "alert_manager/coherence/scan" }]);
   assert.equal(panel._coherence, response);
   assert.equal(panel._coherenceLoading, false);
+});
+
+test("coherence scan date is red only when older than 48 hours", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._coherence = {
+    results: [],
+    missing_count: 0,
+    files_scanned: 4,
+    references_checked: 12,
+    duration_ms: 8,
+    scanned_at: "2026-08-25T11:59:59+00:00",
+  };
+  const originalNow = Date.now;
+  Date.now = () => Date.parse("2026-08-27T12:00:00+00:00");
+  try {
+    const stale = panel._renderCoherence();
+    assert.match(stale, /coherence-scan-date stale/);
+    assert.match(stale, /Dernière analyse/);
+
+    panel._coherence.scanned_at = "2026-08-25T12:00:01+00:00";
+    const fresh = panel._renderCoherence();
+    assert.match(fresh, /coherence-scan-date/);
+    assert.doesNotMatch(fresh, /coherence-scan-date stale/);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("coherence result actions open their exact Home Assistant target", () => {
@@ -510,6 +538,12 @@ test("initial load requests pack metadata from the backend", async () => {
   const panel = new Panel();
   panel._render = () => {};
   const calls = [];
+  const retainedCoherence = {
+    results: [{ entity_id: "sensor.gone" }],
+    missing_count: 1,
+    missing_entity_count: 1,
+    scanned_at: "2026-08-24T12:00:00+00:00",
+  };
   const responses = {
     "alert_manager/config/get": completeConfig(),
     "alert_manager/alerts/list": {
@@ -524,6 +558,7 @@ test("initial load requests pack metadata from the backend", async () => {
       events: [], count: 0, retention_limit: 100, enabled: true,
     },
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
+    "alert_manager/coherence/get": retainedCoherence,
     "config/label_registry/list": [],
   };
   panel._hass = {
@@ -545,11 +580,13 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/packs/list",
     "alert_manager/history/list",
     "alert_manager/history/config/get",
+    "alert_manager/coherence/get",
     "config/label_registry/list",
     "frontend/get_translations",
     "frontend/get_translations",
   ]);
   assert.deepEqual(panel._packs, completePacks());
+  assert.equal(panel._coherence, retainedCoherence);
 });
 
 test("rule save button explicitly creates a rule and keeps typed values", async () => {

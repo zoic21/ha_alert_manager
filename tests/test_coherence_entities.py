@@ -14,6 +14,7 @@ from custom_components.alert_manager.button import (
     async_setup_entry as setup_button,
 )
 from custom_components.alert_manager.const import (
+    COHERENCE_STORAGE_KEY,
     DATA_COHERENCE_RESULT,
     SIGNAL_COHERENCE_UPDATED,
 )
@@ -117,6 +118,51 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     result = run(coherence_module.async_run_coherence_scan(hass))
 
     assert result is expected
+    assert result["scanned_at"] == "2026-08-24T12:00:00+00:00"
     assert hass.data[DATA_COHERENCE_RESULT] is expected
+    assert hass.stores[COHERENCE_STORAGE_KEY] is expected
+    assert hass.store_save_count == 1
     assert sensor.native_value == 2
     assert sensor.writes == 1
+
+
+def test_latest_scan_is_restored_from_storage_after_restart(hass):
+    """The complete latest report survives the in-memory integration state."""
+    stored = {
+        "scanned_at": "2026-08-23T08:30:00+00:00",
+        "missing_count": 3,
+        "missing_entity_count": 2,
+        "results": [
+            {"entity_id": "sensor.first"},
+            {"entity_id": "sensor.first"},
+            {"entity_id": "sensor.second"},
+        ],
+    }
+    hass.stores[COHERENCE_STORAGE_KEY] = stored
+    coherence_module = importlib.import_module(
+        "custom_components.alert_manager.coherence"
+    )
+
+    restored = run(coherence_module.async_load_coherence_result(hass))
+    sensor = AlertManagerCoherenceIssueSensor()
+    sensor.hass = hass
+    run(sensor.async_added_to_hass())
+
+    assert restored is stored
+    assert hass.data[DATA_COHERENCE_RESULT] is stored
+    assert sensor.native_value == 2
+
+
+def test_invalid_stored_scan_is_ignored(hass):
+    """A damaged storage record leaves the sensor unknown instead of crashing."""
+    hass.stores[COHERENCE_STORAGE_KEY] = {
+        "missing_entity_count": "not-a-number",
+        "results": [],
+        "scanned_at": "2026-08-23T08:30:00+00:00",
+    }
+    coherence_module = importlib.import_module(
+        "custom_components.alert_manager.coherence"
+    )
+
+    assert run(coherence_module.async_load_coherence_result(hass)) is None
+    assert DATA_COHERENCE_RESULT not in hass.data

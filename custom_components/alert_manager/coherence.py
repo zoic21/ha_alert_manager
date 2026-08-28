@@ -1,8 +1,8 @@
 """On-demand Home Assistant configuration coherence scanner.
 
-The scanner deliberately has no listeners, cache or persistent state. It reads the
-configuration only when an administrator requests a scan from the panel, and all
-filesystem work runs in Home Assistant's executor.
+The scanner deliberately has no listeners or polling. It reads the configuration
+only when an administrator requests a scan, runs filesystem work in Home Assistant's
+executor and persists only the latest report.
 """
 
 from __future__ import annotations
@@ -20,9 +20,16 @@ import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
-from .const import DATA_COHERENCE_RESULT, SIGNAL_COHERENCE_UPDATED
+from .const import (
+    COHERENCE_STORAGE_KEY,
+    COHERENCE_STORAGE_VERSION,
+    DATA_COHERENCE_RESULT,
+    SIGNAL_COHERENCE_UPDATED,
+)
 
 _IGNORED_DIRECTORIES: Final = frozenset(
     {
@@ -640,8 +647,30 @@ async def async_scan_configuration(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
-    """Run one scan, retain its result and notify Home Assistant entities."""
+    """Run one scan, persist its result and notify Home Assistant entities."""
     result = await async_scan_configuration(hass)
+    result["scanned_at"] = dt_util.now().isoformat()
+    await Store[dict[str, Any]](
+        hass, COHERENCE_STORAGE_VERSION, COHERENCE_STORAGE_KEY
+    ).async_save(result)
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
+    return result
+
+
+async def async_load_coherence_result(
+    hass: HomeAssistant,
+) -> dict[str, Any] | None:
+    """Restore the latest valid coherence report from Home Assistant storage."""
+    result = await Store[dict[str, Any]](
+        hass, COHERENCE_STORAGE_VERSION, COHERENCE_STORAGE_KEY
+    ).async_load()
+    if (
+        not isinstance(result, dict)
+        or not isinstance(result.get("results"), list)
+        or not isinstance(result.get("scanned_at"), str)
+        or not isinstance(result.get("missing_entity_count"), int)
+    ):
+        return None
+    hass.data[DATA_COHERENCE_RESULT] = result
     return result

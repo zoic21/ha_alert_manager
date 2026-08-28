@@ -72,6 +72,7 @@
         "files": "Files scanned: {count}",
         "missing": "Invalid references: {count}",
         "references": "References checked: {count}",
+        "scanned_at": "Last scan: {date}",
         "skipped": "Unreadable or invalid files skipped: {count}"
       },
       "title": "Configuration coherence",

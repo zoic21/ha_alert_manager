@@ -43,9 +43,46 @@ Alert Manager ne vous impose **aucun système de notification**. Les notificatio
 
 ## Captures d’écran
 
-Les captures de l’interface actuelle ainsi que la discussion originale autour du bêta-test sont disponibles ici :
+### Vue d’ensemble
 
-**[Reddit — Integration alarm manager: need beta test](https://www.reddit.com/r/homeassistant/comments/1vzyqg1/integration_alarm_manager_need_beta_test/)**
+<p align="center">
+  <img src="docs/assets/screenshots/overview.webp" alt="Vue d’ensemble Alert Manager">
+</p>
+
+<details>
+<summary><strong>Voir plus de captures</strong></summary>
+
+### Historique
+
+<p align="center">
+  <img src="docs/assets/screenshots/history.webp" alt="Historique Alert Manager">
+</p>
+
+### Surveillance automatique
+
+<p align="center">
+  <img src="docs/assets/screenshots/automatic-monitoring.webp" alt="Surveillance automatique Alert Manager">
+</p>
+
+### Règles personnalisées
+
+<p align="center">
+  <img src="docs/assets/screenshots/custom-rules.webp" alt="Règles personnalisées Alert Manager">
+</p>
+
+### Éditeur de règle
+
+<p align="center">
+  <img src="docs/assets/screenshots/rule-editor.webp" width="520" alt="Éditeur de règle Alert Manager">
+</p>
+
+### Configuration
+
+<p align="center">
+  <img src="docs/assets/screenshots/configuration.webp" alt="Configuration Alert Manager">
+</p>
+
+</details>
 
 ## Installation
 

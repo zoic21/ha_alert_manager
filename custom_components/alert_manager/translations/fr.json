@@ -72,6 +72,7 @@
         "files": "Fichiers analysés : {count}",
         "missing": "Références invalides : {count}",
         "references": "Références vérifiées : {count}",
+        "scanned_at": "Dernière analyse : {date}",
         "skipped": "Fichiers ignorés car illisibles ou invalides : {count}"
       },
       "title": "Cohérence de la configuration",
