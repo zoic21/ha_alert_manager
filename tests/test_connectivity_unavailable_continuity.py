@@ -43,14 +43,10 @@ def test_connectivity_treats_unavailable_as_neutral(hass):
 
     assert not _should(connectivity.PACK, hass, on_state)
     assert _should(connectivity.PACK, hass, off_state)
-    assert not _should(
-        connectivity.PACK, hass, off_state, record_exists=True
-    )
+    assert not _should(connectivity.PACK, hass, off_state, record_exists=True)
     assert _should(connectivity.PACK, hass, on_state, record_exists=True)
     assert not _should(connectivity.PACK, hass, unavailable_state)
-    assert not _should(
-        connectivity.PACK, hass, unavailable_state, record_exists=True
-    )
+    assert not _should(connectivity.PACK, hass, unavailable_state, record_exists=True)
 
     match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
     assert match is None
@@ -63,9 +59,7 @@ def test_connectivity_reload_survives_temporary_attribute_loss(hass):
     )
     unavailable_state = _state(hass, STATE_UNAVAILABLE, attributes={})
 
-    assert not _should(
-        connectivity.PACK, hass, unavailable_state, record_exists=True
-    )
+    assert not _should(connectivity.PACK, hass, unavailable_state, record_exists=True)
     assert _should(unavailable.PACK, hass, unavailable_state)
     match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
     assert match is None
