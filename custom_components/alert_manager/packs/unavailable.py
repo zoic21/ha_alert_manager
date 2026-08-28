@@ -16,6 +16,15 @@ def _applies(_hass: HomeAssistant, _state: State) -> bool:
     return True
 
 
+def _should_evaluate(
+    _hass: HomeAssistant,
+    new_state: State,
+    _config: dict[str, Any],
+) -> bool:
+    """Evaluate applicable entities only when they become unavailable."""
+    return new_state.state == STATE_UNAVAILABLE
+
+
 def _evaluate(
     _hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
@@ -33,4 +42,5 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
+    transition_filter=_should_evaluate,
 )

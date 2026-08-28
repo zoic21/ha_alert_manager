@@ -20,6 +20,11 @@ class PackMatch:
 
 
 @dataclass(frozen=True, slots=True)
+class PackNeutral:
+    """Signal that one pack must preserve its current occurrence unchanged."""
+
+
+@dataclass(frozen=True, slots=True)
 class PackConfigField:
     """Describe one pack-owned configuration field for validation and the UI."""
 
@@ -50,6 +55,10 @@ class PackConfigField:
         }
 
 
+PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any]], bool]
+PackEvaluation = PackMatch | PackNeutral | None
+
+
 @dataclass(frozen=True, slots=True)
 class AutomaticPack:
     """Stable metadata and isolated evaluation function for an automatic pack."""
@@ -58,8 +67,23 @@ class AutomaticPack:
     translation_key: str
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
-    evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackMatch | None]
+    evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
+    transition_filter: PackTransitionFilter | None = None
     config_fields: tuple[PackConfigField, ...] = ()
+
+    def should_evaluate(
+        self,
+        hass: HomeAssistant,
+        new_state: State | None,
+        config: dict[str, Any],
+    ) -> bool:
+        """Return whether a record-free entity state is worth evaluating."""
+        if new_state is None or not self.applies(hass, new_state):
+            return False
+        if self.transition_filter is not None:
+            return self.transition_filter(hass, new_state, config)
+        # Future packs without a filter stay conservative for applicable states.
+        return True
 
     def available(self, hass: HomeAssistant) -> bool:
         """Return whether every required integration has one usable entry."""

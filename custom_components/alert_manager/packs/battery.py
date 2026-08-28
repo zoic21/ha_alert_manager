@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
-from homeassistant.const import ATTR_DEVICE_CLASS
+from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
@@ -18,12 +19,63 @@ from ..models import safe_float
 from .base import AutomaticPack, PackConfigField, PackMatch
 
 
+@lru_cache(maxsize=512)
+def _cached_effective_threshold(
+    entity_id: str,
+    device_id: str | None,
+    global_threshold: float | int | str,
+    device_threshold: float | int | str | None,
+) -> float:
+    """Cache the normalized effective threshold for one entity/config tuple."""
+    del entity_id, device_id
+    normalized_device = safe_float(device_threshold)
+    if normalized_device is not None:
+        return normalized_device
+    normalized_global = safe_float(global_threshold)
+    return (
+        normalized_global
+        if normalized_global is not None
+        else float(DEFAULT_BATTERY_THRESHOLD)
+    )
+
+
 def _applies(_hass: HomeAssistant, state: State) -> bool:
     """Return whether the state is a battery sensor."""
     return (
         state.entity_id.partition(".")[0] == "sensor"
         and state.attributes.get(ATTR_DEVICE_CLASS) == "battery"
     )
+
+
+def _effective_threshold(
+    hass: HomeAssistant, state: State, config: dict[str, Any]
+) -> float:
+    """Return the cached global/device threshold effective for this entity."""
+    entity_entry = er.async_get(hass).async_get(state.entity_id)
+    device_id = (
+        entity_entry.device_id
+        if entity_entry is not None and entity_entry.device_id
+        else None
+    )
+    device_thresholds = config.get("device_thresholds", {})
+    device_threshold = (
+        device_thresholds.get(device_id) if device_id is not None else None
+    )
+    return _cached_effective_threshold(
+        state.entity_id,
+        device_id,
+        config.get("threshold", DEFAULT_BATTERY_THRESHOLD),
+        device_threshold,
+    )
+
+
+def _should_evaluate(
+    _hass: HomeAssistant,
+    new_state: State,
+    _config: dict[str, Any],
+) -> bool:
+    """Evaluate applicable battery states except unavailable."""
+    return new_state.state != STATE_UNAVAILABLE
 
 
 def _evaluate(
@@ -33,16 +85,7 @@ def _evaluate(
     if not _applies(hass, state):
         return None
     value = safe_float(state.state)
-    entity_entry = er.async_get(hass).async_get(state.entity_id)
-    device_thresholds = config.get("device_thresholds", {})
-    device_threshold = (
-        safe_float(device_thresholds.get(entity_entry.device_id))
-        if entity_entry is not None and entity_entry.device_id
-        else None
-    )
-    threshold = (
-        device_threshold if device_threshold is not None else config["threshold"]
-    )
+    threshold = _effective_threshold(hass, state, config)
     if value is None or value > threshold:
         return None
     return PackMatch(
@@ -58,6 +101,7 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
+    transition_filter=_should_evaluate,
     config_fields=(
         PackConfigField(
             id="threshold",

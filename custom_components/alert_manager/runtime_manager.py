@@ -2,29 +2,22 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator, Callable, Iterable
-from contextlib import asynccontextmanager
-from copy import deepcopy
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
-from .const import (
-    DOMAIN,
-    EVENT_ALERT_ACKNOWLEDGED,
-    EVENT_ALERT_RESOLVED,
-    EVENT_ALERT_STARTED,
-    EVENT_ALERT_UNACKNOWLEDGED,
-)
+from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
+from .models import AlertStatus, Rule
+from .packs import PACKS, PACKS_BY_ID, PackNeutral
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,10 +31,10 @@ type DependencyKey = tuple[str, str, str]
 
 
 class AlertManager(BaseAlertManager):
-    """Add loop guards, durable lifecycle events and coalesced processing."""
+    """Add loop guards and coalesced event processing to the core manager."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize runtime indexes, transactions and coalescing queues."""
+        """Initialize runtime indexes and coalescing queues."""
         super().__init__(hass, entry)
         self._template_dependents: dict[str, set[DependencyKey]] = {}
         self._template_dynamic_infos: dict[DependencyKey, Any] = {}
@@ -52,260 +45,13 @@ class AlertManager(BaseAlertManager):
         self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
+        self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
         self._registry_evaluation_dirty = False
         self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
-        self._mutation_lock = asyncio.Lock()
-        self._mutation_owner: asyncio.Task[Any] | None = None
-        self._mutation_depth = 0
-        self._deferred_lifecycle_events: list[tuple[str, dict[str, Any]]] = []
-
-    @asynccontextmanager
-    async def _mutation_transaction(self) -> AsyncIterator[None]:
-        """Serialize mutations, roll back failures and defer events until durable."""
-        task = asyncio.current_task()
-        if task is None:  # pragma: no cover - Home Assistant always runs in a task
-            raise RuntimeError("Alert Manager mutation requires an asyncio task")
-        if self._mutation_owner is task:
-            self._mutation_depth += 1
-            try:
-                yield
-            finally:
-                self._mutation_depth -= 1
-            return
-
-        deferred: list[tuple[str, dict[str, Any]]] = []
-        async with self._mutation_lock:
-            self._mutation_owner = task
-            self._mutation_depth = 1
-            snapshot = self._runtime_snapshot()
-            self._deferred_lifecycle_events = []
-            try:
-                yield
-            except Exception:
-                self._restore_runtime_snapshot(snapshot)
-                self._deferred_lifecycle_events.clear()
-                raise
-            else:
-                deferred = self._deferred_lifecycle_events
-            finally:
-                self._deferred_lifecycle_events = []
-                self._mutation_depth = 0
-                self._mutation_owner = None
-
-        # Fire outside the mutation lock. Event listeners may call back into the
-        # integration and must see a completely committed runtime snapshot.
-        for event_type, data in deferred:
-            self.hass.bus.async_fire(event_type, data)
-
-    def _runtime_snapshot(self) -> dict[str, Any]:
-        """Capture mutable business state needed for a failed-write rollback."""
-        return {
-            "config": deepcopy(self.config),
-            "records": deepcopy(self.records),
-            "history": list(self.history),
-            "pending_history": list(self._pending_history),
-            "rule_render_info": dict(self._rule_template_render_info),
-            "message_render_info": dict(self._rule_message_render_info),
-            "pack_availability": dict(self._pack_availability),
-            "last_public_snapshot": deepcopy(self._last_public_snapshot),
-            "active_device_group_ids": set(self._active_device_group_ids),
-            "unloading": self._unloading,
-        }
-
-    def _restore_runtime_snapshot(self, snapshot: dict[str, Any]) -> None:
-        """Restore a failed transaction without retaining timers or indexes."""
-        self._cancel_all_timers()
-        self._cancel_all_device_event_timers()
-        self._cancel_template_dependency_timers()
-        self.config = snapshot["config"]
-        self.records = snapshot["records"]
-        self.history = snapshot["history"]
-        self._pending_history = snapshot["pending_history"]
-        self._rule_template_render_info = snapshot["rule_render_info"]
-        self._rule_message_render_info = snapshot["message_render_info"]
-        self._pack_availability = snapshot["pack_availability"]
-        self._last_public_snapshot = snapshot["last_public_snapshot"]
-        self._active_device_group_ids = snapshot["active_device_group_ids"]
-        self._unloading = snapshot["unloading"]
-        self._rebuild_rule_index()
-        self._refresh_tracking()
-        self._reschedule_record_timers()
-
-    def _defer_or_fire(self, event_type: str, data: dict[str, Any]) -> None:
-        """Queue lifecycle events while a persistence transaction is in flight."""
-        if self._mutation_owner is not None:
-            self._deferred_lifecycle_events.append((event_type, deepcopy(data)))
-            return
-        self.hass.bus.async_fire(event_type, data)
-
-    def _fire_started(self, record: AlertRecord) -> None:
-        """Emit a start event only after the surrounding mutation commits."""
-        self._defer_or_fire(EVENT_ALERT_STARTED, record.as_public_dict())
-
-    def _fire_resolved(self, record: AlertRecord, now: datetime) -> None:
-        """Emit a resolved event only after the surrounding mutation commits."""
-        data = record.as_public_dict()
-        data["resolved_at"] = now.isoformat()
-        self._defer_or_fire(EVENT_ALERT_RESOLVED, data)
-
-    def _fire_acknowledged(self, record: AlertRecord) -> None:
-        """Emit acknowledgement only after its durable transaction commits."""
-        self._defer_or_fire(EVENT_ALERT_ACKNOWLEDGED, record.as_public_dict())
-
-    def _fire_unacknowledged(
-        self,
-        record: AlertRecord,
-        now: datetime,
-        actor: str | None,
-        previous_at: datetime | None,
-        previous_by: str | None,
-    ) -> None:
-        """Emit removal metadata only after its durable transaction commits."""
-        data = record.as_public_dict()
-        data["unacknowledged_at"] = now.isoformat()
-        if actor is not None:
-            data["unacknowledged_by"] = actor
-        if previous_at is not None:
-            data["previous_acknowledged_at"] = previous_at.isoformat()
-        if previous_by is not None:
-            data["previous_acknowledged_by"] = previous_by
-        self._defer_or_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
-
-    async def async_evaluate_all(
-        self,
-        *,
-        restoring: bool = False,
-        save: bool = True,
-        publish: bool = True,
-        emit_events: bool = True,
-    ) -> bool:
-        """Serialize a full evaluation with every other runtime mutation."""
-        async with self._mutation_transaction():
-            return await super().async_evaluate_all(
-                restoring=restoring,
-                save=save,
-                publish=publish,
-                emit_events=emit_events,
-            )
-
-    async def async_evaluate_entity(
-        self,
-        entity_id: str,
-        *,
-        restoring: bool = False,
-        save: bool = True,
-        publish: bool = True,
-        emit_events: bool = True,
-    ) -> bool:
-        """Serialize one source evaluation and roll it back on write failure."""
-        async with self._mutation_transaction():
-            return await super().async_evaluate_entity(
-                entity_id,
-                restoring=restoring,
-                save=save,
-                publish=publish,
-                emit_events=emit_events,
-            )
-
-    async def async_refresh_pack_availability(self) -> bool:
-        """Serialize prerequisite changes with state/config mutations."""
-        async with self._mutation_transaction():
-            return await super().async_refresh_pack_availability()
-
-    async def async_set_history_limit(self, limit: int) -> dict[str, int | bool]:
-        """Serialize history configuration with runtime persistence."""
-        async with self._mutation_transaction():
-            return await super().async_set_history_limit(limit)
-
-    async def async_clear_history(self) -> dict[str, Any]:
-        """Serialize history clearing with runtime persistence."""
-        async with self._mutation_transaction():
-            return await super().async_clear_history()
-
-    async def async_set_monitoring(self, enabled: bool) -> bool:
-        """Serialize monitoring suspension/resume with state transitions."""
-        async with self._mutation_transaction():
-            return await super().async_set_monitoring(enabled)
-
-    async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
-        """Serialize acknowledgement against simultaneous resolution."""
-        async with self._mutation_transaction():
-            return await super().async_acknowledge(alert_id, actor)
-
-    async def async_unacknowledge(self, alert_id: str, actor: str | None) -> bool:
-        """Serialize acknowledgement removal against simultaneous resolution."""
-        async with self._mutation_transaction():
-            return await super().async_unacknowledge(alert_id, actor)
-
-    async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
-        """Serialize configuration updates with all evaluations."""
-        async with self._mutation_transaction():
-            return await super().async_update_config(changes)
-
-    async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
-        """Import atomically and emit lifecycle changes after persistence."""
-        async with self._mutation_transaction():
-            previous_records = deepcopy(self.records)
-            was_monitoring = self.monitoring_enabled
-            result = await super().async_import_config(raw_yaml)
-            if was_monitoring and self.monitoring_enabled:
-                # Base import suppresses evaluation events while reconciling the
-                # complete configuration. Recreate exactly the resulting lifecycle
-                # delta once the imported state has been durably saved.
-                self._emit_resume_events(previous_records)
-            return result
-
-    async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Serialize rule creation and its initial evaluations."""
-        async with self._mutation_transaction():
-            return await super().async_create_rule(data)
-
-    async def async_update_rule(
-        self, rule_id: str, data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Serialize rule edits and lifecycle reconciliation."""
-        async with self._mutation_transaction():
-            return await super().async_update_rule(rule_id, data)
-
-    async def async_delete_rule(self, rule_id: str) -> None:
-        """Serialize rule deletion and lifecycle reconciliation."""
-        async with self._mutation_transaction():
-            await super().async_delete_rule(rule_id)
-
-    async def async_unload(self) -> None:
-        """Wait for in-flight mutations before persisting the final snapshot."""
-        self._cancel_template_dependency_timers()
-        async with self._mutation_transaction():
-            await super().async_unload()
-
-    def _build_candidates(self, state: State) -> dict[str, tuple[Any, int]]:
-        """Freeze the effective delay once an occurrence has become active."""
-        candidates = super()._build_candidates(state)
-        for alert_id, (details, _delay) in tuple(candidates.items()):
-            record = self.records.get(alert_id)
-            if record is not None and record.status is AlertStatus.ACTIVE:
-                # A configuration delay applies to future/pending activation only.
-                # Moving an already active occurrence back to pending corrupts its
-                # history and can emit a second start event for the same occurrence.
-                candidates[alert_id] = (details, record.delay)
-        return candidates
-
-    def _remove_rule_instances(self, rule_id: str, entity_ids: set[str]) -> None:
-        """Resolve active instances removed by disabling/editing/deleting a rule."""
-        now = dt_util.now()
-        for entity_id in entity_ids:
-            alert_id = f"rule:{rule_id}:{entity_id}"
-            record = self.records.pop(alert_id, None)
-            if record is None:
-                continue
-            self._cancel_timer(alert_id)
-            if record.status is AlertStatus.ACTIVE:
-                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
-                self._fire_resolved(record, now)
 
     def _validate_rule_template(self, rule: Rule) -> None:
         """Reject self-referential Jinja in addition to invalid syntax."""
@@ -458,7 +204,7 @@ class AlertManager(BaseAlertManager):
         self._template_rate_limit_timers.clear()
 
     def _schedule_template_time_tick(self) -> None:
-        """Match Home Assistant's now()/utcnow() refresh at each minute boundary."""
+        """Refresh now()/utcnow() templates at the next minute boundary."""
         if (
             self._template_time_timer is not None
             or not self._template_time_dependencies
@@ -470,37 +216,31 @@ class AlertManager(BaseAlertManager):
         @callback
         def timer_due(_now: datetime) -> None:
             self._template_time_timer = None
-            sources = {key[2] for key in self._template_time_dependencies}
-            self._queue_entity_evaluations(sources)
+            self._queue_entity_evaluations(
+                {key[2] for key in self._template_time_dependencies}
+            )
             if self._template_time_dependencies:
                 self._schedule_template_time_tick()
 
         self._template_time_timer = async_track_point_in_utc_time(
-            self.hass,
-            timer_due,
-            when,
+            self.hass, timer_due, when
         )
 
     def _schedule_rate_limited_dependency(
         self, dependency_key: DependencyKey, when: datetime
     ) -> None:
-        """Guarantee a coalesced re-render when a dynamic Jinja limit expires."""
+        """Queue one trailing render when a broad Jinja rate limit expires."""
         if dependency_key in self._template_rate_limit_timers:
             return
 
         @callback
         def timer_due(_now: datetime) -> None:
             self._template_rate_limit_timers.pop(dependency_key, None)
-            if dependency_key not in self._template_dynamic_infos:
-                return
-            self._queue_entity_evaluations((dependency_key[2],))
+            if dependency_key in self._template_dynamic_infos:
+                self._queue_entity_evaluations((dependency_key[2],))
 
         self._template_rate_limit_timers[dependency_key] = (
-            async_track_point_in_utc_time(
-                self.hass,
-                timer_due,
-                when,
-            )
+            async_track_point_in_utc_time(self.hass, timer_due, when)
         )
 
     def _dynamic_dependency_matches(
@@ -511,19 +251,19 @@ class AlertManager(BaseAlertManager):
         *,
         lifecycle: bool,
     ) -> bool:
-        """Apply HA RenderInfo state/lifecycle filters and dynamic rate limits."""
+        """Apply Home Assistant's lifecycle filters and broad rate limits."""
         try:
-            matches = bool(render_info.filter(entity_id))
-            if lifecycle:
-                matches |= bool(render_info.filter_lifecycle(entity_id))
+            matches = bool(
+                render_info.filter_lifecycle(entity_id)
+                if lifecycle
+                else render_info.filter(entity_id)
+            )
         except Exception:  # pragma: no cover - defensive HA API guard
             _LOGGER.exception("Unable to filter Jinja dependency for %s", entity_id)
             return False
         if not matches:
             return False
 
-        # Explicit entity references are precise dependencies and Home Assistant
-        # does not need broad-domain/all-state throttling for those changes.
         if entity_id in self._template_entities_by_key.get(dependency_key, ()):
             return True
         rate_limit = getattr(render_info, "rate_limit", None)
@@ -630,6 +370,124 @@ class AlertManager(BaseAlertManager):
         self._index_render_info("message", pair, render_info)
         return rendered
 
+    def _build_candidates(self, state: State) -> dict[str, Any]:
+        """Let every automatic pack evaluate unavailable states."""
+        if state.state != STATE_UNAVAILABLE:
+            return super()._build_candidates(state)
+        if not self._is_base_eligible(state.entity_id):
+            return {}
+
+        result: dict[str, Any] = {}
+        if self._is_automatic_eligible(state.entity_id):
+            for pack in PACKS:
+                self._add_pack_candidate(result, state, pack.id)
+        # Keep the existing rule semantics: custom rules are not evaluated while
+        # their source itself is unavailable.
+        return result
+
+    def _add_pack_candidate(
+        self,
+        result: dict[str, Any],
+        state: State,
+        pack_id: str,
+    ) -> None:
+        """Apply one pack's Match, Neutral or None evaluation result."""
+        config = self.config["automatic"][pack_id]
+        pack = PACKS_BY_ID[pack_id]
+        if not config["enabled"] or not self._pack_is_available(pack_id):
+            return
+
+        evaluation = pack.evaluate(self.hass, state, config)
+        alert_id = f"{pack_id}:{state.entity_id}"
+        if isinstance(evaluation, PackNeutral):
+            record = self.records.get(alert_id)
+            if record is not None:
+                result[alert_id] = (record.details, record.delay)
+            return
+        if evaluation is None:
+            return
+
+        condition = self._localized_pack_condition(
+            evaluation.condition_key, evaluation.condition_params
+        )
+        result[alert_id] = (
+            self._details(
+                state,
+                alert_id,
+                pack_id,
+                condition,
+                value=evaluation.value,
+                condition_key=evaluation.condition_key,
+                condition_params=evaluation.condition_params,
+                message=condition,
+            ),
+            self._delay_for(state, pack_id),
+        )
+
+    def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
+        """Return whether this state transition can change source-owned output."""
+        if entity_id in self._rules_by_entity:
+            return True
+
+        # Once any alert occurrence exists for this source, always evaluate the
+        # entity. Candidate generation/evaluate() owns all keep/resolve decisions.
+        if any(
+            record.details.entity_id == entity_id for record in self.records.values()
+        ):
+            return True
+
+        # Home Assistant state_changed events include both states. Keep a
+        # conservative fallback for synthetic events or future HA API changes.
+        if "old_state" not in event.data or "new_state" not in event.data:
+            return self._is_relevant_entity_id(entity_id)
+        old_state = event.data.get("old_state")
+        new_state = event.data.get("new_state")
+        if (old_state is not None and not isinstance(old_state, State)) or (
+            new_state is not None and not isinstance(new_state, State)
+        ):
+            return self._is_relevant_entity_id(entity_id)
+
+        # Exact duplicate events are irrelevant only while the entity has no
+        # current alert occurrence. Jinja dependencies are queued independently.
+        if (
+            old_state is not None
+            and new_state is not None
+            and old_state.state == new_state.state
+            and old_state.attributes == new_state.attributes
+        ):
+            return False
+
+        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
+            entity_id
+        ):
+            return False
+
+        automatic = self.config.get("automatic", {})
+        for pack in PACKS:
+            config = automatic.get(pack.id, {})
+            if not config.get("enabled", False):
+                continue
+            if not self._pack_is_available(pack.id):
+                continue
+            if pack.should_evaluate(self.hass, new_state, config):
+                return True
+        return False
+
+    def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
+        """Update automatic tracked membership without evaluating alert candidates."""
+        if "new_state" not in event.data:
+            return False
+        new_state = event.data.get("new_state")
+        if new_state is not None and not isinstance(new_state, State):
+            return False
+        was_tracked = entity_id in self._automatic_tracked_entities
+        is_tracked = new_state is not None and self._is_automatically_tracked(new_state)
+        if is_tracked:
+            self._automatic_tracked_entities.add(entity_id)
+        else:
+            self._automatic_tracked_entities.discard(entity_id)
+        return was_tracked != is_tracked
+
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state or entity lifecycle event."""
@@ -638,6 +496,9 @@ class AlertManager(BaseAlertManager):
         entity_id = event.data.get("entity_id")
         if not entity_id or self._is_own_entity(entity_id):
             return
+
+        if self._update_tracking_for_state_event(entity_id, event):
+            self._queued_public_refresh = True
 
         affected_entities = {
             dependency_key[2]
@@ -654,7 +515,7 @@ class AlertManager(BaseAlertManager):
                 lifecycle=lifecycle,
             ):
                 affected_entities.add(dependency_key[2])
-        if self._is_relevant_entity_id(entity_id):
+        if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
         self._queue_entity_evaluations(
             affected_entities,
@@ -673,7 +534,7 @@ class AlertManager(BaseAlertManager):
             for entity_id in entity_ids
             if entity_id and not self._is_own_entity(entity_id)
         )
-        if not self._queued_evaluation_entities:
+        if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
         self._queued_evaluation_restoring |= restoring
         self._schedule_evaluation_flush()
@@ -693,33 +554,41 @@ class AlertManager(BaseAlertManager):
     async def _async_flush_queued_evaluations(self) -> None:
         """Evaluate the latest states and persist/publish the whole batch once."""
         try:
-            async with self._mutation_transaction():
-                if self._unloading or not self.monitoring_enabled:
-                    self._queued_evaluation_entities.clear()
-                    self._queued_evaluation_restoring = False
-                    return
-                entity_ids = sorted(self._queued_evaluation_entities)
+            if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
-                restoring = self._queued_evaluation_restoring
                 self._queued_evaluation_restoring = False
-                persisted_changed = False
-                for entity_id in entity_ids:
-                    try:
-                        persisted_changed |= await self.async_evaluate_entity(
-                            entity_id,
-                            restoring=restoring,
-                            save=False,
-                            publish=False,
-                        )
-                    except Exception:  # pragma: no cover - isolate one bad source
-                        _LOGGER.exception("Unable to evaluate %s", entity_id)
-                if persisted_changed:
-                    await self._async_save_state()
+                self._queued_public_refresh = False
+                return
+            entity_ids = sorted(self._queued_evaluation_entities)
+            self._queued_evaluation_entities.clear()
+            restoring = self._queued_evaluation_restoring
+            self._queued_evaluation_restoring = False
+            public_refresh = self._queued_public_refresh
+            self._queued_public_refresh = False
+            tracked_count_before = self._tracked_count()
+            persisted_changed = False
+            for entity_id in entity_ids:
+                try:
+                    persisted_changed |= await self.async_evaluate_entity(
+                        entity_id,
+                        restoring=restoring,
+                        save=False,
+                        publish=False,
+                    )
+                except Exception:  # pragma: no cover - isolate one bad source
+                    _LOGGER.exception("Unable to evaluate %s", entity_id)
+            if persisted_changed:
+                await self._async_save_state()
+            if (
+                persisted_changed
+                or public_refresh
+                or self._tracked_count() != tracked_count_before
+            ):
                 self._publish_if_changed()
         finally:
             self._evaluation_flush_scheduled = False
             if (
-                self._queued_evaluation_entities
+                (self._queued_evaluation_entities or self._queued_public_refresh)
                 and not self._unloading
                 and self.monitoring_enabled
             ):
@@ -744,6 +613,9 @@ class AlertManager(BaseAlertManager):
         record = self.records.get(alert_id)
         if record is None:
             return
+        # A timer may exist only to expose a still-pending alert. That changes
+        # the public snapshot without changing persisted record data.
+        self._queued_public_refresh = True
         self._queue_entity_evaluations((record.details.entity_id,))
 
     @callback
@@ -763,7 +635,6 @@ class AlertManager(BaseAlertManager):
             self._pending_entity_renames[old_entity_id] = new_entity_id
         elif not self.monitoring_enabled:
             return
-
         self._registry_evaluation_dirty = True
         if self._registry_evaluation_scheduled:
             return
@@ -775,7 +646,7 @@ class AlertManager(BaseAlertManager):
         )
 
     def _apply_pending_entity_renames(self) -> bool:
-        """Migrate config and live record identities for registry entity renames."""
+        """Migrate configured references and live records after entity renames."""
         if not self._pending_entity_renames:
             return False
         renames = dict(self._pending_entity_renames)
@@ -783,11 +654,10 @@ class AlertManager(BaseAlertManager):
 
         def final_target(entity_id: str) -> str:
             seen: set[str] = set()
-            target = entity_id
-            while target in renames and target not in seen:
-                seen.add(target)
-                target = renames[target]
-            return target
+            while entity_id in renames and entity_id not in seen:
+                seen.add(entity_id)
+                entity_id = renames[entity_id]
+            return entity_id
 
         changed = False
         for old_entity_id in tuple(renames):
@@ -799,51 +669,55 @@ class AlertManager(BaseAlertManager):
                 entity_ids = raw_rule.get("entity_ids")
                 if not isinstance(entity_ids, list) or old_entity_id not in entity_ids:
                     continue
-                replaced: list[str] = []
-                for entity_id in entity_ids:
-                    entity_id = (
-                        new_entity_id if entity_id == old_entity_id else entity_id
+                raw_rule["entity_ids"] = list(
+                    dict.fromkeys(
+                        new_entity_id if item == old_entity_id else item
+                        for item in entity_ids
                     )
-                    if entity_id not in replaced:
-                        replaced.append(entity_id)
-                raw_rule["entity_ids"] = replaced
+                )
                 changed = True
 
             entity_delays = self.config.get("entity_delays", {})
             if old_entity_id in entity_delays:
-                if new_entity_id not in entity_delays:
-                    entity_delays[new_entity_id] = entity_delays[old_entity_id]
-                entity_delays.pop(old_entity_id, None)
+                entity_delays.setdefault(new_entity_id, entity_delays[old_entity_id])
+                entity_delays.pop(old_entity_id)
                 changed = True
 
             excluded_entities = self.config.get("excluded_entities", [])
             if old_entity_id in excluded_entities:
-                replaced_exclusions: list[str] = []
-                for entity_id in excluded_entities:
-                    entity_id = (
-                        new_entity_id if entity_id == old_entity_id else entity_id
+                self.config["excluded_entities"] = list(
+                    dict.fromkeys(
+                        new_entity_id if item == old_entity_id else item
+                        for item in excluded_entities
                     )
-                    if entity_id not in replaced_exclusions:
-                        replaced_exclusions.append(entity_id)
-                self.config["excluded_entities"] = replaced_exclusions
+                )
                 changed = True
 
-            for alert_id, record in tuple(self.records.items()):
-                if record.details.entity_id != old_entity_id:
+            for alert_id, original_record in tuple(self.records.items()):
+                if original_record.details.entity_id != old_entity_id:
                     continue
-                if record.details.type == "rule" and record.details.rule_id:
-                    new_alert_id = f"rule:{record.details.rule_id}:{new_entity_id}"
-                else:
-                    new_alert_id = f"{record.details.type}:{new_entity_id}"
-                self._cancel_timer(alert_id)
                 self.records.pop(alert_id, None)
-                existing = self.records.pop(new_alert_id, None)
-                if existing is not None:
+                self._cancel_timer(alert_id)
+                if (
+                    original_record.details.type == "rule"
+                    and original_record.details.rule_id
+                ):
+                    new_alert_id = (
+                        f"rule:{original_record.details.rule_id}:{new_entity_id}"
+                    )
+                else:
+                    new_alert_id = f"{original_record.details.type}:{new_entity_id}"
+                existing_record = self.records.pop(new_alert_id, None)
+                if existing_record is not None:
                     self._cancel_timer(new_alert_id)
-                    # A rename should preserve the oldest occurrence rather than
-                    # silently replacing its lifecycle with a freshly-created one.
-                    if existing.detected_at < record.detected_at:
-                        record = existing
+                record = (
+                    min(
+                        (original_record, existing_record),
+                        key=lambda item: item.detected_at,
+                    )
+                    if existing_record is not None
+                    else original_record
+                )
                 record.details.entity_id = new_entity_id
                 record.details.id = new_alert_id
                 self.records[new_alert_id] = record
@@ -861,22 +735,21 @@ class AlertManager(BaseAlertManager):
         return changed
 
     async def _async_flush_registry_evaluation(self) -> None:
-        """Apply renames and run one durable full scan for each registry burst."""
+        """Apply renames and run one durable scan for each registry burst."""
         try:
             while self._registry_evaluation_dirty and not self._unloading:
                 self._registry_evaluation_dirty = False
-                async with self._mutation_transaction():
-                    renamed = self._apply_pending_entity_renames()
-                    evaluated = False
-                    if self.monitoring_enabled:
-                        evaluated = await self.async_evaluate_all(
-                            save=False,
-                            publish=False,
-                        )
-                    if renamed or evaluated:
-                        await self._async_save_state()
-                    if self.monitoring_enabled:
-                        self._publish_if_changed()
+                renamed = self._apply_pending_entity_renames()
+                evaluated = False
+                if self.monitoring_enabled:
+                    evaluated = await self.async_evaluate_all(
+                        save=False,
+                        publish=False,
+                    )
+                if renamed or evaluated:
+                    await self._async_save_state()
+                if self.monitoring_enabled:
+                    self._publish_if_changed()
         finally:
             self._registry_evaluation_scheduled = False
             if self._registry_evaluation_dirty and not self._unloading:
@@ -886,6 +759,11 @@ class AlertManager(BaseAlertManager):
                     self._async_flush_registry_evaluation(),
                     name=f"{DOMAIN} registry batch",
                 )
+
+    async def async_unload(self) -> None:
+        """Cancel Jinja dependency timers before unloading the integration."""
+        self._cancel_template_dependency_timers()
+        await super().async_unload()
 
     @callback
     def _schedule_pack_availability_refresh(self) -> None:
