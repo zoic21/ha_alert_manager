@@ -105,6 +105,8 @@ def test_config_export_is_deterministic_and_reimportable() -> None:
     assert first.startswith("version: 1\nconfig:\n")
     assert "  monitoring_enabled: true\n" in first
     assert "  coherence_schedule: none\n" in first
+    assert "  coherence_scan_esphome: true\n" in first
+    assert "  coherence_ignored_entity_references: []\n" in first
     assert "id: stable-rule-id" not in first
     imported = parse_config_yaml(first)
     assert imported["rules"][0]["id"] != "stable-rule-id"
@@ -124,6 +126,17 @@ def test_older_export_without_coherence_schedule_defaults_to_none() -> None:
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
     legacy = exported.replace("  coherence_schedule: none\n", "")
     assert parse_config_yaml(legacy)["coherence_schedule"] == "none"
+
+
+def test_older_export_without_coherence_scan_options_uses_defaults() -> None:
+    """Exports created before configurable scan scope remain importable."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace("  coherence_scan_esphome: true\n", "").replace(
+        "  coherence_ignored_entity_references: []\n", ""
+    )
+    imported = parse_config_yaml(legacy)
+    assert imported["coherence_scan_esphome"] is True
+    assert imported["coherence_ignored_entity_references"] == []
 
 
 def test_pre_dev14_export_without_pending_display_delay_uses_default() -> None:

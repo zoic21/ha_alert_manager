@@ -1840,6 +1840,8 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert manager.get_config()["excluded_labels"] == ["skip"]
     assert manager.get_config()["monitoring_enabled"] is True
     assert manager.get_config()["history_limit"] == 100
+    assert manager.get_config()["coherence_scan_esphome"] is True
+    assert manager.get_config()["coherence_ignored_entity_references"] == []
     assert manager.get_config()["pending_display_delay"] == 7
     assert "active_display_delay" not in manager.get_config()
     assert manager.history == []

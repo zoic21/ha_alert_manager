@@ -233,6 +233,10 @@
     "settings": {
       "coherence_schedule": "Automatic coherence scan",
       "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
+      "coherence_scan_esphome": "Scan the ESPHome folder",
+      "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
+      "coherence_ignored_entity_references": "References ignored by the coherence scan",
+      "coherence_ignored_entity_references_help": "Add exact references to ignore, for example toto.plop.",
       "coherence_schedules": {
         "daily": "Once a day",
         "monthly": "Once a month",

@@ -29,6 +29,8 @@ _CONFIG_UPDATE_KEYS = {
     "active_display_delay",
     "pending_display_delay",
     "coherence_schedule",
+    "coherence_scan_esphome",
+    "coherence_ignored_entity_references",
     "excluded_labels",
     # Accepted only so a cached V1 panel can update safely during migration.
     "exclusion_label",
@@ -107,6 +109,17 @@ def validate_config(config: Any) -> dict[str, Any]:
             "coherence_schedule must be one of: " + ", ".join(COHERENCE_SCHEDULES)
         )
     result["coherence_schedule"] = coherence_schedule
+    coherence_scan_esphome = config.get(
+        "coherence_scan_esphome", result["coherence_scan_esphome"]
+    )
+    if not isinstance(coherence_scan_esphome, bool):
+        raise ValueError("coherence_scan_esphome must be a boolean")
+    result["coherence_scan_esphome"] = coherence_scan_esphome
+    result["coherence_ignored_entity_references"] = (
+        validate_coherence_ignored_entity_references(
+            config.get("coherence_ignored_entity_references", [])
+        )
+    )
     result["global_delay"] = validate_delay(
         config.get("global_delay", result["global_delay"]), "global_delay"
     )
@@ -313,6 +326,24 @@ def validate_entity_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         raise ValueError("excluded_entities must be a list")
     return list(dict.fromkeys(validate_entity_id(item) for item in value))
+
+
+def validate_coherence_ignored_entity_references(value: Any) -> list[str]:
+    """Validate exact entity-like references ignored by coherence scans."""
+    if not isinstance(value, list):
+        raise ValueError("coherence_ignored_entity_references must be a list")
+    result: list[str] = []
+    for item in value:
+        reference = item.strip().casefold() if isinstance(item, str) else item
+        try:
+            reference = validate_entity_id(reference)
+        except ValueError as err:
+            raise ValueError(
+                "coherence_ignored_entity_references contains an invalid reference"
+            ) from err
+        if reference not in result:
+            result.append(reference)
+    return result
 
 
 def validate_device_list(value: Any) -> list[str]:

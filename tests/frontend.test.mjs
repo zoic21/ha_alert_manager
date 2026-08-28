@@ -348,6 +348,8 @@ const completeConfig = () => ({
   monitoring_enabled: true,
   history_limit: 100,
   coherence_schedule: "none",
+  coherence_scan_esphome: true,
+  coherence_ignored_entity_references: [],
   automatic: {
     unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
@@ -1491,6 +1493,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
+  assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
+  assert.match(settings, /<ha-selector id="coherence-ignored-entity-references"/);
+  assert.match(settings, /Références ignorées par l’analyse de cohérence/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
@@ -1508,6 +1513,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
   assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
+  assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
   assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
@@ -1890,6 +1896,8 @@ test("settings action serializes exclusions and entity delays", async () => {
   panel._config = completeConfig();
   panel._render = () => {};
   panel._settingsDraft = {
+    coherence_scan_esphome: false,
+    coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
     excluded_entities: ["sensor.skip", "light.skip"],
     excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1902,6 +1910,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     "#global-delay": { value: "300" },
     "#pending-display-delay": { value: "15" },
     "#coherence-schedule": { value: "weekly" },
+    "#coherence-scan-esphome": { checked: false },
     "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
@@ -1924,6 +1933,8 @@ test("settings action serializes exclusions and entity delays", async () => {
       global_delay: 300,
       pending_display_delay: 15,
       coherence_schedule: "weekly",
+      coherence_scan_esphome: false,
+      coherence_ignored_entity_references: ["toto.plop"],
       excluded_labels: ["sans_alerte"],
       excluded_entities: ["sensor.skip", "light.skip"],
       excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1943,7 +1954,12 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._activeTab = "settings";
   panel._hass = { states: {} };
   const selectors = Object.fromEntries(
-    ["#excluded-labels", "#excluded-entities", "#excluded-devices"].map((id) => [
+    [
+      "#coherence-ignored-entity-references",
+      "#excluded-labels",
+      "#excluded-entities",
+      "#excluded-devices",
+    ].map((id) => [
       id,
       { addEventListener() {} },
     ]),
@@ -1954,6 +1970,9 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
+  assert.deepEqual(selectors["#coherence-ignored-entity-references"].selector, {
+    text: { multiple: true },
+  });
   assert.equal(selectors["#coherence-schedule"].value, "none");
   assert.deepEqual(
     selectors["#coherence-schedule"].options.map((option) => option.value),
@@ -1974,6 +1993,19 @@ test("native Home Assistant selectors are configured for multiple values", () =>
     },
   });
   assert.deepEqual(selectors["#excluded-devices"].selector, { device: { multiple: true } });
+});
+
+test("ESPHome scan switch keeps its draft value before saving", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+
+  panel._handleChange({ target: { id: "coherence-scan-esphome", checked: false } });
+
+  assert.equal(panel._settingsDraft.coherence_scan_esphome, false);
+  const settings = panel._renderSettings();
+  assert.match(settings, /id="coherence-scan-esphome"/);
+  assert.doesNotMatch(settings, /id="coherence-scan-esphome"[^>]+checked/);
 });
 
 test("entity delay selector refuses a duplicate entity", () => {
@@ -2351,6 +2383,8 @@ test("common settings save accepts a zero history retention limit", async () => 
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
   panel._historyConfig = { retention_limit: 100, enabled: true };
   panel._settingsDraft = {
+    coherence_scan_esphome: true,
+    coherence_ignored_entity_references: [],
     excluded_labels: [],
     excluded_entities: [],
     excluded_devices: [],
@@ -2361,6 +2395,7 @@ test("common settings save accepts a zero history retention limit", async () => 
     "#global-delay": { value: "900" },
     "#pending-display-delay": { value: "10" },
     "#coherence-schedule": { value: "none" },
+    "#coherence-scan-esphome": { checked: true },
     "#history-limit": { value: "0", reportValidity: () => true },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];

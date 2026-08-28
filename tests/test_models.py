@@ -316,6 +316,18 @@ def test_frontend_payload_validation():
     )
     with pytest.raises(ValueError, match="coherence_schedule"):
         validate_config({"coherence_schedule": "hourly"})
+    config = validate_config(
+        {
+            "coherence_scan_esphome": False,
+            "coherence_ignored_entity_references": [" Toto.Plop ", "toto.plop"],
+        }
+    )
+    assert config["coherence_scan_esphome"] is False
+    assert config["coherence_ignored_entity_references"] == ["toto.plop"]
+    with pytest.raises(ValueError, match="coherence_scan_esphome"):
+        validate_config({"coherence_scan_esphome": "false"})
+    with pytest.raises(ValueError, match="invalid reference"):
+        validate_config({"coherence_ignored_entity_references": ["not valid"]})
 
 
 def test_only_coherence_sensor_is_allowed_as_an_alert_manager_rule_source():

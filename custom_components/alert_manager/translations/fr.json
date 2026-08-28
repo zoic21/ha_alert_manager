@@ -233,6 +233,10 @@
     "settings": {
       "coherence_schedule": "Analyse automatique de cohérence",
       "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
+      "coherence_scan_esphome": "Analyser le dossier ESPHome",
+      "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
+      "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
+      "coherence_ignored_entity_references_help": "Ajoutez les références exactes à ignorer, par exemple toto.plop.",
       "coherence_schedules": {
         "daily": "Une fois par jour",
         "monthly": "Une fois par mois",

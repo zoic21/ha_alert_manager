@@ -11,6 +11,7 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    DEFAULT_COHERENCE_SCAN_ESPHOME,
     DEFAULT_COHERENCE_SCHEDULE,
     DEFAULT_CONFIG,
     DEFAULT_EXCLUSION_LABEL,
@@ -237,6 +238,14 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
 
     if "coherence_schedule" not in config:
         config["coherence_schedule"] = DEFAULT_COHERENCE_SCHEDULE
+        changed = True
+
+    if "coherence_scan_esphome" not in config:
+        config["coherence_scan_esphome"] = DEFAULT_COHERENCE_SCAN_ESPHOME
+        changed = True
+
+    if "coherence_ignored_entity_references" not in config:
+        config["coherence_ignored_entity_references"] = []
         changed = True
 
     if "pending_display_delay" not in config:

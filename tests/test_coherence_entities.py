@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -17,6 +18,7 @@ from custom_components.alert_manager.button import (
 from custom_components.alert_manager.const import (
     COHERENCE_STORAGE_KEY,
     DATA_COHERENCE_RESULT,
+    DATA_MANAGER,
     SIGNAL_COHERENCE_UPDATED,
 )
 from custom_components.alert_manager.sensor import AlertManagerCoherenceIssueSensor
@@ -120,10 +122,19 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
         "custom_components.alert_manager.coherence"
     )
 
-    async def scan(_hass):
+    scan_options = {}
+
+    async def scan(_hass, **options):
+        scan_options.update(options)
         return expected
 
     monkeypatch.setattr(coherence_module, "async_scan_configuration", scan)
+    hass.data[DATA_MANAGER] = SimpleNamespace(
+        config={
+            "coherence_scan_esphome": False,
+            "coherence_ignored_entity_references": ["toto.plop"],
+        }
+    )
     sensor = AlertManagerCoherenceIssueSensor()
     sensor.hass = hass
     run(sensor.async_added_to_hass())
@@ -137,6 +148,10 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     assert hass.store_save_count == 1
     assert sensor.native_value == 2
     assert sensor.writes == 1
+    assert scan_options == {
+        "scan_esphome": False,
+        "ignored_entity_references": frozenset({"toto.plop"}),
+    }
 
 
 def test_latest_scan_is_restored_from_storage_after_restart(hass):

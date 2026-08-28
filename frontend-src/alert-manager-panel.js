@@ -1181,6 +1181,18 @@ class AlertManagerPanel extends HTMLElement {
       this._config.coherence_schedule ?? "none",
     );
     this._configureSelector(
+      "coherence-ignored-entity-references",
+      { text: { multiple: true } },
+      this._settingsDraft.coherence_ignored_entity_references,
+      (value) => {
+        this._settingsDraft.coherence_ignored_entity_references =
+          this._multipleSelectorValue(
+            value,
+            this._settingsDraft.coherence_ignored_entity_references,
+          );
+      },
+    );
+    this._configureSelector(
       "excluded-labels",
       { label: { multiple: true } },
       this._settingsDraft.excluded_labels,
@@ -1191,9 +1203,9 @@ class AlertManagerPanel extends HTMLElement {
         );
       },
     );
-      this._configureSelector(
-        "excluded-entities",
-        { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+    this._configureSelector(
+      "excluded-entities",
+      { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
       this._settingsDraft.excluded_entities,
       (value) => {
         this._settingsDraft.excluded_entities = this._multipleSelectorValue(
@@ -2041,6 +2053,8 @@ class AlertManagerPanel extends HTMLElement {
         ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
         ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
         <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
+        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(this._t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(this._t("settings.coherence_scan_esphome"))}" ${this._settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(this._t("settings.coherence_scan_esphome_help"))}</small></div>
+        <div class="field full"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span><ha-selector id="coherence-ignored-entity-references"></ha-selector><small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small></div>
         <div class="field"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
         <div class="history-settings full">
           <div class="history-settings-row">
@@ -2417,6 +2431,10 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _handleChange(event) {
+    if (event.target?.id === "coherence-scan-esphome") {
+      this._ensureSettingsDraft();
+      this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);
+    }
     void this._handleImportSelection(event);
   }
 
@@ -2732,6 +2750,12 @@ class AlertManagerPanel extends HTMLElement {
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
       pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
+      coherence_scan_esphome: Boolean(
+        this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
+      ),
+      coherence_ignored_entity_references: [
+        ...this._settingsDraft.coherence_ignored_entity_references,
+      ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
       excluded_entities: [...this._settingsDraft.excluded_entities],
       excluded_devices: [...this._settingsDraft.excluded_devices],
@@ -2896,6 +2920,10 @@ class AlertManagerPanel extends HTMLElement {
   _ensureSettingsDraft() {
     if (this._settingsDraft && this._entityDelayDraft) return;
     this._settingsDraft = {
+      coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
+      coherence_ignored_entity_references: [
+        ...(this._config.coherence_ignored_entity_references ?? []),
+      ],
       excluded_labels: [...(this._config.excluded_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
@@ -3013,7 +3041,7 @@ class AlertManagerPanel extends HTMLElement {
       .history-empty{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.history-settings{display:grid;gap:8px;margin-top:4px}.history-settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0}.settings-save-actions{justify-content:flex-end;margin-top:4px}
       .coherence-panel{padding:0}.coherence-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:20px}.coherence-header>div{min-width:0}.coherence-header ha-button{flex:none}.coherence-stats{display:flex;flex-wrap:wrap;gap:8px 20px;padding:12px 20px;border-block:1px solid var(--divider-color,#ddd);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px)}.coherence-stats .warning{color:var(--warning-color,#9a6b00)}.coherence-scan-date.stale{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}#coherence-table{display:block;width:100%}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
-      .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.pack-map-list{display:grid;gap:10px;margin-top:8px}.pack-map-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,180px) auto;gap:10px;align-items:start}.pack-map-row>ha-button{margin-top:8px}.pack-map-add-action{justify-content:flex-start}
+      .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.switch-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;min-height:48px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.pack-map-list{display:grid;gap:10px;margin-top:8px}.pack-map-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,180px) auto;gap:10px;align-items:start}.pack-map-row>ha-button{margin-top:8px}.pack-map-add-action{justify-content:flex-start}
       .actions{display:flex;justify-content:flex-end;gap:10px}#rules-table{display:block;width:100%;margin-top:16px}.rule-entities{display:flex;min-width:0;flex-direction:column}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.page-alert{display:block;margin-bottom:16px}
       @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}

@@ -35,6 +35,8 @@ _RULE_YAML_KEYS = {
 _CONFIG_YAML_KEY_ORDER = (
     "monitoring_enabled",
     "coherence_schedule",
+    "coherence_scan_esphome",
+    "coherence_ignored_entity_references",
     "global_delay",
     "pending_display_delay",
     "excluded_labels",
@@ -207,6 +209,8 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         - {
             "monitoring_enabled",
             "coherence_schedule",
+            "coherence_scan_esphome",
+            "coherence_ignored_entity_references",
             "pending_display_delay",
         }
         - set(config)

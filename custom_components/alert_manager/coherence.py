@@ -35,6 +35,8 @@ from .const import (
     COHERENCE_STORAGE_KEY,
     COHERENCE_STORAGE_VERSION,
     DATA_COHERENCE_RESULT,
+    DATA_MANAGER,
+    DEFAULT_COHERENCE_SCAN_ESPHOME,
     SIGNAL_COHERENCE_UPDATED,
 )
 
@@ -172,6 +174,7 @@ class _ScanState:
     pattern: re.Pattern[str]
     existing_entities: frozenset[str]
     service_ids: frozenset[str]
+    ignored_entity_references: frozenset[str]
     template_by_unique_id: dict[str, str]
     template_by_name: dict[str, str]
     template_by_config_entry: dict[str, str]
@@ -401,7 +404,10 @@ def _record_scalar(
         if _is_dynamic_reference(value, match):
             continue
         entity_id = match.group(1).lower()
-        if entity_id in _IGNORED_ENTITY_REFERENCES or entity_id in state.service_ids:
+        if (
+            entity_id in state.ignored_entity_references
+            or entity_id in state.service_ids
+        ):
             continue
         state.references_checked += 1
         if entity_id in state.existing_entities:
@@ -524,13 +530,22 @@ def _dashboard_sources(config_dir: Path) -> dict[str, tuple[str, str]]:
 def _discover_sources(
     config_dir: Path,
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
+    *,
+    scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
 ) -> list[_Source]:
     """Discover supported configuration files without entering unrelated trees."""
     sources: list[_Source] = []
     dashboard_files = yaml_dashboards or {}
     for directory, child_directories, filenames in os.walk(config_dir):
         child_directories[:] = [
-            child for child in child_directories if child not in _IGNORED_DIRECTORIES
+            child
+            for child in child_directories
+            if child not in _IGNORED_DIRECTORIES
+            and not (
+                not scan_esphome
+                and Path(directory) == config_dir
+                and child.casefold() == "esphome"
+            )
         ]
         directory_path = Path(directory)
         for filename in filenames:
@@ -583,6 +598,8 @@ def scan_configuration(
     template_by_name: dict[str, str] | None = None,
     template_by_config_entry: dict[str, str] | None = None,
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
+    scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
+    ignored_entity_references: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Synchronously scan configuration files; intended for an executor thread."""
     started = time.monotonic()
@@ -590,13 +607,14 @@ def scan_configuration(
         _entity_pattern(existing_entities),
         existing_entities,
         service_ids,
+        _IGNORED_ENTITY_REFERENCES | ignored_entity_references,
         template_by_unique_id or {},
         template_by_name or {},
         template_by_config_entry or {},
         [],
         set(),
     )
-    sources = _discover_sources(config_dir, yaml_dashboards)
+    sources = _discover_sources(config_dir, yaml_dashboards, scan_esphome=scan_esphome)
     skipped_files = 0
     for source in sources:
         try:
@@ -638,7 +656,12 @@ def _registry_entries(registry: Any) -> list[Any]:
     return list(entries.values())
 
 
-async def async_scan_configuration(hass: HomeAssistant) -> dict[str, Any]:
+async def async_scan_configuration(
+    hass: HomeAssistant,
+    *,
+    scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
+    ignored_entity_references: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
     """Collect live HA metadata and run one configuration scan in the executor."""
     registry_entries = _registry_entries(er.async_get(hass))
     existing_entities = {state.entity_id.lower() for state in hass.states.async_all()}
@@ -699,12 +722,24 @@ async def async_scan_configuration(hass: HomeAssistant) -> dict[str, Any]:
         template_by_name,
         template_by_config_entry,
         yaml_dashboards,
+        scan_esphome,
+        ignored_entity_references,
     )
 
 
 async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     """Run one scan, persist its result and notify Home Assistant entities."""
-    result = await async_scan_configuration(hass)
+    manager = hass.data.get(DATA_MANAGER)
+    config = getattr(manager, "config", {})
+    result = await async_scan_configuration(
+        hass,
+        scan_esphome=config.get(
+            "coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME
+        ),
+        ignored_entity_references=frozenset(
+            config.get("coherence_ignored_entity_references", [])
+        ),
+    )
     result["scanned_at"] = dt_util.now().isoformat()
     await Store[dict[str, Any]](
         hass, COHERENCE_STORAGE_VERSION, COHERENCE_STORAGE_KEY

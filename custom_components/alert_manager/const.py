@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.0.0-dev10"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.4"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.5"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -58,7 +58,7 @@ STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 COHERENCE_STORAGE_KEY: Final = f"{DOMAIN}.coherence"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 11
+STORAGE_MINOR_VERSION: Final = 12
 HISTORY_STORAGE_VERSION: Final = 1
 COHERENCE_STORAGE_VERSION: Final = 1
 
@@ -73,6 +73,7 @@ DEFAULT_BATTERY_THRESHOLD: Final = 15.0
 DEFAULT_EXCLUSION_LABEL: Final = "pas_d_alerte"
 DEFAULT_HISTORY_LIMIT: Final = 100
 DEFAULT_COHERENCE_SCHEDULE: Final = "none"
+DEFAULT_COHERENCE_SCAN_ESPHOME: Final = True
 COHERENCE_SCHEDULES: Final = ("none", "daily", "weekly", "monthly")
 COHERENCE_SCHEDULE_HOUR: Final = 3
 COHERENCE_SCHEDULE_MINUTE: Final = 5
@@ -94,6 +95,8 @@ DEFAULT_CONFIG: Final = {
     "monitoring_enabled": True,
     "history_limit": DEFAULT_HISTORY_LIMIT,
     "coherence_schedule": DEFAULT_COHERENCE_SCHEDULE,
+    "coherence_scan_esphome": DEFAULT_COHERENCE_SCAN_ESPHOME,
+    "coherence_ignored_entity_references": [],
     "global_delay": DEFAULT_DELAY,
     "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
     "excluded_labels": [],
