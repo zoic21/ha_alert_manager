@@ -18,6 +18,7 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
         and state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity"
     )
 
+
 def _should_evaluate(
     _hass: HomeAssistant,
     new_state: State,
