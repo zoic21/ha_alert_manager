@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 globalThis.HTMLElement = class {
@@ -193,4 +194,16 @@ test("coherence row click opens the exact Home Assistant target", () => {
   tablePage.data[0].link = { type: "more_info", entity_id: "sensor.template_result" };
   tablePage.listeners["row-click"]({ detail: { id: tablePage.data[0].id } });
   assert.equal(moreInfo, "sensor.template_result");
+});
+
+
+test("panel entry propagates the frontend cache query", () => {
+  const source = readFileSync(
+    new URL("../frontend-src/alert-manager-panel-entry.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /const panelModuleUrl = new URL\("\.\/alert-manager-panel\.js", import\.meta\.url\);/);
+  assert.match(source, /panelModuleUrl\.search = new URL\(import\.meta\.url\)\.search;/);
+  assert.match(source, /await import\(panelModuleUrl\.href\)/);
+  assert.doesNotMatch(source, /from "\.\/alert-manager-panel\.js"/);
 });

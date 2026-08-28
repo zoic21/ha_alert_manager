@@ -1,4 +1,6 @@
-import { AlertManagerPanel } from "./alert-manager-panel.js";
+const panelModuleUrl = new URL("./alert-manager-panel.js", import.meta.url);
+panelModuleUrl.search = new URL(import.meta.url).search;
+const { AlertManagerPanel } = await import(panelModuleUrl.href);
 
 const COHERENCE_TABLE_PREFERENCES_KEY = "alert-manager-coherence-table-preferences-v1";
 const COHERENCE_STALE_MS = 48 * 60 * 60 * 1000;
