@@ -23,6 +23,8 @@ from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.sensor import (
     AlertManagerSensor,
+    _bounded_attributes,
+    _compact_alert,
 )
 from custom_components.alert_manager.sensor import (
     async_setup_entry as async_setup_sensor,
@@ -782,6 +784,23 @@ def test_unchanged_global_evaluation_does_not_publish(hass, entry):
     assert notifications == []
 
 
+def test_publication_groups_active_devices_once(hass, entry, monkeypatch):
+    """One publication reuses device groups for the snapshot and event debounce."""
+    manager = make_manager(hass, entry)
+    original = manager._active_device_groups
+    calls = 0
+
+    def count_groups(active_records=None):
+        nonlocal calls
+        calls += 1
+        return original(active_records)
+
+    monkeypatch.setattr(manager, "_active_device_groups", count_groups)
+    manager._publish_if_changed(force=True)
+
+    assert calls == 1
+
+
 def test_unavailable_monitors_every_domain_but_not_alert_manager(
     hass, entry, registry_entry
 ):
@@ -1189,6 +1208,48 @@ def test_lifecycle_sensor_attributes_are_compact_and_recorder_safe():
         "integration",
         "unit",
     }.isdisjoint(attributes["alerts"][0])
+
+
+def test_linear_attribute_bounding_preserves_the_previous_output():
+    """The linear size accounting keeps the exact established prefix contract."""
+    alerts = [
+        {
+            "id": f"rule:{index}:sensor.source_{index}",
+            "entity_id": f"sensor.source_{index}",
+            "value": {"temperature": index, "labels": ["été", "garage"]},
+            "condition": f"Condition {index}",
+            "message": "é" * (index % 17),
+            "detected_at": "2026-08-27T10:00:00+00:00",
+            "due_at": "2026-08-27T10:15:00+00:00",
+        }
+        for index in range(400)
+    ]
+
+    expected = []
+    for alert in alerts:
+        candidate = [*expected, _compact_alert(alert)]
+        omitted = len(alerts) - len(candidate)
+        attributes = {"alerts": candidate}
+        if omitted:
+            attributes["alerts_omitted"] = omitted
+        if (
+            len(
+                json.dumps(
+                    attributes,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    default=str,
+                ).encode()
+            )
+            > 15_000
+        ):
+            break
+        expected = candidate
+
+    result = _bounded_attributes("alerts", alerts, _compact_alert)
+
+    assert result["alerts"] == expected
+    assert result["alerts_omitted"] == len(alerts) - len(expected)
 
 
 def test_sensor_skips_writes_when_its_partition_did_not_change():

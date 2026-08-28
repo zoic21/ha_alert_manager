@@ -1203,7 +1203,7 @@ class AlertManagerPanel extends HTMLElement {
     return unit ? `${rendered} ${unit}` : rendered;
   }
 
-  _entityMetadata(source) {
+  _entityMetadata(source, labelRegistry) {
     const entityId = source.entity_id || "";
     const entity = this._hass?.entities?.[entityId];
     const domain = entityId.includes(".") ? entityId.split(".", 1)[0] : "";
@@ -1212,11 +1212,8 @@ class AlertManagerPanel extends HTMLElement {
       ...(Array.isArray(source.labels) ? source.labels : []),
       ...(Array.isArray(entity?.labels) ? entity.labels : []),
     ].map(String).filter(Boolean))];
-    const registry = new Map((Array.isArray(this._labels) ? this._labels : []).map((label) => (
-      [String(label.label_id), label]
-    )));
     const labels = labelIds.map((labelId) => {
-      const entry = registry.get(labelId);
+      const entry = labelRegistry.get(labelId);
       return {
         id: labelId,
         name: entry?.name || labelId,
@@ -1235,8 +1232,13 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _tableRows(kind, historyEvents = []) {
+    const labelRegistry = new Map(
+      (Array.isArray(this._labels) ? this._labels : []).map((label) => (
+        [String(label.label_id), label]
+      )),
+    );
     const create = (source, status, history = false) => {
-      const metadata = this._entityMetadata(source);
+      const metadata = this._entityMetadata(source, labelRegistry);
       const entityName = history ? (source.entity_name || source.entity_id) : (source.name || source.entity_id);
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);

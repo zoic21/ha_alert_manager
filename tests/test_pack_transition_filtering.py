@@ -70,11 +70,8 @@ def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_ent
     )
 
 
-def test_battery_threshold_cache_follows_config_and_device_changes(
-    hass, registry_entry
-):
-    """Cached thresholds cannot survive a changed override or device assignment."""
-    battery._cached_effective_threshold.cache_clear()
+def test_battery_threshold_follows_config_and_device_changes(hass, registry_entry):
+    """Threshold selection follows changed overrides and device assignments."""
     registry = registry_entry(hass, "sensor.battery", device_id="device-a")
     config = {
         "enabled": True,
@@ -84,10 +81,7 @@ def test_battery_threshold_cache_follows_config_and_device_changes(
     state = _battery_state(hass, "40")
 
     assert battery.PACK.evaluate(hass, state, config) is None
-    first_info = battery._cached_effective_threshold.cache_info()
     assert battery.PACK.evaluate(hass, state, config) is None
-    second_info = battery._cached_effective_threshold.cache_info()
-    assert second_info.hits == first_info.hits + 1
 
     config["device_thresholds"]["device-a"] = 45
     match = battery.PACK.evaluate(hass, state, config)
