@@ -51,7 +51,7 @@ class PackConfigField:
 
 
 PackTransitionFilter = Callable[
-    [HomeAssistant, State | None, State | None, dict[str, Any]], bool
+    [HomeAssistant, State, dict[str, Any], bool], bool
 ]
 
 
@@ -71,20 +71,22 @@ class AutomaticPack:
     def should_evaluate(
         self,
         hass: HomeAssistant,
-        old_state: State | None,
         new_state: State | None,
         config: dict[str, Any],
+        *,
+        record_exists: bool,
     ) -> bool:
-        """Return whether one state transition can change this pack's output."""
-        old_applies = old_state is not None and self.applies(hass, old_state)
-        new_applies = new_state is not None and self.applies(hass, new_state)
-        if not old_applies and not new_applies:
+        """Return whether the current record and new state disagree."""
+        if new_state is not None and new_state.state in self.neutral_states:
             return False
+        if new_state is None:
+            return record_exists
+        if not self.applies(hass, new_state):
+            return record_exists
         if self.transition_filter is not None:
-            return self.transition_filter(hass, old_state, new_state, config)
+            return self.transition_filter(hass, new_state, config, record_exists)
         # Keep future packs conservative unless they explicitly provide a
-        # transition-aware filter. At least one side is known to belong to the
-        # pack, so creation and resolution transitions are both preserved.
+        # transition-aware filter. New applicable states may change their output.
         return True
 
     def available(self, hass: HomeAssistant) -> bool:
