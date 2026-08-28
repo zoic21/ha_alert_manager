@@ -31,10 +31,10 @@ def _should_evaluate(
     _hass: HomeAssistant,
     new_state: State,
     _config: dict[str, Any],
-    record_exists: bool,
+    _record_exists: bool,
 ) -> bool:
-    """Evaluate only when the stored occurrence and definitive state disagree."""
-    return record_exists != (new_state.state == "off")
+    """Evaluate applicable connectivity states except unavailable."""
+    return new_state.state != STATE_UNAVAILABLE
 
 
 def _evaluate(
