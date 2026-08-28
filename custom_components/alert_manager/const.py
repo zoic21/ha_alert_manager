@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.0.0-dev9"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.3"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.4"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -40,6 +40,9 @@ ALERT_MANAGER_ENTITY_IDS: Final = frozenset(
         "switch.alert_manager_main_monitoring",
     }
 )
+CUSTOM_RULE_ALLOWED_ENTITY_IDS: Final = frozenset(
+    {"sensor.alert_manager_coherence_issue"}
+)
 
 SERVICE_ACKNOWLEDGE: Final = "acknowledge"
 SERVICE_UNACKNOWLEDGE: Final = "unacknowledge"
@@ -55,7 +58,7 @@ STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 COHERENCE_STORAGE_KEY: Final = f"{DOMAIN}.coherence"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 10
+STORAGE_MINOR_VERSION: Final = 11
 HISTORY_STORAGE_VERSION: Final = 1
 COHERENCE_STORAGE_VERSION: Final = 1
 
@@ -69,6 +72,10 @@ DEFAULT_PENDING_DISPLAY_DELAY: Final = 10
 DEFAULT_BATTERY_THRESHOLD: Final = 15.0
 DEFAULT_EXCLUSION_LABEL: Final = "pas_d_alerte"
 DEFAULT_HISTORY_LIMIT: Final = 100
+DEFAULT_COHERENCE_SCHEDULE: Final = "none"
+COHERENCE_SCHEDULES: Final = ("none", "daily", "weekly", "monthly")
+COHERENCE_SCHEDULE_HOUR: Final = 3
+COHERENCE_SCHEDULE_MINUTE: Final = 5
 MIN_HISTORY_LIMIT: Final = 0
 MAX_HISTORY_LIMIT: Final = 1000
 
@@ -86,6 +93,7 @@ CATEGORIES: Final = (
 DEFAULT_CONFIG: Final = {
     "monitoring_enabled": True,
     "history_limit": DEFAULT_HISTORY_LIMIT,
+    "coherence_schedule": DEFAULT_COHERENCE_SCHEDULE,
     "global_delay": DEFAULT_DELAY,
     "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
     "excluded_labels": [],

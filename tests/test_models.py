@@ -310,6 +310,37 @@ def test_frontend_payload_validation():
         validate_config({"excluded_entities": ["invalid"]})
     with pytest.raises(ValueError, match="integer"):
         validate_config({"global_delay": 2.5})
+    assert (
+        validate_config({"coherence_schedule": "weekly"})["coherence_schedule"]
+        == "weekly"
+    )
+    with pytest.raises(ValueError, match="coherence_schedule"):
+        validate_config({"coherence_schedule": "hourly"})
+
+
+def test_only_coherence_sensor_is_allowed_as_an_alert_manager_rule_source():
+    """The loop-safe result sensor is the sole self-monitoring exception."""
+    allowed = validate_rule_payload(
+        {
+            "name": "Coherence",
+            "entity_ids": ["sensor.alert_manager_coherence_issue"],
+            "operator": "above",
+            "value": 0,
+            "duration": 0,
+        }
+    )
+    assert allowed.entity_ids == ["sensor.alert_manager_coherence_issue"]
+
+    with pytest.raises(ValueError, match="Alert Manager entities"):
+        validate_rule_payload(
+            {
+                "name": "Loop",
+                "entity_ids": ["sensor.alert_manager_main_active"],
+                "operator": "above",
+                "value": 0,
+                "duration": 0,
+            }
+        )
 
 
 def test_unknown_frontend_fields_are_rejected():

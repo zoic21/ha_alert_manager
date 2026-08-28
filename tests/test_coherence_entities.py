@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from datetime import UTC, datetime
 
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
@@ -61,6 +62,7 @@ def test_sensor_is_unknown_until_scan_then_tracks_distinct_issue_count(hass):
 
     result = {
         "missing_entity_count": 2,
+        "scanned_at": "2026-08-24T12:00:00+00:00",
         "results": [
             {"entity_id": "sensor.first"},
             {"entity_id": "sensor.first"},
@@ -71,10 +73,21 @@ def test_sensor_is_unknown_until_scan_then_tracks_distinct_issue_count(hass):
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
 
     assert sensor.native_value == 2
+    assert sensor.extra_state_attributes == {"scanned_at": "2026-08-24T12:00:00+00:00"}
     assert sensor.writes == 1
 
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
     assert sensor.writes == 1
+
+    newer_result = {
+        **result,
+        "scanned_at": "2026-08-24T13:00:00+00:00",
+        "results": [{"entity_id": "sensor.different"}],
+    }
+    async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, newer_result)
+    assert sensor.native_value == 2
+    assert sensor.extra_state_attributes == {"scanned_at": "2026-08-24T13:00:00+00:00"}
+    assert sensor.writes == 2
 
 
 def test_sensor_restores_latest_session_result_when_added(hass):
@@ -166,3 +179,42 @@ def test_invalid_stored_scan_is_ignored(hass):
 
     assert run(coherence_module.async_load_coherence_result(hass)) is None
     assert DATA_COHERENCE_RESULT not in hass.data
+
+
+def test_optional_coherence_schedules_run_only_on_their_due_date(hass, monkeypatch):
+    """One daily time listener gates weekly and monthly scans without polling."""
+    coherence_module = importlib.import_module(
+        "custom_components.alert_manager.coherence"
+    )
+    calls = []
+
+    async def scan(_hass):
+        calls.append(True)
+        return {"results": [], "missing_entity_count": 0}
+
+    monkeypatch.setattr(coherence_module, "async_run_coherence_scan", scan)
+
+    assert coherence_module.schedule_coherence_scans(hass, "none") is None
+    assert hass.timers == []
+
+    cancel = coherence_module.schedule_coherence_scans(hass, "weekly")
+    timer = hass.timers[-1]
+    assert (timer["hour"], timer["minute"], timer["second"]) == (3, 5, 0)
+    run(timer["action"](datetime(2026, 8, 30, 3, 5, tzinfo=UTC)))
+    assert calls == []
+    run(timer["action"](datetime(2026, 8, 31, 3, 5, tzinfo=UTC)))
+    assert calls == [True]
+    cancel()
+    assert timer["cancelled"] is True
+
+    coherence_module.schedule_coherence_scans(hass, "monthly")
+    timer = hass.timers[-1]
+    run(timer["action"](datetime(2026, 9, 2, 3, 5, tzinfo=UTC)))
+    assert calls == [True]
+    run(timer["action"](datetime(2026, 10, 1, 3, 5, tzinfo=UTC)))
+    assert calls == [True, True]
+
+    coherence_module.schedule_coherence_scans(hass, "daily")
+    timer = hass.timers[-1]
+    run(timer["action"](datetime(2026, 10, 2, 3, 5, tzinfo=UTC)))
+    assert calls == [True, True, True]

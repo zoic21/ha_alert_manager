@@ -854,6 +854,62 @@ def test_custom_rules_reject_alert_manager_entities(hass, entry, registry_entry)
         run(manager.async_create_rule(payload))
 
 
+def test_coherence_issue_sensor_is_a_loop_safe_custom_rule_source(hass, entry):
+    """Only the coherence result sensor can feed a custom Alert Manager rule."""
+    entity_id = "sensor.alert_manager_coherence_issue"
+    hass.states.set(
+        entity_id,
+        "2",
+        {"scanned_at": "2026-08-24T12:00:00+00:00"},
+    )
+    manager = make_manager(hass, entry)
+    created = run(
+        manager.async_create_rule(
+            {
+                "name": "Coherence issues",
+                "entity_ids": [entity_id],
+                "operator": "above",
+                "value": 0,
+                "duration": 0,
+                "enabled": True,
+                "source": "state",
+                "message": "{{ states('sensor.alert_manager_coherence_issue') }}",
+            }
+        )
+    )
+
+    alert_id = f"rule:{created['id']}:{entity_id}"
+    assert alert_id in manager.records
+    assert manager.records[alert_id].status is AlertStatus.ACTIVE
+    assert manager.records[alert_id].details.message == "2"
+    assert f"unavailable:{entity_id}" not in manager.records
+
+
+def test_coherence_schedule_is_replaced_and_cancelled_with_configuration(hass, entry):
+    """Changing or disabling the schedule never leaves duplicate listeners."""
+    manager = make_manager(hass, entry)
+    assert manager.config["coherence_schedule"] == "none"
+    assert not [timer for timer in hass.timers if "hour" in timer]
+
+    run(manager.async_update_config({"coherence_schedule": "daily"}))
+    first = next(timer for timer in hass.timers if "hour" in timer)
+    assert first["cancelled"] is False
+    assert hass.stores["alert_manager"]["config"]["coherence_schedule"] == "daily"
+
+    run(manager.async_update_config({"coherence_schedule": "weekly"}))
+    live = [
+        timer for timer in hass.timers if "hour" in timer and not timer["cancelled"]
+    ]
+    assert first["cancelled"] is True
+    assert len(live) == 1
+
+    run(manager.async_update_config({"coherence_schedule": "none"}))
+    assert live[0]["cancelled"] is True
+    assert not [
+        timer for timer in hass.timers if "hour" in timer and not timer["cancelled"]
+    ]
+
+
 def test_existing_self_rules_are_removed_during_migration(hass, entry):
     """An inert self-rule from an earlier release is cleaned without data loss."""
     hass.stores["alert_manager"] = {

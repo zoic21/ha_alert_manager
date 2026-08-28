@@ -186,6 +186,44 @@ test("coherence scan date is red only when older than 48 hours", () => {
   }
 });
 
+test("external coherence scans refresh the open panel even when the count is unchanged", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._activeTab = "coherence";
+  panel._coherenceScannedAt = "2026-08-24T12:00:00+00:00";
+  panel._coherence = {
+    missing_entity_count: 2,
+    scanned_at: panel._coherenceScannedAt,
+    results: [{ entity_id: "sensor.old" }],
+  };
+  const refreshed = {
+    missing_entity_count: 2,
+    scanned_at: "2026-08-24T13:00:00+00:00",
+    results: [{ entity_id: "sensor.new" }],
+  };
+  const calls = [];
+  panel._render = () => {};
+
+  panel.hass = {
+    locale: { language: "fr" },
+    states: {
+      "sensor.alert_manager_coherence_issue": {
+        state: "2",
+        attributes: { scanned_at: refreshed.scanned_at },
+      },
+    },
+    callWS: async (message) => {
+      calls.push(message);
+      return refreshed;
+    },
+  };
+  await panel._coherenceLoadPromise;
+
+  assert.deepEqual(calls, [{ type: "alert_manager/coherence/get" }]);
+  assert.equal(panel._coherence, refreshed);
+});
+
 test("coherence result actions open their exact Home Assistant target", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -309,6 +347,7 @@ test("unrelated Home Assistant updates do not rerender the overview", () => {
 const completeConfig = () => ({
   monitoring_enabled: true,
   history_limit: 100,
+  coherence_schedule: "none",
   automatic: {
     unavailable: { enabled: true, delay: 900 },
     connectivity: { enabled: true, delay: 900 },
@@ -1451,6 +1490,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(batteryDelayHelp < batteryThreshold);
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
@@ -1861,6 +1901,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   const controls = {
     "#global-delay": { value: "300" },
     "#pending-display-delay": { value: "15" },
+    "#coherence-schedule": { value: "weekly" },
     "#history-limit": { value: "250" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
@@ -1882,6 +1923,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     config: {
       global_delay: 300,
       pending_display_delay: 15,
+      coherence_schedule: "weekly",
       excluded_labels: ["sans_alerte"],
       excluded_entities: ["sensor.skip", "light.skip"],
       excluded_devices: ["a".repeat(32), "b".repeat(32)],
@@ -1906,11 +1948,17 @@ test("native Home Assistant selectors are configured for multiple values", () =>
       { addEventListener() {} },
     ]),
   );
+  selectors["#coherence-schedule"] = { addEventListener() {} };
   panel.shadowRoot.querySelector = (selector) => selectors[selector] ?? null;
 
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
+  assert.equal(selectors["#coherence-schedule"].value, "none");
+  assert.deepEqual(
+    selectors["#coherence-schedule"].options.map((option) => option.value),
+    ["none", "daily", "weekly", "monthly"],
+  );
   assert.deepEqual(selectors["#excluded-entities"].selector, {
     entity: {
       multiple: true,
@@ -1963,7 +2011,6 @@ test("custom rule sources use the native multiple entity selector", () => {
       multiple: true,
       exclude_entities: [
         "button.alert_manager_check_coherence",
-        "sensor.alert_manager_coherence_issue",
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
@@ -2313,6 +2360,7 @@ test("common settings save accepts a zero history retention limit", async () => 
   const controls = {
     "#global-delay": { value: "900" },
     "#pending-display-delay": { value: "10" },
+    "#coherence-schedule": { value: "none" },
     "#history-limit": { value: "0", reportValidity: () => true },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];

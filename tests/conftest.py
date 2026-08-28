@@ -270,7 +270,24 @@ def async_track_point_in_utc_time(hass, action, point):
     return cancel
 
 
+def async_track_time_change(hass, action, *, hour, minute, second):
+    item = {
+        "action": action,
+        "hour": hour,
+        "minute": minute,
+        "second": second,
+        "cancelled": False,
+    }
+    hass.timers.append(item)
+
+    def cancel():
+        item["cancelled"] = True
+
+    return cancel
+
+
 event_helper.async_track_point_in_utc_time = async_track_point_in_utc_time
+event_helper.async_track_time_change = async_track_time_change
 
 template_helper = _module("homeassistant.helpers.template")
 

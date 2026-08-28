@@ -18,7 +18,7 @@ from homeassistant.core import Event, State, callback
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
-from .const import ALERT_MANAGER_ENTITY_IDS, CATEGORY_UNAVAILABLE, DOMAIN
+from .const import CATEGORY_UNAVAILABLE, DOMAIN
 from .models import (
     AlertDetails,
     AlertHistoryEntry,
@@ -57,7 +57,7 @@ class _RuntimeMixin:
         if not self.monitoring_enabled:
             return
         entity_id = event.data.get("entity_id")
-        if not entity_id or self._is_own_entity(entity_id):
+        if not entity_id or not self._is_allowed_rule_source(entity_id):
             return
 
         if self._update_tracking_for_state_event(entity_id, event):
@@ -149,7 +149,7 @@ class _RuntimeMixin:
         self._queued_evaluation_entities.update(
             entity_id
             for entity_id in entity_ids
-            if entity_id and not self._is_own_entity(entity_id)
+            if entity_id and self._is_allowed_rule_source(entity_id)
         )
         if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
@@ -705,9 +705,7 @@ class _RuntimeMixin:
     def _is_base_eligible(self, entity_id: str) -> bool:
         """Reject Alert Manager's own and registry-disabled entities."""
         entity_entry = self._entity_registry.async_get(entity_id)
-        if entity_id in ALERT_MANAGER_ENTITY_IDS or (
-            entity_entry is not None and entity_entry.platform == DOMAIN
-        ):
+        if not self._is_allowed_rule_source(entity_id):
             return False
         if entity_entry is not None and entity_entry.disabled_by is not None:
             return False
@@ -731,6 +729,8 @@ class _RuntimeMixin:
 
     def _is_automatic_eligible(self, entity_id: str) -> bool:
         """Apply explicit and selected-label exclusions to automatic packs only."""
+        if self._is_own_entity(entity_id):
+            return False
         if self._is_explicitly_excluded(entity_id):
             return False
         if not self._excluded_labels:
@@ -824,6 +824,8 @@ class _RuntimeMixin:
             record.details.entity_id == entity_id for record in self.records.values()
         ):
             return True
+        if not self._is_automatic_eligible(entity_id):
+            return False
         domain = entity_id.partition(".")[0]
         automatic = self.config.get("automatic", {})
         unavailable = automatic.get(CATEGORY_UNAVAILABLE, {})

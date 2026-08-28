@@ -183,6 +183,7 @@ class AlertManagerCoherenceIssueSensor(SensorEntity):
         """Initialize the stable sensor entity id without inventing a result."""
         self.entity_id = "sensor.alert_manager_coherence_issue"
         self._issue_count: int | None = None
+        self._scanned_at: str | None = None
 
     async def async_added_to_hass(self) -> None:
         """Restore the session result and subscribe to future scans."""
@@ -202,15 +203,23 @@ class AlertManagerCoherenceIssueSensor(SensorEntity):
         issue_count = result.get("missing_entity_count")
         if issue_count is None:
             issue_count = len({item["entity_id"] for item in result.get("results", [])})
-        if issue_count == self._issue_count:
+        raw_scanned_at = result.get("scanned_at")
+        scanned_at = raw_scanned_at if isinstance(raw_scanned_at, str) else None
+        if issue_count == self._issue_count and scanned_at == self._scanned_at:
             return
         self._issue_count = issue_count
+        self._scanned_at = scanned_at
         self.async_write_ha_state()
 
     @property
     def native_value(self) -> int | None:
         """Return the latest distinct issue count, or unknown before a scan."""
         return self._issue_count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose the scan marker so the panel can refresh unchanged counts."""
+        return {"scanned_at": self._scanned_at} if self._scanned_at else {}
 
 
 def _compact_alert(alert: dict[str, Any]) -> dict[str, Any]:

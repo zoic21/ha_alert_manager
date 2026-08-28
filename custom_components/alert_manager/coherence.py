@@ -1,17 +1,20 @@
 """On-demand Home Assistant configuration coherence scanner.
 
-The scanner deliberately has no listeners or polling. It reads the configuration
-only when an administrator requests a scan, runs filesystem work in Home Assistant's
-executor and persists only the latest report.
+The scanner deliberately has no continuous listeners or polling. It reads the
+configuration only on an explicit request or the configured low-frequency schedule,
+runs filesystem work in Home Assistant's executor and persists only the latest report.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import quote
@@ -20,16 +23,22 @@ import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from .const import (
+    COHERENCE_SCHEDULE_HOUR,
+    COHERENCE_SCHEDULE_MINUTE,
+    COHERENCE_SCHEDULES,
     COHERENCE_STORAGE_KEY,
     COHERENCE_STORAGE_VERSION,
     DATA_COHERENCE_RESULT,
     SIGNAL_COHERENCE_UPDATED,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _IGNORED_DIRECTORIES: Final = frozenset(
     {
@@ -721,3 +730,31 @@ async def async_load_coherence_result(
         return None
     hass.data[DATA_COHERENCE_RESULT] = result
     return result
+
+
+def schedule_coherence_scans(
+    hass: HomeAssistant, frequency: str
+) -> Callable[[], None] | None:
+    """Schedule scans at 03:05 local time and return the cancellation callback."""
+    if frequency == "none":
+        return None
+    if frequency not in COHERENCE_SCHEDULES:
+        raise ValueError(f"Unsupported coherence schedule: {frequency}")
+
+    async def run_scheduled_scan(now: datetime) -> None:
+        if frequency == "weekly" and now.weekday() != 0:
+            return
+        if frequency == "monthly" and now.day != 1:
+            return
+        try:
+            await async_run_coherence_scan(hass)
+        except Exception:  # pragma: no cover - Home Assistant reports runtime failures
+            _LOGGER.exception("Scheduled coherence scan failed")
+
+    return async_track_time_change(
+        hass,
+        run_scheduled_scan,
+        hour=COHERENCE_SCHEDULE_HOUR,
+        minute=COHERENCE_SCHEDULE_MINUTE,
+        second=0,
+    )

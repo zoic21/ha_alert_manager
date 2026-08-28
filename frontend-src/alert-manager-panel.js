@@ -56,6 +56,9 @@ const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_device_main_active",
   "switch.alert_manager_main_monitoring",
 ];
+const CUSTOM_RULE_EXCLUDED_ENTITY_IDS = ALERT_MANAGER_ENTITY_IDS.filter(
+  (entityId) => entityId !== "sensor.alert_manager_coherence_issue",
+);
 
 const esc = (value) =>
   String(value ?? "")
@@ -216,6 +219,8 @@ class AlertManagerPanel extends HTMLElement {
     this._historyConfig = { retention_limit: 100, enabled: true };
     this._coherence = null;
     this._coherenceLoading = false;
+    this._coherenceLoadPromise = null;
+    this._coherenceScannedAt = null;
     this._historyLoadPromise = null;
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
@@ -288,9 +293,18 @@ class AlertManagerPanel extends HTMLElement {
   set hass(value) {
     const language = value?.locale?.language || "en";
     const languageChanged = language !== this._language;
+    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
+      ?.attributes?.scanned_at ?? null;
+    const coherenceChanged = Boolean(
+      scannedAt && scannedAt !== this._coherenceScannedAt,
+    );
+    this._coherenceScannedAt = scannedAt;
     this._hass = value;
     this._language = language;
     const alertsChanged = this._syncSensor();
+    if (this.isConnected && this._config && coherenceChanged) {
+      void this._refreshCoherence();
+    }
     if (this.isConnected && !this._config && !this._loadPromise) {
       this._load();
     } else if (this.isConnected && languageChanged && !this._translationPromise) {
@@ -372,6 +386,7 @@ class AlertManagerPanel extends HTMLElement {
         this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
+      this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
       this._resetSettingsDraft();
       this._resetAutomaticDraft();
       this._syncSensor();
@@ -397,6 +412,23 @@ class AlertManagerPanel extends HTMLElement {
       if (this.isConnected) this._render();
     }
     return this._history;
+  }
+
+  async _refreshCoherence() {
+    if (!this._hass || this._coherenceLoadPromise) return this._coherenceLoadPromise;
+    this._coherenceLoadPromise = this._hass.callWS({
+      type: "alert_manager/coherence/get",
+    });
+    try {
+      this._coherence = await this._coherenceLoadPromise;
+      this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._coherenceLoadPromise = null;
+      if (this.isConnected && this._activeTab === "coherence") this._render();
+    }
+    return this._coherence;
   }
 
   async _refreshAlerts() {
@@ -1091,7 +1123,7 @@ class AlertManagerPanel extends HTMLElement {
       );
       this._configureSelector(
         "rule-entity-ids",
-        { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+        { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
         this._editingRule.entity_ids ?? [],
         (value) => {
           this._editingRule.entity_ids = this._multipleSelectorValue(
@@ -1140,6 +1172,14 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (this._activeTab !== "settings") return;
     this._ensureSettingsDraft();
+    this._configureSelect(
+      "coherence-schedule",
+      ["none", "daily", "weekly", "monthly"].map((value) => ({
+        value,
+        label: this._t(`settings.coherence_schedules.${value}`),
+      })),
+      this._config.coherence_schedule ?? "none",
+    );
     this._configureSelector(
       "excluded-labels",
       { label: { multiple: true } },
@@ -2000,6 +2040,7 @@ class AlertManagerPanel extends HTMLElement {
       <ha-card outlined class="panel"><h2>${esc(this._t("settings.general"))}</h2><div class="fields">
         ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
         ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
+        <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
         <div class="field"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
         <div class="history-settings full">
           <div class="history-settings-row">
@@ -2177,6 +2218,7 @@ class AlertManagerPanel extends HTMLElement {
         this._coherence = await this._hass.callWS({
           type: "alert_manager/coherence/scan",
         });
+        this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
       } catch (error) {
         this._notice = { kind: "error", text: this._errorText(error) };
       } finally {
@@ -2689,6 +2731,7 @@ class AlertManagerPanel extends HTMLElement {
     const changes = {
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
       pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       excluded_labels: [...this._settingsDraft.excluded_labels],
       excluded_entities: [...this._settingsDraft.excluded_entities],
       excluded_devices: [...this._settingsDraft.excluded_devices],

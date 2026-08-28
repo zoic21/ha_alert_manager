@@ -104,6 +104,7 @@ def test_config_export_is_deterministic_and_reimportable() -> None:
     assert first == dump_config_yaml(config)
     assert first.startswith("version: 1\nconfig:\n")
     assert "  monitoring_enabled: true\n" in first
+    assert "  coherence_schedule: none\n" in first
     assert "id: stable-rule-id" not in first
     imported = parse_config_yaml(first)
     assert imported["rules"][0]["id"] != "stable-rule-id"
@@ -116,6 +117,13 @@ def test_v15_export_without_monitoring_state_defaults_to_enabled() -> None:
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
     legacy = exported.replace("  monitoring_enabled: true\n", "")
     assert parse_config_yaml(legacy)["monitoring_enabled"] is True
+
+
+def test_older_export_without_coherence_schedule_defaults_to_none() -> None:
+    """Exports created before scheduled scans remain importable."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace("  coherence_schedule: none\n", "")
+    assert parse_config_yaml(legacy)["coherence_schedule"] == "none"
 
 
 def test_pre_dev14_export_without_pending_display_delay_uses_default() -> None:

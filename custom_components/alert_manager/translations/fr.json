@@ -231,6 +231,14 @@
       "yaml_title": "Règle YAML"
     },
     "settings": {
+      "coherence_schedule": "Analyse automatique de cohérence",
+      "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
+      "coherence_schedules": {
+        "daily": "Une fois par jour",
+        "monthly": "Une fois par mois",
+        "none": "Aucune",
+        "weekly": "Une fois par semaine"
+      },
       "pending_display_delay": "Délai d’affichage des alertes à venir",
       "pending_display_delay_help": "Une alerte à venir attend ce délai avant d’être affichée. Si elle devient active plus tôt, elle apparaît immédiatement comme active sans passer par la liste des alertes à venir.",
       "aria_delay": "Délai en secondes",

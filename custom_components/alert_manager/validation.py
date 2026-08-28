@@ -11,6 +11,8 @@ from homeassistant.core import valid_entity_id
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
     CATEGORIES,
+    COHERENCE_SCHEDULES,
+    CUSTOM_RULE_ALLOWED_ENTITY_IDS,
     DEFAULT_CONFIG,
     MAX_DELAY,
     MAX_HISTORY_LIMIT,
@@ -26,6 +28,7 @@ _CONFIG_UPDATE_KEYS = {
     # Accepted temporarily so a cached dev14 panel can update during upgrade.
     "active_display_delay",
     "pending_display_delay",
+    "coherence_schedule",
     "excluded_labels",
     # Accepted only so a cached V1 panel can update safely during migration.
     "exclusion_label",
@@ -98,6 +101,12 @@ def validate_config(config: Any) -> dict[str, Any]:
             f"history_limit must be between {MIN_HISTORY_LIMIT} and {MAX_HISTORY_LIMIT}"
         )
     result["history_limit"] = history_limit
+    coherence_schedule = config.get("coherence_schedule", result["coherence_schedule"])
+    if coherence_schedule not in COHERENCE_SCHEDULES:
+        raise ValueError(
+            "coherence_schedule must be one of: " + ", ".join(COHERENCE_SCHEDULES)
+        )
+    result["coherence_schedule"] = coherence_schedule
     result["global_delay"] = validate_delay(
         config.get("global_delay", result["global_delay"]), "global_delay"
     )
@@ -338,7 +347,11 @@ def validate_rule_entity_ids(value: Any) -> list[str]:
     if not isinstance(value, list) or not value:
         raise ValueError("entity_ids must be a non-empty list")
     result = [validate_entity_id(item) for item in value]
-    if any(entity_id in ALERT_MANAGER_ENTITY_IDS for entity_id in result):
+    if any(
+        entity_id in ALERT_MANAGER_ENTITY_IDS
+        and entity_id not in CUSTOM_RULE_ALLOWED_ENTITY_IDS
+        for entity_id in result
+    ):
         raise ValueError("Alert Manager entities cannot be monitored")
     if len(set(result)) != len(result):
         raise ValueError("An entity cannot be repeated in the same rule")
