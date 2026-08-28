@@ -26,27 +26,19 @@ def _state(hass, value, *, attributes=None):
     return hass.states.get("binary_sensor.link")
 
 
-def _should(pack, hass, new_state, *, record_exists=False):
-    return pack.should_evaluate(
-        hass,
-        new_state,
-        {"enabled": True},
-        record_exists=record_exists,
-    )
+def _should(pack, hass, new_state):
+    return pack.should_evaluate(hass, new_state, {"enabled": True})
 
 
-def test_connectivity_treats_unavailable_as_neutral(hass):
-    """Unavailable never changes the connectivity status by itself."""
+def test_connectivity_treats_unavailable_as_uninteresting(hass):
+    """Connectivity filters only unavailable; evaluate decides on/off matching."""
     on_state = _state(hass, "on")
     off_state = _state(hass, "off")
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
 
-    assert not _should(connectivity.PACK, hass, on_state)
+    assert _should(connectivity.PACK, hass, on_state)
     assert _should(connectivity.PACK, hass, off_state)
-    assert not _should(connectivity.PACK, hass, off_state, record_exists=True)
-    assert _should(connectivity.PACK, hass, on_state, record_exists=True)
     assert not _should(connectivity.PACK, hass, unavailable_state)
-    assert not _should(connectivity.PACK, hass, unavailable_state, record_exists=True)
 
     match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
     assert match is None
@@ -59,7 +51,7 @@ def test_connectivity_reload_survives_temporary_attribute_loss(hass):
     )
     unavailable_state = _state(hass, STATE_UNAVAILABLE, attributes={})
 
-    assert not _should(connectivity.PACK, hass, unavailable_state, record_exists=True)
+    assert not _should(connectivity.PACK, hass, unavailable_state)
     assert _should(unavailable.PACK, hass, unavailable_state)
     match = connectivity.PACK.evaluate(hass, unavailable_state, {"enabled": True})
     assert match is None
@@ -71,7 +63,7 @@ def test_unavailable_still_handles_real_connectivity_failure_edges(hass):
     unavailable_state = _state(hass, STATE_UNAVAILABLE)
 
     assert _should(unavailable.PACK, hass, unavailable_state)
-    assert _should(unavailable.PACK, hass, on_state, record_exists=True)
+    assert not _should(unavailable.PACK, hass, on_state)
 
 
 def test_connectivity_pending_survives_off_unavailable_off_reload(hass, entry):
