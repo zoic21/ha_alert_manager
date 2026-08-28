@@ -41,12 +41,8 @@ def test_unavailable_pack_owns_transition_filtering(hass):
     assert not unavailable.PACK.should_evaluate(
         hass, unavailable_state, config, record_exists=True
     )
-    assert unavailable.PACK.should_evaluate(
-        hass, normal, config, record_exists=True
-    )
-    assert unavailable.PACK.should_evaluate(
-        hass, None, config, record_exists=True
-    )
+    assert unavailable.PACK.should_evaluate(hass, normal, config, record_exists=True)
+    assert unavailable.PACK.should_evaluate(hass, None, config, record_exists=True)
     assert not unavailable.PACK.should_evaluate(
         hass, None, config, record_exists=False
     )
@@ -78,9 +74,7 @@ def test_connectivity_pack_only_keeps_relevant_edges(hass):
     assert not connectivity.PACK.should_evaluate(
         hass, unavailable_state, config, record_exists=True
     )
-    assert connectivity.PACK.should_evaluate(
-        hass, None, config, record_exists=True
-    )
+    assert connectivity.PACK.should_evaluate(hass, None, config, record_exists=True)
 
 
 def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
@@ -94,9 +88,7 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
     }
 
     high = _battery_state(hass, "40")
-    assert not battery.PACK.should_evaluate(
-        hass, high, config, record_exists=False
-    )
+    assert not battery.PACK.should_evaluate(hass, high, config, record_exists=False)
     assert battery.PACK.should_evaluate(hass, high, config, record_exists=True)
 
     at_threshold = _battery_state(hass, "30")
@@ -113,9 +105,7 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
     )
 
     recovered = _battery_state(hass, "31")
-    assert battery.PACK.should_evaluate(
-        hass, recovered, config, record_exists=True
-    )
+    assert battery.PACK.should_evaluate(hass, recovered, config, record_exists=True)
     assert not battery.PACK.should_evaluate(
         hass, recovered, config, record_exists=False
     )
