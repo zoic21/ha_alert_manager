@@ -1614,9 +1614,9 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
-  assert.match(editor, /<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="enabled">Supprimer<\/ha-button>/);
+  assert.match(editor, /<ha-dropdown-item value="delete-rule">Supprimer<\/ha-dropdown-item>/);
   assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
-  assert.match(editor, />Annuler<\/ha-button>/);
+  assert.doesNotMatch(editor, /<ha-button[^>]*data-action="cancel-rule"[^>]*>Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
   assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
@@ -2542,4 +2542,47 @@ test("new rule saves message and condition drafts when selector hosts still expo
     calls[0].rule.condition_template,
     "{{ is_state('binary_sensor.example', 'on') }}",
   );
+});
+
+test("rule editor keeps only save in the footer", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+
+  panel._editingRule = {};
+  const createHtml = panel._renderRuleEditor();
+  const createFooter = createHtml.match(/<div class="actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  assert.match(createFooter, /data-action="save-rule"/);
+  assert.doesNotMatch(createFooter, /data-action="cancel-rule"/);
+  assert.doesNotMatch(createFooter, /data-action="delete-rule"/);
+  assert.doesNotMatch(createHtml, /<ha-dropdown-item value="delete-rule">/);
+
+  panel._editingRule = { ...newRuleDefaults(), id: "rule-1", name: "Test" };
+  const editHtml = panel._renderRuleEditor();
+  const editFooter = editHtml.match(/<div class="actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  assert.match(editFooter, /data-action="save-rule"/);
+  assert.doesNotMatch(editFooter, /data-action="cancel-rule"/);
+  assert.doesNotMatch(editFooter, /data-action="delete-rule"/);
+  assert.match(editHtml, /<ha-dropdown-item value="delete-rule">Supprimer<\/ha-dropdown-item>/);
+});
+
+test("rule editor delete menu uses the existing delete flow", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = { rules: [{ id: "rule-1", name: "Test", enabled: true }] };
+  panel._editingRule = { id: "rule-1", name: "Modified draft" };
+  panel._render = () => {};
+  const calls = [];
+  panel._call = async (message) => {
+    calls.push(message);
+    return {};
+  };
+
+  await panel._handleSelected({
+    composedPath: () => [{ dataset: { ruleEditorMenu: "" } }],
+    detail: { value: "delete-rule" },
+  });
+
+  assert.deepEqual(calls, [{ type: "alert_manager/rules/delete", rule_id: "rule-1" }]);
+  assert.deepEqual(panel._config.rules, []);
+  assert.equal(panel._editingRule, null);
 });

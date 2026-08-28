@@ -1931,11 +1931,11 @@ class AlertManagerPanel extends HTMLElement {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item></ha-dropdown>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="delete-rule">${esc(this._t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions">${rule.id ? `<ha-button appearance="plain" variant="danger" data-action="delete-rule" data-id="${esc(rule.id)}">${esc(this._t("buttons.delete"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="plain" data-action="cancel-rule">${esc(this._t("buttons.cancel"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
+        <div class="actions rule-editor-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
   }
@@ -2055,12 +2055,17 @@ class AlertManagerPanel extends HTMLElement {
     return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
   }
 
-  _handleSelected(event) {
+  async _handleSelected(event) {
     const path = event.composedPath?.() ?? [event.target];
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
-    if (ruleMenu && ruleValue === "switch-editor") {
-      void this._switchRuleEditor();
+    if (!ruleMenu) return;
+    if (ruleValue === "switch-editor") {
+      await this._switchRuleEditor();
+      return;
+    }
+    if (ruleValue === "delete-rule" && this._editingRule?.id) {
+      await this._deleteRule(this._editingRule.id);
     }
   }
 
@@ -2275,16 +2280,22 @@ class AlertManagerPanel extends HTMLElement {
     } else if (action === "toggle-rule") {
       await this._toggleRule(rule.id);
     } else if (action === "delete-rule") {
-      if (!window.confirm(this._t("rules.delete_confirm", { name: rule.name }))) return;
-      const result = await this._call(
-        { type: "alert_manager/rules/delete", rule_id: rule.id },
-        this._t("success.rule_deleted"),
-      );
-      if (result !== null) {
-        this._config.rules = this._config.rules.filter((item) => item.id !== rule.id);
-        if (this._editingRule?.id === rule.id) this._editingRule = null;
-        this._render();
-      }
+      await this._deleteRule(rule.id);
+    }
+  }
+
+  async _deleteRule(ruleId) {
+    const rule = (this._config?.rules ?? []).find((item) => item.id === ruleId);
+    if (!rule) return;
+    if (!window.confirm(this._t("rules.delete_confirm", { name: rule.name }))) return;
+    const result = await this._call(
+      { type: "alert_manager/rules/delete", rule_id: rule.id },
+      this._t("success.rule_deleted"),
+    );
+    if (result !== null) {
+      this._config.rules = this._config.rules.filter((item) => item.id !== rule.id);
+      if (this._editingRule?.id === rule.id) this._editingRule = null;
+      this._render();
     }
   }
 
