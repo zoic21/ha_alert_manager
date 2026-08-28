@@ -27,36 +27,60 @@ def _state_event(entity_id, old_state, new_state):
 
 
 def test_unavailable_pack_owns_transition_filtering(hass):
-    """Unavailable treats missing/normal states alike and keeps alert edges."""
+    """Unavailable compares its stored occurrence only with the new state."""
     normal = hass.states.set("sensor.source", "1")
-    changed = hass.states.set("sensor.source", "2")
     unavailable_state = hass.states.set("sensor.source", "unavailable")
     config = {"enabled": True}
 
-    assert unavailable.PACK.should_evaluate(hass, normal, changed, config) is False
-    assert unavailable.PACK.should_evaluate(hass, None, normal, config) is False
-    assert unavailable.PACK.should_evaluate(hass, normal, None, config) is False
-    assert unavailable.PACK.should_evaluate(hass, None, unavailable_state, config)
-    assert unavailable.PACK.should_evaluate(hass, unavailable_state, None, config)
-    assert unavailable.PACK.should_evaluate(hass, changed, unavailable_state, config)
-    assert unavailable.PACK.should_evaluate(hass, unavailable_state, changed, config)
+    assert not unavailable.PACK.should_evaluate(
+        hass, normal, config, record_exists=False
+    )
+    assert unavailable.PACK.should_evaluate(
+        hass, unavailable_state, config, record_exists=False
+    )
+    assert not unavailable.PACK.should_evaluate(
+        hass, unavailable_state, config, record_exists=True
+    )
+    assert unavailable.PACK.should_evaluate(
+        hass, normal, config, record_exists=True
+    )
+    assert unavailable.PACK.should_evaluate(
+        hass, None, config, record_exists=True
+    )
+    assert not unavailable.PACK.should_evaluate(
+        hass, None, config, record_exists=False
+    )
 
 
 def test_connectivity_pack_only_keeps_relevant_edges(hass):
-    """Connectivity evaluates only transitions into or out of its off match."""
+    """Connectivity compares its stored occurrence with the definitive new state."""
     attributes = {ATTR_DEVICE_CLASS: "connectivity"}
-    on_old = hass.states.set("binary_sensor.link", "on", attributes)
-    on_new = hass.states.set("binary_sensor.link", "on", attributes)
-    off = hass.states.set("binary_sensor.link", "off", attributes)
+    on_state = hass.states.set("binary_sensor.link", "on", attributes)
+    off_state = hass.states.set("binary_sensor.link", "off", attributes)
+    unavailable_state = hass.states.set("binary_sensor.link", "unavailable", attributes)
     config = {"enabled": True}
 
-    assert connectivity.PACK.should_evaluate(hass, on_old, on_new, config) is False
-    assert connectivity.PACK.should_evaluate(hass, None, on_new, config) is False
-    assert connectivity.PACK.should_evaluate(hass, on_new, None, config) is False
-    assert connectivity.PACK.should_evaluate(hass, None, off, config) is True
-    assert connectivity.PACK.should_evaluate(hass, off, None, config) is True
-    assert connectivity.PACK.should_evaluate(hass, on_new, off, config) is True
-    assert connectivity.PACK.should_evaluate(hass, off, on_new, config) is True
+    assert not connectivity.PACK.should_evaluate(
+        hass, on_state, config, record_exists=False
+    )
+    assert connectivity.PACK.should_evaluate(
+        hass, off_state, config, record_exists=False
+    )
+    assert not connectivity.PACK.should_evaluate(
+        hass, off_state, config, record_exists=True
+    )
+    assert connectivity.PACK.should_evaluate(
+        hass, on_state, config, record_exists=True
+    )
+    assert not connectivity.PACK.should_evaluate(
+        hass, unavailable_state, config, record_exists=False
+    )
+    assert not connectivity.PACK.should_evaluate(
+        hass, unavailable_state, config, record_exists=True
+    )
+    assert connectivity.PACK.should_evaluate(
+        hass, None, config, record_exists=True
+    )
 
 
 def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
@@ -70,26 +94,31 @@ def test_battery_filter_uses_per_device_threshold(hass, registry_entry):
     }
 
     high = _battery_state(hass, "40")
-    assert battery.PACK.should_evaluate(hass, None, high, config) is False
-    assert battery.PACK.should_evaluate(hass, high, None, config) is False
+    assert not battery.PACK.should_evaluate(
+        hass, high, config, record_exists=False
+    )
+    assert battery.PACK.should_evaluate(hass, high, config, record_exists=True)
 
-    old_state = _battery_state(hass, "40")
-    new_state = _battery_state(hass, "35")
-    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is False
+    at_threshold = _battery_state(hass, "30")
+    assert battery.PACK.should_evaluate(
+        hass, at_threshold, config, record_exists=False
+    )
+    assert not battery.PACK.should_evaluate(
+        hass, at_threshold, config, record_exists=True
+    )
 
-    old_state = _battery_state(hass, "31")
-    new_state = _battery_state(hass, "30")
-    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is True
-    assert battery.PACK.should_evaluate(hass, None, new_state, config) is True
-    assert battery.PACK.should_evaluate(hass, new_state, None, config) is True
+    still_low = _battery_state(hass, "29")
+    assert not battery.PACK.should_evaluate(
+        hass, still_low, config, record_exists=True
+    )
 
-    old_state = _battery_state(hass, "30")
-    new_state = _battery_state(hass, "29")
-    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is False
-
-    old_state = _battery_state(hass, "29")
-    new_state = _battery_state(hass, "31")
-    assert battery.PACK.should_evaluate(hass, old_state, new_state, config) is True
+    recovered = _battery_state(hass, "31")
+    assert battery.PACK.should_evaluate(
+        hass, recovered, config, record_exists=True
+    )
+    assert not battery.PACK.should_evaluate(
+        hass, recovered, config, record_exists=False
+    )
 
 
 def test_battery_threshold_cache_follows_config_and_device_changes(
