@@ -1,7 +1,11 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const files = ["alert-manager-panel.js", "alert-manager-panel-entry.js"];
+const files = [
+  "alert-manager-panel.js",
+  "alert-manager-panel-entry.js",
+  "alert-manager-panel-runtime.js",
+];
 
 for (const filename of files) {
   const source = new URL(`../frontend-src/${filename}`, import.meta.url);
