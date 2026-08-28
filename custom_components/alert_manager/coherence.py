@@ -58,6 +58,12 @@ _ACTION_KEYS: Final = frozenset(
     {"action", "perform_action", "service", "service_template"}
 )
 _INTENT_KEYS: Final = frozenset({"condition", "trigger"})
+_IGNORED_ENTITY_REFERENCES: Final = frozenset(
+    {
+        "script.execute",
+        "script.run",
+    }
+)
 _ENTITY_DOMAINS: Final = frozenset(
     {
         "ai_task",
@@ -346,7 +352,7 @@ def _record_scalar(
         return
     for match in state.pattern.finditer(value):
         entity_id = match.group(1).lower()
-        if entity_id in state.service_ids:
+        if entity_id in _IGNORED_ENTITY_REFERENCES or entity_id in state.service_ids:
             continue
         state.references_checked += 1
         if entity_id in state.existing_entities:
