@@ -178,6 +178,7 @@ def _entity_pattern(existing_entities: frozenset[str]) -> re.Pattern[str]:
     return re.compile(
         rf"(?<![a-zA-Z0-9_./\\@$%&|-])(?:states\.)?"
         rf"((?:{domain_pattern})\.[a-z0-9_]+)"
+        rf"(?!\()"
         rf"(?=(?:\.(?:state\b|attributes(?:\.|\[|\b)))|[^a-zA-Z0-9_.-]|$)",
         re.IGNORECASE,
     )
