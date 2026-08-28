@@ -50,9 +50,7 @@ class PackConfigField:
         }
 
 
-PackTransitionFilter = Callable[
-    [HomeAssistant, State, dict[str, Any], bool], bool
-]
+PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any], bool], bool]
 
 
 @dataclass(frozen=True, slots=True)
