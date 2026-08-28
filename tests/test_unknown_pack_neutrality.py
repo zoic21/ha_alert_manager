@@ -7,8 +7,8 @@ import asyncio
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     STATE_HOME,
-    STATE_UNKNOWN,
     STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 
 from custom_components.alert_manager.runtime_manager import AlertManager
