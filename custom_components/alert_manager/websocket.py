@@ -9,8 +9,8 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
-from .coherence import async_scan_configuration
-from .const import DATA_MANAGER
+from .coherence import async_run_coherence_scan
+from .const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from .manager import AlertManager
 
 ERR_NOT_LOADED = "not_loaded"
@@ -91,7 +91,18 @@ async def websocket_coherence_scan(
     """Scan Home Assistant configuration for missing entity references."""
     if _manager(hass, connection, msg["id"]) is None:
         return
-    connection.send_result(msg["id"], await async_scan_configuration(hass))
+    connection.send_result(msg["id"], await async_run_coherence_scan(hass))
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command({vol.Required("type"): "alert_manager/coherence/get"})
+async def websocket_coherence_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the latest persisted coherence report without starting a scan."""
+    if _manager(hass, connection, msg["id"]) is not None:
+        connection.send_result(msg["id"], hass.data.get(DATA_COHERENCE_RESULT))
 
 
 @websocket_api.require_admin
@@ -365,6 +376,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_update,
         websocket_alerts_list,
         websocket_history_list,
+        websocket_coherence_get,
         websocket_coherence_scan,
         websocket_history_config_get,
         websocket_history_config_update,

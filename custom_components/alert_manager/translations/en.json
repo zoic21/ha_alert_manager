@@ -72,6 +72,7 @@
         "files": "Files scanned: {count}",
         "missing": "Invalid references: {count}",
         "references": "References checked: {count}",
+        "scanned_at": "Last scan: {date}",
         "skipped": "Unreadable or invalid files skipped: {count}"
       },
       "title": "Configuration coherence",
@@ -399,7 +400,15 @@
     }
   },
   "entity": {
+    "button": {
+      "check_coherence": {
+        "name": "Check configuration coherence"
+      }
+    },
     "sensor": {
+      "coherence_issue": {
+        "name": "Missing entities"
+      },
       "device_main_active": {
         "name": "Devices in alert"
       },

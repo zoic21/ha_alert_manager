@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from custom_components.alert_manager.button import async_setup_entry as setup_button
 from custom_components.alert_manager.const import (
     DATA_MANAGER,
     EVENT_ALERT_RESOLVED,
@@ -30,16 +31,17 @@ def event_data(hass, event_type):
     return [data for event, data in hass.bus.fired if event == event_type]
 
 
-def test_main_device_groups_all_five_entities(hass, entry):
-    """The four sensors and switch use one deterministic service device."""
+def test_main_device_groups_all_seven_entities(hass, entry):
+    """The five sensors, switch and button use one deterministic service device."""
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
     entities = []
     run(setup_sensors(hass, entry, entities.extend))
     run(setup_switch(hass, entry, entities.extend))
+    run(setup_button(hass, entry, entities.extend))
 
-    assert len(entities) == 5
+    assert len(entities) == 7
     for entity in entities:
         assert entity._attr_device_info == {
             "identifiers": {("alert_manager", "main")},
@@ -290,6 +292,9 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
     run(manager.async_set_monitoring(False))
     assert len(manager.records) == 3
     for sensor in sensors:
+        if sensor.entity_id == "sensor.alert_manager_coherence_issue":
+            assert sensor.native_value is None
+            continue
         assert sensor.native_value == 0
         if sensor is device_sensor:
             assert sensor.extra_state_attributes == {"devices": []}

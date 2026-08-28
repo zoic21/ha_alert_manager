@@ -72,6 +72,7 @@
         "files": "Fichiers analysés : {count}",
         "missing": "Références invalides : {count}",
         "references": "Références vérifiées : {count}",
+        "scanned_at": "Dernière analyse : {date}",
         "skipped": "Fichiers ignorés car illisibles ou invalides : {count}"
       },
       "title": "Cohérence de la configuration",
@@ -399,7 +400,15 @@
     }
   },
   "entity": {
+    "button": {
+      "check_coherence": {
+        "name": "Vérifier la cohérence"
+      }
+    },
     "sensor": {
+      "coherence_issue": {
+        "name": "Entités inexistantes"
+      },
       "device_main_active": {
         "name": "Appareils en alerte"
       },

@@ -237,3 +237,20 @@ def test_scan_does_not_report_current_or_disabled_entities(tmp_path):
     )
 
     assert [row["entity_id"] for row in result["results"]] == ["sensor.gone"]
+
+
+def test_missing_entity_count_is_distinct_from_reference_count(tmp_path):
+    """The entity sensor count does not grow for repeated references."""
+    _write(
+        tmp_path / "groups.yaml",
+        """first:
+  entities: [sensor.gone, binary_sensor.gone]
+second:
+  entities: [sensor.gone]
+""",
+    )
+
+    result = scan_configuration(tmp_path, frozenset())
+
+    assert result["missing_count"] == 3
+    assert result["missing_entity_count"] == 2

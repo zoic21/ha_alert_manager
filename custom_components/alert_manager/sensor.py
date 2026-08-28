@@ -15,11 +15,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
+    DATA_COHERENCE_RESULT,
     DATA_MANAGER,
     DOMAIN,
     MAIN_DEVICE_IDENTIFIER,
     MAIN_DEVICE_NAME,
     SIGNAL_ALERTS_UPDATED,
+    SIGNAL_COHERENCE_UPDATED,
 )
 from .manager import AlertManager
 
@@ -75,9 +77,9 @@ async def async_setup_entry(
         entity_registry.async_remove(legacy_entity_id)
 
     manager: AlertManager = hass.data[DATA_MANAGER]
-    async_add_entities(
-        [AlertManagerSensor(manager, *description) for description in _SENSORS]
-    )
+    sensors = [AlertManagerSensor(manager, *description) for description in _SENSORS]
+    sensors.append(AlertManagerCoherenceIssueSensor())
+    async_add_entities(sensors)
 
 
 class AlertManagerSensor(SensorEntity):
@@ -161,6 +163,54 @@ class AlertManagerSensor(SensorEntity):
             _compact_device if self._attribute_key == "devices" else _compact_alert
         )
         return _bounded_attributes(self._attribute_key, items, compactor)
+
+
+class AlertManagerCoherenceIssueSensor(SensorEntity):
+    """Expose the number of distinct missing entities from the latest scan."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:file-alert-outline"
+    _attr_translation_key = "coherence_issue"
+    _attr_unique_id = "alert_manager_coherence_issue"
+    _attr_device_info = DeviceInfo(
+        identifiers={(DOMAIN, MAIN_DEVICE_IDENTIFIER)},
+        name=MAIN_DEVICE_NAME,
+        entry_type=DeviceEntryType.SERVICE,
+    )
+
+    def __init__(self) -> None:
+        """Initialize the stable sensor entity id without inventing a result."""
+        self.entity_id = "sensor.alert_manager_coherence_issue"
+        self._issue_count: int | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the session result and subscribe to future scans."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_COHERENCE_UPDATED,
+                self._async_coherence_updated,
+            )
+        )
+        if result := self.hass.data.get(DATA_COHERENCE_RESULT):
+            self._async_coherence_updated(result)
+
+    @callback
+    def _async_coherence_updated(self, result: dict[str, Any]) -> None:
+        """Publish the count of distinct missing entity ids."""
+        issue_count = result.get("missing_entity_count")
+        if issue_count is None:
+            issue_count = len({item["entity_id"] for item in result.get("results", [])})
+        if issue_count == self._issue_count:
+            return
+        self._issue_count = issue_count
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the latest distinct issue count, or unknown before a scan."""
+        return self._issue_count
 
 
 def _compact_alert(alert: dict[str, Any]) -> dict[str, Any]:

@@ -39,6 +39,7 @@ const = _module("homeassistant.const")
 
 
 class Platform:
+    BUTTON = "button"
     SENSOR = "sensor"
     SWITCH = "switch"
 
@@ -430,6 +431,15 @@ class SensorEntity:
 
 
 sensor_module.SensorEntity = SensorEntity
+
+button_module = _module("homeassistant.components.button")
+
+
+class ButtonEntity(SensorEntity):
+    pass
+
+
+button_module.ButtonEntity = ButtonEntity
 
 switch_module = _module("homeassistant.components.switch")
 

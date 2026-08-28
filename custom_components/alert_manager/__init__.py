@@ -11,7 +11,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
+from .coherence import async_load_coherence_result
 from .const import (
+    DATA_COHERENCE_RESULT,
     DATA_MANAGER,
     DATA_STATIC_REGISTERED,
     DATA_WEBSOCKET_REGISTERED,
@@ -42,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await manager.async_setup()
         hass.data[DATA_MANAGER] = manager
+        await async_load_coherence_result(hass)
 
         if not hass.data.get(DATA_STATIC_REGISTERED):
             frontend_dir = Path(__file__).parent / "frontend"
@@ -86,6 +89,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
     manager: AlertManager | None = hass.data.pop(DATA_MANAGER, None)
+    hass.data.pop(DATA_COHERENCE_RESULT, None)
     if manager is not None:
         await manager.async_unload()
     return True
