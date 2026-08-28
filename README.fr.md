@@ -43,11 +43,46 @@ Alert Manager ne vous impose **aucun système de notification**. Les notificatio
 
 ## Captures d’écran
 
-Vue d’ensemble, historique, surveillance automatique, règles personnalisées, configuration et éditeur de règle — le tout directement dans Home Assistant.
+### Vue d’ensemble
 
 <p align="center">
-  <img src="docs/assets/screenshots/alert-manager-ui.webp" alt="Interface Alert Manager : vue d’ensemble, historique, surveillance automatique, règles personnalisées, configuration et éditeur de règle">
+  <img src="docs/assets/screenshots/overview.webp" alt="Vue d’ensemble Alert Manager">
 </p>
+
+<details>
+<summary><strong>Voir plus de captures</strong></summary>
+
+### Historique
+
+<p align="center">
+  <img src="docs/assets/screenshots/history.webp" alt="Historique Alert Manager">
+</p>
+
+### Surveillance automatique
+
+<p align="center">
+  <img src="docs/assets/screenshots/automatic-monitoring.webp" alt="Surveillance automatique Alert Manager">
+</p>
+
+### Règles personnalisées
+
+<p align="center">
+  <img src="docs/assets/screenshots/custom-rules.webp" alt="Règles personnalisées Alert Manager">
+</p>
+
+### Éditeur de règle
+
+<p align="center">
+  <img src="docs/assets/screenshots/rule-editor.webp" width="520" alt="Éditeur de règle Alert Manager">
+</p>
+
+### Configuration
+
+<p align="center">
+  <img src="docs/assets/screenshots/configuration.webp" alt="Configuration Alert Manager">
+</p>
+
+</details>
 
 ## Installation
 
