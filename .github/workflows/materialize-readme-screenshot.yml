@@ -31,3 +31,5 @@ jobs:
           git add -A
           git commit -m "docs: add Alert Manager UI screenshots"
           git push
+
+# retry after validating the screenshot payload
