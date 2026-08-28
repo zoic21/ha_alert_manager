@@ -21,7 +21,7 @@ from .const import (
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
 )
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus
+from .models import AlertRecord, AlertStatus, calculate_due_at
 from .storage import sort_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,13 +100,7 @@ class _StateMixin:
             record, now
         ):
             return
-        record.visible_at = self._calculate_pending_visible_at(record)
-
-    def _calculate_pending_visible_at(self, record: AlertRecord) -> datetime:
-        """Return the presentation due date for one pending alert."""
-        from .models import calculate_due_at
-
-        return calculate_due_at(
+        record.visible_at = calculate_due_at(
             record.detected_at,
             min(self.config["pending_display_delay"], record.delay),
         ) + timedelta(seconds=record.paused_seconds)
