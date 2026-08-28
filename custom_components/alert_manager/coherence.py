@@ -48,7 +48,7 @@ _IGNORED_DIRECTORIES: Final = frozenset(
         "trash",
         "venv",
         "www",
-        "archive"
+        "archive",
     }
 )
 _IGNORED_BRANCH_KEYS: Final = frozenset(
