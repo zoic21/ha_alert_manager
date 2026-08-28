@@ -8,11 +8,13 @@ from collections.abc import Iterable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
 
 from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
 from .models import AlertStatus, Rule
+from .packs import PACKS, PACKS_BY_ID, PackNeutral
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +38,7 @@ class AlertManager(BaseAlertManager):
         self._template_entities_by_key: dict[DependencyKey, frozenset[str]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
+        self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
         self._registry_evaluation_dirty = False
@@ -253,6 +256,124 @@ class AlertManager(BaseAlertManager):
         self._index_render_info("message", pair, render_info)
         return rendered
 
+    def _build_candidates(self, state: State) -> dict[str, Any]:
+        """Let every automatic pack evaluate unavailable states."""
+        if state.state != STATE_UNAVAILABLE:
+            return super()._build_candidates(state)
+        if not self._is_base_eligible(state.entity_id):
+            return {}
+
+        result: dict[str, Any] = {}
+        if self._is_automatic_eligible(state.entity_id):
+            for pack in PACKS:
+                self._add_pack_candidate(result, state, pack.id)
+        # Keep the existing rule semantics: custom rules are not evaluated while
+        # their source itself is unavailable.
+        return result
+
+    def _add_pack_candidate(
+        self,
+        result: dict[str, Any],
+        state: State,
+        pack_id: str,
+    ) -> None:
+        """Apply one pack's Match, Neutral or None evaluation result."""
+        config = self.config["automatic"][pack_id]
+        pack = PACKS_BY_ID[pack_id]
+        if not config["enabled"] or not self._pack_is_available(pack_id):
+            return
+
+        evaluation = pack.evaluate(self.hass, state, config)
+        alert_id = f"{pack_id}:{state.entity_id}"
+        if isinstance(evaluation, PackNeutral):
+            record = self.records.get(alert_id)
+            if record is not None:
+                result[alert_id] = (record.details, record.delay)
+            return
+        if evaluation is None:
+            return
+
+        condition = self._localized_pack_condition(
+            evaluation.condition_key, evaluation.condition_params
+        )
+        result[alert_id] = (
+            self._details(
+                state,
+                alert_id,
+                pack_id,
+                condition,
+                value=evaluation.value,
+                condition_key=evaluation.condition_key,
+                condition_params=evaluation.condition_params,
+                message=condition,
+            ),
+            self._delay_for(state, pack_id),
+        )
+
+    def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
+        """Return whether this state transition can change source-owned output."""
+        if entity_id in self._rules_by_entity:
+            return True
+
+        # Once any alert occurrence exists for this source, always evaluate the
+        # entity. Candidate generation/evaluate() owns all keep/resolve decisions.
+        if any(
+            record.details.entity_id == entity_id for record in self.records.values()
+        ):
+            return True
+
+        # Home Assistant state_changed events include both states. Keep a
+        # conservative fallback for synthetic events or future HA API changes.
+        if "old_state" not in event.data or "new_state" not in event.data:
+            return self._is_relevant_entity_id(entity_id)
+        old_state = event.data.get("old_state")
+        new_state = event.data.get("new_state")
+        if (old_state is not None and not isinstance(old_state, State)) or (
+            new_state is not None and not isinstance(new_state, State)
+        ):
+            return self._is_relevant_entity_id(entity_id)
+
+        # Exact duplicate events are irrelevant only while the entity has no
+        # current alert occurrence. Jinja dependencies are queued independently.
+        if (
+            old_state is not None
+            and new_state is not None
+            and old_state.state == new_state.state
+            and old_state.attributes == new_state.attributes
+        ):
+            return False
+
+        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
+            entity_id
+        ):
+            return False
+
+        automatic = self.config.get("automatic", {})
+        for pack in PACKS:
+            config = automatic.get(pack.id, {})
+            if not config.get("enabled", False):
+                continue
+            if not self._pack_is_available(pack.id):
+                continue
+            if pack.should_evaluate(self.hass, new_state, config):
+                return True
+        return False
+
+    def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
+        """Update automatic tracked membership without evaluating alert candidates."""
+        if "new_state" not in event.data:
+            return False
+        new_state = event.data.get("new_state")
+        if new_state is not None and not isinstance(new_state, State):
+            return False
+        was_tracked = entity_id in self._automatic_tracked_entities
+        is_tracked = new_state is not None and self._is_automatically_tracked(new_state)
+        if is_tracked:
+            self._automatic_tracked_entities.add(entity_id)
+        else:
+            self._automatic_tracked_entities.discard(entity_id)
+        return was_tracked != is_tracked
+
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state event, never our own entities."""
@@ -261,6 +382,9 @@ class AlertManager(BaseAlertManager):
         entity_id = event.data.get("entity_id")
         if not entity_id or self._is_own_entity(entity_id):
             return
+
+        if self._update_tracking_for_state_event(entity_id, event):
+            self._queued_public_refresh = True
 
         affected_entities = {
             dependency_key[2]
@@ -272,7 +396,7 @@ class AlertManager(BaseAlertManager):
                     affected_entities.add(dependency_key[2])
             except Exception:  # pragma: no cover - defensive HA API guard
                 _LOGGER.exception("Unable to filter Jinja dependency for %s", entity_id)
-        if self._is_relevant_entity_id(entity_id):
+        if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
         self._queue_entity_evaluations(
             affected_entities,
@@ -291,7 +415,7 @@ class AlertManager(BaseAlertManager):
             for entity_id in entity_ids
             if entity_id and not self._is_own_entity(entity_id)
         )
-        if not self._queued_evaluation_entities:
+        if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
         self._queued_evaluation_restoring |= restoring
         self._schedule_evaluation_flush()
@@ -314,11 +438,15 @@ class AlertManager(BaseAlertManager):
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
                 self._queued_evaluation_restoring = False
+                self._queued_public_refresh = False
                 return
             entity_ids = sorted(self._queued_evaluation_entities)
             self._queued_evaluation_entities.clear()
             restoring = self._queued_evaluation_restoring
             self._queued_evaluation_restoring = False
+            public_refresh = self._queued_public_refresh
+            self._queued_public_refresh = False
+            tracked_count_before = self._tracked_count()
             persisted_changed = False
             for entity_id in entity_ids:
                 try:
@@ -332,11 +460,16 @@ class AlertManager(BaseAlertManager):
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
             if persisted_changed:
                 await self._async_save_state()
-            self._publish_if_changed()
+            if (
+                persisted_changed
+                or public_refresh
+                or self._tracked_count() != tracked_count_before
+            ):
+                self._publish_if_changed()
         finally:
             self._evaluation_flush_scheduled = False
             if (
-                self._queued_evaluation_entities
+                (self._queued_evaluation_entities or self._queued_public_refresh)
                 and not self._unloading
                 and self.monitoring_enabled
             ):
@@ -361,6 +494,9 @@ class AlertManager(BaseAlertManager):
         record = self.records.get(alert_id)
         if record is None:
             return
+        # A timer may exist only to expose a still-pending alert. That changes
+        # the public snapshot without changing persisted record data.
+        self._queued_public_refresh = True
         self._queue_entity_evaluations((record.details.entity_id,))
 
     @callback

@@ -522,8 +522,6 @@ class AlertManager:
                 if pack.id != CATEGORY_UNAVAILABLE:
                     self._add_pack_candidate(result, state, pack.id)
 
-        if self._is_explicitly_excluded(entity_id):
-            return result
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
@@ -1225,7 +1223,6 @@ class AlertManager:
             if rule.enabled
             for entity_id in rule.entity_ids
             if self._is_base_eligible(entity_id)
-            and not self._is_explicitly_excluded(entity_id)
         )
 
     def _update_automatic_tracking_for_entity(
