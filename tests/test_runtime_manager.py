@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from homeassistant.const import ATTR_DEVICE_CLASS
-from homeassistant.core import Event
+from homeassistant.core import Event, State
 
+from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.runtime_manager import AlertManager
 from custom_components.alert_manager.sensor import AlertManagerSensor
@@ -378,5 +381,206 @@ def test_registry_changes_are_coalesced(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         assert manager._registry_evaluation_scheduled is False
+
+    asyncio.run(scenario())
+
+
+def _render_info(**changes):
+    values = {
+        "entities": frozenset(),
+        "all_states": False,
+        "all_states_lifecycle": False,
+        "domains": frozenset(),
+        "domains_lifecycle": frozenset(),
+        "has_time": False,
+        "rate_limit": None,
+        "filter": lambda _entity_id: False,
+        "filter_lifecycle": lambda _entity_id: False,
+    }
+    values.update(changes)
+    return SimpleNamespace(**values)
+
+
+def test_jinja_time_dependency_refreshes_at_next_minute(hass, entry, set_now):
+    """A now()/utcnow() dependency refreshes on the next minute boundary."""
+    start = datetime(2026, 8, 27, 12, 34, 17, tzinfo=UTC)
+    set_now(start)
+    manager = make_manager(hass, entry)
+    dependency_key = ("condition", "rule-id", "sensor.source")
+    manager._index_render_info(
+        "condition",
+        ("rule-id", "sensor.source"),
+        _render_info(has_time=True),
+    )
+
+    assert dependency_key in manager._template_time_dependencies
+    timer = hass.timers[-1]
+    assert timer["point"] == datetime(2026, 8, 27, 12, 35, tzinfo=UTC)
+    queued = []
+    manager._queue_entity_evaluations = (
+        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    )
+    timer["action"](timer["point"])
+    assert queued == ["sensor.source"]
+
+
+def test_jinja_lifecycle_uses_the_lifecycle_filter_only(hass, entry):
+    """Entity creation follows RenderInfo.filter_lifecycle, like Home Assistant."""
+    manager = make_manager(hass, entry)
+    manager._index_render_info(
+        "condition",
+        ("watched-domain", "sensor.source"),
+        _render_info(
+            domains_lifecycle=frozenset({"sensor"}),
+            filter_lifecycle=lambda entity_id: entity_id.startswith("sensor."),
+        ),
+    )
+    manager._index_render_info(
+        "condition",
+        ("states-only", "sensor.other"),
+        _render_info(
+            all_states=True,
+            filter=lambda _entity_id: True,
+            filter_lifecycle=lambda _entity_id: False,
+        ),
+    )
+    queued = []
+    manager._queue_entity_evaluations = (
+        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    )
+
+    manager._state_changed(_state_event("sensor.new", None, State("sensor.new", "on")))
+
+    assert "sensor.source" in queued
+    assert "sensor.other" not in queued
+
+
+def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_now):
+    """Broad templates coalesce state churn until RenderInfo's limit expires."""
+    start = datetime(2026, 8, 27, 12, tzinfo=UTC)
+    set_now(start)
+    manager = make_manager(hass, entry)
+    info = _render_info(
+        all_states=True,
+        rate_limit=60,
+        filter=lambda _entity_id: True,
+    )
+    dependency_key = ("condition", "rule-id", "sensor.source")
+    manager._index_render_info("condition", ("rule-id", "sensor.source"), info)
+    queued = []
+    manager._queue_entity_evaluations = (
+        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    )
+
+    assert not manager._dynamic_dependency_matches(
+        dependency_key,
+        info,
+        "binary_sensor.changed",
+        lifecycle=False,
+    )
+    assert dependency_key in manager._template_rate_limit_timers
+    first_timer = hass.timers[-1]
+    assert first_timer["point"] == start + timedelta(seconds=60)
+
+    manager._dynamic_dependency_matches(
+        dependency_key,
+        info,
+        "binary_sensor.changed_again",
+        lifecycle=False,
+    )
+    assert len(manager._template_rate_limit_timers) == 1
+    first_timer["action"](first_timer["point"])
+    assert queued == ["sensor.source"]
+
+
+def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_now):
+    """A registry rename preserves references and the current alert lifecycle."""
+
+    async def scenario():
+        start = datetime(2026, 8, 27, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.old", "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(entity_ids=["sensor.old"], duration=0)
+        )
+        old_alert_id = f"rule:{created['id']}:sensor.old"
+        await manager.async_acknowledge(old_alert_id, "Admin")
+        await manager.async_update_config(
+            {
+                "entity_delays": {"sensor.old": 123},
+                "excluded_entities": ["sensor.old"],
+            }
+        )
+        original = manager.records[old_alert_id]
+        detected_at = original.detected_at
+        active_since = original.active_since
+
+        renamed_state = hass.states.data.pop("sensor.old")
+        renamed_state.entity_id = "sensor.new"
+        hass.states.data["sensor.new"] = renamed_state
+        manager._registry_changed(
+            Event(
+                {
+                    "action": "update",
+                    "entity_id": "sensor.new",
+                    "old_entity_id": "sensor.old",
+                    "changes": {"entity_id": "sensor.new"},
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        new_alert_id = f"rule:{created['id']}:sensor.new"
+        assert manager.config["rules"][0]["entity_ids"] == ["sensor.new"]
+        assert manager.config["entity_delays"] == {"sensor.new": 123}
+        assert manager.config["excluded_entities"] == ["sensor.new"]
+        assert old_alert_id not in manager.records
+        record = manager.records[new_alert_id]
+        assert record.detected_at == detected_at
+        assert record.active_since == active_since
+        assert record.acknowledged_by == "Admin"
+
+    asyncio.run(scenario())
+
+
+def test_runtime_keeps_delay_recheck_semantics(hass, entry, set_now):
+    """Changing a duration still rechecks an already active occurrence."""
+
+    async def scenario():
+        start = datetime(2026, 8, 27, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.source", "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(_rule(duration=0))
+
+        await manager.async_update_rule(created["id"], {"duration": 60})
+
+        record = manager.records[f"rule:{created['id']}:sensor.source"]
+        assert record.status is AlertStatus.PENDING
+        assert record.due_at == start + timedelta(seconds=60)
+
+    asyncio.run(scenario())
+
+
+def test_runtime_rule_cleanup_remains_silent(hass, entry):
+    """Disabling a rule is configuration cleanup, not condition recovery."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(_rule(duration=0))
+        hass.bus.fired.clear()
+
+        await manager.async_update_rule(created["id"], {"enabled": False})
+
+        assert not [
+            event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+        ]
 
     asyncio.run(scenario())

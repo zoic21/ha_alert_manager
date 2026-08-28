@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .manager import AlertManager as BaseAlertManager
@@ -36,12 +39,17 @@ class AlertManager(BaseAlertManager):
         self._template_dependents: dict[str, set[DependencyKey]] = {}
         self._template_dynamic_infos: dict[DependencyKey, Any] = {}
         self._template_entities_by_key: dict[DependencyKey, frozenset[str]] = {}
+        self._template_time_dependencies: set[DependencyKey] = set()
+        self._template_time_timer: Callable[[], None] | None = None
+        self._template_rate_limit_until: dict[DependencyKey, datetime] = {}
+        self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
         self._registry_evaluation_dirty = False
+        self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
 
@@ -119,9 +127,12 @@ class AlertManager(BaseAlertManager):
 
     def _rebuild_template_dependency_index(self) -> None:
         """Build reverse indexes so state events avoid scanning every template."""
+        self._cancel_template_dependency_timers()
         self._template_dependents.clear()
         self._template_dynamic_infos.clear()
         self._template_entities_by_key.clear()
+        self._template_time_dependencies.clear()
+        self._template_rate_limit_until.clear()
         for kind, render_infos in (
             ("condition", self._rule_template_render_info),
             ("message", self._rule_message_render_info),
@@ -132,7 +143,7 @@ class AlertManager(BaseAlertManager):
     def _index_render_info(
         self, kind: str, pair: tuple[str, str], render_info: Any
     ) -> None:
-        """Index one RenderInfo by explicit entities with a dynamic fallback."""
+        """Index explicit, dynamic and time-driven RenderInfo dependencies."""
         dependency_key = (kind, pair[0], pair[1])
         self._remove_dependency_key(dependency_key)
         entities = frozenset(getattr(render_info, "entities", ()) or ())
@@ -143,6 +154,14 @@ class AlertManager(BaseAlertManager):
             self._template_dependents.setdefault(entity_id, set()).add(dependency_key)
         if self._render_info_is_dynamic(render_info):
             self._template_dynamic_infos[dependency_key] = render_info
+            rate_limit = getattr(render_info, "rate_limit", None)
+            if isinstance(rate_limit, int | float) and rate_limit > 0:
+                self._template_rate_limit_until[dependency_key] = (
+                    dt_util.now() + timedelta(seconds=float(rate_limit))
+                )
+        if getattr(render_info, "has_time", False):
+            self._template_time_dependencies.add(dependency_key)
+            self._schedule_template_time_tick()
 
     @staticmethod
     def _render_info_is_dynamic(render_info: Any) -> bool:
@@ -155,7 +174,7 @@ class AlertManager(BaseAlertManager):
         )
 
     def _remove_dependency_key(self, dependency_key: DependencyKey) -> None:
-        """Remove one template instance from every reverse index."""
+        """Remove one template instance from every reverse index and timer."""
         for entity_id in self._template_entities_by_key.pop(dependency_key, ()):
             dependents = self._template_dependents.get(entity_id)
             if dependents is None:
@@ -164,6 +183,101 @@ class AlertManager(BaseAlertManager):
             if not dependents:
                 self._template_dependents.pop(entity_id, None)
         self._template_dynamic_infos.pop(dependency_key, None)
+        self._template_rate_limit_until.pop(dependency_key, None)
+        if cancel := self._template_rate_limit_timers.pop(dependency_key, None):
+            cancel()
+        self._template_time_dependencies.discard(dependency_key)
+        if (
+            not self._template_time_dependencies
+            and self._template_time_timer is not None
+        ):
+            self._template_time_timer()
+            self._template_time_timer = None
+
+    def _cancel_template_dependency_timers(self) -> None:
+        """Cancel time and rate-limit callbacks before rebuilding or unloading."""
+        if self._template_time_timer is not None:
+            self._template_time_timer()
+            self._template_time_timer = None
+        for cancel in self._template_rate_limit_timers.values():
+            cancel()
+        self._template_rate_limit_timers.clear()
+
+    def _schedule_template_time_tick(self) -> None:
+        """Refresh now()/utcnow() templates at the next minute boundary."""
+        if (
+            self._template_time_timer is not None
+            or not self._template_time_dependencies
+        ):
+            return
+        now = dt_util.now().astimezone(UTC)
+        when = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._template_time_timer = None
+            self._queue_entity_evaluations(
+                {key[2] for key in self._template_time_dependencies}
+            )
+            if self._template_time_dependencies:
+                self._schedule_template_time_tick()
+
+        self._template_time_timer = async_track_point_in_utc_time(
+            self.hass, timer_due, when
+        )
+
+    def _schedule_rate_limited_dependency(
+        self, dependency_key: DependencyKey, when: datetime
+    ) -> None:
+        """Queue one trailing render when a broad Jinja rate limit expires."""
+        if dependency_key in self._template_rate_limit_timers:
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._template_rate_limit_timers.pop(dependency_key, None)
+            if dependency_key in self._template_dynamic_infos:
+                self._queue_entity_evaluations((dependency_key[2],))
+
+        self._template_rate_limit_timers[dependency_key] = (
+            async_track_point_in_utc_time(self.hass, timer_due, when)
+        )
+
+    def _dynamic_dependency_matches(
+        self,
+        dependency_key: DependencyKey,
+        render_info: Any,
+        entity_id: str,
+        *,
+        lifecycle: bool,
+    ) -> bool:
+        """Apply Home Assistant's lifecycle filters and broad rate limits."""
+        try:
+            matches = bool(
+                render_info.filter_lifecycle(entity_id)
+                if lifecycle
+                else render_info.filter(entity_id)
+            )
+        except Exception:  # pragma: no cover - defensive HA API guard
+            _LOGGER.exception("Unable to filter Jinja dependency for %s", entity_id)
+            return False
+        if not matches:
+            return False
+
+        if entity_id in self._template_entities_by_key.get(dependency_key, ()):
+            return True
+        rate_limit = getattr(render_info, "rate_limit", None)
+        if not isinstance(rate_limit, int | float) or rate_limit <= 0:
+            return True
+        now = dt_util.now()
+        until = self._template_rate_limit_until.get(dependency_key)
+        if until is None or now.astimezone(UTC) >= until.astimezone(UTC):
+            self._template_rate_limit_until[dependency_key] = now + timedelta(
+                seconds=float(rate_limit)
+            )
+            return True
+        self._schedule_rate_limited_dependency(dependency_key, until)
+        return False
 
     def _render_info_has_own_dependency(self, render_info: Any) -> set[str]:
         """Return runtime-discovered dependencies that belong to this integration."""
@@ -376,7 +490,7 @@ class AlertManager(BaseAlertManager):
 
     @callback
     def _state_changed(self, event: Event) -> None:
-        """Queue only sources affected by a state event, never our own entities."""
+        """Queue only sources affected by a state or entity lifecycle event."""
         if not self.monitoring_enabled:
             return
         entity_id = event.data.get("entity_id")
@@ -390,12 +504,17 @@ class AlertManager(BaseAlertManager):
             dependency_key[2]
             for dependency_key in self._template_dependents.get(entity_id, ())
         }
+        lifecycle = (
+            event.data.get("old_state") is None or event.data.get("new_state") is None
+        ) and ("old_state" in event.data or "new_state" in event.data)
         for dependency_key, render_info in tuple(self._template_dynamic_infos.items()):
-            try:
-                if render_info.filter(entity_id):
-                    affected_entities.add(dependency_key[2])
-            except Exception:  # pragma: no cover - defensive HA API guard
-                _LOGGER.exception("Unable to filter Jinja dependency for %s", entity_id)
+            if self._dynamic_dependency_matches(
+                dependency_key,
+                render_info,
+                entity_id,
+                lifecycle=lifecycle,
+            ):
+                affected_entities.add(dependency_key[2])
         if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
         self._queue_entity_evaluations(
@@ -500,9 +619,21 @@ class AlertManager(BaseAlertManager):
         self._queue_entity_evaluations((record.details.entity_id,))
 
     @callback
-    def _registry_changed(self, _event: Event) -> None:
-        """Coalesce registry bursts into one full evaluation."""
-        if not self.monitoring_enabled or self._unloading:
+    def _registry_changed(self, event: Event) -> None:
+        """Coalesce registry changes and preserve references across entity renames."""
+        if self._unloading:
+            return
+        old_entity_id = event.data.get("old_entity_id")
+        new_entity_id = event.data.get("entity_id")
+        is_rename = (
+            event.data.get("action") == "update"
+            and isinstance(old_entity_id, str)
+            and isinstance(new_entity_id, str)
+            and old_entity_id != new_entity_id
+        )
+        if is_rename:
+            self._pending_entity_renames[old_entity_id] = new_entity_id
+        elif not self.monitoring_enabled:
             return
         self._registry_evaluation_dirty = True
         if self._registry_evaluation_scheduled:
@@ -514,26 +645,125 @@ class AlertManager(BaseAlertManager):
             name=f"{DOMAIN} registry batch",
         )
 
+    def _apply_pending_entity_renames(self) -> bool:
+        """Migrate configured references and live records after entity renames."""
+        if not self._pending_entity_renames:
+            return False
+        renames = dict(self._pending_entity_renames)
+        self._pending_entity_renames.clear()
+
+        def final_target(entity_id: str) -> str:
+            seen: set[str] = set()
+            while entity_id in renames and entity_id not in seen:
+                seen.add(entity_id)
+                entity_id = renames[entity_id]
+            return entity_id
+
+        changed = False
+        for old_entity_id in tuple(renames):
+            new_entity_id = final_target(old_entity_id)
+            if old_entity_id == new_entity_id:
+                continue
+
+            for raw_rule in self.config.get("rules", []):
+                entity_ids = raw_rule.get("entity_ids")
+                if not isinstance(entity_ids, list) or old_entity_id not in entity_ids:
+                    continue
+                raw_rule["entity_ids"] = list(
+                    dict.fromkeys(
+                        new_entity_id if item == old_entity_id else item
+                        for item in entity_ids
+                    )
+                )
+                changed = True
+
+            entity_delays = self.config.get("entity_delays", {})
+            if old_entity_id in entity_delays:
+                entity_delays.setdefault(new_entity_id, entity_delays[old_entity_id])
+                entity_delays.pop(old_entity_id)
+                changed = True
+
+            excluded_entities = self.config.get("excluded_entities", [])
+            if old_entity_id in excluded_entities:
+                self.config["excluded_entities"] = list(
+                    dict.fromkeys(
+                        new_entity_id if item == old_entity_id else item
+                        for item in excluded_entities
+                    )
+                )
+                changed = True
+
+            for alert_id, original_record in tuple(self.records.items()):
+                if original_record.details.entity_id != old_entity_id:
+                    continue
+                self.records.pop(alert_id, None)
+                self._cancel_timer(alert_id)
+                if (
+                    original_record.details.type == "rule"
+                    and original_record.details.rule_id
+                ):
+                    new_alert_id = (
+                        f"rule:{original_record.details.rule_id}:{new_entity_id}"
+                    )
+                else:
+                    new_alert_id = f"{original_record.details.type}:{new_entity_id}"
+                existing_record = self.records.pop(new_alert_id, None)
+                if existing_record is not None:
+                    self._cancel_timer(new_alert_id)
+                record = (
+                    min(
+                        (original_record, existing_record),
+                        key=lambda item: item.detected_at,
+                    )
+                    if existing_record is not None
+                    else original_record
+                )
+                record.details.entity_id = new_entity_id
+                record.details.id = new_alert_id
+                self.records[new_alert_id] = record
+                changed = True
+
+            if old_entity_id in self._queued_evaluation_entities:
+                self._queued_evaluation_entities.discard(old_entity_id)
+                self._queued_evaluation_entities.add(new_entity_id)
+
+        if changed:
+            self._rebuild_rule_index()
+            self._refresh_tracking()
+            self._cancel_all_timers()
+            self._reschedule_record_timers()
+        return changed
+
     async def _async_flush_registry_evaluation(self) -> None:
-        """Run one full scan for all registry changes seen before each pass."""
+        """Apply renames and run one durable scan for each registry burst."""
         try:
             while self._registry_evaluation_dirty and not self._unloading:
                 self._registry_evaluation_dirty = False
+                renamed = self._apply_pending_entity_renames()
+                evaluated = False
                 if self.monitoring_enabled:
-                    await self.async_evaluate_all()
+                    evaluated = await self.async_evaluate_all(
+                        save=False,
+                        publish=False,
+                    )
+                if renamed or evaluated:
+                    await self._async_save_state()
+                if self.monitoring_enabled:
+                    self._publish_if_changed()
         finally:
             self._registry_evaluation_scheduled = False
-            if (
-                self._registry_evaluation_dirty
-                and not self._unloading
-                and self.monitoring_enabled
-            ):
+            if self._registry_evaluation_dirty and not self._unloading:
                 self._registry_evaluation_scheduled = True
                 self.entry.async_create_task(
                     self.hass,
                     self._async_flush_registry_evaluation(),
                     name=f"{DOMAIN} registry batch",
                 )
+
+    async def async_unload(self) -> None:
+        """Cancel Jinja dependency timers before unloading the integration."""
+        self._cancel_template_dependency_timers()
+        await super().async_unload()
 
     @callback
     def _schedule_pack_availability_refresh(self) -> None:
