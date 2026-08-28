@@ -22,6 +22,7 @@ from custom_components.alert_manager.const import (
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.sensor import (
+    AlertManagerCoherenceIssueSensor,
     AlertManagerSensor,
     _bounded_attributes,
     _compact_alert,
@@ -52,7 +53,7 @@ def fire_device_event_timers(hass):
 
 
 def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
-    """The sensor platform exposes three partitions and one device counter."""
+    """The sensor platform exposes alert partitions and coherence issues."""
     registry_entry(
         hass,
         "sensor.legacy_alerts",
@@ -63,22 +64,35 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     hass.data[DATA_MANAGER] = manager
     entities = []
     run(async_setup_sensor(hass, entry, entities.extend))
-    assert len(entities) == 4
-    assert all(isinstance(entity, AlertManagerSensor) for entity in entities)
+    assert len(entities) == 5
+    partition_sensors = [
+        entity for entity in entities if isinstance(entity, AlertManagerSensor)
+    ]
+    coherence_sensor = next(
+        entity
+        for entity in entities
+        if isinstance(entity, AlertManagerCoherenceIssueSensor)
+    )
+    assert len(partition_sensors) == 4
     assert {entity.entity_id for entity in entities} == {
+        "sensor.alert_manager_coherence_issue",
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
         "sensor.alert_manager_device_main_active",
     }
     assert {entity._attr_unique_id for entity in entities} == {
+        "alert_manager_coherence_issue",
         "alert_manager_main_active",
         "alert_manager_main_pending",
         "alert_manager_main_acknowledge",
         "alert_manager_device_main_active",
     }
-    assert all(entity.native_value == 0 for entity in entities)
-    assert {entity.entity_id: entity.extra_state_attributes for entity in entities} == {
+    assert all(entity.native_value == 0 for entity in partition_sensors)
+    assert coherence_sensor.native_value is None
+    assert {
+        entity.entity_id: entity.extra_state_attributes for entity in partition_sensors
+    } == {
         "sensor.alert_manager_main_active": {"alerts": []},
         "sensor.alert_manager_main_pending": {"alerts": []},
         "sensor.alert_manager_main_acknowledge": {"alerts": []},

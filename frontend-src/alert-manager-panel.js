@@ -48,6 +48,8 @@ const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const ALERT_MANAGER_ENTITY_IDS = [
+  "button.alert_manager_check_coherence",
+  "sensor.alert_manager_coherence_issue",
   "sensor.alert_manager_main_active",
   "sensor.alert_manager_main_pending",
   "sensor.alert_manager_main_acknowledge",

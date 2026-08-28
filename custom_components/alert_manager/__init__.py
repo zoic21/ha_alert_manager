@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    DATA_COHERENCE_RESULT,
     DATA_MANAGER,
     DATA_STATIC_REGISTERED,
     DATA_WEBSOCKET_REGISTERED,
@@ -86,6 +87,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
     manager: AlertManager | None = hass.data.pop(DATA_MANAGER, None)
+    hass.data.pop(DATA_COHERENCE_RESULT, None)
     if manager is not None:
         await manager.async_unload()
     return True

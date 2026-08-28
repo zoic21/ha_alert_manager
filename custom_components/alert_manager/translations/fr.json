@@ -399,7 +399,15 @@
     }
   },
   "entity": {
+    "button": {
+      "check_coherence": {
+        "name": "Vérifier la cohérence"
+      }
+    },
     "sensor": {
+      "coherence_issue": {
+        "name": "Entités inexistantes"
+      },
       "device_main_active": {
         "name": "Appareils en alerte"
       },

@@ -19,7 +19,10 @@ from urllib.parse import quote
 import yaml
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
+
+from .const import DATA_COHERENCE_RESULT, SIGNAL_COHERENCE_UPDATED
 
 _IGNORED_DIRECTORIES: Final = frozenset(
     {
@@ -556,6 +559,7 @@ def scan_configuration(
     return {
         "results": state.results,
         "missing_count": len(state.results),
+        "missing_entity_count": len({result["entity_id"] for result in state.results}),
         "files_scanned": len(sources) - skipped_files,
         "files_skipped": skipped_files,
         "references_checked": state.references_checked,
@@ -633,3 +637,11 @@ async def async_scan_configuration(hass: HomeAssistant) -> dict[str, Any]:
         template_by_config_entry,
         yaml_dashboards,
     )
+
+
+async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
+    """Run one scan, retain its result and notify Home Assistant entities."""
+    result = await async_scan_configuration(hass)
+    hass.data[DATA_COHERENCE_RESULT] = result
+    async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
+    return result

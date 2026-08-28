@@ -229,7 +229,7 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
     websocket_module = importlib.import_module(
         "custom_components.alert_manager.websocket"
     )
-    monkeypatch.setattr(websocket_module, "async_scan_configuration", scan)
+    monkeypatch.setattr(websocket_module, "async_run_coherence_scan", scan)
     asyncio.run(websocket_coherence_scan(hass, connection, {"id": 40}))
 
     assert connection.errors == []

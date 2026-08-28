@@ -12,7 +12,7 @@ DOMAIN: Final = "alert_manager"
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "1.8.0"
 FRONTEND_CACHE_VERSION: Final = INTEGRATION_VERSION
-PLATFORMS: Final = [Platform.SENSOR, Platform.SWITCH]
+PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
 EVENT_ALERT_RESOLVED: Final = "alert_manager_alert_resolved"
@@ -23,6 +23,7 @@ DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
 SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"
+SIGNAL_COHERENCE_UPDATED: Final = "alert_manager_coherence_updated"
 
 MAIN_DEVICE_IDENTIFIER: Final = "main"
 MAIN_DEVICE_NAME: Final = "Alert Manager - Général"
@@ -34,6 +35,8 @@ ALERT_MANAGER_ENTITY_IDS: Final = frozenset(
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
         "sensor.alert_manager_device_main_active",
+        "sensor.alert_manager_coherence_issue",
+        "button.alert_manager_check_coherence",
         "switch.alert_manager_main_monitoring",
     }
 )
@@ -57,6 +60,7 @@ HISTORY_STORAGE_VERSION: Final = 1
 DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
 DATA_WEBSOCKET_REGISTERED: HassKey = HassKey(f"{DOMAIN}_websocket_registered")
 DATA_STATIC_REGISTERED: HassKey = HassKey(f"{DOMAIN}_static_registered")
+DATA_COHERENCE_RESULT: HassKey = HassKey(f"{DOMAIN}_coherence_result")
 
 DEFAULT_DELAY: Final = 900
 DEFAULT_PENDING_DISPLAY_DELAY: Final = 10

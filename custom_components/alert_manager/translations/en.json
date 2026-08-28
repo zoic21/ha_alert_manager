@@ -399,7 +399,15 @@
     }
   },
   "entity": {
+    "button": {
+      "check_coherence": {
+        "name": "Check configuration coherence"
+      }
+    },
     "sensor": {
+      "coherence_issue": {
+        "name": "Missing entities"
+      },
       "device_main_active": {
         "name": "Devices in alert"
       },

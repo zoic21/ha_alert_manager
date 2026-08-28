@@ -1878,6 +1878,8 @@ test("native Home Assistant selectors are configured for multiple values", () =>
     entity: {
       multiple: true,
       exclude_entities: [
+        "button.alert_manager_check_coherence",
+        "sensor.alert_manager_coherence_issue",
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
@@ -1923,6 +1925,8 @@ test("custom rule sources use the native multiple entity selector", () => {
     entity: {
       multiple: true,
       exclude_entities: [
+        "button.alert_manager_check_coherence",
+        "sensor.alert_manager_coherence_issue",
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
