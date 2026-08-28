@@ -101,7 +101,7 @@ def test_battery_threshold_cache_follows_config_and_device_changes(
     assert match.condition_params == {"threshold": "50"}
 
 
-def test_runtime_battery_filter_evaluates_definitive_states(hass, entry, registry_entry):
+def test_runtime_battery_filter_evaluates_states(hass, entry, registry_entry):
     """Battery values are evaluated even when they do not cross the threshold."""
 
     async def scenario():
