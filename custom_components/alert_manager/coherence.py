@@ -188,6 +188,38 @@ def _entity_pattern(existing_entities: frozenset[str]) -> re.Pattern[str]:
     )
 
 
+def _is_part_of_concatenation(value: str, match: re.Match[str]) -> bool:
+    """Return whether a matched entity literal participates in string building."""
+    start, end = match.span(1)
+    before = value[:start].rstrip()
+    after = value[end:].lstrip()
+
+    if not before.endswith(("'", '"')):
+        return False
+    quote_char = before[-1]
+    if not after.startswith(quote_char):
+        return False
+
+    left = before[:-1].rstrip()
+    right = after[1:].lstrip()
+    return left.endswith(("+", "~", "%")) or right.startswith(
+        ("+", "~", "%", ".format")
+    )
+
+
+def _is_dynamic_reference(value: str, match: re.Match[str]) -> bool:
+    """Return whether a candidate entity ID is dynamically constructed."""
+    entity_id = match.group(1)
+    if entity_id.endswith("_"):
+        return True
+
+    remaining = value[match.end(1) :].lstrip()
+    if remaining.startswith(("(", "{", "[", "*")):
+        return True
+
+    return _is_part_of_concatenation(value, match)
+
+
 def _scalar(node: Node | None) -> str | None:
     """Return the textual value of a scalar YAML node."""
     return node.value if isinstance(node, ScalarNode) else None
@@ -356,6 +388,8 @@ def _record_scalar(
     if skip_plain_value and "{{" not in value and "{%" not in value:
         return
     for match in state.pattern.finditer(value):
+        if _is_dynamic_reference(value, match):
+            continue
         entity_id = match.group(1).lower()
         if entity_id in _IGNORED_ENTITY_REFERENCES or entity_id in state.service_ids:
             continue
