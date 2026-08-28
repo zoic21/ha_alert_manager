@@ -9,6 +9,7 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
+from .coherence import async_scan_configuration
 from .const import DATA_MANAGER
 from .manager import AlertManager
 
@@ -79,6 +80,18 @@ async def websocket_history_list(
     """Return the newest-first completed history to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.history_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command({vol.Required("type"): "alert_manager/coherence/scan"})
+async def websocket_coherence_scan(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Scan Home Assistant configuration for missing entity references."""
+    if _manager(hass, connection, msg["id"]) is None:
+        return
+    connection.send_result(msg["id"], await async_scan_configuration(hass))
 
 
 @websocket_api.require_admin
@@ -352,6 +365,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_update,
         websocket_alerts_list,
         websocket_history_list,
+        websocket_coherence_scan,
         websocket_history_config_get,
         websocket_history_config_update,
         websocket_history_clear,

@@ -119,6 +119,66 @@ test("panel is registered", () => {
   assert.ok(customElements.get("alert-manager-panel"));
 });
 
+test("coherence tab is available without starting a scan", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const tab = panel._tabs().find((item) => item.path === "/alert-manager/coherence");
+  assert.equal(tab.name, "Cohérence");
+  assert.equal(panel._coherence, null);
+});
+
+test("coherence scan runs only from its explicit action", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  const response = {
+    results: [],
+    missing_count: 0,
+    files_scanned: 4,
+    files_skipped: 0,
+    references_checked: 12,
+    duration_ms: 8,
+  };
+  const calls = [];
+  panel._hass = {
+    async callWS(message) {
+      calls.push(message);
+      return response;
+    },
+  };
+  await panel._handleClick({
+    target: {
+      closest() {
+        return { dataset: { action: "scan-coherence" } };
+      },
+    },
+  });
+  assert.deepEqual(calls, [{ type: "alert_manager/coherence/scan" }]);
+  assert.equal(panel._coherence, response);
+  assert.equal(panel._coherenceLoading, false);
+});
+
+test("coherence result actions open their exact Home Assistant target", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  let navigatedTo = null;
+  let moreInfo = null;
+  panel._navigate = (path) => { navigatedTo = path; };
+  panel._openMoreInfo = (entityId) => { moreInfo = entityId; };
+
+  const navigation = panel._nativeCoherenceActionCell({
+    link: { type: "navigate", path: "/config/automation/edit/123" },
+  });
+  navigation.listeners.click({ stopPropagation() {} });
+  assert.equal(navigatedTo, "/config/automation/edit/123");
+
+  const template = panel._nativeCoherenceActionCell({
+    link: { type: "more_info", entity_id: "sensor.template_result" },
+  });
+  template.listeners.click({ stopPropagation() {} });
+  assert.equal(moreInfo, "sensor.template_result");
+});
+
 test("reconnecting during initial load does not duplicate WebSocket requests", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -1281,6 +1341,7 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   assert.deepEqual(shell.tabs.map(({ path, name }) => ({ path, name })), [
     { path: "/alert-manager/overview", name: "Vue d’ensemble" },
     { path: "/alert-manager/history", name: "Historique" },
+    { path: "/alert-manager/coherence", name: "Cohérence" },
     { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/rules", name: "Règles personnalisées" },
     { path: "/alert-manager/settings", name: "Configuration" },
@@ -2105,6 +2166,7 @@ test("panel renders French and English from backend translation resources", () =
   assert.deepEqual(panel._tabs().map((tab) => tab.name), [
     "Overview",
     "History",
+    "Coherence",
     "Automatic monitoring",
     "Custom rules",
     "Configuration",

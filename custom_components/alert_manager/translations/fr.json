@@ -53,6 +53,38 @@
         "state": "État"
       }
     },
+    "coherence": {
+      "columns": {
+        "entity": "Entité manquante",
+        "file": "Fichier",
+        "line": "Ligne",
+        "source": "Configuration",
+        "type": "Type"
+      },
+      "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration.",
+      "empty": "Aucune référence vers une entité manquante.",
+      "not_scanned": "L’analyse n’a pas encore été lancée.",
+      "open": "Ouvrir",
+      "scan": "Lancer l’analyse",
+      "scanning": "Analyse en cours…",
+      "stats": {
+        "duration": "Durée : {duration} ms",
+        "files": "Fichiers analysés : {count}",
+        "missing": "Références invalides : {count}",
+        "references": "Références vérifiées : {count}",
+        "skipped": "Fichiers ignorés car illisibles ou invalides : {count}"
+      },
+      "title": "Cohérence de la configuration",
+      "types": {
+        "automation": "Automatisation",
+        "dashboard": "Dashboard",
+        "file": "Fichier YAML",
+        "integration": "Intégration",
+        "scene": "Scène",
+        "script": "Script",
+        "template": "Template"
+      }
+    },
     "duration": {
       "activation": "Activation en cours…",
       "hours": "{count} h",
@@ -332,6 +364,7 @@
     },
     "tabs": {
       "automatic": "Surveillance automatique",
+      "coherence": "Cohérence",
       "history": "Historique",
       "overview": "Vue d’ensemble",
       "rules": "Règles personnalisées",
