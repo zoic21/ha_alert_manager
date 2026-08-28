@@ -1,7 +1,9 @@
 {
   "domain": "alert_manager",
   "name": "Alert Manager",
-  "codeowners": ["@zoic21"],
+  "codeowners": [
+    "@zoic21"
+  ],
   "config_flow": true,
   "dependencies": [
     "frontend",
