@@ -2388,7 +2388,7 @@ test("custom rule choices use native Home Assistant selects", () => {
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
     { value: "unchanged", label: "Aucun changement" },
-    { value: "none", label: "Aucun" },
+    { value: "none", label: "Jinja" },
   ]);
   assert.equal(operator.value, "above");
   assert.deepEqual(operator.options.map((option) => option.value), [
@@ -2427,7 +2427,7 @@ test("Jinja-only rule editor hides comparison fields and requires its template",
   assert.equal(panel._notice.kind, "error");
   assert.equal(
     panel._notice.text,
-    "La condition Jinja est obligatoire lorsque la source est « Aucun ».",
+    "La condition Jinja est obligatoire lorsque la source est « Jinja ».",
   );
 });
 
