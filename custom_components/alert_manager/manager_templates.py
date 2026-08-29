@@ -16,7 +16,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .const import ALERT_MANAGER_ENTITY_IDS, CUSTOM_RULE_ALLOWED_ENTITY_IDS, DOMAIN
-from .models import AlertStatus, Rule
+from .models import AlertStatus, Rule, extract_attribute_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +27,9 @@ _LEGACY_OPERATOR_LABELS = {
     "not_contains": "Ne contient pas",
     "above": "Supérieur à",
     "below": "Inférieur à",
+    "between": "Entre",
+    "outside": "En dehors de",
+    "unchanged": "Aucun changement",
 }
 
 _JINJA_BLOCK_PATTERN = re.compile(r"{{(.*?)}}|{%(.*?)%}", re.DOTALL)
@@ -45,6 +48,12 @@ class _TemplatesMixin:
         """Return stable structured parameters for a generated rule condition."""
         if rule.source in ("none", "unchanged"):
             return {"duration": rule.duration}
+        if rule.operator == "unchanged":
+            return {
+                "source": rule.source,
+                "attribute": rule.attribute,
+                "duration": rule.duration,
+            }
         return {
             "source": rule.source,
             "attribute": rule.attribute,
@@ -66,6 +75,12 @@ class _TemplatesMixin:
         if rule.source == "unchanged":
             duration = f" pendant {rule.duration} s" if rule.duration else ""
             return f"État et attributs inchangés{duration}"
+        if rule.operator == "unchanged":
+            source = (
+                f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
+            )
+            duration = f" pendant {rule.duration} s" if rule.duration else ""
+            return f"{source} inchangé{duration}"
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         source = f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
         suffix = f" {unit}" if unit else ""
@@ -408,11 +423,11 @@ class _TemplatesMixin:
         state = self.hass.states.get(entity_id)
         if record is None or record.status is not AlertStatus.ACTIVE or state is None:
             return False
-        current = (
-            state.state
-            if rule.source in ("state", "none", "unchanged")
-            else state.attributes.get(rule.attribute or "")
-        )
+        current = state.state
+        if rule.source == "attribute":
+            _found, current = extract_attribute_value(
+                state.attributes, rule.attribute or ""
+            )
         rendered_message = self._render_rule_message(
             rule,
             state,
@@ -427,6 +442,8 @@ class _TemplatesMixin:
             if rule.source == "none"
             else "rule.unchanged"
             if rule.source == "unchanged"
+            else "rule.selected_unchanged"
+            if rule.operator == "unchanged"
             else "rule.generated"
         )
         condition_params = (
@@ -485,7 +502,10 @@ class _TemplatesMixin:
                 ),
                 (
                     "comparison_value",
-                    None if rule.source in ("none", "unchanged") else rule.value,
+                    None
+                    if rule.source in ("none", "unchanged")
+                    or rule.operator == "unchanged"
+                    else rule.value,
                 ),
                 ("attribute", rule.attribute),
             ]

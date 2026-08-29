@@ -456,6 +456,23 @@ class _ApiMixin:
             removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
             if not rule.enabled:
                 removed_entities.update(old_rule.entity_ids)
+            old_inactivity = (
+                old_rule.source == "unchanged" or old_rule.operator == "unchanged"
+            )
+            new_inactivity = rule.source == "unchanged" or rule.operator == "unchanged"
+            inactivity_changed = (old_inactivity or new_inactivity) and (
+                old_rule.source,
+                old_rule.attribute,
+                old_rule.operator,
+                old_rule.condition_template,
+            ) != (
+                rule.source,
+                rule.attribute,
+                rule.operator,
+                rule.condition_template,
+            )
+            if inactivity_changed:
+                removed_entities.update(set(old_rule.entity_ids) & set(rule.entity_ids))
             if self.monitoring_enabled:
                 self._remove_rule_instances(rule_id, removed_entities)
 

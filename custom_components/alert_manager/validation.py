@@ -265,7 +265,9 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
         raise ValueError("Rule must be an object")
     missing = _REQUIRED_RULE_KEYS - data.keys()
     if data.get("source", "state") not in ("none", "unchanged"):
-        missing |= {"operator", "value"} - data.keys()
+        missing |= {"operator"} - data.keys()
+        if data.get("operator") != "unchanged":
+            missing |= {"value"} - data.keys()
     if missing:
         raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
     if rule_id is None:

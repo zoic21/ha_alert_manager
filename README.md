@@ -154,7 +154,12 @@ Rules can:
 
 - monitor one or several entities independently;
 - use the entity state or an attribute;
-- compare with `equals`, `not equals`, `contains`, `not contains`, `above` or `below`;
+- compare with `equals`, `not equals`, `contains`, `not contains`, `above`,
+  `below`, inclusive `between`, or `outside`;
+- traverse attribute arrays with a path such as `data.*.key` and test one or
+  several extracted values;
+- use the `unchanged` operator to monitor only the main state or selected
+  attribute without other entity updates resetting the timer;
 - require the condition to remain true for a configurable duration;
 - add an optional Home Assistant Jinja condition;
 - choose the “No change” source to alert when neither the state nor its attributes

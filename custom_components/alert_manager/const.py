@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.0.0-dev20"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.5"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.6"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -132,5 +132,8 @@ OPERATORS: Final = (
     "not_contains",
     "above",
     "below",
+    "between",
+    "outside",
+    "unchanged",
 )
 VALUE_SOURCES: Final = ("state", "attribute", "unchanged", "none")

@@ -18,6 +18,7 @@ from custom_components.alert_manager.models import (
     Rule,
     advance_record,
     calculate_due_at,
+    extract_attribute_value,
     safe_float,
 )
 from custom_components.alert_manager.validation import (
@@ -41,6 +42,10 @@ from custom_components.alert_manager.validation import (
         ("not_contains", "OL CHRG", ["ERROR", "WARN"], True),
         ("above", "11.2", 9, True),
         ("below", "0.8", 1, True),
+        ("between", "10", [10, 20], True),
+        ("between", "20", [10, 20], True),
+        ("outside", "9.9", [10, 20], True),
+        ("outside", "20.1", [10, 20], True),
     ],
 )
 def test_rule_operators(operator, current, expected, matches):
@@ -79,6 +84,109 @@ def test_negative_text_operators_are_the_inverse_of_positive_operators(
     )
     expected_match = operator in ("equals", "contains")
     assert rule.matches(current) is expected_match
+
+
+@pytest.mark.parametrize(
+    ("operator", "current", "expected", "matches"),
+    [
+        ("equals", ["enjoy", "redox"], ["redox", "flow"], True),
+        ("not_equals", ["enjoy", "redox"], ["redox", "flow"], False),
+        ("contains", ["all_good", "redox_warning"], ["redox", "flow"], True),
+        ("not_contains", ["all_good", "redox_warning"], ["redox", "flow"], False),
+        ("not_equals", ["enjoy", "redox"], ["flow", "ph"], True),
+        ("outside", [15, 21], [10, 20], True),
+    ],
+)
+def test_rule_operators_compare_all_extracted_values(
+    operator, current, expected, matches
+):
+    """Positive operators match any extracted value and negatives invert that."""
+    rule = Rule(
+        id="array-rule",
+        name="Array",
+        entity_ids=["sensor.pool"],
+        operator=operator,
+        value=expected,
+        duration=0,
+        source="attribute",
+        attribute="data.*.key",
+    )
+    assert rule.matches(current) is matches
+
+
+def test_attribute_path_extracts_array_fields_and_preserves_exact_attribute_names():
+    """Dotted wildcard paths flatten matching fields without breaking exact keys."""
+    attributes = {
+        "data": [
+            {"key": "enjoy", "code": "8.33"},
+            {"key": "redox", "code": "8.34"},
+            {"code": "8.35"},
+            "invalid",
+        ],
+        "data.*.key": "literal",
+    }
+    assert extract_attribute_value(attributes, "data.*.key") == (True, "literal")
+    del attributes["data.*.key"]
+    assert extract_attribute_value(attributes, "data.*.key") == (
+        True,
+        ["enjoy", "redox"],
+    )
+    assert extract_attribute_value(attributes, "data.*.missing") == (False, None)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ([1], "exactly two"),
+        ([1, 2, 3], "exactly two"),
+        (["low", 2], "finite numeric"),
+        ([3, 2], "must not exceed"),
+        ([1, "nan"], "finite numeric"),
+    ],
+)
+def test_range_rule_rejects_missing_invalid_or_inverted_bounds(value, message):
+    """Range rules accept exactly two ordered finite numeric bounds."""
+    with pytest.raises(ValueError, match=message):
+        Rule(
+            id="bad-range",
+            name="Bad range",
+            entity_ids=["sensor.test"],
+            operator="between",
+            value=value,
+            duration=0,
+        ).validate()
+
+
+def test_selected_value_unchanged_rule_omits_comparison_value():
+    """No-change is an operator for state or attribute sources without a value."""
+    rule = validate_rule_payload(
+        {
+            "name": "Stable state",
+            "entity_ids": ["sensor.test"],
+            "source": "state",
+            "operator": "unchanged",
+            "duration": 60,
+        }
+    )
+    assert rule.operator == "unchanged"
+    assert rule.matches("anything") is True
+    assert "value" not in rule.as_dict()
+
+
+@pytest.mark.parametrize("attribute", ["*.key", "data.*key", "data..*.key"])
+def test_attribute_wildcard_path_rejects_ambiguous_syntax(attribute):
+    """The wildcard is only accepted as a complete non-root dotted segment."""
+    with pytest.raises(ValueError, match="wildcard paths"):
+        Rule(
+            id="bad-path",
+            name="Bad path",
+            entity_ids=["sensor.test"],
+            operator="equals",
+            value="value",
+            duration=0,
+            source="attribute",
+            attribute=attribute,
+        ).validate()
 
 
 def test_text_rule_values_must_be_non_empty_unique_scalars():

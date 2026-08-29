@@ -24,8 +24,10 @@ from .models import (
     AlertHistoryEntry,
     AlertRecord,
     AlertStatus,
+    Rule,
     advance_record,
     calculate_due_at,
+    extract_attribute_value,
 )
 from .packs import PACKS, PACKS_BY_ID, PackNeutral
 
@@ -504,7 +506,7 @@ class _RuntimeMixin:
 
         persisted_changed = False
         if state is not None:
-            persisted_changed = self._reset_unchanged_records_after_update(
+            persisted_changed = self._reset_inactivity_records_after_update(
                 state,
                 now,
                 emit_events=emit_events,
@@ -520,8 +522,8 @@ class _RuntimeMixin:
             record = self.records.get(alert_id)
             if record is None:
                 detected_at = (
-                    self._unchanged_detected_at(details.rule_id, state, now)
-                    if details.source == "unchanged"
+                    self._inactivity_detected_at(details.rule_id, state, now)
+                    if details.source == "unchanged" or details.operator == "unchanged"
                     else now
                 )
                 record = AlertRecord.pending(details, delay, detected_at)
@@ -579,22 +581,31 @@ class _RuntimeMixin:
             self._publish_if_changed()
         return persisted_changed
 
-    def _reset_unchanged_records_after_update(
+    def _reset_inactivity_records_after_update(
         self,
         state: State,
         now: datetime,
         *,
         emit_events: bool,
     ) -> bool:
-        """Restart inactivity windows after a state or attribute update."""
+        """Restart whole-state or selected-value inactivity windows."""
         updated_at = state.last_updated.astimezone(UTC)
         changed = False
         for rule in self._rules_by_entity.get(state.entity_id, ()):
-            if not rule.enabled or rule.source != "unchanged":
+            if not rule.enabled or (
+                rule.source != "unchanged" and rule.operator != "unchanged"
+            ):
                 continue
             alert_id = f"rule:{rule.id}:{state.entity_id}"
             record = self.records.get(alert_id)
-            if record is None or updated_at <= record.detected_at.astimezone(UTC):
+            if record is None:
+                continue
+            if rule.source == "unchanged":
+                reset = updated_at > record.detected_at.astimezone(UTC)
+            else:
+                found, current = self._rule_current_value(rule, state)
+                reset = not found or current != record.details.value
+            if not reset:
                 continue
             self.records.pop(alert_id)
             self._cancel_timer(alert_id)
@@ -605,13 +616,13 @@ class _RuntimeMixin:
                     self._fire_resolved(record, now)
         return changed
 
-    def _unchanged_detected_at(
+    def _inactivity_detected_at(
         self,
         rule_id: str | None,
         state: State,
         now: datetime,
     ) -> datetime:
-        """Anchor inactivity at the source update or a later Jinja match."""
+        """Anchor inactivity at the relevant change or a later Jinja match."""
         rule = next(
             (
                 candidate
@@ -620,11 +631,20 @@ class _RuntimeMixin:
             ),
             None,
         )
-        return (
-            now
-            if rule is not None and rule.condition_template is not None
-            else state.last_updated
-        )
+        if rule is None or rule.condition_template is not None:
+            return now
+        if rule.source == "unchanged":
+            return state.last_updated
+        if rule.source == "state":
+            return getattr(state, "last_changed", state.last_updated)
+        return now
+
+    @staticmethod
+    def _rule_current_value(rule: Rule, state: State) -> tuple[bool, Any]:
+        """Read one rule source, including dotted list-wildcard attributes."""
+        if rule.source == "attribute":
+            return extract_attribute_value(state.attributes, rule.attribute or "")
+        return True, state.state
 
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
@@ -652,13 +672,9 @@ class _RuntimeMixin:
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
-            if rule.source == "attribute" and rule.attribute not in state.attributes:
+            found, current = self._rule_current_value(rule, state)
+            if not found:
                 continue
-            current = (
-                state.state
-                if rule.source in ("state", "none", "unchanged")
-                else state.attributes.get(rule.attribute or "")
-            )
             if rule.source not in ("none", "unchanged") and not rule.matches(current):
                 continue
             if not self._rule_template_matches(rule, state, current):
@@ -674,6 +690,8 @@ class _RuntimeMixin:
                     if rule.source == "none"
                     else "rule.unchanged"
                     if rule.source == "unchanged"
+                    else "rule.selected_unchanged"
+                    if rule.operator == "unchanged"
                     else "rule.generated"
                 )
                 condition_params = self._rule_condition_params(rule, state)
@@ -694,7 +712,10 @@ class _RuntimeMixin:
                         None if rule.source in ("none", "unchanged") else rule.operator
                     ),
                     comparison_value=(
-                        None if rule.source in ("none", "unchanged") else rule.value
+                        None
+                        if rule.source in ("none", "unchanged")
+                        or rule.operator == "unchanged"
+                        else rule.value
                     ),
                     attribute=rule.attribute,
                 ),

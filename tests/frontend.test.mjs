@@ -2398,7 +2398,94 @@ test("custom rule choices use native Home Assistant selects", () => {
     "not_contains",
     "above",
     "below",
+    "between",
+    "outside",
+    "unchanged",
   ]);
+});
+
+test("range operators render two numeric bounds and save both values", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.temperature"],
+    operator: "between",
+    value: ["10", "20"],
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.match(editor, /data-field="lower-bound"[^>]*type="number"[^>]*value="10"/);
+  assert.match(editor, /data-field="upper-bound"[^>]*type="number"[^>]*value="20"/);
+  assert.doesNotMatch(editor, /data-rule-value-index/);
+
+  const values = {
+    name: "Temperature range",
+    source: "state",
+    operator: "between",
+    "lower-bound": "10",
+    "upper-bound": "20",
+    duration: "60",
+  };
+  const ruleForm = {
+    querySelector(selector) {
+      const name = selector.match(/data-field="([^"]+)"/)?.[1];
+      return name && name in values ? { value: values[name] } : null;
+    },
+    querySelectorAll() { return []; },
+    elements: { namedItem() { return null; } },
+  };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "range-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+
+  await panel._saveRule(ruleForm);
+
+  assert.deepEqual(calls[0].rule.value, ["10", "20"]);
+});
+
+test("selected no-change operator hides comparison values and stays source-specific", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.pool"],
+    source: "attribute",
+    attribute: "data.*.key",
+    operator: "unchanged",
+    value: "",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.match(editor, /data\.\*\.key/);
+  assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"|data-field="lower-bound"/);
+  assert.match(editor, /valeur ou de l’attribut sélectionné/);
+
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "stable-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+  await panel._saveRule(form(ruleValues({
+    source: "attribute",
+    attribute: "data.*.key",
+    operator: "unchanged",
+  })));
+
+  assert.equal(calls[0].rule.source, "attribute");
+  assert.equal(calls[0].rule.attribute, "data.*.key");
+  assert.equal(calls[0].rule.operator, "unchanged");
+  assert.equal(calls[0].rule.value, "");
 });
 
 test("Jinja-only rule editor hides comparison fields and requires its template", async () => {
