@@ -252,6 +252,7 @@ class AlertManagerPanel extends HTMLElement {
     this._automaticMapDraft = null;
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
+    this._moreInfoScrollRestore = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("keydown", (event) => this._handleKeydown(event));
@@ -379,6 +380,7 @@ class AlertManagerPanel extends HTMLElement {
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
     this._stopRuleEditorResize();
+    this._cancelMoreInfoScrollRestore();
   }
 
   async _load() {
@@ -1906,11 +1908,59 @@ class AlertManagerPanel extends HTMLElement {
 
   _openMoreInfo(entityId) {
     if (!this._hass?.states?.[entityId]) return;
+    this._preserveOverviewScrollAfterMoreInfo();
     this.dispatchEvent(new CustomEvent("hass-more-info", {
       bubbles: true,
       composed: true,
       detail: { entityId },
     }));
+  }
+
+  _overviewContentScroller() {
+    const tablePage = this.shadowRoot?.querySelector?.(
+      '[data-alert-table-page="overview"]',
+    );
+    const subpage = tablePage?.shadowRoot?.querySelector?.("hass-tabs-subpage");
+    return subpage?.shadowRoot?.querySelector?.(".content") ?? null;
+  }
+
+  _dialogEventTarget() {
+    return globalThis.document;
+  }
+
+  _cancelMoreInfoScrollRestore() {
+    const pending = this._moreInfoScrollRestore;
+    if (!pending) return;
+    pending.target?.removeEventListener?.("dialog-closed", pending.listener, true);
+    this._moreInfoScrollRestore = null;
+  }
+
+  _preserveOverviewScrollAfterMoreInfo() {
+    this._cancelMoreInfoScrollRestore();
+    if (!this._narrow || this._activeTab !== "overview") return;
+    const scroller = this._overviewContentScroller();
+    const target = this._dialogEventTarget();
+    if (!scroller || typeof target?.addEventListener !== "function") return;
+    const scrollTop = scroller.scrollTop;
+    const listener = (event) => {
+      if (event.detail?.dialog !== "ha-more-info-dialog") return;
+      this._cancelMoreInfoScrollRestore();
+      const restore = () => {
+        if (!this.isConnected) return;
+        const currentScroller = this._overviewContentScroller();
+        if (currentScroller) currentScroller.scrollTop = scrollTop;
+      };
+      restore();
+      const schedule = globalThis.requestAnimationFrame
+        ?? globalThis.window?.requestAnimationFrame;
+      if (typeof schedule === "function") {
+        schedule(() => schedule(restore));
+      } else {
+        globalThis.setTimeout?.(restore, 0);
+      }
+    };
+    this._moreInfoScrollRestore = { target, listener };
+    target.addEventListener("dialog-closed", listener, true);
   }
 
   _navigate(path, newTabInBrowser = false) {

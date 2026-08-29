@@ -245,6 +245,67 @@ test("coherence result actions open their exact Home Assistant target", () => {
   assert.equal(moreInfo, "sensor.template_result");
 });
 
+test("closing more info restores the mobile overview scroll position", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const scroller = { scrollTop: 96 };
+  const listeners = new Map();
+  const eventTarget = {
+    addEventListener(name, listener) { listeners.set(name, listener); },
+    removeEventListener(name, listener) {
+      if (listeners.get(name) === listener) listeners.delete(name);
+    },
+  };
+  panel._hass = { states: { "sensor.mobile": {} } };
+  panel._narrow = true;
+  panel._overviewContentScroller = () => scroller;
+  panel._dialogEventTarget = () => eventTarget;
+  const previousAnimationFrame = globalThis.requestAnimationFrame;
+  const animationFrames = [];
+  globalThis.requestAnimationFrame = (callback) => {
+    animationFrames.push(callback);
+    return animationFrames.length;
+  };
+  try {
+    panel._openMoreInfo("sensor.mobile");
+    assert.equal(panel.dispatchedEvent.detail.entityId, "sensor.mobile");
+    listeners.get("dialog-closed")({ detail: { dialog: "another-dialog" } });
+    assert.equal(listeners.has("dialog-closed"), true);
+    scroller.scrollTop = 0;
+    listeners.get("dialog-closed")({ detail: { dialog: "ha-more-info-dialog" } });
+    assert.equal(scroller.scrollTop, 96);
+    scroller.scrollTop = 24;
+    animationFrames.shift()();
+    scroller.scrollTop = 12;
+    animationFrames.shift()();
+  } finally {
+    globalThis.requestAnimationFrame = previousAnimationFrame;
+  }
+  assert.equal(scroller.scrollTop, 96);
+  assert.equal(listeners.has("dialog-closed"), false);
+});
+
+test("more info scroll restoration is limited to the mobile overview", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const eventTarget = {
+    calls: 0,
+    addEventListener() { this.calls += 1; },
+    removeEventListener() {},
+  };
+  panel._hass = { states: { "sensor.desktop": {} } };
+  panel._narrow = false;
+  panel._dialogEventTarget = () => eventTarget;
+  panel._overviewContentScroller = () => ({ scrollTop: 42 });
+  panel._openMoreInfo("sensor.desktop");
+  assert.equal(eventTarget.calls, 0);
+
+  panel._narrow = true;
+  panel._activeTab = "coherence";
+  panel._openMoreInfo("sensor.desktop");
+  assert.equal(eventTarget.calls, 0);
+});
+
 test("reconnecting during initial load does not duplicate WebSocket requests", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
