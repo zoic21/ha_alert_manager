@@ -172,7 +172,7 @@ const makeTableState = (kind, preferences = {}) => {
   return {
     search: "",
     filters: {
-      status: [],
+      status: kind === "overview" ? ["active"] : [],
       device: [],
       area: [],
       rule: [],

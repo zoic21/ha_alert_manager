@@ -921,6 +921,16 @@ test("dashboard renders one compact table with the required default columns and 
   ]);
   assert.equal(panel._tableState.overview.sortBy, "status");
   assert.equal(panel._tableState.overview.sortDirection, "asc");
+  assert.deepEqual(panel._tableState.overview.filters.status, ["active"]);
+  assert.equal(panel._filterCount("overview"), 1);
+  assert.deepEqual(
+    panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status),
+    ["active"],
+  );
+  assert.match(
+    html,
+    /data-table-filter-option="status" data-filter-value="active" checked/,
+  );
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
   assert.match(html, /slot="filter-pane"/);
   assert.match(html, /slot="selection-bar"/);
@@ -972,7 +982,9 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.columns.timeline.maxWidth, undefined);
   assert.equal(table.columns.timeline.flex, 1.2);
   assert.equal(table.columns.condition.showNarrow, false);
-  assert.equal(table.data.length, 3);
+  assert.equal(table.data.length, 1);
+  assert.equal(table.data[0].status, "active");
+  assert.equal(table.filters, 1);
   assert.equal(table.filter, "garage");
   assert.equal(table.id, "id");
   assert.deepEqual(table.initialSorting, { column: "status", direction: "asc" });
@@ -1109,6 +1121,7 @@ test("date range filtering preserves the selected start and end times", () => {
 
 test("native grouping works for device, area, rule and status and remembers collapsed groups", () => {
   const panel = tablePanel();
+  panel._resetTableFilters("overview");
   const rows = panel._filteredTableRows("overview", panel._tableRows("overview"));
   const data = panel._nativeTableData("overview", rows);
   assert.ok(new Set(data.map((row) => row.device_group)).size >= 2);
@@ -1137,6 +1150,7 @@ test("native grouping works for device, area, rule and status and remembers coll
 
 test("sorting handles dates, numeric values and text in both directions", () => {
   const panel = tablePanel();
+  panel._resetTableFilters("overview");
   const rows = panel._tableRows("overview");
   assert.deepEqual(
     panel._filteredTableRows("overview", rows).map((row) => row.status),
@@ -1859,7 +1873,7 @@ test("overview status summaries filter the table directly", async () => {
   assert.match(html, /Alertes à venir<\/span><strong class="pending">3<\/strong>/);
   assert.match(html, /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
   assert.ok(html.indexOf("Alertes à venir") < html.indexOf("Alertes acquittées"));
-  assert.match(html, /data-action="filter-summary-status" data-status="active"[^>]*aria-pressed="false"/);
+  assert.match(html, /data-action="filter-summary-status" data-status="active"[^>]*aria-pressed="true"/);
   assert.match(html, /data-action="filter-summary-status" data-status="pending"/);
   panel._render = () => {};
   await panel._handleClick(actionEvent("filter-summary-status", undefined, { status: "pending" }));
