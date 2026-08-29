@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryChange
@@ -502,15 +502,31 @@ class _RuntimeMixin:
                 self._publish_if_changed()
             return False
 
-        candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed = False
+        if state is not None:
+            persisted_changed = self._reset_unchanged_records_after_update(
+                state,
+                now,
+                emit_events=emit_events,
+            )
+        existing_ids = {
+            alert_id
+            for alert_id, record in self.records.items()
+            if record.details.entity_id == entity_id
+        }
+        candidates = self._build_candidates(state) if state is not None else {}
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
             if record is None:
-                record = AlertRecord.pending(details, delay, now)
+                detected_at = (
+                    self._unchanged_detected_at(details.rule_id, state, now)
+                    if details.source == "unchanged"
+                    else now
+                )
+                record = AlertRecord.pending(details, delay, detected_at)
                 record.visible_at = calculate_due_at(
-                    now,
+                    detected_at,
                     min(self.config["pending_display_delay"], delay),
                 )
                 self.records[alert_id] = record
@@ -563,6 +579,53 @@ class _RuntimeMixin:
             self._publish_if_changed()
         return persisted_changed
 
+    def _reset_unchanged_records_after_update(
+        self,
+        state: State,
+        now: datetime,
+        *,
+        emit_events: bool,
+    ) -> bool:
+        """Restart inactivity windows after a state or attribute update."""
+        updated_at = state.last_updated.astimezone(UTC)
+        changed = False
+        for rule in self._rules_by_entity.get(state.entity_id, ()):
+            if not rule.enabled or rule.source != "unchanged":
+                continue
+            alert_id = f"rule:{rule.id}:{state.entity_id}"
+            record = self.records.get(alert_id)
+            if record is None or updated_at <= record.detected_at.astimezone(UTC):
+                continue
+            self.records.pop(alert_id)
+            self._cancel_timer(alert_id)
+            changed = True
+            if record.status is AlertStatus.ACTIVE:
+                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                if emit_events:
+                    self._fire_resolved(record, now)
+        return changed
+
+    def _unchanged_detected_at(
+        self,
+        rule_id: str | None,
+        state: State,
+        now: datetime,
+    ) -> datetime:
+        """Anchor inactivity at the source update or a later Jinja match."""
+        rule = next(
+            (
+                candidate
+                for candidate in self._rules_by_entity.get(state.entity_id, ())
+                if candidate.id == rule_id
+            ),
+            None,
+        )
+        return (
+            now
+            if rule is not None and rule.condition_template is not None
+            else state.last_updated
+        )
+
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
         if not self._is_base_eligible(state.entity_id):
@@ -593,10 +656,10 @@ class _RuntimeMixin:
                 continue
             current = (
                 state.state
-                if rule.source == "state"
+                if rule.source in ("state", "none", "unchanged")
                 else state.attributes.get(rule.attribute or "")
             )
-            if not rule.matches(current):
+            if rule.source not in ("none", "unchanged") and not rule.matches(current):
                 continue
             if not self._rule_template_matches(rule, state, current):
                 continue
@@ -606,7 +669,13 @@ class _RuntimeMixin:
             condition_key = None
             condition_params = None
             if rendered_message is None:
-                condition_key = "rule.generated"
+                condition_key = (
+                    "rule.jinja"
+                    if rule.source == "none"
+                    else "rule.unchanged"
+                    if rule.source == "unchanged"
+                    else "rule.generated"
+                )
                 condition_params = self._rule_condition_params(rule, state)
             result[alert_id] = (
                 self._details(
@@ -621,8 +690,12 @@ class _RuntimeMixin:
                     rule_name=rule.name,
                     message=rendered_message,
                     source=rule.source,
-                    operator=rule.operator,
-                    comparison_value=rule.value,
+                    operator=(
+                        None if rule.source in ("none", "unchanged") else rule.operator
+                    ),
+                    comparison_value=(
+                        None if rule.source in ("none", "unchanged") else rule.value
+                    ),
                     attribute=rule.attribute,
                 ),
                 rule.duration,

@@ -46,7 +46,9 @@
         "duration": "for {duration}"
       },
       "rule": {
-        "generated": "{source} {operator} {expected}{unit}{duration}"
+        "generated": "{source} {operator} {expected}{unit}{duration}",
+        "jinja": "Jinja condition{duration}",
+        "unchanged": "State and attributes unchanged{duration}"
       },
       "sources": {
         "attribute": "Attribute {attribute}",
@@ -196,14 +198,18 @@
       "condition": "Condition",
       "condition_template": "Additional Jinja condition",
       "condition_template_help": "Optional. The template must return true in addition to the comparison. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_only": "Jinja condition",
+      "condition_template_only_help": "Required. The template must return true to trigger the alert; no other comparison is evaluated. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_unchanged_help": "Optional. The template must return true in addition to the state and attributes remaining unchanged. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_required": "The Jinja condition is required when the source is “None”.",
       "create": "Create",
       "delete_confirm": "Delete rule “{name}”?",
-      "description": "Simple comparisons on the state or an attribute.",
+      "description": "Comparisons, no-change monitoring and Jinja conditions for your entities.",
       "duration": "Duration",
       "discard_confirm": "Discard unsaved rule changes?",
       "edit_visually": "Edit visually",
       "edit_yaml": "Edit in YAML",
-      "editor_condition_help": "Define the value that triggers the alert.",
+      "editor_condition_help": "Define what triggers the alert.",
       "editor_information": "Information",
       "editor_information_help": "Identify the rule and select the monitored entities.",
       "editor_trigger": "Trigger",
@@ -222,11 +228,13 @@
       "operator": "Operator",
       "source": "Source",
       "source_attribute": "Attribute",
+      "source_none": "None",
       "source_state": "Main state",
+      "source_unchanged": "No change",
       "title": "Custom rules",
       "value": "Comparison value",
       "values": "Comparison values",
-      "yaml_help": "The rule supports the Alert Manager comparison and an optional Jinja condition_template. Automation and, or and not groups are not supported.",
+      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. With source: unchanged, the state and attributes are monitored for changes and condition_template remains optional. With source: none, only condition_template is evaluated and it is required. Automation and, or and not groups are not supported.",
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule"
     },

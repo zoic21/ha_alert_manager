@@ -133,4 +133,4 @@ OPERATORS: Final = (
     "above",
     "below",
 )
-VALUE_SOURCES: Final = ("state", "attribute")
+VALUE_SOURCES: Final = ("state", "attribute", "unchanged", "none")

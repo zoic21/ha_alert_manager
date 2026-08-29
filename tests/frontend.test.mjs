@@ -245,6 +245,67 @@ test("coherence result actions open their exact Home Assistant target", () => {
   assert.equal(moreInfo, "sensor.template_result");
 });
 
+test("closing more info restores the mobile overview scroll position", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const scroller = { scrollTop: 96 };
+  const listeners = new Map();
+  const eventTarget = {
+    addEventListener(name, listener) { listeners.set(name, listener); },
+    removeEventListener(name, listener) {
+      if (listeners.get(name) === listener) listeners.delete(name);
+    },
+  };
+  panel._hass = { states: { "sensor.mobile": {} } };
+  panel._narrow = true;
+  panel._overviewContentScroller = () => scroller;
+  panel._dialogEventTarget = () => eventTarget;
+  const previousAnimationFrame = globalThis.requestAnimationFrame;
+  const animationFrames = [];
+  globalThis.requestAnimationFrame = (callback) => {
+    animationFrames.push(callback);
+    return animationFrames.length;
+  };
+  try {
+    panel._openMoreInfo("sensor.mobile");
+    assert.equal(panel.dispatchedEvent.detail.entityId, "sensor.mobile");
+    listeners.get("dialog-closed")({ detail: { dialog: "another-dialog" } });
+    assert.equal(listeners.has("dialog-closed"), true);
+    scroller.scrollTop = 0;
+    listeners.get("dialog-closed")({ detail: { dialog: "ha-more-info-dialog" } });
+    assert.equal(scroller.scrollTop, 96);
+    scroller.scrollTop = 24;
+    animationFrames.shift()();
+    scroller.scrollTop = 12;
+    animationFrames.shift()();
+  } finally {
+    globalThis.requestAnimationFrame = previousAnimationFrame;
+  }
+  assert.equal(scroller.scrollTop, 96);
+  assert.equal(listeners.has("dialog-closed"), false);
+});
+
+test("more info scroll restoration is limited to the mobile overview", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const eventTarget = {
+    calls: 0,
+    addEventListener() { this.calls += 1; },
+    removeEventListener() {},
+  };
+  panel._hass = { states: { "sensor.desktop": {} } };
+  panel._narrow = false;
+  panel._dialogEventTarget = () => eventTarget;
+  panel._overviewContentScroller = () => ({ scrollTop: 42 });
+  panel._openMoreInfo("sensor.desktop");
+  assert.equal(eventTarget.calls, 0);
+
+  panel._narrow = true;
+  panel._activeTab = "coherence";
+  panel._openMoreInfo("sensor.desktop");
+  assert.equal(eventTarget.calls, 0);
+});
+
 test("reconnecting during initial load does not duplicate WebSocket requests", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -860,6 +921,16 @@ test("dashboard renders one compact table with the required default columns and 
   ]);
   assert.equal(panel._tableState.overview.sortBy, "status");
   assert.equal(panel._tableState.overview.sortDirection, "asc");
+  assert.deepEqual(panel._tableState.overview.filters.status, ["active"]);
+  assert.equal(panel._filterCount("overview"), 1);
+  assert.deepEqual(
+    panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status),
+    ["active"],
+  );
+  assert.match(
+    html,
+    /data-table-filter-option="status" data-filter-value="active" checked/,
+  );
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="overview"[\s\S]*selectable/);
   assert.match(html, /slot="filter-pane"/);
   assert.match(html, /slot="selection-bar"/);
@@ -911,7 +982,9 @@ test("native Home Assistant data table receives columns, rows, sort and visibili
   assert.equal(table.columns.timeline.maxWidth, undefined);
   assert.equal(table.columns.timeline.flex, 1.2);
   assert.equal(table.columns.condition.showNarrow, false);
-  assert.equal(table.data.length, 3);
+  assert.equal(table.data.length, 1);
+  assert.equal(table.data[0].status, "active");
+  assert.equal(table.filters, 1);
   assert.equal(table.filter, "garage");
   assert.equal(table.id, "id");
   assert.deepEqual(table.initialSorting, { column: "status", direction: "asc" });
@@ -1048,6 +1121,7 @@ test("date range filtering preserves the selected start and end times", () => {
 
 test("native grouping works for device, area, rule and status and remembers collapsed groups", () => {
   const panel = tablePanel();
+  panel._resetTableFilters("overview");
   const rows = panel._filteredTableRows("overview", panel._tableRows("overview"));
   const data = panel._nativeTableData("overview", rows);
   assert.ok(new Set(data.map((row) => row.device_group)).size >= 2);
@@ -1076,6 +1150,7 @@ test("native grouping works for device, area, rule and status and remembers coll
 
 test("sorting handles dates, numeric values and text in both directions", () => {
   const panel = tablePanel();
+  panel._resetTableFilters("overview");
   const rows = panel._tableRows("overview");
   assert.deepEqual(
     panel._filteredTableRows("overview", rows).map((row) => row.status),
@@ -1547,6 +1622,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
+  assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
+  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('id="excluded-entities"'));
+  assert.ok(settings.indexOf('id="excluded-entities"') < settings.indexOf('id="excluded-devices"'));
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
   assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
   assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
@@ -1564,6 +1642,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.settings-form\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
   assert.match(styles, /\.ignored-reference-chips\{[^}]*flex-wrap:wrap/);
+  assert.match(styles, /\.ignored-reference-add\{display:flex;align-items:flex-start;gap:8px\}/);
+  assert.match(styles, /\.ignored-reference-add ha-input\{flex:0 1 420px\}/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
   assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
@@ -1793,7 +1873,7 @@ test("overview status summaries filter the table directly", async () => {
   assert.match(html, /Alertes à venir<\/span><strong class="pending">3<\/strong>/);
   assert.match(html, /Alertes acquittées<\/span><strong class="acknowledged">4<\/strong>/);
   assert.ok(html.indexOf("Alertes à venir") < html.indexOf("Alertes acquittées"));
-  assert.match(html, /data-action="filter-summary-status" data-status="active"[^>]*aria-pressed="false"/);
+  assert.match(html, /data-action="filter-summary-status" data-status="active"[^>]*aria-pressed="true"/);
   assert.match(html, /data-action="filter-summary-status" data-status="pending"/);
   panel._render = () => {};
   await panel._handleClick(actionEvent("filter-summary-status", undefined, { status: "pending" }));
@@ -2307,6 +2387,8 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
+    { value: "unchanged", label: "Aucun changement" },
+    { value: "none", label: "Aucun" },
   ]);
   assert.equal(operator.value, "above");
   assert.deepEqual(operator.options.map((option) => option.value), [
@@ -2317,6 +2399,92 @@ test("custom rule choices use native Home Assistant selects", () => {
     "above",
     "below",
   ]);
+});
+
+test("Jinja-only rule editor hides comparison fields and requires its template", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    source: "none",
+    condition_template: "{{ value == 'ready' }}",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.doesNotMatch(editor, /id="rule-operator"/);
+  assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
+  assert.match(editor, /<span class="field-label">Condition Jinja<\/span><ha-selector id="rule-condition-template" required aria-required="true">/);
+  assert.match(editor, /aucune autre comparaison n’est évaluée/);
+
+  const calls = [];
+  panel._hass = { callWS: async (message) => { calls.push(message); return message.rule; } };
+  panel._render = () => {};
+  panel._editingRule.condition_template = "";
+  await panel._saveRule(form(ruleValues({ source: "none" })));
+  assert.equal(calls.length, 0);
+  assert.equal(panel._notice.kind, "error");
+  assert.equal(
+    panel._notice.text,
+    "La condition Jinja est obligatoire lorsque la source est « Aucun ».",
+  );
+});
+
+test("normal comparison rules still save without a Jinja condition", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = { entity_ids: ["sensor.one"], condition_template: "" };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "normal-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+
+  await panel._saveRule(form(ruleValues({ entity_ids: ["sensor.one"] })));
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.source, "state");
+  assert.equal(calls[0].rule.condition_template, null);
+});
+
+test("unchanged rule hides comparison fields and keeps Jinja optional", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    source: "unchanged",
+    condition_template: "",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.doesNotMatch(editor, /id="rule-operator"/);
+  assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
+  assert.match(editor, /Condition Jinja supplémentaire/);
+  assert.match(editor, /absence de changement de l’état et des attributs/);
+  assert.doesNotMatch(editor, /rule-condition-template" required/);
+
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "unchanged-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+  await panel._saveRule(form(ruleValues({ source: "unchanged" })));
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.source, "unchanged");
+  assert.equal(calls[0].rule.operator, "equals");
+  assert.equal(calls[0].rule.value, "");
+  assert.equal(calls[0].rule.condition_template, null);
 });
 
 test("rule editor renders multiple native value inputs with compact actions", () => {
@@ -2630,6 +2798,11 @@ test("structured automatic and generated rule conditions are localized", () => {
       duration: 900,
     },
   }), "State greater than 9 °C for 15 min");
+  assert.equal(panel._conditionText({
+    condition: "État et attributs inchangés pendant 900 s",
+    condition_key: "rule.unchanged",
+    condition_params: { duration: 900 },
+  }), "State and attributes unchanged for 15 min");
   assert.equal(panel._conditionText({ condition: "User text" }), "User text");
 
   const table = tablePanel();

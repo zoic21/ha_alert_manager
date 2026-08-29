@@ -542,6 +542,148 @@ def test_custom_rule_requires_its_optional_jinja_condition(hass, entry):
     run(scenario())
 
 
+def test_jinja_only_rule_uses_only_its_template_and_keeps_duration(
+    hass, entry, set_now
+):
+    """A comparison-free rule follows Jinja while retaining pending timing."""
+    start = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "comparison-does-not-matter")
+    hass.states.set("input_boolean.guard", "on")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Pure Jinja",
+                "entity_ids": ["sensor.source"],
+                "source": "none",
+                "duration": 60,
+                "condition_template": "{{ is_state('input_boolean.guard', 'on') }}",
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.due_at == start + timedelta(seconds=60)
+        assert record.details.condition_key == "rule.jinja"
+        assert record.details.operator is None
+        assert record.details.comparison_value is None
+
+        hass.states.set("input_boolean.guard", "off")
+        manager._state_changed(Event({"entity_id": "input_boolean.guard"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in manager.records
+
+    run(scenario())
+
+
+def test_unchanged_rule_resets_for_state_and_attribute_updates(hass, entry, set_now):
+    """No-change rules restart on either part of a Home Assistant state."""
+    start = datetime(2026, 8, 29, 9, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "idle", {"sequence": 1})
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "No updates",
+                "entity_ids": ["sensor.source"],
+                "source": "unchanged",
+                "duration": 60,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        record = manager.records[alert_id]
+        assert record.detected_at == start
+        assert record.due_at == start + timedelta(seconds=60)
+        assert record.details.condition_key == "rule.unchanged"
+        assert record.details.operator is None
+        assert record.details.comparison_value is None
+
+        attribute_update = start + timedelta(seconds=30)
+        set_now(attribute_update)
+        hass.states.set("sensor.source", "idle", {"sequence": 2})
+        await manager.async_evaluate_entity("sensor.source")
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.detected_at == attribute_update
+        assert record.due_at == attribute_update + timedelta(seconds=60)
+
+        set_now(start + timedelta(seconds=45))
+        hass.states.set(
+            "sensor.source",
+            "idle",
+            {"sequence": 2},
+            last_updated=attribute_update,
+        )
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].detected_at == attribute_update
+
+        set_now(attribute_update + timedelta(seconds=61))
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+        state_update = start + timedelta(seconds=100)
+        set_now(state_update)
+        hass.states.set("sensor.source", "running", {"sequence": 2})
+        await manager.async_evaluate_entity("sensor.source")
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.detected_at == state_update
+        assert record.due_at == state_update + timedelta(seconds=60)
+        resolved = [
+            data
+            for event_type, data in hass.bus.fired
+            if event_type == EVENT_ALERT_RESOLVED and data["id"] == alert_id
+        ]
+        assert len(resolved) == 1
+
+    run(scenario())
+
+
+def test_unchanged_rule_accepts_an_optional_jinja_filter(hass, entry, set_now):
+    """Jinja can filter inactivity but is not required by validation."""
+    start = datetime(2026, 8, 29, 10, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "idle")
+    hass.states.set("input_boolean.guard", "off")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Filtered inactivity",
+                "entity_ids": ["sensor.source"],
+                "source": "unchanged",
+                "duration": 60,
+                "condition_template": ("{{ is_state('input_boolean.guard', 'on') }}"),
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        assert alert_id not in manager.records
+
+        set_now(start + timedelta(seconds=61))
+        hass.states.set("input_boolean.guard", "on")
+        manager._state_changed(Event({"entity_id": "input_boolean.guard"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.detected_at == start + timedelta(seconds=61)
+
+        set_now(start + timedelta(seconds=122))
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+    run(scenario())
+
+
 def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
     """Invalid templates never reach storage or runtime evaluation."""
     hass.states.set("sensor.source", "on")

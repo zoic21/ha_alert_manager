@@ -49,6 +49,50 @@ def test_rule_yaml_serialization_round_trip() -> None:
     assert parsed.value == 33
 
 
+def test_jinja_only_rule_yaml_omits_irrelevant_comparison_fields() -> None:
+    """Pure Jinja YAML remains concise and round-trips through shared validation."""
+    rule = parse_rule_yaml(
+        """name: Pure Jinja
+enabled: true
+entity_ids:
+  - sensor.bay_temperature
+source: none
+duration: 30
+message: null
+condition_template: "{{ value | float(0) > 33 }}"
+"""
+    )
+
+    rendered = dump_rule_yaml(rule)
+    assert "operator:" not in rendered
+    assert "value:" not in rendered
+    parsed = parse_rule_yaml(rendered)
+    assert parsed.source == "none"
+    assert parsed.condition_template == "{{ value | float(0) > 33 }}"
+
+
+def test_unchanged_rule_yaml_keeps_jinja_optional_and_omits_comparison() -> None:
+    """No-change YAML contains only fields that affect inactivity monitoring."""
+    rule = parse_rule_yaml(
+        """name: No updates
+enabled: true
+entity_ids:
+  - sensor.bay_temperature
+source: unchanged
+duration: 300
+message: null
+condition_template: null
+"""
+    )
+
+    rendered = dump_rule_yaml(rule)
+    assert "operator:" not in rendered
+    assert "value:" not in rendered
+    parsed = parse_rule_yaml(rendered)
+    assert parsed.source == "unchanged"
+    assert parsed.condition_template is None
+
+
 def test_rule_yaml_syntax_and_business_errors_are_clear() -> None:
     """Syntax and rule-model failures are distinct safe validation failures."""
     with pytest.raises(ValueError, match="Invalid YAML"):

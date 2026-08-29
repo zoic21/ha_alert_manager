@@ -157,6 +157,10 @@ Une règle peut :
 - comparer avec `equals`, `not equals`, `contains`, `not contains`, `above` ou `below` ;
 - demander que la condition reste vraie pendant une durée configurable ;
 - ajouter une condition Jinja Home Assistant facultative ;
+- choisir la source « Aucun changement » pour alerter si ni l’état ni les attributs
+  n’évoluent pendant la durée configurée, avec une condition Jinja facultative ;
+- choisir la source « Aucun » pour utiliser une condition Jinja obligatoire comme
+  unique critère de déclenchement ;
 - générer un message Jinja personnalisé avec les données des entités.
 
 Cela couvre par exemple les températures anormales, la consommation électrique, l’âge d’une sauvegarde, des codes d’erreur ou presque n’importe quel état exposé par Home Assistant.

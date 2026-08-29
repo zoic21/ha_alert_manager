@@ -46,7 +46,9 @@
         "duration": "pendant {duration}"
       },
       "rule": {
-        "generated": "{source} {operator} {expected}{unit}{duration}"
+        "generated": "{source} {operator} {expected}{unit}{duration}",
+        "jinja": "Condition Jinja{duration}",
+        "unchanged": "État et attributs inchangés{duration}"
       },
       "sources": {
         "attribute": "Attribut {attribute}",
@@ -196,14 +198,18 @@
       "condition": "Condition",
       "condition_template": "Condition Jinja supplémentaire",
       "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
+      "condition_template_only": "Condition Jinja",
+      "condition_template_only_help": "Obligatoire. Le template doit renvoyer true pour déclencher l’alerte ; aucune autre comparaison n’est évaluée. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
+      "condition_template_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de l’état et des attributs. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
+      "condition_template_required": "La condition Jinja est obligatoire lorsque la source est « Aucun ».",
       "create": "Créer",
       "delete_confirm": "Supprimer la règle « {name} » ?",
-      "description": "Comparaisons simples sur l’état ou un attribut.",
+      "description": "Comparaisons, absence de changement et conditions Jinja sur vos entités.",
       "duration": "Durée",
       "discard_confirm": "Abandonner les modifications non enregistrées de la règle ?",
       "edit_visually": "Modifier visuellement",
       "edit_yaml": "Modifier en YAML",
-      "editor_condition_help": "Définissez la valeur qui doit déclencher l’alerte.",
+      "editor_condition_help": "Définissez ce qui doit déclencher l’alerte.",
       "editor_information": "Informations",
       "editor_information_help": "Identifiez la règle et choisissez les entités surveillées.",
       "editor_trigger": "Déclenchement",
@@ -222,11 +228,13 @@
       "operator": "Opérateur",
       "source": "Source",
       "source_attribute": "Attribut",
+      "source_none": "Aucun",
       "source_state": "État principal",
+      "source_unchanged": "Aucun changement",
       "title": "Règles personnalisées",
       "value": "Valeur de comparaison",
       "values": "Valeurs de comparaison",
-      "yaml_help": "La règle prend en charge la comparaison Alert Manager et une condition_template Jinja facultative. Les groupes d’automatisation and, or et not ne sont pas pris en charge.",
+      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée et condition_template reste facultative. Avec source: none, seule condition_template est évaluée et elle devient obligatoire. Les groupes d’automatisation and, or et not ne sont pas pris en charge.",
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML"
     },

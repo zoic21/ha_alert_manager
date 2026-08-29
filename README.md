@@ -157,6 +157,10 @@ Rules can:
 - compare with `equals`, `not equals`, `contains`, `not contains`, `above` or `below`;
 - require the condition to remain true for a configurable duration;
 - add an optional Home Assistant Jinja condition;
+- choose the “No change” source to alert when neither the state nor its attributes
+  change for the configured duration, with an optional Jinja condition;
+- choose the “None” source to use a required Jinja condition as the only trigger
+  criterion;
 - generate a custom Jinja message with live entity data.
 
 Example use cases include temperature limits, abnormal power consumption, backup age, device error codes or almost any state Home Assistant exposes.

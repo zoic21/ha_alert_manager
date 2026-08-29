@@ -43,6 +43,8 @@ class _TemplatesMixin:
 
     def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
         """Return stable structured parameters for a generated rule condition."""
+        if rule.source in ("none", "unchanged"):
+            return {"duration": rule.duration}
         return {
             "source": rule.source,
             "attribute": rule.attribute,
@@ -58,6 +60,12 @@ class _TemplatesMixin:
 
     def _rule_condition(self, rule: Rule, state: State) -> str:
         """Build a compact human-readable rule condition."""
+        if rule.source == "none":
+            duration = f" pendant {rule.duration} s" if rule.duration else ""
+            return f"Condition Jinja{duration}"
+        if rule.source == "unchanged":
+            duration = f" pendant {rule.duration} s" if rule.duration else ""
+            return f"État et attributs inchangés{duration}"
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         source = f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
         suffix = f" {unit}" if unit else ""
@@ -402,7 +410,7 @@ class _TemplatesMixin:
             return False
         current = (
             state.state
-            if rule.source == "state"
+            if rule.source in ("state", "none", "unchanged")
             else state.attributes.get(rule.attribute or "")
         )
         rendered_message = self._render_rule_message(
@@ -412,7 +420,15 @@ class _TemplatesMixin:
             force=True,
         )
         condition = rendered_message or self._rule_condition(rule, state)
-        condition_key = None if rendered_message is not None else "rule.generated"
+        condition_key = (
+            None
+            if rendered_message is not None
+            else "rule.jinja"
+            if rule.source == "none"
+            else "rule.unchanged"
+            if rule.source == "unchanged"
+            else "rule.generated"
+        )
         condition_params = (
             None
             if rendered_message is not None
@@ -463,8 +479,14 @@ class _TemplatesMixin:
                 changed = True
             metadata = [
                 ("source", rule.source),
-                ("operator", rule.operator),
-                ("comparison_value", rule.value),
+                (
+                    "operator",
+                    None if rule.source in ("none", "unchanged") else rule.operator,
+                ),
+                (
+                    "comparison_value",
+                    None if rule.source in ("none", "unchanged") else rule.value,
+                ),
                 ("attribute", rule.attribute),
             ]
             if record.status is not AlertStatus.ACTIVE:
