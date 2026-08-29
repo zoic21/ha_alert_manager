@@ -176,6 +176,7 @@ AlertManagerPanel.prototype._saveRule = async function(form) {
   if (this._editingRule !== null && this._notice?.kind === "error") {
     this._ruleEditorError = this._notice.text;
     this._notice = null;
+    this.shadowRoot?.querySelector?.('.page-alert[alert-type="error"]')?.remove?.();
     this._refreshRuleEditor();
   }
 };
