@@ -41,8 +41,6 @@ jobs:
       - uses: home-assistant/actions/hassfest@master
 
   hacs:
-    # hacs/action downloads manifest.json and hacs.json from raw.githubusercontent.com
-    # without authentication. Those URLs return 404 for private repositories.
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
     steps:
@@ -50,6 +48,3 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # Publication metadata is intentionally deferred while the repository is
-          # private. Keep all technical integration validations enabled.
-          ignore: description topics
