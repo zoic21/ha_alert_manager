@@ -102,6 +102,12 @@ The main alert list focuses on active problems first and uses Home Assistant-sty
   <img src="docs/assets/screenshots/custom-rules.webp" alt="Alert Manager custom rules">
 </p>
 
+### Configuration coherence
+
+<p align="center">
+  <img src="docs/assets/screenshots/coherence.png" alt="Alert Manager configuration coherence">
+</p>
+
 ### Rule editor
 
 <p align="center">
