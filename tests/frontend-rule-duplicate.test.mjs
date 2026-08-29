@@ -58,39 +58,21 @@ const rule = () => ({
   condition_template: "",
 });
 
-test("mobile overview keeps extra spacing below summary cards", () => {
+test("mobile overview keeps summary spacing inside the gray header", () => {
   const panel = new AlertManagerPanel();
+  const styles = panel._styles();
+
   assert.match(
-    panel._styles(),
-    /@media\(max-width:700px\)\{\.table-page-top \.summary\{margin-bottom:28px\}\}/,
+    styles,
+    /@media\(max-width:700px\)\{\.table-page-top\{display:flow-root\}\}/,
   );
+  assert.match(styles, /\.table-page-top \.summary\{margin-bottom:20px\}/);
+  assert.doesNotMatch(styles, /margin-bottom:28px/);
 });
 
-test("mobile overview focuses the Home Assistant content scroller before more info", () => {
+test("runtime does not force focus before opening more info", () => {
   const panel = new AlertManagerPanel();
-  let focusCalls = 0;
-  const subpage = {
-    focusContentScroller() { focusCalls += 1; },
-  };
-  const tablePage = {
-    shadowRoot: {
-      querySelector(selector) {
-        return selector === "hass-tabs-subpage" ? subpage : null;
-      },
-    },
-  };
-  panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-alert-table-page="overview"]' ? tablePage : null
-  );
-  panel._narrow = true;
-  panel._activeTab = "overview";
-
-  panel._focusOverviewContentScroller();
-  assert.equal(focusCalls, 1);
-
-  panel._narrow = false;
-  panel._focusOverviewContentScroller();
-  assert.equal(focusCalls, 1);
+  assert.equal(panel._focusOverviewContentScroller, undefined);
 });
 
 test("rule editor menu follows Home Assistant actions styling", () => {

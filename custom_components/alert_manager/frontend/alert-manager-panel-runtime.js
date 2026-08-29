@@ -18,25 +18,10 @@ const duplicateLabel = (panel) => panel._hass?.localize?.(
   "ui.panel.config.automation.editor.duplicate",
 ) || (String(panel._language ?? "").toLowerCase().startsWith("fr") ? "Dupliquer" : "Duplicate");
 
-AlertManagerPanel.prototype._focusOverviewContentScroller = function() {
-  if (!this._narrow || this._activeTab !== "overview") return;
-  const tablePage = this.shadowRoot?.querySelector?.(
-    '[data-alert-table-page="overview"]',
-  );
-  const subpage = tablePage?.shadowRoot?.querySelector?.("hass-tabs-subpage");
-  subpage?.focusContentScroller?.();
-};
-
-const baseOpenMoreInfo = AlertManagerPanel.prototype._openMoreInfo;
-AlertManagerPanel.prototype._openMoreInfo = function(entityId) {
-  if (this._hass?.states?.[entityId]) this._focusOverviewContentScroller();
-  return baseOpenMoreInfo.call(this, entityId);
-};
-
 const baseRuntimeStyles = AlertManagerPanel.prototype._styles;
 AlertManagerPanel.prototype._styles = function() {
   return `${baseRuntimeStyles.call(this)}
-    @media(max-width:700px){.table-page-top .summary{margin-bottom:28px}}
+    @media(max-width:700px){.table-page-top{display:flow-root}}
   `;
 };
 
