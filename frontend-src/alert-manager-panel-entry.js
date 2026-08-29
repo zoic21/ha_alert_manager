@@ -125,6 +125,23 @@ AlertManagerPanel.prototype._tabs = function() {
   return reorderedTabs;
 };
 
+const baseHandleClick = AlertManagerPanel.prototype._handleClick;
+AlertManagerPanel.prototype._handleClick = async function(event) {
+  const button = event.target?.closest?.("[data-action]");
+  if (button?.dataset.action === "filter-summary-status") {
+    const status = button.dataset.status;
+    if (["active", "pending", "acknowledged"].includes(status)) {
+      const selectedStatuses = this._filterValues(this._tableState.overview.filters.status);
+      if (selectedStatuses.length === 1 && selectedStatuses[0] === status) {
+        this._tableState.overview.filters.status = [];
+        this._render();
+        return;
+      }
+    }
+  }
+  await baseHandleClick.call(this, event);
+};
+
 const baseStyles = AlertManagerPanel.prototype._styles;
 AlertManagerPanel.prototype._styles = function() {
   return `${baseStyles.call(this)}
