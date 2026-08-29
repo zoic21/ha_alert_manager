@@ -27,29 +27,36 @@ AlertManagerPanel.prototype._styles = function() {
   `;
 };
 
-const OVERVIEW_NARROW_HEADER_STYLE_ID = "alert-manager-overview-narrow-header-style";
+const NARROW_TABLE_HEADER_STYLE_ID = "alert-manager-narrow-table-header-style";
+const TABLE_PAGE_SELECTORS = [
+  '[data-alert-table-page="overview"]',
+  '[data-alert-table-page="history"]',
+  "[data-rules-table-page]",
+  "[data-coherence-table-page]",
+];
 
-AlertManagerPanel.prototype._syncOverviewNarrowHeaderBackground = function() {
-  const tablePage = this.shadowRoot?.querySelector?.(
-    '[data-alert-table-page="overview"]',
-  );
-  const root = tablePage?.shadowRoot;
-  if (!root || root.querySelector?.(`#${OVERVIEW_NARROW_HEADER_STYLE_ID}`)) return;
+AlertManagerPanel.prototype._syncNarrowTableHeaderBackgrounds = function() {
+  for (const selector of TABLE_PAGE_SELECTORS) {
+    const root = this.shadowRoot?.querySelector?.(selector)?.shadowRoot;
+    if (!root || root.querySelector?.(`#${NARROW_TABLE_HEADER_STYLE_ID}`)) continue;
 
-  const style = document.createElement("style");
-  style.id = OVERVIEW_NARROW_HEADER_STYLE_ID;
-  style.textContent = `
-    :host([narrow]) .narrow-header-row {
-      background: var(--primary-background-color);
-    }
-  `;
-  root.append(style);
+    const style = document.createElement("style");
+    style.id = NARROW_TABLE_HEADER_STYLE_ID;
+    style.textContent = `
+      :host([narrow]) .narrow-header-row {
+        background: var(--primary-background-color);
+        border-bottom: 1px solid var(--divider-color);
+        box-sizing: border-box;
+      }
+    `;
+    root.append(style);
+  }
 };
 
 const baseHydrateDataTables = AlertManagerPanel.prototype._hydrateDataTables;
 AlertManagerPanel.prototype._hydrateDataTables = function() {
   baseHydrateDataTables.call(this);
-  this._syncOverviewNarrowHeaderBackground();
+  this._syncNarrowTableHeaderBackgrounds();
 };
 
 AlertManagerPanel.prototype._clearRuleEditorError = function() {
