@@ -17,7 +17,6 @@ PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
 EVENT_ALERT_RESOLVED: Final = "alert_manager_alert_resolved"
 EVENT_ALERT_ACKNOWLEDGED: Final = "alert_manager_alert_acknowledged"
-EVENT_ALERT_UNACKNOWLEDGE: Final = "alert_manager_alert_unacknowledged"
 EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
 EVENT_DEVICE_ALERT_STARTED: Final = "alert_manager_device_alert_started"
 DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
