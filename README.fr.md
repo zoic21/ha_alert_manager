@@ -102,6 +102,12 @@ La liste principale met d’abord l’accent sur les problèmes actifs et repren
   <img src="docs/assets/screenshots/custom-rules.webp" alt="Règles personnalisées Alert Manager">
 </p>
 
+### Analyse de cohérence
+
+<p align="center">
+  <img src="docs/assets/screenshots/coherence.png" alt="Analyse de cohérence Alert Manager">
+</p>
+
 ### Éditeur de règle
 
 <p align="center">
