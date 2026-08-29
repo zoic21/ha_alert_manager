@@ -25,6 +25,31 @@ AlertManagerPanel.prototype._styles = function() {
   `;
 };
 
+const OVERVIEW_NARROW_HEADER_STYLE_ID = "alert-manager-overview-narrow-header-style";
+
+AlertManagerPanel.prototype._syncOverviewNarrowHeaderBackground = function() {
+  const tablePage = this.shadowRoot?.querySelector?.(
+    '[data-alert-table-page="overview"]',
+  );
+  const root = tablePage?.shadowRoot;
+  if (!root || root.querySelector?.(`#${OVERVIEW_NARROW_HEADER_STYLE_ID}`)) return;
+
+  const style = document.createElement("style");
+  style.id = OVERVIEW_NARROW_HEADER_STYLE_ID;
+  style.textContent = `
+    :host([narrow]) .narrow-header-row {
+      background: var(--primary-background-color);
+    }
+  `;
+  root.append(style);
+};
+
+const baseHydrateDataTables = AlertManagerPanel.prototype._hydrateDataTables;
+AlertManagerPanel.prototype._hydrateDataTables = function() {
+  baseHydrateDataTables.call(this);
+  this._syncOverviewNarrowHeaderBackground();
+};
+
 AlertManagerPanel.prototype._ruleAttributeOptions = function() {
   const attributes = new Set();
   for (const entityId of this._editingRule?.entity_ids ?? []) {

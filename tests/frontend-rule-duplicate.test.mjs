@@ -71,6 +71,34 @@ test("overview keeps summary spacing inside the gray header at every width", () 
   );
 });
 
+test("narrow overview keeps the native table action row on the gray background", () => {
+  const panel = new AlertManagerPanel();
+  const injectedStyles = [];
+  const tablePageShadowRoot = {
+    querySelector(selector) {
+      if (!selector.startsWith("#")) return null;
+      return injectedStyles.find((style) => style.id === selector.slice(1)) ?? null;
+    },
+    append(style) {
+      injectedStyles.push(style);
+    },
+  };
+  const tablePage = { shadowRoot: tablePageShadowRoot };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? tablePage : null
+  );
+
+  panel._syncOverviewNarrowHeaderBackground();
+  panel._syncOverviewNarrowHeaderBackground();
+
+  assert.equal(injectedStyles.length, 1);
+  assert.equal(injectedStyles[0].tagName, "STYLE");
+  assert.match(
+    injectedStyles[0].textContent,
+    /:host\(\[narrow\]\) \.narrow-header-row \{[\s\S]*background: var\(--primary-background-color\);/,
+  );
+});
+
 test("runtime does not force focus before opening more info", () => {
   const panel = new AlertManagerPanel();
   assert.equal(panel._focusOverviewContentScroller, undefined);
