@@ -158,6 +158,26 @@ def test_jinja_only_rule_rejects_a_missing_template_without_affecting_normal_rul
     assert normal.condition_template is None
 
 
+def test_unchanged_rule_has_no_comparison_and_keeps_jinja_optional():
+    """Inactivity rules require only entities and a duration."""
+    rule = validate_rule_payload(
+        {
+            "name": "No updates",
+            "entity_ids": ["sensor.test"],
+            "source": "unchanged",
+            "duration": 300,
+        }
+    )
+
+    assert rule.source == "unchanged"
+    assert rule.operator == "equals"
+    assert rule.value == ""
+    assert rule.condition_template is None
+    assert rule.matches("anything") is True
+    assert "operator" not in rule.as_dict()
+    assert "value" not in rule.as_dict()
+
+
 def test_numeric_rule_rejects_non_finite_values():
     """Numeric comparisons never accept NaN, infinities or booleans."""
     assert safe_float("nan") is None

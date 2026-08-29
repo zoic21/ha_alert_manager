@@ -2373,6 +2373,7 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
+    { value: "unchanged", label: "Aucun changement" },
     { value: "none", label: "Aucun" },
   ]);
   assert.equal(operator.value, "above");
@@ -2434,6 +2435,41 @@ test("normal comparison rules still save without a Jinja condition", async () =>
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].rule.source, "state");
+  assert.equal(calls[0].rule.condition_template, null);
+});
+
+test("unchanged rule hides comparison fields and keeps Jinja optional", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    source: "unchanged",
+    condition_template: "",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.doesNotMatch(editor, /id="rule-operator"/);
+  assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
+  assert.match(editor, /Condition Jinja supplémentaire/);
+  assert.match(editor, /absence de changement de l’état et des attributs/);
+  assert.doesNotMatch(editor, /rule-condition-template" required/);
+
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "unchanged-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+  await panel._saveRule(form(ruleValues({ source: "unchanged" })));
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.source, "unchanged");
+  assert.equal(calls[0].rule.operator, "equals");
+  assert.equal(calls[0].rule.value, "");
   assert.equal(calls[0].rule.condition_template, null);
 });
 
@@ -2748,6 +2784,11 @@ test("structured automatic and generated rule conditions are localized", () => {
       duration: 900,
     },
   }), "State greater than 9 °C for 15 min");
+  assert.equal(panel._conditionText({
+    condition: "État et attributs inchangés pendant 900 s",
+    condition_key: "rule.unchanged",
+    condition_params: { duration: 900 },
+  }), "State and attributes unchanged for 15 min");
   assert.equal(panel._conditionText({ condition: "User text" }), "User text");
 
   const table = tablePanel();

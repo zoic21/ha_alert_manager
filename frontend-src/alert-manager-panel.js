@@ -102,7 +102,7 @@ const ruleToYaml = (rule) => {
     `source: ${yamlValue(rule.source ?? "state")}`,
   ];
   if ((rule.source ?? "state") === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
-  if ((rule.source ?? "state") !== "none") {
+  if (!["none", "unchanged"].includes(rule.source ?? "state")) {
     lines.push(
       `operator: ${yamlValue(rule.operator)}`,
       Array.isArray(rule.value)
@@ -1110,6 +1110,7 @@ class AlertManagerPanel extends HTMLElement {
         [
           { value: "state", label: this._t("rules.source_state") },
           { value: "attribute", label: this._t("rules.source_attribute") },
+          { value: "unchanged", label: this._t("rules.source_unchanged") },
           { value: "none", label: this._t("rules.source_none") },
         ],
         this._editingRule.source ?? "state",
@@ -1119,7 +1120,8 @@ class AlertManagerPanel extends HTMLElement {
           this._editingRule.source = value;
           if (value !== "attribute") this._editingRule.attribute = "";
           this._ruleDirty = true;
-          if (previousSource === "none" || value === "none") {
+          if (["none", "unchanged"].includes(previousSource)
+            || ["none", "unchanged"].includes(value)) {
             this._refreshRuleEditor();
           } else {
             const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
@@ -2069,6 +2071,8 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleVisualEditor(rule) {
     const jinjaOnly = rule.source === "none";
+    const unchanged = rule.source === "unchanged";
+    const comparisonFree = jinjaOnly || unchanged;
     return `
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_information"))}</h3><small>${esc(this._t("rules.editor_information_help"))}</small></div></div>
@@ -2082,8 +2086,8 @@ class AlertManagerPanel extends HTMLElement {
           <div class="fields">
             <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
             <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input></div>
-            ${jinjaOnly ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
-            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : "rules.condition_template_help"))}</small></div>
+            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
+            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : unchanged ? "rules.condition_template_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
@@ -2219,6 +2223,10 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _ruleSummary(rule) {
+    if (rule.source === "none") return this._t("conditions.rule.jinja", { duration: "" });
+    if (rule.source === "unchanged") {
+      return this._t("conditions.rule.unchanged", { duration: "" });
+    }
     const source = rule.source === "attribute"
       ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
       : this._t("conditions.sources.state");
@@ -2934,9 +2942,10 @@ class AlertManagerPanel extends HTMLElement {
       form.querySelector?.(`[name="${name}"]`);
     const value = (name) => field(name)?.value ?? "";
     const source = value("source");
-    const operator = source === "none" ? "equals" : value("operator");
+    const comparisonFree = ["none", "unchanged"].includes(source);
+    const operator = comparisonFree ? "equals" : value("operator");
     const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const comparisonValue = source === "none"
+    const comparisonValue = comparisonFree
       ? ""
       : TEXT_RULE_OPERATORS.has(operator)
       ? (valueInputs.length
@@ -3161,7 +3170,7 @@ class AlertManagerPanel extends HTMLElement {
           duration: this._durationText(params.duration),
         })}`
         : "";
-    } else if (alert.condition_key === "rule.jinja") {
+    } else if (["rule.jinja", "rule.unchanged"].includes(alert.condition_key)) {
       params.duration = Number(params.duration)
         ? ` ${this._t("conditions.fragments.duration", {
           duration: this._durationText(params.duration),

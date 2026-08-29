@@ -545,13 +545,13 @@ class Rule:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
         required = {"id", "name", "entity_ids", "duration"}
-        if normalized.get("source", "state") != "none":
+        if normalized.get("source", "state") not in ("none", "unchanged"):
             required.update(("operator", "value"))
         if missing := required - normalized.keys():
             raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
-        if normalized.get("source", "state") == "none":
+        if normalized.get("source", "state") in ("none", "unchanged"):
             # Keep canonical internal values for the dataclass; as_dict omits them
-            # and runtime evaluation bypasses them for Jinja-only rules.
+            # and runtime evaluation bypasses them for comparison-free rules.
             normalized["operator"] = "equals"
             normalized["value"] = ""
             normalized["attribute"] = None
@@ -624,7 +624,7 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
-        if self.source == "none":
+        if self.source in ("none", "unchanged"):
             return
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
@@ -652,14 +652,14 @@ class Rule:
         result = asdict(self)
         extra = result.pop("extra", {})
         result.update(extra)
-        if self.source == "none":
+        if self.source in ("none", "unchanged"):
             result.pop("operator", None)
             result.pop("value", None)
         return {key: value for key, value in result.items() if value is not None}
 
     def matches(self, current: Any) -> bool:
         """Safely compare a current value to the configured value."""
-        if self.source == "none":
+        if self.source in ("none", "unchanged"):
             return True
         if self.operator in ("above", "below"):
             current_number = safe_float(current)

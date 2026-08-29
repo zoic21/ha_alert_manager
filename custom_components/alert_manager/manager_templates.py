@@ -43,7 +43,7 @@ class _TemplatesMixin:
 
     def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
         """Return stable structured parameters for a generated rule condition."""
-        if rule.source == "none":
+        if rule.source in ("none", "unchanged"):
             return {"duration": rule.duration}
         return {
             "source": rule.source,
@@ -63,6 +63,9 @@ class _TemplatesMixin:
         if rule.source == "none":
             duration = f" pendant {rule.duration} s" if rule.duration else ""
             return f"Condition Jinja{duration}"
+        if rule.source == "unchanged":
+            duration = f" pendant {rule.duration} s" if rule.duration else ""
+            return f"État et attributs inchangés{duration}"
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
         source = f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
         suffix = f" {unit}" if unit else ""
@@ -407,7 +410,7 @@ class _TemplatesMixin:
             return False
         current = (
             state.state
-            if rule.source in ("state", "none")
+            if rule.source in ("state", "none", "unchanged")
             else state.attributes.get(rule.attribute or "")
         )
         rendered_message = self._render_rule_message(
@@ -422,6 +425,8 @@ class _TemplatesMixin:
             if rendered_message is not None
             else "rule.jinja"
             if rule.source == "none"
+            else "rule.unchanged"
+            if rule.source == "unchanged"
             else "rule.generated"
         )
         condition_params = (
@@ -474,10 +479,13 @@ class _TemplatesMixin:
                 changed = True
             metadata = [
                 ("source", rule.source),
-                ("operator", None if rule.source == "none" else rule.operator),
+                (
+                    "operator",
+                    None if rule.source in ("none", "unchanged") else rule.operator,
+                ),
                 (
                     "comparison_value",
-                    None if rule.source == "none" else rule.value,
+                    None if rule.source in ("none", "unchanged") else rule.value,
                 ),
                 ("attribute", rule.attribute),
             ]

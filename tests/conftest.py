@@ -86,10 +86,13 @@ class ServiceCall:
 
 
 class State:
-    def __init__(self, entity_id: str, state: str, attributes=None):
+    def __init__(
+        self, entity_id: str, state: str, attributes=None, *, last_updated=None
+    ):
         self.entity_id = entity_id
         self.state = state
         self.attributes = attributes or {}
+        self.last_updated = last_updated or _clock["now"]
 
 
 core.callback = callback
@@ -550,8 +553,13 @@ class FakeStates:
     def async_all(self):
         return list(self.data.values())
 
-    def set(self, entity_id, state, attributes=None):
-        self.data[entity_id] = State(entity_id, state, attributes)
+    def set(self, entity_id, state, attributes=None, *, last_updated=None):
+        self.data[entity_id] = State(
+            entity_id,
+            state,
+            attributes,
+            last_updated=last_updated,
+        )
         return self.data[entity_id]
 
 
