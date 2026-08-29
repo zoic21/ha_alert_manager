@@ -21,7 +21,7 @@ const duplicateLabel = (panel) => panel._hass?.localize?.(
 const baseRuntimeStyles = AlertManagerPanel.prototype._styles;
 AlertManagerPanel.prototype._styles = function() {
   return `${baseRuntimeStyles.call(this)}
-    @media(max-width:700px){.table-page-top{display:flow-root}}
+    .table-page-top{display:flow-root}
   `;
 };
 

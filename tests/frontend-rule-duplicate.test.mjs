@@ -58,16 +58,17 @@ const rule = () => ({
   condition_template: "",
 });
 
-test("mobile overview keeps summary spacing inside the gray header", () => {
+test("overview keeps summary spacing inside the gray header at every width", () => {
   const panel = new AlertManagerPanel();
   const styles = panel._styles();
 
-  assert.match(
+  assert.match(styles, /\.table-page-top\{display:flow-root\}/);
+  assert.match(styles, /\.table-page-top \.summary\{margin-bottom:20px\}/);
+  assert.doesNotMatch(styles, /margin-bottom:28px/);
+  assert.doesNotMatch(
     styles,
     /@media\(max-width:700px\)\{\.table-page-top\{display:flow-root\}\}/,
   );
-  assert.match(styles, /\.table-page-top \.summary\{margin-bottom:20px\}/);
-  assert.doesNotMatch(styles, /margin-bottom:28px/);
 });
 
 test("runtime does not force focus before opening more info", () => {
