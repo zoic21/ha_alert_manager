@@ -242,6 +242,10 @@ Alert acknowledgement is also available through `alert_manager.acknowledge` and 
 
 Alert Manager is an unofficial community integration and is not affiliated with the Home Assistant project.
 
+## Note
+
+This code was written partly with the help of AI.
+
 ## Feedback
 
 Alert Manager is actively evolving and real-world installations are the best way to find edge cases.
