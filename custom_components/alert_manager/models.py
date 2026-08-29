@@ -544,9 +544,17 @@ class Rule:
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
-        required = {"id", "name", "entity_ids", "operator", "value", "duration"}
+        required = {"id", "name", "entity_ids", "duration"}
+        if normalized.get("source", "state") != "none":
+            required.update(("operator", "value"))
         if missing := required - normalized.keys():
             raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
+        if normalized.get("source", "state") == "none":
+            # Keep canonical internal values for the dataclass; as_dict omits them
+            # and runtime evaluation bypasses them for Jinja-only rules.
+            normalized["operator"] = "equals"
+            normalized["value"] = ""
+            normalized["attribute"] = None
         version = normalized.get("version", 2)
         if isinstance(version, int) and not isinstance(version, bool):
             normalized["version"] = max(version, 2)
@@ -579,8 +587,6 @@ class Rule:
             raise ValueError("Rule entity_ids must contain strings")
         if len(set(self.entity_ids)) != len(self.entity_ids):
             raise ValueError("An entity cannot be repeated in the same rule")
-        if self.operator not in OPERATORS:
-            raise ValueError(f"Unsupported operator: {self.operator}")
         if self.source not in VALUE_SOURCES:
             raise ValueError(f"Unsupported value source: {self.source}")
         if self.source == "attribute" and (
@@ -589,8 +595,8 @@ class Rule:
             or len(self.attribute) > 255
         ):
             raise ValueError("Attribute is required for attribute rules")
-        if self.source == "state" and self.attribute is not None:
-            raise ValueError("Attribute must be empty for state rules")
+        if self.source != "attribute" and self.attribute is not None:
+            raise ValueError("Attribute must be empty for non-attribute rules")
         if self.message is not None and (
             not isinstance(self.message, str) or len(self.message) > 1024
         ):
@@ -604,6 +610,8 @@ class Rule:
                 "Rule condition_template must be non-empty text of at most "
                 "65536 characters"
             )
+        if self.source == "none" and self.condition_template is None:
+            raise ValueError("Rule condition_template is required for Jinja-only rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
         if (
@@ -616,6 +624,10 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
+        if self.source == "none":
+            return
+        if self.operator not in OPERATORS:
+            raise ValueError(f"Unsupported operator: {self.operator}")
         if self.operator in ("above", "below"):
             if isinstance(self.value, list) or safe_float(self.value) is None:
                 raise ValueError("Numeric operators require one finite numeric value")
@@ -640,10 +652,15 @@ class Rule:
         result = asdict(self)
         extra = result.pop("extra", {})
         result.update(extra)
+        if self.source == "none":
+            result.pop("operator", None)
+            result.pop("value", None)
         return {key: value for key, value in result.items() if value is not None}
 
     def matches(self, current: Any) -> bool:
         """Safely compare a current value to the configured value."""
+        if self.source == "none":
+            return True
         if self.operator in ("above", "below"):
             current_number = safe_float(current)
             expected_number = safe_float(self.value)

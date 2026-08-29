@@ -1547,6 +1547,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
+  assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
+  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('id="excluded-entities"'));
+  assert.ok(settings.indexOf('id="excluded-entities"') < settings.indexOf('id="excluded-devices"'));
   assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
   assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
   assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
@@ -1564,6 +1567,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.settings-form\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
   assert.match(styles, /\.ignored-reference-chips\{[^}]*flex-wrap:wrap/);
+  assert.match(styles, /\.ignored-reference-add\{display:flex;align-items:flex-start;gap:8px\}/);
+  assert.match(styles, /\.ignored-reference-add ha-input\{flex:0 1 420px\}/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
   assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
@@ -2307,6 +2312,7 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
+    { value: "none", label: "Aucun" },
   ]);
   assert.equal(operator.value, "above");
   assert.deepEqual(operator.options.map((option) => option.value), [
@@ -2317,6 +2323,57 @@ test("custom rule choices use native Home Assistant selects", () => {
     "above",
     "below",
   ]);
+});
+
+test("Jinja-only rule editor hides comparison fields and requires its template", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    source: "none",
+    condition_template: "{{ value == 'ready' }}",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.doesNotMatch(editor, /id="rule-operator"/);
+  assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
+  assert.match(editor, /<span class="field-label">Condition Jinja<\/span><ha-selector id="rule-condition-template" required aria-required="true">/);
+  assert.match(editor, /aucune autre comparaison n’est évaluée/);
+
+  const calls = [];
+  panel._hass = { callWS: async (message) => { calls.push(message); return message.rule; } };
+  panel._render = () => {};
+  panel._editingRule.condition_template = "";
+  await panel._saveRule(form(ruleValues({ source: "none" })));
+  assert.equal(calls.length, 0);
+  assert.equal(panel._notice.kind, "error");
+  assert.equal(
+    panel._notice.text,
+    "La condition Jinja est obligatoire lorsque la source est « Aucun ».",
+  );
+});
+
+test("normal comparison rules still save without a Jinja condition", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = { entity_ids: ["sensor.one"], condition_template: "" };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "normal-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+
+  await panel._saveRule(form(ruleValues({ entity_ids: ["sensor.one"] })));
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.source, "state");
+  assert.equal(calls[0].rule.condition_template, null);
 });
 
 test("rule editor renders multiple native value inputs with compact actions", () => {

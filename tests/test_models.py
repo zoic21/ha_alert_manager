@@ -113,6 +113,51 @@ def test_incomplete_rule_payload_has_a_validation_error():
         )
 
 
+def test_jinja_only_rule_requires_only_its_template_and_duration():
+    """Pure Jinja rules have no comparison but keep strict template validation."""
+    rule = validate_rule_payload(
+        {
+            "name": "Pure Jinja",
+            "entity_ids": ["sensor.test"],
+            "source": "none",
+            "duration": 60,
+            "condition_template": "{{ value == 'ready' }}",
+        }
+    )
+
+    assert rule.source == "none"
+    assert rule.operator == "equals"
+    assert rule.value == ""
+    assert rule.matches("anything") is True
+    assert "operator" not in rule.as_dict()
+    assert "value" not in rule.as_dict()
+
+
+def test_jinja_only_rule_rejects_a_missing_template_without_affecting_normal_rules():
+    """Jinja is mandatory only for the explicit comparison-free source."""
+    with pytest.raises(ValueError, match="condition_template is required"):
+        validate_rule_payload(
+            {
+                "name": "Missing Jinja",
+                "entity_ids": ["sensor.test"],
+                "source": "none",
+                "duration": 0,
+            }
+        )
+
+    normal = validate_rule_payload(
+        {
+            "name": "Normal comparison",
+            "entity_ids": ["sensor.test"],
+            "source": "state",
+            "operator": "equals",
+            "value": "on",
+            "duration": 0,
+        }
+    )
+    assert normal.condition_template is None
+
+
 def test_numeric_rule_rejects_non_finite_values():
     """Numeric comparisons never accept NaN, infinities or booleans."""
     assert safe_float("nan") is None

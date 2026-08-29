@@ -58,7 +58,7 @@ _RULE_CLIENT_KEYS = {
     "message",
     "condition_template",
 }
-_REQUIRED_RULE_KEYS = {"name", "entity_ids", "operator", "value", "duration"}
+_REQUIRED_RULE_KEYS = {"name", "entity_ids", "duration"}
 
 
 def validate_config_update(changes: Any) -> None:
@@ -264,6 +264,8 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
     if not isinstance(data, dict):
         raise ValueError("Rule must be an object")
     missing = _REQUIRED_RULE_KEYS - data.keys()
+    if data.get("source", "state") != "none":
+        missing |= {"operator", "value"} - data.keys()
     if missing:
         raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
     if rule_id is None:

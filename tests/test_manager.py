@@ -542,6 +542,44 @@ def test_custom_rule_requires_its_optional_jinja_condition(hass, entry):
     run(scenario())
 
 
+def test_jinja_only_rule_uses_only_its_template_and_keeps_duration(
+    hass, entry, set_now
+):
+    """A comparison-free rule follows Jinja while retaining pending timing."""
+    start = datetime(2026, 8, 29, 8, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "comparison-does-not-matter")
+    hass.states.set("input_boolean.guard", "on")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Pure Jinja",
+                "entity_ids": ["sensor.source"],
+                "source": "none",
+                "duration": 60,
+                "condition_template": "{{ is_state('input_boolean.guard', 'on') }}",
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.due_at == start + timedelta(seconds=60)
+        assert record.details.condition_key == "rule.jinja"
+        assert record.details.operator is None
+        assert record.details.comparison_value is None
+
+        hass.states.set("input_boolean.guard", "off")
+        manager._state_changed(Event({"entity_id": "input_boolean.guard"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in manager.records
+
+    run(scenario())
+
+
 def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
     """Invalid templates never reach storage or runtime evaluation."""
     hass.states.set("sensor.source", "on")

@@ -593,10 +593,10 @@ class _RuntimeMixin:
                 continue
             current = (
                 state.state
-                if rule.source == "state"
+                if rule.source in ("state", "none")
                 else state.attributes.get(rule.attribute or "")
             )
-            if not rule.matches(current):
+            if rule.source != "none" and not rule.matches(current):
                 continue
             if not self._rule_template_matches(rule, state, current):
                 continue
@@ -606,7 +606,9 @@ class _RuntimeMixin:
             condition_key = None
             condition_params = None
             if rendered_message is None:
-                condition_key = "rule.generated"
+                condition_key = (
+                    "rule.jinja" if rule.source == "none" else "rule.generated"
+                )
                 condition_params = self._rule_condition_params(rule, state)
             result[alert_id] = (
                 self._details(
@@ -621,8 +623,8 @@ class _RuntimeMixin:
                     rule_name=rule.name,
                     message=rendered_message,
                     source=rule.source,
-                    operator=rule.operator,
-                    comparison_value=rule.value,
+                    operator=None if rule.source == "none" else rule.operator,
+                    comparison_value=None if rule.source == "none" else rule.value,
                     attribute=rule.attribute,
                 ),
                 rule.duration,
