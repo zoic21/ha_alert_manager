@@ -58,6 +58,41 @@ const rule = () => ({
   condition_template: "",
 });
 
+test("mobile overview keeps extra spacing below summary cards", () => {
+  const panel = new AlertManagerPanel();
+  assert.match(
+    panel._styles(),
+    /@media\(max-width:700px\)\{\.table-page-top \.summary\{margin-bottom:28px\}\}/,
+  );
+});
+
+test("mobile overview focuses the Home Assistant content scroller before more info", () => {
+  const panel = new AlertManagerPanel();
+  let focusCalls = 0;
+  const subpage = {
+    focusContentScroller() { focusCalls += 1; },
+  };
+  const tablePage = {
+    shadowRoot: {
+      querySelector(selector) {
+        return selector === "hass-tabs-subpage" ? subpage : null;
+      },
+    },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? tablePage : null
+  );
+  panel._narrow = true;
+  panel._activeTab = "overview";
+
+  panel._focusOverviewContentScroller();
+  assert.equal(focusCalls, 1);
+
+  panel._narrow = false;
+  panel._focusOverviewContentScroller();
+  assert.equal(focusCalls, 1);
+});
+
 test("rule editor menu follows Home Assistant actions styling", () => {
   const panel = new AlertManagerPanel();
   panel._hass = {
