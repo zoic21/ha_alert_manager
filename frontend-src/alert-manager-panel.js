@@ -47,6 +47,7 @@ const MDI_DOWNLOAD = "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z";
 const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
+const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
 const ALERT_MANAGER_ENTITY_IDS = [
   "button.alert_manager_check_coherence",
   "sensor.alert_manager_coherence_issue",
@@ -103,12 +104,12 @@ const ruleToYaml = (rule) => {
   ];
   if ((rule.source ?? "state") === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
   if (!["none", "unchanged"].includes(rule.source ?? "state")) {
-    lines.push(
-      `operator: ${yamlValue(rule.operator)}`,
-      Array.isArray(rule.value)
+    lines.push(`operator: ${yamlValue(rule.operator)}`);
+    if (rule.operator !== "unchanged") {
+      lines.push(Array.isArray(rule.value)
         ? "value:\n" + rule.value.map((value) => `  - ${yamlValue(value)}`).join("\n")
-        : `value: ${yamlValue(rule.value)}`,
-    );
+        : `value: ${yamlValue(rule.value)}`);
+    }
   }
   lines.push(
     `duration: ${yamlValue(rule.duration)}`,
@@ -1138,6 +1139,9 @@ class AlertManagerPanel extends HTMLElement {
           { value: "not_contains", label: this._t("operators.not_contains") },
           { value: "above", label: this._t("operators.above") },
           { value: "below", label: this._t("operators.below") },
+          { value: "between", label: this._t("operators.between") },
+          { value: "outside", label: this._t("operators.outside") },
+          { value: "unchanged", label: this._t("operators.unchanged") },
         ],
         this._editingRule.operator ?? "equals",
         (value) => {
@@ -1146,6 +1150,11 @@ class AlertManagerPanel extends HTMLElement {
           this._ruleDirty = true;
           if (TEXT_RULE_OPERATORS.has(value)) {
             this._editingRule.value = this._ruleValueList(this._editingRule.value);
+          } else if (RANGE_RULE_OPERATORS.has(value)) {
+            const bounds = this._ruleValueList(this._editingRule.value);
+            this._editingRule.value = [bounds[0] ?? "", bounds[1] ?? ""];
+          } else if (value === "unchanged") {
+            this._editingRule.value = "";
           } else {
             this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
           }
@@ -2047,9 +2056,16 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
-    rule.value = TEXT_RULE_OPERATORS.has(rule.operator)
-      ? this._ruleValueList(rule.value)
-      : this._ruleValueList(rule.value)[0] ?? "";
+    if (TEXT_RULE_OPERATORS.has(rule.operator)) {
+      rule.value = this._ruleValueList(rule.value);
+    } else if (RANGE_RULE_OPERATORS.has(rule.operator)) {
+      const bounds = this._ruleValueList(rule.value);
+      rule.value = [bounds[0] ?? "", bounds[1] ?? ""];
+    } else {
+      rule.value = rule.operator === "unchanged"
+        ? ""
+        : this._ruleValueList(rule.value)[0] ?? "";
+    }
     this._editingRule = rule;
     const yamlMode = this._ruleEditorMode === "yaml";
     const editorContent = yamlMode ? this._renderRuleYamlEditor(rule) : this._renderRuleVisualEditor(rule);
@@ -2085,9 +2101,9 @@ class AlertManagerPanel extends HTMLElement {
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
             <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input></div>
+            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input><small>${esc(this._t("rules.attribute_path_help"))}</small></div>
             ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
-            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : unchanged ? "rules.condition_template_unchanged_help" : "rules.condition_template_help"))}</small></div>
+            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
@@ -2109,6 +2125,11 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderRuleValues(rule) {
+    if (rule.operator === "unchanged") return "";
+    if (RANGE_RULE_OPERATORS.has(rule.operator)) {
+      const bounds = this._ruleValueList(rule.value);
+      return `<div class="field"><span class="field-label">${esc(this._t("rules.lower_bound"))}</span><ha-input data-field="lower-bound" type="number" step="any" value="${esc(bounds[0] ?? "")}" required aria-label="${esc(this._t("rules.lower_bound"))}"></ha-input></div><div class="field"><span class="field-label">${esc(this._t("rules.upper_bound"))}</span><ha-input data-field="upper-bound" type="number" step="any" value="${esc(bounds[1] ?? "")}" required aria-label="${esc(this._t("rules.upper_bound"))}"></ha-input></div>`;
+    }
     if (!TEXT_RULE_OPERATORS.has(rule.operator)) {
       return `<div class="field full"><span class="field-label">${esc(this._t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(this._t("rules.value"))}"></ha-input></div>`;
     }
@@ -2230,6 +2251,9 @@ class AlertManagerPanel extends HTMLElement {
     const source = rule.source === "attribute"
       ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
       : this._t("conditions.sources.state");
+    if (rule.operator === "unchanged") {
+      return this._t("conditions.rule.selected_unchanged", { source, duration: "" });
+    }
     const expected = this._ruleValueList(rule.value).join(" / ");
     return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
   }
@@ -2945,8 +2969,10 @@ class AlertManagerPanel extends HTMLElement {
     const comparisonFree = ["none", "unchanged"].includes(source);
     const operator = comparisonFree ? "equals" : value("operator");
     const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const comparisonValue = comparisonFree
+    const comparisonValue = comparisonFree || operator === "unchanged"
       ? ""
+      : RANGE_RULE_OPERATORS.has(operator)
+      ? [String(value("lower-bound")), String(value("upper-bound"))]
       : TEXT_RULE_OPERATORS.has(operator)
       ? (valueInputs.length
         ? valueInputs.map((input) => String(input.value).trim())
@@ -3006,16 +3032,28 @@ class AlertManagerPanel extends HTMLElement {
     const field = (name) => form.querySelector?.(`[data-field="${name}"]`);
     const value = (name) => field(name)?.value;
     const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
+    const operator = value("operator") ?? this._editingRule.operator ?? "equals";
+    let ruleValue;
+    if (valueInputs.length) {
+      ruleValue = valueInputs.map((input) => String(input.value));
+    } else if (RANGE_RULE_OPERATORS.has(operator)) {
+      ruleValue = [
+        String(value("lower-bound") ?? this._ruleValueList(this._editingRule.value)[0] ?? ""),
+        String(value("upper-bound") ?? this._ruleValueList(this._editingRule.value)[1] ?? ""),
+      ];
+    } else {
+      ruleValue = operator === "unchanged"
+        ? ""
+        : String(value("value") ?? this._editingRule.value ?? "");
+    }
     this._editingRule = {
       ...this._editingRule,
       name: String(value("name") ?? this._editingRule.name ?? ""),
       enabled: Boolean(this._editingRule.enabled ?? true),
       source: value("source") ?? this._editingRule.source ?? "state",
       attribute: String(value("attribute") ?? this._editingRule.attribute ?? ""),
-      operator: value("operator") ?? this._editingRule.operator ?? "equals",
-      value: valueInputs.length
-        ? valueInputs.map((input) => String(input.value))
-        : String(value("value") ?? this._editingRule.value ?? ""),
+      operator,
+      value: ruleValue,
       duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
       message: String(
         this._editingRule.message
@@ -3165,6 +3203,16 @@ class AlertManagerPanel extends HTMLElement {
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
       params.operator = this._t(`operators.${params.operator}`);
       params.unit = params.unit ? ` ${params.unit}` : "";
+      params.duration = Number(params.duration)
+        ? ` ${this._t("conditions.fragments.duration", {
+          duration: this._durationText(params.duration),
+        })}`
+        : "";
+    } else if (alert.condition_key === "rule.selected_unchanged") {
+      const sourceKey = params.source === "attribute"
+        ? "conditions.sources.attribute"
+        : "conditions.sources.state";
+      params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
       params.duration = Number(params.duration)
         ? ` ${this._t("conditions.fragments.duration", {
           duration: this._durationText(params.duration),

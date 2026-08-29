@@ -684,6 +684,164 @@ def test_unchanged_rule_accepts_an_optional_jinja_filter(hass, entry, set_now):
     run(scenario())
 
 
+def test_selected_state_unchanged_ignores_attribute_updates(hass, entry, set_now):
+    """State no-change restarts only when the main state value changes."""
+    start = datetime(2026, 8, 29, 11, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "idle", {"sequence": 1})
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Stable state",
+                "entity_ids": ["sensor.source"],
+                "source": "state",
+                "operator": "unchanged",
+                "duration": 60,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        assert manager.records[alert_id].detected_at == start
+
+        set_now(start + timedelta(seconds=30))
+        hass.states.set("sensor.source", "idle", {"sequence": 2})
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].detected_at == start
+
+        changed_at = start + timedelta(seconds=40)
+        set_now(changed_at)
+        hass.states.set("sensor.source", "running", {"sequence": 2})
+        await manager.async_evaluate_entity("sensor.source")
+        record = manager.records[alert_id]
+        assert record.detected_at == changed_at
+        assert record.details.value == "running"
+        assert record.details.condition_key == "rule.selected_unchanged"
+        assert record.details.comparison_value is None
+
+    run(scenario())
+
+
+def test_selected_attribute_unchanged_and_array_wildcard(hass, entry, set_now):
+    """Attribute inactivity and wildcard comparisons use only extracted values."""
+    start = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set(
+        "sensor.pool",
+        "ok",
+        {
+            "data": [
+                {"code": "8.33", "key": "enjoy"},
+                {"code": "8.34", "key": "redox"},
+            ],
+            "sequence": 1,
+        },
+    )
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        stable = await manager.async_create_rule(
+            {
+                "name": "Stable keys",
+                "entity_ids": ["sensor.pool"],
+                "source": "attribute",
+                "attribute": "data.*.key",
+                "operator": "unchanged",
+                "duration": 60,
+            }
+        )
+        matching = await manager.async_create_rule(
+            {
+                "name": "Redox present",
+                "entity_ids": ["sensor.pool"],
+                "source": "attribute",
+                "attribute": "data.*.key",
+                "operator": "equals",
+                "value": ["redox", "flow"],
+                "duration": 0,
+            }
+        )
+        stable_id = f"rule:{stable['id']}:sensor.pool"
+        matching_id = f"rule:{matching['id']}:sensor.pool"
+        assert manager.records[stable_id].details.value == ["enjoy", "redox"]
+        assert manager.records[matching_id].status is AlertStatus.ACTIVE
+
+        set_now(start + timedelta(seconds=20))
+        hass.states.set(
+            "sensor.pool",
+            "changed state",
+            {
+                "data": [
+                    {"code": "new", "key": "enjoy"},
+                    {"code": "new", "key": "redox"},
+                ],
+                "sequence": 2,
+            },
+        )
+        await manager.async_evaluate_entity("sensor.pool")
+        assert manager.records[stable_id].detected_at == start
+
+        changed_at = start + timedelta(seconds=30)
+        set_now(changed_at)
+        hass.states.set(
+            "sensor.pool",
+            "changed state",
+            {"data": [{"code": "8.35", "key": "ph"}]},
+        )
+        await manager.async_evaluate_entity("sensor.pool")
+        assert manager.records[stable_id].detected_at == changed_at
+        assert manager.records[stable_id].details.value == ["ph"]
+        assert matching_id not in manager.records
+
+    run(scenario())
+
+
+def test_editing_to_selected_unchanged_starts_a_new_inactivity_window(
+    hass, entry, set_now
+):
+    """Changing comparison semantics cannot reuse an older active occurrence."""
+    start = datetime(2026, 8, 29, 13, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "on", {"sequence": 1})
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "State rule",
+                "entity_ids": ["sensor.source"],
+                "source": "state",
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+        changed_at = start + timedelta(seconds=120)
+        set_now(changed_at)
+        await manager.async_update_rule(
+            rule["id"],
+            {
+                "source": "attribute",
+                "attribute": "sequence",
+                "operator": "unchanged",
+                "duration": 60,
+            },
+        )
+
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.PENDING
+        assert record.detected_at == changed_at
+        assert record.due_at == changed_at + timedelta(seconds=60)
+
+    run(scenario())
+
+
 def test_custom_rule_rejects_invalid_jinja_syntax(hass, entry):
     """Invalid templates never reach storage or runtime evaluation."""
     hass.states.set("sensor.source", "on")

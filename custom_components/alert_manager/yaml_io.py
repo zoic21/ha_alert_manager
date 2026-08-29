@@ -117,12 +117,9 @@ def rule_to_yaml_data(
     if result["source"] == "attribute":
         result["attribute"] = data.get("attribute")
     if result["source"] not in ("none", "unchanged"):
-        result.update(
-            {
-                "operator": data.get("operator"),
-                "value": data.get("value"),
-            }
-        )
+        result["operator"] = data.get("operator")
+        if result["operator"] != "unchanged":
+            result["value"] = data.get("value")
     result.update(
         {
             "duration": data.get("duration"),

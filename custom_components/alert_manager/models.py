@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -546,7 +547,9 @@ class Rule:
         normalized.pop("entity_id", None)
         required = {"id", "name", "entity_ids", "duration"}
         if normalized.get("source", "state") not in ("none", "unchanged"):
-            required.update(("operator", "value"))
+            required.add("operator")
+            if normalized.get("operator") != "unchanged":
+                required.add("value")
         if missing := required - normalized.keys():
             raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
         if normalized.get("source", "state") in ("none", "unchanged"):
@@ -555,6 +558,8 @@ class Rule:
             normalized["operator"] = "equals"
             normalized["value"] = ""
             normalized["attribute"] = None
+        elif normalized.get("operator") == "unchanged":
+            normalized["value"] = ""
         version = normalized.get("version", 2)
         if isinstance(version, int) and not isinstance(version, bool):
             normalized["version"] = max(version, 2)
@@ -595,6 +600,16 @@ class Rule:
             or len(self.attribute) > 255
         ):
             raise ValueError("Attribute is required for attribute rules")
+        if self.source == "attribute" and "*" in self.attribute:
+            segments = self.attribute.split(".")
+            if (
+                any(not segment for segment in segments)
+                or any("*" in segment and segment != "*" for segment in segments)
+                or segments[0] == "*"
+            ):
+                raise ValueError(
+                    "Attribute wildcard paths must use complete .* segments"
+                )
         if self.source != "attribute" and self.attribute is not None:
             raise ValueError("Attribute must be empty for non-attribute rules")
         if self.message is not None and (
@@ -628,9 +643,21 @@ class Rule:
             return
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
+        if self.operator == "unchanged":
+            return
         if self.operator in ("above", "below"):
             if isinstance(self.value, list) or safe_float(self.value) is None:
                 raise ValueError("Numeric operators require one finite numeric value")
+            return
+        if self.operator in ("between", "outside"):
+            if not isinstance(self.value, list) or len(self.value) != 2:
+                raise ValueError("Range operators require exactly two numeric bounds")
+            lower = safe_float(self.value[0])
+            upper = safe_float(self.value[1])
+            if lower is None or upper is None:
+                raise ValueError("Range operators require two finite numeric bounds")
+            if lower > upper:
+                raise ValueError("Range lower bound must not exceed upper bound")
             return
 
         values = self.value if isinstance(self.value, list) else [self.value]
@@ -655,35 +682,96 @@ class Rule:
         if self.source in ("none", "unchanged"):
             result.pop("operator", None)
             result.pop("value", None)
+        elif self.operator == "unchanged":
+            result.pop("value", None)
         return {key: value for key, value in result.items() if value is not None}
 
     def matches(self, current: Any) -> bool:
         """Safely compare a current value to the configured value."""
-        if self.source in ("none", "unchanged"):
+        if self.source in ("none", "unchanged") or self.operator == "unchanged":
             return True
+        current_values = (
+            list(current)
+            if isinstance(current, Sequence) and not isinstance(current, str | bytes)
+            else [current]
+        )
         if self.operator in ("above", "below"):
-            current_number = safe_float(current)
             expected_number = safe_float(self.value)
-            if current_number is None or expected_number is None:
+            if expected_number is None:
                 return False
-            return (
-                current_number > expected_number
-                if self.operator == "above"
-                else current_number < expected_number
+            return any(
+                (number := safe_float(item)) is not None
+                and (
+                    number > expected_number
+                    if self.operator == "above"
+                    else number < expected_number
+                )
+                for item in current_values
+            )
+        if self.operator in ("between", "outside"):
+            lower = safe_float(self.value[0])
+            upper = safe_float(self.value[1])
+            if lower is None or upper is None:
+                return False
+            if self.operator == "between":
+                return any(
+                    (number := safe_float(item)) is not None
+                    and lower <= number <= upper
+                    for item in current_values
+                )
+            return any(
+                (number := safe_float(item)) is not None
+                and (number < lower or number > upper)
+                for item in current_values
             )
 
-        current_text = normalize_scalar(current)
+        current_texts = [normalize_scalar(item) for item in current_values]
         raw_values = self.value if isinstance(self.value, list) else [self.value]
         expected_texts = [normalize_scalar(value) for value in raw_values]
         if self.operator in ("equals", "not_equals"):
-            positive_match = current_text in expected_texts
+            positive_match = any(
+                current_text in expected_texts for current_text in current_texts
+            )
         else:
-            positive_match = any(value in current_text for value in expected_texts)
+            positive_match = any(
+                expected in current_text
+                for current_text in current_texts
+                for expected in expected_texts
+            )
         return (
             positive_match
             if self.operator in ("equals", "contains")
             else not positive_match
         )
+
+
+def extract_attribute_value(
+    attributes: Mapping[str, Any], path: str
+) -> tuple[bool, Any]:
+    """Resolve a top-level attribute or a dotted path with list wildcards."""
+    if path in attributes:
+        return True, attributes[path]
+    if "." not in path:
+        return False, None
+
+    segments = path.split(".")
+    values: list[Any] = [attributes]
+    used_wildcard = False
+    for segment in segments:
+        next_values: list[Any] = []
+        if segment == "*":
+            used_wildcard = True
+            for value in values:
+                if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+                    next_values.extend(value)
+        else:
+            for value in values:
+                if isinstance(value, Mapping) and segment in value:
+                    next_values.append(value[segment])
+        if not next_values:
+            return False, None
+        values = next_values
+    return True, values if used_wildcard else values[0]
 
 
 def safe_float(value: Any) -> float | None:

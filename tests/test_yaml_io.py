@@ -93,6 +93,44 @@ condition_template: null
     assert parsed.condition_template is None
 
 
+def test_range_and_selected_unchanged_yaml_shapes_are_strict() -> None:
+    """Ranges keep two bounds while selected no-change omits value."""
+    range_rule = parse_rule_yaml(
+        """name: Temperature range
+enabled: true
+entity_ids:
+  - sensor.temperature
+source: state
+operator: between
+value:
+  - 10
+  - 20
+duration: 60
+message: null
+condition_template: null
+"""
+    )
+    assert range_rule.value == [10, 20]
+    assert "value:\n- 10\n- 20" in dump_rule_yaml(range_rule)
+
+    unchanged_rule = parse_rule_yaml(
+        """name: Stable attribute
+enabled: true
+entity_ids:
+  - sensor.pool
+source: attribute
+attribute: data.*.key
+operator: unchanged
+duration: 60
+message: null
+condition_template: null
+"""
+    )
+    rendered = dump_rule_yaml(unchanged_rule)
+    assert "operator: unchanged" in rendered
+    assert "value:" not in rendered
+
+
 def test_rule_yaml_syntax_and_business_errors_are_clear() -> None:
     """Syntax and rule-model failures are distinct safe validation failures."""
     with pytest.raises(ValueError, match="Invalid YAML"):

@@ -154,7 +154,13 @@ Une règle peut :
 
 - surveiller une ou plusieurs entités indépendamment ;
 - utiliser l’état de l’entité ou l’un de ses attributs ;
-- comparer avec `equals`, `not equals`, `contains`, `not contains`, `above` ou `below` ;
+- comparer avec `equals`, `not equals`, `contains`, `not contains`, `above`,
+  `below`, `between` (bornes incluses) ou `outside` ;
+- parcourir les tableaux d’attributs avec un chemin comme `data.*.key` et tester
+  une ou plusieurs valeurs extraites ;
+- utiliser l’opérateur `unchanged` pour surveiller uniquement l’état principal ou
+  l’attribut sélectionné, sans être réinitialisé par les autres changements de
+  l’entité ;
 - demander que la condition reste vraie pendant une durée configurable ;
 - ajouter une condition Jinja Home Assistant facultative ;
 - choisir la source « Aucun changement » pour alerter si ni l’état ni les attributs

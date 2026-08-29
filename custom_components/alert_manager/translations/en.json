@@ -48,6 +48,7 @@
       "rule": {
         "generated": "{source} {operator} {expected}{unit}{duration}",
         "jinja": "Jinja condition{duration}",
+        "selected_unchanged": "{source} unchanged{duration}",
         "unchanged": "State and attributes unchanged{duration}"
       },
       "sources": {
@@ -125,10 +126,13 @@
     "operators": {
       "above": "greater than",
       "below": "less than",
+      "between": "is between",
       "contains": "contains",
       "equals": "equals",
       "not_contains": "does not contain",
-      "not_equals": "does not equal"
+      "not_equals": "does not equal",
+      "outside": "is outside",
+      "unchanged": "no change"
     },
     "overview": {
       "acknowledge": "Acknowledge",
@@ -195,11 +199,13 @@
       "aria_value": "Comparison value {index}",
       "attribute": "Attribute",
       "attribute_name": "Attribute name",
+      "attribute_path_help": "Use data.*.key to compare the key field from every item in the data array.",
       "condition": "Condition",
       "condition_template": "Additional Jinja condition",
       "condition_template_help": "Optional. The template must return true in addition to the comparison. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
       "condition_template_only": "Jinja condition",
       "condition_template_only_help": "Required. The template must return true to trigger the alert; no other comparison is evaluated. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_selected_unchanged_help": "Optional. The template must return true in addition to the selected state value or attribute remaining unchanged. Additional variables: entity_id, state and value.",
       "condition_template_unchanged_help": "Optional. The template must return true in addition to the state and attributes remaining unchanged. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
       "condition_template_required": "The Jinja condition is required when the source is “Jinja”.",
       "create": "Create",
@@ -219,6 +225,7 @@
       "entities_help": "Each entity is evaluated independently.",
       "message_optional": "Optional message",
       "message_help": "Supports Jinja. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value. The rendered message is frozen when the alert becomes active.",
+      "lower_bound": "Lower bound",
       "modify": "Edit",
       "multiple_any": "The alert triggers as soon as one value matches.",
       "multiple_none": "The alert triggers only when none of the values match.",
@@ -232,9 +239,10 @@
       "source_state": "Main state",
       "source_unchanged": "No change",
       "title": "Custom rules",
+      "upper_bound": "Upper bound",
       "value": "Comparison value",
       "values": "Comparison values",
-      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. With source: unchanged, the state and attributes are monitored for changes and condition_template remains optional. With the Jinja source (source: none), only condition_template is evaluated and it is required. Automation and, or and not groups are not supported.",
+      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. The between and outside operators use value: [lower_bound, upper_bound]; unchanged has no value. An attribute path such as data.*.key checks every item in the data array. With source: unchanged, state and attributes are monitored together. With source: none, only condition_template is evaluated and it is required.",
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule"
     },

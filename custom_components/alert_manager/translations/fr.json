@@ -48,6 +48,7 @@
       "rule": {
         "generated": "{source} {operator} {expected}{unit}{duration}",
         "jinja": "Condition Jinja{duration}",
+        "selected_unchanged": "{source} inchangé{duration}",
         "unchanged": "État et attributs inchangés{duration}"
       },
       "sources": {
@@ -125,10 +126,13 @@
     "operators": {
       "above": "supérieur à",
       "below": "inférieur à",
+      "between": "est entre",
       "contains": "contient",
       "equals": "égal à",
       "not_contains": "ne contient pas",
-      "not_equals": "différent de"
+      "not_equals": "différent de",
+      "outside": "est en dehors",
+      "unchanged": "aucun changement"
     },
     "overview": {
       "acknowledge": "Acquitter",
@@ -195,11 +199,13 @@
       "aria_value": "Valeur de comparaison {index}",
       "attribute": "Attribut",
       "attribute_name": "Nom de l’attribut",
+      "attribute_path_help": "Utilisez data.*.key pour comparer la clé key de chaque élément du tableau data.",
       "condition": "Condition",
       "condition_template": "Condition Jinja supplémentaire",
       "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
       "condition_template_only": "Condition Jinja",
       "condition_template_only_help": "Obligatoire. Le template doit renvoyer true pour déclencher l’alerte ; aucune autre comparaison n’est évaluée. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
+      "condition_template_selected_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de la valeur ou de l’attribut sélectionné. Variables supplémentaires : entity_id, state et value.",
       "condition_template_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de l’état et des attributs. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
       "condition_template_required": "La condition Jinja est obligatoire lorsque la source est « Jinja ».",
       "create": "Créer",
@@ -219,6 +225,7 @@
       "entities_help": "Chaque entité est évaluée indépendamment.",
       "message_optional": "Message facultatif",
       "message_help": "Compatible Jinja. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value. Le rendu est figé lorsque l’alerte devient active.",
+      "lower_bound": "Borne inférieure",
       "modify": "Modifier",
       "multiple_any": "L’alerte se déclenche dès qu’une valeur correspond.",
       "multiple_none": "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.",
@@ -232,9 +239,10 @@
       "source_state": "État principal",
       "source_unchanged": "Aucun changement",
       "title": "Règles personnalisées",
+      "upper_bound": "Borne supérieure",
       "value": "Valeur de comparaison",
       "values": "Valeurs de comparaison",
-      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée et condition_template reste facultative. Avec la source Jinja (source: none), seule condition_template est évaluée et elle devient obligatoire. Les groupes d’automatisation and, or et not ne sont pas pris en charge.",
+      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Les opérateurs between et outside utilisent value: [borne_inférieure, borne_supérieure] ; l’opérateur unchanged n’utilise pas value. Un attribut data.*.key parcourt chaque élément du tableau data. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée. Avec source: none, seule condition_template est évaluée et elle devient obligatoire.",
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML"
     },
