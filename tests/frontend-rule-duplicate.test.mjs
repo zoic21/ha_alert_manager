@@ -71,32 +71,44 @@ test("overview keeps summary spacing inside the gray header at every width", () 
   );
 });
 
-test("narrow overview keeps the native table action row on the gray background", () => {
+test("narrow native table action rows stay gray on every table page", () => {
   const panel = new AlertManagerPanel();
-  const injectedStyles = [];
-  const tablePageShadowRoot = {
-    querySelector(selector) {
-      if (!selector.startsWith("#")) return null;
-      return injectedStyles.find((style) => style.id === selector.slice(1)) ?? null;
-    },
-    append(style) {
-      injectedStyles.push(style);
-    },
-  };
-  const tablePage = { shadowRoot: tablePageShadowRoot };
-  panel.shadowRoot.querySelector = (selector) => (
-    selector === '[data-alert-table-page="overview"]' ? tablePage : null
-  );
+  const selectors = [
+    '[data-alert-table-page="overview"]',
+    '[data-alert-table-page="history"]',
+    "[data-rules-table-page]",
+    "[data-coherence-table-page]",
+  ];
+  const pages = new Map(selectors.map((selector) => {
+    const injectedStyles = [];
+    const shadowRoot = {
+      querySelector(query) {
+        if (!query.startsWith("#")) return null;
+        return injectedStyles.find((style) => style.id === query.slice(1)) ?? null;
+      },
+      append(style) {
+        injectedStyles.push(style);
+      },
+    };
+    return [selector, { shadowRoot, injectedStyles }];
+  }));
+  panel.shadowRoot.querySelector = (selector) => pages.get(selector) ?? null;
 
-  panel._syncOverviewNarrowHeaderBackground();
-  panel._syncOverviewNarrowHeaderBackground();
+  panel._syncNarrowTableHeaderBackgrounds();
+  panel._syncNarrowTableHeaderBackgrounds();
 
-  assert.equal(injectedStyles.length, 1);
-  assert.equal(injectedStyles[0].tagName, "STYLE");
-  assert.match(
-    injectedStyles[0].textContent,
-    /:host\(\[narrow\]\) \.narrow-header-row \{[\s\S]*background: var\(--primary-background-color\);/,
-  );
+  for (const { injectedStyles } of pages.values()) {
+    assert.equal(injectedStyles.length, 1);
+    assert.equal(injectedStyles[0].tagName, "STYLE");
+    assert.match(
+      injectedStyles[0].textContent,
+      /:host\(\[narrow\]\) \.narrow-header-row \{[\s\S]*background: var\(--primary-background-color\);/,
+    );
+    assert.match(
+      injectedStyles[0].textContent,
+      /border-bottom: 1px solid var\(--divider-color\);/,
+    );
+  }
 });
 
 test("runtime does not force focus before opening more info", () => {
