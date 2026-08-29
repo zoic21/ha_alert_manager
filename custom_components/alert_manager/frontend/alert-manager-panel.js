@@ -48,6 +48,36 @@ const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
+const VALIDATION_ERROR_KEYS = new Map([
+  ["Rule name is required", "rule_name_required"],
+  ["Rule name is too long", "rule_name_too_long"],
+  ["Rule entity_ids must be a non-empty list", "rule_entities_required"],
+  ["An entity cannot be repeated in the same rule", "rule_entity_duplicate"],
+  ["Alert Manager entities cannot be monitored", "rule_entity_forbidden"],
+  ["Attribute is required for attribute rules", "attribute_required"],
+  ["Attribute wildcard paths must use complete .* segments", "attribute_path_invalid"],
+  ["Rule message must not exceed 1024 characters", "message_too_long"],
+  ["Rule condition_template is required for Jinja-only rules", "jinja_required"],
+  ["Duration must be an integer", "duration_integer"],
+  ["Duration must be between 0 and 31536000 seconds", "duration_range"],
+  ["Numeric operators require one finite numeric value", "numeric_value_required"],
+  ["Range operators require exactly two numeric bounds", "range_bounds_required"],
+  ["Range operators require two finite numeric bounds", "range_bounds_invalid"],
+  ["Range lower bound must not exceed upper bound", "range_bounds_order"],
+  ["Text operators require at least one value", "text_value_required"],
+  ["Text operator values must be scalar", "text_value_scalar"],
+  ["Text operator values must not be empty", "text_value_empty"],
+  ["Text operator values must be unique", "text_value_duplicate"],
+]);
+const VALIDATION_ERROR_PREFIX_KEYS = [
+  ["Missing rule field:", "rule_field_missing"],
+  ["Unsupported value source:", "source_unsupported"],
+  ["Unsupported operator:", "operator_unsupported"],
+  ["Invalid rule condition_template:", "jinja_invalid"],
+  ["Invalid rule message template:", "jinja_invalid"],
+  ["Jinja templates cannot reference Alert Manager entities", "jinja_self_reference"],
+  ["Invalid YAML:", "yaml_invalid"],
+];
 const ALERT_MANAGER_ENTITY_IDS = [
   "button.alert_manager_check_coherence",
   "sensor.alert_manager_coherence_issue",
@@ -590,7 +620,12 @@ class AlertManagerPanel extends HTMLElement {
   _errorText(error) {
     const code = error?.code ?? error?.body?.code;
     const message = error?.message ?? error?.body?.message;
-    if (code === "invalid_format" && typeof message === "string" && message) return message;
+    if (code === "invalid_format" && typeof message === "string" && message) {
+      const exactKey = VALIDATION_ERROR_KEYS.get(message);
+      if (exactKey) return this._t(`errors.${exactKey}`);
+      const prefix = VALIDATION_ERROR_PREFIX_KEYS.find(([value]) => message.startsWith(value));
+      if (prefix) return this._t(`errors.${prefix[1]}`);
+    }
     return this._t(`errors.${["invalid_format", "not_loaded"].includes(code) ? code : "unknown"}`);
   }
 

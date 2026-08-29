@@ -791,6 +791,37 @@ test("rule create errors remain visible without clearing the draft", async () =>
   assert.deepEqual(panel._editingRule.value, ["0"]);
 });
 
+test("backend rule validation errors are localized without leaking English", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const validationError = (message) => ({ code: "invalid_format", message });
+
+  assert.equal(
+    panel._errorText(validationError("Range lower bound must not exceed upper bound")),
+    "La borne inférieure doit être inférieure ou égale à la borne supérieure.",
+  );
+  assert.equal(
+    panel._errorText(validationError("Range operators require two finite numeric bounds")),
+    "Les deux bornes doivent être des nombres valides.",
+  );
+  assert.equal(
+    panel._errorText(validationError("Text operator values must be unique")),
+    "Les valeurs de comparaison doivent être uniques.",
+  );
+  assert.equal(
+    panel._errorText(validationError("Invalid rule condition_template: parser details")),
+    "Le code Jinja de la règle est invalide.",
+  );
+  assert.equal(
+    panel._errorText(validationError("Invalid YAML: parser details")),
+    "Le YAML est invalide. Vérifiez sa syntaxe.",
+  );
+  assert.equal(
+    panel._errorText(validationError("A future backend validation message")),
+    "Les données sont invalides. Vérifiez les champs et réessayez.",
+  );
+});
+
 test("text rules serialize several trimmed comparison values", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
