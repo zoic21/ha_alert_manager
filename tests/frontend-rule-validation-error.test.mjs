@@ -110,6 +110,12 @@ test("a rejected visual rule save moves the translated error from the page notic
   };
   panel._render = () => {};
   let refreshCount = 0;
+  let pageNoticeRemoved = 0;
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '.page-alert[alert-type="error"]'
+      ? { remove() { pageNoticeRemoved += 1; } }
+      : null
+  );
   panel._refreshRuleEditor = () => { refreshCount += 1; };
 
   await panel._saveRule(rangeForm());
@@ -119,6 +125,7 @@ test("a rejected visual rule save moves the translated error from the page notic
     "La borne inférieure doit être inférieure ou égale à la borne supérieure.",
   );
   assert.equal(panel._notice, null);
+  assert.equal(pageNoticeRemoved, 1);
   assert.equal(refreshCount, 1);
   assert.equal(panel._editingRule.value[0], "30");
   assert.equal(panel._editingRule.value[1], "20");
