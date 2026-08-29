@@ -3,15 +3,24 @@ panelModuleUrl.search = new URL(import.meta.url).search;
 const { AlertManagerPanel } = await import(panelModuleUrl.href);
 
 const COHERENCE_TABLE_PREFERENCES_KEY = "alert-manager-coherence-table-preferences-v1";
+const RULES_TABLE_PREFERENCES_KEY = "alert-manager-rules-table-preferences-v1";
 const COHERENCE_STALE_MS = 48 * 60 * 60 * 1000;
 const COHERENCE_COLUMNS = ["entity", "type", "source", "file", "line", "action"];
 const COHERENCE_SECONDARY_COLUMNS = new Set(["type", "source", "file", "line"]);
+const RULES_COLUMNS = ["name", "entities", "condition", "duration", "enabled"];
+const RULES_SECONDARY_COLUMNS = new Set(["entities", "condition", "duration"]);
 const DEFAULT_COHERENCE_TABLE_STATE = Object.freeze({
   columnOrder: Object.freeze([...COHERENCE_COLUMNS]),
   hiddenColumns: Object.freeze([]),
   sortBy: "entity",
   sortDirection: "asc",
   groupBy: "",
+});
+const DEFAULT_RULES_TABLE_STATE = Object.freeze({
+  columnOrder: Object.freeze([...RULES_COLUMNS]),
+  hiddenColumns: Object.freeze([]),
+  sortBy: "name",
+  sortDirection: "asc",
 });
 const ACTION_ICONS = Object.freeze({
   "save-automatic": "mdi:content-save",
@@ -101,14 +110,76 @@ const saveCoherenceTableState = (panel) => {
   }
 };
 
+const ensureRulesTableState = (panel) => {
+  if (panel._tableState?.rules) return panel._tableState.rules;
+
+  let stored = {};
+  try {
+    stored = JSON.parse(window.localStorage?.getItem(RULES_TABLE_PREFERENCES_KEY) ?? "{}");
+  } catch (_error) {
+    stored = {};
+  }
+
+  const storedOrder = Array.isArray(stored.columnOrder)
+    ? stored.columnOrder.filter((column, index, columns) => (
+      RULES_COLUMNS.includes(column) && columns.indexOf(column) === index
+    ))
+    : [];
+  const optionalOrder = storedOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+  const columnOrder = [
+    "name",
+    ...optionalOrder,
+    ...RULES_COLUMNS.filter((column) => (
+      RULES_SECONDARY_COLUMNS.has(column) && !optionalOrder.includes(column)
+    )),
+    "enabled",
+  ];
+  const hiddenColumns = Array.isArray(stored.hiddenColumns)
+    ? stored.hiddenColumns.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
+    : [];
+  const sortBy = RULES_COLUMNS.includes(stored.sortBy)
+    ? stored.sortBy
+    : DEFAULT_RULES_TABLE_STATE.sortBy;
+  const sortDirection = ["asc", "desc"].includes(stored.sortDirection)
+    ? stored.sortDirection
+    : DEFAULT_RULES_TABLE_STATE.sortDirection;
+
+  panel._tableState ??= {};
+  panel._tableState.rules = {
+    search: "",
+    filters: { enabled: [] },
+    columnOrder,
+    hiddenColumns,
+    sortBy,
+    sortDirection,
+  };
+  return panel._tableState.rules;
+};
+
+const saveRulesTableState = (panel) => {
+  const state = ensureRulesTableState(panel);
+  try {
+    window.localStorage?.setItem(RULES_TABLE_PREFERENCES_KEY, JSON.stringify({
+      columnOrder: state.columnOrder,
+      hiddenColumns: state.hiddenColumns,
+      sortBy: state.sortBy,
+      sortDirection: state.sortDirection,
+    }));
+  } catch (_error) {
+    // Private browsing or a full storage quota must not make the panel unusable.
+  }
+};
+
 const narrowDescriptor = Object.getOwnPropertyDescriptor(AlertManagerPanel.prototype, "narrow");
 
 Object.defineProperty(AlertManagerPanel.prototype, "narrow", {
   configurable: true,
   set(value) {
     narrowDescriptor?.set?.call(this, value);
-    const table = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
-    if (table) table.narrow = Boolean(this._narrow);
+    for (const selector of ["[data-coherence-table-page]", "[data-rules-table-page]"]) {
+      const table = this.shadowRoot?.querySelector?.(selector);
+      if (table) table.narrow = Boolean(this._narrow);
+    }
   },
 });
 
@@ -146,6 +217,11 @@ const baseStyles = AlertManagerPanel.prototype._styles;
 AlertManagerPanel.prototype._styles = function() {
   return `${baseStyles.call(this)}
     .automatic-grid{width:100%;max-width:1120px;margin-inline:auto}
+    .rules-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+    .rules-header>div{min-width:0}.rules-header ha-button{flex:none}
+    .rules-layout.has-editor [data-rules-table-page]{width:auto;margin-inline-end:calc(var(--rule-editor-width) + 8px)}
+    @media(max-width:1000px){.rules-layout.has-editor [data-rules-table-page]{width:100%;margin-inline-end:0}}
+    @media(max-width:700px){.rules-header{align-items:stretch;flex-direction:column}.rules-header ha-button{width:100%}}
   `;
 };
 
@@ -220,6 +296,95 @@ AlertManagerPanel.prototype._renderCoherence = function() {
       </ha-card>
     </div>
   </hass-tabs-subpage-data-table>`;
+};
+
+AlertManagerPanel.prototype._ruleTableRows = function() {
+  return (this._config?.rules ?? []).map((rule) => {
+    const enabled = rule.enabled !== false;
+    const row = {
+      id: rule.id,
+      name: rule.name,
+      entityIds: [...(rule.entity_ids ?? [])],
+      entities: (rule.entity_ids ?? []).join(", "),
+      condition: this._ruleSummary(rule),
+      duration: this._durationText(rule.duration),
+      durationSort: Number(rule.duration),
+      enabled,
+      enabledSort: enabled ? 1 : 0,
+      enabledKey: enabled ? "active" : "inactive",
+      enabledLabel: this._t(enabled ? "rules.status_active" : "rules.status_inactive"),
+    };
+    row.search_index = [
+      row.name,
+      row.entities,
+      row.condition,
+      row.duration,
+      row.enabledLabel,
+    ].join(" ");
+    return row;
+  });
+};
+
+AlertManagerPanel.prototype._nativeRuleNameCell = function(row, narrow = false) {
+  if (!narrow || !globalThis.document?.createElement) return row.name;
+  const state = ensureRulesTableState(this);
+  const hiddenColumns = new Set(state.hiddenColumns);
+  const secondaryColumns = state.columnOrder.filter((column) => (
+    RULES_SECONDARY_COLUMNS.has(column) && !hiddenColumns.has(column)
+  ));
+
+  const content = document.createElement("span");
+  content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
+
+  const primary = document.createElement("span");
+  primary.textContent = row.name;
+  primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+  content.append(primary);
+
+  if (secondaryColumns.length) {
+    const secondary = document.createElement("span");
+    secondary.textContent = secondaryColumns
+      .map((column) => row[column])
+      .filter((value) => value !== undefined && value !== null && value !== "")
+      .join(" · ");
+    secondary.style.cssText = "display:block;min-width:0;overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
+    content.append(secondary);
+  }
+
+  return content;
+};
+
+AlertManagerPanel.prototype._renderRules = function() {
+  ensureRulesTableState(this);
+  const editorOpen = this._editingRule !== null;
+  const editor = editorOpen ? this._renderRuleEditor() : "";
+  const statuses = [
+    { value: "active", label: this._t("rules.status_active") },
+    { value: "inactive", label: this._t("rules.status_inactive") },
+  ];
+  return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px">
+    <hass-tabs-subpage-data-table
+      id="panel-shell"
+      data-rules-table-page
+      has-filters
+      clickable
+      main-page
+    >
+      <div slot="top-header" class="table-page-top">
+        ${this._renderPageMessages()}
+        <ha-card outlined class="panel rules-list-panel">
+          <div class="rules-header">
+            <div><h2>${escapeHtml(this._t("rules.title"))}</h2><p>${escapeHtml(this._t("rules.description"))}</p></div>
+            <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></ha-svg-icon>${escapeHtml(this._t("rules.new"))}</ha-button>
+          </div>
+        </ha-card>
+      </div>
+      <div slot="filter-pane" class="filter-pane-content">
+        ${this._renderFacetFilter("rules", "enabled", this._t("rules.status"), statuses)}
+      </div>
+    </hass-tabs-subpage-data-table>
+    ${editor}
+  </div>`;
 };
 
 const baseRender = AlertManagerPanel.prototype._render;
@@ -378,5 +543,154 @@ AlertManagerPanel.prototype._hydrateCoherenceTable = function() {
       (item) => String(item.id) === String(event.detail?.id),
     );
     if (row?.link) this._openCoherenceLink(row.link);
+  });
+};
+
+AlertManagerPanel.prototype._hydrateRuleTable = function() {
+  const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
+  if (!tablePage || !this._config) return;
+
+  const state = ensureRulesTableState(this);
+  const sourceRows = this._ruleTableRows();
+  const enabledFilters = new Set(this._filterValues(state.filters.enabled));
+  const visibleRows = sourceRows.filter((row) => (
+    !enabledFilters.size || enabledFilters.has(row.enabledKey)
+  ));
+
+  tablePage.hass = this._hass;
+  tablePage.narrow = Boolean(this._narrow);
+  tablePage.tabs = this._tabs();
+  tablePage.route = { prefix: "", path: "/alert-manager/rules" };
+  tablePage.mainPage = true;
+  tablePage.backPath = undefined;
+  tablePage.backCallback = undefined;
+  tablePage.id = "id";
+  tablePage.clickable = true;
+  tablePage.searchLabel = this._t("rules.search");
+  tablePage.filter = state.search;
+  tablePage.filters = enabledFilters.size ? 1 : 0;
+  tablePage.showFilters = this._filterPaneKind === "rules";
+  tablePage.columns = {
+    name: {
+      title: this._t("rules.name"),
+      label: this._t("rules.name"),
+      main: true,
+      sortable: true,
+      hideable: false,
+      moveable: false,
+      minWidth: "180px",
+      flex: 1.2,
+      template: (row) => this._nativeRuleNameCell(row, Boolean(this._narrow)),
+    },
+    entities: {
+      title: this._t("rules.entities"),
+      sortable: true,
+      minWidth: "220px",
+      flex: 1.4,
+      template: (row) => this._nativeRuleEntitiesCell(row),
+    },
+    condition: {
+      title: this._t("rules.condition"),
+      sortable: true,
+      minWidth: "260px",
+      flex: 1.7,
+    },
+    duration: {
+      title: this._t("rules.duration"),
+      sortable: true,
+      valueColumn: "durationSort",
+      type: "numeric",
+      minWidth: "120px",
+      flex: 0.7,
+    },
+    enabled: {
+      title: this._t("rules.status"),
+      label: this._t("rules.status"),
+      sortable: true,
+      valueColumn: "enabledSort",
+      type: "icon",
+      showNarrow: true,
+      hideable: false,
+      moveable: false,
+      minWidth: "88px",
+      flex: 0.5,
+      template: (row) => this._nativeRuleToggleCell(row),
+    },
+    search_index: {
+      title: "",
+      hidden: true,
+      filterable: true,
+    },
+  };
+  tablePage.columnOrder = [...state.columnOrder];
+  tablePage.hiddenColumns = [...state.hiddenColumns];
+  tablePage.initialSorting = {
+    column: state.sortBy,
+    direction: state.sortDirection,
+  };
+  tablePage.data = visibleRows;
+  tablePage._alertManagerRows = visibleRows;
+  tablePage.noDataText = sourceRows.length
+    ? this._t("rules.empty_filtered")
+    : this._t("rules.empty");
+
+  tablePage.addEventListener("search-changed", (event) => {
+    state.search = String(event.detail?.value ?? "");
+  });
+  tablePage.addEventListener("clear-filter", () => {
+    state.filters.enabled = [];
+    this._filterPaneKind = "rules";
+    this._render();
+  });
+  tablePage.addEventListener("sorting-changed", (event) => {
+    const column = event.detail?.column;
+    const direction = event.detail?.direction;
+    if (!RULES_COLUMNS.includes(column)) return;
+    if (!["asc", "desc"].includes(direction)) return;
+    state.sortBy = column;
+    state.sortDirection = direction;
+    saveRulesTableState(this);
+  });
+  tablePage.addEventListener("columns-changed", (event) => {
+    const order = Array.isArray(event.detail?.columnOrder)
+      ? event.detail.columnOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
+      : DEFAULT_RULES_TABLE_STATE.columnOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+    state.columnOrder = [
+      "name",
+      ...order,
+      ...RULES_COLUMNS.filter((column) => (
+        RULES_SECONDARY_COLUMNS.has(column) && !order.includes(column)
+      )),
+      "enabled",
+    ];
+    state.hiddenColumns = (event.detail?.hiddenColumns ?? [])
+      .filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+    saveRulesTableState(this);
+  });
+  tablePage.addEventListener("row-click", (event) => {
+    const rule = (this._config?.rules ?? []).find(
+      (item) => String(item.id) === String(event.detail?.id),
+    );
+    if (!rule) return;
+    this._editingRule = { ...rule };
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleDirty = false;
+    this._refreshRuleEditor();
+  });
+
+  tablePage.querySelectorAll?.("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
+    const value = checkbox.dataset.filterValue;
+    checkbox.checked = this._filterValues(state.filters.enabled).includes(value);
+    checkbox.addEventListener("change", (event) => {
+      event.stopPropagation();
+      const selected = new Set(this._filterValues(state.filters.enabled));
+      if (checkbox.checked) selected.add(value);
+      else selected.delete(value);
+      state.filters.enabled = [...selected];
+      this._filterPaneKind = "rules";
+      this._render();
+    });
   });
 };
