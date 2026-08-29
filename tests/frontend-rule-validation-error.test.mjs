@@ -127,6 +127,7 @@ test("a rejected visual rule save moves the translated error from the page notic
 test("editing the visual rule clears a stale inline validation error", () => {
   const panel = new AlertManagerPanel();
   let removed = 0;
+  panel._editingRule = rule();
   panel._ruleEditorError = "Old validation error";
   panel.shadowRoot.querySelector = (selector) => (
     selector === ".rule-editor-error"
