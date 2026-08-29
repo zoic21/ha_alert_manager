@@ -242,6 +242,10 @@ L’acquittement est également disponible via `alert_manager.acknowledge` et `a
 
 Alert Manager est une intégration communautaire non officielle et n’est pas affiliée au projet Home Assistant.
 
+## Note
+
+Ce code a été ecrit en partie avec l'aide d'une IA
+
 ## Retours
 
 Alert Manager évolue activement et les installations réelles sont le meilleur moyen de trouver les cas limites.
