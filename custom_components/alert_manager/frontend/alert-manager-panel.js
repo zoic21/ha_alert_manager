@@ -642,6 +642,7 @@ class AlertManagerPanel extends HTMLElement {
       : this._renderTab();
     const nativeTablePage = !this._loading && this._config
       && (this._activeTab === "overview"
+        || this._activeTab === "rules"
         || (this._activeTab === "history" && Number(this._historyConfig?.retention_limit ?? 100) !== 0));
     const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `

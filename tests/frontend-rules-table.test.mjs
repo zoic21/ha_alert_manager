@@ -101,6 +101,18 @@ test("custom rules use the native Home Assistant table toolbar without grouping"
   assert.doesNotMatch(rendered, /grouping-changed/);
 });
 
+test("custom rules render without a second tabs subpage wrapper", () => {
+  const panel = new Panel();
+  panel._hass = {};
+  panel._config = { rules: rules() };
+  panel._loading = false;
+  panel._activeTab = "rules";
+  panel._render();
+
+  assert.match(panel.shadowRoot.innerHTML, /<hass-tabs-subpage-data-table/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /<hass-tabs-subpage id="panel-shell"/);
+});
+
 test("rules table keeps name and activation visible and wires native controls", () => {
   const panel = new Panel();
   const table = tablePage();
