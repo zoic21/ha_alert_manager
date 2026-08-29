@@ -1,0 +1,44 @@
+name: One-shot Jinja test fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/one-shot-jinja-test-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Update stale frontend expectations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/frontend.test.mjs")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              '{ value: "none", label: "Aucun" },': '{ value: "none", label: "Jinja" },',
+              'La condition Jinja est obligatoire lorsque la source est « Aucun ».': 'La condition Jinja est obligatoire lorsque la source est « Jinja ».',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"Expected text not found: {old}")
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          Path(".github/workflows/one-shot-jinja-test-fix.yml").unlink()
+          PY
+      - name: Commit fix and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/frontend.test.mjs .github/workflows/one-shot-jinja-test-fix.yml
+          git commit -m "Update frontend tests for Jinja label"
+          git push origin HEAD:main
