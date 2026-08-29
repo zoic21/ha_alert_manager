@@ -22,8 +22,12 @@ const baseRuntimeStyles = AlertManagerPanel.prototype._styles;
 AlertManagerPanel.prototype._styles = function() {
   return `${baseRuntimeStyles.call(this)}
     .table-page-top{display:flow-root}
+    .coherence-panel{padding:20px}
+    .coherence-header{padding:0}
+    .coherence-stats{margin-top:12px;padding:0;border:0;background:transparent}
     .rule-editor-actions{flex-wrap:wrap}
     .rule-editor-error{flex:1 0 100%;width:100%;margin:0 0 4px}
+    @media(max-width:700px){.coherence-panel{padding:15px}}
   `;
 };
 
