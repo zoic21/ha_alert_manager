@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build-frontend.mjs",
     "lint:frontend": "node scripts/lint-frontend.mjs",
-    "test:frontend": "node --test tests/frontend.test.mjs tests/frontend-coherence-mobile.test.mjs tests/frontend-rule-duplicate.test.mjs tests/frontend-rules-table.test.mjs"
+    "test:frontend": "node --test tests/frontend.test.mjs tests/frontend-coherence-mobile.test.mjs tests/frontend-rule-duplicate.test.mjs tests/frontend-rule-validation-error.test.mjs tests/frontend-rules-table.test.mjs"
   },
   "engines": {
     "node": ">=20"
