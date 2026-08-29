@@ -27,6 +27,7 @@ AlertManagerPanel.prototype._styles = function() {
     .coherence-stats{margin-top:12px;padding:0;border:0;background:transparent}
     .rule-editor-actions{flex-wrap:wrap}
     .rule-editor-error{flex:1 0 100%;width:100%;margin:0 0 4px}
+    .rules-layout.has-editor [data-rules-table-page] .rules-list-panel{margin-inline-end:0}
     @media(max-width:700px){.coherence-panel{padding:15px}}
   `;
 };

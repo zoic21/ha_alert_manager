@@ -94,6 +94,16 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
   assert.match(styles, /\.rule-editor-actions\{position:sticky;bottom:0/);
 });
 
+test("rules header card only reserves the editor width once", () => {
+  const panel = new AlertManagerPanel();
+  const styles = panel._styles();
+
+  assert.match(
+    styles,
+    /\.rules-layout\.has-editor \[data-rules-table-page\] \.rules-list-panel\{margin-inline-end:0\}/,
+  );
+});
+
 test("a rejected visual rule save moves the translated error from the page notice into the drawer", async () => {
   const panel = new AlertManagerPanel();
   panel._editingRule = rule();
