@@ -10,7 +10,9 @@
 
 **Know when something is wrong in Home Assistant — and keep it visible until it is fixed.**
 
-Alert Manager gives you one place to monitor abnormal situations in your Home Assistant installation. Instead of maintaining many templates, automations, notifications and dashboard cards, you define what should be considered abnormal and Alert Manager keeps track of it for you.
+Alert Manager turns abnormal situations in Home Assistant into issues you can actually follow. Instead of spreading the logic across templates, automations, notifications and dashboard cards, you define what “not normal” means and Alert Manager keeps track of it from detection to resolution.
+
+It can also look for **broken entity references in your Home Assistant configuration**, helping you find leftovers after an entity is renamed or removed.
 
 Typical examples:
 
@@ -19,27 +21,57 @@ Typical examples:
 - a connectivity sensor stays `off`;
 - a UniFi device stays `not_home`;
 - a fridge consumes more than 200 W for 2 hours;
-- a fridge temperature stays above 8 °C for 30 minutes;
+- a temperature remains outside an expected range;
+- a value or attribute stops changing for too long;
+- an automation or dashboard still references an entity that no longer exists;
 - any custom state, attribute or Jinja-based condition you want to monitor.
 
-The important difference from a simple notification is that the problem **remains visible until it is resolved**.
+The important difference from a simple notification is that a problem **remains visible until it is resolved**.
 
-## What you get
+## What Alert Manager gives you
 
-- **Central alert dashboard** with active, upcoming and acknowledged alerts.
-- **Automatic monitoring** for unavailable entities, connectivity, low batteries and UniFi devices.
-- **Custom rules** on entity states or attributes with delays.
-- **Jinja conditions and messages** using Home Assistant templates.
-- **Acknowledgement** without losing track of the underlying problem.
-- **History** of resolved alerts.
-- **Search, filters, sorting and grouping** in the dashboard.
-- **Exclusions** by entity, device or label.
-- **Per-rule, per-entity and global delays** so short glitches do not become noise.
-- **Home Assistant events and sensors** for your own dashboards and automations.
-- **Event-driven monitoring** without frequent global polling.
+- **A central alert dashboard** for active, upcoming and acknowledged problems.
+- **Automatic monitoring** for common Home Assistant failures such as unavailable entities, connectivity, low batteries and UniFi devices.
+- **Powerful custom rules** for states, attributes, ranges, inactivity and Jinja conditions.
+- **Configuration coherence checks** to find references to missing entities and jump back to the affected configuration when possible.
+- **Alert acknowledgement and history** so temporary handling does not hide the real state of your installation.
+- **Search, filters, sorting, grouping and customizable columns**, with a responsive mobile view.
+- **Exclusions and delays** to keep expected situations and short glitches from becoming noise.
+- **Home Assistant entities and events** so Alert Manager can feed your own dashboards and notification automations.
 - **French and English UI**.
 
-Alert Manager does **not** force a notification system on you. Notifications remain regular Home Assistant automations, so you decide who gets notified, how, and when.
+Alert Manager does **not** impose its own notification system. Notifications stay regular Home Assistant automations, so you decide who gets notified, how and when.
+
+## What is new in v2
+
+### Configuration coherence
+
+Home Assistant configurations evolve constantly: entities are renamed, integrations disappear, dashboards are reorganized. It is easy to leave an old reference behind and only discover it much later.
+
+Alert Manager v2 can scan your configuration and report references to entities that no longer exist. Results include the affected object, file and line when available, with direct navigation back to the relevant Home Assistant page whenever possible.
+
+The scan covers the Home Assistant configuration, including dashboards, automations, scripts, templates and blueprints, with optional ESPHome scanning. It can be started manually or scheduled automatically, and the last result is kept after a restart so you always know when your installation was last checked.
+
+Known special references can be excluded when needed, while dynamic references are deliberately ignored as much as possible to reduce false positives.
+
+### More expressive custom rules
+
+Custom rules now cover more real-world cases without requiring a separate template sensor or automation:
+
+- equality, difference and text matching;
+- numeric thresholds, **between** and **outside** ranges;
+- multiple accepted values;
+- nested attributes and arrays such as `data.*.key`;
+- alert when the **whole entity stops changing**;
+- alert when only a **specific state or attribute stops changing**;
+- Jinja as an additional condition or as the complete rule logic;
+- custom Jinja messages using live Home Assistant data.
+
+Rules can monitor several entities independently, use their own duration, be edited visually or in YAML, and be duplicated when you need a similar rule.
+
+### A cleaner day-to-day interface
+
+The main alert list focuses on active problems first and uses Home Assistant-style table controls for searching, filtering, sorting, grouping and column visibility. The custom rules and coherence views follow the same approach, and mobile layouts keep the most important information readable without losing access to the details.
 
 ## Screenshots
 
@@ -106,6 +138,48 @@ The **Alert Manager** panel then appears in the Home Assistant sidebar.
 
 No Lovelace resource and no YAML configuration are required to get started.
 
+## Automatic monitoring
+
+Alert Manager can automatically watch common Home Assistant problems:
+
+| Monitor | Alert condition |
+| --- | --- |
+| Unavailable entities | entity stays `unavailable` |
+| Connectivity | `binary_sensor` with `device_class: connectivity` stays `off` |
+| Low battery | battery sensor reaches the configured threshold |
+| UniFi | UniFi network `device_tracker` stays away from `home` |
+
+Each monitor can be enabled independently. Delays and exclusions can be adjusted from the UI, and battery thresholds can be adapted when some devices need different limits.
+
+## Custom rules
+
+For everything else, create your own rules directly from the Alert Manager panel.
+
+A rule can monitor one or several entities independently and use the entity state, an attribute, a no-change condition or Jinja-only logic. Delays let you require the situation to persist before it becomes an alert, which prevents short glitches from filling the dashboard.
+
+Example use cases include abnormal temperatures, unexpected power consumption, backup age, error codes, stale sensors, equipment that stopped updating or almost any state Home Assistant exposes.
+
+Rules can be edited visually or in YAML. The full Alert Manager configuration can also be exported and imported as YAML.
+
+## Configuration coherence
+
+The **Coherence** page checks static entity references found in your Home Assistant configuration against the entities that currently exist.
+
+When an issue is found, Alert Manager shows where it comes from and, when possible, lets you open the affected automation, script, dashboard, template or other Home Assistant object directly. Results are stored between restarts and can also be exposed through `sensor.alert_manager_coherence_issue` so a failed coherence check can itself become something you monitor.
+
+Scans can run on demand or automatically on a daily, weekly or monthly schedule. ESPHome scanning can be disabled, and known references can be ignored from the configuration page.
+
+## Alert lifecycle
+
+An alert can be:
+
+- **Upcoming** while its delay is still running;
+- **Active** once the condition has lasted long enough;
+- **Acknowledged** when you know about the issue but it is not resolved yet;
+- **Resolved** when the abnormal condition disappears.
+
+Resolved alerts can be kept in history, making it easier to spot recurring problems instead of only seeing what is wrong right now.
+
 ## Notifications without getting spammed
 
 Alert Manager emits `alert_manager_device_alert_started` when a device enters an alert state. Alerts that arrive close together for the same device are grouped before the event is emitted, which makes it useful for sending **one useful notification for the device instead of one notification per rule**.
@@ -133,58 +207,16 @@ mode: queued
 
 `script.notification` is only an example here: replace it with your own notification script or any Home Assistant notification action.
 
-## Automatic monitoring
+## Home Assistant entities and events
 
-Alert Manager can automatically watch common Home Assistant problems:
-
-| Monitor | Alert condition |
-| --- | --- |
-| Unavailable entities | entity stays `unavailable` |
-| Connectivity | `binary_sensor` with `device_class: connectivity` stays `off` |
-| Low battery | battery sensor reaches the configured threshold |
-| UniFi | UniFi network `device_tracker` stays away from `home` |
-
-Automatic checks can be enabled independently and adjusted from the UI.
-
-## Custom rules
-
-For everything else, create your own rules directly from the Alert Manager panel.
-
-Rules can:
-
-- monitor one or several entities independently;
-- use the entity state or an attribute;
-- compare with `equals`, `not equals`, `contains`, `not contains`, `above`,
-  `below`, inclusive `between`, or `outside`;
-- traverse attribute arrays with a path such as `data.*.key` and test one or
-  several extracted values;
-- use the `unchanged` operator to monitor only the main state or selected
-  attribute without other entity updates resetting the timer;
-- require the condition to remain true for a configurable duration;
-- add an optional Home Assistant Jinja condition;
-- choose the “No change” source to alert when neither the state nor its attributes
-  change for the configured duration, with an optional Jinja condition;
-- choose the “None” source to use a required Jinja condition as the only trigger
-  criterion;
-- generate a custom Jinja message with live entity data.
-
-Example use cases include temperature limits, abnormal power consumption, backup age, device error codes or almost any state Home Assistant exposes.
-
-Rules can be edited visually or in YAML. The full Alert Manager configuration can also be exported and imported as YAML.
-
-## Active, upcoming and acknowledged alerts
-
-Alert Manager exposes dedicated entities so you can also use its state outside the built-in panel:
+Alert Manager exposes dedicated entities so its state can also be used outside the built-in panel:
 
 - `switch.alert_manager_main_monitoring`
 - `sensor.alert_manager_main_active`
 - `sensor.alert_manager_main_pending`
 - `sensor.alert_manager_main_acknowledge`
 - `sensor.alert_manager_device_main_active`
-
-This makes it easy to create a conditional card on your normal dashboard, drive a notification automation, or expose a simple health indicator for your Home Assistant installation.
-
-## Events and actions
+- `sensor.alert_manager_coherence_issue`
 
 Useful events include:
 
@@ -194,10 +226,7 @@ Useful events include:
 - `alert_manager_alert_acknowledged`
 - `alert_manager_alert_unacknowledged`
 
-Alert acknowledgement is also available through:
-
-- `alert_manager.acknowledge`
-- `alert_manager.unacknowledge`
+Alert acknowledgement is also available through `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
 
 ## Requirements
 
@@ -207,10 +236,8 @@ Alert acknowledgement is also available through:
 
 Alert Manager is an unofficial community integration and is not affiliated with the Home Assistant project.
 
-## Feedback and beta testing
+## Feedback
 
 Alert Manager is actively evolving and real-world installations are the best way to find edge cases.
 
-If you test it, bug reports and use cases are very welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
-
-If you have an unusual thing you monitor today with a template or automation, feel free to describe it too — it may be a good candidate for a future built-in rule.
+Bug reports, ideas and unusual monitoring use cases are very welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
