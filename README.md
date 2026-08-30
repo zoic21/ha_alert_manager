@@ -192,13 +192,13 @@ condition_template: "{{ state.state == 'heating' }}"
 
 #### Bayrol messages, with expected states filtered out
 
-This rule evaluates every message key in the Bayrol data array. It can activate only when none of the expected flow, start-delay and enjoyment states is present; its Jinja condition also requires flow to be present. The Jinja message filters the returned text, including the low-redox warning only when the pool temperature is above 15 °C.
+This rule evaluates every message key in the Bayrol data array. It can activate only when none of the expected flow, start-delay and enjoyment states is present; its Jinja condition also requires flow to be present.
 
 ```yaml
 name: "Alerte Bayrol"
 enabled: true
 entity_ids:
-  - "sensor.bayrol_24ase2_16263_messages"
+  - "sensor.bayrol_messages"
 source: "attribute"
 attribute: "data.*.key"
 operator: "not_contains"
@@ -207,9 +207,10 @@ value:
   - "al_start_delay"
   - "enjoy"
 duration: 5400
-message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
+message: "{% if state_attr('sensor.bayrol_messages','data') %}\n{% for item in state_attr('sensor.bayrol_messages','data') %}     \n    {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}       \n      {{ item.message | replace(\"\\n\",\" \") }}  \n    {% endif %}      \n{% endfor %}     \n{% endif %}"
 update_message_when_active: false
-condition_template: "{% set flow = states('binary_sensor.bayrol_24ase2_16263_flow_contact') %}\n{{ (flow == 'on') }}"
+condition_template: "{% set flow = states('binary_sensor.bayrol_flow_contact') %}\n{{ (flow == 'on') }}"
+
 ```
 
 ## Configuration coherence
