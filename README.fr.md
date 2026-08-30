@@ -169,6 +169,49 @@ Cela couvre par exemple les températures anormales, les consommations électriq
 
 Les règles peuvent être éditées visuellement ou en YAML. La configuration complète d’Alert Manager peut également être exportée et importée en YAML.
 
+### Exemples
+
+#### Un thermostat qui chauffe sans réchauffer la pièce
+
+Lorsque le thermostat commence à chauffer, la condition Jinja devient vraie et Alert Manager mémorise la température initiale. Après deux heures, la règle déclenche une alerte si la pièce a gagné moins de 0,2 °C. Dans le message, value correspond à la variation de température mesurée.
+
+```yaml
+name: "Thermostat : surveillance"
+enabled: true
+entity_ids:
+  - "climate.tado_smart_thermostat_su0582429440"
+source: "attribute_variation"
+attribute: "current_temperature"
+operator: "below"
+value: "0.2"
+duration: 7200
+message: "Le chauffage {{ state_attr(entity_id, 'friendly_name') }} est en marche depuis 2 h, mais la température n'a augmenté que de {{ value | float(0) | round(1) }} °C."
+update_message_when_active: false
+condition_template: "{{ state.state == 'heating' }}"
+```
+
+#### Messages Bayrol en ignorant les états attendus
+
+Cette règle lit chaque clé de message du tableau data de Bayrol et ignore les états habituels de débit, de démarrage et de mode enjoy. Sa condition Jinja impose aussi que le débit soit présent. Le message Jinja ne renvoie que les messages utiles, et ne conserve l’alerte redox basse que lorsque la température de la piscine dépasse 15 °C.
+
+```yaml
+name: "Alerte Bayrol"
+enabled: true
+entity_ids:
+  - "sensor.bayrol_24ase2_16263_messages"
+source: "attribute"
+attribute: "data.*.key"
+operator: "not_contains"
+value:
+  - "al_no_flow_bnc"
+  - "al_start_delay"
+  - "enjoy"
+duration: 5400
+message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
+update_message_when_active: false
+condition_template: "{% set flow = states('binary_sensor.bayrol_24ase2_16263_flow_contact') %}\n{{ (flow == 'on') }}"
+```
+
 ## Analyse de cohérence
 
 La page **Cohérence** compare les références statiques d’entités trouvées dans votre configuration Home Assistant avec les entités réellement présentes.
