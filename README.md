@@ -192,7 +192,7 @@ condition_template: "{{ state.state == 'heating' }}"
 
 #### Bayrol messages, with expected states filtered out
 
-This rule reads every message key from the Bayrol data array and filters out the usual flow, start-delay and enjoyment states. Its Jinja condition also requires flow to be present. The Jinja message only returns useful messages, including the low-redox warning only when the pool temperature is above 15 °C.
+This rule evaluates every message key in the Bayrol data array. It can activate only when none of the expected flow, start-delay and enjoyment states is present; its Jinja condition also requires flow to be present. The Jinja message filters the returned text, including the low-redox warning only when the pool temperature is above 15 °C.
 
 ```yaml
 name: "Alerte Bayrol"
