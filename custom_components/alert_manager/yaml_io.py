@@ -30,6 +30,7 @@ _RULE_YAML_KEYS = {
     "value",
     "duration",
     "message",
+    "update_message_when_active",
     "condition_template",
 }
 _CONFIG_YAML_KEY_ORDER = (
@@ -108,15 +109,18 @@ def rule_to_yaml_data(
 ) -> dict[str, Any]:
     """Return the documented rule shape in a stable human-readable order."""
     data = rule.as_dict() if isinstance(rule, Rule) else dict(rule)
+    source = data.get("source", "state")
+    if source == "none":
+        source = "jinja"
     result: dict[str, Any] = {
         "name": data.get("name"),
         "enabled": data.get("enabled", True),
         "entity_ids": data.get("entity_ids"),
-        "source": data.get("source", "state"),
+        "source": source,
     }
     if result["source"] == "attribute":
         result["attribute"] = data.get("attribute")
-    if result["source"] not in ("none", "unchanged"):
+    if result["source"] not in ("jinja", "unchanged"):
         result["operator"] = data.get("operator")
         if result["operator"] != "unchanged":
             result["value"] = data.get("value")
@@ -124,6 +128,7 @@ def rule_to_yaml_data(
         {
             "duration": data.get("duration"),
             "message": data.get("message"),
+            "update_message_when_active": data.get("update_message_when_active", False),
             "condition_template": data.get("condition_template"),
         }
     )

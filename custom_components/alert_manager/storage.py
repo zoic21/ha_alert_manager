@@ -44,6 +44,7 @@ class AlertManagerStore(Store[dict[str, Any]]):
         migrated["config"] = config
         _migrate_acknowledgement_shape(migrated.get("alerts", {}))
         _migrate_pending_visibility_shape(migrated.get("alerts", {}))
+        _migrate_alert_value_sources(migrated.get("alerts", {}))
         return migrated
 
 
@@ -77,6 +78,8 @@ class AlertManagerStorage:
         if not isinstance(raw_alerts, dict):
             _LOGGER.warning("Ignoring invalid persisted alerts collection")
             return config, records, True
+        if _migrate_alert_value_sources(raw_alerts):
+            migrated = True
         for alert_id, record_data in raw_alerts.items():
             if not isinstance(alert_id, str) or not alert_id:
                 _LOGGER.warning("Ignoring persisted alert with invalid id %r", alert_id)
@@ -161,6 +164,9 @@ class AlertManagerHistoryStorage:
         changed = False
         seen: set[str] = set()
         for raw_entry in raw["events"]:
+            if isinstance(raw_entry, dict) and raw_entry.get("source") == "none":
+                raw_entry = {**raw_entry, "source": "jinja"}
+                changed = True
             try:
                 entry = AlertHistoryEntry.from_dict(raw_entry)
             except (KeyError, TypeError, ValueError):
@@ -268,6 +274,12 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
             if "entity_id" in rule:
                 rule.pop("entity_id")
                 changed = True
+            if rule.get("source") == "none":
+                rule["source"] = "jinja"
+                changed = True
+            if "update_message_when_active" not in rule:
+                rule["update_message_when_active"] = False
+                changed = True
             version = rule.get("version", 1)
             if (
                 isinstance(version, int)
@@ -312,5 +324,20 @@ def _migrate_pending_visibility_shape(stored: Any) -> bool:
             and "visible_at" in record
         ):
             record.pop("visible_at")
+            changed = True
+    return changed
+
+
+def _migrate_alert_value_sources(stored: Any) -> bool:
+    """Rename the legacy Jinja-only source in persisted active records."""
+    if not isinstance(stored, dict):
+        return False
+    changed = False
+    for record in stored.values():
+        if not isinstance(record, dict):
+            continue
+        details = record.get("details")
+        if isinstance(details, dict) and details.get("source") == "none":
+            details["source"] = "jinja"
             changed = True
     return changed

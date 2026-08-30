@@ -56,9 +56,10 @@ def test_jinja_only_rule_yaml_omits_irrelevant_comparison_fields() -> None:
 enabled: true
 entity_ids:
   - sensor.bay_temperature
-source: none
+source: jinja
 duration: 30
 message: null
+update_message_when_active: true
 condition_template: "{{ value | float(0) > 33 }}"
 """
     )
@@ -66,9 +67,32 @@ condition_template: "{{ value | float(0) > 33 }}"
     rendered = dump_rule_yaml(rule)
     assert "operator:" not in rendered
     assert "value:" not in rendered
+    assert "source: jinja" in rendered
+    assert "update_message_when_active: true" in rendered
     parsed = parse_rule_yaml(rendered)
-    assert parsed.source == "none"
+    assert parsed.source == "jinja"
+    assert parsed.update_message_when_active is True
     assert parsed.condition_template == "{{ value | float(0) > 33 }}"
+
+
+def test_legacy_none_source_yaml_is_imported_and_exported_as_jinja() -> None:
+    """Existing YAML remains importable while every new export is canonical."""
+    legacy = """name: Legacy Jinja
+enabled: true
+entity_ids:
+  - sensor.bay_temperature
+source: none
+duration: 0
+message: null
+condition_template: "{{ true }}"
+"""
+
+    parsed = parse_rule_yaml(legacy)
+    assert parsed.source == "jinja"
+    rendered = dump_rule_yaml(parsed)
+    assert "source: jinja" in rendered
+    assert "source: none" not in rendered
+    assert "update_message_when_active: false" in rendered
 
 
 def test_unchanged_rule_yaml_keeps_jinja_optional_and_omits_comparison() -> None:

@@ -46,7 +46,7 @@ class _TemplatesMixin:
 
     def _rule_condition_params(self, rule: Rule, state: State) -> dict[str, Any]:
         """Return stable structured parameters for a generated rule condition."""
-        if rule.source in ("none", "unchanged"):
+        if rule.source in ("jinja", "unchanged"):
             return {"duration": rule.duration}
         if rule.operator == "unchanged":
             return {
@@ -69,7 +69,7 @@ class _TemplatesMixin:
 
     def _rule_condition(self, rule: Rule, state: State) -> str:
         """Build a compact human-readable rule condition."""
-        if rule.source == "none":
+        if rule.source == "jinja":
             duration = f" pendant {rule.duration} s" if rule.duration else ""
             return f"Condition Jinja{duration}"
         if rule.source == "unchanged":
@@ -350,14 +350,18 @@ class _TemplatesMixin:
         *,
         force: bool = False,
     ) -> str | None:
-        """Render and track an optional Jinja message until activation."""
+        """Render an optional message and track it for as long as configured."""
         if rule.message is None:
             return None
         pair = (rule.id, state.entity_id)
         dependency_key = ("message", rule.id, state.entity_id)
         alert_id = f"rule:{rule.id}:{state.entity_id}"
         record = self.records.get(alert_id)
-        if record is not None and record.status is AlertStatus.ACTIVE:
+        if (
+            record is not None
+            and record.status is AlertStatus.ACTIVE
+            and not rule.update_message_when_active
+        ):
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(dependency_key)
             if not force:
@@ -439,7 +443,7 @@ class _TemplatesMixin:
             None
             if rendered_message is not None
             else "rule.jinja"
-            if rule.source == "none"
+            if rule.source == "jinja"
             else "rule.unchanged"
             if rule.source == "unchanged"
             else "rule.selected_unchanged"
@@ -498,12 +502,12 @@ class _TemplatesMixin:
                 ("source", rule.source),
                 (
                     "operator",
-                    None if rule.source in ("none", "unchanged") else rule.operator,
+                    None if rule.source in ("jinja", "unchanged") else rule.operator,
                 ),
                 (
                     "comparison_value",
                     None
-                    if rule.source in ("none", "unchanged")
+                    if rule.source in ("jinja", "unchanged")
                     or rule.operator == "unchanged"
                     else rule.value,
                 ),

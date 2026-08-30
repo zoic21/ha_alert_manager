@@ -53,6 +53,9 @@ class AlertDetails:
         """Deserialize alert details, rejecting malformed storage data."""
         if not isinstance(data, dict):
             raise ValueError("Alert details must be an object")
+        data = dict(data)
+        if data.get("source") == "none":
+            data["source"] = "jinja"
         required_strings = ("id", "type", "entity_id", "name", "condition")
         for key in required_strings:
             if not isinstance(data.get(key), str) or not data[key]:
@@ -195,6 +198,9 @@ class AlertHistoryEntry:
         """Deserialize one strictly shaped persisted history entry."""
         if not isinstance(data, dict):
             raise ValueError("History entry must be an object")
+        data = dict(data)
+        if data.get("source") == "none":
+            data["source"] = "jinja"
         required_strings = (
             "event_id",
             "id",
@@ -527,6 +533,7 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
+    update_message_when_active: bool = False
     condition_template: str | None = None
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
@@ -542,17 +549,19 @@ class Rule:
         if not isinstance(data, dict):
             raise ValueError("Rule must be an object")
         normalized = dict(data)
+        if normalized.get("source") == "none":
+            normalized["source"] = "jinja"
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
         required = {"id", "name", "entity_ids", "duration"}
-        if normalized.get("source", "state") not in ("none", "unchanged"):
+        if normalized.get("source", "state") not in ("jinja", "unchanged"):
             required.add("operator")
             if normalized.get("operator") != "unchanged":
                 required.add("value")
         if missing := required - normalized.keys():
             raise ValueError(f"Missing rule field: {sorted(missing)[0]}")
-        if normalized.get("source", "state") in ("none", "unchanged"):
+        if normalized.get("source", "state") in ("jinja", "unchanged"):
             # Keep canonical internal values for the dataclass; as_dict omits them
             # and runtime evaluation bypasses them for comparison-free rules.
             normalized["operator"] = "equals"
@@ -616,6 +625,8 @@ class Rule:
             not isinstance(self.message, str) or len(self.message) > 1024
         ):
             raise ValueError("Rule message must not exceed 1024 characters")
+        if not isinstance(self.update_message_when_active, bool):
+            raise ValueError("Rule update_message_when_active must be a boolean")
         if self.condition_template is not None and (
             not isinstance(self.condition_template, str)
             or not self.condition_template.strip()
@@ -625,7 +636,7 @@ class Rule:
                 "Rule condition_template must be non-empty text of at most "
                 "65536 characters"
             )
-        if self.source == "none" and self.condition_template is None:
+        if self.source == "jinja" and self.condition_template is None:
             raise ValueError("Rule condition_template is required for Jinja-only rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
@@ -639,7 +650,7 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
-        if self.source in ("none", "unchanged"):
+        if self.source in ("jinja", "unchanged"):
             return
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
@@ -679,7 +690,7 @@ class Rule:
         result = asdict(self)
         extra = result.pop("extra", {})
         result.update(extra)
-        if self.source in ("none", "unchanged"):
+        if self.source in ("jinja", "unchanged"):
             result.pop("operator", None)
             result.pop("value", None)
         elif self.operator == "unchanged":
@@ -688,7 +699,7 @@ class Rule:
 
     def matches(self, current: Any) -> bool:
         """Safely compare a current value to the configured value."""
-        if self.source in ("none", "unchanged") or self.operator == "unchanged":
+        if self.source in ("jinja", "unchanged") or self.operator == "unchanged":
             return True
         current_values = (
             list(current)

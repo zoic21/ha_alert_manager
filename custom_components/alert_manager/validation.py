@@ -56,6 +56,7 @@ _RULE_CLIENT_KEYS = {
     "value",
     "duration",
     "message",
+    "update_message_when_active",
     "condition_template",
 }
 _REQUIRED_RULE_KEYS = {"name", "entity_ids", "duration"}
@@ -264,7 +265,7 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
     if not isinstance(data, dict):
         raise ValueError("Rule must be an object")
     missing = _REQUIRED_RULE_KEYS - data.keys()
-    if data.get("source", "state") not in ("none", "unchanged"):
+    if data.get("source", "state") not in ("none", "jinja", "unchanged"):
         missing |= {"operator"} - data.keys()
         if data.get("operator") != "unchanged":
             missing |= {"value"} - data.keys()

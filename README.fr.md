@@ -65,9 +65,10 @@ Les règles personnalisées couvrent désormais davantage de cas concrets sans d
 - alerte lorsque **l’entité entière ne change plus** ;
 - alerte lorsque seul **un état ou un attribut précis ne change plus** ;
 - Jinja comme condition complémentaire ou comme logique complète de la règle ;
-- messages Jinja personnalisés utilisant les données Home Assistant en temps réel.
+- messages Jinja personnalisés, avec mise à jour facultative pendant que l’alerte est active.
 
 Une règle peut surveiller plusieurs entités indépendamment, utiliser sa propre temporisation, être éditée visuellement ou en YAML et être dupliquée lorsqu’une règle proche est nécessaire.
+En YAML, les règles entièrement basées sur Jinja utilisent désormais la valeur explicite `source: jinja` ; les règles existantes en `source: none` sont migrées automatiquement.
 
 ### Une interface plus agréable au quotidien
 
