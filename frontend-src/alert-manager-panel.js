@@ -165,7 +165,32 @@ const ruleToYaml = (rule) => {
 };
 
 const TABLE_PREFERENCES_KEY = "alert-manager-table-preferences-v1";
+const COHERENCE_TABLE_PREFERENCES_KEY = "alert-manager-coherence-table-preferences-v1";
+const RULES_TABLE_PREFERENCES_KEY = "alert-manager-rules-table-preferences-v1";
 const COHERENCE_STALE_MS = 48 * 60 * 60 * 1000;
+const COHERENCE_COLUMNS = ["entity", "type", "source", "file", "line", "action"];
+const COHERENCE_SECONDARY_COLUMNS = new Set(["type", "source", "file", "line"]);
+const RULES_COLUMNS = ["name", "entities", "condition", "duration", "enabled"];
+const RULES_SECONDARY_COLUMNS = new Set(["entities", "condition", "duration"]);
+const DEFAULT_COHERENCE_TABLE_STATE = Object.freeze({
+  columnOrder: Object.freeze([...COHERENCE_COLUMNS]),
+  hiddenColumns: Object.freeze([]),
+  sortBy: "entity",
+  sortDirection: "asc",
+  groupBy: "",
+});
+const DEFAULT_RULES_TABLE_STATE = Object.freeze({
+  columnOrder: Object.freeze([...RULES_COLUMNS]),
+  hiddenColumns: Object.freeze([]),
+  sortBy: "name",
+  sortDirection: "asc",
+});
+const ACTION_ICONS = Object.freeze({
+  "save-automatic": "mdi:content-save",
+  "save-rule": "mdi:content-save",
+  "save-settings": "mdi:content-save",
+  "scan-coherence": "mdi:refresh",
+});
 const REQUIRED_COLUMNS = new Set(["status", "entity"]);
 const DEFAULT_TABLE_STATE = Object.freeze({
   overview: Object.freeze({
@@ -279,6 +304,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
+    this._ruleEditorError = null;
     this._ruleDirty = false;
     this._loading = true;
     this._busy = false;
@@ -342,6 +368,108 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
 
+  _ensureCoherenceTableState() {
+    if (this._coherenceTableState) return this._coherenceTableState;
+    let stored = {};
+    try {
+      stored = JSON.parse(window.localStorage?.getItem(COHERENCE_TABLE_PREFERENCES_KEY) ?? "{}");
+    } catch (_error) {
+      stored = {};
+    }
+    const storedOrder = Array.isArray(stored.columnOrder)
+      ? stored.columnOrder.filter((column, index, columns) => (
+        COHERENCE_COLUMNS.includes(column) && columns.indexOf(column) === index
+      ))
+      : [];
+    this._coherenceTableState = {
+      search: "",
+      columnOrder: [
+        ...storedOrder,
+        ...COHERENCE_COLUMNS.filter((column) => !storedOrder.includes(column)),
+      ],
+      hiddenColumns: Array.isArray(stored.hiddenColumns)
+        ? stored.hiddenColumns.filter((column) => (
+          COHERENCE_COLUMNS.includes(column) && column !== "entity"
+        ))
+        : [],
+      sortBy: COHERENCE_COLUMNS.includes(stored.sortBy) && stored.sortBy !== "action"
+        ? stored.sortBy
+        : DEFAULT_COHERENCE_TABLE_STATE.sortBy,
+      sortDirection: ["asc", "desc"].includes(stored.sortDirection)
+        ? stored.sortDirection
+        : DEFAULT_COHERENCE_TABLE_STATE.sortDirection,
+      groupBy: stored.groupBy === "entity" ? "entity" : "",
+    };
+    return this._coherenceTableState;
+  }
+
+  _saveCoherenceTableState() {
+    const state = this._ensureCoherenceTableState();
+    try {
+      window.localStorage?.setItem(COHERENCE_TABLE_PREFERENCES_KEY, JSON.stringify({
+        columnOrder: state.columnOrder,
+        hiddenColumns: state.hiddenColumns,
+        sortBy: state.sortBy,
+        sortDirection: state.sortDirection,
+        groupBy: state.groupBy,
+      }));
+    } catch (_error) {
+      // Private browsing or a full storage quota must not make the panel unusable.
+    }
+  }
+
+  _ensureRulesTableState() {
+    if (this._tableState.rules) return this._tableState.rules;
+    let stored = {};
+    try {
+      stored = JSON.parse(window.localStorage?.getItem(RULES_TABLE_PREFERENCES_KEY) ?? "{}");
+    } catch (_error) {
+      stored = {};
+    }
+    const storedOrder = Array.isArray(stored.columnOrder)
+      ? stored.columnOrder.filter((column, index, columns) => (
+        RULES_COLUMNS.includes(column) && columns.indexOf(column) === index
+      ))
+      : [];
+    const optionalOrder = storedOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+    this._tableState.rules = {
+      search: "",
+      filters: { enabled: [] },
+      columnOrder: [
+        "name",
+        ...optionalOrder,
+        ...RULES_COLUMNS.filter((column) => (
+          RULES_SECONDARY_COLUMNS.has(column) && !optionalOrder.includes(column)
+        )),
+        "enabled",
+      ],
+      hiddenColumns: Array.isArray(stored.hiddenColumns)
+        ? stored.hiddenColumns.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
+        : [],
+      sortBy: RULES_COLUMNS.includes(stored.sortBy)
+        ? stored.sortBy
+        : DEFAULT_RULES_TABLE_STATE.sortBy,
+      sortDirection: ["asc", "desc"].includes(stored.sortDirection)
+        ? stored.sortDirection
+        : DEFAULT_RULES_TABLE_STATE.sortDirection,
+    };
+    return this._tableState.rules;
+  }
+
+  _saveRulesTableState() {
+    const state = this._ensureRulesTableState();
+    try {
+      window.localStorage?.setItem(RULES_TABLE_PREFERENCES_KEY, JSON.stringify({
+        columnOrder: state.columnOrder,
+        hiddenColumns: state.hiddenColumns,
+        sortBy: state.sortBy,
+        sortDirection: state.sortDirection,
+      }));
+    } catch (_error) {
+      // Private browsing or a full storage quota must not make the panel unusable.
+    }
+  }
+
   set hass(value) {
     const language = value?.locale?.language || "en";
     const languageChanged = language !== this._language;
@@ -396,8 +524,14 @@ class AlertManagerPanel extends HTMLElement {
 
   set narrow(value) {
     this._narrow = Boolean(value);
-    const tablePage = this.shadowRoot?.querySelector("[data-alert-table-page]");
-    if (tablePage) tablePage.narrow = this._narrow;
+    for (const selector of [
+      "[data-alert-table-page]",
+      "[data-coherence-table-page]",
+      "[data-rules-table-page]",
+    ]) {
+      const tablePage = this.shadowRoot?.querySelector(selector);
+      if (tablePage) tablePage.narrow = this._narrow;
+    }
   }
 
   _upgradeProperty(name) {
@@ -476,7 +610,7 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._historyLoadPromise = null;
-      if (this.isConnected) this._render();
+      if (this.isConnected) this._refreshHistoryData();
     }
     return this._history;
   }
@@ -493,7 +627,7 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._coherenceLoadPromise = null;
-      if (this.isConnected && this._activeTab === "coherence") this._render();
+      if (this.isConnected && this._activeTab === "coherence") this._refreshCoherenceData();
     }
     return this._coherence;
   }
@@ -572,11 +706,17 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _tabs() {
-    return TABS.map(({ path, translationKey, iconPath }) => ({
+    const tabs = TABS.map(({ path, translationKey, iconPath }) => ({
       path,
       name: this._t(translationKey),
       iconPath,
     }));
+    const automaticIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/automatic");
+    const rulesIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/rules");
+    if (automaticIndex < 0 || rulesIndex < 0 || rulesIndex < automaticIndex) return tabs;
+    const [rulesTab] = tabs.splice(rulesIndex, 1);
+    tabs.splice(automaticIndex, 0, rulesTab);
+    return tabs;
   }
 
   _syncSensor() {
@@ -618,7 +758,7 @@ class AlertManagerPanel extends HTMLElement {
   async _call(message, successText) {
     this._busy = true;
     this._notice = null;
-    this._render();
+    this._refreshUiState();
     try {
       const result = await this._hass.callWS(message);
       this._notice = successText ? { kind: "success", text: successText } : null;
@@ -628,7 +768,7 @@ class AlertManagerPanel extends HTMLElement {
       return null;
     } finally {
       this._busy = false;
-      this._render();
+      this._refreshUiState();
     }
   }
 
@@ -658,6 +798,7 @@ class AlertManagerPanel extends HTMLElement {
     const nativeTablePage = !this._loading && this._config
       && (this._activeTab === "overview"
         || this._activeTab === "rules"
+        || (this._activeTab === "coherence" && this._coherence)
         || (this._activeTab === "history" && Number(this._historyConfig?.retention_limit ?? 100) !== 0));
     const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `
@@ -669,6 +810,8 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateCoherenceTable();
     this._hydrateYamlEditor();
     this._updateCountdowns();
+    this._decorateActionIcons();
+    this._syncNarrowTableHeaderBackgrounds();
   }
 
   _refreshOverviewData() {
@@ -687,21 +830,157 @@ class AlertManagerPanel extends HTMLElement {
       const value = tablePage.querySelector?.(`[data-summary="${key}"] strong`);
       if (value) value.textContent = String(count);
     }
-    const sourceRows = this._tableRows("overview");
-    const visibleRows = this._filteredTableRows("overview", sourceRows, false);
-    tablePage.hass = this._hass;
-    tablePage.data = this._nativeTableData("overview", visibleRows);
-    tablePage._alertManagerRows = tablePage.data;
-    tablePage.selected = this._selectedAlertIds.size;
-    tablePage.noDataText = sourceRows.length
-      ? this._t("table.empty_filtered")
-      : this._t("table.empty_current");
+    this._refreshAlertTableData("overview", tablePage);
     this._updateCountdowns();
   }
 
+  _refreshHistoryData() {
+    if (this._activeTab !== "history") return;
+    const tablePage = this.shadowRoot?.querySelector?.('[data-alert-table-page="history"]');
+    const historyEnabled = Number(
+      this._historyConfig?.retention_limit ?? this._history?.retention_limit ?? 100,
+    ) !== 0;
+    if (!tablePage || !historyEnabled) {
+      this._render();
+      return;
+    }
+    this._refreshAlertTableData("history", tablePage);
+    this._refreshUiState();
+  }
+
+  _refreshAlertTableData(kind, tablePage) {
+    const sourceRows = kind === "overview"
+      ? this._tableRows("overview")
+      : this._tableRows("history", this._history?.events ?? []);
+    const visibleRows = this._filteredTableRows(kind, sourceRows, false);
+    tablePage.hass = this._hass;
+    tablePage.data = this._nativeTableData(kind, visibleRows);
+    tablePage._alertManagerRows = tablePage.data;
+    if (kind === "overview") tablePage.selected = this._selectedAlertIds.size;
+    tablePage.noDataText = sourceRows.length
+      ? this._t("table.empty_filtered")
+      : this._t(kind === "history" ? "history.empty" : "table.empty_current");
+  }
+
+  _coherenceStatsMarkup() {
+    const result = this._coherence;
+    if (!result) return "";
+    const scannedAt = result.scanned_at ? new Date(result.scanned_at).getTime() : NaN;
+    const scanIsStale = Number.isFinite(scannedAt)
+      && Date.now() - scannedAt > COHERENCE_STALE_MS;
+    return `${result.scanned_at ? `<span class="coherence-scan-date${scanIsStale ? " stale" : ""}">${esc(this._t("coherence.stats.scanned_at", { date: this._date(result.scanned_at) }))}</span>` : ""}
+      <span>${esc(this._t("coherence.stats.missing", { count: result.missing_count ?? 0 }))}</span>
+      <span>${esc(this._t("coherence.stats.files", { count: result.files_scanned ?? 0 }))}</span>
+      <span>${esc(this._t("coherence.stats.references", { count: result.references_checked ?? 0 }))}</span>
+      <span>${esc(this._t("coherence.stats.duration", { duration: result.duration_ms ?? 0 }))}</span>
+      ${result.files_skipped ? `<span class="warning">${esc(this._t("coherence.stats.skipped", { count: result.files_skipped }))}</span>` : ""}`;
+  }
+
+  _coherenceTableRows() {
+    return (this._coherence?.results ?? []).map((result, index) => {
+      const row = {
+        id: `${result.entity_id}:${result.file}:${result.line}:${index}`,
+        entity: result.entity_id,
+        type: this._t(`coherence.types.${result.source_type}`),
+        source: result.source_name || "—",
+        file: result.file,
+        line: String(result.line),
+        lineSort: Number(result.line),
+        link: result.link ?? null,
+      };
+      row.search_index = [row.entity, row.type, row.source, row.file, row.line].join(" ");
+      return row;
+    });
+  }
+
+  _refreshCoherenceData() {
+    if (this._activeTab !== "coherence") return;
+    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
+    if (!tablePage || !this._coherence) {
+      this._render();
+      return;
+    }
+    const stats = tablePage.querySelector?.("[data-coherence-stats]");
+    if (stats) stats.innerHTML = this._coherenceStatsMarkup();
+    const button = tablePage.querySelector?.('[data-action="scan-coherence"]');
+    if (button) {
+      button.disabled = this._coherenceLoading;
+      const label = button.querySelector?.("[data-action-label]");
+      if (label) label.textContent = this._t(
+        this._coherenceLoading ? "coherence.scanning" : "coherence.scan",
+      );
+    }
+    const data = this._coherenceTableRows();
+    tablePage.hass = this._hass;
+    tablePage.data = data;
+    tablePage._alertManagerRows = data;
+    tablePage.noDataText = this._t("coherence.empty");
+    this._refreshUiState();
+  }
+
+  _refreshRulesData() {
+    if (this._activeTab !== "rules") return;
+    const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
+    if (!tablePage || !this._config) {
+      this._render();
+      return;
+    }
+    const state = this._ensureRulesTableState();
+    const sourceRows = this._ruleTableRows();
+    const enabledFilters = new Set(this._filterValues(state.filters.enabled));
+    const visibleRows = sourceRows.filter((row) => (
+      !enabledFilters.size || enabledFilters.has(row.enabledKey)
+    ));
+    tablePage.hass = this._hass;
+    tablePage.data = visibleRows;
+    tablePage._alertManagerRows = visibleRows;
+    tablePage.filters = enabledFilters.size ? 1 : 0;
+    tablePage.noDataText = sourceRows.length
+      ? this._t("rules.empty_filtered")
+      : this._t("rules.empty");
+    this._refreshUiState();
+  }
+
   _renderPageMessages() {
+    return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
+  }
+
+  _pageMessagesContent() {
     return `${!this._monitoringEnabled ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
+  }
+
+  _refreshUiState() {
+    const messages = this.shadowRoot?.querySelector?.("[data-page-messages]");
+    if (messages) messages.innerHTML = this._pageMessagesContent();
+    const busyActions = new Set([
+      "enable-monitoring",
+      "bulk-acknowledge",
+      "bulk-unacknowledge",
+      "save-automatic",
+      "save-rule",
+      "save-settings",
+      "export-config",
+      "choose-config-import",
+    ]);
+    for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
+      if (busyActions.has(button.dataset.action)) button.disabled = this._busy;
+    }
+    this._decorateActionIcons();
+  }
+
+  _decorateActionIcons() {
+    if (!globalThis.document?.createElement) return;
+    for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
+      for (const button of this.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? []) {
+        if (button.querySelector?.("[data-alert-manager-action-icon]")) continue;
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("slot", "start");
+        icon.setAttribute("icon", iconName);
+        icon.setAttribute("data-alert-manager-action-icon", "");
+        button.prepend(icon);
+      }
+    }
   }
 
   _loadNativeDateRangePicker() {
@@ -880,23 +1159,42 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _hydrateRuleTable() {
-    const table = this.shadowRoot.querySelector("#rules-table");
-    if (!table || !this._config) return;
-    const rules = this._config.rules ?? [];
-    table.hass = this._hass;
-    table.id = "id";
-    table.clickable = true;
-    table.autoHeight = true;
-    table.columns = {
+    const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
+    if (!tablePage || !this._config) return;
+    const state = this._ensureRulesTableState();
+    const sourceRows = this._ruleTableRows();
+    const enabledFilters = new Set(this._filterValues(state.filters.enabled));
+    const visibleRows = sourceRows.filter((row) => (
+      !enabledFilters.size || enabledFilters.has(row.enabledKey)
+    ));
+    tablePage.hass = this._hass;
+    tablePage.narrow = Boolean(this._narrow);
+    tablePage.tabs = this._tabs();
+    tablePage.route = { prefix: "", path: "/alert-manager/rules" };
+    tablePage.mainPage = true;
+    tablePage.backPath = undefined;
+    tablePage.backCallback = undefined;
+    tablePage.id = "id";
+    tablePage.clickable = true;
+    tablePage.searchLabel = this._t("rules.search");
+    tablePage.filter = state.search;
+    tablePage.filters = enabledFilters.size ? 1 : 0;
+    tablePage.showFilters = this._filterPaneKind === "rules";
+    tablePage.columns = {
       name: {
         title: this._t("rules.name"),
+        label: this._t("rules.name"),
         main: true,
         sortable: true,
+        hideable: false,
+        moveable: false,
         minWidth: "180px",
         flex: 1.2,
+        template: (row) => this._nativeRuleNameCell(row, Boolean(this._narrow)),
       },
       entities: {
         title: this._t("rules.entities"),
+        sortable: true,
         minWidth: "220px",
         flex: 1.4,
         template: (row) => this._nativeRuleEntitiesCell(row),
@@ -910,33 +1208,75 @@ class AlertManagerPanel extends HTMLElement {
         title: this._t("rules.duration"),
         sortable: true,
         valueColumn: "durationSort",
+        type: "numeric",
         minWidth: "120px",
         flex: 0.7,
       },
       enabled: {
-        title: this._t("overview.status_active"),
+        title: this._t("rules.status"),
+        label: this._t("rules.status"),
         sortable: true,
         valueColumn: "enabledSort",
+        type: "icon",
+        showNarrow: true,
+        hideable: false,
+        moveable: false,
         minWidth: "88px",
         flex: 0.5,
         template: (row) => this._nativeRuleToggleCell(row),
       },
+      search_index: {
+        title: "",
+        hidden: true,
+        filterable: true,
+      },
     };
-    table.columnOrder = ["name", "entities", "condition", "duration", "enabled"];
-    table.data = rules.map((rule) => ({
-      id: rule.id,
-      name: rule.name,
-      entityIds: [...rule.entity_ids],
-      condition: this._ruleSummary(rule),
-      duration: this._durationText(rule.duration),
-      durationSort: Number(rule.duration),
-      enabled: Boolean(rule.enabled),
-      enabledSort: rule.enabled ? 1 : 0,
-    }));
-    table.initialSorting = { column: "name", direction: "asc" };
-    table.noDataText = this._t("rules.empty");
-    table.addEventListener("row-click", (event) => {
-      const rule = rules.find((item) => String(item.id) === String(event.detail?.id));
+    tablePage.columnOrder = [...state.columnOrder];
+    tablePage.hiddenColumns = [...state.hiddenColumns];
+    tablePage.initialSorting = { column: state.sortBy, direction: state.sortDirection };
+    tablePage.data = visibleRows;
+    tablePage._alertManagerRows = visibleRows;
+    tablePage.noDataText = sourceRows.length
+      ? this._t("rules.empty_filtered")
+      : this._t("rules.empty");
+    tablePage.addEventListener("search-changed", (event) => {
+      state.search = String(event.detail?.value ?? "");
+    });
+    tablePage.addEventListener("clear-filter", () => {
+      state.filters.enabled = [];
+      this._filterPaneKind = "rules";
+      this._render();
+    });
+    tablePage.addEventListener("sorting-changed", (event) => {
+      const column = event.detail?.column;
+      const direction = event.detail?.direction;
+      if (!RULES_COLUMNS.includes(column) || !["asc", "desc"].includes(direction)) return;
+      state.sortBy = column;
+      state.sortDirection = direction;
+      this._saveRulesTableState();
+    });
+    tablePage.addEventListener("columns-changed", (event) => {
+      const order = Array.isArray(event.detail?.columnOrder)
+        ? event.detail.columnOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
+        : DEFAULT_RULES_TABLE_STATE.columnOrder.filter(
+          (column) => RULES_SECONDARY_COLUMNS.has(column),
+        );
+      state.columnOrder = [
+        "name",
+        ...order,
+        ...RULES_COLUMNS.filter((column) => (
+          RULES_SECONDARY_COLUMNS.has(column) && !order.includes(column)
+        )),
+        "enabled",
+      ];
+      state.hiddenColumns = (event.detail?.hiddenColumns ?? [])
+        .filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+      this._saveRulesTableState();
+    });
+    tablePage.addEventListener("row-click", (event) => {
+      const rule = (this._config?.rules ?? []).find(
+        (item) => String(item.id) === String(event.detail?.id),
+      );
       if (!rule) return;
       this._editingRule = { ...rule };
       this._ruleEditorMode = "visual";
@@ -945,21 +1285,47 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleDirty = false;
       this._refreshRuleEditor();
     });
+    tablePage.querySelectorAll?.("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
+      const value = checkbox.dataset.filterValue;
+      checkbox.checked = this._filterValues(state.filters.enabled).includes(value);
+      checkbox.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const selected = new Set(this._filterValues(state.filters.enabled));
+        if (checkbox.checked) selected.add(value);
+        else selected.delete(value);
+        state.filters.enabled = [...selected];
+        this._filterPaneKind = "rules";
+        this._render();
+      });
+    });
   }
 
   _hydrateCoherenceTable() {
-    const table = this.shadowRoot.querySelector("#coherence-table");
-    if (!table || !this._coherence) return;
-    table.hass = this._hass;
-    table.id = "id";
-    table.autoHeight = true;
-    table.columns = {
+    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
+    if (!tablePage || !this._coherence) return;
+    const state = this._ensureCoherenceTableState();
+    tablePage.hass = this._hass;
+    tablePage.narrow = Boolean(this._narrow);
+    tablePage.tabs = this._tabs();
+    tablePage.route = { prefix: "", path: "/alert-manager/coherence" };
+    tablePage.mainPage = true;
+    tablePage.backPath = undefined;
+    tablePage.backCallback = undefined;
+    tablePage.id = "id";
+    tablePage.clickable = true;
+    tablePage.searchLabel = this._t("table.search");
+    tablePage.filter = state.search;
+    tablePage.columns = {
       entity: {
         title: this._t("coherence.columns.entity"),
+        label: this._t("coherence.columns.entity"),
         main: true,
         sortable: true,
+        groupable: true,
+        hideable: false,
         minWidth: "190px",
         flex: 1.2,
+        template: (row) => this._nativeCoherenceEntityCell(row, Boolean(this._narrow)),
       },
       type: {
         title: this._t("coherence.columns.type"),
@@ -983,29 +1349,95 @@ class AlertManagerPanel extends HTMLElement {
         title: this._t("coherence.columns.line"),
         sortable: true,
         valueColumn: "lineSort",
+        type: "numeric",
         minWidth: "72px",
         flex: 0.4,
       },
       action: {
         title: "",
+        label: this._t("coherence.open"),
         minWidth: "100px",
         flex: 0.5,
         template: (row) => this._nativeCoherenceActionCell(row),
       },
+      search_index: {
+        title: "",
+        hidden: true,
+        filterable: true,
+      },
     };
-    table.columnOrder = ["entity", "type", "source", "file", "line", "action"];
-    table.data = (this._coherence.results ?? []).map((result, index) => ({
-      id: `${result.entity_id}:${result.file}:${result.line}:${index}`,
-      entity: result.entity_id,
-      type: this._t(`coherence.types.${result.source_type}`),
-      source: result.source_name || "—",
-      file: result.file,
-      line: String(result.line),
-      lineSort: Number(result.line),
-      link: result.link ?? null,
-    }));
-    table.initialSorting = { column: "entity", direction: "asc" };
-    table.noDataText = this._t("coherence.empty");
+    const data = this._coherenceTableRows();
+    tablePage.columnOrder = [...state.columnOrder];
+    tablePage.hiddenColumns = [...state.hiddenColumns];
+    tablePage.initialSorting = { column: state.sortBy, direction: state.sortDirection };
+    tablePage.initialGroupColumn = state.groupBy || undefined;
+    tablePage.data = data;
+    tablePage._alertManagerRows = data;
+    tablePage.noDataText = this._t("coherence.empty");
+    tablePage.addEventListener("search-changed", (event) => {
+      state.search = String(event.detail?.value ?? "");
+    });
+    tablePage.addEventListener("sorting-changed", (event) => {
+      const column = event.detail?.column;
+      const direction = event.detail?.direction;
+      if (!COHERENCE_COLUMNS.includes(column) || column === "action") return;
+      if (!["asc", "desc"].includes(direction)) return;
+      state.sortBy = column;
+      state.sortDirection = direction;
+      this._saveCoherenceTableState();
+    });
+    tablePage.addEventListener("grouping-changed", (event) => {
+      state.groupBy = event.detail?.value === "entity" ? "entity" : "";
+      this._saveCoherenceTableState();
+    });
+    tablePage.addEventListener("columns-changed", (event) => {
+      const order = Array.isArray(event.detail?.columnOrder)
+        ? event.detail.columnOrder.filter((column) => COHERENCE_COLUMNS.includes(column))
+        : [...DEFAULT_COHERENCE_TABLE_STATE.columnOrder];
+      state.columnOrder = [
+        ...order,
+        ...COHERENCE_COLUMNS.filter((column) => !order.includes(column)),
+      ];
+      state.hiddenColumns = (event.detail?.hiddenColumns ?? [])
+        .filter((column) => COHERENCE_COLUMNS.includes(column) && column !== "entity");
+      this._saveCoherenceTableState();
+    });
+    tablePage.addEventListener("row-click", (event) => {
+      const row = tablePage._alertManagerRows?.find(
+        (item) => String(item.id) === String(event.detail?.id),
+      );
+      if (row?.link) this._openCoherenceLink(row.link);
+    });
+  }
+
+  _nativeCoherenceEntityCell(row, narrow = false) {
+    if (!narrow || !globalThis.document?.createElement) return row.entity;
+    const state = this._ensureCoherenceTableState();
+    const hiddenColumns = new Set(state.hiddenColumns);
+    const secondaryColumns = state.columnOrder.filter((column) => (
+      COHERENCE_SECONDARY_COLUMNS.has(column) && !hiddenColumns.has(column)
+    ));
+    const content = document.createElement("span");
+    content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
+    const primary = document.createElement("span");
+    primary.textContent = row.entity;
+    primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    content.append(primary);
+    if (secondaryColumns.length) {
+      const secondary = document.createElement("span");
+      secondary.textContent = secondaryColumns
+        .map((column) => row[column])
+        .filter((value) => value !== undefined && value !== null && value !== "")
+        .join(" · ");
+      secondary.style.cssText = "display:block;min-width:0;overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
+      content.append(secondary);
+    }
+    return content;
+  }
+
+  _openCoherenceLink(link) {
+    if (link?.type === "more_info") this._openMoreInfo(link.entity_id);
+    else if (link?.type === "navigate") this._navigate(link.path, true);
   }
 
   _nativeCoherenceActionCell(row) {
@@ -1015,11 +1447,7 @@ class AlertManagerPanel extends HTMLElement {
     button.textContent = this._t("coherence.open");
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (row.link.type === "more_info") {
-        this._openMoreInfo(row.link.entity_id);
-      } else if (row.link.type === "navigate") {
-        this._navigate(row.link.path, true);
-      }
+      this._openCoherenceLink(row.link);
     });
     return button;
   }
@@ -1089,6 +1517,35 @@ class AlertManagerPanel extends HTMLElement {
     if (tablePage) tablePage.selected = selectedRows.length;
   }
 
+  _clearRuleEditorError() {
+    this._ruleEditorError = null;
+    this.shadowRoot?.querySelector?.(".rule-editor-error")?.remove?.();
+  }
+
+  _ruleAttributeOptions() {
+    const attributes = new Set();
+    for (const entityId of this._editingRule?.entity_ids ?? []) {
+      const stateAttributes = this._hass?.states?.[entityId]?.attributes;
+      if (!stateAttributes || typeof stateAttributes !== "object") continue;
+      for (const attribute of Object.keys(stateAttributes)) attributes.add(attribute);
+    }
+    return [...attributes].sort();
+  }
+
+  _refreshRuleAttributeSelector() {
+    const element = this.shadowRoot?.querySelector?.("#rule-attribute");
+    if (!element) return;
+    element.hass = this._hass;
+    element.selector = {
+      select: {
+        options: this._ruleAttributeOptions(),
+        custom_value: true,
+        mode: "dropdown",
+      },
+    };
+    element.value = this._editingRule?.attribute ?? "";
+  }
+
   _configureSelector(id, selector, value, onChange) {
     const element = this.shadowRoot.querySelector(`#${id}`);
     if (!element) return;
@@ -1105,7 +1562,9 @@ class AlertManagerPanel extends HTMLElement {
         // value is not updated automatically when the inner selector emits
         // value-changed. Mirror the value so later reads are never stale.
         element.value = eventValue;
+        if (id.startsWith("rule-")) this._clearRuleEditorError();
         onChange(eventValue);
+        if (id === "rule-entity-ids") this._refreshRuleAttributeSelector();
       }
     });
     this._configuredControls.add(element);
@@ -1130,7 +1589,9 @@ class AlertManagerPanel extends HTMLElement {
     element.value = value;
     element.addEventListener("selected", (event) => {
       element.value = event.detail?.value;
+      if (id.startsWith("rule-")) this._clearRuleEditorError();
       onChange?.(event.detail?.value);
+      if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
     this._configuredControls.add(element);
   }
@@ -1234,6 +1695,21 @@ class AlertManagerPanel extends HTMLElement {
             value,
             this._editingRule.entity_ids,
           );
+          this._ruleDirty = true;
+        },
+      );
+      this._configureSelector(
+        "rule-attribute",
+        {
+          select: {
+            options: this._ruleAttributeOptions(),
+            custom_value: true,
+            mode: "dropdown",
+          },
+        },
+        this._editingRule.attribute ?? "",
+        (value) => {
+          this._editingRule.attribute = String(value ?? "");
           this._ruleDirty = true;
         },
       );
@@ -1396,27 +1872,32 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderCoherence() {
     const result = this._coherence;
-    const scannedAt = result?.scanned_at ? new Date(result.scanned_at).getTime() : NaN;
-    const scanIsStale = Number.isFinite(scannedAt)
-      && Date.now() - scannedAt > COHERENCE_STALE_MS;
-    const stats = result
-      ? `<div class="coherence-stats">
-        ${result.scanned_at ? `<span class="coherence-scan-date${scanIsStale ? " stale" : ""}">${esc(this._t("coherence.stats.scanned_at", { date: this._date(result.scanned_at) }))}</span>` : ""}
-        <span>${esc(this._t("coherence.stats.missing", { count: result.missing_count ?? 0 }))}</span>
-        <span>${esc(this._t("coherence.stats.files", { count: result.files_scanned ?? 0 }))}</span>
-        <span>${esc(this._t("coherence.stats.references", { count: result.references_checked ?? 0 }))}</span>
-        <span>${esc(this._t("coherence.stats.duration", { duration: result.duration_ms ?? 0 }))}</span>
-        ${result.files_skipped ? `<span class="warning">${esc(this._t("coherence.stats.skipped", { count: result.files_skipped }))}</span>` : ""}
-      </div>`
-      : "";
-    return `<ha-card outlined class="panel coherence-panel">
-      <div class="coherence-header">
-        <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
-        <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</ha-button>
+    if (!result) {
+      return `<ha-card outlined class="panel coherence-panel">
+        <div class="coherence-header">
+          <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
+          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+        </div>
+        <div class="empty compact">${esc(this._t("coherence.not_scanned"))}</div>
+      </ha-card>`;
+    }
+    return `<hass-tabs-subpage-data-table
+      id="panel-shell"
+      data-coherence-table-page
+      clickable
+      main-page
+    >
+      <div slot="top-header" class="table-page-top">
+        ${this._renderPageMessages()}
+        <ha-card outlined class="panel coherence-panel">
+          <div class="coherence-header">
+            <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
+            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+          </div>
+          <div class="coherence-stats" data-coherence-stats>${this._coherenceStatsMarkup()}</div>
+        </ha-card>
       </div>
-      ${stats}
-      ${result ? `<ha-data-table id="coherence-table" auto-height></ha-data-table>` : `<div class="empty compact">${esc(this._t("coherence.not_scanned"))}</div>`}
-    </ha-card>`;
+    </hass-tabs-subpage-data-table>`;
   }
 
   _historyRuleName(event) {
@@ -2115,13 +2596,88 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderRules() {
+    this._ensureRulesTableState();
     const editorOpen = this._editingRule !== null;
     const editor = editorOpen ? this._renderRuleEditor() : "";
-    return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px"><ha-card outlined class="panel rules-list-panel">
-      <div><h2>${esc(this._t("rules.title"))}</h2><p>${esc(this._t("rules.description"))}</p></div>
-      <ha-data-table id="rules-table" clickable auto-height></ha-data-table>
-      <div class="actions new-rule-action"><ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("rules.new"))}</ha-button></div>
-    </ha-card>${editor}</div>`;
+    const statuses = [
+      { value: "active", label: this._t("rules.status_active") },
+      { value: "inactive", label: this._t("rules.status_inactive") },
+    ];
+    return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px">
+      <hass-tabs-subpage-data-table
+        id="panel-shell"
+        data-rules-table-page
+        has-filters
+        clickable
+        main-page
+      >
+        <div slot="top-header" class="table-page-top">
+          ${this._renderPageMessages()}
+          <ha-card outlined class="panel rules-list-panel">
+            <div class="rules-header">
+              <div><h2>${esc(this._t("rules.title"))}</h2><p>${esc(this._t("rules.description"))}</p></div>
+              <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("rules.new"))}</ha-button>
+            </div>
+          </ha-card>
+        </div>
+        <div slot="filter-pane" class="filter-pane-content">
+          ${this._renderFacetFilter("rules", "enabled", this._t("rules.status"), statuses)}
+        </div>
+      </hass-tabs-subpage-data-table>
+      ${editor}
+    </div>`;
+  }
+
+  _ruleTableRows() {
+    return (this._config?.rules ?? []).map((rule) => {
+      const enabled = rule.enabled !== false;
+      const row = {
+        id: rule.id,
+        name: rule.name,
+        entityIds: [...(rule.entity_ids ?? [])],
+        entities: (rule.entity_ids ?? []).join(", "),
+        condition: this._ruleSummary(rule),
+        duration: this._durationText(rule.duration),
+        durationSort: Number(rule.duration),
+        enabled,
+        enabledSort: enabled ? 1 : 0,
+        enabledKey: enabled ? "active" : "inactive",
+        enabledLabel: this._t(enabled ? "rules.status_active" : "rules.status_inactive"),
+      };
+      row.search_index = [
+        row.name,
+        row.entities,
+        row.condition,
+        row.duration,
+        row.enabledLabel,
+      ].join(" ");
+      return row;
+    });
+  }
+
+  _nativeRuleNameCell(row, narrow = false) {
+    if (!narrow || !globalThis.document?.createElement) return row.name;
+    const state = this._ensureRulesTableState();
+    const hiddenColumns = new Set(state.hiddenColumns);
+    const secondaryColumns = state.columnOrder.filter((column) => (
+      RULES_SECONDARY_COLUMNS.has(column) && !hiddenColumns.has(column)
+    ));
+    const content = document.createElement("span");
+    content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
+    const primary = document.createElement("span");
+    primary.textContent = row.name;
+    primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    content.append(primary);
+    if (secondaryColumns.length) {
+      const secondary = document.createElement("span");
+      secondary.textContent = secondaryColumns
+        .map((column) => row[column])
+        .filter((value) => value !== undefined && value !== null && value !== "")
+        .join(" · ");
+      secondary.style.cssText = "display:block;min-width:0;overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
+      content.append(secondary);
+    }
+    return content;
   }
 
   _renderRuleEditor() {
@@ -2151,11 +2707,11 @@ class AlertManagerPanel extends HTMLElement {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor">${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="delete-rule">${esc(this._t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(this._duplicateRuleLabel())}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(this._t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
+        <div class="actions rule-editor-actions">${this._ruleEditorMode === "visual" && this._ruleEditorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(this._ruleEditorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
   }
@@ -2177,7 +2733,7 @@ class AlertManagerPanel extends HTMLElement {
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
             <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input><small>${esc(this._t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(this._t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
             ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
             <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
@@ -2348,9 +2904,43 @@ class AlertManagerPanel extends HTMLElement {
       await this._switchRuleEditor();
       return;
     }
+    if (ruleValue === "duplicate-rule") {
+      await this._duplicateRuleDraft();
+      return;
+    }
     if (ruleValue === "delete-rule" && this._editingRule?.id) {
       await this._deleteRule(this._editingRule.id);
     }
+  }
+
+  _duplicateRuleLabel() {
+    return this._hass?.localize?.("ui.panel.config.automation.editor.duplicate")
+      || (String(this._language).toLowerCase().startsWith("fr") ? "Dupliquer" : "Duplicate");
+  }
+
+  async _duplicateRuleDraft() {
+    if (!this._editingRule?.id) return;
+    if (this._ruleEditorMode === "yaml") {
+      await this._switchRuleEditor();
+      if (this._ruleEditorMode !== "visual" || !this._editingRule?.id) return;
+    } else {
+      this._captureRuleDraft();
+    }
+    const source = this._editingRule;
+    const duplicate = {
+      ...source,
+      name: "",
+      entity_ids: [...(source.entity_ids ?? [])],
+      value: Array.isArray(source.value) ? [...source.value] : source.value,
+    };
+    delete duplicate.id;
+    this._editingRule = duplicate;
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleEditorError = null;
+    this._ruleDirty = true;
+    this._refreshRuleEditor();
   }
 
   async _handleClick(event) {
@@ -2388,14 +2978,18 @@ class AlertManagerPanel extends HTMLElement {
     if (action === "filter-summary-status") {
       const status = button.dataset.status;
       if (!["active", "pending", "acknowledged"].includes(status)) return;
-      this._tableState.overview.filters.status = [status];
+      const selectedStatuses = this._filterValues(this._tableState.overview.filters.status);
+      this._tableState.overview.filters.status = selectedStatuses.length === 1
+        && selectedStatuses[0] === status
+        ? []
+        : [status];
       this._render();
       return;
     }
     if (action === "enable-monitoring") {
       if (this._busy) return;
       this._busy = true;
-      this._render();
+      this._refreshUiState();
       try {
         await this._hass.callService("switch", "turn_on", {
           entity_id: "switch.alert_manager_main_monitoring",
@@ -2406,7 +3000,7 @@ class AlertManagerPanel extends HTMLElement {
         this._notice = { kind: "error", text: this._errorText(error) };
       } finally {
         this._busy = false;
-        this._render();
+        this._refreshUiState();
       }
       return;
     }
@@ -2449,7 +3043,10 @@ class AlertManagerPanel extends HTMLElement {
         { type: "alert_manager/history/clear", confirmed: true },
         this._t("success.history_cleared"),
       );
-      if (result) this._history = result;
+      if (result) {
+        this._history = result;
+        this._refreshHistoryData();
+      }
       return;
     }
     if (action === "open-history-settings") {
@@ -2463,7 +3060,7 @@ class AlertManagerPanel extends HTMLElement {
       if (this._coherenceLoading) return;
       this._coherenceLoading = true;
       this._notice = null;
-      this._render();
+      this._refreshCoherenceData();
       try {
         this._coherence = await this._hass.callWS({
           type: "alert_manager/coherence/scan",
@@ -2473,7 +3070,7 @@ class AlertManagerPanel extends HTMLElement {
         this._notice = { kind: "error", text: this._errorText(error) };
       } finally {
         this._coherenceLoading = false;
-        this._render();
+        this._refreshCoherenceData();
       }
       return;
     }
@@ -2587,7 +3184,8 @@ class AlertManagerPanel extends HTMLElement {
     if (result !== null) {
       this._config.rules = this._config.rules.filter((item) => item.id !== rule.id);
       if (this._editingRule?.id === rule.id) this._editingRule = null;
-      this._render();
+      this._refreshRulesData();
+      this._refreshRuleEditor();
     }
   }
 
@@ -2610,7 +3208,7 @@ class AlertManagerPanel extends HTMLElement {
     if (!rows.length) return;
     this._busy = true;
     this._notice = null;
-    this._render();
+    this._refreshUiState();
     const results = await Promise.allSettled(rows.map((row) => this._hass.callService(
       "alert_manager",
       service,
@@ -2635,7 +3233,9 @@ class AlertManagerPanel extends HTMLElement {
         ),
       };
     this._busy = false;
-    this._render();
+    this._refreshOverviewData();
+    this._updateSelectionToolbar();
+    this._refreshUiState();
   }
 
   _applyOptimisticAcknowledgement(alertId, acknowledged) {
@@ -2684,7 +3284,10 @@ class AlertManagerPanel extends HTMLElement {
   _handleRuleInput(event) {
     if (this._editingRule === null) return;
     const target = event.target;
-    if (target?.closest?.("#rule-form")) this._ruleDirty = true;
+    if (target?.closest?.("#rule-form")) {
+      this._clearRuleEditorError();
+      this._ruleDirty = true;
+    }
     if (target?.id === "rule-yaml-editor") {
       this._ruleYaml = String(target.value ?? this._ruleYaml);
       this._ruleYamlError = null;
@@ -2698,10 +3301,12 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
+    this._clearRuleEditorError();
     this._refreshRuleEditor();
   }
 
   async _switchRuleEditor() {
+    this._clearRuleEditorError();
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
       this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
@@ -2721,13 +3326,13 @@ class AlertManagerPanel extends HTMLElement {
     );
     if (!validated) {
       this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     this._editingRule = { ...validated, ...(ruleId ? { id: ruleId } : {}) };
     this._ruleYamlError = null;
     this._ruleEditorMode = "visual";
-    this._render();
+    this._refreshRuleEditor();
   }
 
   async _saveRuleYaml() {
@@ -2741,7 +3346,7 @@ class AlertManagerPanel extends HTMLElement {
     );
     if (!updated) {
       this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
-      this._render();
+      this._refreshRuleEditor();
       return;
     }
     this._editingRule = null;
@@ -2944,7 +3549,7 @@ class AlertManagerPanel extends HTMLElement {
               kind: "error",
               text: this._t("automatic.device_threshold_validation"),
             };
-            this._render();
+            this._refreshUiState();
             return;
           }
           if (Object.hasOwn(values, row.device_id)) {
@@ -2952,7 +3557,7 @@ class AlertManagerPanel extends HTMLElement {
               kind: "error",
               text: this._t("automatic.duplicate_device_threshold"),
             };
-            this._render();
+            this._refreshUiState();
             return;
           }
           values[row.device_id] = row.value;
@@ -2967,28 +3572,28 @@ class AlertManagerPanel extends HTMLElement {
     if (config) {
       this._config = config;
       this._resetAutomaticDraft();
-      this._render();
+      this._refreshUiState();
     }
   }
 
   async _saveSettings() {
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
-      this._render();
+      this._refreshUiState();
       return;
     }
     this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
       this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
-      this._render();
+      this._refreshUiState();
       return;
     }
     const entityDelays = {};
     for (const row of this._entityDelayDraft) {
       if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
         this._notice = { kind: "error", text: this._t("settings.delay_validation") };
-        this._render();
+        this._refreshUiState();
         return;
       }
       if (row.entity_id in entityDelays) {
@@ -2996,7 +3601,7 @@ class AlertManagerPanel extends HTMLElement {
           kind: "error",
           text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
         };
-        this._render();
+        this._refreshUiState();
         return;
       }
       entityDelays[row.entity_id] = row.delay;
@@ -3019,7 +3624,7 @@ class AlertManagerPanel extends HTMLElement {
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
     this._notice = null;
-    this._render();
+    this._refreshUiState();
     try {
       const config = await this._hass.callWS({
         type: "alert_manager/config/update",
@@ -3040,11 +3645,12 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._busy = false;
-      this._render();
+      this._refreshUiState();
     }
   }
 
   async _saveRule(form) {
+    this._clearRuleEditorError();
     const field = (name) =>
       form.querySelector?.(`[data-field="${name}"]`) ??
       form.elements?.namedItem(name) ??
@@ -3095,13 +3701,10 @@ class AlertManagerPanel extends HTMLElement {
     // that render cannot clear the form, especially when the backend rejects it.
     this._editingRule = { ...rule, ...(id ? { id } : {}) };
     if ((source === "jinja" || VARIATION_RULE_SOURCES.has(source)) && conditionTemplate === null) {
-      this._notice = {
-        kind: "error",
-        text: this._t(VARIATION_RULE_SOURCES.has(source)
-          ? "rules.condition_template_variation_required"
-          : "rules.condition_template_required"),
-      };
-      this._render();
+      this._ruleEditorError = this._t(VARIATION_RULE_SOURCES.has(source)
+        ? "rules.condition_template_variation_required"
+        : "rules.condition_template_required");
+      this._refreshRuleEditor();
       return;
     }
     const message = id
@@ -3116,6 +3719,10 @@ class AlertManagerPanel extends HTMLElement {
       this._ruleEditorMode = "visual";
       this._ruleDirty = false;
       this._replaceRule(updated);
+    } else if (this._notice?.kind === "error") {
+      this._ruleEditorError = this._notice.text;
+      this._notice = null;
+      this._refreshRuleEditor();
     }
   }
 
@@ -3174,7 +3781,8 @@ class AlertManagerPanel extends HTMLElement {
     if (this._editingRule?.id === rule.id) {
       this._editingRule = { ...this._editingRule, enabled: rule.enabled };
     }
-    this._render();
+    this._refreshRulesData();
+    if (this._editingRule === null) this._refreshRuleEditor();
   }
 
   _resetSettingsDraft() {
@@ -3348,20 +3956,44 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
 
+  _syncNarrowTableHeaderBackgrounds() {
+    if (!globalThis.document?.createElement) return;
+    const styleId = "alert-manager-narrow-table-header-style";
+    for (const selector of [
+      '[data-alert-table-page="overview"]',
+      '[data-alert-table-page="history"]',
+      "[data-rules-table-page]",
+      "[data-coherence-table-page]",
+    ]) {
+      const root = this.shadowRoot?.querySelector?.(selector)?.shadowRoot;
+      if (!root || root.querySelector?.(`#${styleId}`)) continue;
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        :host([narrow]) .narrow-header-row {
+          background: var(--primary-background-color);
+          border-bottom: 1px solid var(--divider-color);
+          box-sizing: border-box;
+        }
+      `;
+      root.append(style);
+    }
+  }
+
   _styles() {
     return `
       :host{display:block;height:100%;background:var(--primary-background-color,#fafafa)}
       *{box-sizing:border-box}main{width:100%;max-width:none;margin:0;padding:24px}h2{font-size:var(--ha-font-size-xl,20px);font-weight:var(--ha-font-weight-normal,400);line-height:var(--ha-line-height-condensed,1.4);margin:0 0 6px}p{margin:0;color:var(--secondary-text-color,#727272)}
       .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.summary ha-card,.panel{padding:20px}.summary ha-card{display:flex;align-items:center;justify-content:space-between}.summary ha-card[data-action="filter-summary-status"]{cursor:pointer}.summary ha-card[data-action="filter-summary-status"]:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.summary ha-card[data-action="filter-summary-status"]:focus-visible{outline:var(--wa-focus-ring,2px solid var(--primary-color,#03a9f4));outline-offset:2px}.summary ha-card[data-action="filter-summary-status"][aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--primary-color,#03a9f4)}.summary strong{font-size:30px}.danger{color:var(--error-color,#db4437)}.acknowledged{color:var(--blue-color,var(--primary-color,#03a9f4))}.pending{color:var(--warning-color,#f5a623)}
-      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.date-filter-fields ha-date-range-picker{display:block;width:100%}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
+      hass-tabs-subpage-data-table{display:block;width:100%;height:100%;--data-table-row-height:60px}.table-page-top{display:flow-root}.table-page-top{box-sizing:border-box;width:100%;padding:24px 24px 0;background:var(--primary-background-color,#fafafa)}.table-page-top .summary{margin-bottom:20px}.filter-pane-content{display:flex;min-height:0;flex-direction:column}.filter-pane-content>ha-expansion-panel{display:block;border-bottom:1px solid var(--divider-color,#ddd)}.filter-section-header{display:flex;min-width:0;align-items:center;width:100%}.filter-section-header>span:first-child{min-width:0}.filter-section-header ha-icon-button{margin-inline-start:auto;margin-inline-end:8px}.filter-badge{display:inline-block;margin-inline-start:8px;min-width:16px;box-sizing:border-box;border-radius:var(--ha-border-radius-circle,50%);font-size:var(--ha-font-size-xs,11px);background:var(--primary-color,#03a9f4);line-height:var(--ha-line-height-normal,1.4);text-align:center;padding:0 2px;color:var(--text-primary-color,#fff)}.facet-filter-options{display:flex;max-height:280px;flex-direction:column;overflow:auto;padding:4px 0 8px}.filter-option{display:flex;min-height:48px;align-items:center;gap:16px;padding:0 16px;cursor:pointer;color:var(--primary-text-color,#212121)}.filter-option:hover{background:var(--ha-color-fill-neutral-quiet-hover,var(--secondary-background-color,#f5f5f5))}.filter-option ha-checkbox{flex:none}.filter-empty{padding:12px 16px;color:var(--secondary-text-color,#727272)}.date-filter-fields{display:grid;gap:12px;padding:4px 16px 16px}.date-filter-fields ha-date-range-picker{display:block;width:100%}.selection-actions{display:flex;align-items:center;gap:var(--ha-space-2,8px)}.selection-actions ha-button[variant="danger"]{color:var(--error-color,#db4437)}
       .history-empty{margin-bottom:20px}.history-empty .empty h2{margin-bottom:8px}.history-empty .empty ha-button{margin-top:16px}.settings-form{width:100%;max-width:1120px;margin-inline:auto}.settings-card{display:grid;gap:18px}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 24px;max-width:920px}.settings-wide{grid-column:1/-1}.ignored-reference-chips{display:flex;flex-wrap:wrap;gap:8px;max-width:100%;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:var(--secondary-background-color,#f5f5f5)}.ignored-reference-add{display:flex;align-items:flex-start;gap:8px}.ignored-reference-add ha-input{flex:0 1 420px}.ignored-reference-add ha-button{flex:none;margin-top:8px}.history-settings{display:grid;gap:8px;max-width:720px}.history-settings-row{display:grid;grid-template-columns:minmax(260px,420px) auto;grid-template-areas:"label ." "input action";align-items:center;gap:6px 16px}.history-limit-label{grid-area:label}#history-limit{grid-area:input}.history-actions{grid-area:action;align-self:start;min-height:56px;align-items:center;justify-content:flex-end;flex-wrap:nowrap}.history-limit-help{margin-top:0;max-width:620px}.settings-save-actions{justify-content:flex-end;margin-top:4px}
-      .coherence-panel{padding:0}.coherence-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:20px}.coherence-header>div{min-width:0}.coherence-header ha-button{flex:none}.coherence-stats{display:flex;flex-wrap:wrap;gap:8px 20px;padding:12px 20px;border-block:1px solid var(--divider-color,#ddd);background:var(--secondary-background-color,#f5f5f5);color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px)}.coherence-stats .warning{color:var(--warning-color,#9a6b00)}.coherence-scan-date.stale{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}#coherence-table{display:block;width:100%}
+      .coherence-panel{padding:20px}.coherence-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:0}.coherence-header>div{min-width:0}.coherence-header ha-button{flex:none}.coherence-stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:12px;padding:0;border:0;background:transparent;color:var(--secondary-text-color,#727272);font-size:var(--ha-font-size-s,12px)}.coherence-stats .warning{color:var(--warning-color,#9a6b00)}.coherence-scan-date.stale{color:var(--error-color,#db4437);font-weight:var(--ha-font-weight-medium,500)}
       code{font-family:var(--ha-font-family-code,ui-monospace,SFMono-Regular,monospace);font-size:12px;word-break:break-all}
-      .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.switch-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;min-height:48px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.pack-map-list{display:grid;gap:10px;margin-top:8px}.pack-map-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,180px) auto;gap:10px;align-items:start}.pack-map-row>ha-button{margin-top:8px}.pack-map-add-action{justify-content:flex-start}
-      .actions{display:flex;justify-content:flex-end;gap:10px}#rules-table{display:block;width:100%;margin-top:16px}.rule-entities{display:flex;min-width:0;flex-direction:column}.new-rule-action{justify-content:flex-start;margin-top:16px}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor .rules-list-panel{margin-inline-end:calc(var(--rule-editor-width) + 8px)}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
+      .stack{display:grid;gap:16px}.automatic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;max-width:1120px;margin-inline:auto}.automatic-actions{grid-column:1/-1}.category-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:16px}.category-header h2{margin:0}.category-header ha-switch{align-self:start}.category-card p{font-size:13px;margin-top:4px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}.full{grid-column:1/-1;margin-top:16px}.field{display:flex;min-width:0;flex-direction:column;gap:6px}.switch-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;min-height:48px}.field-label{font-size:var(--ha-font-size-m,14px);font-weight:var(--ha-font-weight-normal,400)}ha-input,ha-select,ha-selector{display:block;width:100%;font-weight:var(--ha-font-weight-normal,400)}ha-input{--ha-input-padding-bottom:0}ha-input>[slot="end"]{padding-inline-start:var(--ha-space-2,8px);color:var(--secondary-text-color,#727272);white-space:nowrap}small{display:block;margin-top:8px;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400)}.pack-map-list{display:grid;gap:10px;margin-top:8px}.pack-map-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(120px,180px) auto;gap:10px;align-items:start}.pack-map-row>ha-button{margin-top:8px}.pack-map-add-action{justify-content:flex-start}
+      .actions{display:flex;justify-content:flex-end;gap:10px}.rule-entities{display:flex;min-width:0;flex-direction:column}.rules-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.rules-header>div{min-width:0}.rules-header ha-button{flex:none}.rules-layout{--rule-editor-width:560px}.rules-layout.has-editor [data-rules-table-page]{width:auto;margin-inline-end:calc(var(--rule-editor-width) + 8px)}.rules-layout.has-editor [data-rules-table-page] .rules-list-panel{margin-inline-end:0}ha-card.rule-editor-drawer{position:fixed;z-index:6;inset-block-start:calc(var(--header-height,56px) + 16px);inset-block-end:16px;inset-inline-end:24px;width:var(--rule-editor-width);max-width:calc(100vw - 64px);display:flex;flex-direction:column;overflow:visible;border-color:var(--primary-color,#03a9f4);border-width:2px;--ha-card-border-radius:var(--ha-dialog-border-radius,var(--ha-border-radius-2xl,14px))}.rule-editor-drawer ha-dialog-header{flex:none;background:var(--ha-dialog-surface-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius);border-end-start-radius:0;border-end-end-radius:0}.rule-editor-form{flex:1;min-height:0;overflow:auto;margin:0;padding:0;background:var(--primary-background-color,#fafafa)}.rule-editor-section{padding:20px;background:var(--card-background-color,#fff);border-bottom:1px solid var(--divider-color,#ddd)}.rule-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.rule-section-heading h3{font-size:var(--ha-font-size-l,16px);font-weight:var(--ha-font-weight-medium,500);line-height:1.4;margin:0}.rule-section-heading small{display:block;margin-top:2px}.rule-editor-form .full{margin-top:0}.rule-attribute-field[hidden]{display:none}.rule-values-field{gap:10px}.rule-value-list{display:grid;gap:10px}.rule-value-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}.rule-value-row ha-button{margin-top:8px}.rule-value-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.rule-value-footer small{margin:0}.yaml-rule-section{min-height:0;display:flex;flex:1;flex-direction:column}.yaml-rule-section ha-code-editor{display:block;flex:1;min-height:360px;border:1px solid var(--divider-color,#ddd);border-radius:var(--ha-border-radius-m,8px);overflow:hidden}.yaml-error{margin-top:12px;padding:10px 12px;border-radius:var(--ha-border-radius-m,8px);background:color-mix(in srgb,var(--error-color,#db4437) 14%,transparent);color:var(--error-color,#db4437);overflow-wrap:anywhere}.rule-editor-actions{position:sticky;bottom:0;z-index:1;align-items:center;justify-content:flex-start;flex-wrap:wrap;padding:12px 20px max(12px,var(--safe-area-inset-bottom,0px));background:var(--card-background-color,#fff);border-top:1px solid var(--divider-color,#ddd);box-shadow:0 -2px 8px rgba(0,0,0,.08)}.rule-editor-error{flex:1 0 100%;width:100%;margin:0 0 4px}.action-spacer{flex:1}.rule-editor-resize{position:absolute;inset-block:var(--ha-card-border-radius) var(--ha-card-border-radius);inset-inline-start:-12px;width:24px;z-index:7;cursor:ew-resize;display:flex;align-items:center;justify-content:center;touch-action:none}.resize-indicator{height:100%;width:4px;border-radius:var(--ha-border-radius-pill,999px);background:var(--primary-color,#03a9f4);opacity:0;transform:scaleX(0);transition:opacity 180ms ease-in-out,transform 180ms ease-in-out}.rule-editor-resize:hover .resize-indicator,.rule-editor-resize:focus-visible .resize-indicator,.rule-editor-resize.is-resizing .resize-indicator{opacity:1;transform:scaleX(1)}.rule-editor-resize:focus-visible{outline:none}.rule-editor-backdrop{display:none}.delay-list{display:grid;gap:10px;margin-top:16px}.delay-add-action{justify-content:flex-start;margin-top:16px}.delay-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,260px) auto;gap:10px;align-items:start}.delay-row ha-input{min-width:0}.delay-row>ha-button{margin-top:8px}.configuration-transfer{display:grid;gap:16px}.transfer-actions{justify-content:flex-start}
       .empty,.loading{padding:40px;text-align:center;color:var(--secondary-text-color,#727272)}.empty.compact{padding:20px}.page-alert{display:block;margin-bottom:16px}
-      @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor .rules-list-panel{margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
-      @media(max-width:700px){main{padding:12px}.automatic-grid{grid-template-columns:1fr}.summary ha-card{padding:12px}.summary strong{font-size:24px}.fields,.settings-grid{grid-template-columns:1fr}.settings-wide{grid-column:auto}.panel{padding:15px}.coherence-panel{padding:0}.coherence-header{align-items:stretch;flex-direction:column;padding:15px}.coherence-header ha-button{width:100%}.coherence-stats{padding-inline:15px}.actions ha-button{width:100%}.ignored-reference-add{align-items:stretch;flex-direction:column}.ignored-reference-add ha-input{flex:none;max-width:none;width:100%}.ignored-reference-add ha-button{width:100%;margin-top:0}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row,.pack-map-row{grid-template-columns:1fr}.delay-row ha-button,.pack-map-row>ha-button{width:100%;margin-top:0}.table-page-top{padding:12px 12px 0}hass-tabs-subpage-data-table{--data-table-row-height:72px}.selection-actions{max-width:44vw;overflow-x:auto}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
+      @media(max-width:1000px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.rules-layout.has-editor [data-rules-table-page]{width:100%;margin-inline-end:0}.rule-editor-backdrop{display:block;position:fixed;z-index:5;inset:var(--header-height,56px) 0 0;background:rgba(0,0,0,.32)}}
+      @media(max-width:700px){main{padding:12px}.automatic-grid{grid-template-columns:1fr}.summary ha-card{padding:12px}.summary strong{font-size:24px}.fields,.settings-grid{grid-template-columns:1fr}.settings-wide{grid-column:auto}.panel{padding:15px}.coherence-panel{padding:15px}.coherence-header{align-items:stretch;flex-direction:column}.coherence-header ha-button{width:100%}.actions ha-button{width:100%}.rules-header{align-items:stretch;flex-direction:column}.rules-header ha-button{width:100%}.ignored-reference-add{align-items:stretch;flex-direction:column}.ignored-reference-add ha-input{flex:none;max-width:none;width:100%}.ignored-reference-add ha-button{width:100%;margin-top:0}.history-settings-row{grid-template-columns:1fr;grid-template-areas:"label" "input" "action"}.history-actions{align-self:auto;align-items:center;justify-content:flex-start}.delay-row,.pack-map-row{grid-template-columns:1fr}.delay-row ha-button,.pack-map-row>ha-button{width:100%;margin-top:0}.table-page-top{padding:12px 12px 0}hass-tabs-subpage-data-table{--data-table-row-height:72px}.selection-actions{max-width:44vw;overflow-x:auto}ha-card.rule-editor-drawer{inset-block-start:var(--header-height,56px);inset-block-end:calc(var(--header-height,56px) + var(--safe-area-inset-bottom,0px));inset-inline-end:0;width:100%;max-width:none;border-width:0;overflow:hidden;--ha-card-border-radius:var(--ha-border-radius-square,0)}.rule-editor-resize{display:none}.rule-section-heading,.rule-value-footer{align-items:stretch;flex-direction:column}.rule-value-row{grid-template-columns:1fr}.rule-value-row ha-button{margin-top:0}.rule-editor-actions{flex-wrap:wrap}.rule-editor-actions .action-spacer{display:none}}
     `;
   }
 }

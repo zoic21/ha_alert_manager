@@ -3,8 +3,6 @@ import { dirname } from "node:path";
 
 const files = [
   "alert-manager-panel.js",
-  "alert-manager-panel-entry.js",
-  "alert-manager-panel-runtime.js",
 ];
 
 for (const filename of files) {

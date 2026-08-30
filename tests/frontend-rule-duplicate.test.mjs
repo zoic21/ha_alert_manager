@@ -41,7 +41,6 @@ globalThis.document = {
   },
 };
 
-await import("../frontend-src/alert-manager-panel-runtime.js");
 const { AlertManagerPanel } = await import("../frontend-src/alert-manager-panel.js");
 
 const rule = () => ({

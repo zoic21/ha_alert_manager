@@ -18,7 +18,7 @@ for (const token of forbidden) {
   }
 }
 const localStorageUses = source.match(/window\.localStorage/g) ?? [];
-if (localStorageUses.length !== 2 || source.includes("globalThis.localStorage")) {
+if (localStorageUses.length !== 6 || source.includes("globalThis.localStorage")) {
   throw new Error("Frontend storage must stay limited to the namespaced table preferences");
 }
 if (!source.includes("customElements.define")) {
@@ -32,7 +32,7 @@ for (const token of forbiddenNativeUi) {
   }
 }
 
-const requiredHomeAssistantUi = ["<ha-alert", "<ha-card", "<ha-data-table"];
+const requiredHomeAssistantUi = ["<ha-alert", "<ha-card", "<hass-tabs-subpage-data-table"];
 for (const token of requiredHomeAssistantUi) {
   if (!source.includes(token)) {
     throw new Error(`Expected Home Assistant display component: ${token}`);
