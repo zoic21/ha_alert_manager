@@ -2422,6 +2422,7 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
+    { value: "variation", label: "Variation" },
     { value: "unchanged", label: "Aucun changement" },
     { value: "jinja", label: "Jinja" },
   ]);
@@ -2574,6 +2575,41 @@ test("normal comparison rules still save without a Jinja condition", async () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0].rule.source, "state");
   assert.equal(calls[0].rule.condition_template, null);
+});
+
+test("variation rule editor requires the Jinja condition that anchors its start", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    source: "variation",
+    operator: "above",
+    value: "5",
+    condition_template: "",
+  };
+
+  const editor = panel._renderRuleEditor();
+  assert.match(editor, /Condition Jinja de début/);
+  assert.match(editor, /rule-condition-template" required aria-required="true"/);
+  assert.match(editor, /capturée lorsque cette condition passe à true/);
+
+  const calls = [];
+  panel._hass = { callWS: async (message) => { calls.push(message); return message.rule; } };
+  panel._render = () => {};
+  await panel._saveRule(form(ruleValues({
+    source: "variation",
+    operator: "above",
+    value: "5",
+  })));
+
+  assert.equal(calls.length, 0);
+  assert.equal(panel._notice.kind, "error");
+  assert.equal(
+    panel._notice.text,
+    "La condition Jinja de début est obligatoire avec la source « Variation ».",
+  );
 });
 
 test("rule editor saves the opt-in active message update option", async () => {

@@ -53,7 +53,8 @@
       },
       "sources": {
         "attribute": "Attribut {attribute}",
-        "state": "État"
+        "state": "État",
+        "variation": "Variation"
       }
     },
     "coherence": {
@@ -109,6 +110,8 @@
       "not_loaded": "Alert Manager n’est pas chargé.",
       "numeric_value_required": "Cet opérateur exige une valeur numérique valide.",
       "operator_unsupported": "Cet opérateur n’est pas pris en charge.",
+      "variation_condition_required": "La condition Jinja de début est obligatoire avec la source Variation.",
+      "variation_operator_required": "La source Variation exige un opérateur numérique : supérieur, inférieur, entre ou en dehors.",
       "range_bounds_invalid": "Les deux bornes doivent être des nombres valides.",
       "range_bounds_order": "La borne inférieure doit être inférieure ou égale à la borne supérieure.",
       "range_bounds_required": "Une borne inférieure et une borne supérieure sont obligatoires.",
@@ -230,6 +233,9 @@
       "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
       "condition_template_only": "Condition Jinja",
       "condition_template_only_help": "Obligatoire. Le template doit renvoyer true pour déclencher l’alerte ; aucune autre comparaison n’est évaluée. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
+      "condition_template_variation": "Condition Jinja de début",
+      "condition_template_variation_help": "Obligatoire. La valeur de début est capturée lorsque cette condition passe à true. Elle est conservée tant que la condition reste vraie, puis réinitialisée lorsqu’elle redevient fausse. Dans cette condition, value correspond à la valeur numérique actuelle de l’entité.",
+      "condition_template_variation_required": "La condition Jinja de début est obligatoire avec la source « Variation ».",
       "condition_template_selected_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de la valeur ou de l’attribut sélectionné. Variables supplémentaires : entity_id, state et value.",
       "condition_template_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de l’état et des attributs. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
       "condition_template_required": "La condition Jinja est obligatoire lorsque la source est « Jinja ».",
@@ -267,6 +273,7 @@
       "source_jinja": "Jinja",
       "source_state": "État principal",
       "source_unchanged": "Aucun changement",
+      "source_variation": "Variation",
       "status": "Statut",
       "status_active": "Actif",
       "status_inactive": "Inactif",
@@ -274,7 +281,7 @@
       "upper_bound": "Borne supérieure",
       "value": "Valeur de comparaison",
       "values": "Valeurs de comparaison",
-      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Les opérateurs between et outside utilisent value: [borne_inférieure, borne_supérieure] ; l’opérateur unchanged n’utilise pas value. Un attribut data.*.key parcourt chaque élément du tableau data. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée. Avec source: jinja, seule condition_template est évaluée et elle devient obligatoire. update_message_when_active permet de continuer à recalculer un message Jinja après l’activation.",
+      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. La source variation compare valeur_actuelle - valeur_au_début et exige condition_template : la référence est capturée lorsque ce template passe à true, puis réinitialisée lorsqu’il redevient false. Elle accepte les opérateurs above, below, between et outside. Les opérateurs between et outside utilisent value: [borne_inférieure, borne_supérieure] ; l’opérateur unchanged n’utilise pas value. Un attribut data.*.key parcourt chaque élément du tableau data. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée. Avec source: jinja, seule condition_template est évaluée et elle devient obligatoire. update_message_when_active permet de continuer à recalculer un message Jinja après l’activation.",
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML"
     },

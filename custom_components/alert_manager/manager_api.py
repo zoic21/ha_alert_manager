@@ -157,6 +157,8 @@ class _ApiMixin:
         previous_config = deepcopy(self.config)
         previous_records = deepcopy(self.records)
         previous_pending_history = list(self._pending_history)
+        previous_variation_baselines = dict(self._variation_baselines)
+        previous_variation_dirty = self._variation_baselines_dirty
         self.config["monitoring_enabled"] = enabled
         try:
             if enabled:
@@ -168,11 +170,15 @@ class _ApiMixin:
                 )
             else:
                 self._freeze_pending_alerts(dt_util.now())
+                self._clear_variation_baselines()
             await self._async_save_state()
         except Exception:
             self.config = previous_config
             self.records = previous_records
             self._pending_history = previous_pending_history
+            self._variation_baselines = previous_variation_baselines
+            self.storage.variation_baselines = self._variation_baselines
+            self._variation_baselines_dirty = previous_variation_dirty
             self._cancel_all_timers()
             self._reschedule_record_timers()
             raise
@@ -342,6 +348,10 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             self.config = candidate
+            if not self.monitoring_enabled and previous[0].get(
+                "monitoring_enabled", True
+            ):
+                self._clear_variation_baselines()
             self._rebuild_rule_index()
             await self.async_evaluate_all(save=False, publish=False)
             if "pending_display_delay" in changes:
@@ -374,6 +384,7 @@ class _ApiMixin:
         self._cancel_all_device_event_timers()
         try:
             self.config = candidate
+            self._clear_variation_baselines()
             self._rebuild_rule_index()
             if self.monitoring_enabled:
                 self._resume_pending_alerts(dt_util.now())
@@ -451,6 +462,22 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             self.config["rules"][index] = rule.as_dict()
+            variation_definition_changed = (
+                old_rule.source == "variation" or rule.source == "variation"
+            ) and (
+                old_rule.enabled,
+                old_rule.source,
+                old_rule.condition_template,
+            ) != (
+                rule.enabled,
+                rule.source,
+                rule.condition_template,
+            )
+            if variation_definition_changed:
+                for entity_id in set(old_rule.entity_ids) | set(rule.entity_ids):
+                    key = f"{rule_id}:{entity_id}"
+                    if self._variation_baselines.pop(key, None) is not None:
+                        self._variation_baselines_dirty = True
             self._rebuild_rule_index()
 
             removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
@@ -517,23 +544,42 @@ class _ApiMixin:
 
     def _configuration_snapshot(
         self,
-    ) -> tuple[dict[str, Any], dict[str, AlertRecord], list[AlertHistoryEntry]]:
+    ) -> tuple[
+        dict[str, Any],
+        dict[str, AlertRecord],
+        list[AlertHistoryEntry],
+        dict[str, float],
+        bool,
+    ]:
         """Copy the state needed to roll back a failed configuration write."""
         return (
             deepcopy(self.config),
             deepcopy(self.records),
             list(self._pending_history),
+            dict(self._variation_baselines),
+            self._variation_baselines_dirty,
         )
 
     def _restore_configuration_snapshot(
         self,
         snapshot: tuple[
-            dict[str, Any], dict[str, AlertRecord], list[AlertHistoryEntry]
+            dict[str, Any],
+            dict[str, AlertRecord],
+            list[AlertHistoryEntry],
+            dict[str, float],
+            bool,
         ],
     ) -> None:
         """Restore configuration, records, indexes and pending timers."""
         self._cancel_all_timers()
-        self.config, self.records, self._pending_history = snapshot
+        (
+            self.config,
+            self.records,
+            self._pending_history,
+            self._variation_baselines,
+            self._variation_baselines_dirty,
+        ) = snapshot
+        self.storage.variation_baselines = self._variation_baselines
         self._rebuild_rule_index()
         self._refresh_tracking()
         self._reschedule_record_timers()

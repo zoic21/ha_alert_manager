@@ -117,6 +117,37 @@ condition_template: null
     assert parsed.condition_template is None
 
 
+def test_variation_rule_yaml_requires_and_preserves_its_starting_condition() -> None:
+    """Variation YAML exposes the gate that anchors its persisted reference."""
+    raw = """name: Energy variation
+enabled: true
+entity_ids:
+  - sensor.energy
+source: variation
+operator: above
+value: 2.5
+duration: 300
+message: null
+condition_template: "{{ is_state('binary_sensor.cycle', 'on') }}"
+"""
+    rule = parse_rule_yaml(raw)
+    rendered = dump_rule_yaml(rule)
+
+    assert rule.source == "variation"
+    assert rule.condition_template == "{{ is_state('binary_sensor.cycle', 'on') }}"
+    assert "source: variation" in rendered
+    assert "operator: above" in rendered
+    assert "condition_template:" in rendered
+
+    with pytest.raises(ValueError, match="required for Variation rules"):
+        parse_rule_yaml(
+            raw.replace(
+                "condition_template: \"{{ is_state('binary_sensor.cycle', 'on') }}\"",
+                "condition_template: null",
+            )
+        )
+
+
 def test_range_and_selected_unchanged_yaml_shapes_are_strict() -> None:
     """Ranges keep two bounds while selected no-change omits value."""
     range_rule = parse_rule_yaml(

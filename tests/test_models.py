@@ -270,6 +270,48 @@ def test_jinja_only_rule_rejects_a_missing_template_without_affecting_normal_rul
     assert normal.condition_template is None
 
 
+def test_variation_rule_requires_a_starting_condition_and_numeric_operator():
+    """Variation windows always have an explicit start gate and numeric threshold."""
+    with pytest.raises(ValueError, match="required for Variation rules"):
+        validate_rule_payload(
+            {
+                "name": "Missing start gate",
+                "entity_ids": ["sensor.test"],
+                "source": "variation",
+                "operator": "above",
+                "value": 5,
+                "duration": 0,
+            }
+        )
+
+    rule = validate_rule_payload(
+        {
+            "name": "Consumption variation",
+            "entity_ids": ["sensor.test"],
+            "source": "variation",
+            "operator": "outside",
+            "value": [-5, 5],
+            "duration": 60,
+            "condition_template": "{{ true }}",
+        }
+    )
+    assert rule.source == "variation"
+    assert rule.matches(6) is True
+
+    with pytest.raises(ValueError, match="numeric operator"):
+        validate_rule_payload(
+            {
+                "name": "Invalid variation",
+                "entity_ids": ["sensor.test"],
+                "source": "variation",
+                "operator": "equals",
+                "value": 5,
+                "duration": 0,
+                "condition_template": "{{ true }}",
+            }
+        )
+
+
 def test_legacy_none_source_is_normalized_to_jinja() -> None:
     """Stored pre-rename rules remain readable but never stay legacy internally."""
     rule = Rule.from_dict(

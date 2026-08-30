@@ -32,6 +32,16 @@ _LEGACY_OPERATOR_LABELS = {
     "unchanged": "Aucun changement",
 }
 
+
+def _legacy_rule_source(rule: Rule) -> str:
+    """Return the source label used only by the non-localized fallback text."""
+    if rule.source == "attribute":
+        return f"Attribut {rule.attribute}"
+    if rule.source == "variation":
+        return "Variation"
+    return "État"
+
+
 _JINJA_BLOCK_PATTERN = re.compile(r"{{(.*?)}}|{%(.*?)%}", re.DOTALL)
 _ENTITY_ID_PATTERN = re.compile(
     r"(?<![a-z0-9_])([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)(?![a-z0-9_])",
@@ -76,13 +86,11 @@ class _TemplatesMixin:
             duration = f" pendant {rule.duration} s" if rule.duration else ""
             return f"État et attributs inchangés{duration}"
         if rule.operator == "unchanged":
-            source = (
-                f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
-            )
+            source = _legacy_rule_source(rule)
             duration = f" pendant {rule.duration} s" if rule.duration else ""
             return f"{source} inchangé{duration}"
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
-        source = f"Attribut {rule.attribute}" if rule.source == "attribute" else "État"
+        source = _legacy_rule_source(rule)
         suffix = f" {unit}" if unit else ""
         duration = f" pendant {rule.duration} s" if rule.duration else ""
         expected = (
@@ -99,6 +107,17 @@ class _TemplatesMixin:
         """Cache enabled rules and rebuild template dependency indexes."""
         self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        valid_variation_keys = {
+            f"{rule.id}:{entity_id}"
+            for rule in self._rules
+            if rule.enabled and rule.source == "variation"
+            for entity_id in rule.entity_ids
+        }
+        stale_variation_keys = self._variation_baselines.keys() - valid_variation_keys
+        if stale_variation_keys:
+            for key in stale_variation_keys:
+                self._variation_baselines.pop(key, None)
+            self._variation_baselines_dirty = True
         self._rule_templates = {}
         self._rule_message_templates = {}
         for rule in self._rules:
@@ -432,6 +451,10 @@ class _TemplatesMixin:
             _found, current = extract_attribute_value(
                 state.attributes, rule.attribute or ""
             )
+        elif rule.source == "variation":
+            found, variation = self._variation_value(rule, state)
+            if found:
+                current = variation
         rendered_message = self._render_rule_message(
             rule,
             state,

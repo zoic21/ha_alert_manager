@@ -28,6 +28,7 @@ from .models import (
     advance_record,
     calculate_due_at,
     extract_attribute_value,
+    safe_float,
 )
 from .packs import PACKS, PACKS_BY_ID, PackNeutral
 
@@ -517,6 +518,7 @@ class _RuntimeMixin:
             if record.details.entity_id == entity_id
         }
         candidates = self._build_candidates(state) if state is not None else {}
+        persisted_changed |= self._variation_baselines_dirty
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
@@ -639,12 +641,47 @@ class _RuntimeMixin:
             return getattr(state, "last_changed", state.last_updated)
         return now
 
-    @staticmethod
-    def _rule_current_value(rule: Rule, state: State) -> tuple[bool, Any]:
+    def _rule_current_value(self, rule: Rule, state: State) -> tuple[bool, Any]:
         """Read one rule source, including dotted list-wildcard attributes."""
         if rule.source == "attribute":
             return extract_attribute_value(state.attributes, rule.attribute or "")
         return True, state.state
+
+    @staticmethod
+    def _variation_key(rule: Rule, entity_id: str) -> str:
+        """Return the stable per-rule, per-entity reference key."""
+        return f"{rule.id}:{entity_id}"
+
+    def _clear_variation_baseline(self, rule: Rule, entity_id: str) -> bool:
+        """End one variation window when its required Jinja gate is false."""
+        key = self._variation_key(rule, entity_id)
+        if key not in self._variation_baselines:
+            return False
+        self._variation_baselines.pop(key)
+        self._variation_baselines_dirty = True
+        return True
+
+    def _clear_variation_baselines(self) -> bool:
+        """Drop all references when monitoring can no longer observe a window."""
+        if not self._variation_baselines:
+            return False
+        self._variation_baselines.clear()
+        self._variation_baselines_dirty = True
+        return True
+
+    def _variation_value(self, rule: Rule, state: State) -> tuple[bool, float | None]:
+        """Capture or reuse the reference and return current minus reference."""
+        current = safe_float(state.state)
+        if current is None:
+            return False, None
+        key = self._variation_key(rule, state.entity_id)
+        baseline = self._variation_baselines.get(key)
+        if baseline is None:
+            baseline = current
+            self._variation_baselines[key] = baseline
+            self._variation_baselines_dirty = True
+        variation = current - baseline
+        return True, 0.0 if variation == 0 else variation
 
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
@@ -672,13 +709,26 @@ class _RuntimeMixin:
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
-            found, current = self._rule_current_value(rule, state)
-            if not found:
-                continue
-            if rule.source not in ("jinja", "unchanged") and not rule.matches(current):
-                continue
-            if not self._rule_template_matches(rule, state, current):
-                continue
+            if rule.source == "variation":
+                numeric_state = safe_float(state.state)
+                if numeric_state is None:
+                    continue
+                if not self._rule_template_matches(rule, state, numeric_state):
+                    self._clear_variation_baseline(rule, entity_id)
+                    continue
+                found, current = self._variation_value(rule, state)
+                if not found or not rule.matches(current):
+                    continue
+            else:
+                found, current = self._rule_current_value(rule, state)
+                if not found:
+                    continue
+                if rule.source not in ("jinja", "unchanged") and not rule.matches(
+                    current
+                ):
+                    continue
+                if not self._rule_template_matches(rule, state, current):
+                    continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             rendered_message = self._render_rule_message(rule, state, current)
             condition = rendered_message or self._rule_condition(rule, state)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from copy import deepcopy
 from typing import Any
 
@@ -61,6 +62,7 @@ class AlertManagerStorage:
             atomic_writes=True,
             minor_version=STORAGE_MINOR_VERSION,
         )
+        self.variation_baselines: dict[str, float] = {}
 
     async def async_load(
         self,
@@ -68,10 +70,15 @@ class AlertManagerStorage:
         """Load and validate stored data, falling back safely."""
         raw = await self._store.async_load()
         if not isinstance(raw, dict):
+            self.variation_baselines = {}
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
         migrated_config, migrated = self._migrate_config(raw.get("config", {}))
+        self.variation_baselines, baselines_migrated = _load_variation_baselines(
+            raw.get("variation_baselines", {})
+        )
+        migrated |= baselines_migrated
         config = _merge_dict(deepcopy(DEFAULT_CONFIG), migrated_config)
         records: dict[str, AlertRecord] = {}
         raw_alerts = raw.get("alerts", {})
@@ -136,8 +143,29 @@ class AlertManagerStorage:
                     alert_id: record.as_storage_dict()
                     for alert_id, record in records.items()
                 },
+                "variation_baselines": dict(self.variation_baselines),
             }
         )
+
+
+def _load_variation_baselines(raw: Any) -> tuple[dict[str, float], bool]:
+    """Load finite numeric variation references and discard malformed entries."""
+    if not isinstance(raw, dict):
+        return {}, True
+    baselines: dict[str, float] = {}
+    changed = False
+    for key, value in raw.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(value)
+        ):
+            changed = True
+            continue
+        baselines[key] = float(value)
+    return baselines, changed
 
 
 class AlertManagerHistoryStorage:

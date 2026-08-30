@@ -62,6 +62,7 @@ Les règles personnalisées couvrent désormais davantage de cas concrets sans d
 - seuils numériques, plages **entre** deux valeurs ou **en dehors** de ces bornes ;
 - plusieurs valeurs acceptées ;
 - attributs imbriqués et tableaux comme `data.*.key` ;
+- variation depuis une valeur de début capturée lorsqu’une condition Jinja obligatoire devient vraie ;
 - alerte lorsque **l’entité entière ne change plus** ;
 - alerte lorsque seul **un état ou un attribut précis ne change plus** ;
 - Jinja comme condition complémentaire ou comme logique complète de la règle ;
@@ -162,7 +163,7 @@ Chaque surveillance peut être activée indépendamment. Les délais et exclusio
 
 Pour tout le reste, vous pouvez créer vos propres règles directement depuis le panneau Alert Manager.
 
-Une règle peut surveiller une ou plusieurs entités indépendamment et utiliser l’état de l’entité, un attribut, une condition d’absence de changement ou une logique entièrement basée sur Jinja. Les temporisations permettent d’exiger qu’une situation persiste avant de devenir une alerte, afin qu’une courte anomalie ne remplisse pas inutilement le dashboard.
+Une règle peut surveiller une ou plusieurs entités indépendamment et utiliser l’état de l’entité, un attribut, une variation depuis une valeur de début définie par une condition, une condition d’absence de changement ou une logique entièrement basée sur Jinja. Les temporisations permettent d’exiger qu’une situation persiste avant de devenir une alerte, afin qu’une courte anomalie ne remplisse pas inutilement le dashboard.
 
 Cela couvre par exemple les températures anormales, les consommations électriques inhabituelles, l’âge d’une sauvegarde, les codes d’erreur, les capteurs qui ne se mettent plus à jour ou presque n’importe quel état exposé par Home Assistant.
 
