@@ -62,7 +62,7 @@ Custom rules now cover more real-world cases without requiring a separate templa
 - numeric thresholds, **between** and **outside** ranges;
 - multiple accepted values;
 - nested attributes and arrays such as `data.*.key`;
-- variation from a starting value captured when a required Jinja condition becomes true;
+- variation of the main state or one numeric attribute from a starting value captured when a required Jinja condition becomes true;
 - alert when the **whole entity stops changing**;
 - alert when only a **specific state or attribute stops changing**;
 - Jinja as an additional condition or as the complete rule logic;
@@ -163,7 +163,7 @@ Each monitor can be enabled independently. Delays and exclusions can be adjusted
 
 For everything else, create your own rules directly from the Alert Manager panel.
 
-A rule can monitor one or several entities independently and use the entity state, an attribute, a variation from a condition-defined starting value, a no-change condition or Jinja-only logic. Delays let you require the situation to persist before it becomes an alert, which prevents short glitches from filling the dashboard.
+A rule can monitor one or several entities independently and use the entity state, an attribute, the variation of the main state or one numeric attribute from a condition-defined starting value, a no-change condition or Jinja-only logic. Delays let you require the situation to persist before it becomes an alert, which prevents short glitches from filling the dashboard.
 
 Example use cases include abnormal temperatures, unexpected power consumption, backup age, error codes, stale sensors, equipment that stopped updating or almost any state Home Assistant exposes.
 

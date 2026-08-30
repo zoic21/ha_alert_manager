@@ -58,7 +58,7 @@ STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 COHERENCE_STORAGE_KEY: Final = f"{DOMAIN}.coherence"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 14
+STORAGE_MINOR_VERSION: Final = 15
 HISTORY_STORAGE_VERSION: Final = 1
 COHERENCE_STORAGE_VERSION: Final = 1
 
@@ -136,4 +136,13 @@ OPERATORS: Final = (
     "outside",
     "unchanged",
 )
-VALUE_SOURCES: Final = ("state", "attribute", "variation", "unchanged", "jinja")
+VALUE_SOURCES: Final = (
+    "state",
+    "attribute",
+    "state_variation",
+    "attribute_variation",
+    "unchanged",
+    "jinja",
+)
+ATTRIBUTE_SOURCES: Final = ("attribute", "attribute_variation")
+VARIATION_SOURCES: Final = ("state_variation", "attribute_variation")

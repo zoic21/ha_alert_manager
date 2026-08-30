@@ -25,6 +25,7 @@ from .const import (
     MONITORING_NOTIFICATION_ID,
     SIGNAL_HISTORY_UPDATED,
     SIGNAL_MONITORING_UPDATED,
+    VARIATION_SOURCES,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID
@@ -463,14 +464,16 @@ class _ApiMixin:
         try:
             self.config["rules"][index] = rule.as_dict()
             variation_definition_changed = (
-                old_rule.source == "variation" or rule.source == "variation"
+                old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
             ) and (
                 old_rule.enabled,
                 old_rule.source,
+                old_rule.attribute,
                 old_rule.condition_template,
             ) != (
                 rule.enabled,
                 rule.source,
+                rule.attribute,
                 rule.condition_template,
             )
             if variation_definition_changed:

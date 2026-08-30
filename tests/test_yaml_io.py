@@ -123,7 +123,7 @@ def test_variation_rule_yaml_requires_and_preserves_its_starting_condition() -> 
 enabled: true
 entity_ids:
   - sensor.energy
-source: variation
+source: state_variation
 operator: above
 value: 2.5
 duration: 300
@@ -133,9 +133,9 @@ condition_template: "{{ is_state('binary_sensor.cycle', 'on') }}"
     rule = parse_rule_yaml(raw)
     rendered = dump_rule_yaml(rule)
 
-    assert rule.source == "variation"
+    assert rule.source == "state_variation"
     assert rule.condition_template == "{{ is_state('binary_sensor.cycle', 'on') }}"
-    assert "source: variation" in rendered
+    assert "source: state_variation" in rendered
     assert "operator: above" in rendered
     assert "condition_template:" in rendered
 
@@ -146,6 +146,45 @@ condition_template: "{{ is_state('binary_sensor.cycle', 'on') }}"
                 "condition_template: null",
             )
         )
+
+    attribute_rule = parse_rule_yaml(
+        """name: Attribute energy variation
+enabled: true
+entity_ids:
+  - sensor.energy
+source: attribute_variation
+attribute: metrics.power
+operator: above
+value: 2.5
+duration: 300
+message: null
+condition_template: "{{ is_state('binary_sensor.cycle', 'on') }}"
+"""
+    )
+    attribute_rendered = dump_rule_yaml(attribute_rule)
+    assert attribute_rule.source == "attribute_variation"
+    assert attribute_rule.attribute == "metrics.power"
+    assert "source: attribute_variation" in attribute_rendered
+    assert "attribute: metrics.power" in attribute_rendered
+
+
+def test_legacy_variation_yaml_is_exported_as_state_variation() -> None:
+    """The short-lived variation name migrates without losing its semantics."""
+    rule = parse_rule_yaml(
+        """name: Legacy variation
+enabled: true
+entity_ids:
+  - sensor.energy
+source: variation
+operator: above
+value: 2.5
+duration: 300
+message: null
+condition_template: "{{ true }}"
+"""
+    )
+    assert rule.source == "state_variation"
+    assert "source: state_variation" in dump_rule_yaml(rule)
 
 
 def test_range_and_selected_unchanged_yaml_shapes_are_strict() -> None:

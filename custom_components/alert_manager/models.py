@@ -12,7 +12,14 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from .const import MAX_DELAY, MIN_DELAY, OPERATORS, VALUE_SOURCES
+from .const import (
+    ATTRIBUTE_SOURCES,
+    MAX_DELAY,
+    MIN_DELAY,
+    OPERATORS,
+    VALUE_SOURCES,
+    VARIATION_SOURCES,
+)
 
 
 class AlertStatus(StrEnum):
@@ -551,6 +558,8 @@ class Rule:
         normalized = dict(data)
         if normalized.get("source") == "none":
             normalized["source"] = "jinja"
+        elif normalized.get("source") == "variation":
+            normalized["source"] = "state_variation"
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
@@ -603,7 +612,7 @@ class Rule:
             raise ValueError("An entity cannot be repeated in the same rule")
         if self.source not in VALUE_SOURCES:
             raise ValueError(f"Unsupported value source: {self.source}")
-        if self.source == "attribute" and (
+        if self.source in ATTRIBUTE_SOURCES and (
             not isinstance(self.attribute, str)
             or not self.attribute.strip()
             or len(self.attribute) > 255
@@ -619,7 +628,9 @@ class Rule:
                 raise ValueError(
                     "Attribute wildcard paths must use complete .* segments"
                 )
-        if self.source != "attribute" and self.attribute is not None:
+        if self.source == "attribute_variation" and "*" in self.attribute:
+            raise ValueError("Attribute variation does not support wildcard paths")
+        if self.source not in ATTRIBUTE_SOURCES and self.attribute is not None:
             raise ValueError("Attribute must be empty for non-attribute rules")
         if self.message is not None and (
             not isinstance(self.message, str) or len(self.message) > 1024
@@ -638,7 +649,7 @@ class Rule:
             )
         if self.source == "jinja" and self.condition_template is None:
             raise ValueError("Rule condition_template is required for Jinja-only rules")
-        if self.source == "variation" and self.condition_template is None:
+        if self.source in VARIATION_SOURCES and self.condition_template is None:
             raise ValueError("Rule condition_template is required for Variation rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
@@ -656,11 +667,14 @@ class Rule:
             return
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
-        if self.source == "variation" and self.operator not in (
-            "above",
-            "below",
-            "between",
-            "outside",
+        if self.source in VARIATION_SOURCES and (
+            self.operator
+            not in (
+                "above",
+                "below",
+                "between",
+                "outside",
+            )
         ):
             raise ValueError("Variation rules require a numeric operator")
         if self.operator == "unchanged":

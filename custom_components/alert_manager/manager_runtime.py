@@ -18,7 +18,7 @@ from homeassistant.core import Event, State, callback
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
-from .const import CATEGORY_UNAVAILABLE, DOMAIN
+from .const import ATTRIBUTE_SOURCES, CATEGORY_UNAVAILABLE, DOMAIN, VARIATION_SOURCES
 from .models import (
     AlertDetails,
     AlertHistoryEntry,
@@ -643,7 +643,7 @@ class _RuntimeMixin:
 
     def _rule_current_value(self, rule: Rule, state: State) -> tuple[bool, Any]:
         """Read one rule source, including dotted list-wildcard attributes."""
-        if rule.source == "attribute":
+        if rule.source in ATTRIBUTE_SOURCES:
             return extract_attribute_value(state.attributes, rule.attribute or "")
         return True, state.state
 
@@ -669,9 +669,11 @@ class _RuntimeMixin:
         self._variation_baselines_dirty = True
         return True
 
-    def _variation_value(self, rule: Rule, state: State) -> tuple[bool, float | None]:
+    def _variation_value(
+        self, rule: Rule, state: State, raw_current: Any
+    ) -> tuple[bool, float | None]:
         """Capture or reuse the reference and return current minus reference."""
-        current = safe_float(state.state)
+        current = safe_float(raw_current)
         if current is None:
             return False, None
         key = self._variation_key(rule, state.entity_id)
@@ -709,14 +711,15 @@ class _RuntimeMixin:
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
-            if rule.source == "variation":
-                numeric_state = safe_float(state.state)
-                if numeric_state is None:
+            if rule.source in VARIATION_SOURCES:
+                found, raw_current = self._rule_current_value(rule, state)
+                numeric_current = safe_float(raw_current) if found else None
+                if numeric_current is None:
                     continue
-                if not self._rule_template_matches(rule, state, numeric_state):
+                if not self._rule_template_matches(rule, state, numeric_current):
                     self._clear_variation_baseline(rule, entity_id)
                     continue
-                found, current = self._variation_value(rule, state)
+                found, current = self._variation_value(rule, state, numeric_current)
                 if not found or not rule.matches(current):
                     continue
             else:

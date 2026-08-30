@@ -15,7 +15,13 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
-from .const import ALERT_MANAGER_ENTITY_IDS, CUSTOM_RULE_ALLOWED_ENTITY_IDS, DOMAIN
+from .const import (
+    ALERT_MANAGER_ENTITY_IDS,
+    ATTRIBUTE_SOURCES,
+    CUSTOM_RULE_ALLOWED_ENTITY_IDS,
+    DOMAIN,
+    VARIATION_SOURCES,
+)
 from .models import AlertStatus, Rule, extract_attribute_value
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,8 +43,10 @@ def _legacy_rule_source(rule: Rule) -> str:
     """Return the source label used only by the non-localized fallback text."""
     if rule.source == "attribute":
         return f"Attribut {rule.attribute}"
-    if rule.source == "variation":
-        return "Variation"
+    if rule.source == "state_variation":
+        return "Variation de l'etat"
+    if rule.source == "attribute_variation":
+        return f"Variation de l'attribut {rule.attribute}"
     return "État"
 
 
@@ -110,7 +118,7 @@ class _TemplatesMixin:
         valid_variation_keys = {
             f"{rule.id}:{entity_id}"
             for rule in self._rules
-            if rule.enabled and rule.source == "variation"
+            if rule.enabled and rule.source in VARIATION_SOURCES
             for entity_id in rule.entity_ids
         }
         stale_variation_keys = self._variation_baselines.keys() - valid_variation_keys
@@ -447,12 +455,12 @@ class _TemplatesMixin:
         if record is None or record.status is not AlertStatus.ACTIVE or state is None:
             return False
         current = state.state
-        if rule.source == "attribute":
+        if rule.source in ATTRIBUTE_SOURCES:
             _found, current = extract_attribute_value(
                 state.attributes, rule.attribute or ""
             )
-        elif rule.source == "variation":
-            found, variation = self._variation_value(rule, state)
+        if rule.source in VARIATION_SOURCES:
+            found, variation = self._variation_value(rule, state, current)
             if found:
                 current = variation
         rendered_message = self._render_rule_message(

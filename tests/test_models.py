@@ -277,7 +277,7 @@ def test_variation_rule_requires_a_starting_condition_and_numeric_operator():
             {
                 "name": "Missing start gate",
                 "entity_ids": ["sensor.test"],
-                "source": "variation",
+                "source": "state_variation",
                 "operator": "above",
                 "value": 5,
                 "duration": 0,
@@ -288,14 +288,14 @@ def test_variation_rule_requires_a_starting_condition_and_numeric_operator():
         {
             "name": "Consumption variation",
             "entity_ids": ["sensor.test"],
-            "source": "variation",
+            "source": "state_variation",
             "operator": "outside",
             "value": [-5, 5],
             "duration": 60,
             "condition_template": "{{ true }}",
         }
     )
-    assert rule.source == "variation"
+    assert rule.source == "state_variation"
     assert rule.matches(6) is True
 
     with pytest.raises(ValueError, match="numeric operator"):
@@ -303,9 +303,37 @@ def test_variation_rule_requires_a_starting_condition_and_numeric_operator():
             {
                 "name": "Invalid variation",
                 "entity_ids": ["sensor.test"],
-                "source": "variation",
+                "source": "state_variation",
                 "operator": "equals",
                 "value": 5,
+                "duration": 0,
+                "condition_template": "{{ true }}",
+            }
+        )
+
+    attribute_rule = validate_rule_payload(
+        {
+            "name": "Attribute variation",
+            "entity_ids": ["sensor.test"],
+            "source": "attribute_variation",
+            "attribute": "metrics.power",
+            "operator": "above",
+            "value": 10,
+            "duration": 0,
+            "condition_template": "{{ true }}",
+        }
+    )
+    assert attribute_rule.attribute == "metrics.power"
+
+    with pytest.raises(ValueError, match="does not support wildcard"):
+        validate_rule_payload(
+            {
+                "name": "Ambiguous attribute variation",
+                "entity_ids": ["sensor.test"],
+                "source": "attribute_variation",
+                "attribute": "metrics.*.power",
+                "operator": "above",
+                "value": 10,
                 "duration": 0,
                 "condition_template": "{{ true }}",
             }
@@ -328,8 +356,23 @@ def test_legacy_none_source_is_normalized_to_jinja() -> None:
     assert rule.source == "jinja"
     assert rule.as_dict()["source"] == "jinja"
 
+    variation = Rule.from_dict(
+        {
+            "id": "legacy-variation",
+            "name": "Legacy variation",
+            "entity_ids": ["sensor.test"],
+            "source": "variation",
+            "operator": "above",
+            "value": 5,
+            "duration": 0,
+            "condition_template": "{{ true }}",
+        }
+    )
+    assert variation.source == "state_variation"
+    assert variation.as_dict()["source"] == "state_variation"
 
-def test_storage_migration_renames_jinja_sources_idempotently() -> None:
+
+def test_storage_migration_renames_legacy_sources_idempotently() -> None:
     """Configuration and active records are rewritten once to the canonical source."""
     stored_config = {
         "rules": [
@@ -341,20 +384,39 @@ def test_storage_migration_renames_jinja_sources_idempotently() -> None:
                 "duration": 0,
                 "condition_template": "{{ true }}",
                 "version": 2,
-            }
+            },
+            {
+                "id": "legacy-variation",
+                "name": "Legacy variation",
+                "entity_ids": ["sensor.power"],
+                "source": "variation",
+                "operator": "above",
+                "value": 5,
+                "duration": 0,
+                "condition_template": "{{ true }}",
+                "version": 2,
+            },
         ]
     }
     migrated, changed = _migrate_config_shape(stored_config)
     assert changed is True
     assert migrated["rules"][0]["source"] == "jinja"
+    assert migrated["rules"][1]["source"] == "state_variation"
     assert migrated["rules"][0]["update_message_when_active"] is False
     remigrated, changed_again = _migrate_config_shape(migrated)
     assert changed_again is False
     assert remigrated["rules"][0]["source"] == "jinja"
+    assert remigrated["rules"][1]["source"] == "state_variation"
 
-    alerts = {"rule:test:sensor.test": {"details": {"source": "none"}}}
+    alerts = {
+        "rule:test:sensor.test": {"details": {"source": "none"}},
+        "rule:variation:sensor.power": {"details": {"source": "variation"}},
+    }
     assert _migrate_alert_value_sources(alerts) is True
     assert alerts["rule:test:sensor.test"]["details"]["source"] == "jinja"
+    assert (
+        alerts["rule:variation:sensor.power"]["details"]["source"] == "state_variation"
+    )
     assert _migrate_alert_value_sources(alerts) is False
 
 

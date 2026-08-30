@@ -405,7 +405,7 @@ def test_variation_reference_follows_required_jinja_window(hass, entry):
         await manager.async_setup()
         created = await manager.async_create_rule(
             _rule(
-                source="variation",
+                source="state_variation",
                 operator="above",
                 value=5,
                 duration=0,
@@ -459,7 +459,7 @@ def test_variation_reference_survives_restart_while_gate_remains_true(hass, entr
         await first.async_setup()
         created = await first.async_create_rule(
             _rule(
-                source="variation",
+                source="state_variation",
                 operator="above",
                 value=5,
                 duration=0,
@@ -490,7 +490,7 @@ def test_variation_threshold_edit_does_not_move_the_window_start(hass, entry):
         await manager.async_setup()
         created = await manager.async_create_rule(
             _rule(
-                source="variation",
+                source="state_variation",
                 operator="above",
                 value=5,
                 duration=0,
@@ -508,6 +508,72 @@ def test_variation_threshold_edit_does_not_move_the_window_start(hass, entry):
             created["id"], {"condition_template": "{{ false }}"}
         )
         assert baseline_key not in manager._variation_baselines
+
+    asyncio.run(scenario())
+
+
+def test_attribute_variation_uses_one_nested_numeric_attribute(hass, entry):
+    """Attribute variation keeps its own reference and tolerates missing data."""
+
+    async def scenario():
+        hass.states.set(
+            "sensor.source",
+            "online",
+            {"metrics": {"power": "100"}},
+        )
+        hass.states.set("binary_sensor.guard", "off")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(
+                source="attribute_variation",
+                attribute="metrics.power",
+                operator="above",
+                value=20,
+                duration=0,
+                condition_template=("{{ is_state('binary_sensor.guard', 'on') }}"),
+            )
+        )
+        baseline_key = f"{created['id']}:sensor.source"
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert baseline_key not in manager._variation_baselines
+
+        hass.states.set("binary_sensor.guard", "on")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager._variation_baselines[baseline_key] == 100
+
+        hass.states.set("sensor.source", "online", {})
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager._variation_baselines[baseline_key] == 100
+        assert alert_id not in manager.records
+
+        hass.states.set(
+            "sensor.source",
+            "online",
+            {"metrics": {"power": "125"}},
+        )
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].details.value == 25
+        assert manager.records[alert_id].details.attribute == "metrics.power"
+
+        hass.states.set("binary_sensor.guard", "off")
+        await manager.async_evaluate_entity("sensor.source")
+        assert baseline_key not in manager._variation_baselines
+        assert alert_id not in manager.records
+
+        hass.states.set(
+            "sensor.source",
+            "online",
+            {"metrics": {"power": "130", "voltage": "230"}},
+        )
+        hass.states.set("binary_sensor.guard", "on")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager._variation_baselines[baseline_key] == 130
+
+        await manager.async_update_rule(created["id"], {"attribute": "metrics.voltage"})
+        # Updating the source attribute clears the old reference, then the
+        # update's immediate evaluation captures the new attribute value.
+        assert manager._variation_baselines[baseline_key] == 230
 
     asyncio.run(scenario())
 

@@ -48,6 +48,8 @@ const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
+const ATTRIBUTE_RULE_SOURCES = new Set(["attribute", "attribute_variation"]);
+const VARIATION_RULE_SOURCES = new Set(["state_variation", "attribute_variation"]);
 const VARIATION_RULE_OPERATORS = new Set(["above", "below", "between", "outside"]);
 const VALIDATION_ERROR_KEYS = new Map([
   ["Rule name is required", "rule_name_required"],
@@ -57,6 +59,7 @@ const VALIDATION_ERROR_KEYS = new Map([
   ["Alert Manager entities cannot be monitored", "rule_entity_forbidden"],
   ["Attribute is required for attribute rules", "attribute_required"],
   ["Attribute wildcard paths must use complete .* segments", "attribute_path_invalid"],
+  ["Attribute variation does not support wildcard paths", "attribute_variation_wildcard"],
   ["Variation rules require a numeric operator", "variation_operator_required"],
   ["Rule message must not exceed 1024 characters", "message_too_long"],
   ["Rule condition_template is required for Jinja-only rules", "jinja_required"],
@@ -129,7 +132,11 @@ const yamlValue = (value) => {
 };
 
 const ruleToYaml = (rule) => {
-  const source = rule.source === "none" ? "jinja" : (rule.source ?? "state");
+  const source = rule.source === "none"
+    ? "jinja"
+    : rule.source === "variation"
+    ? "state_variation"
+    : (rule.source ?? "state");
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
@@ -137,7 +144,9 @@ const ruleToYaml = (rule) => {
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
     `source: ${yamlValue(source)}`,
   ];
-  if (source === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
+  if (ATTRIBUTE_RULE_SOURCES.has(source)) {
+    lines.push(`attribute: ${yamlValue(rule.attribute)}`);
+  }
   if (!["jinja", "unchanged"].includes(source)) {
     lines.push(`operator: ${yamlValue(rule.operator)}`);
     if (rule.operator !== "unchanged") {
@@ -1153,7 +1162,8 @@ class AlertManagerPanel extends HTMLElement {
         [
           { value: "state", label: this._t("rules.source_state") },
           { value: "attribute", label: this._t("rules.source_attribute") },
-          { value: "variation", label: this._t("rules.source_variation") },
+          { value: "state_variation", label: this._t("rules.source_state_variation") },
+          { value: "attribute_variation", label: this._t("rules.source_attribute_variation") },
           { value: "unchanged", label: this._t("rules.source_unchanged") },
           { value: "jinja", label: this._t("rules.source_jinja") },
         ],
@@ -1162,24 +1172,26 @@ class AlertManagerPanel extends HTMLElement {
           const previousSource = this._editingRule.source ?? "state";
           this._captureRuleDraft();
           this._editingRule.source = value;
-          if (value !== "attribute") this._editingRule.attribute = "";
-          if (value === "variation" && !VARIATION_RULE_OPERATORS.has(this._editingRule.operator)) {
+          if (!ATTRIBUTE_RULE_SOURCES.has(value)) this._editingRule.attribute = "";
+          if (VARIATION_RULE_SOURCES.has(value) && !VARIATION_RULE_OPERATORS.has(this._editingRule.operator)) {
             this._editingRule.operator = "above";
             this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
           }
           this._ruleDirty = true;
-          if (["jinja", "unchanged", "variation"].includes(previousSource)
-            || ["jinja", "unchanged", "variation"].includes(value)) {
+          if (["jinja", "unchanged"].includes(previousSource)
+            || ["jinja", "unchanged"].includes(value)
+            || VARIATION_RULE_SOURCES.has(previousSource)
+            || VARIATION_RULE_SOURCES.has(value)) {
             this._refreshRuleEditor();
           } else {
             const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
-            if (attributeField) attributeField.hidden = value !== "attribute";
+            if (attributeField) attributeField.hidden = !ATTRIBUTE_RULE_SOURCES.has(value);
           }
         },
       );
       this._configureSelect(
         "rule-operator",
-        (this._editingRule.source === "variation" ? [
+        (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? [
           { value: "above", label: this._t("operators.above") },
           { value: "below", label: this._t("operators.below") },
           { value: "between", label: this._t("operators.between") },
@@ -1195,7 +1207,7 @@ class AlertManagerPanel extends HTMLElement {
           { value: "outside", label: this._t("operators.outside") },
           { value: "unchanged", label: this._t("operators.unchanged") },
         ]),
-        this._editingRule.operator ?? (this._editingRule.source === "variation" ? "above" : "equals"),
+        this._editingRule.operator ?? (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? "above" : "equals"),
         (value) => {
           this._captureRuleDraft();
           this._editingRule.operator = value;
@@ -1419,8 +1431,10 @@ class AlertManagerPanel extends HTMLElement {
     const source = this._t(
       event.source === "attribute"
         ? "conditions.sources.attribute"
-        : event.source === "variation"
-        ? "conditions.sources.variation"
+        : event.source === "attribute_variation"
+        ? "conditions.sources.attribute_variation"
+        : ["state_variation", "variation"].includes(event.source)
+        ? "conditions.sources.state_variation"
         : "conditions.sources.state",
       { attribute: event.attribute ?? "" },
     );
@@ -2113,7 +2127,8 @@ class AlertManagerPanel extends HTMLElement {
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
     if (rule.source === "none") rule.source = "jinja";
-    if (rule.source === "variation" && !VARIATION_RULE_OPERATORS.has(rule.operator)) {
+    if (rule.source === "variation") rule.source = "state_variation";
+    if (VARIATION_RULE_SOURCES.has(rule.source) && !VARIATION_RULE_OPERATORS.has(rule.operator)) {
       rule.operator = "above";
     }
     if (TEXT_RULE_OPERATORS.has(rule.operator)) {
@@ -2147,7 +2162,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleVisualEditor(rule) {
     const jinjaOnly = rule.source === "jinja";
-    const variation = rule.source === "variation";
+    const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
@@ -2162,7 +2177,7 @@ class AlertManagerPanel extends HTMLElement {
           <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
             <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input><small>${esc(this._t("rules.attribute_path_help"))}</small></div>
+            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input><small>${esc(this._t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
             ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
             <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
@@ -2312,8 +2327,10 @@ class AlertManagerPanel extends HTMLElement {
     }
     const source = rule.source === "attribute"
       ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
-      : rule.source === "variation"
-      ? this._t("conditions.sources.variation")
+      : rule.source === "attribute_variation"
+      ? this._t("conditions.sources.attribute_variation", { attribute: rule.attribute })
+      : ["state_variation", "variation"].includes(rule.source)
+      ? this._t("conditions.sources.state_variation")
       : this._t("conditions.sources.state");
     if (rule.operator === "unchanged") {
       return this._t("conditions.rule.selected_unchanged", { source, duration: "" });
@@ -3056,7 +3073,7 @@ class AlertManagerPanel extends HTMLElement {
       entity_ids: [...(this._editingRule?.entity_ids ?? [])],
       enabled: Boolean(this._editingRule?.enabled ?? true),
       source,
-      attribute: source === "attribute" ? String(value("attribute")).trim() : null,
+      attribute: ATTRIBUTE_RULE_SOURCES.has(source) ? String(value("attribute")).trim() : null,
       operator,
       value: comparisonValue,
       duration: Number(value("duration")),
@@ -3077,10 +3094,10 @@ class AlertManagerPanel extends HTMLElement {
     // _call renders a busy state. Keep the submitted values as the editor draft so
     // that render cannot clear the form, especially when the backend rejects it.
     this._editingRule = { ...rule, ...(id ? { id } : {}) };
-    if (["jinja", "variation"].includes(source) && conditionTemplate === null) {
+    if ((source === "jinja" || VARIATION_RULE_SOURCES.has(source)) && conditionTemplate === null) {
       this._notice = {
         kind: "error",
-        text: this._t(source === "variation"
+        text: this._t(VARIATION_RULE_SOURCES.has(source)
           ? "rules.condition_template_variation_required"
           : "rules.condition_template_required"),
       };
@@ -3281,8 +3298,10 @@ class AlertManagerPanel extends HTMLElement {
     if (alert.condition_key === "rule.generated") {
       const sourceKey = params.source === "attribute"
         ? "conditions.sources.attribute"
-        : params.source === "variation"
-        ? "conditions.sources.variation"
+        : params.source === "attribute_variation"
+        ? "conditions.sources.attribute_variation"
+        : ["state_variation", "variation"].includes(params.source)
+        ? "conditions.sources.state_variation"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
       params.operator = this._t(`operators.${params.operator}`);

@@ -305,6 +305,9 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
             if rule.get("source") == "none":
                 rule["source"] = "jinja"
                 changed = True
+            elif rule.get("source") == "variation":
+                rule["source"] = "state_variation"
+                changed = True
             if "update_message_when_active" not in rule:
                 rule["update_message_when_active"] = False
                 changed = True
@@ -357,7 +360,7 @@ def _migrate_pending_visibility_shape(stored: Any) -> bool:
 
 
 def _migrate_alert_value_sources(stored: Any) -> bool:
-    """Rename the legacy Jinja-only source in persisted active records."""
+    """Rename legacy sources in persisted active records."""
     if not isinstance(stored, dict):
         return False
     changed = False
@@ -365,7 +368,11 @@ def _migrate_alert_value_sources(stored: Any) -> bool:
         if not isinstance(record, dict):
             continue
         details = record.get("details")
-        if isinstance(details, dict) and details.get("source") == "none":
-            details["source"] = "jinja"
-            changed = True
+        if isinstance(details, dict):
+            if details.get("source") == "none":
+                details["source"] = "jinja"
+                changed = True
+            elif details.get("source") == "variation":
+                details["source"] = "state_variation"
+                changed = True
     return changed

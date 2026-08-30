@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from .const import CATEGORIES, DEFAULT_CONFIG
+from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG
 from .models import Rule
 from .validation import validate_config, validate_rule_payload
 
@@ -112,13 +112,15 @@ def rule_to_yaml_data(
     source = data.get("source", "state")
     if source == "none":
         source = "jinja"
+    elif source == "variation":
+        source = "state_variation"
     result: dict[str, Any] = {
         "name": data.get("name"),
         "enabled": data.get("enabled", True),
         "entity_ids": data.get("entity_ids"),
         "source": source,
     }
-    if result["source"] == "attribute":
+    if result["source"] in ATTRIBUTE_SOURCES:
         result["attribute"] = data.get("attribute")
     if result["source"] not in ("jinja", "unchanged"):
         result["operator"] = data.get("operator")
