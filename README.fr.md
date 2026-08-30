@@ -192,7 +192,7 @@ condition_template: "{{ state.state == 'heating' }}"
 
 #### Messages Bayrol en ignorant les états attendus
 
-Cette règle lit chaque clé de message du tableau data de Bayrol et ignore les états habituels de débit, de démarrage et de mode enjoy. Sa condition Jinja impose aussi que le débit soit présent. Le message Jinja ne renvoie que les messages utiles, et ne conserve l’alerte redox basse que lorsque la température de la piscine dépasse 15 °C.
+Cette règle évalue chaque clé de message du tableau data de Bayrol. Elle ne peut devenir active que lorsqu’aucun des états attendus de débit, de démarrage ou de mode enjoy n’est présent ; sa condition Jinja impose aussi que le débit soit présent. Le message Jinja filtre les textes renvoyés et ne conserve l’alerte redox basse que lorsque la température de la piscine dépasse 15 °C.
 
 ```yaml
 name: "Alerte Bayrol"
