@@ -169,6 +169,49 @@ Example use cases include abnormal temperatures, unexpected power consumption, b
 
 Rules can be edited visually or in YAML. The full Alert Manager configuration can also be exported and imported as YAML.
 
+### Examples
+
+#### A thermostat that heats without warming the room
+
+When the thermostat starts heating, the Jinja condition becomes true and Alert Manager stores the initial current_temperature. After two hours, this rule raises an alert if the room has gained less than 0.2 °C. In the message, value is the measured temperature variation.
+
+```yaml
+name: "Thermostat : surveillance"
+enabled: true
+entity_ids:
+  - "climate.tado_smart_thermostat_su0582429440"
+source: "attribute_variation"
+attribute: "current_temperature"
+operator: "below"
+value: "0.2"
+duration: 7200
+message: "Le chauffage {{ state_attr(entity_id, 'friendly_name') }} est en marche depuis 2 h, mais la température n'a augmenté que de {{ value | float(0) | round(1) }} °C."
+update_message_when_active: false
+condition_template: "{{ state.state == 'heating' }}"
+```
+
+#### Bayrol messages, with expected states filtered out
+
+This rule reads every message key from the Bayrol data array and filters out the usual flow, start-delay and enjoyment states. Its Jinja condition also requires flow to be present. The Jinja message only returns useful messages, including the low-redox warning only when the pool temperature is above 15 °C.
+
+```yaml
+name: "Alerte Bayrol"
+enabled: true
+entity_ids:
+  - "sensor.bayrol_24ase2_16263_messages"
+source: "attribute"
+attribute: "data.*.key"
+operator: "not_contains"
+value:
+  - "al_no_flow_bnc"
+  - "al_start_delay"
+  - "enjoy"
+duration: 5400
+message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \" ) }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \" ) }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
+update_message_when_active: false
+condition_template: "{% set flow = states('binary_sensor.bayrol_24ase2_16263_flow_contact') %}\n{{ (flow == 'on') }}"
+```
+
 ## Configuration coherence
 
 The **Coherence** page checks static entity references found in your Home Assistant configuration against the entities that currently exist.
