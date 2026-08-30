@@ -65,9 +65,10 @@ Custom rules now cover more real-world cases without requiring a separate templa
 - alert when the **whole entity stops changing**;
 - alert when only a **specific state or attribute stops changing**;
 - Jinja as an additional condition or as the complete rule logic;
-- custom Jinja messages using live Home Assistant data.
+- custom Jinja messages, optionally kept up to date while an alert is active.
 
 Rules can monitor several entities independently, use their own duration, be edited visually or in YAML, and be duplicated when you need a similar rule.
+Jinja-only rules use the explicit `source: jinja` value in YAML; existing `source: none` rules are migrated automatically.
 
 ### A cleaner day-to-day interface
 

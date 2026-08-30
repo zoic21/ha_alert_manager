@@ -393,10 +393,20 @@ class _StateMixin:
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
+        live_message_pairs = {
+            (rule.id, entity_id)
+            for rule in self._rules
+            if rule.enabled
+            and rule.message is not None
+            and rule.update_message_when_active
+            for entity_id in rule.entity_ids
+        }
         for record in self.records.values():
             if record.status is not AlertStatus.ACTIVE or not record.details.rule_id:
                 continue
             pair = (record.details.rule_id, record.details.entity_id)
+            if pair in live_message_pairs:
+                continue
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(("message", pair[0], pair[1]))
         snapshot, device_groups = self._build_public_snapshot()

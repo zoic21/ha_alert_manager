@@ -376,6 +376,7 @@ test("new rules start enabled with safe defaults", () => {
     value: [""],
     duration: 900,
     message: "",
+    update_message_when_active: false,
     condition_template: "",
   });
 });
@@ -643,7 +644,7 @@ const form = (values) => ({
   elements: {
     namedItem(name) {
       if (!(name in values)) return null;
-      return name === "enabled"
+      return ["enabled", "update_message_when_active"].includes(name)
         ? { checked: values[name] }
         : { value: values[name] };
     },
@@ -662,6 +663,7 @@ const ruleValues = (changes = {}) => ({
   value: "0",
   duration: "900",
   message: "",
+  update_message_when_active: false,
   ...changes,
 });
 
@@ -767,6 +769,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         value: ["0"],
         duration: 900,
         message: "État :\n{{ states('todo.liste_d_achats') }}",
+        update_message_when_active: false,
         condition_template: "{{ true }}",
       },
     },
@@ -1815,7 +1818,8 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field full rule-message-field"[\s\S]*<ha-selector id="rule-message-template"><\/ha-selector>/);
   assert.match(editor, /Condition Jinja supplémentaire/);
   assert.match(editor, /Toutes les fonctions Jinja et entités de Home Assistant sont accessibles/);
-  assert.match(editor, /Le rendu est figé lorsque l’alerte devient active/);
+  assert.match(editor, /le message reste figé à l’activation/);
+  assert.match(editor, /id="rule-update-message-when-active"/);
   assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
@@ -2419,7 +2423,7 @@ test("custom rule choices use native Home Assistant selects", () => {
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
     { value: "unchanged", label: "Aucun changement" },
-    { value: "none", label: "Jinja" },
+    { value: "jinja", label: "Jinja" },
   ]);
   assert.equal(operator.value, "above");
   assert.deepEqual(operator.options.map((option) => option.value), [
@@ -2526,8 +2530,9 @@ test("Jinja-only rule editor hides comparison fields and requires its template",
   panel._editingRule = {
     ...newRuleDefaults(),
     entity_ids: ["sensor.one"],
-    source: "none",
+    source: "jinja",
     condition_template: "{{ value == 'ready' }}",
+    update_message_when_active: true,
   };
 
   const editor = panel._renderRuleEditor();
@@ -2535,12 +2540,13 @@ test("Jinja-only rule editor hides comparison fields and requires its template",
   assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
   assert.match(editor, /<span class="field-label">Condition Jinja<\/span><ha-selector id="rule-condition-template" required aria-required="true">/);
   assert.match(editor, /aucune autre comparaison n’est évaluée/);
+  assert.match(editor, /id="rule-update-message-when-active"[^>]+checked/);
 
   const calls = [];
   panel._hass = { callWS: async (message) => { calls.push(message); return message.rule; } };
   panel._render = () => {};
   panel._editingRule.condition_template = "";
-  await panel._saveRule(form(ruleValues({ source: "none" })));
+  await panel._saveRule(form(ruleValues({ source: "jinja" })));
   assert.equal(calls.length, 0);
   assert.equal(panel._notice.kind, "error");
   assert.equal(
@@ -2568,6 +2574,34 @@ test("normal comparison rules still save without a Jinja condition", async () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0].rule.source, "state");
   assert.equal(calls[0].rule.condition_template, null);
+});
+
+test("rule editor saves the opt-in active message update option", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.one"],
+    message: "Live {{ value }}",
+    update_message_when_active: true,
+  };
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "live-message-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+
+  await panel._saveRule(form(ruleValues({
+    entity_ids: ["sensor.one"],
+    update_message_when_active: true,
+  })));
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].rule.update_message_when_active, true);
 });
 
 test("unchanged rule hides comparison fields and keeps Jinja optional", async () => {

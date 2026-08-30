@@ -21,6 +21,10 @@ from custom_components.alert_manager.models import (
     extract_attribute_value,
     safe_float,
 )
+from custom_components.alert_manager.storage import (
+    _migrate_alert_value_sources,
+    _migrate_config_shape,
+)
 from custom_components.alert_manager.validation import (
     validate_config,
     validate_config_update,
@@ -227,13 +231,13 @@ def test_jinja_only_rule_requires_only_its_template_and_duration():
         {
             "name": "Pure Jinja",
             "entity_ids": ["sensor.test"],
-            "source": "none",
+            "source": "jinja",
             "duration": 60,
             "condition_template": "{{ value == 'ready' }}",
         }
     )
 
-    assert rule.source == "none"
+    assert rule.source == "jinja"
     assert rule.operator == "equals"
     assert rule.value == ""
     assert rule.matches("anything") is True
@@ -248,7 +252,7 @@ def test_jinja_only_rule_rejects_a_missing_template_without_affecting_normal_rul
             {
                 "name": "Missing Jinja",
                 "entity_ids": ["sensor.test"],
-                "source": "none",
+                "source": "jinja",
                 "duration": 0,
             }
         )
@@ -264,6 +268,68 @@ def test_jinja_only_rule_rejects_a_missing_template_without_affecting_normal_rul
         }
     )
     assert normal.condition_template is None
+
+
+def test_legacy_none_source_is_normalized_to_jinja() -> None:
+    """Stored pre-rename rules remain readable but never stay legacy internally."""
+    rule = Rule.from_dict(
+        {
+            "id": "legacy-jinja",
+            "name": "Legacy Jinja",
+            "entity_ids": ["sensor.test"],
+            "source": "none",
+            "duration": 0,
+            "condition_template": "{{ true }}",
+        }
+    )
+
+    assert rule.source == "jinja"
+    assert rule.as_dict()["source"] == "jinja"
+
+
+def test_storage_migration_renames_jinja_sources_idempotently() -> None:
+    """Configuration and active records are rewritten once to the canonical source."""
+    stored_config = {
+        "rules": [
+            {
+                "id": "legacy-jinja",
+                "name": "Legacy Jinja",
+                "entity_ids": ["sensor.test"],
+                "source": "none",
+                "duration": 0,
+                "condition_template": "{{ true }}",
+                "version": 2,
+            }
+        ]
+    }
+    migrated, changed = _migrate_config_shape(stored_config)
+    assert changed is True
+    assert migrated["rules"][0]["source"] == "jinja"
+    assert migrated["rules"][0]["update_message_when_active"] is False
+    remigrated, changed_again = _migrate_config_shape(migrated)
+    assert changed_again is False
+    assert remigrated["rules"][0]["source"] == "jinja"
+
+    alerts = {"rule:test:sensor.test": {"details": {"source": "none"}}}
+    assert _migrate_alert_value_sources(alerts) is True
+    assert alerts["rule:test:sensor.test"]["details"]["source"] == "jinja"
+    assert _migrate_alert_value_sources(alerts) is False
+
+
+def test_update_message_when_active_must_be_boolean() -> None:
+    """The live message option cannot be enabled through truthy string values."""
+    with pytest.raises(ValueError, match="must be a boolean"):
+        validate_rule_payload(
+            {
+                "name": "Invalid live message option",
+                "entity_ids": ["sensor.test"],
+                "source": "state",
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "update_message_when_active": "true",
+            }
+        )
 
 
 def test_unchanged_rule_has_no_comparison_and_keeps_jinja_optional():

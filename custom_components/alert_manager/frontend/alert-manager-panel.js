@@ -115,6 +115,7 @@ const newRuleDefaults = () => ({
   value: [""],
   duration: 900,
   message: "",
+  update_message_when_active: false,
   condition_template: "",
 });
 
@@ -125,15 +126,16 @@ const yamlValue = (value) => {
 };
 
 const ruleToYaml = (rule) => {
+  const source = rule.source === "none" ? "jinja" : (rule.source ?? "state");
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
-    `source: ${yamlValue(rule.source ?? "state")}`,
+    `source: ${yamlValue(source)}`,
   ];
-  if ((rule.source ?? "state") === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
-  if (!["none", "unchanged"].includes(rule.source ?? "state")) {
+  if (source === "attribute") lines.push(`attribute: ${yamlValue(rule.attribute)}`);
+  if (!["jinja", "unchanged"].includes(source)) {
     lines.push(`operator: ${yamlValue(rule.operator)}`);
     if (rule.operator !== "unchanged") {
       lines.push(Array.isArray(rule.value)
@@ -144,6 +146,7 @@ const ruleToYaml = (rule) => {
   lines.push(
     `duration: ${yamlValue(rule.duration)}`,
     `message: ${yamlValue(rule.message)}`,
+    `update_message_when_active: ${yamlValue(rule.update_message_when_active ?? false)}`,
     `condition_template: ${yamlValue(rule.condition_template)}`,
   );
   return `${lines.join("\n")}\n`;
@@ -1148,7 +1151,7 @@ class AlertManagerPanel extends HTMLElement {
           { value: "state", label: this._t("rules.source_state") },
           { value: "attribute", label: this._t("rules.source_attribute") },
           { value: "unchanged", label: this._t("rules.source_unchanged") },
-          { value: "none", label: this._t("rules.source_none") },
+          { value: "jinja", label: this._t("rules.source_jinja") },
         ],
         this._editingRule.source ?? "state",
         (value) => {
@@ -1157,8 +1160,8 @@ class AlertManagerPanel extends HTMLElement {
           this._editingRule.source = value;
           if (value !== "attribute") this._editingRule.attribute = "";
           this._ruleDirty = true;
-          if (["none", "unchanged"].includes(previousSource)
-            || ["none", "unchanged"].includes(value)) {
+          if (["jinja", "unchanged"].includes(previousSource)
+            || ["jinja", "unchanged"].includes(value)) {
             this._refreshRuleEditor();
           } else {
             const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
@@ -2092,6 +2095,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
+    if (rule.source === "none") rule.source = "jinja";
     if (TEXT_RULE_OPERATORS.has(rule.operator)) {
       rule.value = this._ruleValueList(rule.value);
     } else if (RANGE_RULE_OPERATORS.has(rule.operator)) {
@@ -2122,7 +2126,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderRuleVisualEditor(rule) {
-    const jinjaOnly = rule.source === "none";
+    const jinjaOnly = rule.source === "jinja";
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
@@ -2147,6 +2151,7 @@ class AlertManagerPanel extends HTMLElement {
           <div class="fields">
             ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, { nameMode: "name" })}
             <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(this._t("rules.message_help"))}</small></div>
+            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(this._t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(this._t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(this._t("rules.update_message_when_active_help"))}</small></div>
           </div>
         </section>`;
   }
@@ -2280,7 +2285,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _ruleSummary(rule) {
-    if (rule.source === "none") return this._t("conditions.rule.jinja", { duration: "" });
+    if (rule.source === "jinja") return this._t("conditions.rule.jinja", { duration: "" });
     if (rule.source === "unchanged") {
       return this._t("conditions.rule.unchanged", { duration: "" });
     }
@@ -2628,6 +2633,10 @@ class AlertManagerPanel extends HTMLElement {
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);
+    }
+    if (event.target?.id === "rule-update-message-when-active" && this._editingRule) {
+      this._editingRule.update_message_when_active = Boolean(event.target.checked);
+      this._ruleDirty = true;
     }
     void this._handleImportSelection(event);
   }
@@ -3002,7 +3011,7 @@ class AlertManagerPanel extends HTMLElement {
       form.querySelector?.(`[name="${name}"]`);
     const value = (name) => field(name)?.value ?? "";
     const source = value("source");
-    const comparisonFree = ["none", "unchanged"].includes(source);
+    const comparisonFree = ["jinja", "unchanged"].includes(source);
     const operator = comparisonFree ? "equals" : value("operator");
     const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
     const comparisonValue = comparisonFree || operator === "unchanged"
@@ -3033,13 +3042,19 @@ class AlertManagerPanel extends HTMLElement {
           ?? this.shadowRoot.querySelector("#rule-message-template")?.value
           ?? "",
       ).trim() || null,
+      update_message_when_active: Boolean(
+        form.querySelector?.("#rule-update-message-when-active")?.checked
+          ?? form.elements?.namedItem("update_message_when_active")?.checked
+          ?? this._editingRule?.update_message_when_active
+          ?? false
+      ),
       condition_template: conditionTemplate,
     };
     const id = String(this._editingRule?.id ?? "");
     // _call renders a busy state. Keep the submitted values as the editor draft so
     // that render cannot clear the form, especially when the backend rejects it.
     this._editingRule = { ...rule, ...(id ? { id } : {}) };
-    if (source === "none" && conditionTemplate === null) {
+    if (source === "jinja" && conditionTemplate === null) {
       this._notice = {
         kind: "error",
         text: this._t("rules.condition_template_required"),
@@ -3095,6 +3110,12 @@ class AlertManagerPanel extends HTMLElement {
         this._editingRule.message
           ?? this.shadowRoot.querySelector("#rule-message-template")?.value
           ?? "",
+      ),
+      update_message_when_active: Boolean(
+        form.querySelector?.("#rule-update-message-when-active")?.checked
+          ?? form.elements?.namedItem("update_message_when_active")?.checked
+          ?? this._editingRule.update_message_when_active
+          ?? false
       ),
       condition_template: String(
         this._editingRule.condition_template

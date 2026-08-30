@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.0.1"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.7"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.8"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -58,7 +58,7 @@ STORAGE_KEY: Final = DOMAIN
 HISTORY_STORAGE_KEY: Final = f"{DOMAIN}.history"
 COHERENCE_STORAGE_KEY: Final = f"{DOMAIN}.coherence"
 STORAGE_VERSION: Final = 1
-STORAGE_MINOR_VERSION: Final = 12
+STORAGE_MINOR_VERSION: Final = 13
 HISTORY_STORAGE_VERSION: Final = 1
 COHERENCE_STORAGE_VERSION: Final = 1
 
@@ -136,4 +136,4 @@ OPERATORS: Final = (
     "outside",
     "unchanged",
 )
-VALUE_SOURCES: Final = ("state", "attribute", "unchanged", "none")
+VALUE_SOURCES: Final = ("state", "attribute", "unchanged", "jinja")

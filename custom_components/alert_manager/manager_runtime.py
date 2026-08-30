@@ -675,7 +675,7 @@ class _RuntimeMixin:
             found, current = self._rule_current_value(rule, state)
             if not found:
                 continue
-            if rule.source not in ("none", "unchanged") and not rule.matches(current):
+            if rule.source not in ("jinja", "unchanged") and not rule.matches(current):
                 continue
             if not self._rule_template_matches(rule, state, current):
                 continue
@@ -687,7 +687,7 @@ class _RuntimeMixin:
             if rendered_message is None:
                 condition_key = (
                     "rule.jinja"
-                    if rule.source == "none"
+                    if rule.source == "jinja"
                     else "rule.unchanged"
                     if rule.source == "unchanged"
                     else "rule.selected_unchanged"
@@ -709,11 +709,11 @@ class _RuntimeMixin:
                     message=rendered_message,
                     source=rule.source,
                     operator=(
-                        None if rule.source in ("none", "unchanged") else rule.operator
+                        None if rule.source in ("jinja", "unchanged") else rule.operator
                     ),
                     comparison_value=(
                         None
-                        if rule.source in ("none", "unchanged")
+                        if rule.source in ("jinja", "unchanged")
                         or rule.operator == "unchanged"
                         else rule.value
                     ),

@@ -558,7 +558,7 @@ def test_jinja_only_rule_uses_only_its_template_and_keeps_duration(
             {
                 "name": "Pure Jinja",
                 "entity_ids": ["sensor.source"],
-                "source": "none",
+                "source": "jinja",
                 "duration": 60,
                 "condition_template": "{{ is_state('input_boolean.guard', 'on') }}",
             }
@@ -922,6 +922,58 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
         await reloaded.async_setup()
         assert reloaded.records[alert_id].details.message == updated
         assert reloaded.records[alert_id].details.condition == updated
+
+    run(scenario())
+
+
+def test_custom_rule_can_keep_updating_message_while_active(hass, entry, set_now):
+    """The opt-in live message keeps dependencies, persistence and UI data current."""
+    start = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.source", "on")
+    hass.states.set("sensor.context", "warm")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Live templated message",
+                "entity_ids": ["sensor.source"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "message": "Context: {{ states('sensor.context') }}",
+                "update_message_when_active": True,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.source"
+        record = manager.records[alert_id]
+        assert record.status is AlertStatus.ACTIVE
+        assert record.details.message == "Context: warm"
+        assert (
+            "message",
+            rule["id"],
+            "sensor.source",
+        ) in manager._template_entities_by_key
+
+        hass.states.set("sensor.context", "cold")
+        manager._state_changed(Event({"entity_id": "sensor.context"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert record.details.message == "Context: cold"
+        assert record.details.condition == "Context: cold"
+        assert (
+            hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
+            == "Context: cold"
+        )
+        public_record = next(
+            alert
+            for alert in manager.public_snapshot()["alerts"]
+            if alert["id"] == alert_id
+        )
+        assert public_record["message"] == "Context: cold"
 
     run(scenario())
 
