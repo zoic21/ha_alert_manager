@@ -192,24 +192,10 @@ condition_template: "{{ state.state == 'heating' }}"
 
 #### Messages Bayrol en ignorant les états attendus
 
-Cette règle évalue chaque clé de message du tableau data de Bayrol. Elle ne peut devenir active que lorsqu’aucun des états attendus de débit, de démarrage ou de mode enjoy n’est présent ; sa condition Jinja impose aussi que le débit soit présent. Le message Jinja filtre les textes renvoyés et ne conserve l’alerte redox basse que lorsque la température de la piscine dépasse 15 °C.
+Cette règle évalue chaque clé de message du tableau data de Bayrol. Elle ne peut devenir active que lorsqu’aucun des états attendus de débit, de démarrage ou de mode enjoy n’est présent ; sa condition Jinja impose aussi que le débit soit présent.
 
 ```yaml
-name: "Alerte Bayrol"
-enabled: true
-entity_ids:
-  - "sensor.bayrol_24ase2_16263_messages"
-source: "attribute"
-attribute: "data.*.key"
-operator: "not_contains"
-value:
-  - "al_no_flow_bnc"
-  - "al_start_delay"
-  - "enjoy"
-duration: 5400
-message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
-update_message_when_active: false
-condition_template: "{% set flow = states('binary_sensor.bayrol_24ase2_16263_flow_contact') %}\n{{ (flow == 'on') }}"
+
 ```
 
 ## Analyse de cohérence
