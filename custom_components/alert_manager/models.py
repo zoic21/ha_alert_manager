@@ -638,6 +638,8 @@ class Rule:
             )
         if self.source == "jinja" and self.condition_template is None:
             raise ValueError("Rule condition_template is required for Jinja-only rules")
+        if self.source == "variation" and self.condition_template is None:
+            raise ValueError("Rule condition_template is required for Variation rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
         if (
@@ -654,6 +656,13 @@ class Rule:
             return
         if self.operator not in OPERATORS:
             raise ValueError(f"Unsupported operator: {self.operator}")
+        if self.source == "variation" and self.operator not in (
+            "above",
+            "below",
+            "between",
+            "outside",
+        ):
+            raise ValueError("Variation rules require a numeric operator")
         if self.operator == "unchanged":
             return
         if self.operator in ("above", "below"):

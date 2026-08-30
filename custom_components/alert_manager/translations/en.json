@@ -53,7 +53,8 @@
       },
       "sources": {
         "attribute": "Attribute {attribute}",
-        "state": "State"
+        "state": "State",
+        "variation": "Variation"
       }
     },
     "coherence": {
@@ -109,6 +110,8 @@
       "not_loaded": "Alert Manager is not loaded.",
       "numeric_value_required": "This operator requires a valid numeric value.",
       "operator_unsupported": "This operator is not supported.",
+      "variation_condition_required": "The starting Jinja condition is required with the Variation source.",
+      "variation_operator_required": "The Variation source requires a numeric operator: above, below, between or outside.",
       "range_bounds_invalid": "Both bounds must be valid numbers.",
       "range_bounds_order": "The lower bound must be less than or equal to the upper bound.",
       "range_bounds_required": "A lower bound and an upper bound are required.",
@@ -230,6 +233,9 @@
       "condition_template_help": "Optional. The template must return true in addition to the comparison. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
       "condition_template_only": "Jinja condition",
       "condition_template_only_help": "Required. The template must return true to trigger the alert; no other comparison is evaluated. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_variation": "Starting Jinja condition",
+      "condition_template_variation_help": "Required. The starting value is captured when this condition becomes true. It is kept while the condition remains true, then reset when it becomes false again. In this condition, value is the entity’s current numeric value.",
+      "condition_template_variation_required": "The starting Jinja condition is required with the “Variation” source.",
       "condition_template_selected_unchanged_help": "Optional. The template must return true in addition to the selected state value or attribute remaining unchanged. Additional variables: entity_id, state and value.",
       "condition_template_unchanged_help": "Optional. The template must return true in addition to the state and attributes remaining unchanged. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
       "condition_template_required": "The Jinja condition is required when the source is “Jinja”.",
@@ -267,6 +273,7 @@
       "source_jinja": "Jinja",
       "source_state": "Main state",
       "source_unchanged": "No change",
+      "source_variation": "Variation",
       "status": "Status",
       "status_active": "Active",
       "status_inactive": "Inactive",
@@ -274,7 +281,7 @@
       "upper_bound": "Upper bound",
       "value": "Comparison value",
       "values": "Comparison values",
-      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. The between and outside operators use value: [lower_bound, upper_bound]; unchanged has no value. An attribute path such as data.*.key checks every item in the data array. With source: unchanged, state and attributes are monitored together. With source: jinja, only condition_template is evaluated and it is required. update_message_when_active keeps recalculating a Jinja message after activation.",
+      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. The variation source compares current_value - starting_value and requires condition_template: its reference is captured when that template becomes true, then reset when it becomes false. It accepts above, below, between and outside. The between and outside operators use value: [lower_bound, upper_bound]; unchanged has no value. An attribute path such as data.*.key checks every item in the data array. With source: unchanged, state and attributes are monitored together. With source: jinja, only condition_template is evaluated and it is required. update_message_when_active keeps recalculating a Jinja message after activation.",
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule"
     },

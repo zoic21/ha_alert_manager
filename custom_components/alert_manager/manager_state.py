@@ -187,6 +187,7 @@ class _StateMixin:
     async def _async_save_state(self) -> None:
         """Persist runtime first, then archive without coupling business success."""
         await self.storage.async_save(self.config, self.records)
+        self._variation_baselines_dirty = False
         await self._async_flush_history()
 
     async def _async_flush_history(self) -> None:

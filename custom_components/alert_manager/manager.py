@@ -50,6 +50,8 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         self._pending_history: list[AlertHistoryEntry] = []
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
+        self._variation_baselines: dict[str, float] = {}
+        self._variation_baselines_dirty = False
         self._unsubscribers: list[Callable[[], None]] = []
         self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
@@ -100,6 +102,7 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
         config, records, migrated = await self.storage.async_load()
+        self._variation_baselines = self.storage.variation_baselines
         try:
             history, history_migrated = await self.history_storage.async_load()
         except Exception:

@@ -395,6 +395,123 @@ def test_jinja_dependencies_are_reverse_indexed_and_batched(hass, entry):
     asyncio.run(scenario())
 
 
+def test_variation_reference_follows_required_jinja_window(hass, entry):
+    """The reference is captured on true, reused, then reset on false."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "10")
+        hass.states.set("binary_sensor.guard", "off")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(
+                source="variation",
+                operator="above",
+                value=5,
+                duration=0,
+                condition_template=("{{ is_state('binary_sensor.guard', 'on') }}"),
+            )
+        )
+        baseline_key = f"{created['id']}:sensor.source"
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert baseline_key not in manager._variation_baselines
+
+        hass.states.set("binary_sensor.guard", "on")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager._variation_baselines[baseline_key] == 10
+        assert alert_id not in manager.records
+
+        before_saves = hass.store_save_count
+        hass.states.set("sensor.source", "14")
+        await manager.async_evaluate_entity("sensor.source")
+        assert alert_id not in manager.records
+        assert hass.store_save_count == before_saves
+
+        hass.states.set("sensor.source", "16")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].details.value == 6
+
+        hass.states.set("binary_sensor.guard", "off")
+        await manager.async_evaluate_entity("sensor.source")
+        assert baseline_key not in manager._variation_baselines
+        assert alert_id not in manager.records
+
+        hass.states.set("sensor.source", "20")
+        await manager.async_evaluate_entity("sensor.source")
+        hass.states.set("binary_sensor.guard", "on")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager._variation_baselines[baseline_key] == 20
+
+        hass.states.set("sensor.source", "26")
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].details.value == 6
+
+    asyncio.run(scenario())
+
+
+def test_variation_reference_survives_restart_while_gate_remains_true(hass, entry):
+    """A restart cannot silently move the beginning of an ongoing window."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "10")
+        hass.states.set("binary_sensor.guard", "on")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        created = await first.async_create_rule(
+            _rule(
+                source="variation",
+                operator="above",
+                value=5,
+                duration=0,
+                condition_template=("{{ is_state('binary_sensor.guard', 'on') }}"),
+            )
+        )
+        baseline_key = f"{created['id']}:sensor.source"
+        assert hass.stores["alert_manager"]["variation_baselines"] == {
+            baseline_key: 10.0
+        }
+
+        hass.states.set("sensor.source", "16")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert restarted._variation_baselines[baseline_key] == 10
+        assert restarted.records[alert_id].details.value == 6
+
+    asyncio.run(scenario())
+
+
+def test_variation_threshold_edit_does_not_move_the_window_start(hass, entry):
+    """Changing alert criteria keeps the start chosen by the unchanged gate."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(
+                source="variation",
+                operator="above",
+                value=5,
+                duration=0,
+                condition_template="{{ true }}",
+            )
+        )
+        baseline_key = f"{created['id']}:sensor.source"
+        hass.states.set("sensor.source", "12")
+        await manager.async_evaluate_entity("sensor.source")
+
+        await manager.async_update_rule(created["id"], {"value": 20})
+        assert manager._variation_baselines[baseline_key] == 10
+
+        await manager.async_update_rule(
+            created["id"], {"condition_template": "{{ false }}"}
+        )
+        assert baseline_key not in manager._variation_baselines
+
+    asyncio.run(scenario())
+
+
 def test_registry_changes_are_coalesced(hass, entry):
     """Multiple registry events before the worker runs schedule one full scan."""
 

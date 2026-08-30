@@ -48,6 +48,7 @@ const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
+const VARIATION_RULE_OPERATORS = new Set(["above", "below", "between", "outside"]);
 const VALIDATION_ERROR_KEYS = new Map([
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],
@@ -56,8 +57,10 @@ const VALIDATION_ERROR_KEYS = new Map([
   ["Alert Manager entities cannot be monitored", "rule_entity_forbidden"],
   ["Attribute is required for attribute rules", "attribute_required"],
   ["Attribute wildcard paths must use complete .* segments", "attribute_path_invalid"],
+  ["Variation rules require a numeric operator", "variation_operator_required"],
   ["Rule message must not exceed 1024 characters", "message_too_long"],
   ["Rule condition_template is required for Jinja-only rules", "jinja_required"],
+  ["Rule condition_template is required for Variation rules", "variation_condition_required"],
   ["Duration must be an integer", "duration_integer"],
   ["Duration must be between 0 and 31536000 seconds", "duration_range"],
   ["Numeric operators require one finite numeric value", "numeric_value_required"],
@@ -1150,6 +1153,7 @@ class AlertManagerPanel extends HTMLElement {
         [
           { value: "state", label: this._t("rules.source_state") },
           { value: "attribute", label: this._t("rules.source_attribute") },
+          { value: "variation", label: this._t("rules.source_variation") },
           { value: "unchanged", label: this._t("rules.source_unchanged") },
           { value: "jinja", label: this._t("rules.source_jinja") },
         ],
@@ -1159,9 +1163,13 @@ class AlertManagerPanel extends HTMLElement {
           this._captureRuleDraft();
           this._editingRule.source = value;
           if (value !== "attribute") this._editingRule.attribute = "";
+          if (value === "variation" && !VARIATION_RULE_OPERATORS.has(this._editingRule.operator)) {
+            this._editingRule.operator = "above";
+            this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
+          }
           this._ruleDirty = true;
-          if (["jinja", "unchanged"].includes(previousSource)
-            || ["jinja", "unchanged"].includes(value)) {
+          if (["jinja", "unchanged", "variation"].includes(previousSource)
+            || ["jinja", "unchanged", "variation"].includes(value)) {
             this._refreshRuleEditor();
           } else {
             const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
@@ -1171,7 +1179,12 @@ class AlertManagerPanel extends HTMLElement {
       );
       this._configureSelect(
         "rule-operator",
-        [
+        (this._editingRule.source === "variation" ? [
+          { value: "above", label: this._t("operators.above") },
+          { value: "below", label: this._t("operators.below") },
+          { value: "between", label: this._t("operators.between") },
+          { value: "outside", label: this._t("operators.outside") },
+        ] : [
           { value: "equals", label: this._t("operators.equals") },
           { value: "not_equals", label: this._t("operators.not_equals") },
           { value: "contains", label: this._t("operators.contains") },
@@ -1181,8 +1194,8 @@ class AlertManagerPanel extends HTMLElement {
           { value: "between", label: this._t("operators.between") },
           { value: "outside", label: this._t("operators.outside") },
           { value: "unchanged", label: this._t("operators.unchanged") },
-        ],
-        this._editingRule.operator ?? "equals",
+        ]),
+        this._editingRule.operator ?? (this._editingRule.source === "variation" ? "above" : "equals"),
         (value) => {
           this._captureRuleDraft();
           this._editingRule.operator = value;
@@ -1404,7 +1417,11 @@ class AlertManagerPanel extends HTMLElement {
     if (event.condition_key) return this._conditionText(event);
     if (!event.source || !event.operator) return event.condition ?? "";
     const source = this._t(
-      event.source === "attribute" ? "conditions.sources.attribute" : "conditions.sources.state",
+      event.source === "attribute"
+        ? "conditions.sources.attribute"
+        : event.source === "variation"
+        ? "conditions.sources.variation"
+        : "conditions.sources.state",
       { attribute: event.attribute ?? "" },
     );
     const expected = Array.isArray(event.comparison_value)
@@ -2096,6 +2113,9 @@ class AlertManagerPanel extends HTMLElement {
   _renderRuleEditor() {
     const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
     if (rule.source === "none") rule.source = "jinja";
+    if (rule.source === "variation" && !VARIATION_RULE_OPERATORS.has(rule.operator)) {
+      rule.operator = "above";
+    }
     if (TEXT_RULE_OPERATORS.has(rule.operator)) {
       rule.value = this._ruleValueList(rule.value);
     } else if (RANGE_RULE_OPERATORS.has(rule.operator)) {
@@ -2127,6 +2147,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderRuleVisualEditor(rule) {
     const jinjaOnly = rule.source === "jinja";
+    const variation = rule.source === "variation";
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
@@ -2143,7 +2164,7 @@ class AlertManagerPanel extends HTMLElement {
             <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
             <div class="field rule-attribute-field" ${rule.source === "attribute" ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-input name="attribute" data-field="attribute" type="text" value="${esc(rule.attribute || "")}" aria-label="${esc(this._t("rules.attribute_name"))}"></ha-input><small>${esc(this._t("rules.attribute_path_help"))}</small></div>
             ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
-            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
@@ -2291,6 +2312,8 @@ class AlertManagerPanel extends HTMLElement {
     }
     const source = rule.source === "attribute"
       ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
+      : rule.source === "variation"
+      ? this._t("conditions.sources.variation")
       : this._t("conditions.sources.state");
     if (rule.operator === "unchanged") {
       return this._t("conditions.rule.selected_unchanged", { source, duration: "" });
@@ -3054,10 +3077,12 @@ class AlertManagerPanel extends HTMLElement {
     // _call renders a busy state. Keep the submitted values as the editor draft so
     // that render cannot clear the form, especially when the backend rejects it.
     this._editingRule = { ...rule, ...(id ? { id } : {}) };
-    if (source === "jinja" && conditionTemplate === null) {
+    if (["jinja", "variation"].includes(source) && conditionTemplate === null) {
       this._notice = {
         kind: "error",
-        text: this._t("rules.condition_template_required"),
+        text: this._t(source === "variation"
+          ? "rules.condition_template_variation_required"
+          : "rules.condition_template_required"),
       };
       this._render();
       return;
@@ -3256,6 +3281,8 @@ class AlertManagerPanel extends HTMLElement {
     if (alert.condition_key === "rule.generated") {
       const sourceKey = params.source === "attribute"
         ? "conditions.sources.attribute"
+        : params.source === "variation"
+        ? "conditions.sources.variation"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
       params.operator = this._t(`operators.${params.operator}`);
