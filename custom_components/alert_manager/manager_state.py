@@ -368,6 +368,15 @@ class _StateMixin:
                 event_data = {
                     key: value for key, value in device.items() if key != "device_id"
                 }
+                event_data["messages"] = list(
+                    dict.fromkeys(
+                        record.details.message
+                        or record.details.rule_name
+                        or record.details.type
+                        for alert_id in device["alert_ids"]
+                        if (record := self.records.get(alert_id)) is not None
+                    )
+                )
                 self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, event_data)
 
         self._device_event_timers[group_id] = async_track_point_in_utc_time(
