@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -197,10 +198,11 @@ class _RuntimeMixin:
                     )
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
-            if persisted_changed:
+            immediate_save_required = self._immediate_state_save_required
+            if persisted_changed and immediate_save_required:
                 await self._async_save_state()
             if (
-                persisted_changed
+                (persisted_changed and immediate_save_required)
                 or public_refresh
                 or self._tracked_count() != tracked_count_before
             ):
@@ -468,9 +470,10 @@ class _RuntimeMixin:
                 publish=False,
                 emit_events=emit_events,
             )
-        if save and persisted_changed:
+        immediate_save_required = self._immediate_state_save_required
+        if save and immediate_save_required:
             await self._async_save_state()
-        if publish:
+        if publish and (not persisted_changed or immediate_save_required):
             self._publish_if_changed(
                 force=restoring and self._last_public_snapshot is None
             )
@@ -506,12 +509,14 @@ class _RuntimeMixin:
             return False
 
         persisted_changed = False
+        immediate_changed = False
         if state is not None:
             persisted_changed = self._reset_inactivity_records_after_update(
                 state,
                 now,
                 emit_events=emit_events,
             )
+            immediate_changed = persisted_changed
         existing_ids = {
             alert_id
             for alert_id, record in self.records.items()
@@ -519,6 +524,7 @@ class _RuntimeMixin:
         }
         candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed |= self._variation_baselines_dirty
+        immediate_changed |= self._variation_baselines_dirty
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
@@ -535,11 +541,19 @@ class _RuntimeMixin:
                 )
                 self.records[alert_id] = record
                 persisted_changed = True
+                immediate_changed = True
             else:
                 details.value = record.details.value
                 if record.details != details:
+                    live_message_only = self._is_live_message_only_change(
+                        record, details
+                    )
                     record.details = details
                     persisted_changed = True
+                    if live_message_only:
+                        self._schedule_live_message_flush()
+                    else:
+                        immediate_changed = True
                 if record.delay != delay:
                     pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
@@ -559,10 +573,12 @@ class _RuntimeMixin:
                     ):
                         self._recalculate_hidden_pending_visibility(record, now)
                     persisted_changed = True
+                    immediate_changed = True
 
             became_active = advance_record(record, now)
             if became_active:
                 persisted_changed = True
+                immediate_changed = True
                 self._cancel_timer(alert_id)
                 if emit_events:
                     self._fire_started(record)
@@ -573,15 +589,43 @@ class _RuntimeMixin:
             record = self.records.pop(alert_id)
             self._cancel_timer(alert_id)
             persisted_changed = True
+            immediate_changed = True
             if record.status is AlertStatus.ACTIVE:
                 self._pending_history.append(AlertHistoryEntry.resolved(record, now))
                 if emit_events:
                     self._fire_resolved(record, now)
-        if save and persisted_changed:
+        if immediate_changed:
+            self._immediate_state_save_required = True
+        if save and immediate_changed:
             await self._async_save_state()
-        if publish:
+        if publish and (not persisted_changed or immediate_changed):
             self._publish_if_changed()
         return persisted_changed
+
+    def _is_live_message_only_change(
+        self, record: AlertRecord, details: AlertDetails
+    ) -> bool:
+        """Return whether only an opted-in active message display has changed."""
+        if record.status is not AlertStatus.ACTIVE or details.rule_id is None:
+            return False
+        rule = next(
+            (
+                candidate
+                for candidate in self._rules_by_entity.get(details.entity_id, ())
+                if candidate.id == details.rule_id
+            ),
+            None,
+        )
+        if rule is None or not rule.update_message_when_active:
+            return False
+        return (
+            replace(
+                record.details,
+                message=details.message,
+                condition=details.condition,
+            )
+            == details
+        )
 
     def _reset_inactivity_records_after_update(
         self,

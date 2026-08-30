@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Read and validate version
         id: version
@@ -39,7 +39,7 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update tag and release
+      - name: Create immutable tag and release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -47,19 +47,9 @@ jobs:
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         shell: bash
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh api \
-              --method PATCH \
-              "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
-              -f sha="$GITHUB_SHA" \
-              -F force=true \
-              >/dev/null
-            gh release edit "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Alert Manager $VERSION"
-            echo "Release $TAG updated to $GITHUB_SHA."
-            exit 0
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Published versions are immutable; bump the manifest version." >&2
+            exit 1
           fi
           args=(
             "$TAG"

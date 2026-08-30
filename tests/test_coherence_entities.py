@@ -7,6 +7,8 @@ import importlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from custom_components.alert_manager.button import (
@@ -49,6 +51,34 @@ def test_button_platform_exposes_stable_entity_and_runs_scan(hass, entry, monkey
     monkeypatch.setattr(button_module, "async_run_coherence_scan", scan)
     run(button.async_press())
 
+    assert calls == [hass]
+
+
+def test_button_rejects_non_admin_users_but_allows_internal_calls(
+    hass, entry, monkeypatch
+):
+    """Entity permissions cannot let a non-admin bypass the panel restriction."""
+    entities = []
+    run(setup_button(hass, entry, entities.extend))
+    button = entities[0]
+    button.hass = hass
+    calls = []
+
+    async def scan(scan_hass):
+        calls.append(scan_hass)
+        return {"missing_entity_count": 0, "results": []}
+
+    button_module = importlib.import_module("custom_components.alert_manager.button")
+    monkeypatch.setattr(button_module, "async_run_coherence_scan", scan)
+    hass.auth.users["regular-user"] = SimpleNamespace(is_admin=False)
+    button._context = SimpleNamespace(user_id="regular-user")
+
+    with pytest.raises(ServiceValidationError, match="administrator"):
+        run(button.async_press())
+    assert calls == []
+
+    button._context = SimpleNamespace(user_id=None)
+    run(button.async_press())
     assert calls == [hass]
 
 
@@ -152,6 +182,43 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
         "scan_esphome": False,
         "ignored_entity_references": frozenset({"toto.plop"}),
     }
+
+
+def test_concurrent_scan_requests_share_one_scan_and_one_store_write(hass, monkeypatch):
+    """Panel, button and schedule callers join the same in-flight operation."""
+    coherence_module = importlib.import_module(
+        "custom_components.alert_manager.coherence"
+    )
+
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def scan(_hass, **_options):
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+            return {"missing_entity_count": 0, "results": []}
+
+        monkeypatch.setattr(coherence_module, "async_scan_configuration", scan)
+        first = asyncio.create_task(coherence_module.async_run_coherence_scan(hass))
+        for _ in range(10):
+            if started.is_set():
+                break
+            await asyncio.sleep(0)
+        assert started.is_set(), repr(first)
+        second = asyncio.create_task(coherence_module.async_run_coherence_scan(hass))
+        await asyncio.sleep(0)
+
+        assert calls == 1
+        release.set()
+        first_result, second_result = await asyncio.gather(first, second)
+        assert first_result is second_result
+        assert hass.store_save_count == 1
+
+    run(scenario())
 
 
 def test_latest_scan_is_restored_from_storage_after_restart(hass):

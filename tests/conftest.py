@@ -608,6 +608,9 @@ class FakeHass:
         self.label_registry = Registry("label")
         self.area_registry = Registry("area")
 
+    def async_create_task(self, coroutine, name=None, eager_start=True):
+        return asyncio.create_task(coroutine, name=name)
+
 
 class FakeConfigEntries:
     def __init__(self):

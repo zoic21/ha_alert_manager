@@ -7,6 +7,7 @@ runs filesystem work in Home Assistant's executor and persists only the latest r
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -35,8 +36,10 @@ from .const import (
     COHERENCE_STORAGE_KEY,
     COHERENCE_STORAGE_VERSION,
     DATA_COHERENCE_RESULT,
+    DATA_COHERENCE_SCAN_TASK,
     DATA_MANAGER,
     DEFAULT_COHERENCE_SCAN_ESPHOME,
+    DOMAIN,
     SIGNAL_COHERENCE_UPDATED,
 )
 
@@ -727,8 +730,8 @@ async def async_scan_configuration(
     )
 
 
-async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
-    """Run one scan, persist its result and notify Home Assistant entities."""
+async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
+    """Run and persist one coherence scan."""
     manager = hass.data.get(DATA_MANAGER)
     config = getattr(manager, "config", {})
     result = await async_scan_configuration(
@@ -747,6 +750,22 @@ async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
     return result
+
+
+async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
+    """Share one in-flight scan across every manual and scheduled caller."""
+    task: asyncio.Task[dict[str, Any]] | None = hass.data.get(DATA_COHERENCE_SCAN_TASK)
+    if task is None or task.done():
+        task = hass.async_create_task(
+            _async_run_coherence_scan(hass),
+            f"{DOMAIN} coherence scan",
+        )
+        hass.data[DATA_COHERENCE_SCAN_TASK] = task
+    try:
+        return await asyncio.shield(task)
+    finally:
+        if task.done() and hass.data.get(DATA_COHERENCE_SCAN_TASK) is task:
+            hass.data.pop(DATA_COHERENCE_SCAN_TASK, None)
 
 
 async def async_load_coherence_result(
