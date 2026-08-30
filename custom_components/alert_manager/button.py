@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -41,4 +42,12 @@ class AlertManagerCoherenceButton(ButtonEntity):
 
     async def async_press(self) -> None:
         """Run the same scan exposed by the Alert Manager panel."""
+        context = getattr(self, "_context", None)
+        user_id = getattr(context, "user_id", None)
+        if user_id is not None:
+            user = await self.hass.auth.async_get_user(user_id)
+            if user is None or not user.is_admin:
+                raise ServiceValidationError(
+                    "Alert Manager coherence scans require an administrator"
+                )
         await async_run_coherence_scan(self.hass)

@@ -88,6 +88,9 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
         self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
+        self._live_message_flush_timer: Callable[[], None] | None = None
+        self._live_message_flush_pending = False
+        self._immediate_state_save_required = False
 
     @property
     def monitoring_enabled(self) -> bool:

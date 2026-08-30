@@ -20,6 +20,7 @@ EVENT_ALERT_ACKNOWLEDGED: Final = "alert_manager_alert_acknowledged"
 EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
 EVENT_DEVICE_ALERT_STARTED: Final = "alert_manager_device_alert_started"
 DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
+LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS: Final = 30
 SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"
@@ -66,6 +67,7 @@ DATA_MANAGER: HassKey = HassKey(f"{DOMAIN}_manager")
 DATA_WEBSOCKET_REGISTERED: HassKey = HassKey(f"{DOMAIN}_websocket_registered")
 DATA_STATIC_REGISTERED: HassKey = HassKey(f"{DOMAIN}_static_registered")
 DATA_COHERENCE_RESULT: HassKey = HassKey(f"{DOMAIN}_coherence_result")
+DATA_COHERENCE_SCAN_TASK: HassKey = HassKey(f"{DOMAIN}_coherence_scan_task")
 
 DEFAULT_DELAY: Final = 900
 DEFAULT_PENDING_DISPLAY_DELAY: Final = 10

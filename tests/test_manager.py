@@ -18,6 +18,7 @@ from custom_components.alert_manager.const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_DEVICE_ALERT_STARTED,
+    SIGNAL_ALERTS_UPDATED,
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
@@ -927,7 +928,7 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
 
 
 def test_custom_rule_can_keep_updating_message_while_active(hass, entry, set_now):
-    """The opt-in live message keeps dependencies, persistence and UI data current."""
+    """Live messages update in memory but batch Store and Recorder writes."""
     start = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
     set_now(start)
     hass.states.set("sensor.source", "on")
@@ -956,6 +957,9 @@ def test_custom_rule_can_keep_updating_message_while_active(hass, entry, set_now
             rule["id"],
             "sensor.source",
         ) in manager._template_entities_by_key
+        saves_before_update = hass.store_save_count
+        updates = []
+        hass.dispatchers[SIGNAL_ALERTS_UPDATED].append(lambda: updates.append(True))
 
         hass.states.set("sensor.context", "cold")
         manager._state_changed(Event({"entity_id": "sensor.context"}))
@@ -964,16 +968,43 @@ def test_custom_rule_can_keep_updating_message_while_active(hass, entry, set_now
 
         assert record.details.message == "Context: cold"
         assert record.details.condition == "Context: cold"
+        assert hass.store_save_count == saves_before_update
         assert (
             hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
-            == "Context: cold"
+            == "Context: warm"
         )
+        assert updates == []
         public_record = next(
             alert
             for alert in manager.public_snapshot()["alerts"]
             if alert["id"] == alert_id
         )
         assert public_record["message"] == "Context: cold"
+
+        hass.states.set("sensor.context", "hot")
+        manager._state_changed(Event({"entity_id": "sensor.context"}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert record.details.message == "Context: hot"
+        assert hass.store_save_count == saves_before_update
+        assert updates == []
+
+        live_timer = next(
+            timer
+            for timer in reversed(hass.timers)
+            if not timer["cancelled"]
+            and timer["point"] == start + timedelta(seconds=30)
+        )
+        live_timer["action"](live_timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert hass.store_save_count == saves_before_update + 1
+        assert (
+            hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
+            == "Context: hot"
+        )
+        assert updates == [True]
 
     run(scenario())
 

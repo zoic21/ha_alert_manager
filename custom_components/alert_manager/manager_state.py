@@ -18,6 +18,7 @@ from .const import (
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,
     EVENT_DEVICE_ALERT_STARTED,
+    LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
 )
@@ -186,9 +187,50 @@ class _StateMixin:
 
     async def _async_save_state(self) -> None:
         """Persist runtime first, then archive without coupling business success."""
+        self._cancel_live_message_flush()
         await self.storage.async_save(self.config, self.records)
+        self._immediate_state_save_required = False
         self._variation_baselines_dirty = False
         await self._async_flush_history()
+
+    def _schedule_live_message_flush(self) -> None:
+        """Persist and publish the latest live messages at a bounded frequency."""
+        self._live_message_flush_pending = True
+        if self._live_message_flush_timer is not None:
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._live_message_flush_timer = None
+            if self._unloading or not self._live_message_flush_pending:
+                return
+            self.entry.async_create_task(
+                self.hass,
+                self._async_flush_live_messages(),
+                name="alert_manager live-message flush",
+            )
+
+        self._live_message_flush_timer = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            (
+                dt_util.now() + timedelta(seconds=LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS)
+            ).astimezone(UTC),
+        )
+
+    async def _async_flush_live_messages(self) -> None:
+        """Write and publish the most recent values for every live message."""
+        if self._unloading or not self._live_message_flush_pending:
+            return
+        await self._async_save_state()
+        self._publish_if_changed()
+
+    def _cancel_live_message_flush(self) -> None:
+        """Cancel a redundant delayed flush after an immediate durable write."""
+        if self._live_message_flush_timer is not None:
+            self._live_message_flush_timer()
+            self._live_message_flush_timer = None
+        self._live_message_flush_pending = False
 
     async def _async_flush_history(self) -> None:
         """Best-effort archive queued resolutions after runtime is durable."""
