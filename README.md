@@ -207,7 +207,7 @@ value:
   - "al_start_delay"
   - "enjoy"
 duration: 5400
-message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \" ) }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \" ) }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
+message: "{% if state_attr('sensor.bayrol_24ase2_16263_messages','data') %}       {% for item in state_attr('sensor.bayrol_24ase2_16263_messages','data') %}            {% if item.key == 'al_mv_too_low' %}              {% if states('sensor.bayrol_24ase2_16263_temperature') | int > 15 %}                 {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}            {% else %}             {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}               {{ item.message | replace(\"\\n\",\" \") }}             {% endif %}           {% endif %}       {% endfor %}     {% endif %}"
 update_message_when_active: false
 condition_template: "{% set flow = states('binary_sensor.bayrol_24ase2_16263_flow_contact') %}\n{{ (flow == 'on') }}"
 ```
