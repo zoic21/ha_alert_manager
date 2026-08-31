@@ -104,10 +104,22 @@ export const responsiveStyles = `
     }
     .alert-details-list {
       min-width: 0;
-    }
-    .alert-details-item {
       grid-template-columns: 1fr;
-      gap: var(--ha-space-1, 4px);
+    }
+    .alert-details-item-wide {
+      grid-column: auto;
+    }
+    .alert-details-summary {
+      align-items: flex-start;
+      padding: var(--ha-space-3, 12px);
+    }
+    .alert-details-status-icon {
+      width: 40px;
+      height: 40px;
+    }
+    .alert-details-entity {
+      font-size: var(--ha-font-size-l, 18px);
+      white-space: normal;
     }
     ha-card.rule-editor-drawer {
       inset-block-start: var(--header-height, 56px);

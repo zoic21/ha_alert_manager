@@ -1124,12 +1124,51 @@ test("alert details expose translated fields and contextual links", () => {
   const row = panel._tableRows("overview")[0];
   const html = panel._renderAlertDetails("overview", row);
 
-  assert.match(html, /Statut/);
+  assert.match(html, /alert-details-summary alert-details-status-active/);
+  assert.match(html, /alert-details-status-label">Alerte active/);
+  assert.match(html, /alert-details-entity table-cell-link/);
+  assert.match(html, /alert-details-highlight[\s\S]*Message[\s\S]*Refroidir la baie/);
+  assert.match(html, /alert-details-highlight[\s\S]*Condition[\s\S]*État supérieur/);
   assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
   assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /data-action="close-alert-details">Fermer/);
+});
+
+test("more info opens only after the alert details dialog is fully closed", async () => {
+  const panel = tablePanel();
+  const listeners = {};
+  const dialog = {
+    open: true,
+    removed: false,
+    addEventListener(name, listener) { listeners[name] = listener; },
+    remove() { this.removed = true; },
+  };
+  panel._alertDetailsDialog = dialog;
+  let openedEntity = null;
+  panel._openMoreInfo = (entityId) => { openedEntity = entityId; };
+  const click = {
+    prevented: false,
+    stopped: false,
+    preventDefault() { this.prevented = true; },
+    stopPropagation() { this.stopped = true; },
+    target: {
+      closest() {
+        return { dataset: { action: "more-info", entityId: "sensor.rack" } };
+      },
+    },
+  };
+
+  await panel._handleClick(click);
+
+  assert.equal(click.prevented, true);
+  assert.equal(click.stopped, true);
+  assert.equal(dialog.open, false);
+  assert.equal(openedEntity, null);
+  listeners.closed();
+  assert.equal(dialog.removed, true);
+  assert.equal(openedEntity, "sensor.rack");
 });
 
 test("opening a custom rule from an alert navigates and opens its editor", () => {

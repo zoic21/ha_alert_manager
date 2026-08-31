@@ -789,54 +789,70 @@ export function nativeAlertLink(label, { action, href }) {
 }
 
 export function alertDetailsItems(kind, row) {
-    const linked = (label, value, action, data = {}) => ({
+    const linked = (key, label, value, action, data = {}) => ({
+      key,
       label,
       value,
       action,
       data,
     });
     const items = [
-      { label: this._t("table.columns.status"), value: row.statusLabel },
-      linked(this._t("table.columns.entity"), row.entityName, "more-info", {
-        entityId: row.entityId,
-      }),
-      linked(this._t("table.columns.entity_id"), row.entityId, "more-info", {
+      linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
         entityId: row.entityId,
       }),
       row.deviceId
-        ? linked(this._t("table.columns.device"), row.device || row.deviceId, "open-alert-device", {
+        ? linked("device", this._t("table.columns.device"), row.device || row.deviceId, "open-alert-device", {
           deviceId: row.deviceId,
         })
-        : { label: this._t("table.columns.device"), value: row.device },
-      { label: this._t("table.columns.area"), value: row.area },
+        : { key: "device", label: this._t("table.columns.device"), value: row.device },
+      { key: "area", label: this._t("table.columns.area"), value: row.area },
       row.customRule && row.ruleId && (this._config?.rules ?? []).some(
         (rule) => String(rule.id) === String(row.ruleId),
       )
-        ? linked(this._t("table.columns.rule"), row.rule, "open-alert-rule", {
+        ? linked("rule", this._t("table.columns.rule"), row.rule, "open-alert-rule", {
           ruleId: row.ruleId,
         })
-        : { label: this._t("table.columns.rule"), value: row.rule },
-      { label: this._t("table.columns.integration"), value: row.integrationLabel || row.integration },
-      { label: this._t("table.columns.value"), value: row.value },
-      { label: this._t("table.columns.condition"), value: row.condition },
-      { label: this._t("table.columns.message"), value: row.message },
-      { label: this._t("table.columns.detected"), value: this._date(row.detected) },
+        : { key: "rule", label: this._t("table.columns.rule"), value: row.rule },
+      {
+        key: "integration",
+        label: this._t("table.columns.integration"),
+        value: row.integrationLabel || row.integration,
+      },
+      { key: "value", label: this._t("table.columns.value"), value: row.value },
+      { key: "detected", label: this._t("table.columns.detected"), value: this._date(row.detected) },
     ];
     if (kind === "history") {
       items.push(
-        { label: this._t("overview.active_since"), value: this._date(row.activated) },
-        { label: this._t("table.columns.resolved"), value: this._date(row.resolved) },
-        { label: this._t("table.columns.duration"), value: this._historyDurationText(row.duration) },
+        {
+          key: "activated",
+          label: this._t("overview.active_since"),
+          value: this._date(row.activated),
+        },
+        {
+          key: "resolved",
+          label: this._t("table.columns.resolved"),
+          value: this._date(row.resolved),
+        },
+        {
+          key: "duration",
+          label: this._t("table.columns.duration"),
+          value: this._historyDurationText(row.duration),
+        },
       );
     } else if (row.status === "pending") {
       items.push({
+        key: "remaining",
         label: this._t("overview.remaining"),
         value: this._monitoringEnabled
           ? this._remaining(row.due)
           : this._t("table.monitoring_suspended"),
       });
     } else {
-      items.push({ label: this._t("overview.active_since"), value: this._date(row.activated) });
+      items.push({
+        key: "activated",
+        label: this._t("overview.active_since"),
+        value: this._date(row.activated),
+      });
     }
     if (row.acknowledged) {
       const acknowledgement = row.acknowledgedAt
@@ -845,19 +861,46 @@ export function alertDetailsItems(kind, row) {
           author: row.acknowledgedBy || this._t("overview.acknowledged_system"),
         })
         : this._t("overview.acknowledged");
-      items.push({ label: this._t("overview.acknowledged"), value: acknowledgement });
+      items.push({
+        key: "acknowledged",
+        label: this._t("overview.acknowledged"),
+        value: acknowledgement,
+        wide: true,
+      });
     }
-    items.push({ label: this._t("alert_details.alert_id"), value: row.id });
+    items.push({
+      key: "alert-id",
+      label: this._t("alert_details.alert_id"),
+      value: row.id,
+      wide: true,
+    });
     return items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
 }
 
 export function renderAlertDetails(context) {
-    const { closeLabel, items } = context;
+    const { closeLabel, conditionLabel, items, messageLabel, summary } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    return `<dl class="alert-details-list">
-      ${items.map((item) => `<div class="alert-details-item">
+    return `<section class="alert-details-summary alert-details-status-${esc(summary.status)}">
+      <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
+      <div class="alert-details-summary-text">
+        <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
+        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}">${esc(summary.entityName)}</a>
+      </div>
+    </section>
+    <div class="alert-details-highlights">
+      ${summary.message ? `<section class="alert-details-highlight">
+        <span>${esc(messageLabel)}</span>
+        <p>${esc(summary.message)}</p>
+      </section>` : ""}
+      ${summary.condition ? `<section class="alert-details-highlight">
+        <span>${esc(conditionLabel)}</span>
+        <p>${esc(summary.condition)}</p>
+      </section>` : ""}
+    </div>
+    <dl class="alert-details-list">
+      ${items.map((item) => `<div class="alert-details-item${item.wide ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
         <dt>${esc(item.label)}</dt>
         <dd>${item.action
           ? `<a class="table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
@@ -868,9 +911,25 @@ export function renderAlertDetails(context) {
 }
 
 export function renderAlertDetailsPanel(kind, row) {
+    let iconPath = MDI_ALERT_CIRCLE_OUTLINE;
+    if (row.status === "pending") iconPath = MDI_CLOCK_OUTLINE;
+    if (row.status === "acknowledged" || kind === "history") {
+      iconPath = MDI_CHECK_CIRCLE_OUTLINE;
+    }
     return renderAlertDetails({
       closeLabel: this._t("buttons.close"),
+      conditionLabel: this._t("table.columns.condition"),
       items: this._alertDetailsItems(kind, row),
+      messageLabel: this._t("table.columns.message"),
+      summary: {
+        condition: row.condition,
+        entityId: row.entityId,
+        entityName: row.entityName,
+        iconPath,
+        message: row.message,
+        status: row.status,
+        statusLabel: row.statusLabel,
+      },
     });
 }
 
@@ -893,12 +952,23 @@ export function openAlertDetails(kind, row) {
     dialog.open = true;
 }
 
-export function closeAlertDetailsDialog() {
+export function closeAlertDetailsDialog(afterClosed) {
     const dialog = this._alertDetailsDialog;
-    if (!dialog) return;
+    const callback = typeof afterClosed === "function" ? afterClosed : null;
+    if (!dialog) {
+      callback?.();
+      return;
+    }
     this._alertDetailsDialog = null;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      dialog.remove?.();
+      callback?.();
+    };
+    dialog.addEventListener?.("closed", finish, { once: true });
     dialog.open = false;
-    dialog.remove?.();
 }
 
 export function nativeTimelineCell(row) {
@@ -1055,21 +1125,29 @@ export async function handleAlertTableAction(action, button, event) {
     return true;
   }
   if (action === "more-info") {
-    this._closeAlertDetailsDialog();
-    this._openMoreInfo(button.dataset.entityId);
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const entityId = button.dataset.entityId;
+    this._closeAlertDetailsDialog(() => this._openMoreInfo(entityId));
     return true;
   }
   if (action === "open-alert-device") {
-    this._closeAlertDetailsDialog();
-    this._navigate(`/config/devices/device/${encodeURIComponent(button.dataset.deviceId)}`);
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const path = `/config/devices/device/${encodeURIComponent(button.dataset.deviceId)}`;
+    this._closeAlertDetailsDialog(() => this._navigate(path));
     return true;
   }
   if (action === "open-alert-rule") {
-    this._closeAlertDetailsDialog();
-    this._openRuleEditor(button.dataset.ruleId, { navigate: true });
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const ruleId = button.dataset.ruleId;
+    this._closeAlertDetailsDialog(() => this._openRuleEditor(ruleId, { navigate: true }));
     return true;
   }
   if (action === "close-alert-details") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
     this._closeAlertDetailsDialog();
     return true;
   }
