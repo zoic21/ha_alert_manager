@@ -1602,6 +1602,127 @@ function consumeRuleEditorNotice(panel, fallback) {
     return message;
 }
 
+function normalizeRuleDraft(rule = {}) {
+    const defaults = newRuleDefaults();
+    const normalized = {
+      ...defaults,
+      ...rule,
+      entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
+    };
+    if (normalized.source === "none") normalized.source = "jinja";
+    if (normalized.source === "variation") normalized.source = "state_variation";
+    if (VARIATION_RULE_SOURCES.has(normalized.source)
+      && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
+      normalized.operator = "above";
+    }
+    if (TEXT_RULE_OPERATORS.has(normalized.operator)) {
+      normalized.value = ruleValueList(normalized.value);
+    } else if (RANGE_RULE_OPERATORS.has(normalized.operator)) {
+      const bounds = ruleValueList(normalized.value);
+      normalized.value = [bounds[0] ?? "", bounds[1] ?? ""];
+    } else {
+      normalized.value = normalized.operator === "unchanged"
+        ? ""
+        : ruleValueList(normalized.value)[0] ?? "";
+    }
+    return normalized;
+}
+
+function formField(form, name) {
+    return form.querySelector?.(`[data-field="${name}"]`)
+      ?? form.elements?.namedItem?.(name)
+      ?? form.querySelector?.(`[name="${name}"]`);
+}
+
+function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
+    const value = (name) => formField(form, name)?.value;
+    const source = value("source") ?? currentRule.source ?? "state";
+    const comparisonFree = ["jinja", "unchanged"].includes(source);
+    const selectedOperator = value("operator") ?? currentRule.operator ?? "equals";
+    const operator = comparisonFree ? "equals" : selectedOperator;
+    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
+    let ruleValue;
+    if (comparisonFree || operator === "unchanged") {
+      ruleValue = "";
+    } else if (valueInputs.length) {
+      ruleValue = valueInputs.map((input) => String(input.value));
+    } else if (RANGE_RULE_OPERATORS.has(operator)) {
+      const currentBounds = ruleValueList(currentRule.value);
+      ruleValue = [
+        String(value("lower-bound") ?? currentBounds[0] ?? ""),
+        String(value("upper-bound") ?? currentBounds[1] ?? ""),
+      ];
+    } else if (TEXT_RULE_OPERATORS.has(operator)) {
+      ruleValue = ruleValueList(value("value") ?? currentRule.value)
+        .map((item) => String(item));
+    } else {
+      ruleValue = String(value("value") ?? currentRule.value ?? "");
+    }
+    return {
+      ...currentRule,
+      name: String(value("name") ?? currentRule.name ?? ""),
+      entity_ids: [...(currentRule.entity_ids ?? [])],
+      enabled: Boolean(currentRule.enabled ?? true),
+      source,
+      attribute: String(value("attribute") ?? currentRule.attribute ?? ""),
+      operator,
+      value: ruleValue,
+      duration: Number(value("duration") ?? currentRule.duration ?? 900),
+      message: String(currentRule.message ?? selectorValues.message ?? ""),
+      update_message_when_active: Boolean(
+        form.querySelector?.("#rule-update-message-when-active")?.checked
+          ?? form.elements?.namedItem?.("update_message_when_active")?.checked
+          ?? currentRule.update_message_when_active
+          ?? false
+      ),
+      condition_template: String(
+        currentRule.condition_template ?? selectorValues.conditionTemplate ?? "",
+      ),
+    };
+}
+
+function serializeRuleDraft(draft) {
+    const source = draft.source;
+    const comparisonFree = ["jinja", "unchanged"].includes(source);
+    const operator = comparisonFree ? "equals" : draft.operator;
+    const comparisonValue = comparisonFree || operator === "unchanged"
+      ? ""
+      : RANGE_RULE_OPERATORS.has(operator)
+      ? ruleValueList(draft.value).slice(0, 2).map((item) => String(item))
+      : TEXT_RULE_OPERATORS.has(operator)
+      ? ruleValueList(draft.value).map((item) => item.trim())
+      : String(draft.value ?? "");
+    return {
+      name: String(draft.name ?? "").trim(),
+      entity_ids: [...(draft.entity_ids ?? [])],
+      enabled: Boolean(draft.enabled ?? true),
+      source,
+      attribute: ATTRIBUTE_RULE_SOURCES.has(source)
+        ? String(draft.attribute ?? "").trim()
+        : null,
+      operator,
+      value: comparisonValue,
+      duration: Number(draft.duration),
+      message: String(draft.message ?? "").trim() || null,
+      update_message_when_active: Boolean(draft.update_message_when_active),
+      condition_template: String(draft.condition_template ?? "").trim() || null,
+    };
+}
+
+function validateRuleDraft(draft) {
+    const conditionTemplate = String(draft.condition_template ?? "").trim();
+    if (conditionTemplate || (draft.source !== "jinja"
+      && !VARIATION_RULE_SOURCES.has(draft.source))) {
+      return { valid: true, errorKey: null };
+    }
+    return {
+      valid: false,
+      errorKey: VARIATION_RULE_SOURCES.has(draft.source)
+        ? "rules.condition_template_variation_required"
+        : "rules.condition_template_required",
+    };
+}
+
 function refreshRuleEditor() {
     const layout = this.shadowRoot?.querySelector(".rules-layout");
     if (!layout || this._activeTab !== "rules") {
@@ -1647,99 +1768,109 @@ function refreshRuleAttributeSelector() {
     element.value = this._editingRule?.attribute ?? "";
 }
 
-function renderRuleEditor() {
-    const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
-    if (rule.source === "none") rule.source = "jinja";
-    if (rule.source === "variation") rule.source = "state_variation";
-    if (VARIATION_RULE_SOURCES.has(rule.source) && !VARIATION_RULE_OPERATORS.has(rule.operator)) {
-      rule.operator = "above";
-    }
-    if (TEXT_RULE_OPERATORS.has(rule.operator)) {
-      rule.value = this._ruleValueList(rule.value);
-    } else if (RANGE_RULE_OPERATORS.has(rule.operator)) {
-      const bounds = this._ruleValueList(rule.value);
-      rule.value = [bounds[0] ?? "", bounds[1] ?? ""];
-    } else {
-      rule.value = rule.operator === "unchanged"
-        ? ""
-        : this._ruleValueList(rule.value)[0] ?? "";
-    }
-    this._editingRule = rule;
-    const yamlMode = this._ruleEditorMode === "yaml";
-    const editorContent = yamlMode ? this._renderRuleYamlEditor(rule) : this._renderRuleVisualEditor(rule);
+function renderRuleEditor(context) {
+    const {
+      rule,
+      mode,
+      busy,
+      editorError,
+      yamlError,
+      t,
+      duplicateLabel,
+      renderTextField,
+      renderNumberField,
+    } = context;
+    const yamlMode = mode === "yaml";
+    const editorContent = yamlMode
+      ? renderRuleYamlEditor({ yamlError, t })
+      : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
     return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(this._t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
-      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(this._t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
+    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
-        <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
-        ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(this._duplicateRuleLabel())}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(this._t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
+        ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions">${this._ruleEditorMode === "visual" && this._ruleEditorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(this._ruleEditorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
+        <div class="actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
 }
 
-function renderRuleVisualEditor(rule) {
+function renderRuleEditorPanel() {
+    return renderRuleEditor({
+      rule: normalizeRuleDraft(this._editingRule ?? {}),
+      mode: this._ruleEditorMode,
+      busy: this._busy,
+      editorError: this._ruleEditorError,
+      yamlError: this._ruleYamlError,
+      t: (key, replacements) => this._t(key, replacements),
+      duplicateLabel: this._duplicateRuleLabel(),
+      renderTextField: (...args) => this._textField(...args),
+      renderNumberField: (...args) => this._numberField(...args),
+    });
+}
+
+function renderRuleVisualEditor(context) {
+    const { rule, t, renderTextField, renderNumberField } = context;
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_information"))}</h3><small>${esc(this._t("rules.editor_information_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
-            ${this._textField("name", this._t("rules.name"), rule.name, true, "name", "full")}
-            <div class="field full"><span class="field-label">${esc(this._t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(this._t("rules.entities_help"))}</small></div>
+            ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
-            <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(this._t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
-            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
-            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+            <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
+            <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_trigger"))}</h3><small>${esc(this._t("rules.editor_trigger_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, { nameMode: "name" })}
-            <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(this._t("rules.message_help"))}</small></div>
-            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(this._t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(this._t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(this._t("rules.update_message_when_active_help"))}</small></div>
+            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, 31536000, { nameMode: "name" })}
+            <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
+            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
         </section>`;
 }
 
-function renderRuleYamlEditor(rule) {
-    if (!this._ruleYaml) this._ruleYaml = ruleToYaml(rule);
+function renderRuleYamlEditor({ yamlError, t }) {
     return `<section class="rule-editor-section yaml-rule-section">
-      <div class="rule-section-heading"><div><h3>${esc(this._t("rules.yaml_title"))}</h3><small>${esc(this._t("rules.yaml_help"))}</small></div></div>
-      <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(this._t("rules.yaml_title"))}"></ha-code-editor>
-      ${this._ruleYamlError ? `<div class="yaml-error" role="alert">${esc(this._ruleYamlError)}</div>` : ""}
+      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t("rules.yaml_help"))}</small></div></div>
+      <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(t("rules.yaml_title"))}"></ha-code-editor>
+      ${yamlError ? `<div class="yaml-error" role="alert">${esc(yamlError)}</div>` : ""}
     </section>`;
 }
 
-function renderRuleValues(rule) {
+function renderRuleValues({ rule, t }) {
     if (rule.operator === "unchanged") return "";
     if (RANGE_RULE_OPERATORS.has(rule.operator)) {
-      const bounds = this._ruleValueList(rule.value);
-      return `<div class="field"><span class="field-label">${esc(this._t("rules.lower_bound"))}</span><ha-input data-field="lower-bound" type="number" step="any" value="${esc(bounds[0] ?? "")}" required aria-label="${esc(this._t("rules.lower_bound"))}"></ha-input></div><div class="field"><span class="field-label">${esc(this._t("rules.upper_bound"))}</span><ha-input data-field="upper-bound" type="number" step="any" value="${esc(bounds[1] ?? "")}" required aria-label="${esc(this._t("rules.upper_bound"))}"></ha-input></div>`;
+      const bounds = ruleValueList(rule.value);
+      return `<div class="field"><span class="field-label">${esc(t("rules.lower_bound"))}</span><ha-input data-field="lower-bound" type="number" step="any" value="${esc(bounds[0] ?? "")}" required aria-label="${esc(t("rules.lower_bound"))}"></ha-input></div><div class="field"><span class="field-label">${esc(t("rules.upper_bound"))}</span><ha-input data-field="upper-bound" type="number" step="any" value="${esc(bounds[1] ?? "")}" required aria-label="${esc(t("rules.upper_bound"))}"></ha-input></div>`;
     }
     if (!TEXT_RULE_OPERATORS.has(rule.operator)) {
-      return `<div class="field full"><span class="field-label">${esc(this._t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(this._t("rules.value"))}"></ha-input></div>`;
+      return `<div class="field full"><span class="field-label">${esc(t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(t("rules.value"))}"></ha-input></div>`;
     }
-    const values = this._ruleValueList(rule.value);
+    const values = ruleValueList(rule.value);
     const multipleHint = rule.operator === "equals" || rule.operator === "contains"
-      ? this._t("rules.multiple_any")
-      : this._t("rules.multiple_none");
-    return `<div class="field full rule-values-field"><span class="field-label">${esc(this._t("rules.values"))}</span><div class="rule-value-list">
-      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(this._t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(this._t("rules.aria_remove_value", { index: index + 1 }))}">${esc(this._t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
-    </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div></div>`;
+      ? t("rules.multiple_any")
+      : t("rules.multiple_none");
+    return `<div class="field full rule-values-field"><span class="field-label">${esc(t("rules.values"))}</span><div class="rule-value-list">
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(t("rules.aria_remove_value", { index: index + 1 }))}">${esc(t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
+    </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div></div>`;
 }
 
 function ruleValueList(value) {
@@ -1922,59 +2053,18 @@ function resetRuleEditorWidth(event) {
 
 async function saveRule(form) {
     this._clearRuleEditorError();
-    const field = (name) =>
-      form.querySelector?.(`[data-field="${name}"]`) ??
-      form.elements?.namedItem(name) ??
-      form.querySelector?.(`[name="${name}"]`);
-    const value = (name) => field(name)?.value ?? "";
-    const source = value("source");
-    const comparisonFree = ["jinja", "unchanged"].includes(source);
-    const operator = comparisonFree ? "equals" : value("operator");
-    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const comparisonValue = comparisonFree || operator === "unchanged"
-      ? ""
-      : RANGE_RULE_OPERATORS.has(operator)
-      ? [String(value("lower-bound")), String(value("upper-bound"))]
-      : TEXT_RULE_OPERATORS.has(operator)
-      ? (valueInputs.length
-        ? valueInputs.map((input) => String(input.value).trim())
-        : this._ruleValueList(value("value")).map((item) => item.trim()))
-      : String(value("value"));
-    const conditionTemplate = String(
-      this._editingRule?.condition_template
-        ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
-        ?? "",
-    ).trim() || null;
-    const rule = {
-      name: String(value("name")).trim(),
-      entity_ids: [...(this._editingRule?.entity_ids ?? [])],
-      enabled: Boolean(this._editingRule?.enabled ?? true),
-      source,
-      attribute: ATTRIBUTE_RULE_SOURCES.has(source) ? String(value("attribute")).trim() : null,
-      operator,
-      value: comparisonValue,
-      duration: Number(value("duration")),
-      message: String(
-        this._editingRule?.message
-          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? "",
-      ).trim() || null,
-      update_message_when_active: Boolean(
-        form.querySelector?.("#rule-update-message-when-active")?.checked
-          ?? form.elements?.namedItem("update_message_when_active")?.checked
-          ?? this._editingRule?.update_message_when_active
-          ?? false
-      ),
-      condition_template: conditionTemplate,
-    };
+    const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
+      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
+      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
+    });
+    const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
     // _call renders a busy state. Keep the submitted values as the editor draft so
     // that render cannot clear the form, especially when the backend rejects it.
-    this._editingRule = { ...rule, ...(id ? { id } : {}) };
-    if ((source === "jinja" || VARIATION_RULE_SOURCES.has(source)) && conditionTemplate === null) {
-      this._ruleEditorError = this._t(VARIATION_RULE_SOURCES.has(source)
-        ? "rules.condition_template_variation_required"
-        : "rules.condition_template_required");
+    this._editingRule = { ...draft, ...(id ? { id } : {}) };
+    const validation = validateRuleDraft(rule);
+    if (!validation.valid) {
+      this._ruleEditorError = this._t(validation.errorKey);
       this._refreshRuleEditor();
       return;
     }
@@ -1999,61 +2089,64 @@ async function saveRule(form) {
 function captureRuleDraft() {
     const form = this.shadowRoot.querySelector?.("#rule-form");
     if (!form || this._editingRule === null) return;
-    const field = (name) => form.querySelector?.(`[data-field="${name}"]`);
-    const value = (name) => field(name)?.value;
-    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const operator = value("operator") ?? this._editingRule.operator ?? "equals";
-    let ruleValue;
-    if (valueInputs.length) {
-      ruleValue = valueInputs.map((input) => String(input.value));
-    } else if (RANGE_RULE_OPERATORS.has(operator)) {
-      ruleValue = [
-        String(value("lower-bound") ?? this._ruleValueList(this._editingRule.value)[0] ?? ""),
-        String(value("upper-bound") ?? this._ruleValueList(this._editingRule.value)[1] ?? ""),
-      ];
-    } else {
-      ruleValue = operator === "unchanged"
-        ? ""
-        : String(value("value") ?? this._editingRule.value ?? "");
-    }
-    this._editingRule = {
-      ...this._editingRule,
-      name: String(value("name") ?? this._editingRule.name ?? ""),
-      enabled: Boolean(this._editingRule.enabled ?? true),
-      source: value("source") ?? this._editingRule.source ?? "state",
-      attribute: String(value("attribute") ?? this._editingRule.attribute ?? ""),
-      operator,
-      value: ruleValue,
-      duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
-      message: String(
-        this._editingRule.message
-          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? "",
-      ),
-      update_message_when_active: Boolean(
-        form.querySelector?.("#rule-update-message-when-active")?.checked
-          ?? form.elements?.namedItem("update_message_when_active")?.checked
-          ?? this._editingRule.update_message_when_active
-          ?? false
-      ),
-      condition_template: String(
-        this._editingRule.condition_template
-          ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
-          ?? "",
-      ),
-    };
+    this._editingRule = captureRuleDraftFromForm(form, this._editingRule, {
+      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
+      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
+    });
+}
+
+function hydrateRuleEditor(root, context) {
+  const closeButton = root?.querySelector?.("#rule-editor-close");
+  if (closeButton) {
+    closeButton.label = context.closeLabel;
+    closeButton.path = MDI_CLOSE;
+  }
+  if (context.mode !== "visual") return;
+  context.configureSelect(
+    "rule-source",
+    context.sourceOptions,
+    context.draft.source ?? "state",
+    context.onSourceChanged,
+  );
+  context.configureSelect(
+    "rule-operator",
+    context.operatorOptions,
+    context.draft.operator ?? "equals",
+    context.onOperatorChanged,
+  );
+  context.configureSelector(
+    "rule-entity-ids",
+    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
+    context.draft.entity_ids ?? [],
+    context.onEntitiesChanged,
+  );
+  context.configureSelector(
+    "rule-attribute",
+    { select: { options: context.attributeOptions, custom_value: true, mode: "dropdown" } },
+    context.draft.attribute ?? "",
+    context.onAttributeChanged,
+  );
+  context.configureSelector(
+    "rule-condition-template",
+    { template: {} },
+    context.draft.condition_template ?? "",
+    context.onConditionTemplateChanged,
+  );
+  context.configureSelector(
+    "rule-message-template",
+    { template: {} },
+    context.draft.message ?? "",
+    context.onMessageChanged,
+  );
 }
 
 function hydrateRuleEditorControls() {
-  const closeButton = this.shadowRoot.querySelector("#rule-editor-close");
-  if (closeButton) {
-    closeButton.label = this._t("rules.aria_close");
-    closeButton.path = MDI_CLOSE;
-  }
-  if (this._ruleEditorMode !== "visual") return;
-  this._configureSelect(
-    "rule-source",
-    [
+  const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
+  hydrateRuleEditor(this.shadowRoot, {
+    mode: this._ruleEditorMode,
+    draft: this._editingRule,
+    closeLabel: this._t("rules.aria_close"),
+    sourceOptions: [
       { value: "state", label: this._t("rules.source_state") },
       { value: "attribute", label: this._t("rules.source_attribute") },
       { value: "state_variation", label: this._t("rules.source_state_variation") },
@@ -2061,8 +2154,26 @@ function hydrateRuleEditorControls() {
       { value: "unchanged", label: this._t("rules.source_unchanged") },
       { value: "jinja", label: this._t("rules.source_jinja") },
     ],
-    this._editingRule.source ?? "state",
-    (value) => {
+    operatorOptions: (variation ? [
+      { value: "above", label: this._t("operators.above") },
+      { value: "below", label: this._t("operators.below") },
+      { value: "between", label: this._t("operators.between") },
+      { value: "outside", label: this._t("operators.outside") },
+    ] : [
+      { value: "equals", label: this._t("operators.equals") },
+      { value: "not_equals", label: this._t("operators.not_equals") },
+      { value: "contains", label: this._t("operators.contains") },
+      { value: "not_contains", label: this._t("operators.not_contains") },
+      { value: "above", label: this._t("operators.above") },
+      { value: "below", label: this._t("operators.below") },
+      { value: "between", label: this._t("operators.between") },
+      { value: "outside", label: this._t("operators.outside") },
+      { value: "unchanged", label: this._t("operators.unchanged") },
+    ]),
+    attributeOptions: this._ruleAttributeOptions(),
+    configureSelect: (...args) => this._configureSelect(...args),
+    configureSelector: (...args) => this._configureSelector(...args),
+    onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "state";
       this._captureRuleDraft();
       this._editingRule.source = value;
@@ -2082,27 +2193,7 @@ function hydrateRuleEditorControls() {
         if (attributeField) attributeField.hidden = !ATTRIBUTE_RULE_SOURCES.has(value);
       }
     },
-  );
-  this._configureSelect(
-    "rule-operator",
-    (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? [
-      { value: "above", label: this._t("operators.above") },
-      { value: "below", label: this._t("operators.below") },
-      { value: "between", label: this._t("operators.between") },
-      { value: "outside", label: this._t("operators.outside") },
-    ] : [
-      { value: "equals", label: this._t("operators.equals") },
-      { value: "not_equals", label: this._t("operators.not_equals") },
-      { value: "contains", label: this._t("operators.contains") },
-      { value: "not_contains", label: this._t("operators.not_contains") },
-      { value: "above", label: this._t("operators.above") },
-      { value: "below", label: this._t("operators.below") },
-      { value: "between", label: this._t("operators.between") },
-      { value: "outside", label: this._t("operators.outside") },
-      { value: "unchanged", label: this._t("operators.unchanged") },
-    ]),
-    this._editingRule.operator ?? (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? "above" : "equals"),
-    (value) => {
+    onOperatorChanged: (value) => {
       this._captureRuleDraft();
       this._editingRule.operator = value;
       this._ruleDirty = true;
@@ -2118,46 +2209,26 @@ function hydrateRuleEditorControls() {
       }
       this._refreshRuleEditor();
     },
-  );
-  this._configureSelector(
-    "rule-entity-ids",
-    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
-    this._editingRule.entity_ids ?? [],
-    (value) => {
+    onEntitiesChanged: (value) => {
       this._editingRule.entity_ids = this._multipleSelectorValue(
         value,
         this._editingRule.entity_ids,
       );
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-attribute",
-    { select: { options: this._ruleAttributeOptions(), custom_value: true, mode: "dropdown" } },
-    this._editingRule.attribute ?? "",
-    (value) => {
+    onAttributeChanged: (value) => {
       this._editingRule.attribute = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-condition-template",
-    { template: {} },
-    this._editingRule.condition_template ?? "",
-    (value) => {
+    onConditionTemplateChanged: (value) => {
       this._editingRule.condition_template = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-message-template",
-    { template: {} },
-    this._editingRule.message ?? "",
-    (value) => {
+    onMessageChanged: (value) => {
       this._editingRule.message = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
+  });
 }
 
 // Source: frontend-src/views/overview.js
@@ -2181,17 +2252,28 @@ function refreshOverviewData() {
     this._updateCountdowns();
 }
 
-function renderOverview() {
-    const selectedStatuses = this._filterValues(this._tableState.overview.filters.status);
+function renderOverview(context) {
+    const { alerts, selectedStatuses, pageMessages, rows, renderAlertTable, t } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${this._renderPageMessages()}
+    const summary = `${pageMessages}
       <section class="summary">
-        <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></ha-card>
-        <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></ha-card>
-        <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined data-summary="tracked"><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
+        <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
+        <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${alerts.acknowledge_count ?? alerts.acknowledge?.length ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${alerts.tracked_count ?? 0}</strong></ha-card>
       </section>`;
-    return this._renderAlertTable("overview", this._tableRows("overview"), summary);
+    return renderAlertTable("overview", rows, summary);
+}
+
+function renderOverviewPanel() {
+    return renderOverview({
+      alerts: this._alerts,
+      selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
+      pageMessages: this._renderPageMessages(),
+      rows: this._tableRows("overview"),
+      renderAlertTable: (...args) => this._renderAlertTable(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 async function bulkAlertAction(service) {
@@ -2309,17 +2391,29 @@ function refreshHistoryData() {
     this._refreshUiState();
 }
 
-function renderHistory() {
-    const limit = Number(this._historyConfig?.retention_limit ?? this._history?.retention_limit ?? 100);
+function renderHistory(context) {
+    const { limit, pageMessages, rows, renderAlertTable, t } = context;
     if (limit === 0) {
-      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(this._t("history.disabled_title"))}</h2><p>${esc(this._t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(this._t("history.open_settings"))}</ha-button></div></ha-card>`;
+      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
-    const events = Array.isArray(this._history?.events) ? this._history.events : [];
-    return this._renderAlertTable(
+    return renderAlertTable(
       "history",
-      this._tableRows("history", events),
-      this._renderPageMessages(),
+      rows,
+      pageMessages,
     );
+}
+
+function renderHistoryPanel() {
+    const limit = Number(this._historyConfig?.retention_limit
+      ?? this._history?.retention_limit ?? 100);
+    const events = Array.isArray(this._history?.events) ? this._history.events : [];
+    return renderHistory({
+      limit,
+      pageMessages: this._renderPageMessages(),
+      rows: this._tableRows("history", events),
+      renderAlertTable: (...args) => this._renderAlertTable(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 function historyRuleName(event) {
@@ -2579,15 +2673,15 @@ function nativeCoherenceActionCell(row) {
     return button;
 }
 
-function renderCoherence() {
-    const result = this._coherence;
+function renderCoherence(context) {
+    const { result, loading, pageMessages, statsMarkup, t } = context;
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
-          <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
-          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+          <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
         </div>
-        <div class="empty compact">${esc(this._t("coherence.not_scanned"))}</div>
+        <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
       </ha-card>`;
     }
     return `<hass-tabs-subpage-data-table
@@ -2597,16 +2691,26 @@ function renderCoherence() {
       main-page
     >
       <div slot="top-header" class="table-page-top">
-        ${this._renderPageMessages()}
+        ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
           <div class="coherence-header">
-            <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
-            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+            <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
           </div>
-          <div class="coherence-stats" data-coherence-stats>${this._coherenceStatsMarkup()}</div>
+          <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
     </hass-tabs-subpage-data-table>`;
+}
+
+function renderCoherencePanel() {
+    return renderCoherence({
+      result: this._coherence,
+      loading: this._coherenceLoading,
+      pageMessages: this._coherence ? this._renderPageMessages() : "",
+      statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 async function handleCoherenceAction(action) {
@@ -2628,6 +2732,10 @@ async function handleCoherenceAction(action) {
 }
 
 // Source: frontend-src/views/rules.js
+const RULES_TABLE_CONTEXT = Symbol("alert-manager-rules-table-context");
+const RULES_TABLE_HYDRATED = Symbol("alert-manager-rules-table-hydrated");
+const RULES_FILTER_HYDRATED = Symbol("alert-manager-rules-filter-hydrated");
+
 async function applyRuleTableEditorLayout(tablePage) {
     if (tablePage.updateComplete) await tablePage.updateComplete;
     tablePage.shadowRoot?.querySelector?.("ha-data-table")?.style?.setProperty(
@@ -2659,54 +2767,34 @@ function refreshRulesData() {
     this._refreshUiState();
 }
 
-function hydrateRuleTable() {
-    const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
-    if (!tablePage || !this._config) return;
-    const state = this._ensureRulesTableState();
-    const sourceRows = this._ruleTableRows();
-    const enabledFilters = new Set(this._filterValues(state.filters.enabled));
-    const visibleRows = sourceRows.filter((row) => (
-      !enabledFilters.size || enabledFilters.has(row.enabledKey)
-    ));
-    tablePage.hass = this._hass;
-    tablePage.narrow = Boolean(this._narrow);
-    tablePage.tabs = this._tabs();
-    tablePage.route = { prefix: "", path: "/alert-manager/rules" };
-    tablePage.mainPage = true;
-    tablePage.backPath = undefined;
-    tablePage.backCallback = undefined;
-    tablePage.id = "id";
-    tablePage.clickable = true;
-    tablePage.searchLabel = this._t("rules.search");
-    tablePage.filter = state.search;
-    tablePage.filters = enabledFilters.size ? 1 : 0;
-    tablePage.showFilters = this._filterPaneKind === "rules";
-    tablePage.columns = {
+function ruleTableColumns(context) {
+    const { t, narrow, renderNameCell, renderEntitiesCell, renderToggleCell } = context;
+    return {
       name: {
-        title: this._t("rules.name"),
-        label: this._t("rules.name"),
+        title: t("rules.name"),
+        label: t("rules.name"),
         main: true,
         sortable: true,
         hideable: false,
         moveable: false,
         minWidth: "180px",
         flex: 1.2,
-        template: (row) => this._nativeRuleNameCell(row, Boolean(this._narrow)),
+        template: (row) => renderNameCell(row, narrow),
       },
       entities: {
-        title: this._t("rules.entities"),
+        title: t("rules.entities"),
         sortable: true,
         minWidth: "220px",
         flex: 1.4,
-        template: (row) => this._nativeRuleEntitiesCell(row),
+        template: (row) => renderEntitiesCell(row),
       },
       condition: {
-        title: this._t("rules.condition"),
+        title: t("rules.condition"),
         minWidth: "260px",
         flex: 1.7,
       },
       duration: {
-        title: this._t("rules.duration"),
+        title: t("rules.duration"),
         sortable: true,
         valueColumn: "durationSort",
         type: "numeric",
@@ -2714,8 +2802,8 @@ function hydrateRuleTable() {
         flex: 0.7,
       },
       enabled: {
-        title: this._t("rules.status"),
-        label: this._t("rules.status"),
+        title: t("rules.status"),
+        label: t("rules.status"),
         sortable: true,
         valueColumn: "enabledSort",
         type: "icon",
@@ -2724,7 +2812,7 @@ function hydrateRuleTable() {
         moveable: false,
         minWidth: "88px",
         flex: 0.5,
-        template: (row) => this._nativeRuleToggleCell(row),
+        template: (row) => renderToggleCell(row),
       },
       search_index: {
         title: "",
@@ -2732,74 +2820,140 @@ function hydrateRuleTable() {
         filterable: true,
       },
     };
+}
+
+function hydrateRules(root, context) {
+    const tablePage = root?.querySelector?.("[data-rules-table-page]");
+    if (!tablePage) return;
+    tablePage[RULES_TABLE_CONTEXT] = context;
+    const { state, sourceRows, visibleRows, selectedFilters } = context;
+    tablePage.hass = context.hass;
+    tablePage.narrow = context.narrow;
+    tablePage.tabs = context.tabs;
+    tablePage.route = { prefix: "", path: "/alert-manager/rules" };
+    tablePage.mainPage = true;
+    tablePage.backPath = undefined;
+    tablePage.backCallback = undefined;
+    tablePage.id = "id";
+    tablePage.clickable = true;
+    tablePage.searchLabel = context.t("rules.search");
+    tablePage.filter = state.search;
+    tablePage.filters = selectedFilters.length ? 1 : 0;
+    tablePage.showFilters = context.filterPaneOpen;
+    tablePage.columns = ruleTableColumns(context);
     tablePage.columnOrder = [...state.columnOrder];
     tablePage.hiddenColumns = [...state.hiddenColumns];
     tablePage.initialSorting = { column: state.sortBy, direction: state.sortDirection };
     tablePage.data = visibleRows;
     tablePage._alertManagerRows = visibleRows;
     tablePage.noDataText = sourceRows.length
-      ? this._t("rules.empty_filtered")
-      : this._t("rules.empty");
-    tablePage.addEventListener("search-changed", (event) => {
-      state.search = String(event.detail?.value ?? "");
-    });
-    tablePage.addEventListener("clear-filter", () => {
-      state.filters.enabled = [];
-      this._filterPaneKind = "rules";
-      this._render();
-    });
-    tablePage.addEventListener("sorting-changed", (event) => {
-      const column = event.detail?.column;
-      const direction = event.detail?.direction;
-      if (!RULES_COLUMNS.includes(column) || !["asc", "desc"].includes(direction)) return;
-      state.sortBy = column;
-      state.sortDirection = direction;
-      this._saveRulesTableState();
-    });
-    tablePage.addEventListener("columns-changed", (event) => {
-      const order = Array.isArray(event.detail?.columnOrder)
-        ? event.detail.columnOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
-        : DEFAULT_RULES_TABLE_STATE.columnOrder.filter(
-          (column) => RULES_SECONDARY_COLUMNS.has(column),
-        );
-      state.columnOrder = [
-        "name",
-        ...order,
-        ...RULES_COLUMNS.filter((column) => (
-          RULES_SECONDARY_COLUMNS.has(column) && !order.includes(column)
-        )),
-        "enabled",
-      ];
-      state.hiddenColumns = (event.detail?.hiddenColumns ?? [])
-        .filter((column) => RULES_SECONDARY_COLUMNS.has(column));
-      this._saveRulesTableState();
-    });
-    tablePage.addEventListener("row-click", (event) => {
-      const rule = (this._config?.rules ?? []).find(
-        (item) => String(item.id) === String(event.detail?.id),
-      );
-      if (!rule) return;
-      this._editingRule = { ...rule };
-      this._ruleEditorMode = "visual";
-      this._ruleYaml = "";
-      this._ruleYamlError = null;
-      this._ruleDirty = false;
-      this._refreshRuleEditor();
-    });
+      ? context.t("rules.empty_filtered")
+      : context.t("rules.empty");
+    if (!tablePage[RULES_TABLE_HYDRATED]) {
+      tablePage.addEventListener("search-changed", (event) => {
+        tablePage[RULES_TABLE_CONTEXT].onSearch(String(event.detail?.value ?? ""));
+      });
+      tablePage.addEventListener("clear-filter", () => {
+        tablePage[RULES_TABLE_CONTEXT].onClearFilter();
+      });
+      tablePage.addEventListener("sorting-changed", (event) => {
+        tablePage[RULES_TABLE_CONTEXT].onSortingChanged(event.detail ?? {});
+      });
+      tablePage.addEventListener("columns-changed", (event) => {
+        tablePage[RULES_TABLE_CONTEXT].onColumnsChanged(event.detail ?? {});
+      });
+      tablePage.addEventListener("row-click", (event) => {
+        tablePage[RULES_TABLE_CONTEXT].onRowClick(event.detail?.id);
+      });
+      tablePage[RULES_TABLE_HYDRATED] = true;
+    }
     tablePage.querySelectorAll?.("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
       const value = checkbox.dataset.filterValue;
-      checkbox.checked = this._filterValues(state.filters.enabled).includes(value);
+      checkbox.checked = selectedFilters.includes(value);
+      checkbox[RULES_TABLE_CONTEXT] = context;
+      if (checkbox[RULES_FILTER_HYDRATED]) return;
       checkbox.addEventListener("change", (event) => {
         event.stopPropagation();
+        checkbox[RULES_TABLE_CONTEXT].onFilterChanged(value, checkbox.checked);
+      });
+      checkbox[RULES_FILTER_HYDRATED] = true;
+    });
+    void applyRuleTableEditorLayout(tablePage);
+}
+
+function hydrateRuleTable() {
+    if (!this._config) return;
+    const state = this._ensureRulesTableState();
+    const sourceRows = this._ruleTableRows();
+    const selectedFilters = this._filterValues(state.filters.enabled);
+    const enabledFilters = new Set(selectedFilters);
+    const visibleRows = sourceRows.filter((row) => (
+      !enabledFilters.size || enabledFilters.has(row.enabledKey)
+    ));
+    hydrateRules(this.shadowRoot, {
+      hass: this._hass,
+      narrow: Boolean(this._narrow),
+      tabs: this._tabs(),
+      state,
+      sourceRows,
+      visibleRows,
+      selectedFilters,
+      filterPaneOpen: this._filterPaneKind === "rules",
+      t: (key, replacements) => this._t(key, replacements),
+      renderNameCell: (row, narrow) => this._nativeRuleNameCell(row, narrow),
+      renderEntitiesCell: (row) => this._nativeRuleEntitiesCell(row),
+      renderToggleCell: (row) => this._nativeRuleToggleCell(row),
+      onSearch: (search) => { state.search = search; },
+      onClearFilter: () => {
+        state.filters.enabled = [];
+        this._filterPaneKind = "rules";
+        this._render();
+      },
+      onSortingChanged: ({ column, direction }) => {
+        if (!RULES_COLUMNS.includes(column) || !["asc", "desc"].includes(direction)) return;
+        state.sortBy = column;
+        state.sortDirection = direction;
+        this._saveRulesTableState();
+      },
+      onColumnsChanged: ({ columnOrder, hiddenColumns }) => {
+        const order = Array.isArray(columnOrder)
+          ? columnOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column))
+          : DEFAULT_RULES_TABLE_STATE.columnOrder.filter(
+            (column) => RULES_SECONDARY_COLUMNS.has(column),
+          );
+        state.columnOrder = [
+          "name",
+          ...order,
+          ...RULES_COLUMNS.filter((column) => (
+            RULES_SECONDARY_COLUMNS.has(column) && !order.includes(column)
+          )),
+          "enabled",
+        ];
+        state.hiddenColumns = (hiddenColumns ?? [])
+          .filter((column) => RULES_SECONDARY_COLUMNS.has(column));
+        this._saveRulesTableState();
+      },
+      onRowClick: (ruleId) => {
+        const rule = (this._config?.rules ?? []).find(
+          (item) => String(item.id) === String(ruleId),
+        );
+        if (!rule) return;
+        this._editingRule = { ...rule };
+        this._ruleEditorMode = "visual";
+        this._ruleYaml = "";
+        this._ruleYamlError = null;
+        this._ruleDirty = false;
+        this._refreshRuleEditor();
+      },
+      onFilterChanged: (value, checked) => {
         const selected = new Set(this._filterValues(state.filters.enabled));
-        if (checkbox.checked) selected.add(value);
+        if (checked) selected.add(value);
         else selected.delete(value);
         state.filters.enabled = [...selected];
         this._filterPaneKind = "rules";
         this._render();
-      });
+      },
     });
-    void applyRuleTableEditorLayout(tablePage);
 }
 
 function nativeRuleEntitiesCell(row) {
@@ -2831,15 +2985,13 @@ function nativeRuleToggleCell(row) {
     return toggle;
 }
 
-function renderRules() {
-    this._ensureRulesTableState();
-    const editorOpen = this._editingRule !== null;
-    const editor = editorOpen ? this._renderRuleEditor() : "";
+function renderRules(context) {
+    const { editorOpen, editor, editorWidth, pageMessages, t, renderFacetFilter } = context;
     const statuses = [
-      { value: "active", label: this._t("rules.status_active") },
-      { value: "inactive", label: this._t("rules.status_inactive") },
+      { value: "active", label: t("rules.status_active") },
+      { value: "inactive", label: t("rules.status_inactive") },
     ];
-    return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${this._ruleEditorWidth}px">
+    return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${editorWidth}px">
       <hass-tabs-subpage-data-table
         id="panel-shell"
         data-rules-table-page
@@ -2848,37 +3000,51 @@ function renderRules() {
         main-page
       >
         <div slot="top-header" class="table-page-top">
-          ${this._renderPageMessages()}
+          ${pageMessages}
           <ha-card outlined class="panel rules-list-panel">
             <div class="rules-header">
-              <div><h2>${esc(this._t("rules.title"))}</h2><p>${esc(this._t("rules.description"))}</p></div>
-              <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("rules.new"))}</ha-button>
+              <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
+              <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
             </div>
           </ha-card>
         </div>
         <div slot="filter-pane" class="filter-pane-content">
-          ${this._renderFacetFilter("rules", "enabled", this._t("rules.status"), statuses)}
+          ${renderFacetFilter("rules", "enabled", t("rules.status"), statuses)}
         </div>
       </hass-tabs-subpage-data-table>
       ${editor}
     </div>`;
 }
 
-function ruleTableRows() {
-    return (this._config?.rules ?? []).map((rule) => {
+function renderRulesPanel() {
+    this._ensureRulesTableState();
+    const editorOpen = this._editingRule !== null;
+    return renderRules({
+      editorOpen,
+      editor: editorOpen ? this._renderRuleEditor() : "",
+      editorWidth: this._ruleEditorWidth,
+      pageMessages: this._renderPageMessages(),
+      t: (key, replacements) => this._t(key, replacements),
+      renderFacetFilter: (...args) => this._renderFacetFilter(...args),
+    });
+}
+
+function buildRuleTableRows(rules, context) {
+    const { t, summarizeRule, formatDuration } = context;
+    return rules.map((rule) => {
       const enabled = rule.enabled !== false;
       const row = {
         id: rule.id,
         name: rule.name,
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
-        condition: this._ruleSummary(rule),
-        duration: this._durationText(rule.duration),
+        condition: summarizeRule(rule),
+        duration: formatDuration(rule.duration),
         durationSort: Number(rule.duration),
         enabled,
         enabledSort: enabled ? 1 : 0,
         enabledKey: enabled ? "active" : "inactive",
-        enabledLabel: this._t(enabled ? "rules.status_active" : "rules.status_inactive"),
+        enabledLabel: t(enabled ? "rules.status_active" : "rules.status_inactive"),
       };
       row.search_index = [
         row.name,
@@ -2888,6 +3054,14 @@ function ruleTableRows() {
         row.enabledLabel,
       ].join(" ");
       return row;
+    });
+}
+
+function ruleTableRows() {
+    return buildRuleTableRows(this._config?.rules ?? [], {
+      t: (key, replacements) => this._t(key, replacements),
+      summarizeRule: (rule) => this._ruleSummary(rule),
+      formatDuration: (duration) => this._durationText(duration),
     });
 }
 
@@ -3032,33 +3206,51 @@ async function handleRulesAction(action, button) {
 }
 
 // Source: frontend-src/views/automatic.js
-function renderAutomatic() {
-    const availablePacks = this._packs.filter((pack) => pack.available);
+function renderAutomatic(context) {
+    const { availablePacks, config, draft, busy, renderNumberField, t } = context;
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
-        const config = this._config.automatic[pack.id];
+        const packConfig = config.automatic[pack.id];
         const packKey = pack.translation_key || pack.id;
-        const packName = this._t(`packs.${packKey}.name`);
+        const packName = t(`packs.${packKey}.name`);
         return `<ha-card outlined class="panel category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
-            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(this._t("automatic.aria_enable", { name: packName }))}" ${config.enabled ? "checked" : ""}></ha-switch>
+            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
           </div>
-          <p>${esc(this._t(`packs.${packKey}.description`))}</p>
+          <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
-            ${this._numberField(`auto-${pack.id}-delay`, this._t("automatic.pack_delay"), config.delay, this._t("units.seconds"), 0, 31536000, { required: false, help: this._t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).map((field) => this._renderPackField(pack, field, config)).join("")}
+            ${renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+            ${(pack.config_fields ?? []).map((field) => renderPackField(
+              pack,
+              field,
+              packConfig,
+              { draft, renderNumberField, t },
+            )).join("")}
           </div>
         </ha-card>`;
       }).join("")}
-      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>${esc(this._t("automatic.save"))}</ha-button></div>
+      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
     </form>`;
 }
 
-function renderPackField(pack, field, config) {
-    const label = this._t(`automatic.fields.${field.translation_key}.label`);
+function renderAutomaticPanel() {
+    this._ensureAutomaticDraft();
+    return renderAutomatic({
+      availablePacks: this._packs.filter((pack) => pack.available),
+      config: this._config,
+      draft: this._automaticMapDraft,
+      busy: this._busy,
+      renderNumberField: (...args) => this._numberField(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
+}
+
+function renderPackField(pack, field, config, context) {
+    const { draft, renderNumberField, t } = context;
+    const label = t(`automatic.fields.${field.translation_key}.label`);
     if (field.type === "number") {
-      return this._numberField(
+      return renderNumberField(
         `auto-${pack.id}-${field.id}`,
         label,
         config[field.id],
@@ -3069,19 +3261,18 @@ function renderPackField(pack, field, config) {
       );
     }
     if (field.type !== "device_number_map") return "";
-    this._ensureAutomaticDraft();
-    const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
+    const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
       <span class="field-label">${esc(label)}</span>
-      <small>${esc(this._t(`automatic.fields.${field.translation_key}.help`))}</small>
+      <small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small>
       <div class="pack-map-list">
         ${rows.map((row, index) => `<div class="pack-map-row">
           <ha-selector id="auto-${pack.id}-${field.id}-device-${index}"></ha-selector>
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(this._t("buttons.remove"))}</ha-button>
+          <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
         </div>`).join("")}
       </div>
-      <div class="actions pack-map-add-action"><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+      <div class="actions pack-map-add-action"><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     </div>`;
 }
 
@@ -3213,52 +3404,70 @@ async function handleAutomaticAction(action, button) {
 }
 
 // Source: frontend-src/views/settings.js
-function renderSettings() {
-    this._ensureSettingsDraft();
-    const ignoredReferences = this._settingsDraft.coherence_ignored_entity_references;
+function renderSettings(context) {
+    const {
+      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      ignoredReferenceDraft, busy, renderNumberField, t,
+    } = context;
+    const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
-        ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
+        ${renderNumberField("global-delay", t("settings.global_delay"), config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.coherence_settings"))}</h2><div class="settings-grid">
-        <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
-        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(this._t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(this._t("settings.coherence_scan_esphome"))}" ${this._settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(this._t("settings.coherence_scan_esphome_help"))}</small></div>
-        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
+        <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
+        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div>
+        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
           ${ignoredReferences.length ? `<ha-chip-set class="ignored-reference-chips">${ignoredReferences.map((reference) => `<ha-input-chip selected label="${esc(reference)}" data-ignored-reference="${esc(reference)}">${esc(reference)}</ha-input-chip>`).join("")}</ha-chip-set>` : ""}
-          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(this._ignoredReferenceDraft)}" placeholder="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
-          <small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small>
+          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(ignoredReferenceDraft)}" placeholder="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+          <small>${esc(t("settings.coherence_ignored_entity_references_help"))}</small>
         </div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.exclusions"))}</h2><div class="settings-grid">
-        <div class="field settings-wide"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
-        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
+        <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
+        <div class="field"><span class="field-label">${esc(t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">${esc(t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.history_settings"))}</h2>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
-            <span class="field-label history-limit-label">${esc(this._t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(this._historyConfig.retention_limit)}" required aria-label="${esc(this._t("settings.history_limit"))}"><span slot="end">${esc(this._t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${this._busy || !(this._history?.events?.length) ? "disabled" : ""}>${esc(this._t("settings.history_clear"))}</ha-button></div>
+            <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
+            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
           </div>
-          <small class="history-limit-help">${esc(this._t("settings.history_limit_help"))}</small>
+          <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel"><div><h2>${esc(this._t("settings.entity_delay"))}</h2><small>${esc(this._t("settings.delay_help"))}</small></div>
-        <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
+      <ha-card outlined class="panel"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+        <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
-          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(this._t("settings.aria_delay"))}"><span slot="end">${esc(this._t("units.seconds"))}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(this._t("settings.aria_remove_delay"))}">${esc(this._t("buttons.delete"))}</ha-button>
-        </div>`).join("") : `<div class="empty compact">${esc(this._t("settings.no_delay"))}</div>`}</div>
-        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
+        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
       </ha-card>
-      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(this._t("settings.transfer_title"))}</h2><small>${esc(this._t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(this._t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(this._t("settings.import"))}</ha-button></div>
+      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </form>`;
+}
+
+function renderSettingsPanel() {
+    this._ensureSettingsDraft();
+    return renderSettings({
+      config: this._config,
+      settingsDraft: this._settingsDraft,
+      historyConfig: this._historyConfig,
+      historyEvents: this._history?.events ?? [],
+      entityDelayDraft: this._entityDelayDraft,
+      ignoredReferenceDraft: this._ignoredReferenceDraft,
+      busy: this._busy,
+      renderNumberField: (...args) => this._numberField(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 function commitIgnoredReferenceInput() {
@@ -4379,11 +4588,11 @@ class AlertManagerPanel extends HTMLElement {
   _refreshAlerts = refreshAlerts;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
-  _renderOverview = renderOverview;
+  _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _refreshHistoryData = refreshHistoryData;
-  _renderHistory = renderHistory;
+  _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
   _historyConditionText = historyConditionText;
   _coherenceStatsMarkup = coherenceStatsMarkup;
@@ -4393,25 +4602,24 @@ class AlertManagerPanel extends HTMLElement {
   _nativeCoherenceEntityCell = nativeCoherenceEntityCell;
   _openCoherenceLink = openCoherenceLink;
   _nativeCoherenceActionCell = nativeCoherenceActionCell;
-  _renderCoherence = renderCoherence;
+  _renderCoherence = renderCoherencePanel;
   _refreshRulesData = refreshRulesData;
   _hydrateRuleTable = hydrateRuleTable;
   _nativeRuleEntitiesCell = nativeRuleEntitiesCell;
   _nativeRuleToggleCell = nativeRuleToggleCell;
-  _renderRules = renderRules;
+  _renderRules = renderRulesPanel;
   _ruleTableRows = ruleTableRows;
   _nativeRuleNameCell = nativeRuleNameCell;
   _handleSelected = handleSelected;
   _deleteRule = deleteRule;
   _toggleRule = toggleRule;
   _replaceRule = replaceRule;
-  _renderAutomatic = renderAutomatic;
-  _renderPackField = renderPackField;
+  _renderAutomatic = renderAutomaticPanel;
   _saveAutomatic = saveAutomatic;
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
-  _renderSettings = renderSettings;
+  _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
   _exportConfiguration = exportConfiguration;
@@ -4465,10 +4673,7 @@ class AlertManagerPanel extends HTMLElement {
   _clearRuleEditorError = clearRuleEditorError;
   _ruleAttributeOptions = ruleAttributeOptions;
   _refreshRuleAttributeSelector = refreshRuleAttributeSelector;
-  _renderRuleEditor = renderRuleEditor;
-  _renderRuleVisualEditor = renderRuleVisualEditor;
-  _renderRuleYamlEditor = renderRuleYamlEditor;
-  _renderRuleValues = renderRuleValues;
+  _renderRuleEditor = renderRuleEditorPanel;
   _ruleValueList = ruleValueList;
   _ruleSummary = ruleSummary;
   _duplicateRuleLabel = duplicateRuleLabel;

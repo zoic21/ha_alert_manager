@@ -9,6 +9,127 @@ function consumeRuleEditorNotice(panel, fallback) {
     return message;
 }
 
+export function normalizeRuleDraft(rule = {}) {
+    const defaults = newRuleDefaults();
+    const normalized = {
+      ...defaults,
+      ...rule,
+      entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
+    };
+    if (normalized.source === "none") normalized.source = "jinja";
+    if (normalized.source === "variation") normalized.source = "state_variation";
+    if (VARIATION_RULE_SOURCES.has(normalized.source)
+      && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
+      normalized.operator = "above";
+    }
+    if (TEXT_RULE_OPERATORS.has(normalized.operator)) {
+      normalized.value = ruleValueList(normalized.value);
+    } else if (RANGE_RULE_OPERATORS.has(normalized.operator)) {
+      const bounds = ruleValueList(normalized.value);
+      normalized.value = [bounds[0] ?? "", bounds[1] ?? ""];
+    } else {
+      normalized.value = normalized.operator === "unchanged"
+        ? ""
+        : ruleValueList(normalized.value)[0] ?? "";
+    }
+    return normalized;
+}
+
+function formField(form, name) {
+    return form.querySelector?.(`[data-field="${name}"]`)
+      ?? form.elements?.namedItem?.(name)
+      ?? form.querySelector?.(`[name="${name}"]`);
+}
+
+export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
+    const value = (name) => formField(form, name)?.value;
+    const source = value("source") ?? currentRule.source ?? "state";
+    const comparisonFree = ["jinja", "unchanged"].includes(source);
+    const selectedOperator = value("operator") ?? currentRule.operator ?? "equals";
+    const operator = comparisonFree ? "equals" : selectedOperator;
+    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
+    let ruleValue;
+    if (comparisonFree || operator === "unchanged") {
+      ruleValue = "";
+    } else if (valueInputs.length) {
+      ruleValue = valueInputs.map((input) => String(input.value));
+    } else if (RANGE_RULE_OPERATORS.has(operator)) {
+      const currentBounds = ruleValueList(currentRule.value);
+      ruleValue = [
+        String(value("lower-bound") ?? currentBounds[0] ?? ""),
+        String(value("upper-bound") ?? currentBounds[1] ?? ""),
+      ];
+    } else if (TEXT_RULE_OPERATORS.has(operator)) {
+      ruleValue = ruleValueList(value("value") ?? currentRule.value)
+        .map((item) => String(item));
+    } else {
+      ruleValue = String(value("value") ?? currentRule.value ?? "");
+    }
+    return {
+      ...currentRule,
+      name: String(value("name") ?? currentRule.name ?? ""),
+      entity_ids: [...(currentRule.entity_ids ?? [])],
+      enabled: Boolean(currentRule.enabled ?? true),
+      source,
+      attribute: String(value("attribute") ?? currentRule.attribute ?? ""),
+      operator,
+      value: ruleValue,
+      duration: Number(value("duration") ?? currentRule.duration ?? 900),
+      message: String(currentRule.message ?? selectorValues.message ?? ""),
+      update_message_when_active: Boolean(
+        form.querySelector?.("#rule-update-message-when-active")?.checked
+          ?? form.elements?.namedItem?.("update_message_when_active")?.checked
+          ?? currentRule.update_message_when_active
+          ?? false
+      ),
+      condition_template: String(
+        currentRule.condition_template ?? selectorValues.conditionTemplate ?? "",
+      ),
+    };
+}
+
+export function serializeRuleDraft(draft) {
+    const source = draft.source;
+    const comparisonFree = ["jinja", "unchanged"].includes(source);
+    const operator = comparisonFree ? "equals" : draft.operator;
+    const comparisonValue = comparisonFree || operator === "unchanged"
+      ? ""
+      : RANGE_RULE_OPERATORS.has(operator)
+      ? ruleValueList(draft.value).slice(0, 2).map((item) => String(item))
+      : TEXT_RULE_OPERATORS.has(operator)
+      ? ruleValueList(draft.value).map((item) => item.trim())
+      : String(draft.value ?? "");
+    return {
+      name: String(draft.name ?? "").trim(),
+      entity_ids: [...(draft.entity_ids ?? [])],
+      enabled: Boolean(draft.enabled ?? true),
+      source,
+      attribute: ATTRIBUTE_RULE_SOURCES.has(source)
+        ? String(draft.attribute ?? "").trim()
+        : null,
+      operator,
+      value: comparisonValue,
+      duration: Number(draft.duration),
+      message: String(draft.message ?? "").trim() || null,
+      update_message_when_active: Boolean(draft.update_message_when_active),
+      condition_template: String(draft.condition_template ?? "").trim() || null,
+    };
+}
+
+export function validateRuleDraft(draft) {
+    const conditionTemplate = String(draft.condition_template ?? "").trim();
+    if (conditionTemplate || (draft.source !== "jinja"
+      && !VARIATION_RULE_SOURCES.has(draft.source))) {
+      return { valid: true, errorKey: null };
+    }
+    return {
+      valid: false,
+      errorKey: VARIATION_RULE_SOURCES.has(draft.source)
+        ? "rules.condition_template_variation_required"
+        : "rules.condition_template_required",
+    };
+}
+
 export function refreshRuleEditor() {
     const layout = this.shadowRoot?.querySelector(".rules-layout");
     if (!layout || this._activeTab !== "rules") {
@@ -54,99 +175,109 @@ export function refreshRuleAttributeSelector() {
     element.value = this._editingRule?.attribute ?? "";
 }
 
-export function renderRuleEditor() {
-    const rule = { ...newRuleDefaults(), ...(this._editingRule ?? {}) };
-    if (rule.source === "none") rule.source = "jinja";
-    if (rule.source === "variation") rule.source = "state_variation";
-    if (VARIATION_RULE_SOURCES.has(rule.source) && !VARIATION_RULE_OPERATORS.has(rule.operator)) {
-      rule.operator = "above";
-    }
-    if (TEXT_RULE_OPERATORS.has(rule.operator)) {
-      rule.value = this._ruleValueList(rule.value);
-    } else if (RANGE_RULE_OPERATORS.has(rule.operator)) {
-      const bounds = this._ruleValueList(rule.value);
-      rule.value = [bounds[0] ?? "", bounds[1] ?? ""];
-    } else {
-      rule.value = rule.operator === "unchanged"
-        ? ""
-        : this._ruleValueList(rule.value)[0] ?? "";
-    }
-    this._editingRule = rule;
-    const yamlMode = this._ruleEditorMode === "yaml";
-    const editorContent = yamlMode ? this._renderRuleYamlEditor(rule) : this._renderRuleVisualEditor(rule);
+export function renderRuleEditor(context) {
+    const {
+      rule,
+      mode,
+      busy,
+      editorError,
+      yamlError,
+      t,
+      duplicateLabel,
+      renderTextField,
+      renderNumberField,
+    } = context;
+    const yamlMode = mode === "yaml";
+    const editorContent = yamlMode
+      ? renderRuleYamlEditor({ yamlError, t })
+      : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
     return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(this._t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
-      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(this._t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
+    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
-        <span slot="title">${esc(this._t(rule.id ? "rules.modify" : "rules.create"))}</span>
-        ${rule.id ? "" : `<span slot="subtitle">${esc(this._t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(this._t("rules.aria_menu"))}" title="${esc(this._t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(this._t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(this._duplicateRuleLabel())}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(this._t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
+        ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions">${this._ruleEditorMode === "visual" && this._ruleEditorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(this._ruleEditorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${this._busy ? "disabled" : ""}>${esc(this._t("buttons.save"))}</ha-button></div>
+        <div class="actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
 }
 
-export function renderRuleVisualEditor(rule) {
+export function renderRuleEditorPanel() {
+    return renderRuleEditor({
+      rule: normalizeRuleDraft(this._editingRule ?? {}),
+      mode: this._ruleEditorMode,
+      busy: this._busy,
+      editorError: this._ruleEditorError,
+      yamlError: this._ruleYamlError,
+      t: (key, replacements) => this._t(key, replacements),
+      duplicateLabel: this._duplicateRuleLabel(),
+      renderTextField: (...args) => this._textField(...args),
+      renderNumberField: (...args) => this._numberField(...args),
+    });
+}
+
+export function renderRuleVisualEditor(context) {
+    const { rule, t, renderTextField, renderNumberField } = context;
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_information"))}</h3><small>${esc(this._t("rules.editor_information_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
-            ${this._textField("name", this._t("rules.name"), rule.name, true, "name", "full")}
-            <div class="field full"><span class="field-label">${esc(this._t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(this._t("rules.entities_help"))}</small></div>
+            ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.condition"))}</h3><small>${esc(this._t("rules.editor_condition_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
           <div class="fields">
-            <div class="field"><span class="field-label">${esc(this._t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(this._t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(this._t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
-            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(this._t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${this._renderRuleValues(rule)}`}
-            <div class="field full rule-template-field"><span class="field-label">${esc(this._t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(this._t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+            <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
+            <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
           </div>
         </section>
         <section class="rule-editor-section">
-          <div class="rule-section-heading"><div><h3>${esc(this._t("rules.editor_trigger"))}</h3><small>${esc(this._t("rules.editor_trigger_help"))}</small></div></div>
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${this._numberField("duration", this._t("rules.duration"), rule.duration, this._t("units.seconds"), 0, 31536000, { nameMode: "name" })}
-            <div class="field full rule-message-field"><span class="field-label">${esc(this._t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(this._t("rules.message_help"))}</small></div>
-            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(this._t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(this._t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(this._t("rules.update_message_when_active_help"))}</small></div>
+            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, 31536000, { nameMode: "name" })}
+            <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
+            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
         </section>`;
 }
 
-export function renderRuleYamlEditor(rule) {
-    if (!this._ruleYaml) this._ruleYaml = ruleToYaml(rule);
+export function renderRuleYamlEditor({ yamlError, t }) {
     return `<section class="rule-editor-section yaml-rule-section">
-      <div class="rule-section-heading"><div><h3>${esc(this._t("rules.yaml_title"))}</h3><small>${esc(this._t("rules.yaml_help"))}</small></div></div>
-      <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(this._t("rules.yaml_title"))}"></ha-code-editor>
-      ${this._ruleYamlError ? `<div class="yaml-error" role="alert">${esc(this._ruleYamlError)}</div>` : ""}
+      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t("rules.yaml_help"))}</small></div></div>
+      <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(t("rules.yaml_title"))}"></ha-code-editor>
+      ${yamlError ? `<div class="yaml-error" role="alert">${esc(yamlError)}</div>` : ""}
     </section>`;
 }
 
-export function renderRuleValues(rule) {
+export function renderRuleValues({ rule, t }) {
     if (rule.operator === "unchanged") return "";
     if (RANGE_RULE_OPERATORS.has(rule.operator)) {
-      const bounds = this._ruleValueList(rule.value);
-      return `<div class="field"><span class="field-label">${esc(this._t("rules.lower_bound"))}</span><ha-input data-field="lower-bound" type="number" step="any" value="${esc(bounds[0] ?? "")}" required aria-label="${esc(this._t("rules.lower_bound"))}"></ha-input></div><div class="field"><span class="field-label">${esc(this._t("rules.upper_bound"))}</span><ha-input data-field="upper-bound" type="number" step="any" value="${esc(bounds[1] ?? "")}" required aria-label="${esc(this._t("rules.upper_bound"))}"></ha-input></div>`;
+      const bounds = ruleValueList(rule.value);
+      return `<div class="field"><span class="field-label">${esc(t("rules.lower_bound"))}</span><ha-input data-field="lower-bound" type="number" step="any" value="${esc(bounds[0] ?? "")}" required aria-label="${esc(t("rules.lower_bound"))}"></ha-input></div><div class="field"><span class="field-label">${esc(t("rules.upper_bound"))}</span><ha-input data-field="upper-bound" type="number" step="any" value="${esc(bounds[1] ?? "")}" required aria-label="${esc(t("rules.upper_bound"))}"></ha-input></div>`;
     }
     if (!TEXT_RULE_OPERATORS.has(rule.operator)) {
-      return `<div class="field full"><span class="field-label">${esc(this._t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(this._t("rules.value"))}"></ha-input></div>`;
+      return `<div class="field full"><span class="field-label">${esc(t("rules.value"))}</span><ha-input data-field="value" name="value" type="number" step="any" value="${esc(rule.value)}" required aria-label="${esc(t("rules.value"))}"></ha-input></div>`;
     }
-    const values = this._ruleValueList(rule.value);
+    const values = ruleValueList(rule.value);
     const multipleHint = rule.operator === "equals" || rule.operator === "contains"
-      ? this._t("rules.multiple_any")
-      : this._t("rules.multiple_none");
-    return `<div class="field full rule-values-field"><span class="field-label">${esc(this._t("rules.values"))}</span><div class="rule-value-list">
-      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(this._t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(this._t("rules.aria_remove_value", { index: index + 1 }))}">${esc(this._t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
-    </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div></div>`;
+      ? t("rules.multiple_any")
+      : t("rules.multiple_none");
+    return `<div class="field full rule-values-field"><span class="field-label">${esc(t("rules.values"))}</span><div class="rule-value-list">
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(t("rules.aria_remove_value", { index: index + 1 }))}">${esc(t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
+    </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div></div>`;
 }
 
 export function ruleValueList(value) {
@@ -329,59 +460,18 @@ export function resetRuleEditorWidth(event) {
 
 export async function saveRule(form) {
     this._clearRuleEditorError();
-    const field = (name) =>
-      form.querySelector?.(`[data-field="${name}"]`) ??
-      form.elements?.namedItem(name) ??
-      form.querySelector?.(`[name="${name}"]`);
-    const value = (name) => field(name)?.value ?? "";
-    const source = value("source");
-    const comparisonFree = ["jinja", "unchanged"].includes(source);
-    const operator = comparisonFree ? "equals" : value("operator");
-    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const comparisonValue = comparisonFree || operator === "unchanged"
-      ? ""
-      : RANGE_RULE_OPERATORS.has(operator)
-      ? [String(value("lower-bound")), String(value("upper-bound"))]
-      : TEXT_RULE_OPERATORS.has(operator)
-      ? (valueInputs.length
-        ? valueInputs.map((input) => String(input.value).trim())
-        : this._ruleValueList(value("value")).map((item) => item.trim()))
-      : String(value("value"));
-    const conditionTemplate = String(
-      this._editingRule?.condition_template
-        ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
-        ?? "",
-    ).trim() || null;
-    const rule = {
-      name: String(value("name")).trim(),
-      entity_ids: [...(this._editingRule?.entity_ids ?? [])],
-      enabled: Boolean(this._editingRule?.enabled ?? true),
-      source,
-      attribute: ATTRIBUTE_RULE_SOURCES.has(source) ? String(value("attribute")).trim() : null,
-      operator,
-      value: comparisonValue,
-      duration: Number(value("duration")),
-      message: String(
-        this._editingRule?.message
-          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? "",
-      ).trim() || null,
-      update_message_when_active: Boolean(
-        form.querySelector?.("#rule-update-message-when-active")?.checked
-          ?? form.elements?.namedItem("update_message_when_active")?.checked
-          ?? this._editingRule?.update_message_when_active
-          ?? false
-      ),
-      condition_template: conditionTemplate,
-    };
+    const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
+      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
+      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
+    });
+    const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
     // _call renders a busy state. Keep the submitted values as the editor draft so
     // that render cannot clear the form, especially when the backend rejects it.
-    this._editingRule = { ...rule, ...(id ? { id } : {}) };
-    if ((source === "jinja" || VARIATION_RULE_SOURCES.has(source)) && conditionTemplate === null) {
-      this._ruleEditorError = this._t(VARIATION_RULE_SOURCES.has(source)
-        ? "rules.condition_template_variation_required"
-        : "rules.condition_template_required");
+    this._editingRule = { ...draft, ...(id ? { id } : {}) };
+    const validation = validateRuleDraft(rule);
+    if (!validation.valid) {
+      this._ruleEditorError = this._t(validation.errorKey);
       this._refreshRuleEditor();
       return;
     }
@@ -406,61 +496,64 @@ export async function saveRule(form) {
 export function captureRuleDraft() {
     const form = this.shadowRoot.querySelector?.("#rule-form");
     if (!form || this._editingRule === null) return;
-    const field = (name) => form.querySelector?.(`[data-field="${name}"]`);
-    const value = (name) => field(name)?.value;
-    const valueInputs = Array.from(form.querySelectorAll?.("[data-rule-value-index]") ?? []);
-    const operator = value("operator") ?? this._editingRule.operator ?? "equals";
-    let ruleValue;
-    if (valueInputs.length) {
-      ruleValue = valueInputs.map((input) => String(input.value));
-    } else if (RANGE_RULE_OPERATORS.has(operator)) {
-      ruleValue = [
-        String(value("lower-bound") ?? this._ruleValueList(this._editingRule.value)[0] ?? ""),
-        String(value("upper-bound") ?? this._ruleValueList(this._editingRule.value)[1] ?? ""),
-      ];
-    } else {
-      ruleValue = operator === "unchanged"
-        ? ""
-        : String(value("value") ?? this._editingRule.value ?? "");
-    }
-    this._editingRule = {
-      ...this._editingRule,
-      name: String(value("name") ?? this._editingRule.name ?? ""),
-      enabled: Boolean(this._editingRule.enabled ?? true),
-      source: value("source") ?? this._editingRule.source ?? "state",
-      attribute: String(value("attribute") ?? this._editingRule.attribute ?? ""),
-      operator,
-      value: ruleValue,
-      duration: Number(value("duration") ?? this._editingRule.duration ?? 900),
-      message: String(
-        this._editingRule.message
-          ?? this.shadowRoot.querySelector("#rule-message-template")?.value
-          ?? "",
-      ),
-      update_message_when_active: Boolean(
-        form.querySelector?.("#rule-update-message-when-active")?.checked
-          ?? form.elements?.namedItem("update_message_when_active")?.checked
-          ?? this._editingRule.update_message_when_active
-          ?? false
-      ),
-      condition_template: String(
-        this._editingRule.condition_template
-          ?? this.shadowRoot.querySelector("#rule-condition-template")?.value
-          ?? "",
-      ),
-    };
+    this._editingRule = captureRuleDraftFromForm(form, this._editingRule, {
+      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
+      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
+    });
+}
+
+export function hydrateRuleEditor(root, context) {
+  const closeButton = root?.querySelector?.("#rule-editor-close");
+  if (closeButton) {
+    closeButton.label = context.closeLabel;
+    closeButton.path = MDI_CLOSE;
+  }
+  if (context.mode !== "visual") return;
+  context.configureSelect(
+    "rule-source",
+    context.sourceOptions,
+    context.draft.source ?? "state",
+    context.onSourceChanged,
+  );
+  context.configureSelect(
+    "rule-operator",
+    context.operatorOptions,
+    context.draft.operator ?? "equals",
+    context.onOperatorChanged,
+  );
+  context.configureSelector(
+    "rule-entity-ids",
+    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
+    context.draft.entity_ids ?? [],
+    context.onEntitiesChanged,
+  );
+  context.configureSelector(
+    "rule-attribute",
+    { select: { options: context.attributeOptions, custom_value: true, mode: "dropdown" } },
+    context.draft.attribute ?? "",
+    context.onAttributeChanged,
+  );
+  context.configureSelector(
+    "rule-condition-template",
+    { template: {} },
+    context.draft.condition_template ?? "",
+    context.onConditionTemplateChanged,
+  );
+  context.configureSelector(
+    "rule-message-template",
+    { template: {} },
+    context.draft.message ?? "",
+    context.onMessageChanged,
+  );
 }
 
 export function hydrateRuleEditorControls() {
-  const closeButton = this.shadowRoot.querySelector("#rule-editor-close");
-  if (closeButton) {
-    closeButton.label = this._t("rules.aria_close");
-    closeButton.path = MDI_CLOSE;
-  }
-  if (this._ruleEditorMode !== "visual") return;
-  this._configureSelect(
-    "rule-source",
-    [
+  const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
+  hydrateRuleEditor(this.shadowRoot, {
+    mode: this._ruleEditorMode,
+    draft: this._editingRule,
+    closeLabel: this._t("rules.aria_close"),
+    sourceOptions: [
       { value: "state", label: this._t("rules.source_state") },
       { value: "attribute", label: this._t("rules.source_attribute") },
       { value: "state_variation", label: this._t("rules.source_state_variation") },
@@ -468,8 +561,26 @@ export function hydrateRuleEditorControls() {
       { value: "unchanged", label: this._t("rules.source_unchanged") },
       { value: "jinja", label: this._t("rules.source_jinja") },
     ],
-    this._editingRule.source ?? "state",
-    (value) => {
+    operatorOptions: (variation ? [
+      { value: "above", label: this._t("operators.above") },
+      { value: "below", label: this._t("operators.below") },
+      { value: "between", label: this._t("operators.between") },
+      { value: "outside", label: this._t("operators.outside") },
+    ] : [
+      { value: "equals", label: this._t("operators.equals") },
+      { value: "not_equals", label: this._t("operators.not_equals") },
+      { value: "contains", label: this._t("operators.contains") },
+      { value: "not_contains", label: this._t("operators.not_contains") },
+      { value: "above", label: this._t("operators.above") },
+      { value: "below", label: this._t("operators.below") },
+      { value: "between", label: this._t("operators.between") },
+      { value: "outside", label: this._t("operators.outside") },
+      { value: "unchanged", label: this._t("operators.unchanged") },
+    ]),
+    attributeOptions: this._ruleAttributeOptions(),
+    configureSelect: (...args) => this._configureSelect(...args),
+    configureSelector: (...args) => this._configureSelector(...args),
+    onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "state";
       this._captureRuleDraft();
       this._editingRule.source = value;
@@ -489,27 +600,7 @@ export function hydrateRuleEditorControls() {
         if (attributeField) attributeField.hidden = !ATTRIBUTE_RULE_SOURCES.has(value);
       }
     },
-  );
-  this._configureSelect(
-    "rule-operator",
-    (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? [
-      { value: "above", label: this._t("operators.above") },
-      { value: "below", label: this._t("operators.below") },
-      { value: "between", label: this._t("operators.between") },
-      { value: "outside", label: this._t("operators.outside") },
-    ] : [
-      { value: "equals", label: this._t("operators.equals") },
-      { value: "not_equals", label: this._t("operators.not_equals") },
-      { value: "contains", label: this._t("operators.contains") },
-      { value: "not_contains", label: this._t("operators.not_contains") },
-      { value: "above", label: this._t("operators.above") },
-      { value: "below", label: this._t("operators.below") },
-      { value: "between", label: this._t("operators.between") },
-      { value: "outside", label: this._t("operators.outside") },
-      { value: "unchanged", label: this._t("operators.unchanged") },
-    ]),
-    this._editingRule.operator ?? (VARIATION_RULE_SOURCES.has(this._editingRule.source) ? "above" : "equals"),
-    (value) => {
+    onOperatorChanged: (value) => {
       this._captureRuleDraft();
       this._editingRule.operator = value;
       this._ruleDirty = true;
@@ -525,44 +616,24 @@ export function hydrateRuleEditorControls() {
       }
       this._refreshRuleEditor();
     },
-  );
-  this._configureSelector(
-    "rule-entity-ids",
-    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
-    this._editingRule.entity_ids ?? [],
-    (value) => {
+    onEntitiesChanged: (value) => {
       this._editingRule.entity_ids = this._multipleSelectorValue(
         value,
         this._editingRule.entity_ids,
       );
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-attribute",
-    { select: { options: this._ruleAttributeOptions(), custom_value: true, mode: "dropdown" } },
-    this._editingRule.attribute ?? "",
-    (value) => {
+    onAttributeChanged: (value) => {
       this._editingRule.attribute = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-condition-template",
-    { template: {} },
-    this._editingRule.condition_template ?? "",
-    (value) => {
+    onConditionTemplateChanged: (value) => {
       this._editingRule.condition_template = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
-  this._configureSelector(
-    "rule-message-template",
-    { template: {} },
-    this._editingRule.message ?? "",
-    (value) => {
+    onMessageChanged: (value) => {
       this._editingRule.message = String(value ?? "");
       this._ruleDirty = true;
     },
-  );
+  });
 }

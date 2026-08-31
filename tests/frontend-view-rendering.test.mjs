@@ -1,0 +1,134 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { renderAutomatic } from "../frontend-src/views/automatic.js";
+import { renderCoherence } from "../frontend-src/views/coherence.js";
+import { renderHistory } from "../frontend-src/views/history.js";
+import { renderOverview } from "../frontend-src/views/overview.js";
+import { renderSettings } from "../frontend-src/views/settings.js";
+
+const t = (key) => key;
+
+test("overview rendering uses only its explicit view context", () => {
+  let tableCall;
+  const markup = renderOverview({
+    alerts: {
+      active_count: 2,
+      pending_count: 1,
+      acknowledge_count: 3,
+      tracked_count: 20,
+    },
+    selectedStatuses: ["active"],
+    pageMessages: "<ha-alert>notice</ha-alert>",
+    rows: [{ id: "alert-1" }],
+    renderAlertTable: (...args) => {
+      tableCall = args;
+      return `<table-view>${args[2]}</table-view>`;
+    },
+    t,
+  });
+
+  assert.equal(tableCall[0], "overview");
+  assert.deepEqual(tableCall[1], [{ id: "alert-1" }]);
+  assert.match(markup, /data-summary="active"[^>]*aria-pressed="true"/);
+  assert.match(markup, /<strong class="danger">2<\/strong>/);
+  assert.match(markup, /<strong>20<\/strong>/);
+});
+
+test("history rendering handles enabled and disabled states without panel state", () => {
+  const disabled = renderHistory({
+    limit: 0,
+    events: [],
+    pageMessages: "",
+    rows: [],
+    renderAlertTable() { throw new Error("table must not render"); },
+    t,
+  });
+  assert.match(disabled, /history.disabled_title/);
+
+  const enabled = renderHistory({
+    limit: 100,
+    events: [{ id: "event-1" }],
+    pageMessages: "<messages></messages>",
+    rows: [{ id: "row-1" }],
+    renderAlertTable: (kind, rows, header) => `${kind}:${rows[0].id}:${header}`,
+    t,
+  });
+  assert.equal(enabled, "history:row-1:<messages></messages>");
+});
+
+test("coherence rendering receives scan state and statistics explicitly", () => {
+  const empty = renderCoherence({
+    result: null,
+    loading: true,
+    pageMessages: "",
+    statsMarkup: "",
+    t,
+  });
+  assert.match(empty, /data-action="scan-coherence" disabled/);
+  assert.match(empty, /coherence.scanning/);
+
+  const scanned = renderCoherence({
+    result: { issue_count: 1 },
+    loading: false,
+    pageMessages: "<ha-alert>ok</ha-alert>",
+    statsMarkup: "<strong>1</strong>",
+    t,
+  });
+  assert.match(scanned, /data-coherence-table-page/);
+  assert.match(scanned, /<strong>1<\/strong>/);
+});
+
+test("automatic rendering uses prepared configuration and draft data", () => {
+  const pack = {
+    id: "battery",
+    available: true,
+    translation_key: "battery",
+    config_fields: [{
+      id: "device_thresholds",
+      type: "device_number_map",
+      translation_key: "device_thresholds",
+      unit: "%",
+    }],
+  };
+  const markup = renderAutomatic({
+    availablePacks: [pack],
+    config: { automatic: { battery: { enabled: true, delay: 60 } } },
+    draft: {
+      battery: {
+        device_thresholds: [{ device_id: "device-1", value: 15 }],
+      },
+    },
+    busy: false,
+    renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
+    t,
+  });
+
+  assert.match(markup, /auto-battery-enabled[^>]*checked/);
+  assert.match(markup, /auto-battery-delay/);
+  assert.match(markup, /auto-battery-device_thresholds-device-0/);
+  assert.match(markup, /value="15"/);
+});
+
+test("settings rendering consumes prepared drafts without initializing them", () => {
+  const markup = renderSettings({
+    config: { global_delay: 900, pending_display_delay: 10 },
+    settingsDraft: {
+      coherence_scan_esphome: true,
+      coherence_ignored_entity_references: ["sensor.old"],
+    },
+    historyConfig: { retention_limit: 100 },
+    historyEvents: [{ id: "event-1" }],
+    entityDelayDraft: [{ entity_id: "sensor.test", delay: 60 }],
+    ignoredReferenceDraft: "sensor.new",
+    busy: false,
+    renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
+    t,
+  });
+
+  assert.match(markup, /id="global-delay"/);
+  assert.match(markup, /coherence-scan-esphome[^>]*checked/);
+  assert.match(markup, /data-ignored-reference="sensor.old"/);
+  assert.match(markup, /value="sensor.new"/);
+  assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
+});

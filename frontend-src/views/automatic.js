@@ -1,33 +1,51 @@
 import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 
-export function renderAutomatic() {
-    const availablePacks = this._packs.filter((pack) => pack.available);
+export function renderAutomatic(context) {
+    const { availablePacks, config, draft, busy, renderNumberField, t } = context;
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
-        const config = this._config.automatic[pack.id];
+        const packConfig = config.automatic[pack.id];
         const packKey = pack.translation_key || pack.id;
-        const packName = this._t(`packs.${packKey}.name`);
+        const packName = t(`packs.${packKey}.name`);
         return `<ha-card outlined class="panel category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
-            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(this._t("automatic.aria_enable", { name: packName }))}" ${config.enabled ? "checked" : ""}></ha-switch>
+            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
           </div>
-          <p>${esc(this._t(`packs.${packKey}.description`))}</p>
+          <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
-            ${this._numberField(`auto-${pack.id}-delay`, this._t("automatic.pack_delay"), config.delay, this._t("units.seconds"), 0, 31536000, { required: false, help: this._t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).map((field) => this._renderPackField(pack, field, config)).join("")}
+            ${renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+            ${(pack.config_fields ?? []).map((field) => renderPackField(
+              pack,
+              field,
+              packConfig,
+              { draft, renderNumberField, t },
+            )).join("")}
           </div>
         </ha-card>`;
       }).join("")}
-      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${this._busy ? "disabled" : ""}>${esc(this._t("automatic.save"))}</ha-button></div>
+      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
     </form>`;
 }
 
-export function renderPackField(pack, field, config) {
-    const label = this._t(`automatic.fields.${field.translation_key}.label`);
+export function renderAutomaticPanel() {
+    this._ensureAutomaticDraft();
+    return renderAutomatic({
+      availablePacks: this._packs.filter((pack) => pack.available),
+      config: this._config,
+      draft: this._automaticMapDraft,
+      busy: this._busy,
+      renderNumberField: (...args) => this._numberField(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
+}
+
+export function renderPackField(pack, field, config, context) {
+    const { draft, renderNumberField, t } = context;
+    const label = t(`automatic.fields.${field.translation_key}.label`);
     if (field.type === "number") {
-      return this._numberField(
+      return renderNumberField(
         `auto-${pack.id}-${field.id}`,
         label,
         config[field.id],
@@ -38,19 +56,18 @@ export function renderPackField(pack, field, config) {
       );
     }
     if (field.type !== "device_number_map") return "";
-    this._ensureAutomaticDraft();
-    const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
+    const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
       <span class="field-label">${esc(label)}</span>
-      <small>${esc(this._t(`automatic.fields.${field.translation_key}.help`))}</small>
+      <small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small>
       <div class="pack-map-list">
         ${rows.map((row, index) => `<div class="pack-map-row">
           <ha-selector id="auto-${pack.id}-${field.id}-device-${index}"></ha-selector>
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(this._t("buttons.remove"))}</ha-button>
+          <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
         </div>`).join("")}
       </div>
-      <div class="actions pack-map-add-action"><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+      <div class="actions pack-map-add-action"><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     </div>`;
 }
 

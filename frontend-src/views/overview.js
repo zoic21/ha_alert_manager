@@ -20,17 +20,28 @@ export function refreshOverviewData() {
     this._updateCountdowns();
 }
 
-export function renderOverview() {
-    const selectedStatuses = this._filterValues(this._tableState.overview.filters.status);
+export function renderOverview(context) {
+    const { alerts, selectedStatuses, pageMessages, rows, renderAlertTable, t } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${this._renderPageMessages()}
+    const summary = `${pageMessages}
       <section class="summary">
-        <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(this._t("overview.summary_active"))}</span><strong class="danger">${this._alerts.active_count}</strong></ha-card>
-        <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(this._t("overview.summary_pending"))}</span><strong class="pending">${this._alerts.pending_count}</strong></ha-card>
-        <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(this._t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined data-summary="tracked"><span>${esc(this._t("overview.summary_tracked"))}</span><strong>${this._alerts.tracked_count ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
+        <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
+        <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${alerts.acknowledge_count ?? alerts.acknowledge?.length ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${alerts.tracked_count ?? 0}</strong></ha-card>
       </section>`;
-    return this._renderAlertTable("overview", this._tableRows("overview"), summary);
+    return renderAlertTable("overview", rows, summary);
+}
+
+export function renderOverviewPanel() {
+    return renderOverview({
+      alerts: this._alerts,
+      selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
+      pageMessages: this._renderPageMessages(),
+      rows: this._tableRows("overview"),
+      renderAlertTable: (...args) => this._renderAlertTable(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 export async function bulkAlertAction(service) {

@@ -1,52 +1,70 @@
 import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 
-export function renderSettings() {
-    this._ensureSettingsDraft();
-    const ignoredReferences = this._settingsDraft.coherence_ignored_entity_references;
+export function renderSettings(context) {
+    const {
+      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      ignoredReferenceDraft, busy, renderNumberField, t,
+    } = context;
+    const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
-        ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
+        ${renderNumberField("global-delay", t("settings.global_delay"), config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.coherence_settings"))}</h2><div class="settings-grid">
-        <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
-        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(this._t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(this._t("settings.coherence_scan_esphome"))}" ${this._settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(this._t("settings.coherence_scan_esphome_help"))}</small></div>
-        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
+        <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
+        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div>
+        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
           ${ignoredReferences.length ? `<ha-chip-set class="ignored-reference-chips">${ignoredReferences.map((reference) => `<ha-input-chip selected label="${esc(reference)}" data-ignored-reference="${esc(reference)}">${esc(reference)}</ha-input-chip>`).join("")}</ha-chip-set>` : ""}
-          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(this._ignoredReferenceDraft)}" placeholder="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
-          <small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small>
+          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(ignoredReferenceDraft)}" placeholder="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+          <small>${esc(t("settings.coherence_ignored_entity_references_help"))}</small>
         </div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.exclusions"))}</h2><div class="settings-grid">
-        <div class="field settings-wide"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
-        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
+        <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
+        <div class="field"><span class="field-label">${esc(t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">${esc(t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.history_settings"))}</h2>
+      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
-            <span class="field-label history-limit-label">${esc(this._t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(this._historyConfig.retention_limit)}" required aria-label="${esc(this._t("settings.history_limit"))}"><span slot="end">${esc(this._t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${this._busy || !(this._history?.events?.length) ? "disabled" : ""}>${esc(this._t("settings.history_clear"))}</ha-button></div>
+            <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
+            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
           </div>
-          <small class="history-limit-help">${esc(this._t("settings.history_limit_help"))}</small>
+          <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel"><div><h2>${esc(this._t("settings.entity_delay"))}</h2><small>${esc(this._t("settings.delay_help"))}</small></div>
-        <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
+      <ha-card outlined class="panel"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+        <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
           <ha-selector id="delay-entity-${index}"></ha-selector>
-          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(this._t("settings.aria_delay"))}"><span slot="end">${esc(this._t("units.seconds"))}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(this._t("settings.aria_remove_delay"))}">${esc(this._t("buttons.delete"))}</ha-button>
-        </div>`).join("") : `<div class="empty compact">${esc(this._t("settings.no_delay"))}</div>`}</div>
-        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
+        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
       </ha-card>
-      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(this._t("settings.transfer_title"))}</h2><small>${esc(this._t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(this._t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(this._t("settings.import"))}</ha-button></div>
+      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </form>`;
+}
+
+export function renderSettingsPanel() {
+    this._ensureSettingsDraft();
+    return renderSettings({
+      config: this._config,
+      settingsDraft: this._settingsDraft,
+      historyConfig: this._historyConfig,
+      historyEvents: this._history?.events ?? [],
+      entityDelayDraft: this._entityDelayDraft,
+      ignoredReferenceDraft: this._ignoredReferenceDraft,
+      busy: this._busy,
+      renderNumberField: (...args) => this._numberField(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 export function commitIgnoredReferenceInput() {
