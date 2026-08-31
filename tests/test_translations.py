@@ -91,7 +91,8 @@ def test_acknowledgement_services_have_metadata_and_standard_icons() -> None:
 
 def test_frontend_uses_backend_translation_resources() -> None:
     """The panel requests native backend resources and has no text catalog."""
-    source = (ROOT / "frontend-src" / "alert-manager-panel.js").read_text()
+    frontend = ROOT / "frontend-src"
+    source = "\n".join(path.read_text() for path in sorted(frontend.rglob("*.js")))
     assert 'type: "frontend/get_translations"' in source
     assert 'category: "config_panel"' in source
     assert 'integration: "alert_manager"' in source

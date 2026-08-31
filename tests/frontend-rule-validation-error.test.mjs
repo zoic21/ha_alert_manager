@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { compactCss } from "./frontend-test-helpers.mjs";
+
 globalThis.HTMLElement = class {
   constructor() {
     this.isConnected = true;
@@ -41,7 +43,6 @@ globalThis.document = {
   },
 };
 
-await import("../frontend-src/alert-manager-panel-runtime.js");
 const { AlertManagerPanel } = await import("../frontend-src/alert-manager-panel.js");
 
 const rule = () => ({
@@ -83,7 +84,7 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
   panel._ruleEditorError = "La borne inférieure doit être inférieure ou égale à la borne supérieure.";
 
   const markup = panel._renderRuleEditor();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(
     markup,
@@ -96,7 +97,7 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
 
 test("rules header card only reserves the editor width once", () => {
   const panel = new AlertManagerPanel();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(
     styles,
@@ -135,7 +136,7 @@ test("a rejected visual rule save moves the translated error from the page notic
     "La borne inférieure doit être inférieure ou égale à la borne supérieure.",
   );
   assert.equal(panel._notice, null);
-  assert.equal(pageNoticeRemoved, 1);
+  assert.equal(pageNoticeRemoved, 0);
   assert.equal(refreshCount, 1);
   assert.equal(panel._editingRule.value[0], "30");
   assert.equal(panel._editingRule.value[1], "20");

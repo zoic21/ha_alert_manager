@@ -1,0 +1,89 @@
+const TABS = [
+  {
+    id: "overview",
+    path: "/alert-manager/overview",
+    translationKey: "tabs.overview",
+    iconPath: "M19,5V7H15V5H19M9,5V11H5V5H9M19,13V19H15V13H19M9,17V19H5V17H9M21,3H13V9H21V3M11,3H3V13H11V3M21,11H13V21H21V11M11,15H3V21H11V15Z",
+  },
+  {
+    id: "history",
+    path: "/alert-manager/history",
+    translationKey: "tabs.history",
+    iconPath: "M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3C8.03,3 4,7.03 4,12H1L4.89,15.89L5,16L9,12H6C6,8.13 9.13,5 13,5C16.87,5 20,8.13 20,12C20,15.87 16.87,19 13,19C11.07,19 9.32,18.22 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21C17.97,21 22,16.97 22,12C22,7.03 17.97,3 13,3Z",
+  },
+  {
+    id: "coherence",
+    path: "/alert-manager/coherence",
+    translationKey: "tabs.coherence",
+    iconPath: "M9.8,17.7L4.1,12L5.5,10.6L9.8,14.9L18.5,6.2L19.9,7.6L9.8,17.7M12,2C6.5,2 2,6.5 2,12C2,17.5 6.5,22 12,22C17.5,22 22,17.5 22,12C22,6.5 17.5,2 12,2Z",
+  },
+  {
+    id: "automatic",
+    path: "/alert-manager/automatic",
+    translationKey: "tabs.automatic",
+    iconPath: "M19.07,4.93L17.66,6.34C19.1,7.79 20,9.79 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12C4,7.92 7.05,4.56 11,4.07V6.09C8.16,6.57 6,9.03 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12C18,10.34 17.33,8.84 16.24,7.76L14.83,9.17C15.55,9.9 16,10.9 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12C8,10.14 9.28,8.59 11,8.14V10.28C10.4,10.63 10,11.26 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12C14,11.26 13.6,10.62 13,10.28V2H12A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,9.24 20.88,6.74 19.07,4.93Z",
+  },
+  {
+    id: "rules",
+    path: "/alert-manager/rules",
+    translationKey: "tabs.rules",
+    iconPath: "M3,5H9V11H3V5M5,7V9H7V7H5M11,7H21V9H11V7M11,15H21V17H11V15M5,20L1.5,16.5L2.91,15.09L5,17.17L9.59,12.59L11,14L5,20Z",
+  },
+  {
+    id: "settings",
+    path: "/alert-manager/settings",
+    translationKey: "tabs.settings",
+    iconPath: "M8 13C6.14 13 4.59 14.28 4.14 16H2V18H4.14C4.59 19.72 6.14 21 8 21S11.41 19.72 11.86 18H22V16H11.86C11.41 14.28 9.86 13 8 13M8 19C6.9 19 6 18.1 6 17C6 15.9 6.9 15 8 15S10 15.9 10 17C10 18.1 9.1 19 8 19M19.86 6C19.41 4.28 17.86 3 16 3S12.59 4.28 12.14 6H2V8H12.14C12.59 9.72 14.14 11 16 11S19.41 9.72 19.86 8H22V6H19.86M16 9C14.9 9 14 8.1 14 7C14 5.9 14.9 5 16 5S18 5.9 18 7C18 8.1 17.1 9 16 9Z",
+  },
+];
+
+const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
+
+const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
+
+const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
+
+const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
+
+const MDI_CHECK_CIRCLE_OUTLINE = "M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z";
+
+const MDI_DOTS_VERTICAL = "M12,8C13.1,8 14,7.1 14,6C14,4.9 13.1,4 12,4C10.9,4 10,4.9 10,6C10,7.1 10.9,8 12,8M12,10C10.9,10 10,10.9 10,12C10,13.1 10.9,14 12,14C13.1,14 14,13.1 14,12C14,10.9 13.1,10 12,10M12,16C10.9,16 10,16.9 10,18C10,19.1 10.9,20 12,20C13.1,20 14,19.1 14,18C14,16.9 13.1,16 12,16Z";
+
+const MDI_DOWNLOAD = "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z";
+
+const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
+
+const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
+
+const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
+
+const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
+
+const ATTRIBUTE_RULE_SOURCES = new Set(["attribute", "attribute_variation"]);
+
+const VARIATION_RULE_SOURCES = new Set(["state_variation", "attribute_variation"]);
+
+const VARIATION_RULE_OPERATORS = new Set(["above", "below", "between", "outside"]);
+
+const ALERT_MANAGER_ENTITY_IDS = [
+  "button.alert_manager_check_coherence",
+  "sensor.alert_manager_coherence_issue",
+  "sensor.alert_manager_main_active",
+  "sensor.alert_manager_main_pending",
+  "sensor.alert_manager_main_acknowledge",
+  "sensor.alert_manager_device_main_active",
+  "switch.alert_manager_main_monitoring",
+];
+
+const CUSTOM_RULE_EXCLUDED_ENTITY_IDS = ALERT_MANAGER_ENTITY_IDS.filter(
+  (entityId) => entityId !== "sensor.alert_manager_coherence_issue",
+);
+
+const ACTION_ICONS = Object.freeze({
+  "save-automatic": "mdi:content-save",
+  "save-rule": "mdi:content-save",
+  "save-settings": "mdi:content-save",
+  "scan-coherence": "mdi:refresh",
+});
+
+export { TABS, MDI_CLOSE, MDI_PLUS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_DOTS_VERTICAL, MDI_DOWNLOAD, MDI_UPLOAD, MDI_FILTER_VARIANT_REMOVE, TEXT_RULE_OPERATORS, RANGE_RULE_OPERATORS, ATTRIBUTE_RULE_SOURCES, VARIATION_RULE_SOURCES, VARIATION_RULE_OPERATORS, ALERT_MANAGER_ENTITY_IDS, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, ACTION_ICONS };

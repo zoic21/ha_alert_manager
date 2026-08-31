@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { compactCss } from "./frontend-test-helpers.mjs";
+
 const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
   (result, [key, item]) => {
     const path = prefix ? `${prefix}.${key}` : key;
@@ -565,6 +567,115 @@ test("overview row changes update the native table without rebuilding the page",
   assert.deepEqual(tablePage.data.map((row) => row.id), ["unavailable:sensor.test"]);
 });
 
+test("history data refresh updates the native table without rebuilding the page", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "history";
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
+  panel._hass = { entities: {}, states: {} };
+  const tablePage = {};
+  const messages = { innerHTML: "" };
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === '[data-alert-table-page="history"]') return tablePage;
+    if (selector === "[data-page-messages]") return messages;
+    return null;
+  };
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+
+  panel._refreshHistoryData();
+
+  assert.equal(renders, 0);
+  assert.deepEqual(tablePage.data, []);
+});
+
+test("coherence data refresh updates stats and rows without rebuilding the page", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "coherence";
+  panel._coherence = {
+    results: [{
+      entity_id: "sensor.missing",
+      source_type: "automation",
+      source_name: "Test",
+      file: "automations.yaml",
+      line: 12,
+    }],
+    missing_count: 1,
+    files_scanned: 2,
+    references_checked: 3,
+    duration_ms: 4,
+  };
+  const stats = { innerHTML: "" };
+  const label = { textContent: "" };
+  const button = { disabled: false, querySelector: () => label };
+  const tablePage = {
+    querySelector(selector) {
+      if (selector === "[data-coherence-stats]") return stats;
+      if (selector === '[data-action="scan-coherence"]') return button;
+      return null;
+    },
+  };
+  const messages = { innerHTML: "" };
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "[data-coherence-table-page]") return tablePage;
+    if (selector === "[data-page-messages]") return messages;
+    return null;
+  };
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+
+  panel._refreshCoherenceData();
+
+  assert.equal(renders, 0);
+  assert.equal(tablePage.data.length, 1);
+  assert.match(stats.innerHTML, /1/);
+});
+
+test("rules data refresh updates filtered rows without rebuilding the page", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "rules";
+  panel._config = {
+    ...completeConfig(),
+    rules: [{ ...ruleValues({ id: "rule-1", enabled: true }), entity_ids: ["sensor.one"] }],
+  };
+  const tablePage = {};
+  const messages = { innerHTML: "" };
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "[data-rules-table-page]") return tablePage;
+    if (selector === "[data-page-messages]") return messages;
+    return null;
+  };
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+
+  panel._refreshRulesData();
+
+  assert.equal(renders, 0);
+  assert.deepEqual(tablePage.data.map((row) => row.id), ["rule-1"]);
+});
+
+test("websocket actions update busy state and messages without rebuilding the page", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._hass = { callWS: async () => ({ ok: true }) };
+  const messages = { innerHTML: "" };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === "[data-page-messages]" ? messages : null
+  );
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+
+  const result = await panel._call({ type: "alert_manager/test" }, "Saved");
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(renders, 0);
+  assert.equal(panel._busy, false);
+  assert.match(messages.innerHTML, /Saved/);
+});
+
 test("disabled monitoring warning can turn the switch back on", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -588,7 +699,7 @@ test("disabled monitoring warning can turn the switch back on", async () => {
     { entity_id: "switch.alert_manager_main_monitoring" },
   ]]);
   assert.equal(panel._monitoringEnabled, true);
-  assert.doesNotMatch(panel.shadowRoot.innerHTML, /alert-type="warning"/);
+  assert.doesNotMatch(panel._pageMessagesContent(), /alert-type="warning"/);
 });
 
 const completePacks = () => [
@@ -788,8 +899,8 @@ test("rule create errors remain visible without clearing the draft", async () =>
 
   await panel._saveRule(form(ruleValues()));
 
-  assert.equal(panel._notice.kind, "error");
-  assert.equal(panel._notice.text, "Une erreur inattendue s’est produite.");
+  assert.equal(panel._notice, null);
+  assert.equal(panel._ruleEditorError, "Une erreur inattendue s’est produite.");
   assert.deepEqual(panel._editingRule.entity_ids, ["todo.liste_d_achats"]);
   assert.deepEqual(panel._editingRule.value, ["0"]);
 });
@@ -1500,7 +1611,7 @@ test("native wrapper events update search grouping sorting and columns", () => {
 test("native Home Assistant table uses full width and all visible columns in compact mobile rows", () => {
   const panel = tablePanel();
   panel._narrow = true;
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
   const columns = panel._nativeTableColumns("overview");
   const active = panel._nativeTableData("overview", panel._tableRows("overview"))[0];
   const entity = panel._nativeEntityCell(active, true);
@@ -1567,14 +1678,14 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
     { path: "/alert-manager/overview", name: "Vue d’ensemble" },
     { path: "/alert-manager/history", name: "Historique" },
     { path: "/alert-manager/coherence", name: "Cohérence" },
-    { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/rules", name: "Règles personnalisées" },
+    { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/settings", name: "Configuration" },
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /<h1>Alertes<|class="header-count"|Détection centralisée des anomalies/);
-  assert.doesNotMatch(panel._styles(), /paper-font|font-family:var\(--ha-font-family-body/);
-  assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
+  assert.doesNotMatch(compactCss(panel._styles()), /paper-font|font-family:var\(--ha-font-family-body/);
+  assert.doesNotMatch(compactCss(panel._styles()), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
 test("all native panel pages use the Home Assistant menu without back navigation", () => {
@@ -1622,7 +1733,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const automatic = panel._renderAutomatic();
   panel._ensureSettingsDraft();
   const settings = panel._renderSettings();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
@@ -1782,9 +1893,10 @@ test("rule rows and editor use native Home Assistant components", () => {
   const listeners = {};
   const table = {
     addEventListener(name, callback) { listeners[name] = callback; },
+    querySelectorAll() { return []; },
   };
   panel._hass = { states: {} };
-  panel.shadowRoot.querySelector = (selector) => selector === "#rules-table" ? table : null;
+  panel.shadowRoot.querySelector = (selector) => selector === "[data-rules-table-page]" ? table : null;
   panel._hydrateRuleTable();
   panel._editingRule = { ...panel._config.rules[0] };
   const editor = panel._renderRuleEditor();
@@ -1792,8 +1904,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
   const settings = panel._renderSettings();
 
-  assert.match(rules, /<ha-data-table id="rules-table" clickable auto-height><\/ha-data-table>/);
-  assert.equal(table.autoHeight, true);
+  assert.match(rules, /<hass-tabs-subpage-data-table[\s\S]*data-rules-table-page/);
   assert.doesNotMatch(rules, /<table|<thead|<tbody|<tr|<td|<th/);
   assert.deepEqual(table.columnOrder, ["name", "entities", "condition", "duration", "enabled"]);
   assert.deepEqual(table.data.map((row) => row.id), ["enabled", "disabled"]);
@@ -1811,7 +1922,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
   assert.match(editor, /<ha-dropdown slot="actionItems" data-rule-editor-menu/);
   assert.match(editor, /<ha-icon-button slot="trigger"/);
-  assert.match(editor, /<ha-dropdown-item value="switch-editor">Modifier en YAML/);
+  assert.match(editor, /<ha-dropdown-item value="switch-editor">[\s\S]*Modifier en YAML/);
   assert.doesNotMatch(editor, /slot="subtitle"/);
   assert.match(editor, /class="rule-editor-resize" role="separator"/);
   assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
@@ -1825,24 +1936,25 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
-  assert.match(editor, /<ha-dropdown-item value="delete-rule">Supprimer<\/ha-dropdown-item>/);
+  assert.match(editor, /<ha-dropdown-item value="delete-rule" variant="danger">[\s\S]*Supprimer<\/ha-dropdown-item>/);
   assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
   assert.doesNotMatch(editor, /<ha-button[^>]*data-action="cancel-rule"[^>]*>Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
-  assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
-  assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /\.delay-row\{[^}]*align-items:start/);
+  assert.match(styles, /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.doesNotMatch(
-    panel._styles(),
+    styles,
     /#rules-table\{[^}]*--data-table-row-height/,
   );
-  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
-  assert.doesNotMatch(panel._styles(), /main\.rules-page/);
-  assert.match(panel._styles(), /main\{width:100%;max-width:none/);
-  assert.match(panel._styles(), /\.rules-layout\.has-editor \.rules-list-panel\{margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
-  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
-  assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
-  assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
+  assert.match(styles, /ha-card\.rule-editor-drawer\{position:fixed/);
+  assert.doesNotMatch(styles, /main\.rules-page/);
+  assert.match(styles, /main\{width:100%;max-width:none/);
+  assert.match(styles, /\.rules-layout\.has-editor \[data-rules-table-page\]\{width:auto;margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
+  assert.match(styles, /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
+  assert.match(styles, /\.rule-editor-form\{[^}]*overflow:auto/);
+  assert.match(styles, /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
   let fullRenders = 0;
   let editorRefreshes = 0;
   panel._render = () => { fullRenders += 1; };
@@ -1915,9 +2027,10 @@ test("overview status summaries filter the table directly", async () => {
   assert.deepEqual(panel._tableState.overview.filters.status, ["pending"]);
   panel._alerts.pending = [currentAlert({ id: "pending:test", entity_id: "sensor.pending" })];
   assert.deepEqual(panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status), ["pending"]);
-  assert.match(panel._styles(), /\.acknowledged\{color:var\(--blue-color/);
-  assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(panel._styles(), /@media\(max-width:1000px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /\.acknowledged\{color:var\(--blue-color/);
+  assert.match(styles, /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:1000px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {
@@ -2550,9 +2663,9 @@ test("Jinja-only rule editor hides comparison fields and requires its template",
   panel._editingRule.condition_template = "";
   await panel._saveRule(form(ruleValues({ source: "jinja" })));
   assert.equal(calls.length, 0);
-  assert.equal(panel._notice.kind, "error");
+  assert.equal(panel._notice, null);
   assert.equal(
-    panel._notice.text,
+    panel._ruleEditorError,
     "La condition Jinja est obligatoire lorsque la source est « Jinja ».",
   );
 });
@@ -2596,7 +2709,7 @@ test("attribute variation requires its attribute and starting Jinja condition", 
   assert.match(editor, /Condition Jinja de début/);
   assert.match(editor, /rule-condition-template" required aria-required="true"/);
   assert.match(editor, /capturée lorsque cette condition passe à true/);
-  assert.match(editor, /data-field="attribute"[^>]*value="metrics\.power"/);
+  assert.match(editor, /<ha-selector id="rule-attribute" data-field="attribute"><\/ha-selector>/);
   assert.match(editor, /pas les jokers/);
 
   const calls = [];
@@ -2610,9 +2723,9 @@ test("attribute variation requires its attribute and starting Jinja condition", 
   })));
 
   assert.equal(calls.length, 0);
-  assert.equal(panel._notice.kind, "error");
+  assert.equal(panel._notice, null);
   assert.equal(
-    panel._notice.text,
+    panel._ruleEditorError,
     "La condition Jinja de début est obligatoire avec une source de variation.",
   );
 
@@ -2768,8 +2881,8 @@ test("panel renders French and English from backend translation resources", () =
     "Overview",
     "History",
     "Coherence",
-    "Automatic monitoring",
     "Custom rules",
+    "Automatic monitoring",
     "Configuration",
   ]);
 });
@@ -3131,7 +3244,7 @@ test("rule editor keeps only save in the footer", () => {
   assert.match(editFooter, /data-action="save-rule"/);
   assert.doesNotMatch(editFooter, /data-action="cancel-rule"/);
   assert.doesNotMatch(editFooter, /data-action="delete-rule"/);
-  assert.match(editHtml, /<ha-dropdown-item value="delete-rule">Supprimer<\/ha-dropdown-item>/);
+  assert.match(editHtml, /<ha-dropdown-item value="delete-rule" variant="danger">[\s\S]*Supprimer<\/ha-dropdown-item>/);
 });
 
 test("rule editor delete menu uses the existing delete flow", async () => {

@@ -56,7 +56,7 @@ globalThis.window = {
   },
 };
 
-await import("../frontend-src/alert-manager-panel-entry.js");
+await import("../frontend-src/alert-manager-panel.js");
 
 const Panel = customElements.get("alert-manager-panel");
 

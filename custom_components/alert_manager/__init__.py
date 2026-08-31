@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             sidebar_title=PANEL_TITLE,
             sidebar_icon=PANEL_ICON,
             module_url=(
-                f"{PANEL_STATIC_URL}/alert-manager-panel-runtime.js?v={FRONTEND_CACHE_VERSION}"
+                f"{PANEL_STATIC_URL}/alert-manager-panel.js?v={FRONTEND_CACHE_VERSION}"
             ),
             require_admin=True,
             config_panel_domain=DOMAIN,

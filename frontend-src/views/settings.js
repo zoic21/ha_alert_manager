@@ -1,0 +1,364 @@
+import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
+import { esc } from "../utils/escaping.js";
+
+export function renderSettings() {
+    this._ensureSettingsDraft();
+    const ignoredReferences = this._settingsDraft.coherence_ignored_entity_references;
+    return `<form id="settings-form" class="stack settings-form">
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.alert_display"))}</h2><div class="settings-grid">
+        ${this._numberField("global-delay", this._t("settings.global_delay"), this._config.global_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.global_delay_help") })}
+        ${this._numberField("pending-display-delay", this._t("settings.pending_display_delay"), this._config.pending_display_delay, this._t("units.seconds"), 0, 31536000, { help: this._t("settings.pending_display_delay_help") })}
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.coherence_settings"))}</h2><div class="settings-grid">
+        <div class="field"><span class="field-label">${esc(this._t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(this._t("settings.coherence_schedule_help"))}</small></div>
+        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(this._t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(this._t("settings.coherence_scan_esphome"))}" ${this._settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(this._t("settings.coherence_scan_esphome_help"))}</small></div>
+        <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(this._t("settings.coherence_ignored_entity_references"))}</span>
+          ${ignoredReferences.length ? `<ha-chip-set class="ignored-reference-chips">${ignoredReferences.map((reference) => `<ha-input-chip selected label="${esc(reference)}" data-ignored-reference="${esc(reference)}">${esc(reference)}</ha-input-chip>`).join("")}</ha-chip-set>` : ""}
+          <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(this._ignoredReferenceDraft)}" placeholder="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(this._t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+          <small>${esc(this._t("settings.coherence_ignored_entity_references_help"))}</small>
+        </div>
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.exclusions"))}</h2><div class="settings-grid">
+        <div class="field settings-wide"><span class="field-label">${esc(this._t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(this._t("settings.labels_help"))}</small></div>
+        <div class="field"><span class="field-label">${esc(this._t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
+        <div class="field"><span class="field-label">${esc(this._t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+      </div></ha-card>
+      <ha-card outlined class="panel settings-card"><h2>${esc(this._t("settings.history_settings"))}</h2>
+        <div class="history-settings">
+          <div class="history-settings-row">
+            <span class="field-label history-limit-label">${esc(this._t("settings.history_limit"))}</span>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(this._historyConfig.retention_limit)}" required aria-label="${esc(this._t("settings.history_limit"))}"><span slot="end">${esc(this._t("units.events"))}</span></ha-input>
+            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${this._busy || !(this._history?.events?.length) ? "disabled" : ""}>${esc(this._t("settings.history_clear"))}</ha-button></div>
+          </div>
+          <small class="history-limit-help">${esc(this._t("settings.history_limit_help"))}</small>
+        </div>
+      </ha-card>
+      <ha-card outlined class="panel"><div><h2>${esc(this._t("settings.entity_delay"))}</h2><small>${esc(this._t("settings.delay_help"))}</small></div>
+        <div class="delay-list">${this._entityDelayDraft.length ? this._entityDelayDraft.map((row, index) => `<div class="delay-row">
+          <ha-selector id="delay-entity-${index}"></ha-selector>
+          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(this._t("settings.aria_delay"))}"><span slot="end">${esc(this._t("units.seconds"))}</span></ha-input>
+          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(this._t("settings.aria_remove_delay"))}">${esc(this._t("buttons.delete"))}</ha-button>
+        </div>`).join("") : `<div class="empty compact">${esc(this._t("settings.no_delay"))}</div>`}</div>
+        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(this._t("buttons.add"))}</ha-button></div>
+      </ha-card>
+      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(this._t("settings.transfer_title"))}</h2><small>${esc(this._t("settings.transfer_help"))}</small></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(this._t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${this._busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(this._t("settings.import"))}</ha-button></div>
+        <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
+      </ha-card>
+      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${this._busy ? "disabled" : ""}>${esc(this._t("settings.save"))}</ha-button></div>
+    </form>`;
+}
+
+export function commitIgnoredReferenceInput() {
+    const input = this.shadowRoot.querySelector("#ignored-reference-input");
+    const rawReference = String(input?.value ?? this._ignoredReferenceDraft);
+    this._ignoredReferenceDraft = rawReference;
+    const reference = rawReference.trim().toLowerCase();
+    if (!reference) return true;
+    if (!/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(reference)) {
+      this._notice = {
+        kind: "error",
+        text: this._t("settings.coherence_ignored_entity_reference_validation"),
+      };
+      return false;
+    }
+    this._ensureSettingsDraft();
+    if (!this._settingsDraft.coherence_ignored_entity_references.includes(reference)) {
+      this._settingsDraft.coherence_ignored_entity_references.push(reference);
+    }
+    this._ignoredReferenceDraft = "";
+    if (input) input.value = "";
+    return true;
+}
+
+export function removeIgnoredReference(reference) {
+    this._ensureSettingsDraft();
+    this._settingsDraft.coherence_ignored_entity_references =
+      this._settingsDraft.coherence_ignored_entity_references.filter(
+        (item) => item !== reference,
+      );
+    this._notice = null;
+    this._render();
+}
+
+export async function exportConfiguration() {
+    const result = await this._call(
+      { type: "alert_manager/config/export" },
+      this._t("success.config_exported"),
+    );
+    if (!result?.yaml) return;
+    const blob = new Blob([result.yaml], { type: "application/yaml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "alert-manager-config.yaml";
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+export async function handleImportSelection(event) {
+    const input = event.target;
+    if (!input?.matches?.("[data-import-file]") || this._busy) return;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    let rawYaml;
+    try {
+      rawYaml = await file.text();
+    } catch (_error) {
+      this._notice = { kind: "error", text: this._t("settings.import_read_error") };
+      this._render();
+      return;
+    }
+    const summary = await this._call(
+      { type: "alert_manager/config/import/validate", yaml: rawYaml },
+      "",
+    );
+    if (!summary) return;
+    const prompt = this._t("settings.import_confirm", {
+      rules: summary.rules,
+      packs: summary.enabled_packs,
+      delays: summary.entity_delays,
+    });
+    if (!window.confirm(prompt)) return;
+    const result = await this._call(
+      { type: "alert_manager/config/import", yaml: rawYaml, confirmed: true },
+      this._t("success.config_imported"),
+    );
+    if (!result?.config) return;
+    this._config = result.config;
+    this._monitoringEnabled = this._config.monitoring_enabled !== false;
+    this._resetSettingsDraft();
+    this._resetAutomaticDraft();
+    this._editingRule = null;
+    this._ruleEditorMode = "visual";
+    this._ruleDirty = false;
+    try {
+      this._alerts = await this._api.call({ type: "alert_manager/alerts/list" });
+      this._syncSensor();
+    } catch (_error) {
+      // The integration has already completed the import.  The sensor update
+      // will refresh the overview shortly even if this immediate read failed.
+    }
+    this._render();
+}
+
+export async function saveSettings() {
+    this._ensureSettingsDraft();
+    if (!this._commitIgnoredReferenceInput()) {
+      this._refreshUiState();
+      return;
+    }
+    this._captureEntityDelayValues();
+    const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
+    if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
+      this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
+      this._refreshUiState();
+      return;
+    }
+    const entityDelays = {};
+    for (const row of this._entityDelayDraft) {
+      if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
+        this._notice = { kind: "error", text: this._t("settings.delay_validation") };
+        this._refreshUiState();
+        return;
+      }
+      if (row.entity_id in entityDelays) {
+        this._notice = {
+          kind: "error",
+          text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
+        };
+        this._refreshUiState();
+        return;
+      }
+      entityDelays[row.entity_id] = row.delay;
+    }
+    const changes = {
+      global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
+      pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
+      coherence_scan_esphome: Boolean(
+        this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
+      ),
+      coherence_ignored_entity_references: [
+        ...this._settingsDraft.coherence_ignored_entity_references,
+      ],
+      excluded_labels: [...this._settingsDraft.excluded_labels],
+      excluded_entities: [...this._settingsDraft.excluded_entities],
+      excluded_devices: [...this._settingsDraft.excluded_devices],
+      entity_delays: entityDelays,
+    };
+    const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
+    this._busy = true;
+    this._notice = null;
+    this._refreshUiState();
+    try {
+      const config = await this._api.call({
+        type: "alert_manager/config/update",
+        config: changes,
+      });
+      this._config = config;
+      if (historyChanged) {
+        this._historyConfig = await this._api.call({
+          type: "alert_manager/history/config/update",
+          retention_limit: historyLimit,
+        });
+        this._config = { ...this._config, history_limit: historyLimit };
+        await this._refreshHistory();
+      }
+      this._resetSettingsDraft();
+      this._notice = { kind: "success", text: this._t("success.settings_saved") };
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._busy = false;
+      this._refreshUiState();
+    }
+}
+
+export function resetSettingsDraft() {
+    this._settingsDraft = null;
+    this._entityDelayDraft = null;
+    this._ignoredReferenceDraft = "";
+}
+
+export function ensureSettingsDraft() {
+    if (this._settingsDraft && this._entityDelayDraft) return;
+    this._settingsDraft = {
+      coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
+      coherence_ignored_entity_references: [
+        ...(this._config.coherence_ignored_entity_references ?? []),
+      ],
+      excluded_labels: [...(this._config.excluded_labels ?? [])],
+      excluded_entities: [...(this._config.excluded_entities ?? [])],
+      excluded_devices: [...(this._config.excluded_devices ?? [])],
+    };
+    this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
+      ([entity_id, delay]) => ({ entity_id, delay }),
+    );
+}
+
+export function captureEntityDelayValues() {
+    if (!this._entityDelayDraft) return;
+    this.shadowRoot.querySelectorAll("[data-delay-index]").forEach((input) => {
+      const row = this._entityDelayDraft[Number(input.dataset.delayIndex)];
+      if (row) row.delay = Number(input.value);
+    });
+}
+
+export function setEntityDelayEntity(index, value) {
+    if (!this._entityDelayDraft) return;
+    const entityId = typeof value === "string" ? value : "";
+    if (
+      entityId
+      && this._entityDelayDraft.some(
+        (row, rowIndex) => rowIndex !== index && row.entity_id === entityId,
+      )
+    ) {
+      this._notice = {
+        kind: "error",
+        text: this._t("settings.duplicate_delay", { entity_id: entityId }),
+      };
+      this._render();
+      return;
+    }
+    this._entityDelayDraft[index].entity_id = entityId;
+}
+
+export function hydrateSettingsControls() {
+  this._ensureSettingsDraft();
+  this._configureSelect(
+    "coherence-schedule",
+    ["none", "daily", "weekly", "monthly"].map((value) => ({
+      value,
+      label: this._t(`settings.coherence_schedules.${value}`),
+    })),
+    this._config.coherence_schedule ?? "none",
+  );
+  this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
+    if (this._configuredControls.has(chip)) return;
+    chip.label = chip.dataset.ignoredReference;
+    chip.selected = true;
+    chip.addEventListener("remove", (event) => {
+      event.stopPropagation();
+      this._removeIgnoredReference(chip.dataset.ignoredReference);
+    });
+    this._configuredControls.add(chip);
+  });
+  this._configureSelector(
+    "excluded-labels",
+    { label: { multiple: true } },
+    this._settingsDraft.excluded_labels,
+    (value) => {
+      this._settingsDraft.excluded_labels = this._multipleSelectorValue(
+        value,
+        this._settingsDraft.excluded_labels,
+      );
+    },
+  );
+  this._configureSelector(
+    "excluded-entities",
+    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+    this._settingsDraft.excluded_entities,
+    (value) => {
+      this._settingsDraft.excluded_entities = this._multipleSelectorValue(
+        value,
+        this._settingsDraft.excluded_entities,
+      );
+    },
+  );
+  this._configureSelector(
+    "excluded-devices",
+    { device: { multiple: true } },
+    this._settingsDraft.excluded_devices,
+    (value) => {
+      this._settingsDraft.excluded_devices = this._multipleSelectorValue(
+        value,
+        this._settingsDraft.excluded_devices,
+      );
+    },
+  );
+  this._entityDelayDraft.forEach((row, index) => {
+    this._configureSelector(
+      `delay-entity-${index}`,
+      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+      row.entity_id || "",
+      (value) => this._setEntityDelayEntity(index, value),
+    );
+  });
+}
+
+export async function handleSettingsAction(action, button) {
+  if (action === "save-settings") {
+    const form = this.shadowRoot.querySelector("#settings-form");
+    if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
+    return true;
+  }
+  if (action === "add-ignored-reference") {
+    if (this._commitIgnoredReferenceInput()) this._notice = null;
+    this._render();
+    return true;
+  }
+  if (action === "export-config") {
+    await this._exportConfiguration();
+    return true;
+  }
+  if (action === "choose-config-import") {
+    this.shadowRoot.querySelector("#config-import-file")?.click();
+    return true;
+  }
+  if (action === "add-entity-delay") {
+    this._ensureSettingsDraft();
+    this._captureEntityDelayValues();
+    this._entityDelayDraft.push({ entity_id: "", delay: 900 });
+    this._render();
+    return true;
+  }
+  if (action === "remove-entity-delay") {
+    this._captureEntityDelayValues();
+    this._entityDelayDraft.splice(Number(button.dataset.index), 1);
+    this._render();
+    return true;
+  }
+  return false;
+}
