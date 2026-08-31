@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { compactCss } from "./frontend-test-helpers.mjs";
+
 globalThis.HTMLElement = class {
   constructor() {
     this.isConnected = true;
@@ -82,7 +84,7 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
   panel._ruleEditorError = "La borne inférieure doit être inférieure ou égale à la borne supérieure.";
 
   const markup = panel._renderRuleEditor();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(
     markup,
@@ -95,7 +97,7 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
 
 test("rules header card only reserves the editor width once", () => {
   const panel = new AlertManagerPanel();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(
     styles,

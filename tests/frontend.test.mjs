@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { compactCss } from "./frontend-test-helpers.mjs";
+
 const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
   (result, [key, item]) => {
     const path = prefix ? `${prefix}.${key}` : key;
@@ -1609,7 +1611,7 @@ test("native wrapper events update search grouping sorting and columns", () => {
 test("native Home Assistant table uses full width and all visible columns in compact mobile rows", () => {
   const panel = tablePanel();
   panel._narrow = true;
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
   const columns = panel._nativeTableColumns("overview");
   const active = panel._nativeTableData("overview", panel._tableRows("overview"))[0];
   const entity = panel._nativeEntityCell(active, true);
@@ -1682,8 +1684,8 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
   assert.doesNotMatch(panel.shadowRoot.innerHTML, /<h1>Alertes<|class="header-count"|Détection centralisée des anomalies/);
-  assert.doesNotMatch(panel._styles(), /paper-font|font-family:var\(--ha-font-family-body/);
-  assert.doesNotMatch(panel._styles(), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
+  assert.doesNotMatch(compactCss(panel._styles()), /paper-font|font-family:var\(--ha-font-family-body/);
+  assert.doesNotMatch(compactCss(panel._styles()), /ha-top-app-bar-fixed|ha-tab-group|\.native-tabs|\.tab-label/);
 });
 
 test("all native panel pages use the Home Assistant menu without back navigation", () => {
@@ -1731,7 +1733,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const automatic = panel._renderAutomatic();
   panel._ensureSettingsDraft();
   const settings = panel._renderSettings();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
@@ -1939,19 +1941,20 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(editor, /<ha-button[^>]*data-action="cancel-rule"[^>]*>Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
-  assert.match(panel._styles(), /\.delay-row\{[^}]*align-items:start/);
-  assert.match(panel._styles(), /\.delay-row>ha-button\{margin-top:8px\}/);
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /\.delay-row\{[^}]*align-items:start/);
+  assert.match(styles, /\.delay-row>ha-button\{margin-top:8px\}/);
   assert.doesNotMatch(
-    panel._styles(),
+    styles,
     /#rules-table\{[^}]*--data-table-row-height/,
   );
-  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{position:fixed/);
-  assert.doesNotMatch(panel._styles(), /main\.rules-page/);
-  assert.match(panel._styles(), /main\{width:100%;max-width:none/);
-  assert.match(panel._styles(), /\.rules-layout\.has-editor \[data-rules-table-page\]\{width:auto;margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
-  assert.match(panel._styles(), /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
-  assert.match(panel._styles(), /\.rule-editor-form\{[^}]*overflow:auto/);
-  assert.match(panel._styles(), /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
+  assert.match(styles, /ha-card\.rule-editor-drawer\{position:fixed/);
+  assert.doesNotMatch(styles, /main\.rules-page/);
+  assert.match(styles, /main\{width:100%;max-width:none/);
+  assert.match(styles, /\.rules-layout\.has-editor \[data-rules-table-page\]\{width:auto;margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
+  assert.match(styles, /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
+  assert.match(styles, /\.rule-editor-form\{[^}]*overflow:auto/);
+  assert.match(styles, /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
   let fullRenders = 0;
   let editorRefreshes = 0;
   panel._render = () => { fullRenders += 1; };
@@ -2024,9 +2027,10 @@ test("overview status summaries filter the table directly", async () => {
   assert.deepEqual(panel._tableState.overview.filters.status, ["pending"]);
   panel._alerts.pending = [currentAlert({ id: "pending:test", entity_id: "sensor.pending" })];
   assert.deepEqual(panel._filteredTableRows("overview", panel._tableRows("overview")).map((row) => row.status), ["pending"]);
-  assert.match(panel._styles(), /\.acknowledged\{color:var\(--blue-color/);
-  assert.match(panel._styles(), /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-  assert.match(panel._styles(), /@media\(max-width:1000px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /\.acknowledged\{color:var\(--blue-color/);
+  assert.match(styles, /\.summary\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media\(max-width:1000px\)\{\.summary\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("rule editor navigation actions open, edit and cancel predictably", async () => {

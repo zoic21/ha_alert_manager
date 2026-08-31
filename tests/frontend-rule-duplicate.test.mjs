@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { compactCss } from "./frontend-test-helpers.mjs";
+
 globalThis.HTMLElement = class {
   constructor() {
     this.isConnected = true;
@@ -59,7 +61,7 @@ const rule = () => ({
 
 test("overview keeps summary spacing inside the gray header at every width", () => {
   const panel = new AlertManagerPanel();
-  const styles = panel._styles();
+  const styles = compactCss(panel._styles());
 
   assert.match(styles, /\.table-page-top\{display:flow-root\}/);
   assert.match(styles, /\.table-page-top \.summary\{margin-bottom:20px\}/);
