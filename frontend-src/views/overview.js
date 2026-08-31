@@ -107,6 +107,40 @@ export function applyOptimisticAcknowledgement(alertId, acknowledged) {
     this._alerts.acknowledge_count = this._alerts.acknowledge.length;
 }
 
+export async function updateAlertAcknowledgement(service, alertId) {
+    if (this._busy || !["acknowledge", "unacknowledge"].includes(service)) return false;
+    const expectedStatus = service === "acknowledge" ? "active" : "acknowledged";
+    const row = this._tableRows("overview").find((item) => item.id === alertId);
+    if (!row || row.status !== expectedStatus) return false;
+    this._busy = true;
+    this._notice = null;
+    this._refreshUiState();
+    try {
+      await this._hass.callService("alert_manager", service, { alert_id: alertId });
+      this._applyOptimisticAcknowledgement(alertId, service === "acknowledge");
+      const updatedRow = this._tableRows("overview").find((item) => item.id === alertId);
+      if (this._alertDetailsDialog && updatedRow) {
+        this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
+        this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
+        this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+      }
+      this._notice = {
+        kind: "success",
+        text: this._t(service === "acknowledge"
+          ? "success.alert_acknowledged"
+          : "success.alert_unacknowledged"),
+      };
+      return true;
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+      return false;
+    } finally {
+      this._busy = false;
+      this._refreshOverviewData();
+      this._refreshUiState();
+    }
+}
+
 export async function handleOverviewAction(action, button) {
   if (action === "bulk-acknowledge" || action === "bulk-unacknowledge") {
     await this._bulkAlertAction(action === "bulk-acknowledge" ? "acknowledge" : "unacknowledge");

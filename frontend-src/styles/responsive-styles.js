@@ -99,31 +99,24 @@ export const responsiveStyles = `
       overflow-x: auto;
     }
     ha-dialog.alert-details-dialog {
-      --mdc-dialog-min-width: calc(100vw - 24px);
-      --mdc-dialog-max-width: calc(100vw - 24px);
+      --ha-dialog-width-md: calc(100vw - 24px);
+      --ha-dialog-max-width: calc(100vw - 24px);
     }
     .alert-details-list {
       width: 100%;
       min-width: 0;
     }
     .alert-details-item {
-      grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
+      grid-template-columns: minmax(90px, .7fr) minmax(0, 1.3fr);
       gap: var(--ha-space-3, 12px);
-      padding: var(--ha-space-3, 12px);
+      padding: 7px var(--ha-space-3, 12px);
     }
     .alert-details-summary {
-      align-items: flex-start;
       padding: var(--ha-space-3, 12px);
     }
     .alert-details-status-icon {
-      width: 40px;
-      height: 40px;
-    }
-    .alert-details-entity {
-      font-size: var(--ha-font-size-l, 18px);
-    }
-    .alert-details-entity-name {
-      white-space: normal;
+      width: 36px;
+      height: 36px;
     }
     ha-card.rule-editor-drawer {
       inset-block-start: var(--header-height, 56px);

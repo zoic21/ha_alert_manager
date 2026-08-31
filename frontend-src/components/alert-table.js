@@ -1,4 +1,4 @@
-import { MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
+import { MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_TABLE_STATE, REQUIRED_COLUMNS } from "../utils/table-preferences.js";
 
@@ -882,19 +882,20 @@ export function renderAlertDetails(context) {
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    return `<section class="alert-details-summary alert-details-status-${esc(summary.status)}">
+    return `${summary.menuAction ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
+      <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
+      <ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>
+    </ha-dropdown>` : ""}
+    <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
-      <div class="alert-details-summary-text">
-        <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
-        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}"><span class="alert-details-entity-name">${esc(summary.entityName)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>
-      </div>
+      <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
     <ha-card outlined class="alert-details-card">
       <dl class="alert-details-list">
         ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
           <dd>${item.action
-            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}><span>${esc(item.value)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>`
+            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}
       </dl>
@@ -907,12 +908,24 @@ export function renderAlertDetailsPanel(kind, row) {
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
+    const menuAction = kind === "overview" && row.status === "active"
+      ? "acknowledge"
+      : kind === "overview" && row.status === "acknowledged"
+        ? "unacknowledge"
+        : "";
     return renderAlertDetails({
       items: this._alertDetailsItems(kind, row),
       summary: {
-        entityId: row.entityId,
-        entityName: row.entityName,
+        alertId: row.id,
         iconPath,
+        menuAction,
+        menuAriaLabel: this._t("alert_details.aria_menu"),
+        menuIcon: menuAction === "acknowledge"
+          ? "mdi:check-circle-outline"
+          : "mdi:check-circle-off-outline",
+        menuLabel: menuAction
+          ? this._t(`overview.${menuAction}`)
+          : "",
         status: row.status,
         statusLabel: row.statusLabel,
       },
@@ -925,7 +938,9 @@ export function openAlertDetails(kind, row) {
     const dialog = document.createElement("ha-dialog");
     dialog.className = "alert-details-dialog";
     dialog.hass = this._hass;
-    dialog.heading = this._t("alert_details.title");
+    dialog.headerTitle = row.entityName || row.entityId;
+    dialog.heading = row.entityName || row.entityId;
+    dialog.width = "medium";
     dialog.scrimClickAction = "close";
     dialog.escapeKeyAction = "close";
     dialog.innerHTML = this._renderAlertDetails(kind, row);
@@ -936,6 +951,16 @@ export function openAlertDetails(kind, row) {
     this._alertDetailsDialog = dialog;
     this.shadowRoot.append(dialog);
     dialog.open = true;
+}
+
+export async function handleAlertDetailsSelection(event) {
+    const path = event.composedPath?.() ?? [event.target];
+    const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
+    if (!menu) return false;
+    const service = event.detail?.item?.value ?? event.detail?.value;
+    if (!["acknowledge", "unacknowledge"].includes(service)) return true;
+    await this._updateAlertAcknowledgement(service, menu.dataset.alertId);
+    return true;
 }
 
 export function closeAlertDetailsDialog(afterClosed) {

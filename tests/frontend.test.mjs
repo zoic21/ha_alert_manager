@@ -1126,7 +1126,7 @@ test("alert details expose translated fields and contextual links", () => {
 
   assert.match(html, /alert-details-summary alert-details-status-active/);
   assert.match(html, /alert-details-status-label">Alerte active/);
-  assert.match(html, /alert-details-entity table-cell-link/);
+  assert.doesNotMatch(html, /alert-details-entity/);
   assert.doesNotMatch(html, /alert-details-highlight/);
   assert.match(html, /data-detail-key="message"[\s\S]*Message[\s\S]*Refroidir la baie/);
   assert.match(html, /data-detail-key="condition"[\s\S]*Condition[\s\S]*État supérieur/);
@@ -1135,8 +1135,51 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /<ha-card outlined class="alert-details-card">/);
-  assert.match(html, /alert-details-action table-cell-link[\s\S]*mdi:chevron-right/);
+  assert.match(html, /slot="headerActionItems"[\s\S]*data-alert-id="rule:temperature:sensor\.rack"/);
+  assert.match(html, /ha-dropdown-item value="acknowledge"[\s\S]*Acquitter/);
+  assert.doesNotMatch(html, /mdi:chevron-right/);
   assert.doesNotMatch(html, /data-action="close-alert-details"/);
+});
+
+test("alert details header uses the entity name and reverses its acknowledgement action", () => {
+  const panel = tablePanel();
+  panel.shadowRoot.append = () => {};
+  const activeRow = panel._tableRows("overview").find((row) => row.status === "active");
+  panel._openAlertDetails("overview", activeRow);
+
+  assert.equal(panel._alertDetailsDialog.headerTitle, "Température rack");
+  assert.equal(panel._alertDetailsDialog.width, "medium");
+
+  const acknowledgedRow = panel._tableRows("overview")
+    .find((row) => row.status === "acknowledged");
+  const acknowledgedHtml = panel._renderAlertDetails("overview", acknowledgedRow);
+  assert.match(acknowledgedHtml, /ha-dropdown-item value="unacknowledge"/);
+  assert.match(acknowledgedHtml, /Retirer l’acquittement/);
+});
+
+test("alert details acknowledgement menu reuses the alert service and refreshes the dialog", async () => {
+  const panel = tablePanel();
+  const calls = [];
+  panel._hass.callService = async (...args) => calls.push(args);
+  panel._refreshUiState = () => {};
+  panel._refreshOverviewData = () => {};
+  panel._alertDetailsDialog = { headerTitle: "", heading: "", innerHTML: "" };
+
+  await panel._handleMenuSelected({
+    composedPath: () => [{ dataset: {
+      alertDetailsMenu: "",
+      alertId: "rule:temperature:sensor.rack",
+    } }],
+    detail: { value: "acknowledge" },
+  });
+
+  assert.deepEqual(calls, [[
+    "alert_manager",
+    "acknowledge",
+    { alert_id: "rule:temperature:sensor.rack" },
+  ]]);
+  assert.match(panel._alertDetailsDialog.innerHTML, /value="unacknowledge"/);
+  assert.match(panel._alertDetailsDialog.innerHTML, /alert-details-status-acknowledged/);
 });
 
 test("alert details use compact rows without forcing internal dialog width", () => {
@@ -1147,6 +1190,7 @@ test("alert details use compact rows without forcing internal dialog width", () 
   assert.match(styles, /\.alert-details-item\{display:grid;min-width:0;grid-template-columns:[^}]+border-bottom:/);
   assert.match(styles, /\.alert-details-card\{display:block;overflow:hidden;/);
   assert.doesNotMatch(styles, /min-width:min\(620px/);
+  assert.doesNotMatch(styles, /mdi:chevron-right/);
   assert.doesNotMatch(styles, /\.alert-details-item\{[^}]*background:/);
 });
 

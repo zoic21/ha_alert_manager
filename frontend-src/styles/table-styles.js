@@ -110,15 +110,15 @@ export const tableStyles = `
     outline-offset: 2px;
   }
   ha-dialog.alert-details-dialog {
-    --mdc-dialog-min-width: min(560px, calc(100vw - 32px));
-    --mdc-dialog-max-width: 640px;
+    --ha-dialog-width-md: 580px;
+    --ha-dialog-max-width: calc(100vw - 24px);
   }
   .alert-details-summary {
     display: flex;
     align-items: center;
-    gap: var(--ha-space-4, 16px);
+    gap: var(--ha-space-3, 12px);
     margin-bottom: var(--ha-space-4, 16px);
-    padding: var(--ha-space-4, 16px);
+    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
     border-radius: var(--ha-border-radius-lg, 12px);
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
@@ -137,8 +137,8 @@ export const tableStyles = `
   }
   .alert-details-status-icon {
     display: inline-flex;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -146,40 +146,14 @@ export const tableStyles = `
     background: color-mix(in srgb, currentColor 12%, transparent);
   }
   .alert-details-status-icon ha-svg-icon {
-    width: 26px;
-    height: 26px;
-  }
-  .alert-details-summary-text {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: var(--ha-space-1, 4px);
+    width: 22px;
+    height: 22px;
   }
   .alert-details-status-label {
-    font-size: var(--ha-font-size-s, 12px);
+    font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-bold, 700);
     letter-spacing: .04em;
     text-transform: uppercase;
-  }
-  .alert-details-entity {
-    display: inline-flex;
-    width: fit-content;
-    max-width: 100%;
-    align-items: center;
-    gap: var(--ha-space-1, 4px);
-    color: var(--primary-text-color, #212121);
-    font-size: var(--ha-font-size-xl, 22px);
-    font-weight: var(--ha-font-weight-bold, 700);
-  }
-  .alert-details-entity-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .alert-details-entity ha-icon, .alert-details-action ha-icon {
-    width: 18px;
-    height: 18px;
-    flex: none;
   }
   .alert-details-card {
     display: block;
@@ -189,8 +163,8 @@ export const tableStyles = `
   }
   .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
-    font-size: var(--ha-font-size-s, 12px);
-    font-weight: var(--ha-font-weight-medium, 500);
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-normal, 400);
   }
   .alert-details-list {
     width: 100%;
@@ -200,18 +174,12 @@ export const tableStyles = `
   .alert-details-item {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
+    grid-template-columns: minmax(120px, .7fr) minmax(0, 1.3fr);
+    align-items: start;
     gap: var(--ha-space-4, 16px);
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
+    padding: 7px var(--ha-space-4, 16px);
     border-bottom: 1px solid var(--divider-color, #e0e0e0);
-  }
-  .alert-details-item[data-detail-key="message"],
-  .alert-details-item[data-detail-key="condition"] {
-    display: block;
-  }
-  .alert-details-item[data-detail-key="message"] dt,
-  .alert-details-item[data-detail-key="condition"] dt {
-    margin-bottom: var(--ha-space-1, 4px);
+    line-height: var(--ha-line-height-normal, 1.4);
   }
   .alert-details-item:last-child {
     border-bottom: 0;
@@ -221,7 +189,8 @@ export const tableStyles = `
     margin: 0;
     overflow-wrap: anywhere;
     color: var(--primary-text-color, #212121);
-    line-height: var(--ha-line-height-normal, 1.4);
+    font-size: var(--ha-font-size-m, 14px);
+    text-align: end;
     white-space: pre-wrap;
   }
   .alert-details-item[data-detail-key="alert-id"] dd {
@@ -229,14 +198,6 @@ export const tableStyles = `
     font-size: var(--ha-font-size-s, 12px);
   }
   .alert-details-action {
-    display: inline-flex;
-    max-width: 100%;
-    align-items: center;
-    gap: var(--ha-space-1, 4px);
     font-weight: var(--ha-font-weight-medium, 500);
-  }
-  .alert-details-action span {
-    min-width: 0;
-    overflow-wrap: anywhere;
   }
 `;

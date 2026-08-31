@@ -5,7 +5,7 @@ import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
   compareTableRows, configureDateRangePicker, dateMatches, dateRangeDefaults, dialogEventTarget,
   displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
-  handleAlertTableAction, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
+  handleAlertDetailsSelection, handleAlertTableAction, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
   nativeAlertLink, nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
   nativeRuleCell, nativeSortColumn, nativeStatusCell, nativeTableCell, nativeTableColumns,
   nativeTableData, nativeTimelineCell, navigate, openAlertDetails, openMoreInfo,
@@ -36,6 +36,7 @@ import { fetchTranslations, reloadTranslations, t, errorText } from "./utils/tra
 import {
   applyOptimisticAcknowledgement, bulkAlertAction, handleOverviewAction,
   refreshOverviewData, renderOverviewPanel,
+  updateAlertAcknowledgement,
 } from "./views/overview.js";
 import {
   handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel,
@@ -82,6 +83,8 @@ class AlertManagerPanel extends HTMLElement {
   _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
+  _updateAlertAcknowledgement = updateAlertAcknowledgement;
+  _handleAlertDetailsSelection = handleAlertDetailsSelection;
   _refreshHistoryData = refreshHistoryData;
   _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
@@ -273,7 +276,9 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
     this.shadowRoot.addEventListener("input", (event) => this._handleInput(event));
     this.shadowRoot.addEventListener("change", (event) => this._handleChange(event));
-    this.shadowRoot.addEventListener("wa-select", (event) => this._handleSelected(event));
+    this.shadowRoot.addEventListener("wa-select", (event) => {
+      void this._handleMenuSelected(event);
+    });
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
@@ -309,6 +314,11 @@ class AlertManagerPanel extends HTMLElement {
 
   get hass() {
     return this._hass;
+  }
+
+  async _handleMenuSelected(event) {
+    if (await this._handleAlertDetailsSelection(event)) return;
+    await this._handleSelected(event);
   }
 
   set panel(value) {

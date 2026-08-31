@@ -13,6 +13,7 @@
   "config_panel": {
     "alert_details": {
       "alert_id": "ID de l’alerte",
+      "aria_menu": "Actions de l’alerte",
       "title": "Détails de l’alerte"
     },
     "automatic": {

@@ -1593,19 +1593,20 @@ function renderAlertDetails(context) {
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    return `<section class="alert-details-summary alert-details-status-${esc(summary.status)}">
+    return `${summary.menuAction ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
+      <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
+      <ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>
+    </ha-dropdown>` : ""}
+    <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
-      <div class="alert-details-summary-text">
-        <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
-        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}"><span class="alert-details-entity-name">${esc(summary.entityName)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>
-      </div>
+      <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
     <ha-card outlined class="alert-details-card">
       <dl class="alert-details-list">
         ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
           <dd>${item.action
-            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}><span>${esc(item.value)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>`
+            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}
       </dl>
@@ -1618,12 +1619,24 @@ function renderAlertDetailsPanel(kind, row) {
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
+    const menuAction = kind === "overview" && row.status === "active"
+      ? "acknowledge"
+      : kind === "overview" && row.status === "acknowledged"
+        ? "unacknowledge"
+        : "";
     return renderAlertDetails({
       items: this._alertDetailsItems(kind, row),
       summary: {
-        entityId: row.entityId,
-        entityName: row.entityName,
+        alertId: row.id,
         iconPath,
+        menuAction,
+        menuAriaLabel: this._t("alert_details.aria_menu"),
+        menuIcon: menuAction === "acknowledge"
+          ? "mdi:check-circle-outline"
+          : "mdi:check-circle-off-outline",
+        menuLabel: menuAction
+          ? this._t(`overview.${menuAction}`)
+          : "",
         status: row.status,
         statusLabel: row.statusLabel,
       },
@@ -1636,7 +1649,9 @@ function openAlertDetails(kind, row) {
     const dialog = document.createElement("ha-dialog");
     dialog.className = "alert-details-dialog";
     dialog.hass = this._hass;
-    dialog.heading = this._t("alert_details.title");
+    dialog.headerTitle = row.entityName || row.entityId;
+    dialog.heading = row.entityName || row.entityId;
+    dialog.width = "medium";
     dialog.scrimClickAction = "close";
     dialog.escapeKeyAction = "close";
     dialog.innerHTML = this._renderAlertDetails(kind, row);
@@ -1647,6 +1662,16 @@ function openAlertDetails(kind, row) {
     this._alertDetailsDialog = dialog;
     this.shadowRoot.append(dialog);
     dialog.open = true;
+}
+
+async function handleAlertDetailsSelection(event) {
+    const path = event.composedPath?.() ?? [event.target];
+    const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
+    if (!menu) return false;
+    const service = event.detail?.item?.value ?? event.detail?.value;
+    if (!["acknowledge", "unacknowledge"].includes(service)) return true;
+    await this._updateAlertAcknowledgement(service, menu.dataset.alertId);
+    return true;
 }
 
 function closeAlertDetailsDialog(afterClosed) {
@@ -2594,6 +2619,40 @@ function applyOptimisticAcknowledgement(alertId, acknowledged) {
     this._alerts[toKey] = [...(this._alerts[toKey] ?? []), updated];
     this._alerts.active_count = this._alerts.alerts.length;
     this._alerts.acknowledge_count = this._alerts.acknowledge.length;
+}
+
+async function updateAlertAcknowledgement(service, alertId) {
+    if (this._busy || !["acknowledge", "unacknowledge"].includes(service)) return false;
+    const expectedStatus = service === "acknowledge" ? "active" : "acknowledged";
+    const row = this._tableRows("overview").find((item) => item.id === alertId);
+    if (!row || row.status !== expectedStatus) return false;
+    this._busy = true;
+    this._notice = null;
+    this._refreshUiState();
+    try {
+      await this._hass.callService("alert_manager", service, { alert_id: alertId });
+      this._applyOptimisticAcknowledgement(alertId, service === "acknowledge");
+      const updatedRow = this._tableRows("overview").find((item) => item.id === alertId);
+      if (this._alertDetailsDialog && updatedRow) {
+        this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
+        this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
+        this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+      }
+      this._notice = {
+        kind: "success",
+        text: this._t(service === "acknowledge"
+          ? "success.alert_acknowledged"
+          : "success.alert_unacknowledged"),
+      };
+      return true;
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+      return false;
+    } finally {
+      this._busy = false;
+      this._refreshOverviewData();
+      this._refreshUiState();
+    }
 }
 
 async function handleOverviewAction(action, button) {
@@ -4232,15 +4291,15 @@ const tableStyles = `
     outline-offset: 2px;
   }
   ha-dialog.alert-details-dialog {
-    --mdc-dialog-min-width: min(560px, calc(100vw - 32px));
-    --mdc-dialog-max-width: 640px;
+    --ha-dialog-width-md: 580px;
+    --ha-dialog-max-width: calc(100vw - 24px);
   }
   .alert-details-summary {
     display: flex;
     align-items: center;
-    gap: var(--ha-space-4, 16px);
+    gap: var(--ha-space-3, 12px);
     margin-bottom: var(--ha-space-4, 16px);
-    padding: var(--ha-space-4, 16px);
+    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
     border-radius: var(--ha-border-radius-lg, 12px);
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
@@ -4259,8 +4318,8 @@ const tableStyles = `
   }
   .alert-details-status-icon {
     display: inline-flex;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -4268,40 +4327,14 @@ const tableStyles = `
     background: color-mix(in srgb, currentColor 12%, transparent);
   }
   .alert-details-status-icon ha-svg-icon {
-    width: 26px;
-    height: 26px;
-  }
-  .alert-details-summary-text {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: var(--ha-space-1, 4px);
+    width: 22px;
+    height: 22px;
   }
   .alert-details-status-label {
-    font-size: var(--ha-font-size-s, 12px);
+    font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-bold, 700);
     letter-spacing: .04em;
     text-transform: uppercase;
-  }
-  .alert-details-entity {
-    display: inline-flex;
-    width: fit-content;
-    max-width: 100%;
-    align-items: center;
-    gap: var(--ha-space-1, 4px);
-    color: var(--primary-text-color, #212121);
-    font-size: var(--ha-font-size-xl, 22px);
-    font-weight: var(--ha-font-weight-bold, 700);
-  }
-  .alert-details-entity-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .alert-details-entity ha-icon, .alert-details-action ha-icon {
-    width: 18px;
-    height: 18px;
-    flex: none;
   }
   .alert-details-card {
     display: block;
@@ -4311,8 +4344,8 @@ const tableStyles = `
   }
   .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
-    font-size: var(--ha-font-size-s, 12px);
-    font-weight: var(--ha-font-weight-medium, 500);
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-normal, 400);
   }
   .alert-details-list {
     width: 100%;
@@ -4322,18 +4355,12 @@ const tableStyles = `
   .alert-details-item {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
+    grid-template-columns: minmax(120px, .7fr) minmax(0, 1.3fr);
+    align-items: start;
     gap: var(--ha-space-4, 16px);
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
+    padding: 7px var(--ha-space-4, 16px);
     border-bottom: 1px solid var(--divider-color, #e0e0e0);
-  }
-  .alert-details-item[data-detail-key="message"],
-  .alert-details-item[data-detail-key="condition"] {
-    display: block;
-  }
-  .alert-details-item[data-detail-key="message"] dt,
-  .alert-details-item[data-detail-key="condition"] dt {
-    margin-bottom: var(--ha-space-1, 4px);
+    line-height: var(--ha-line-height-normal, 1.4);
   }
   .alert-details-item:last-child {
     border-bottom: 0;
@@ -4343,7 +4370,8 @@ const tableStyles = `
     margin: 0;
     overflow-wrap: anywhere;
     color: var(--primary-text-color, #212121);
-    line-height: var(--ha-line-height-normal, 1.4);
+    font-size: var(--ha-font-size-m, 14px);
+    text-align: end;
     white-space: pre-wrap;
   }
   .alert-details-item[data-detail-key="alert-id"] dd {
@@ -4351,15 +4379,7 @@ const tableStyles = `
     font-size: var(--ha-font-size-s, 12px);
   }
   .alert-details-action {
-    display: inline-flex;
-    max-width: 100%;
-    align-items: center;
-    gap: var(--ha-space-1, 4px);
     font-weight: var(--ha-font-weight-medium, 500);
-  }
-  .alert-details-action span {
-    min-width: 0;
-    overflow-wrap: anywhere;
   }
 `;
 
@@ -4935,31 +4955,24 @@ const responsiveStyles = `
       overflow-x: auto;
     }
     ha-dialog.alert-details-dialog {
-      --mdc-dialog-min-width: calc(100vw - 24px);
-      --mdc-dialog-max-width: calc(100vw - 24px);
+      --ha-dialog-width-md: calc(100vw - 24px);
+      --ha-dialog-max-width: calc(100vw - 24px);
     }
     .alert-details-list {
       width: 100%;
       min-width: 0;
     }
     .alert-details-item {
-      grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
+      grid-template-columns: minmax(90px, .7fr) minmax(0, 1.3fr);
       gap: var(--ha-space-3, 12px);
-      padding: var(--ha-space-3, 12px);
+      padding: 7px var(--ha-space-3, 12px);
     }
     .alert-details-summary {
-      align-items: flex-start;
       padding: var(--ha-space-3, 12px);
     }
     .alert-details-status-icon {
-      width: 40px;
-      height: 40px;
-    }
-    .alert-details-entity {
-      font-size: var(--ha-font-size-l, 18px);
-    }
-    .alert-details-entity-name {
-      white-space: normal;
+      width: 36px;
+      height: 36px;
     }
     ha-card.rule-editor-drawer {
       inset-block-start: var(--header-height, 56px);
@@ -5024,6 +5037,8 @@ class AlertManagerPanel extends HTMLElement {
   _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
+  _updateAlertAcknowledgement = updateAlertAcknowledgement;
+  _handleAlertDetailsSelection = handleAlertDetailsSelection;
   _refreshHistoryData = refreshHistoryData;
   _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
@@ -5215,7 +5230,9 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
     this.shadowRoot.addEventListener("input", (event) => this._handleInput(event));
     this.shadowRoot.addEventListener("change", (event) => this._handleChange(event));
-    this.shadowRoot.addEventListener("wa-select", (event) => this._handleSelected(event));
+    this.shadowRoot.addEventListener("wa-select", (event) => {
+      void this._handleMenuSelected(event);
+    });
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
@@ -5251,6 +5268,11 @@ class AlertManagerPanel extends HTMLElement {
 
   get hass() {
     return this._hass;
+  }
+
+  async _handleMenuSelected(event) {
+    if (await this._handleAlertDetailsSelection(event)) return;
+    await this._handleSelected(event);
   }
 
   set panel(value) {
