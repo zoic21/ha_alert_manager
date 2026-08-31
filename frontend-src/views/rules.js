@@ -2,20 +2,12 @@ import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_RULES_TABLE_STATE, RULES_COLUMNS, RULES_SECONDARY_COLUMNS } from "../utils/table-preferences.js";
 
-const RULE_TABLE_EDITOR_LAYOUT_STYLE_ID = "alert-manager-rule-table-editor-layout";
-
-async function installRuleTableEditorLayout(tablePage) {
+async function applyRuleTableEditorLayout(tablePage) {
     if (tablePage.updateComplete) await tablePage.updateComplete;
-    const root = tablePage.shadowRoot;
-    if (!root || root.querySelector?.(`#${RULE_TABLE_EDITOR_LAYOUT_STYLE_ID}`)) return;
-    const style = document.createElement("style");
-    style.id = RULE_TABLE_EDITOR_LAYOUT_STYLE_ID;
-    style.textContent = `
-      ha-data-table {
-        width: var(--alert-manager-rule-table-width, 100%);
-      }
-    `;
-    root.append(style);
+    tablePage.shadowRoot?.querySelector?.("ha-data-table")?.style?.setProperty(
+      "width",
+      "var(--alert-manager-rule-table-width, 100%)",
+    );
 }
 
 export function refreshRulesData() {
@@ -181,7 +173,7 @@ export function hydrateRuleTable() {
         this._render();
       });
     });
-    void installRuleTableEditorLayout(tablePage);
+    void applyRuleTableEditorLayout(tablePage);
 }
 
 export function nativeRuleEntitiesCell(row) {

@@ -2628,20 +2628,12 @@ async function handleCoherenceAction(action) {
 }
 
 // Source: frontend-src/views/rules.js
-const RULE_TABLE_EDITOR_LAYOUT_STYLE_ID = "alert-manager-rule-table-editor-layout";
-
-async function installRuleTableEditorLayout(tablePage) {
+async function applyRuleTableEditorLayout(tablePage) {
     if (tablePage.updateComplete) await tablePage.updateComplete;
-    const root = tablePage.shadowRoot;
-    if (!root || root.querySelector?.(`#${RULE_TABLE_EDITOR_LAYOUT_STYLE_ID}`)) return;
-    const style = document.createElement("style");
-    style.id = RULE_TABLE_EDITOR_LAYOUT_STYLE_ID;
-    style.textContent = `
-      ha-data-table {
-        width: var(--alert-manager-rule-table-width, 100%);
-      }
-    `;
-    root.append(style);
+    tablePage.shadowRoot?.querySelector?.("ha-data-table")?.style?.setProperty(
+      "width",
+      "var(--alert-manager-rule-table-width, 100%)",
+    );
 }
 
 function refreshRulesData() {
@@ -2807,7 +2799,7 @@ function hydrateRuleTable() {
         this._render();
       });
     });
-    void installRuleTableEditorLayout(tablePage);
+    void applyRuleTableEditorLayout(tablePage);
 }
 
 function nativeRuleEntitiesCell(row) {

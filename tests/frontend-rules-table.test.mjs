@@ -86,9 +86,13 @@ const rules = () => [
 const tablePage = () => ({
   listeners: {},
   shadowRoot: {
-    styles: [],
-    querySelector() { return null; },
-    append(node) { this.styles.push(node); },
+    nativeTable: {
+      style: {
+        values: {},
+        setProperty(name, value) { this.values[name] = value; },
+      },
+    },
+    querySelector(selector) { return selector === "ha-data-table" ? this.nativeTable : null; },
   },
   addEventListener(name, callback) { this.listeners[name] = callback; },
   querySelectorAll() { return []; },
@@ -150,10 +154,9 @@ test("rules table keeps name and activation visible and wires native controls", 
   assert.equal(typeof table.listeners["sorting-changed"], "function");
   assert.equal(typeof table.listeners["columns-changed"], "function");
   assert.equal(typeof table.listeners["row-click"], "function");
-  assert.equal(table.shadowRoot.styles.length, 1);
-  assert.match(
-    table.shadowRoot.styles[0].textContent,
-    /width: var\(--alert-manager-rule-table-width, 100%\)/,
+  assert.equal(
+    table.shadowRoot.nativeTable.style.values.width,
+    "var(--alert-manager-rule-table-width, 100%)",
   );
 
   table.listeners["search-changed"]({ detail: { value: "humidity" } });
@@ -195,14 +198,13 @@ test("rules content width is installed after the native table finishes rendering
 
   panel._hydrateRuleTable();
 
-  assert.equal(table.shadowRoot.styles.length, 0);
+  assert.equal(table.shadowRoot.nativeTable.style.values.width, undefined);
   finishNativeRender();
   await table.updateComplete;
   await Promise.resolve();
-  assert.equal(table.shadowRoot.styles.length, 1);
-  assert.match(
-    table.shadowRoot.styles[0].textContent,
-    /width: var\(--alert-manager-rule-table-width, 100%\)/,
+  assert.equal(
+    table.shadowRoot.nativeTable.style.values.width,
+    "var(--alert-manager-rule-table-width, 100%)",
   );
 });
 
