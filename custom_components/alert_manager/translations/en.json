@@ -11,6 +11,10 @@
     }
   },
   "config_panel": {
+    "alert_details": {
+      "alert_id": "Alert ID",
+      "title": "Alert details"
+    },
     "automatic": {
       "aria_enable": "Enable {name}",
       "device_threshold_validation": "Each row must contain a device and a valid numeric threshold.",
@@ -31,6 +35,7 @@
     "buttons": {
       "add": "Add",
       "cancel": "Cancel",
+      "close": "Close",
       "delete": "Delete",
       "remove": "Remove",
       "save": "Save"

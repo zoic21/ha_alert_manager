@@ -145,7 +145,7 @@ export function hydrateDataTables() {
         const row = tablePage._alertManagerRows?.find(
           (item) => String(item.id) === String(event.detail?.id),
         );
-        if (row?.entityId) this._openMoreInfo(row.entityId);
+        if (row) this._openAlertDetails(kind, row);
       });
       if (kind === "overview") {
         tablePage.addEventListener("selection-changed", (event) => {
@@ -299,8 +299,11 @@ export function tableRows(kind, historyEvents = []) {
         statusLabel: finalLabel,
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
+        deviceId: source.device_id || "",
         device: source.device_name || "",
         area: source.area || "",
+        ruleId: source.rule_id || "",
+        customRule: source.type === "rule",
         rule,
         integration: metadata.integration,
         integrationLabel: this._integrationLabel(metadata.integration),
@@ -317,6 +320,8 @@ export function tableRows(kind, historyEvents = []) {
         due: history ? "" : source.due_at,
         duration: history ? Number(source.total_duration_seconds ?? 0) : 0,
         acknowledged: history ? source.acknowledged === true : status === "acknowledged",
+        acknowledgedAt: source.acknowledged_at || "",
+        acknowledgedBy: source.acknowledged_by || "",
       };
       row.search = [
         row.rule, row.entityName, row.entityId, row.device, row.area, row.message,
@@ -620,10 +625,10 @@ export function tableSortStateColumn(column) {
 export function nativeTableCell(kind, row, column) {
     if (column === "status") return this._nativeStatusCell(row, kind);
     if (column === "entity") return this._nativeEntityCell(row, Boolean(this._narrow), kind);
-    if (column === "entity_id") return row.entityId || "—";
-    if (column === "device") return row.device || "—";
+    if (column === "entity_id") return this._nativeEntityIdCell(row);
+    if (column === "device") return this._nativeDeviceCell(row);
     if (column === "area") return row.area || "—";
-    if (column === "rule") return row.rule || "—";
+    if (column === "rule") return this._nativeRuleCell(row);
     if (column === "integration") return row.integrationLabel || row.integration || "—";
     if (column === "message") return row.message || "—";
     if (column === "value") return row.value;
@@ -673,9 +678,19 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (!globalThis.document?.createElement) return row.entityName;
     const content = document.createElement("span");
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
-    const name = document.createElement("span");
+    const name = row.entityId ? document.createElement("a") : document.createElement("span");
     name.textContent = row.entityName;
-    name.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    name.style.cssText = "overflow:hidden;font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    if (row.entityId) {
+      name.href = "#";
+      name.className = "table-cell-link";
+      name.title = row.entityId;
+      name.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this._openMoreInfo(row.entityId);
+      });
+    }
     content.append(name);
     if (!narrow && row.labels?.length) {
       const labels = document.createElement("span");
@@ -704,16 +719,24 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
         secondary.style.cssText = "display:block;min-width:0;overflow:hidden;color:var(--secondary-text-color,#727272);font-weight:var(--ha-font-weight-normal,400);text-overflow:ellipsis;white-space:nowrap";
         secondaryColumns.forEach((column, index) => {
           if (index) secondary.append(" · ");
-          const item = document.createElement("span");
+          let item;
           if (column === "timeline" && row.status === "pending" && this._monitoringEnabled) {
+            item = document.createElement("span");
             item.dataset.due = row.due;
             item.textContent = this._remaining(row.due);
           } else if (column === "timeline") {
+            item = document.createElement("span");
             item.textContent = row.status === "pending"
               ? this._t("table.monitoring_suspended")
               : this._date(row.activated);
           } else {
-            item.textContent = String(this._nativeTableCell(kind, row, column));
+            const rendered = this._nativeTableCell(kind, row, column);
+            item = typeof rendered === "object" && rendered !== null
+              ? rendered
+              : document.createElement("span");
+            if (typeof rendered !== "object" || rendered === null) {
+              item.textContent = String(rendered);
+            }
           }
           secondary.append(item);
         });
@@ -721,6 +744,161 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
       }
     }
     return content;
+}
+
+export function nativeEntityIdCell(row) {
+    return this._nativeAlertLink(row.entityId, {
+      action: () => this._openMoreInfo(row.entityId),
+      href: "#",
+    });
+}
+
+export function nativeDeviceCell(row) {
+    if (!row.deviceId) return row.device || "—";
+    const path = `/config/devices/device/${encodeURIComponent(row.deviceId)}`;
+    return this._nativeAlertLink(row.device || row.deviceId, {
+      action: () => this._navigate(path),
+      href: path,
+    });
+}
+
+export function nativeRuleCell(row) {
+    const ruleExists = row.customRule && row.ruleId && (this._config?.rules ?? []).some(
+      (rule) => String(rule.id) === String(row.ruleId),
+    );
+    if (!ruleExists) return row.rule || "—";
+    return this._nativeAlertLink(row.rule, {
+      action: () => this._openRuleEditor(row.ruleId, { navigate: true }),
+      href: "/alert-manager/rules",
+    });
+}
+
+export function nativeAlertLink(label, { action, href }) {
+    if (!label) return "—";
+    if (!globalThis.document?.createElement) return label;
+    const link = document.createElement("a");
+    link.className = "table-cell-link";
+    link.href = href;
+    link.textContent = label;
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    });
+    return link;
+}
+
+export function alertDetailsItems(kind, row) {
+    const linked = (label, value, action, data = {}) => ({
+      label,
+      value,
+      action,
+      data,
+    });
+    const items = [
+      { label: this._t("table.columns.status"), value: row.statusLabel },
+      linked(this._t("table.columns.entity"), row.entityName, "more-info", {
+        entityId: row.entityId,
+      }),
+      linked(this._t("table.columns.entity_id"), row.entityId, "more-info", {
+        entityId: row.entityId,
+      }),
+      row.deviceId
+        ? linked(this._t("table.columns.device"), row.device || row.deviceId, "open-alert-device", {
+          deviceId: row.deviceId,
+        })
+        : { label: this._t("table.columns.device"), value: row.device },
+      { label: this._t("table.columns.area"), value: row.area },
+      row.customRule && row.ruleId && (this._config?.rules ?? []).some(
+        (rule) => String(rule.id) === String(row.ruleId),
+      )
+        ? linked(this._t("table.columns.rule"), row.rule, "open-alert-rule", {
+          ruleId: row.ruleId,
+        })
+        : { label: this._t("table.columns.rule"), value: row.rule },
+      { label: this._t("table.columns.integration"), value: row.integrationLabel || row.integration },
+      { label: this._t("table.columns.value"), value: row.value },
+      { label: this._t("table.columns.condition"), value: row.condition },
+      { label: this._t("table.columns.message"), value: row.message },
+      { label: this._t("table.columns.detected"), value: this._date(row.detected) },
+    ];
+    if (kind === "history") {
+      items.push(
+        { label: this._t("overview.active_since"), value: this._date(row.activated) },
+        { label: this._t("table.columns.resolved"), value: this._date(row.resolved) },
+        { label: this._t("table.columns.duration"), value: this._historyDurationText(row.duration) },
+      );
+    } else if (row.status === "pending") {
+      items.push({
+        label: this._t("overview.remaining"),
+        value: this._monitoringEnabled
+          ? this._remaining(row.due)
+          : this._t("table.monitoring_suspended"),
+      });
+    } else {
+      items.push({ label: this._t("overview.active_since"), value: this._date(row.activated) });
+    }
+    if (row.acknowledged) {
+      const acknowledgement = row.acknowledgedAt
+        ? this._t("overview.acknowledged_details", {
+          date: this._date(row.acknowledgedAt),
+          author: row.acknowledgedBy || this._t("overview.acknowledged_system"),
+        })
+        : this._t("overview.acknowledged");
+      items.push({ label: this._t("overview.acknowledged"), value: acknowledgement });
+    }
+    items.push({ label: this._t("alert_details.alert_id"), value: row.id });
+    return items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
+}
+
+export function renderAlertDetails(context) {
+    const { closeLabel, items } = context;
+    const attributes = (data) => Object.entries(data).map(([key, value]) => (
+      ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
+    )).join("");
+    return `<dl class="alert-details-list">
+      ${items.map((item) => `<div class="alert-details-item">
+        <dt>${esc(item.label)}</dt>
+        <dd>${item.action
+          ? `<a class="table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
+          : esc(item.value)}</dd>
+      </div>`).join("")}
+    </dl>
+    <ha-button slot="primaryAction" appearance="accent" variant="brand" data-action="close-alert-details">${esc(closeLabel)}</ha-button>`;
+}
+
+export function renderAlertDetailsPanel(kind, row) {
+    return renderAlertDetails({
+      closeLabel: this._t("buttons.close"),
+      items: this._alertDetailsItems(kind, row),
+    });
+}
+
+export function openAlertDetails(kind, row) {
+    if (!globalThis.document?.createElement || !this.shadowRoot?.append) return;
+    this._closeAlertDetailsDialog();
+    const dialog = document.createElement("ha-dialog");
+    dialog.className = "alert-details-dialog";
+    dialog.hass = this._hass;
+    dialog.heading = this._t("alert_details.title");
+    dialog.scrimClickAction = "close";
+    dialog.escapeKeyAction = "close";
+    dialog.innerHTML = this._renderAlertDetails(kind, row);
+    dialog.addEventListener("closed", () => {
+      if (this._alertDetailsDialog === dialog) this._alertDetailsDialog = null;
+      dialog.remove?.();
+    });
+    this._alertDetailsDialog = dialog;
+    this.shadowRoot.append(dialog);
+    dialog.open = true;
+}
+
+export function closeAlertDetailsDialog() {
+    const dialog = this._alertDetailsDialog;
+    if (!dialog) return;
+    this._alertDetailsDialog = null;
+    dialog.open = false;
+    dialog.remove?.();
 }
 
 export function nativeTimelineCell(row) {
@@ -877,7 +1055,22 @@ export async function handleAlertTableAction(action, button, event) {
     return true;
   }
   if (action === "more-info") {
+    this._closeAlertDetailsDialog();
     this._openMoreInfo(button.dataset.entityId);
+    return true;
+  }
+  if (action === "open-alert-device") {
+    this._closeAlertDetailsDialog();
+    this._navigate(`/config/devices/device/${encodeURIComponent(button.dataset.deviceId)}`);
+    return true;
+  }
+  if (action === "open-alert-rule") {
+    this._closeAlertDetailsDialog();
+    this._openRuleEditor(button.dataset.ruleId, { navigate: true });
+    return true;
+  }
+  if (action === "close-alert-details") {
+    this._closeAlertDetailsDialog();
     return true;
   }
   return false;

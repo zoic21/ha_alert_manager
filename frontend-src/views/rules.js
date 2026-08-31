@@ -204,16 +204,7 @@ export function hydrateRuleTable() {
         this._saveRulesTableState();
       },
       onRowClick: (ruleId) => {
-        const rule = (this._config?.rules ?? []).find(
-          (item) => String(item.id) === String(ruleId),
-        );
-        if (!rule) return;
-        this._editingRule = { ...rule };
-        this._ruleEditorMode = "visual";
-        this._ruleYaml = "";
-        this._ruleYamlError = null;
-        this._ruleDirty = false;
-        this._refreshRuleEditor();
+        this._openRuleEditor(ruleId);
       },
       onFilterChanged: (value, checked) => {
         const selected = new Set(this._filterValues(state.filters.enabled));
@@ -360,6 +351,26 @@ export function nativeRuleNameCell(row, narrow = false) {
     return content;
 }
 
+export function openRuleEditor(ruleId, { navigate = false } = {}) {
+    const rule = (this._config?.rules ?? []).find(
+      (item) => String(item.id) === String(ruleId),
+    );
+    if (!rule) return false;
+    if (navigate) {
+      this._navigate("/alert-manager/rules");
+      this._activeTab = "rules";
+    }
+    this._editingRule = { ...rule };
+    this._ruleEditorMode = "visual";
+    this._ruleYaml = "";
+    this._ruleYamlError = null;
+    this._ruleEditorError = null;
+    this._ruleDirty = false;
+    if (navigate) this._render();
+    else this._refreshRuleEditor();
+    return true;
+}
+
 export async function handleSelected(event) {
     const path = event.composedPath?.() ?? [event.target];
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
@@ -461,12 +472,7 @@ export async function handleRulesAction(action, button) {
   const rule = (this._config.rules || []).find((item) => item.id === button.dataset.id);
   if (!rule) return true;
   if (action === "edit-rule") {
-    this._editingRule = { ...rule };
-    this._ruleEditorMode = "visual";
-    this._ruleYaml = "";
-    this._ruleYamlError = null;
-    this._ruleDirty = false;
-    this._refreshRuleEditor();
+    this._openRuleEditor(rule.id);
   } else if (action === "toggle-rule") {
     await this._toggleRule(rule.id);
   } else {

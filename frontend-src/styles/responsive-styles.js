@@ -98,6 +98,17 @@ export const responsiveStyles = `
       max-width: 44vw;
       overflow-x: auto;
     }
+    ha-dialog.alert-details-dialog {
+      --mdc-dialog-min-width: calc(100vw - 24px);
+      --mdc-dialog-max-width: calc(100vw - 24px);
+    }
+    .alert-details-list {
+      min-width: 0;
+    }
+    .alert-details-item {
+      grid-template-columns: 1fr;
+      gap: var(--ha-space-1, 4px);
+    }
     ha-card.rule-editor-drawer {
       inset-block-start: var(--header-height, 56px);
       inset-block-end: calc(var(--header-height, 56px) + var(--safe-area-inset-bottom, 0px));
