@@ -1508,6 +1508,8 @@ function alertDetailsItems(kind, row) {
       data,
     });
     const items = [
+      { key: "message", label: this._t("table.columns.message"), value: row.message },
+      { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
       linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
         entityId: row.entityId,
       }),
@@ -1576,20 +1578,18 @@ function alertDetailsItems(kind, row) {
         key: "acknowledged",
         label: this._t("overview.acknowledged"),
         value: acknowledgement,
-        wide: true,
       });
     }
     items.push({
       key: "alert-id",
       label: this._t("alert_details.alert_id"),
       value: row.id,
-      wide: true,
     });
     return items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
 }
 
 function renderAlertDetails(context) {
-    const { closeLabel, conditionLabel, items, messageLabel, summary } = context;
+    const { closeLabel, items, summary } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
@@ -1600,18 +1600,8 @@ function renderAlertDetails(context) {
         <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}">${esc(summary.entityName)}</a>
       </div>
     </section>
-    <div class="alert-details-highlights">
-      ${summary.message ? `<section class="alert-details-highlight">
-        <span>${esc(messageLabel)}</span>
-        <p>${esc(summary.message)}</p>
-      </section>` : ""}
-      ${summary.condition ? `<section class="alert-details-highlight">
-        <span>${esc(conditionLabel)}</span>
-        <p>${esc(summary.condition)}</p>
-      </section>` : ""}
-    </div>
     <dl class="alert-details-list">
-      ${items.map((item) => `<div class="alert-details-item${item.wide ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
+      ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
         <dt>${esc(item.label)}</dt>
         <dd>${item.action
           ? `<a class="table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
@@ -1629,15 +1619,11 @@ function renderAlertDetailsPanel(kind, row) {
     }
     return renderAlertDetails({
       closeLabel: this._t("buttons.close"),
-      conditionLabel: this._t("table.columns.condition"),
       items: this._alertDetailsItems(kind, row),
-      messageLabel: this._t("table.columns.message"),
       summary: {
-        condition: row.condition,
         entityId: row.entityId,
         entityName: row.entityName,
         iconPath,
-        message: row.message,
         status: row.status,
         statusLabel: row.statusLabel,
       },
@@ -4246,8 +4232,8 @@ const tableStyles = `
     outline-offset: 2px;
   }
   ha-dialog.alert-details-dialog {
-    --mdc-dialog-min-width: min(680px, calc(100vw - 48px));
-    --mdc-dialog-max-width: 760px;
+    --mdc-dialog-min-width: min(560px, calc(100vw - 32px));
+    --mdc-dialog-max-width: 640px;
   }
   .alert-details-summary {
     display: flex;
@@ -4305,47 +4291,26 @@ const tableStyles = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .alert-details-highlights {
-    display: grid;
-    gap: var(--ha-space-3, 12px);
-    margin-bottom: var(--ha-space-4, 16px);
-  }
-  .alert-details-highlight {
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
-    border-inline-start: 3px solid var(--primary-color, #03a9f4);
-    border-radius: var(--ha-border-radius-md, 8px);
-    background: var(--secondary-background-color, #f5f5f5);
-  }
-  .alert-details-highlight span, .alert-details-item dt {
+  .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
     font-weight: var(--ha-font-weight-medium, 500);
   }
-  .alert-details-highlight p {
-    margin: var(--ha-space-1, 4px) 0 0;
-    overflow-wrap: anywhere;
-    color: var(--primary-text-color, #212121);
-    line-height: var(--ha-line-height-normal, 1.4);
-    white-space: pre-wrap;
-  }
   .alert-details-list {
-    display: grid;
-    min-width: min(620px, calc(100vw - 96px));
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ha-space-2, 8px);
+    width: 100%;
+    min-width: 0;
     margin: 0;
   }
   .alert-details-item {
-    display: flex;
+    display: grid;
     min-width: 0;
-    flex-direction: column;
-    gap: var(--ha-space-1, 4px);
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
-    border-radius: var(--ha-border-radius-md, 8px);
-    background: var(--secondary-background-color, #f5f5f5);
+    grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
+    gap: var(--ha-space-4, 16px);
+    padding: var(--ha-space-2, 8px) 0;
+    border-bottom: 1px solid var(--divider-color, #e0e0e0);
   }
-  .alert-details-item-wide {
-    grid-column: 1 / -1;
+  .alert-details-item:last-child {
+    border-bottom: 0;
   }
   .alert-details-item dd {
     min-width: 0;
@@ -4933,11 +4898,12 @@ const responsiveStyles = `
       --mdc-dialog-max-width: calc(100vw - 24px);
     }
     .alert-details-list {
+      width: 100%;
       min-width: 0;
-      grid-template-columns: 1fr;
     }
-    .alert-details-item-wide {
-      grid-column: auto;
+    .alert-details-item {
+      grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
+      gap: var(--ha-space-3, 12px);
     }
     .alert-details-summary {
       align-items: flex-start;

@@ -110,8 +110,8 @@ export const tableStyles = `
     outline-offset: 2px;
   }
   ha-dialog.alert-details-dialog {
-    --mdc-dialog-min-width: min(680px, calc(100vw - 48px));
-    --mdc-dialog-max-width: 760px;
+    --mdc-dialog-min-width: min(560px, calc(100vw - 32px));
+    --mdc-dialog-max-width: 640px;
   }
   .alert-details-summary {
     display: flex;
@@ -169,47 +169,26 @@ export const tableStyles = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .alert-details-highlights {
-    display: grid;
-    gap: var(--ha-space-3, 12px);
-    margin-bottom: var(--ha-space-4, 16px);
-  }
-  .alert-details-highlight {
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
-    border-inline-start: 3px solid var(--primary-color, #03a9f4);
-    border-radius: var(--ha-border-radius-md, 8px);
-    background: var(--secondary-background-color, #f5f5f5);
-  }
-  .alert-details-highlight span, .alert-details-item dt {
+  .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
     font-weight: var(--ha-font-weight-medium, 500);
   }
-  .alert-details-highlight p {
-    margin: var(--ha-space-1, 4px) 0 0;
-    overflow-wrap: anywhere;
-    color: var(--primary-text-color, #212121);
-    line-height: var(--ha-line-height-normal, 1.4);
-    white-space: pre-wrap;
-  }
   .alert-details-list {
-    display: grid;
-    min-width: min(620px, calc(100vw - 96px));
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ha-space-2, 8px);
+    width: 100%;
+    min-width: 0;
     margin: 0;
   }
   .alert-details-item {
-    display: flex;
+    display: grid;
     min-width: 0;
-    flex-direction: column;
-    gap: var(--ha-space-1, 4px);
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
-    border-radius: var(--ha-border-radius-md, 8px);
-    background: var(--secondary-background-color, #f5f5f5);
+    grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
+    gap: var(--ha-space-4, 16px);
+    padding: var(--ha-space-2, 8px) 0;
+    border-bottom: 1px solid var(--divider-color, #e0e0e0);
   }
-  .alert-details-item-wide {
-    grid-column: 1 / -1;
+  .alert-details-item:last-child {
+    border-bottom: 0;
   }
   .alert-details-item dd {
     min-width: 0;

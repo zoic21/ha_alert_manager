@@ -103,11 +103,12 @@ export const responsiveStyles = `
       --mdc-dialog-max-width: calc(100vw - 24px);
     }
     .alert-details-list {
+      width: 100%;
       min-width: 0;
-      grid-template-columns: 1fr;
     }
-    .alert-details-item-wide {
-      grid-column: auto;
+    .alert-details-item {
+      grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
+      gap: var(--ha-space-3, 12px);
     }
     .alert-details-summary {
       align-items: flex-start;

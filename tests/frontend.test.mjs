@@ -1127,13 +1127,24 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /alert-details-summary alert-details-status-active/);
   assert.match(html, /alert-details-status-label">Alerte active/);
   assert.match(html, /alert-details-entity table-cell-link/);
-  assert.match(html, /alert-details-highlight[\s\S]*Message[\s\S]*Refroidir la baie/);
-  assert.match(html, /alert-details-highlight[\s\S]*Condition[\s\S]*État supérieur/);
+  assert.doesNotMatch(html, /alert-details-highlight/);
+  assert.match(html, /data-detail-key="message"[\s\S]*Message[\s\S]*Refroidir la baie/);
+  assert.match(html, /data-detail-key="condition"[\s\S]*Condition[\s\S]*État supérieur/);
   assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
   assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /data-action="close-alert-details">Fermer/);
+});
+
+test("alert details use compact rows without forcing internal dialog width", () => {
+  const panel = tablePanel();
+  const styles = compactCss(panel._styles());
+
+  assert.match(styles, /\.alert-details-list\{width:100%;min-width:0;margin:0\}/);
+  assert.match(styles, /\.alert-details-item\{display:grid;min-width:0;grid-template-columns:[^}]+border-bottom:/);
+  assert.doesNotMatch(styles, /min-width:min\(620px/);
+  assert.doesNotMatch(styles, /\.alert-details-item\{[^}]*background:/);
 });
 
 test("more info opens only after the alert details dialog is fully closed", async () => {
