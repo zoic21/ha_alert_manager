@@ -2,14 +2,15 @@ import {
   AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
 } from "./api/alert-manager-api.js";
 import {
-  alertRuleName, cancelMoreInfoScrollRestore, compareTableRows, configureDateRangePicker,
-  dateMatches, dateRangeDefaults, dialogEventTarget, displayValue, entityMetadata,
-  facetOptions, filterCount, filteredTableRows, filterValues, handleAlertTableAction,
-  hydrateDataTables, integrationLabel, loadNativeDateRangePicker, nativeEntityCell,
-  nativeGroupColumn, nativeSortColumn, nativeStatusCell, nativeTableCell,
-  nativeTableColumns, nativeTableData, nativeTimelineCell, navigate, openMoreInfo,
+  alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
+  compareTableRows, configureDateRangePicker, dateMatches, dateRangeDefaults, dialogEventTarget,
+  displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
+  handleAlertTableAction, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
+  nativeAlertLink, nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
+  nativeRuleCell, nativeSortColumn, nativeStatusCell, nativeTableCell, nativeTableColumns,
+  nativeTableData, nativeTimelineCell, navigate, openAlertDetails, openMoreInfo,
   overviewContentScroller, preserveOverviewScrollAfterMoreInfo, refreshAlertTableData,
-  renderAlertTable, renderDateFilter, renderFacetFilter, renderFilterPane,
+  renderAlertDetailsPanel, renderAlertTable, renderDateFilter, renderFacetFilter, renderFilterPane,
   resetTableFilters, syncNarrowTableHeaderBackgrounds, tableColumns, tableRows,
   tableSortStateColumn, tableStateGroupColumn, updateSelectionToolbar,
 } from "./components/alert-table.js";
@@ -46,8 +47,8 @@ import {
 } from "./views/coherence.js";
 import {
   deleteRule, handleRulesAction, handleSelected, hydrateRuleTable, nativeRuleEntitiesCell,
-  nativeRuleNameCell, nativeRuleToggleCell, refreshRulesData, renderRulesPanel, replaceRule,
-  ruleTableRows, toggleRule,
+  nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
+  replaceRule, ruleTableRows, toggleRule,
 } from "./views/rules.js";
 import {
   captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction,
@@ -151,7 +152,15 @@ class AlertManagerPanel extends HTMLElement {
   _nativeTableCell = nativeTableCell;
   _nativeStatusCell = nativeStatusCell;
   _nativeEntityCell = nativeEntityCell;
+  _nativeEntityIdCell = nativeEntityIdCell;
+  _nativeDeviceCell = nativeDeviceCell;
+  _nativeRuleCell = nativeRuleCell;
+  _nativeAlertLink = nativeAlertLink;
   _nativeTimelineCell = nativeTimelineCell;
+  _alertDetailsItems = alertDetailsItems;
+  _renderAlertDetails = renderAlertDetailsPanel;
+  _openAlertDetails = openAlertDetails;
+  _closeAlertDetailsDialog = closeAlertDetailsDialog;
   _openMoreInfo = openMoreInfo;
   _overviewContentScroller = overviewContentScroller;
   _dialogEventTarget = dialogEventTarget;
@@ -160,6 +169,7 @@ class AlertManagerPanel extends HTMLElement {
   _navigate = navigate;
   _syncNarrowTableHeaderBackgrounds = syncNarrowTableHeaderBackgrounds;
   _refreshRuleEditor = refreshRuleEditor;
+  _openRuleEditor = openRuleEditor;
   _clearRuleEditorError = clearRuleEditorError;
   _ruleAttributeOptions = ruleAttributeOptions;
   _refreshRuleAttributeSelector = refreshRuleAttributeSelector;
@@ -254,6 +264,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
+    this._alertDetailsDialog = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("keydown", (event) => this._handleKeydown(event));
@@ -358,6 +369,7 @@ class AlertManagerPanel extends HTMLElement {
     this._timer = null;
     this._stopRuleEditorResize();
     this._cancelMoreInfoScrollRestore();
+    this._closeAlertDetailsDialog();
   }
 
   _tabs() {
@@ -412,6 +424,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot) return;
+    this._closeAlertDetailsDialog();
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
       const kind = currentTablePage.dataset.alertTablePage;

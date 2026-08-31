@@ -96,4 +96,47 @@ export const tableStyles = `
   .selection-actions ha-button[variant="danger"] {
     color: var(--error-color, #db4437);
   }
+  .table-cell-link {
+    color: var(--primary-color, #03a9f4);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .table-cell-link:hover, .table-cell-link:focus-visible {
+    text-decoration: underline;
+  }
+  .table-cell-link:focus-visible {
+    border-radius: var(--ha-border-radius-sm, 4px);
+    outline: 2px solid var(--primary-color, #03a9f4);
+    outline-offset: 2px;
+  }
+  ha-dialog.alert-details-dialog {
+    --mdc-dialog-min-width: min(620px, calc(100vw - 48px));
+    --mdc-dialog-max-width: 720px;
+  }
+  .alert-details-list {
+    display: grid;
+    min-width: min(560px, calc(100vw - 96px));
+    gap: 0;
+    margin: 0;
+  }
+  .alert-details-item {
+    display: grid;
+    grid-template-columns: minmax(130px, .8fr) minmax(0, 1.6fr);
+    gap: var(--ha-space-4, 16px);
+    padding: var(--ha-space-3, 12px) 0;
+    border-bottom: 1px solid var(--divider-color, #ddd);
+  }
+  .alert-details-item:last-child {
+    border-bottom: 0;
+  }
+  .alert-details-item dt {
+    color: var(--secondary-text-color, #727272);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .alert-details-item dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
 `;

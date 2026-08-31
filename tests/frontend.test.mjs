@@ -1058,6 +1058,101 @@ const tablePanel = () => {
   return panel;
 };
 
+test("alert table links keep entity, rule and device navigation separate from row details", () => {
+  const panel = tablePanel();
+  panel._config.rules = [{ id: "temperature", name: "Température baie" }];
+  const row = panel._tableRows("overview")[0];
+  const calls = [];
+  panel._openMoreInfo = (entityId) => calls.push(["entity", entityId]);
+  panel._navigate = (path) => calls.push(["device", path]);
+  panel._openRuleEditor = (ruleId, options) => calls.push(["rule", ruleId, options]);
+  const event = () => ({
+    prevented: false,
+    stopped: false,
+    preventDefault() { this.prevented = true; },
+    stopPropagation() { this.stopped = true; },
+  });
+
+  const entity = panel._nativeEntityCell(row).children[0];
+  const entityEvent = event();
+  entity.listeners.click(entityEvent);
+  assert.equal(entityEvent.prevented, true);
+  assert.equal(entityEvent.stopped, true);
+
+  const entityId = panel._nativeEntityIdCell(row);
+  entityId.listeners.click(event());
+  const device = panel._nativeDeviceCell(row);
+  device.listeners.click(event());
+  const rule = panel._nativeRuleCell(row);
+  rule.listeners.click(event());
+  const narrowDevice = panel._nativeEntityCell(row, true, "overview").children[1].children[0];
+  narrowDevice.listeners.click(event());
+
+  assert.deepEqual(calls, [
+    ["entity", "sensor.rack"],
+    ["entity", "sensor.rack"],
+    ["device", "/config/devices/device/device-rack"],
+    ["rule", "temperature", { navigate: true }],
+    ["device", "/config/devices/device/device-rack"],
+  ]);
+});
+
+test("clicking an alert row opens its detail dialog instead of entity more info", () => {
+  const panel = tablePanel();
+  const listeners = {};
+  const table = {
+    addEventListener(name, listener) { listeners[name] = listener; },
+    querySelectorAll() { return []; },
+    dataset: { alertTablePage: "overview" },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="overview"]' ? table : null
+  );
+  const opened = [];
+  panel._openAlertDetails = (kind, row) => opened.push([kind, row.id]);
+  panel._openMoreInfo = () => assert.fail("row click must not open more info");
+
+  panel._hydrateDataTables();
+  listeners["row-click"]({ detail: { id: "rule:temperature:sensor.rack" } });
+
+  assert.deepEqual(opened, [["overview", "rule:temperature:sensor.rack"]]);
+});
+
+test("alert details expose translated fields and contextual links", () => {
+  const panel = tablePanel();
+  panel._config.rules = [{ id: "temperature", name: "Température baie" }];
+  const row = panel._tableRows("overview")[0];
+  const html = panel._renderAlertDetails("overview", row);
+
+  assert.match(html, /Statut/);
+  assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
+  assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
+  assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
+  assert.match(html, /ID de l’alerte/);
+  assert.match(html, /data-action="close-alert-details">Fermer/);
+});
+
+test("opening a custom rule from an alert navigates and opens its editor", () => {
+  const panel = tablePanel();
+  const configuredRule = {
+    id: "temperature",
+    name: "Température baie",
+    entity_ids: ["sensor.rack"],
+  };
+  panel._config.rules = [configuredRule];
+  const navigations = [];
+  let renders = 0;
+  panel._navigate = (path) => navigations.push(path);
+  panel._render = () => { renders += 1; };
+
+  assert.equal(panel._openRuleEditor("temperature", { navigate: true }), true);
+  assert.deepEqual(navigations, ["/alert-manager/rules"]);
+  assert.equal(panel._activeTab, "rules");
+  assert.deepEqual(panel._editingRule, configuredRule);
+  assert.notEqual(panel._editingRule, configuredRule);
+  assert.equal(renders, 1);
+});
+
 test("dashboard renders one compact table with the required default columns and statuses", () => {
   const panel = tablePanel();
   const html = panel._renderOverview();

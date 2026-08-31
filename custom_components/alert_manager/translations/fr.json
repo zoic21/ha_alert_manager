@@ -11,6 +11,10 @@
     }
   },
   "config_panel": {
+    "alert_details": {
+      "alert_id": "ID de l’alerte",
+      "title": "Détails de l’alerte"
+    },
     "automatic": {
       "aria_enable": "Activer {name}",
       "device_threshold_validation": "Chaque ligne doit contenir un appareil et un seuil numérique valide.",
@@ -31,6 +35,7 @@
     "buttons": {
       "add": "Ajouter",
       "cancel": "Annuler",
+      "close": "Fermer",
       "delete": "Supprimer",
       "remove": "Retirer",
       "save": "Enregistrer"
