@@ -1589,7 +1589,7 @@ function alertDetailsItems(kind, row) {
 }
 
 function renderAlertDetails(context) {
-    const { closeLabel, items, summary } = context;
+    const { items, summary } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
@@ -1597,18 +1597,19 @@ function renderAlertDetails(context) {
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <div class="alert-details-summary-text">
         <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
-        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}">${esc(summary.entityName)}</a>
+        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}"><span class="alert-details-entity-name">${esc(summary.entityName)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>
       </div>
     </section>
-    <dl class="alert-details-list">
-      ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
-        <dt>${esc(item.label)}</dt>
-        <dd>${item.action
-          ? `<a class="table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
-          : esc(item.value)}</dd>
-      </div>`).join("")}
-    </dl>
-    <ha-button slot="primaryAction" appearance="accent" variant="brand" data-action="close-alert-details">${esc(closeLabel)}</ha-button>`;
+    <ha-card outlined class="alert-details-card">
+      <dl class="alert-details-list">
+        ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
+          <dt>${esc(item.label)}</dt>
+          <dd>${item.action
+            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}><span>${esc(item.value)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>`
+            : esc(item.value)}</dd>
+        </div>`).join("")}
+      </dl>
+    </ha-card>`;
 }
 
 function renderAlertDetailsPanel(kind, row) {
@@ -1618,7 +1619,6 @@ function renderAlertDetailsPanel(kind, row) {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
     return renderAlertDetails({
-      closeLabel: this._t("buttons.close"),
       items: this._alertDetailsItems(kind, row),
       summary: {
         entityId: row.entityId,
@@ -4284,12 +4284,30 @@ const tableStyles = `
     text-transform: uppercase;
   }
   .alert-details-entity {
-    overflow: hidden;
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
     color: var(--primary-text-color, #212121);
     font-size: var(--ha-font-size-xl, 22px);
     font-weight: var(--ha-font-weight-bold, 700);
+  }
+  .alert-details-entity-name {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .alert-details-entity ha-icon, .alert-details-action ha-icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+  .alert-details-card {
+    display: block;
+    overflow: hidden;
+    border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px));
+    box-shadow: none;
   }
   .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
@@ -4306,8 +4324,16 @@ const tableStyles = `
     min-width: 0;
     grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
     gap: var(--ha-space-4, 16px);
-    padding: var(--ha-space-2, 8px) 0;
+    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
     border-bottom: 1px solid var(--divider-color, #e0e0e0);
+  }
+  .alert-details-item[data-detail-key="message"],
+  .alert-details-item[data-detail-key="condition"] {
+    display: block;
+  }
+  .alert-details-item[data-detail-key="message"] dt,
+  .alert-details-item[data-detail-key="condition"] dt {
+    margin-bottom: var(--ha-space-1, 4px);
   }
   .alert-details-item:last-child {
     border-bottom: 0;
@@ -4319,6 +4345,21 @@ const tableStyles = `
     color: var(--primary-text-color, #212121);
     line-height: var(--ha-line-height-normal, 1.4);
     white-space: pre-wrap;
+  }
+  .alert-details-item[data-detail-key="alert-id"] dd {
+    color: var(--secondary-text-color, #727272);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .alert-details-action {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .alert-details-action span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 `;
 
@@ -4904,6 +4945,7 @@ const responsiveStyles = `
     .alert-details-item {
       grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
       gap: var(--ha-space-3, 12px);
+      padding: var(--ha-space-3, 12px);
     }
     .alert-details-summary {
       align-items: flex-start;
@@ -4915,6 +4957,8 @@ const responsiveStyles = `
     }
     .alert-details-entity {
       font-size: var(--ha-font-size-l, 18px);
+    }
+    .alert-details-entity-name {
       white-space: normal;
     }
     ha-card.rule-editor-drawer {

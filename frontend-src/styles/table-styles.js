@@ -162,12 +162,30 @@ export const tableStyles = `
     text-transform: uppercase;
   }
   .alert-details-entity {
-    overflow: hidden;
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
     color: var(--primary-text-color, #212121);
     font-size: var(--ha-font-size-xl, 22px);
     font-weight: var(--ha-font-weight-bold, 700);
+  }
+  .alert-details-entity-name {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .alert-details-entity ha-icon, .alert-details-action ha-icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+  .alert-details-card {
+    display: block;
+    overflow: hidden;
+    border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px));
+    box-shadow: none;
   }
   .alert-details-item dt {
     color: var(--secondary-text-color, #727272);
@@ -184,8 +202,16 @@ export const tableStyles = `
     min-width: 0;
     grid-template-columns: minmax(100px, .45fr) minmax(0, 1.55fr);
     gap: var(--ha-space-4, 16px);
-    padding: var(--ha-space-2, 8px) 0;
+    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
     border-bottom: 1px solid var(--divider-color, #e0e0e0);
+  }
+  .alert-details-item[data-detail-key="message"],
+  .alert-details-item[data-detail-key="condition"] {
+    display: block;
+  }
+  .alert-details-item[data-detail-key="message"] dt,
+  .alert-details-item[data-detail-key="condition"] dt {
+    margin-bottom: var(--ha-space-1, 4px);
   }
   .alert-details-item:last-child {
     border-bottom: 0;
@@ -197,5 +223,20 @@ export const tableStyles = `
     color: var(--primary-text-color, #212121);
     line-height: var(--ha-line-height-normal, 1.4);
     white-space: pre-wrap;
+  }
+  .alert-details-item[data-detail-key="alert-id"] dd {
+    color: var(--secondary-text-color, #727272);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .alert-details-action {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--ha-space-1, 4px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .alert-details-action span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 `;

@@ -109,6 +109,7 @@ export const responsiveStyles = `
     .alert-details-item {
       grid-template-columns: minmax(90px, .45fr) minmax(0, 1.55fr);
       gap: var(--ha-space-3, 12px);
+      padding: var(--ha-space-3, 12px);
     }
     .alert-details-summary {
       align-items: flex-start;
@@ -120,6 +121,8 @@ export const responsiveStyles = `
     }
     .alert-details-entity {
       font-size: var(--ha-font-size-l, 18px);
+    }
+    .alert-details-entity-name {
       white-space: normal;
     }
     ha-card.rule-editor-drawer {

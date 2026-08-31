@@ -1134,7 +1134,9 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /ID de l’alerte/);
-  assert.match(html, /data-action="close-alert-details">Fermer/);
+  assert.match(html, /<ha-card outlined class="alert-details-card">/);
+  assert.match(html, /alert-details-action table-cell-link[\s\S]*mdi:chevron-right/);
+  assert.doesNotMatch(html, /data-action="close-alert-details"/);
 });
 
 test("alert details use compact rows without forcing internal dialog width", () => {
@@ -1143,6 +1145,7 @@ test("alert details use compact rows without forcing internal dialog width", () 
 
   assert.match(styles, /\.alert-details-list\{width:100%;min-width:0;margin:0\}/);
   assert.match(styles, /\.alert-details-item\{display:grid;min-width:0;grid-template-columns:[^}]+border-bottom:/);
+  assert.match(styles, /\.alert-details-card\{display:block;overflow:hidden;/);
   assert.doesNotMatch(styles, /min-width:min\(620px/);
   assert.doesNotMatch(styles, /\.alert-details-item\{[^}]*background:/);
 });

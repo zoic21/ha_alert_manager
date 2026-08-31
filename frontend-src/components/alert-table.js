@@ -878,7 +878,7 @@ export function alertDetailsItems(kind, row) {
 }
 
 export function renderAlertDetails(context) {
-    const { closeLabel, items, summary } = context;
+    const { items, summary } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
@@ -886,18 +886,19 @@ export function renderAlertDetails(context) {
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <div class="alert-details-summary-text">
         <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
-        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}">${esc(summary.entityName)}</a>
+        <a class="alert-details-entity table-cell-link" href="#" data-action="more-info" data-entity-id="${esc(summary.entityId)}"><span class="alert-details-entity-name">${esc(summary.entityName)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>
       </div>
     </section>
-    <dl class="alert-details-list">
-      ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
-        <dt>${esc(item.label)}</dt>
-        <dd>${item.action
-          ? `<a class="table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
-          : esc(item.value)}</dd>
-      </div>`).join("")}
-    </dl>
-    <ha-button slot="primaryAction" appearance="accent" variant="brand" data-action="close-alert-details">${esc(closeLabel)}</ha-button>`;
+    <ha-card outlined class="alert-details-card">
+      <dl class="alert-details-list">
+        ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
+          <dt>${esc(item.label)}</dt>
+          <dd>${item.action
+            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}><span>${esc(item.value)}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon></a>`
+            : esc(item.value)}</dd>
+        </div>`).join("")}
+      </dl>
+    </ha-card>`;
 }
 
 export function renderAlertDetailsPanel(kind, row) {
@@ -907,7 +908,6 @@ export function renderAlertDetailsPanel(kind, row) {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
     return renderAlertDetails({
-      closeLabel: this._t("buttons.close"),
       items: this._alertDetailsItems(kind, row),
       summary: {
         entityId: row.entityId,
