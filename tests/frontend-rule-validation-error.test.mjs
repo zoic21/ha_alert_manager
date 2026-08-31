@@ -95,13 +95,17 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
   assert.match(styles, /\.rule-editor-actions\{position:sticky;bottom:0/);
 });
 
-test("rules header card only reserves the editor width once", () => {
+test("rules content reserves the editor position and a visible gap", () => {
   const panel = new AlertManagerPanel();
   const styles = compactCss(panel._styles());
 
   assert.match(
     styles,
-    /\.rules-layout\.has-editor \[data-rules-table-page\]\{--alert-manager-rule-table-width:calc\(100% - var\(--rule-editor-width\) - 8px\)\}/,
+    /\.rules-layout\.has-editor \[data-rules-table-page\]\{--alert-manager-rule-table-width:calc\(\s*100% - var\(--rule-editor-width\) - var\(--rule-editor-inline-end\) - var\(--rule-editor-content-gap\)\s*\)\}/,
+  );
+  assert.match(
+    styles,
+    /\.rules-layout\{--rule-editor-width:560px;--rule-editor-inline-end:24px;--rule-editor-content-gap:16px\}/,
   );
   assert.doesNotMatch(
     styles,

@@ -24,19 +24,23 @@ export const ruleEditorStyles = `
   }
   .rules-layout {
     --rule-editor-width: 560px;
+    --rule-editor-inline-end: 24px;
+    --rule-editor-content-gap: 16px;
   }
   .rules-layout [data-rules-table-page] {
     --alert-manager-rule-table-width: 100%;
   }
   .rules-layout.has-editor [data-rules-table-page] {
-    --alert-manager-rule-table-width: calc(100% - var(--rule-editor-width) - 8px);
+    --alert-manager-rule-table-width: calc(
+      100% - var(--rule-editor-width) - var(--rule-editor-inline-end) - var(--rule-editor-content-gap)
+    );
   }
   ha-card.rule-editor-drawer {
     position: fixed;
     z-index: 6;
     inset-block-start: calc(var(--header-height, 56px) + 16px);
     inset-block-end: 16px;
-    inset-inline-end: 24px;
+    inset-inline-end: var(--rule-editor-inline-end);
     width: var(--rule-editor-width);
     max-width: calc(100vw - 64px);
     display: flex;
