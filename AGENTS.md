@@ -16,8 +16,8 @@ unless the task explicitly requires it.
   listeners; use timers only for real deadlines. Do not add broad periodic polling.
 - One anomaly has one stable alert instance. Custom rules create an independent
   instance per entity. Do not create one Home Assistant entity per alert.
-- Preserve the established pending, active, acknowledged, resolved, snoozed, and
-  history behavior. A pending condition that disappears must not enter history.
+- Preserve the established pending, active, acknowledged, resolved, and history
+  behavior. A pending condition that disappears must not enter history.
 - Acknowledged alerts remain visible but do not count as active alerts.
 - Disabling monitoring freezes pending timers and exposes zero alert counts; resuming
   monitoring must evaluate current state without manufacturing duplicate events.
