@@ -81,6 +81,16 @@ export const responsiveStyles = `
       align-items: center;
       justify-content: flex-start;
     }
+    .config-backup-row {
+      grid-template-columns: 1fr;
+      padding: 12px 0;
+    }
+    .config-backup-actions {
+      justify-content: flex-start;
+    }
+    .config-backup-actions ha-button {
+      width: auto;
+    }
     .delay-row, .pack-map-row {
       grid-template-columns: 1fr;
     }

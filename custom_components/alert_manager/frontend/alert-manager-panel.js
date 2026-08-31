@@ -608,6 +608,7 @@ async function load() {
       this._api.call({ type: "alert_manager/history/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
       this._api.call({ type: "alert_manager/coherence/get" }),
+      this._api.call({ type: "alert_manager/config/recovery/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -621,6 +622,7 @@ async function load() {
         this._history,
         this._historyConfig,
         this._coherence,
+        this._configRecovery,
         this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
@@ -1876,6 +1878,162 @@ async function handleAlertTableAction(action, button, event) {
   return false;
 }
 
+// Source: frontend-src/components/config-backups.js
+function renderConfigBackups(context) {
+  const { backups, busy, date, t } = context;
+  return `<section class="config-backups" data-config-backups>
+    <div><h3>${esc(t("recovery.backups_title"))}</h3><small>${esc(t("recovery.backups_help"))}</small></div>
+    <div class="config-backup-list">${backups.length ? backups.map((backup) => `
+      <div class="config-backup-row" data-backup-id="${esc(backup.id)}">
+        <div class="config-backup-details"><strong>${esc(date(backup.created_at))}</strong><span>${esc(t("recovery.rule_count", { count: backup.rules }))}</span></div>
+        <div class="actions config-backup-actions">
+          <ha-button type="button" appearance="plain" data-action="download-config-backup" data-backup-id="${esc(backup.id)}" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("recovery.download"))}</ha-button>
+          <ha-button type="button" appearance="plain" variant="danger" data-action="restore-config-backup" data-backup-id="${esc(backup.id)}" ${busy ? "disabled" : ""}>${esc(t("recovery.restore"))}</ha-button>
+        </div>
+      </div>`).join("") : `<div class="empty compact">${esc(t("recovery.no_backups"))}</div>`}</div>
+  </section>`;
+}
+
+function renderRecoveryBanner(context) {
+  const {
+    active, failedConfigAvailable, backupsMarkup, busy, t,
+  } = context;
+  if (!active) return "";
+  return `<section class="recovery-panel" data-config-recovery>
+    <ha-alert class="page-alert recovery-alert" alert-type="error">
+      <strong>${esc(t("recovery.banner_title"))}</strong>
+      <span>${esc(t("recovery.banner_message"))}</span>
+    </ha-alert>
+    ${failedConfigAvailable ? `<div class="actions recovery-diagnostic-action"><ha-button type="button" appearance="plain" data-action="download-failed-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("recovery.download_failed"))}</ha-button></div>` : ""}
+    <ha-card outlined class="panel recovery-backups-card">${backupsMarkup}</ha-card>
+  </section>`;
+}
+
+function renderBackupRestoreDialog(context) {
+  const { backup, busy, date, t } = context;
+  if (!backup) return "";
+  return `<ha-dialog id="config-backup-restore-dialog">
+    <ha-dialog-header>${esc(t("recovery.confirm_title"))}</ha-dialog-header>
+    <div class="config-backup-confirmation">${esc(t("recovery.confirm_message", {
+      date: date(backup.created_at),
+      rules: backup.rules,
+    }))}</div>
+    <ha-button type="button" slot="secondaryAction" appearance="plain" data-action="cancel-config-backup-restore" ${busy ? "disabled" : ""}>${esc(t("buttons.cancel"))}</ha-button>
+    <ha-button type="button" slot="primaryAction" appearance="accent" variant="danger" data-action="confirm-config-backup-restore" data-backup-id="${esc(backup.id)}" ${busy ? "disabled" : ""}>${esc(t("recovery.restore"))}</ha-button>
+  </ha-dialog>`;
+}
+
+function renderBackupRestoreDialogPanel() {
+  return renderBackupRestoreDialog({
+    backup: this._backupRestoreCandidate,
+    busy: this._busy,
+    date: (value) => this._date(value),
+    t: (key, replacements) => this._t(key, replacements),
+  });
+}
+
+function downloadTextPayload(payload) {
+  if (!payload?.content || !payload?.filename) return false;
+  const blob = new Blob(
+    [payload.content],
+    { type: payload.content_type || "text/plain;charset=utf-8" },
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = payload.filename;
+  link.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+async function applyCompleteConfiguration(result) {
+  if (!result?.config) return false;
+  this._config = result.config;
+  this._monitoringEnabled = this._config.monitoring_enabled !== false;
+  this._resetSettingsDraft();
+  this._resetAutomaticDraft();
+  this._editingRule = null;
+  this._ruleEditorMode = "visual";
+  this._ruleDirty = false;
+  const [alerts, history, recovery] = await Promise.all([
+    this._api.call({ type: "alert_manager/alerts/list" }).catch(() => null),
+    this._api.call({ type: "alert_manager/history/list" }).catch(() => null),
+    this._api.call({ type: "alert_manager/config/recovery/get" }).catch(() => null),
+  ]);
+  if (alerts) this._alerts = alerts;
+  if (history) this._history = history;
+  if (recovery) this._configRecovery = recovery;
+  this._syncSensor();
+  this._render();
+  return true;
+}
+
+function hydrateConfigBackups() {
+  const dialog = this.shadowRoot?.querySelector?.("#config-backup-restore-dialog");
+  if (!dialog || dialog.dataset.configured) return;
+  dialog.dataset.configured = "true";
+  dialog.hass = this._hass;
+  dialog.scrimClickAction = "close";
+  dialog.escapeKeyAction = "close";
+  dialog.addEventListener("closed", () => {
+    if (!this._backupRestoreCandidate) return;
+    this._backupRestoreCandidate = null;
+    this._render();
+  });
+  dialog.open = true;
+}
+
+async function handleConfigBackupAction(action, button) {
+  if (action === "download-config-backup") {
+    const payload = await this._call(
+      {
+        type: "alert_manager/config/backups/download",
+        backup_id: button.dataset.backupId,
+      },
+      this._t("success.backup_downloaded"),
+    );
+    downloadTextPayload(payload);
+    return true;
+  }
+  if (action === "download-failed-config") {
+    const payload = await this._call(
+      { type: "alert_manager/config/recovery/failed/download" },
+      this._t("success.failed_config_downloaded"),
+    );
+    downloadTextPayload(payload);
+    return true;
+  }
+  if (action === "restore-config-backup") {
+    this._backupRestoreCandidate = (this._configRecovery?.backups ?? []).find(
+      (backup) => backup.id === button.dataset.backupId,
+    ) ?? null;
+    this._render();
+    return true;
+  }
+  if (action === "cancel-config-backup-restore") {
+    this._backupRestoreCandidate = null;
+    this._render();
+    return true;
+  }
+  if (action === "confirm-config-backup-restore") {
+    const backupId = button.dataset.backupId;
+    const result = await this._call(
+      {
+        type: "alert_manager/config/backups/restore",
+        backup_id: backupId,
+        confirmed: true,
+      },
+      this._t("success.backup_restored"),
+    );
+    this._backupRestoreCandidate = null;
+    if (result) await this._applyCompleteConfiguration(result);
+    else this._render();
+    return true;
+  }
+  return false;
+}
+
 // Source: frontend-src/components/rule-editor.js
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -2535,9 +2693,12 @@ function refreshOverviewData() {
 }
 
 function renderOverview(context) {
-    const { alerts, selectedStatuses, pageMessages, rows, renderAlertTable, t } = context;
+    const {
+      alerts, selectedStatuses, pageMessages, recoveryPanel = "", rows,
+      renderAlertTable, t,
+    } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${pageMessages}
+    const summary = `${pageMessages}${recoveryPanel}
       <section class="summary">
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
@@ -2552,6 +2713,18 @@ function renderOverviewPanel() {
       alerts: this._alerts,
       selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
       pageMessages: this._renderPageMessages(),
+      recoveryPanel: this._renderRecoveryBanner({
+        active: this._configRecovery?.active === true,
+        failedConfigAvailable: this._configRecovery?.failed_config_available === true,
+        backupsMarkup: this._renderConfigBackups({
+          backups: this._configRecovery?.backups ?? [],
+          busy: this._busy,
+          date: (value) => this._date(value),
+          t: (key, replacements) => this._t(key, replacements),
+        }),
+        busy: this._busy,
+        t: (key, replacements) => this._t(key, replacements),
+      }),
       rows: this._tableRows("overview"),
       renderAlertTable: (...args) => this._renderAlertTable(...args),
       t: (key, replacements) => this._t(key, replacements),
@@ -3729,7 +3902,8 @@ async function handleAutomaticAction(action, button) {
 function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, busy, renderNumberField, t,
+      ignoredReferenceDraft, busy, recoveryActive = false, configBackupsMarkup = "",
+      renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
@@ -3770,10 +3944,11 @@ function renderSettings(context) {
         <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
       </ha-card>
       <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
+        ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </form>`;
 }
 
@@ -3787,6 +3962,13 @@ function renderSettingsPanel() {
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       busy: this._busy,
+      recoveryActive: this._configRecovery?.active === true,
+      configBackupsMarkup: this._renderConfigBackups({
+        backups: this._configRecovery?.backups ?? [],
+        busy: this._busy,
+        date: (value) => this._date(value),
+        t: (key, replacements) => this._t(key, replacements),
+      }),
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
@@ -3830,13 +4012,11 @@ async function exportConfiguration() {
       this._t("success.config_exported"),
     );
     if (!result?.yaml) return;
-    const blob = new Blob([result.yaml], { type: "application/yaml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "alert-manager-config.yaml";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadTextPayload({
+      content: result.yaml,
+      content_type: "application/yaml;charset=utf-8",
+      filename: "alert-manager-config.yaml",
+    });
 }
 
 async function handleImportSelection(event) {
@@ -3868,22 +4048,7 @@ async function handleImportSelection(event) {
       { type: "alert_manager/config/import", yaml: rawYaml, confirmed: true },
       this._t("success.config_imported"),
     );
-    if (!result?.config) return;
-    this._config = result.config;
-    this._monitoringEnabled = this._config.monitoring_enabled !== false;
-    this._resetSettingsDraft();
-    this._resetAutomaticDraft();
-    this._editingRule = null;
-    this._ruleEditorMode = "visual";
-    this._ruleDirty = false;
-    try {
-      this._alerts = await this._api.call({ type: "alert_manager/alerts/list" });
-      this._syncSensor();
-    } catch (_error) {
-      // The integration has already completed the import.  The sensor update
-      // will refresh the overview shortly even if this immediate read failed.
-    }
-    this._render();
+    if (result?.config) await this._applyCompleteConfiguration(result);
 }
 
 async function saveSettings() {
@@ -4468,6 +4633,63 @@ const settingsStyles = `
     justify-content: flex-end;
     margin-top: 4px;
   }
+  .recovery-panel {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .recovery-alert strong, .recovery-alert span {
+    display: block;
+  }
+  .recovery-alert strong {
+    margin-bottom: 4px;
+  }
+  .recovery-diagnostic-action {
+    justify-content: flex-start;
+  }
+  .recovery-backups-card {
+    padding: 16px 20px;
+  }
+  .config-backups {
+    display: grid;
+    gap: 12px;
+  }
+  .config-backups h3 {
+    margin: 0;
+    font-size: var(--ha-font-size-l, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .config-backups small {
+    margin-top: 4px;
+  }
+  .config-backup-list {
+    display: grid;
+  }
+  .config-backup-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .config-backup-details {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .config-backup-details span {
+    color: var(--secondary-text-color, #727272);
+  }
+  .config-backup-actions {
+    flex-wrap: wrap;
+  }
+  .config-backup-confirmation {
+    max-width: 520px;
+    padding: 8px 24px 20px;
+    white-space: pre-line;
+  }
 
   /* Coherence */
   .coherence-panel {
@@ -4937,6 +5159,16 @@ const responsiveStyles = `
       align-items: center;
       justify-content: flex-start;
     }
+    .config-backup-row {
+      grid-template-columns: 1fr;
+      padding: 12px 0;
+    }
+    .config-backup-actions {
+      justify-content: flex-start;
+    }
+    .config-backup-actions ha-button {
+      width: auto;
+    }
     .delay-row, .pack-map-row {
       grid-template-columns: 1fr;
     }
@@ -5018,6 +5250,7 @@ const panelStyles = () => [
 
 // Source: frontend-src/alert-manager-panel.js
 const ACTION_HANDLERS = [
+  handleConfigBackupAction,
   handleAlertTableAction,
   handleOverviewAction,
   handleHistoryAction,
@@ -5032,6 +5265,11 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _applyCompleteConfiguration = applyCompleteConfiguration;
+  _hydrateConfigBackups = hydrateConfigBackups;
+  _renderConfigBackups = renderConfigBackups;
+  _renderRecoveryBanner = renderRecoveryBanner;
+  _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
   _renderOverview = renderOverviewPanel;
@@ -5188,6 +5426,8 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._configRecovery = { active: false, reason: null, failed_config_available: false, backups: [] };
+    this._backupRestoreCandidate = null;
     this._coherence = null;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
@@ -5406,12 +5646,14 @@ class AlertManagerPanel extends HTMLElement {
     const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}`;
+      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
+      ${this._renderBackupRestoreDialog()}`;
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
     this._hydrateCoherenceTable();
     this._hydrateYamlEditor();
+    this._hydrateConfigBackups();
     this._updateCountdowns();
     this._decorateActionIcons();
     this._syncNarrowTableHeaderBackgrounds();
@@ -5422,7 +5664,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _pageMessagesContent() {
-    return `${!this._monitoringEnabled ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
+    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
@@ -5438,6 +5680,10 @@ class AlertManagerPanel extends HTMLElement {
       "save-settings",
       "export-config",
       "choose-config-import",
+      "download-config-backup",
+      "download-failed-config",
+      "restore-config-backup",
+      "confirm-config-backup-restore",
     ]);
     for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
       if (busyActions.has(button.dataset.action)) button.disabled = this._busy;

@@ -1,10 +1,12 @@
 import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { downloadTextPayload } from "../components/config-backups.js";
 
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, busy, renderNumberField, t,
+      ignoredReferenceDraft, busy, recoveryActive = false, configBackupsMarkup = "",
+      renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
@@ -45,10 +47,11 @@ export function renderSettings(context) {
         <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
       </ha-card>
       <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
+        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
+        ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </form>`;
 }
 
@@ -62,6 +65,13 @@ export function renderSettingsPanel() {
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       busy: this._busy,
+      recoveryActive: this._configRecovery?.active === true,
+      configBackupsMarkup: this._renderConfigBackups({
+        backups: this._configRecovery?.backups ?? [],
+        busy: this._busy,
+        date: (value) => this._date(value),
+        t: (key, replacements) => this._t(key, replacements),
+      }),
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
@@ -105,13 +115,11 @@ export async function exportConfiguration() {
       this._t("success.config_exported"),
     );
     if (!result?.yaml) return;
-    const blob = new Blob([result.yaml], { type: "application/yaml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "alert-manager-config.yaml";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadTextPayload({
+      content: result.yaml,
+      content_type: "application/yaml;charset=utf-8",
+      filename: "alert-manager-config.yaml",
+    });
 }
 
 export async function handleImportSelection(event) {
@@ -143,22 +151,7 @@ export async function handleImportSelection(event) {
       { type: "alert_manager/config/import", yaml: rawYaml, confirmed: true },
       this._t("success.config_imported"),
     );
-    if (!result?.config) return;
-    this._config = result.config;
-    this._monitoringEnabled = this._config.monitoring_enabled !== false;
-    this._resetSettingsDraft();
-    this._resetAutomaticDraft();
-    this._editingRule = null;
-    this._ruleEditorMode = "visual";
-    this._ruleDirty = false;
-    try {
-      this._alerts = await this._api.call({ type: "alert_manager/alerts/list" });
-      this._syncSensor();
-    } catch (_error) {
-      // The integration has already completed the import.  The sensor update
-      // will refresh the overview shortly even if this immediate read failed.
-    }
-    this._render();
+    if (result?.config) await this._applyCompleteConfiguration(result);
 }
 
 export async function saveSettings() {

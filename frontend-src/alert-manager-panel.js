@@ -15,6 +15,10 @@ import {
   tableSortStateColumn, tableStateGroupColumn, updateSelectionToolbar,
 } from "./components/alert-table.js";
 import {
+  applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups,
+  renderBackupRestoreDialogPanel, renderConfigBackups, renderRecoveryBanner,
+} from "./components/config-backups.js";
+import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
   duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
   refreshRuleEditor, renderRuleEditorPanel, resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
@@ -64,6 +68,7 @@ import {
 } from "./views/settings.js";
 
 const ACTION_HANDLERS = [
+  handleConfigBackupAction,
   handleAlertTableAction,
   handleOverviewAction,
   handleHistoryAction,
@@ -78,6 +83,11 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _applyCompleteConfiguration = applyCompleteConfiguration;
+  _hydrateConfigBackups = hydrateConfigBackups;
+  _renderConfigBackups = renderConfigBackups;
+  _renderRecoveryBanner = renderRecoveryBanner;
+  _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
   _renderOverview = renderOverviewPanel;
@@ -234,6 +244,8 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._configRecovery = { active: false, reason: null, failed_config_available: false, backups: [] };
+    this._backupRestoreCandidate = null;
     this._coherence = null;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
@@ -452,12 +464,14 @@ class AlertManagerPanel extends HTMLElement {
     const page = nativeTablePage ? content : `<main>${this._renderPageMessages()}${content}</main>`;
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}`;
+      ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
+      ${this._renderBackupRestoreDialog()}`;
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
     this._hydrateCoherenceTable();
     this._hydrateYamlEditor();
+    this._hydrateConfigBackups();
     this._updateCountdowns();
     this._decorateActionIcons();
     this._syncNarrowTableHeaderBackgrounds();
@@ -468,7 +482,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _pageMessagesContent() {
-    return `${!this._monitoringEnabled ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
+    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
@@ -484,6 +498,10 @@ class AlertManagerPanel extends HTMLElement {
       "save-settings",
       "export-config",
       "choose-config-import",
+      "download-config-backup",
+      "download-failed-config",
+      "restore-config-backup",
+      "confirm-config-backup-restore",
     ]);
     for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
       if (busyActions.has(button.dataset.action)) button.disabled = this._busy;

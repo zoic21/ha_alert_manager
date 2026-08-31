@@ -159,6 +159,21 @@
       "notification_message": "La surveillance Alert Manager est désactivée. Activez « Surveillance Alert Manager » pour reprendre la détection des alertes.",
       "notification_title": "Surveillance Alert Manager désactivée"
     },
+    "recovery": {
+      "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",
+      "backups_title": "Sauvegardes automatiques",
+      "banner_message": "La configuration actuelle n’a pas pu être chargée. Aucune sauvegarde n’a été restaurée automatiquement. Choisissez une sauvegarde précédente ci-dessous ou importez manuellement une configuration.",
+      "banner_title": "Récupération de la configuration nécessaire",
+      "confirm_message": "La configuration actuelle, les alertes runtime et l’historique seront remplacés par la sauvegarde du {date}.\n\nRègles : {rules}\n\nContinuer ?",
+      "confirm_title": "Restaurer cette sauvegarde de configuration ?",
+      "download": "Télécharger",
+      "download_failed": "Télécharger la configuration ayant échoué",
+      "no_backups": "Aucune sauvegarde automatique valide n’est disponible.",
+      "notification_message": "Alert Manager n’a pas pu charger correctement sa configuration. Aucune sauvegarde n’a été restaurée automatiquement. Ouvrez Alert Manager pour vérifier le problème et choisir éventuellement une sauvegarde.",
+      "notification_title": "Problème de configuration Alert Manager",
+      "restore": "Restaurer",
+      "rule_count": "{count} règles"
+    },
     "operators": {
       "above": "supérieur à",
       "below": "inférieur à",
@@ -349,8 +364,11 @@
       "alert_acknowledged": "Alerte acquittée",
       "alert_unacknowledged": "Acquittement retiré",
       "automatic_saved": "Surveillance automatique enregistrée",
+      "backup_downloaded": "Sauvegarde téléchargée",
+      "backup_restored": "Sauvegarde de configuration restaurée",
       "config_exported": "Configuration exportée",
       "config_imported": "Configuration importée",
+      "failed_config_downloaded": "Configuration ayant échoué téléchargée",
       "history_cleared": "Historique effacé",
       "rule_created": "Règle créée",
       "rule_deleted": "Règle supprimée",

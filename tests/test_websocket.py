@@ -12,11 +12,15 @@ from custom_components.alert_manager.websocket import (
     websocket_alerts_list,
     websocket_coherence_get,
     websocket_coherence_scan,
+    websocket_config_backup_download,
+    websocket_config_backup_restore,
     websocket_config_export,
     websocket_config_get,
     websocket_config_import,
     websocket_config_import_validate,
+    websocket_config_recovery_get,
     websocket_config_update,
+    websocket_failed_config_download,
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
@@ -204,9 +208,16 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_history_clear, {"id": 17, "confirmed": True}),
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
+        (websocket_config_recovery_get, {"id": 20}),
+        (websocket_config_backup_download, {"id": 21, "backup_id": "one"}),
+        (
+            websocket_config_backup_restore,
+            {"id": 22, "backup_id": "one", "confirmed": True},
+        ),
+        (websocket_failed_config_download, {"id": 23}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 14
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 18
     assert connection.results == []
 
 
@@ -236,6 +247,56 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
 
     assert connection.errors == []
     assert connection.results == [(40, expected)]
+
+
+def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, entry):
+    """The shared automatic backup endpoints expose YAML and explicit restore."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_config_recovery_get(hass, connection, {"id": 50}))
+    status = connection.results[-1][1]
+    assert status["active"] is False
+    assert len(status["backups"]) == 1
+    backup_id = status["backups"][0]["id"]
+
+    asyncio.run(
+        websocket_config_backup_download(
+            hass, connection, {"id": 51, "backup_id": backup_id}
+        )
+    )
+    assert connection.results[-1][1]["content"] == manager.export_config_yaml()
+
+    asyncio.run(
+        websocket_config_backup_restore(
+            hass,
+            connection,
+            {"id": 52, "backup_id": backup_id, "confirmed": True},
+        )
+    )
+    assert connection.errors == []
+    assert connection.results[-1][1]["config"] == manager.get_config()
+
+
+def test_admin_can_download_rejected_configuration_through_recovery_api(hass, entry):
+    """Diagnostic content is mediated by the backend rather than storage paths."""
+    hass.stores["alert_manager"] = {
+        "config": {"rules": [{"id": "incomplete"}]},
+        "alerts": {},
+    }
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_failed_config_download(hass, connection, {"id": 53}))
+
+    assert connection.errors == []
+    payload = connection.results[-1][1]
+    assert payload["filename"] == "alert-manager-failed-config.yaml"
+    assert "incomplete" in payload["content"]
 
 
 def test_coherence_get_websocket_restores_last_result_without_scanning(hass, entry):

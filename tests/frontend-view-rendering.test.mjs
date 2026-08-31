@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { renderAutomatic } from "../frontend-src/views/automatic.js";
+import {
+  renderBackupRestoreDialog, renderConfigBackups, renderRecoveryBanner,
+} from "../frontend-src/components/config-backups.js";
 import { renderCoherence } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import { renderOverview } from "../frontend-src/views/overview.js";
@@ -131,4 +134,62 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
+});
+
+test("recovery banner and settings reuse one automatic backup list", () => {
+  const backups = [
+    { id: "one", created_at: "2026-08-30T03:00:00+00:00", rules: 18 },
+    { id: "two", created_at: "2026-08-29T03:00:00+00:00", rules: 18 },
+    { id: "three", created_at: "2026-08-28T03:00:00+00:00", rules: 17 },
+  ];
+  const backupsMarkup = renderConfigBackups({
+    backups,
+    busy: false,
+    date: (value) => value,
+    t,
+  });
+  const recovery = renderRecoveryBanner({
+    active: true,
+    failedConfigAvailable: true,
+    backupsMarkup,
+    busy: false,
+    t,
+  });
+  const settings = renderSettings({
+    config: { global_delay: 900, pending_display_delay: 10 },
+    settingsDraft: {
+      coherence_scan_esphome: true,
+      coherence_ignored_entity_references: [],
+    },
+    historyConfig: { retention_limit: 100 },
+    historyEvents: [],
+    entityDelayDraft: [],
+    ignoredReferenceDraft: "",
+    busy: false,
+    configBackupsMarkup: backupsMarkup,
+    renderNumberField: () => "",
+    t,
+  });
+
+  assert.equal((backupsMarkup.match(/data-backup-id=/g) ?? []).length, 9);
+  assert.match(backupsMarkup, /download-config-backup/);
+  assert.match(backupsMarkup, /restore-config-backup/);
+  assert.ok(recovery.includes(backupsMarkup));
+  assert.ok(settings.includes(backupsMarkup));
+  assert.match(recovery, /download-failed-config/);
+});
+
+test("backup restoration uses a native confirmation dialog", () => {
+  const markup = renderBackupRestoreDialog({
+    backup: { id: "backup-1", created_at: "2026-08-30T03:00:00+00:00", rules: 18 },
+    busy: false,
+    date: (value) => value,
+    t,
+  });
+
+  assert.match(markup, /^<ha-dialog/);
+  assert.match(markup, /<ha-dialog-header>/);
+  assert.match(markup, /data-action="cancel-config-backup-restore"/);
+  assert.match(markup, /data-action="confirm-config-backup-restore"/);
+  assert.match(markup, /data-backup-id="backup-1"/);
 });

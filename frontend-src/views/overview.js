@@ -21,9 +21,12 @@ export function refreshOverviewData() {
 }
 
 export function renderOverview(context) {
-    const { alerts, selectedStatuses, pageMessages, rows, renderAlertTable, t } = context;
+    const {
+      alerts, selectedStatuses, pageMessages, recoveryPanel = "", rows,
+      renderAlertTable, t,
+    } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${pageMessages}
+    const summary = `${pageMessages}${recoveryPanel}
       <section class="summary">
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
@@ -38,6 +41,18 @@ export function renderOverviewPanel() {
       alerts: this._alerts,
       selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
       pageMessages: this._renderPageMessages(),
+      recoveryPanel: this._renderRecoveryBanner({
+        active: this._configRecovery?.active === true,
+        failedConfigAvailable: this._configRecovery?.failed_config_available === true,
+        backupsMarkup: this._renderConfigBackups({
+          backups: this._configRecovery?.backups ?? [],
+          busy: this._busy,
+          date: (value) => this._date(value),
+          t: (key, replacements) => this._t(key, replacements),
+        }),
+        busy: this._busy,
+        t: (key, replacements) => this._t(key, replacements),
+      }),
       rows: this._tableRows("overview"),
       renderAlertTable: (...args) => this._renderAlertTable(...args),
       t: (key, replacements) => this._t(key, replacements),

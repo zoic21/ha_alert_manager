@@ -812,6 +812,9 @@ test("initial load requests pack metadata from the backend", async () => {
     },
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
     "alert_manager/coherence/get": retainedCoherence,
+    "alert_manager/config/recovery/get": {
+      active: false, failed_config_available: false, backups: [],
+    },
     "config/label_registry/list": [],
   };
   panel._hass = {
@@ -834,12 +837,50 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/history/list",
     "alert_manager/history/config/get",
     "alert_manager/coherence/get",
+    "alert_manager/config/recovery/get",
     "config/label_registry/list",
     "frontend/get_translations",
     "frontend/get_translations",
   ]);
   assert.deepEqual(panel._packs, completePacks());
   assert.equal(panel._coherence, retainedCoherence);
+});
+
+test("backup restore is sent only after the native confirmation action", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const backup = {
+    id: "backup-1", created_at: "2026-08-30T03:00:00+00:00", rules: 18,
+  };
+  panel._configRecovery = {
+    active: true, failed_config_available: true, backups: [backup],
+  };
+  panel._render = () => {};
+  panel._refreshUiState = () => {};
+  const calls = [];
+  panel._hass = {
+    states: {},
+    callWS: async (message) => {
+      calls.push(message);
+      return { config: completeConfig(), summary: {} };
+    },
+  };
+  panel._applyCompleteConfiguration = async () => true;
+
+  await panel._handleClick(actionEvent(
+    "restore-config-backup", null, { backupId: backup.id },
+  ));
+  assert.equal(panel._backupRestoreCandidate, backup);
+  assert.deepEqual(calls, []);
+
+  await panel._handleClick(actionEvent(
+    "confirm-config-backup-restore", null, { backupId: backup.id },
+  ));
+  assert.deepEqual(calls, [{
+    type: "alert_manager/config/backups/restore",
+    backup_id: backup.id,
+    confirmed: true,
+  }]);
 });
 
 test("rule save button explicitly creates a rule and keeps typed values", async () => {

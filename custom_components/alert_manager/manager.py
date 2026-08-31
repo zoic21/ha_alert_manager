@@ -21,17 +21,25 @@ from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
 from .manager_api import _ApiMixin
+from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
-from .storage import AlertManagerHistoryStorage, AlertManagerStorage
+from .storage import (
+    AlertManagerConfigBackupStorage,
+    AlertManagerHistoryStorage,
+    AlertManagerStorage,
+    ConfigStorageError,
+)
 from .validation import validate_config
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
+class AlertManager(
+    _RuntimeMixin, _TemplatesMixin, _ApiMixin, _RecoveryMixin, _StateMixin
+):
     """Own configuration, runtime records, listeners and timers."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -40,6 +48,7 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         self.entry = entry
         self.storage = AlertManagerStorage(hass)
         self.history_storage = AlertManagerHistoryStorage(hass)
+        self.config_backup_storage = AlertManagerConfigBackupStorage(hass)
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
         self._area_registry = ar.async_get(hass)
@@ -91,11 +100,13 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
         self._immediate_state_save_required = False
+        self._recovery_state: dict[str, Any] | None = None
+        self._config_backup_schedule_unsubscribe: Callable[[], None] | None = None
 
     @property
     def monitoring_enabled(self) -> bool:
         """Return whether the main category currently evaluates anomalies."""
-        return self.config.get("monitoring_enabled", True)
+        return not self.recovery_active and self.config.get("monitoring_enabled", True)
 
     @property
     def rules(self) -> list[Rule]:
@@ -104,21 +115,44 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
 
     async def async_setup(self) -> None:
         """Load persisted state and start event-driven evaluation."""
-        config, records, migrated = await self.storage.async_load()
-        self._variation_baselines = self.storage.variation_baselines
+        loaded_config: dict[str, Any] | None = None
         try:
-            history, history_migrated = await self.history_storage.async_load()
-        except Exception:
+            loaded_config, records, migrated = await self.storage.async_load()
+            candidate = validate_config(loaded_config)
+            self._validate_config_rule_sources(candidate)
+        except Exception as err:
             _LOGGER.exception(
-                "Unable to load alert history; starting with an empty view"
+                "Stored configuration is unusable; entering recovery mode without "
+                "writing defaults"
             )
-            history, history_migrated = [], False
-        try:
-            self.config = validate_config(config)
-        except ValueError:
-            _LOGGER.exception("Stored configuration is invalid; using defaults")
+            faulty_config = (
+                err.faulty_config
+                if isinstance(err, ConfigStorageError)
+                else loaded_config
+            )
+            failed_content = (
+                err.failed_content if isinstance(err, ConfigStorageError) else None
+            )
+            self._enter_config_recovery(
+                str(err),
+                faulty_config=faulty_config,
+                failed_content=failed_content,
+            )
             self.config = validate_config({})
-            migrated = True
+            records = {}
+            migrated = False
+            self.storage.variation_baselines = {}
+            history, history_migrated = [], False
+        else:
+            self.config = candidate
+            try:
+                history, history_migrated = await self.history_storage.async_load()
+            except Exception:
+                _LOGGER.exception(
+                    "Unable to load alert history; starting with an empty view"
+                )
+                history, history_migrated = [], False
+        self._variation_baselines = self.storage.variation_baselines
         await self._async_load_condition_translations()
         self.records = records
         self.history = history
@@ -161,7 +195,9 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
             )
         )
 
-        if self.hass.is_running:
+        if self.recovery_active:
+            self._publish_if_changed(force=True)
+        elif self.hass.is_running:
             changed = await self.async_evaluate_all(restoring=True, save=False)
             if migrated or changed:
                 await self._async_save_state()
@@ -174,13 +210,16 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
                 )
             )
             self._publish_if_changed(force=True)
-        if history_migrated:
+        if history_migrated and not self.recovery_active:
             try:
                 await self.history_storage.async_save(self.history)
             except Exception:
                 _LOGGER.exception("Unable to persist migrated alert history")
+        await self._async_sync_recovery_notification()
         await self._async_sync_monitoring_notification()
-        self._refresh_coherence_schedule()
+        if not self.recovery_active:
+            self._refresh_coherence_schedule()
+        await self._async_initialize_config_backups()
 
     def _refresh_coherence_schedule(self) -> None:
         """Replace the optional low-frequency coherence scan listener."""
@@ -195,6 +234,7 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
         """Remove listeners and timers, persisting a final snapshot."""
         self._cancel_template_dependency_timers()
         self._unloading = True
+        self._cancel_config_backup_schedule()
         if self._coherence_schedule_unsubscribe is not None:
             self._coherence_schedule_unsubscribe()
             self._coherence_schedule_unsubscribe = None
@@ -208,4 +248,5 @@ class AlertManager(_RuntimeMixin, _TemplatesMixin, _ApiMixin, _StateMixin):
             cancel()
         self._timers.clear()
         self._cancel_all_device_event_timers()
-        await self._async_save_state()
+        if not self.recovery_active:
+            await self._async_save_state()

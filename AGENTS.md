@@ -38,6 +38,7 @@ unless the task explicitly requires it.
 | `custom_components/alert_manager/__init__.py` | Integration lifecycle, services, platforms, WebSocket registration, and panel registration. |
 | `manager.py` | `AlertManager` composition root: owned state, listeners, setup, and unload. |
 | `manager_api.py` | Public queries and serialized configuration mutations used by transports and entities. |
+| `manager_recovery.py` | Valid configuration backups, recovery state, scheduling, downloads, and explicit restoration. |
 | `manager_runtime.py` | Event routing, dependency-aware evaluation, automatic packs, and candidate construction. |
 | `manager_state.py` | Alert lifecycle, timers, persistence scheduling, history, events, and public snapshots. |
 | `manager_templates.py` | Jinja rendering, dependency tracking, rule indexing, and source protection. |
