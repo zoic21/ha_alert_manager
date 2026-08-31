@@ -5,8 +5,7 @@ export const responsiveStyles = `
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .rules-layout.has-editor [data-rules-table-page] {
-      width: 100%;
-      margin-inline-end: 0;
+      --alert-manager-rule-table-width: 100%;
     }
     .rule-editor-backdrop {
       display: block;

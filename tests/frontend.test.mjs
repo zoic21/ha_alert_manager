@@ -1951,7 +1951,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(styles, /ha-card\.rule-editor-drawer\{position:fixed/);
   assert.doesNotMatch(styles, /main\.rules-page/);
   assert.match(styles, /main\{width:100%;max-width:none/);
-  assert.match(styles, /\.rules-layout\.has-editor \[data-rules-table-page\]\{width:auto;margin-inline-end:calc\(var\(--rule-editor-width\) \+ 8px\)\}/);
+  assert.match(styles, /\.rules-layout\.has-editor \[data-rules-table-page\]\{--alert-manager-rule-table-width:calc\(100% - var\(--rule-editor-width\) - 8px\)\}/);
   assert.match(styles, /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:24px/);
   assert.match(styles, /\.rule-editor-form\{[^}]*overflow:auto/);
   assert.match(styles, /\.rule-editor-resize\{[^}]*cursor:ew-resize/);

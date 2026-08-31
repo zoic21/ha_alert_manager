@@ -2,6 +2,21 @@ import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_RULES_TABLE_STATE, RULES_COLUMNS, RULES_SECONDARY_COLUMNS } from "../utils/table-preferences.js";
 
+const RULE_TABLE_EDITOR_LAYOUT_STYLE_ID = "alert-manager-rule-table-editor-layout";
+
+function installRuleTableEditorLayout(tablePage) {
+    const root = tablePage.shadowRoot;
+    if (!root || root.querySelector?.(`#${RULE_TABLE_EDITOR_LAYOUT_STYLE_ID}`)) return;
+    const style = document.createElement("style");
+    style.id = RULE_TABLE_EDITOR_LAYOUT_STYLE_ID;
+    style.textContent = `
+      ha-data-table {
+        width: var(--alert-manager-rule-table-width, 100%);
+      }
+    `;
+    root.append(style);
+}
+
 export function refreshRulesData() {
     if (this._activeTab !== "rules") return;
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
@@ -28,6 +43,7 @@ export function refreshRulesData() {
 export function hydrateRuleTable() {
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
     if (!tablePage || !this._config) return;
+    installRuleTableEditorLayout(tablePage);
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
     const enabledFilters = new Set(this._filterValues(state.filters.enabled));

@@ -2,6 +2,13 @@ import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MDI_CLOSE, MDI
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
 
+function consumeRuleEditorNotice(panel, fallback) {
+    const message = panel._notice?.text ?? fallback;
+    panel._notice = null;
+    panel._refreshUiState();
+    return message;
+}
+
 export function refreshRuleEditor() {
     const layout = this.shadowRoot?.querySelector(".rules-layout");
     if (!layout || this._activeTab !== "rules") {
@@ -239,7 +246,7 @@ export async function switchRuleEditor() {
       "",
     );
     if (!validated) {
-      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._ruleYamlError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
       this._refreshRuleEditor();
       return;
     }
@@ -259,7 +266,7 @@ export async function saveRuleYaml() {
       this._t(id ? "success.rule_updated" : "success.rule_created"),
     );
     if (!updated) {
-      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._ruleYamlError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
       this._refreshRuleEditor();
       return;
     }
@@ -391,8 +398,7 @@ export async function saveRule(form) {
       this._ruleDirty = false;
       this._replaceRule(updated);
     } else if (this._notice?.kind === "error") {
-      this._ruleEditorError = this._notice.text;
-      this._notice = null;
+      this._ruleEditorError = consumeRuleEditorNotice(this, this._t("errors.unknown"));
       this._refreshRuleEditor();
     }
 }

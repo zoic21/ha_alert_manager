@@ -1595,6 +1595,13 @@ async function handleAlertTableAction(action, button, event) {
 }
 
 // Source: frontend-src/components/rule-editor.js
+function consumeRuleEditorNotice(panel, fallback) {
+    const message = panel._notice?.text ?? fallback;
+    panel._notice = null;
+    panel._refreshUiState();
+    return message;
+}
+
 function refreshRuleEditor() {
     const layout = this.shadowRoot?.querySelector(".rules-layout");
     if (!layout || this._activeTab !== "rules") {
@@ -1832,7 +1839,7 @@ async function switchRuleEditor() {
       "",
     );
     if (!validated) {
-      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._ruleYamlError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
       this._refreshRuleEditor();
       return;
     }
@@ -1852,7 +1859,7 @@ async function saveRuleYaml() {
       this._t(id ? "success.rule_updated" : "success.rule_created"),
     );
     if (!updated) {
-      this._ruleYamlError = this._notice?.text ?? this._t("rules.yaml_invalid");
+      this._ruleYamlError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
       this._refreshRuleEditor();
       return;
     }
@@ -1984,8 +1991,7 @@ async function saveRule(form) {
       this._ruleDirty = false;
       this._replaceRule(updated);
     } else if (this._notice?.kind === "error") {
-      this._ruleEditorError = this._notice.text;
-      this._notice = null;
+      this._ruleEditorError = consumeRuleEditorNotice(this, this._t("errors.unknown"));
       this._refreshRuleEditor();
     }
 }
@@ -2622,6 +2628,21 @@ async function handleCoherenceAction(action) {
 }
 
 // Source: frontend-src/views/rules.js
+const RULE_TABLE_EDITOR_LAYOUT_STYLE_ID = "alert-manager-rule-table-editor-layout";
+
+function installRuleTableEditorLayout(tablePage) {
+    const root = tablePage.shadowRoot;
+    if (!root || root.querySelector?.(`#${RULE_TABLE_EDITOR_LAYOUT_STYLE_ID}`)) return;
+    const style = document.createElement("style");
+    style.id = RULE_TABLE_EDITOR_LAYOUT_STYLE_ID;
+    style.textContent = `
+      ha-data-table {
+        width: var(--alert-manager-rule-table-width, 100%);
+      }
+    `;
+    root.append(style);
+}
+
 function refreshRulesData() {
     if (this._activeTab !== "rules") return;
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
@@ -2648,6 +2669,7 @@ function refreshRulesData() {
 function hydrateRuleTable() {
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
     if (!tablePage || !this._config) return;
+    installRuleTableEditorLayout(tablePage);
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
     const enabledFilters = new Set(this._filterValues(state.filters.enabled));
@@ -3987,12 +4009,11 @@ const ruleEditorStyles = `
   .rules-layout {
     --rule-editor-width: 560px;
   }
-  .rules-layout.has-editor [data-rules-table-page] {
-    width: auto;
-    margin-inline-end: calc(var(--rule-editor-width) + 8px);
+  .rules-layout [data-rules-table-page] {
+    --alert-manager-rule-table-width: 100%;
   }
-  .rules-layout.has-editor [data-rules-table-page] .rules-list-panel {
-    margin-inline-end: 0;
+  .rules-layout.has-editor [data-rules-table-page] {
+    --alert-manager-rule-table-width: calc(100% - var(--rule-editor-width) - 8px);
   }
   ha-card.rule-editor-drawer {
     position: fixed;
@@ -4008,6 +4029,7 @@ const ruleEditorStyles = `
     border-color: var(--primary-color, #03a9f4);
     border-width: 2px;
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
+    border-radius: var(--ha-card-border-radius);
   }
   .rule-editor-drawer ha-dialog-header {
     flex: none;
@@ -4023,6 +4045,8 @@ const ruleEditorStyles = `
     margin: 0;
     padding: 0;
     background: var(--primary-background-color, #fafafa);
+    border-end-start-radius: var(--ha-card-border-radius);
+    border-end-end-radius: var(--ha-card-border-radius);
   }
   .rule-editor-section {
     padding: 20px;
@@ -4205,8 +4229,7 @@ const responsiveStyles = `
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .rules-layout.has-editor [data-rules-table-page] {
-      width: 100%;
-      margin-inline-end: 0;
+      --alert-manager-rule-table-width: 100%;
     }
     .rule-editor-backdrop {
       display: block;

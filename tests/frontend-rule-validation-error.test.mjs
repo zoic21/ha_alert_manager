@@ -101,7 +101,25 @@ test("rules header card only reserves the editor width once", () => {
 
   assert.match(
     styles,
-    /\.rules-layout\.has-editor \[data-rules-table-page\] \.rules-list-panel\{margin-inline-end:0\}/,
+    /\.rules-layout\.has-editor \[data-rules-table-page\]\{--alert-manager-rule-table-width:calc\(100% - var\(--rule-editor-width\) - 8px\)\}/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.rules-layout\.has-editor \[data-rules-table-page\]\{[^}]*margin-inline-end/,
+  );
+});
+
+test("the rule drawer clips its contents into complete rounded bottom corners", () => {
+  const panel = new AlertManagerPanel();
+  const styles = compactCss(panel._styles());
+
+  assert.match(
+    styles,
+    /ha-card\.rule-editor-drawer\{[^}]*border-radius:var\(--ha-card-border-radius\)/,
+  );
+  assert.match(
+    styles,
+    /\.rule-editor-form\{[^}]*border-end-start-radius:var\(--ha-card-border-radius\);border-end-end-radius:var\(--ha-card-border-radius\)/,
   );
 });
 
@@ -121,12 +139,13 @@ test("a rejected visual rule save moves the translated error from the page notic
   };
   panel._render = () => {};
   let refreshCount = 0;
-  let pageNoticeRemoved = 0;
+  const pageMessages = { innerHTML: "" };
   panel.shadowRoot.querySelector = (selector) => (
-    selector === '.page-alert[alert-type="error"]'
-      ? { remove() { pageNoticeRemoved += 1; } }
+    selector === "[data-page-messages]"
+      ? pageMessages
       : null
   );
+  panel.shadowRoot.querySelectorAll = () => [];
   panel._refreshRuleEditor = () => { refreshCount += 1; };
 
   await panel._saveRule(rangeForm());
@@ -136,7 +155,7 @@ test("a rejected visual rule save moves the translated error from the page notic
     "La borne inférieure doit être inférieure ou égale à la borne supérieure.",
   );
   assert.equal(panel._notice, null);
-  assert.equal(pageNoticeRemoved, 0);
+  assert.equal(pageMessages.innerHTML.trim(), "");
   assert.equal(refreshCount, 1);
   assert.equal(panel._editingRule.value[0], "30");
   assert.equal(panel._editingRule.value[1], "20");

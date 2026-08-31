@@ -25,12 +25,11 @@ export const ruleEditorStyles = `
   .rules-layout {
     --rule-editor-width: 560px;
   }
-  .rules-layout.has-editor [data-rules-table-page] {
-    width: auto;
-    margin-inline-end: calc(var(--rule-editor-width) + 8px);
+  .rules-layout [data-rules-table-page] {
+    --alert-manager-rule-table-width: 100%;
   }
-  .rules-layout.has-editor [data-rules-table-page] .rules-list-panel {
-    margin-inline-end: 0;
+  .rules-layout.has-editor [data-rules-table-page] {
+    --alert-manager-rule-table-width: calc(100% - var(--rule-editor-width) - 8px);
   }
   ha-card.rule-editor-drawer {
     position: fixed;
@@ -46,6 +45,7 @@ export const ruleEditorStyles = `
     border-color: var(--primary-color, #03a9f4);
     border-width: 2px;
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
+    border-radius: var(--ha-card-border-radius);
   }
   .rule-editor-drawer ha-dialog-header {
     flex: none;
@@ -61,6 +61,8 @@ export const ruleEditorStyles = `
     margin: 0;
     padding: 0;
     background: var(--primary-background-color, #fafafa);
+    border-end-start-radius: var(--ha-card-border-radius);
+    border-end-end-radius: var(--ha-card-border-radius);
   }
   .rule-editor-section {
     padding: 20px;
