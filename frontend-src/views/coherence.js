@@ -209,15 +209,15 @@ export function nativeCoherenceActionCell(row) {
     return button;
 }
 
-export function renderCoherence() {
-    const result = this._coherence;
+export function renderCoherence(context) {
+    const { result, loading, pageMessages, statsMarkup, t } = context;
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
-          <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
-          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+          <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
         </div>
-        <div class="empty compact">${esc(this._t("coherence.not_scanned"))}</div>
+        <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
       </ha-card>`;
     }
     return `<hass-tabs-subpage-data-table
@@ -227,16 +227,26 @@ export function renderCoherence() {
       main-page
     >
       <div slot="top-header" class="table-page-top">
-        ${this._renderPageMessages()}
+        ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
           <div class="coherence-header">
-            <div><h2>${esc(this._t("coherence.title"))}</h2><p>${esc(this._t("coherence.description"))}</p></div>
-            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${this._coherenceLoading ? "disabled" : ""}><span data-action-label>${esc(this._t(this._coherenceLoading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+            <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
           </div>
-          <div class="coherence-stats" data-coherence-stats>${this._coherenceStatsMarkup()}</div>
+          <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
     </hass-tabs-subpage-data-table>`;
+}
+
+export function renderCoherencePanel() {
+    return renderCoherence({
+      result: this._coherence,
+      loading: this._coherenceLoading,
+      pageMessages: this._coherence ? this._renderPageMessages() : "",
+      statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 export async function handleCoherenceAction(action) {

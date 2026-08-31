@@ -49,6 +49,11 @@ lint scripts, and avoid top-level identifier collisions in the standalone bundle
   components call the panel's API helpers; they do not create a second transport path.
 - Keep tab-specific behavior in its view. Keep genuinely shared table/editor behavior
   in components and pure reusable transformations in utils.
+- Keep exported `render*` functions pure: pass an explicit context, return markup, and
+  do not mutate panel or draft state. A narrow `render*Panel` adapter may assemble the
+  context from `AlertManagerPanel` for runtime compatibility.
+- Hydration functions receive their DOM root and an explicit behavior context. Make
+  repeated hydration idempotent so it updates callbacks instead of stacking listeners.
 - Prefer targeted DOM/data-table updates when data, busy state, notices, or countdowns
   change. Reserve a full panel render for structural changes such as navigation,
   loading, or opening/closing an editor.

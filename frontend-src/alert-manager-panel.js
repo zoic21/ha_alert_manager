@@ -16,8 +16,7 @@ import {
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
   duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
-  refreshRuleEditor, renderRuleEditor, renderRuleValues, renderRuleVisualEditor,
-  renderRuleYamlEditor, resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
+  refreshRuleEditor, renderRuleEditorPanel, resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
   ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth,
   startRuleEditorResize, stopRuleEditorResize, switchRuleEditor,
 } from "./components/rule-editor.js";
@@ -35,30 +34,30 @@ import {
 import { fetchTranslations, reloadTranslations, t, errorText } from "./utils/translations.js";
 import {
   applyOptimisticAcknowledgement, bulkAlertAction, handleOverviewAction,
-  refreshOverviewData, renderOverview,
+  refreshOverviewData, renderOverviewPanel,
 } from "./views/overview.js";
 import {
-  handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistory,
+  handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel,
 } from "./views/history.js";
 import {
   coherenceStatsMarkup, coherenceTableRows, handleCoherenceAction, hydrateCoherenceTable,
   nativeCoherenceActionCell, nativeCoherenceEntityCell, openCoherenceLink,
-  refreshCoherenceData, renderCoherence,
+  refreshCoherenceData, renderCoherencePanel,
 } from "./views/coherence.js";
 import {
   deleteRule, handleRulesAction, handleSelected, hydrateRuleTable, nativeRuleEntitiesCell,
-  nativeRuleNameCell, nativeRuleToggleCell, refreshRulesData, renderRules, replaceRule,
+  nativeRuleNameCell, nativeRuleToggleCell, refreshRulesData, renderRulesPanel, replaceRule,
   ruleTableRows, toggleRule,
 } from "./views/rules.js";
 import {
   captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction,
-  hydrateAutomaticControls, renderAutomatic, renderPackField, resetAutomaticDraft,
+  hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft,
   saveAutomatic,
 } from "./views/automatic.js";
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft,
   exportConfiguration, handleImportSelection, handleSettingsAction, hydrateSettingsControls,
-  removeIgnoredReference, renderSettings, resetSettingsDraft, saveSettings,
+  removeIgnoredReference, renderSettingsPanel, resetSettingsDraft, saveSettings,
   setEntityDelayEntity,
 } from "./views/settings.js";
 
@@ -79,11 +78,11 @@ class AlertManagerPanel extends HTMLElement {
   _refreshAlerts = refreshAlerts;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
-  _renderOverview = renderOverview;
+  _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _refreshHistoryData = refreshHistoryData;
-  _renderHistory = renderHistory;
+  _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
   _historyConditionText = historyConditionText;
   _coherenceStatsMarkup = coherenceStatsMarkup;
@@ -93,25 +92,24 @@ class AlertManagerPanel extends HTMLElement {
   _nativeCoherenceEntityCell = nativeCoherenceEntityCell;
   _openCoherenceLink = openCoherenceLink;
   _nativeCoherenceActionCell = nativeCoherenceActionCell;
-  _renderCoherence = renderCoherence;
+  _renderCoherence = renderCoherencePanel;
   _refreshRulesData = refreshRulesData;
   _hydrateRuleTable = hydrateRuleTable;
   _nativeRuleEntitiesCell = nativeRuleEntitiesCell;
   _nativeRuleToggleCell = nativeRuleToggleCell;
-  _renderRules = renderRules;
+  _renderRules = renderRulesPanel;
   _ruleTableRows = ruleTableRows;
   _nativeRuleNameCell = nativeRuleNameCell;
   _handleSelected = handleSelected;
   _deleteRule = deleteRule;
   _toggleRule = toggleRule;
   _replaceRule = replaceRule;
-  _renderAutomatic = renderAutomatic;
-  _renderPackField = renderPackField;
+  _renderAutomatic = renderAutomaticPanel;
   _saveAutomatic = saveAutomatic;
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
-  _renderSettings = renderSettings;
+  _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
   _exportConfiguration = exportConfiguration;
@@ -165,10 +163,7 @@ class AlertManagerPanel extends HTMLElement {
   _clearRuleEditorError = clearRuleEditorError;
   _ruleAttributeOptions = ruleAttributeOptions;
   _refreshRuleAttributeSelector = refreshRuleAttributeSelector;
-  _renderRuleEditor = renderRuleEditor;
-  _renderRuleVisualEditor = renderRuleVisualEditor;
-  _renderRuleYamlEditor = renderRuleYamlEditor;
-  _renderRuleValues = renderRuleValues;
+  _renderRuleEditor = renderRuleEditorPanel;
   _ruleValueList = ruleValueList;
   _ruleSummary = ruleSummary;
   _duplicateRuleLabel = duplicateRuleLabel;

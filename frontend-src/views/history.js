@@ -14,17 +14,29 @@ export function refreshHistoryData() {
     this._refreshUiState();
 }
 
-export function renderHistory() {
-    const limit = Number(this._historyConfig?.retention_limit ?? this._history?.retention_limit ?? 100);
+export function renderHistory(context) {
+    const { limit, pageMessages, rows, renderAlertTable, t } = context;
     if (limit === 0) {
-      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(this._t("history.disabled_title"))}</h2><p>${esc(this._t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(this._t("history.open_settings"))}</ha-button></div></ha-card>`;
+      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
-    const events = Array.isArray(this._history?.events) ? this._history.events : [];
-    return this._renderAlertTable(
+    return renderAlertTable(
       "history",
-      this._tableRows("history", events),
-      this._renderPageMessages(),
+      rows,
+      pageMessages,
     );
+}
+
+export function renderHistoryPanel() {
+    const limit = Number(this._historyConfig?.retention_limit
+      ?? this._history?.retention_limit ?? 100);
+    const events = Array.isArray(this._history?.events) ? this._history.events : [];
+    return renderHistory({
+      limit,
+      pageMessages: this._renderPageMessages(),
+      rows: this._tableRows("history", events),
+      renderAlertTable: (...args) => this._renderAlertTable(...args),
+      t: (key, replacements) => this._t(key, replacements),
+    });
 }
 
 export function historyRuleName(event) {
