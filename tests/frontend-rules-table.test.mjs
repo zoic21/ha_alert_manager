@@ -182,6 +182,30 @@ test("rules table keeps name and activation visible and wires native controls", 
   assert.equal(panel._editingRule.id, "inactive-rule");
 });
 
+test("rules content width is installed after the native table finishes rendering", async () => {
+  const panel = new Panel();
+  const table = tablePage();
+  let finishNativeRender;
+  table.updateComplete = new Promise((resolve) => { finishNativeRender = resolve; });
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === "[data-rules-table-page]" ? table : null
+  );
+  panel._hass = {};
+  panel._config = { rules: rules() };
+
+  panel._hydrateRuleTable();
+
+  assert.equal(table.shadowRoot.styles.length, 0);
+  finishNativeRender();
+  await table.updateComplete;
+  await Promise.resolve();
+  assert.equal(table.shadowRoot.styles.length, 1);
+  assert.match(
+    table.shadowRoot.styles[0].textContent,
+    /width: var\(--alert-manager-rule-table-width, 100%\)/,
+  );
+});
+
 test("active filter and mobile secondary details follow the saved column choices", () => {
   const panel = new Panel();
   panel._hass = {};

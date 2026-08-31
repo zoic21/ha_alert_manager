@@ -2630,7 +2630,8 @@ async function handleCoherenceAction(action) {
 // Source: frontend-src/views/rules.js
 const RULE_TABLE_EDITOR_LAYOUT_STYLE_ID = "alert-manager-rule-table-editor-layout";
 
-function installRuleTableEditorLayout(tablePage) {
+async function installRuleTableEditorLayout(tablePage) {
+    if (tablePage.updateComplete) await tablePage.updateComplete;
     const root = tablePage.shadowRoot;
     if (!root || root.querySelector?.(`#${RULE_TABLE_EDITOR_LAYOUT_STYLE_ID}`)) return;
     const style = document.createElement("style");
@@ -2669,7 +2670,6 @@ function refreshRulesData() {
 function hydrateRuleTable() {
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
     if (!tablePage || !this._config) return;
-    installRuleTableEditorLayout(tablePage);
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
     const enabledFilters = new Set(this._filterValues(state.filters.enabled));
@@ -2807,6 +2807,7 @@ function hydrateRuleTable() {
         this._render();
       });
     });
+    void installRuleTableEditorLayout(tablePage);
 }
 
 function nativeRuleEntitiesCell(row) {
