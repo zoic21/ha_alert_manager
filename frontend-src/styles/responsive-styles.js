@@ -1,4 +1,16 @@
 export const responsiveStyles = `
+  /* Home Assistant already renders the main panel toolbar around custom panels.
+   * Its native tabs subpage still reserves a second toolbar on narrow screens,
+   * where the tabs themselves move to the bottom. Move that duplicate toolbar
+   * behind the main one so the content and bottom tabs stay inside the viewport. */
+  @media (max-width: 870px), (max-height: 500px) {
+    #panel-shell {
+      margin-block-start: calc(
+        0px - var(--header-height, 56px) - var(--safe-area-inset-top, 0px)
+      );
+    }
+  }
+
   /* Medium screens */
   @media (max-width: 1000px) {
     .summary {

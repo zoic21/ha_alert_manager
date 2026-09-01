@@ -72,6 +72,16 @@ test("overview keeps summary spacing inside the gray header at every width", () 
   );
 });
 
+test("narrow panel shell cancels the duplicated Home Assistant toolbar offset", () => {
+  const panel = new AlertManagerPanel();
+  const styles = compactCss(panel._styles());
+
+  assert.match(
+    styles,
+    /@media\(max-width:870px\),\(max-height:500px\)\{#panel-shell\{margin-block-start:calc\(\s*0px - var\(--header-height,56px\) - var\(--safe-area-inset-top,0px\)\s*\)\}\}/,
+  );
+});
+
 test("narrow native table action rows stay gray on every table page", () => {
   const panel = new AlertManagerPanel();
   const selectors = [
