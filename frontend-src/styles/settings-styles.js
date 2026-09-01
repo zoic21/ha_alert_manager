@@ -82,23 +82,6 @@ export const settingsStyles = `
     justify-content: flex-end;
     margin-top: 4px;
   }
-  .recovery-panel {
-    display: grid;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .recovery-alert strong, .recovery-alert span {
-    display: block;
-  }
-  .recovery-alert strong {
-    margin-bottom: 4px;
-  }
-  .recovery-diagnostic-action {
-    justify-content: flex-start;
-  }
-  .recovery-backups-card {
-    padding: 16px 20px;
-  }
   .config-backups {
     display: grid;
     gap: 12px;

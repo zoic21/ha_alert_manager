@@ -188,6 +188,8 @@ class _StateMixin:
     async def _async_save_state(self) -> None:
         """Persist runtime first, then archive without coupling business success."""
         self._cancel_live_message_flush()
+        if self.recovery_active:
+            return
         await self.storage.async_save(self.config, self.records)
         self._immediate_state_save_required = False
         self._variation_baselines_dirty = False

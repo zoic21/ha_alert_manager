@@ -1894,21 +1894,6 @@ function renderConfigBackups(context) {
   </section>`;
 }
 
-function renderRecoveryBanner(context) {
-  const {
-    active, failedConfigAvailable, backupsMarkup, busy, t,
-  } = context;
-  if (!active) return "";
-  return `<section class="recovery-panel" data-config-recovery>
-    <ha-alert class="page-alert recovery-alert" alert-type="error">
-      <strong>${esc(t("recovery.banner_title"))}</strong>
-      <span>${esc(t("recovery.banner_message"))}</span>
-    </ha-alert>
-    ${failedConfigAvailable ? `<div class="actions recovery-diagnostic-action"><ha-button type="button" appearance="plain" data-action="download-failed-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("recovery.download_failed"))}</ha-button></div>` : ""}
-    <ha-card outlined class="panel recovery-backups-card">${backupsMarkup}</ha-card>
-  </section>`;
-}
-
 function renderBackupRestoreDialog(context) {
   const { backup, busy, date, t } = context;
   if (!backup) return "";
@@ -1992,14 +1977,6 @@ async function handleConfigBackupAction(action, button) {
         backup_id: button.dataset.backupId,
       },
       this._t("success.backup_downloaded"),
-    );
-    downloadTextPayload(payload);
-    return true;
-  }
-  if (action === "download-failed-config") {
-    const payload = await this._call(
-      { type: "alert_manager/config/recovery/failed/download" },
-      this._t("success.failed_config_downloaded"),
     );
     downloadTextPayload(payload);
     return true;
@@ -2694,11 +2671,11 @@ function refreshOverviewData() {
 
 function renderOverview(context) {
     const {
-      alerts, selectedStatuses, pageMessages, recoveryPanel = "", rows,
+      alerts, selectedStatuses, pageMessages, rows,
       renderAlertTable, t,
     } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${pageMessages}${recoveryPanel}
+    const summary = `${pageMessages}
       <section class="summary">
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
@@ -2713,18 +2690,6 @@ function renderOverviewPanel() {
       alerts: this._alerts,
       selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
       pageMessages: this._renderPageMessages(),
-      recoveryPanel: this._renderRecoveryBanner({
-        active: this._configRecovery?.active === true,
-        failedConfigAvailable: this._configRecovery?.failed_config_available === true,
-        backupsMarkup: this._renderConfigBackups({
-          backups: this._configRecovery?.backups ?? [],
-          busy: this._busy,
-          date: (value) => this._date(value),
-          t: (key, replacements) => this._t(key, replacements),
-        }),
-        busy: this._busy,
-        t: (key, replacements) => this._t(key, replacements),
-      }),
       rows: this._tableRows("overview"),
       renderAlertTable: (...args) => this._renderAlertTable(...args),
       t: (key, replacements) => this._t(key, replacements),
@@ -4633,23 +4598,6 @@ const settingsStyles = `
     justify-content: flex-end;
     margin-top: 4px;
   }
-  .recovery-panel {
-    display: grid;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .recovery-alert strong, .recovery-alert span {
-    display: block;
-  }
-  .recovery-alert strong {
-    margin-bottom: 4px;
-  }
-  .recovery-diagnostic-action {
-    justify-content: flex-start;
-  }
-  .recovery-backups-card {
-    padding: 16px 20px;
-  }
   .config-backups {
     display: grid;
     gap: 12px;
@@ -5268,7 +5216,6 @@ class AlertManagerPanel extends HTMLElement {
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
-  _renderRecoveryBanner = renderRecoveryBanner;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -5681,7 +5628,6 @@ class AlertManagerPanel extends HTMLElement {
       "export-config",
       "choose-config-import",
       "download-config-backup",
-      "download-failed-config",
       "restore-config-backup",
       "confirm-config-backup-restore",
     ]);

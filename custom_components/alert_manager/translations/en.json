@@ -162,14 +162,11 @@
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",
       "backups_title": "Automatic backups",
-      "banner_message": "The current configuration could not be loaded. No backup was restored automatically. Choose a previous backup below or import a configuration manually.",
-      "banner_title": "Configuration recovery required",
       "confirm_message": "The current configuration, runtime alerts and history will be replaced by the backup from {date}.\n\nRules: {rules}\n\nContinue?",
       "confirm_title": "Restore configuration backup?",
       "download": "Download",
-      "download_failed": "Download rejected configuration",
       "no_backups": "No valid automatic backup is available.",
-      "notification_message": "Alert Manager could not load its configuration. No backup was restored automatically. Open Alert Manager to inspect the problem and choose a backup if needed.",
+      "notification_message": "Alert Manager could not load its configuration and started with an empty in-memory configuration. No backup was restored automatically. Open Alert Manager settings, then Export / Import, to choose a backup.",
       "notification_title": "Alert Manager configuration problem",
       "restore": "Restore",
       "rule_count": "{count} rules"
@@ -368,7 +365,6 @@
       "backup_restored": "Configuration backup restored",
       "config_exported": "Configuration exported",
       "config_imported": "Configuration imported",
-      "failed_config_downloaded": "Rejected configuration downloaded",
       "history_cleared": "History cleared",
       "rule_created": "Rule created",
       "rule_deleted": "Rule deleted",

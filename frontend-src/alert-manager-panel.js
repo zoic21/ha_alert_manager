@@ -16,7 +16,7 @@ import {
 } from "./components/alert-table.js";
 import {
   applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups,
-  renderBackupRestoreDialogPanel, renderConfigBackups, renderRecoveryBanner,
+  renderBackupRestoreDialogPanel, renderConfigBackups,
 } from "./components/config-backups.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
@@ -86,7 +86,6 @@ class AlertManagerPanel extends HTMLElement {
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
-  _renderRecoveryBanner = renderRecoveryBanner;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -499,7 +498,6 @@ class AlertManagerPanel extends HTMLElement {
       "export-config",
       "choose-config-import",
       "download-config-backup",
-      "download-failed-config",
       "restore-config-backup",
       "confirm-config-backup-restore",
     ]);

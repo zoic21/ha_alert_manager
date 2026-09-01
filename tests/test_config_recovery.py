@@ -122,9 +122,12 @@ def test_invalid_startup_preserves_main_store_and_enters_manual_recovery(hass, e
     run(manager.async_setup())
 
     assert manager.recovery_active is True
-    assert manager.monitoring_enabled is False
+    assert manager.monitoring_enabled is True
     assert hass.stores["alert_manager"] == faulty_store
     assert hass.notifications[RECOVERY_NOTIFICATION_ID]
+    assert (
+        "configuration vide" in hass.notifications[RECOVERY_NOTIFICATION_ID]["message"]
+    )
     status = run(manager.async_get_recovery_status())
     assert status["active"] is True
     assert status["failed_config_available"] is True
@@ -134,6 +137,11 @@ def test_invalid_startup_preserves_main_store_and_enters_manual_recovery(hass, e
         in manager.get_failed_config_download()["content"]
     )
     assert manager.get_config()["rules"] == []
+    assert all(
+        not pack_config["enabled"]
+        for pack_config in manager.get_config()["automatic"].values()
+    )
+    assert manager.public_snapshot()["tracked_count"] == 0
     assert run(manager.async_get_recovery_status())["backups"] == [backup]
 
 
@@ -190,7 +198,7 @@ def test_home_assistant_silent_corrupt_store_fallback_is_not_treated_as_first_st
 def test_explicit_backup_restore_uses_import_and_clears_recovery_notification(
     hass, entry
 ):
-    """Recovery stays inert until the administrator chooses one valid backup."""
+    """The empty fallback persists only until an administrator restores a backup."""
     backup_storage = AlertManagerConfigBackupStorage(hass)
     backup_yaml = dump_config_yaml(validate_config({}))
     backup = run(

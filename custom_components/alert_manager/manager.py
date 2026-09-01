@@ -20,6 +20,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
+from .const import CATEGORIES
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
@@ -35,6 +36,13 @@ from .storage import (
 from .validation import validate_config
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _empty_runtime_config() -> dict[str, Any]:
+    """Return a valid configuration that cannot create alerts."""
+    return validate_config(
+        {"automatic": {category: {"enabled": False} for category in CATEGORIES}}
+    )
 
 
 class AlertManager(
@@ -106,7 +114,7 @@ class AlertManager(
     @property
     def monitoring_enabled(self) -> bool:
         """Return whether the main category currently evaluates anomalies."""
-        return not self.recovery_active and self.config.get("monitoring_enabled", True)
+        return self.config.get("monitoring_enabled", True)
 
     @property
     def rules(self) -> list[Rule]:
@@ -138,7 +146,7 @@ class AlertManager(
                 faulty_config=faulty_config,
                 failed_content=failed_content,
             )
-            self.config = validate_config({})
+            self.config = _empty_runtime_config()
             records = {}
             migrated = False
             self.storage.variation_baselines = {}
@@ -195,14 +203,12 @@ class AlertManager(
             )
         )
 
-        if self.recovery_active:
-            self._publish_if_changed(force=True)
-        elif self.hass.is_running:
+        if self.hass.is_running:
             changed = await self.async_evaluate_all(restoring=True, save=False)
-            if migrated or changed:
+            if not self.recovery_active and (migrated or changed):
                 await self._async_save_state()
         else:
-            if migrated:
+            if migrated and not self.recovery_active:
                 await self._async_save_state()
             self._unsubscribers.append(
                 self.hass.bus.async_listen_once(
@@ -217,8 +223,7 @@ class AlertManager(
                 _LOGGER.exception("Unable to persist migrated alert history")
         await self._async_sync_recovery_notification()
         await self._async_sync_monitoring_notification()
-        if not self.recovery_active:
-            self._refresh_coherence_schedule()
+        self._refresh_coherence_schedule()
         await self._async_initialize_config_backups()
 
     def _refresh_coherence_schedule(self) -> None:

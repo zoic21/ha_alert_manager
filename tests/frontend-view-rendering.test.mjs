@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
-  renderBackupRestoreDialog, renderConfigBackups, renderRecoveryBanner,
+  renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
 import { renderCoherence } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
@@ -136,7 +136,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
 });
 
-test("recovery banner and settings reuse one automatic backup list", () => {
+test("automatic backups stay in settings without a recovery banner", () => {
   const backups = [
     { id: "one", created_at: "2026-08-30T03:00:00+00:00", rules: 18 },
     { id: "two", created_at: "2026-08-29T03:00:00+00:00", rules: 18 },
@@ -148,11 +148,14 @@ test("recovery banner and settings reuse one automatic backup list", () => {
     date: (value) => value,
     t,
   });
-  const recovery = renderRecoveryBanner({
-    active: true,
-    failedConfigAvailable: true,
-    backupsMarkup,
-    busy: false,
+  const overview = renderOverview({
+    alerts: {
+      active_count: 0, pending_count: 0, acknowledge_count: 0, tracked_count: 0,
+    },
+    selectedStatuses: [],
+    pageMessages: "",
+    rows: [],
+    renderAlertTable: (_kind, _rows, summary) => summary,
     t,
   });
   const settings = renderSettings({
@@ -174,9 +177,8 @@ test("recovery banner and settings reuse one automatic backup list", () => {
   assert.equal((backupsMarkup.match(/data-backup-id=/g) ?? []).length, 9);
   assert.match(backupsMarkup, /download-config-backup/);
   assert.match(backupsMarkup, /restore-config-backup/);
-  assert.ok(recovery.includes(backupsMarkup));
   assert.ok(settings.includes(backupsMarkup));
-  assert.match(recovery, /download-failed-config/);
+  assert.doesNotMatch(overview, /data-config-recovery|download-failed-config/);
 });
 
 test("backup restoration uses a native confirmation dialog", () => {

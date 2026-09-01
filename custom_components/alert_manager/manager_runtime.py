@@ -49,8 +49,6 @@ class _RuntimeMixin:
     @callback
     def _home_assistant_started(self, _event: Event) -> None:
         """Evaluate only after all startup states have had a chance to load."""
-        if self.recovery_active:
-            return
         self.entry.async_create_task(
             self.hass,
             self.async_evaluate_all(restoring=True),
@@ -221,7 +219,7 @@ class _RuntimeMixin:
     @callback
     def _registry_changed(self, event: Event) -> None:
         """Coalesce registry changes and preserve references across entity renames."""
-        if self._unloading or self.recovery_active:
+        if self._unloading:
             return
         old_entity_id = event.data.get("old_entity_id")
         new_entity_id = event.data.get("entity_id")
@@ -366,8 +364,6 @@ class _RuntimeMixin:
         self, _change: ConfigEntryChange, changed_entry: ConfigEntry
     ) -> None:
         """Track added, removed and updated prerequisite integration entries."""
-        if self.recovery_active:
-            return
         if changed_entry.domain not in self._pack_prerequisite_domains():
             return
         self._refresh_pack_entry_listeners()
@@ -381,7 +377,7 @@ class _RuntimeMixin:
     @callback
     def _schedule_pack_availability_refresh(self) -> None:
         """Coalesce repeated config-entry state transitions."""
-        if self._unloading or self.recovery_active:
+        if self._unloading:
             return
         self._pack_refresh_dirty = True
         if self._pack_refresh_scheduled:

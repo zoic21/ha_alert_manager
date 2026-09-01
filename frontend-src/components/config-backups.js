@@ -16,21 +16,6 @@ export function renderConfigBackups(context) {
   </section>`;
 }
 
-export function renderRecoveryBanner(context) {
-  const {
-    active, failedConfigAvailable, backupsMarkup, busy, t,
-  } = context;
-  if (!active) return "";
-  return `<section class="recovery-panel" data-config-recovery>
-    <ha-alert class="page-alert recovery-alert" alert-type="error">
-      <strong>${esc(t("recovery.banner_title"))}</strong>
-      <span>${esc(t("recovery.banner_message"))}</span>
-    </ha-alert>
-    ${failedConfigAvailable ? `<div class="actions recovery-diagnostic-action"><ha-button type="button" appearance="plain" data-action="download-failed-config" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("recovery.download_failed"))}</ha-button></div>` : ""}
-    <ha-card outlined class="panel recovery-backups-card">${backupsMarkup}</ha-card>
-  </section>`;
-}
-
 export function renderBackupRestoreDialog(context) {
   const { backup, busy, date, t } = context;
   if (!backup) return "";
@@ -114,14 +99,6 @@ export async function handleConfigBackupAction(action, button) {
         backup_id: button.dataset.backupId,
       },
       this._t("success.backup_downloaded"),
-    );
-    downloadTextPayload(payload);
-    return true;
-  }
-  if (action === "download-failed-config") {
-    const payload = await this._call(
-      { type: "alert_manager/config/recovery/failed/download" },
-      this._t("success.failed_config_downloaded"),
     );
     downloadTextPayload(payload);
     return true;

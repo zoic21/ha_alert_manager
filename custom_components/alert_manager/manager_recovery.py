@@ -228,8 +228,9 @@ class _RecoveryMixin:
         )
         message = resources.get(
             f"{prefix}.notification_message",
-            "Alert Manager could not load its configuration. No backup was "
-            "restored automatically. Open Alert Manager to choose a backup.",
+            "Alert Manager could not load its configuration and started with an "
+            "empty in-memory configuration. No backup was restored automatically. "
+            "Open Alert Manager settings, then Export / Import, to choose a backup.",
         )
         async_create_persistent_notification(
             self.hass,
@@ -239,7 +240,7 @@ class _RecoveryMixin:
         )
 
     async def _async_resolve_config_recovery(self) -> None:
-        """Resume normal scheduling and frontend state after a valid import."""
+        """Resume normal persistence and scheduling after a valid import."""
         async_dismiss_persistent_notification(self.hass, RECOVERY_NOTIFICATION_ID)
         async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         self._schedule_config_backup(delay_seconds=1)
