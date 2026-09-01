@@ -614,7 +614,6 @@ class _RuntimeMixin:
             replace(
                 record.details,
                 message=details.message,
-                condition=details.condition,
             )
             == details
         )
@@ -770,20 +769,17 @@ class _RuntimeMixin:
                     continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             rendered_message = self._render_rule_message(rule, state, current)
-            condition = rendered_message or self._rule_condition(rule, state)
-            condition_key = None
-            condition_params = None
-            if rendered_message is None:
-                condition_key = (
-                    "rule.jinja"
-                    if rule.source == "jinja"
-                    else "rule.unchanged"
-                    if rule.source == "unchanged"
-                    else "rule.selected_unchanged"
-                    if rule.operator == "unchanged"
-                    else "rule.generated"
-                )
-                condition_params = self._rule_condition_params(rule, state)
+            condition = self._rule_condition(rule, state)
+            condition_key = (
+                "rule.jinja"
+                if rule.source == "jinja"
+                else "rule.unchanged"
+                if rule.source == "unchanged"
+                else "rule.selected_unchanged"
+                if rule.operator == "unchanged"
+                else "rule.generated"
+            )
+            condition_params = self._rule_condition_params(rule, state)
             result[alert_id] = (
                 self._details(
                     state,

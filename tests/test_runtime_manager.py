@@ -118,7 +118,8 @@ def test_explicit_message_edit_refreshes_active_alert_once(hass, entry):
         record = manager.records[alert_id]
         assert record.status is AlertStatus.ACTIVE
         assert record.details.message == "Status off"
-        assert record.details.condition == "Status off"
+        assert record.details.condition != record.details.message
+        assert record.details.condition_key == "rule.generated"
         assert "binary_sensor.cloudflared_running" not in manager._template_dependents
 
         hass.states.set("binary_sensor.cloudflared_running", "on")

@@ -16,6 +16,8 @@ from .const import (
     DEFAULT_CONFIG,
     MAX_DELAY,
     MAX_HISTORY_LIMIT,
+    MAX_RULE_ENTITY_IDS,
+    MAX_RULES,
     MIN_DELAY,
     MIN_HISTORY_LIMIT,
 )
@@ -195,6 +197,7 @@ def validate_config(config: Any) -> dict[str, Any]:
     rules = config.get("rules", [])
     if not isinstance(rules, list):
         raise ValueError("rules must be a list")
+    validate_rule_count(len(rules))
     seen: set[str] = set()
     normalized_rules: list[dict[str, Any]] = []
     for raw_rule in rules:
@@ -292,6 +295,12 @@ def validate_rule_update_fields(data: Any) -> None:
     _reject_unknown_rule_fields(data, allow_id=True)
 
 
+def validate_rule_count(count: int) -> None:
+    """Bound the complete custom-rule collection."""
+    if count > MAX_RULES:
+        raise ValueError(f"rules must contain at most {MAX_RULES} items")
+
+
 def _reject_unknown_rule_fields(
     data: dict[str, Any], *, allow_id: bool = False
 ) -> None:
@@ -382,6 +391,10 @@ def validate_rule_entity_ids(value: Any) -> list[str]:
     """Validate rule sources without silently accepting duplicates."""
     if not isinstance(value, list) or not value:
         raise ValueError("entity_ids must be a non-empty list")
+    if len(value) > MAX_RULE_ENTITY_IDS:
+        raise ValueError(
+            f"Rule entity_ids must contain at most {MAX_RULE_ENTITY_IDS} items"
+        )
     result = [validate_entity_id(item) for item in value]
     if any(
         entity_id in ALERT_MANAGER_ENTITY_IDS

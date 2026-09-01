@@ -18,10 +18,11 @@ from custom_components.alert_manager.const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_DEVICE_ALERT_STARTED,
+    MAX_RULES,
     SIGNAL_ALERTS_UPDATED,
 )
 from custom_components.alert_manager.manager import AlertManager
-from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.models import AlertStatus, Rule
 from custom_components.alert_manager.sensor import (
     AlertManagerCoherenceIssueSensor,
     AlertManagerSensor,
@@ -41,6 +42,35 @@ def make_manager(hass, entry):
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     return manager
+
+
+def test_rule_creation_respects_the_configuration_limit(hass, entry):
+    """The dedicated create API cannot bypass the complete-config rule limit."""
+    manager = make_manager(hass, entry)
+    manager.config["rules"] = [
+        Rule(
+            id=f"rule-{index}",
+            name=f"Rule {index}",
+            entity_ids=["sensor.test"],
+            operator="equals",
+            value="on",
+            duration=0,
+        ).as_dict()
+        for index in range(MAX_RULES)
+    ]
+
+    with pytest.raises(ValueError, match=f"at most {MAX_RULES}"):
+        run(
+            manager.async_create_rule(
+                {
+                    "name": "One rule too many",
+                    "entity_ids": ["sensor.test"],
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 0,
+                }
+            )
+        )
 
 
 def assert_record_index(manager):
@@ -930,9 +960,12 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
         )
         alert_id = f"rule:{rule['id']}:sensor.source"
         expected = "sensor.source vaut on et le contexte est warm"
-        assert manager.records[alert_id].status is AlertStatus.PENDING
-        assert manager.records[alert_id].details.message == expected
-        assert manager.records[alert_id].details.condition == expected
+        record = manager.records[alert_id]
+        condition = record.details.condition
+        assert record.status is AlertStatus.PENDING
+        assert record.details.message == expected
+        assert condition != expected
+        assert record.details.condition_key == "rule.generated"
 
         hass.states.set("sensor.context", "hot")
         manager._state_changed(Event({"entity_id": "sensor.context"}))
@@ -941,7 +974,7 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
 
         updated = "sensor.source vaut on et le contexte est hot"
         assert manager.records[alert_id].details.message == updated
-        assert manager.records[alert_id].details.condition == updated
+        assert manager.records[alert_id].details.condition == condition
 
         set_now(start + timedelta(seconds=60))
         await manager.async_evaluate_entity("sensor.source")
@@ -953,7 +986,7 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
         await asyncio.sleep(0)
 
         assert manager.records[alert_id].details.message == updated
-        assert manager.records[alert_id].details.condition == updated
+        assert manager.records[alert_id].details.condition == condition
         assert (
             hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
             == updated
@@ -963,7 +996,7 @@ def test_custom_rule_message_updates_pending_then_freezes_when_active(
         reloaded = AlertManager(hass, entry)
         await reloaded.async_setup()
         assert reloaded.records[alert_id].details.message == updated
-        assert reloaded.records[alert_id].details.condition == updated
+        assert reloaded.records[alert_id].details.condition == condition
 
     run(scenario())
 
@@ -1008,7 +1041,8 @@ def test_custom_rule_can_keep_updating_message_while_active(hass, entry, set_now
         await asyncio.sleep(0)
 
         assert record.details.message == "Context: cold"
-        assert record.details.condition == "Context: cold"
+        assert record.details.condition != record.details.message
+        assert record.details.condition_key == "rule.generated"
         assert hass.store_save_count == saves_before_update
         assert (
             hass.stores["alert_manager"]["alerts"][alert_id]["details"]["message"]
@@ -1115,8 +1149,8 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
     }
 
 
-def test_custom_rule_message_remains_untranslated_user_text(hass, entry):
-    """A custom message remains the compatible condition without a key."""
+def test_custom_rule_message_does_not_replace_condition(hass, entry):
+    """A custom message remains separate from the structured rule condition."""
     hass.states.set("sensor.test", "on")
     manager = make_manager(hass, entry)
     rule = run(
@@ -1132,9 +1166,44 @@ def test_custom_rule_message_remains_untranslated_user_text(hass, entry):
         )
     )
     details = manager.records[f"rule:{rule['id']}:sensor.test"].details
-    assert details.condition == "My custom message"
-    assert details.condition_key is None
-    assert details.condition_params is None
+    assert details.message == "My custom message"
+    assert details.condition != details.message
+    assert details.condition_key == "rule.generated"
+    assert details.condition_params == {
+        "source": "state",
+        "attribute": None,
+        "operator": "equals",
+        "expected": "on",
+        "unit": None,
+        "duration": 0,
+    }
+
+
+def test_editing_active_rule_message_preserves_condition(hass, entry):
+    """Explicit message edits cannot overwrite an active alert condition."""
+    hass.states.set("sensor.test", "on")
+    manager = make_manager(hass, entry)
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "User rule",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "message": "Old message",
+            }
+        )
+    )
+    alert_id = f"rule:{rule['id']}:sensor.test"
+    condition = manager.records[alert_id].details.condition
+
+    run(manager.async_update_rule(rule["id"], {"message": "New message"}))
+
+    details = manager.records[alert_id].details
+    assert details.message == "New message"
+    assert details.condition == condition
+    assert details.condition_key == "rule.generated"
 
 
 def test_delay_priority(hass, entry):

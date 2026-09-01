@@ -469,11 +469,9 @@ class _TemplatesMixin:
             current,
             force=True,
         )
-        condition = rendered_message or self._rule_condition(rule, state)
+        condition = self._rule_condition(rule, state)
         condition_key = (
-            None
-            if rendered_message is not None
-            else "rule.jinja"
+            "rule.jinja"
             if rule.source == "jinja"
             else "rule.unchanged"
             if rule.source == "unchanged"
@@ -481,11 +479,7 @@ class _TemplatesMixin:
             if rule.operator == "unchanged"
             else "rule.generated"
         )
-        condition_params = (
-            None
-            if rendered_message is not None
-            else self._rule_condition_params(rule, state)
-        )
+        condition_params = self._rule_condition_params(rule, state)
         changed = (
             record.details.message != rendered_message
             or record.details.condition != condition

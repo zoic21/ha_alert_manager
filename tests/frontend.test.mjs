@@ -964,6 +964,18 @@ test("backend rule validation errors are localized without leaking English", () 
     "Les valeurs de comparaison doivent être uniques.",
   );
   assert.equal(
+    panel._errorText(validationError("Rule entity_ids must contain at most 1000 items")),
+    "Une règle ne peut pas surveiller plus de 1 000 entités.",
+  );
+  assert.equal(
+    panel._errorText(validationError("rules must contain at most 1000 items")),
+    "La configuration ne peut pas contenir plus de 1 000 règles.",
+  );
+  assert.equal(
+    panel._errorText(validationError("Rule condition_template must be non-empty text of at most 65536 characters")),
+    "La condition Jinja ne doit pas dépasser 65 536 caractères.",
+  );
+  assert.equal(
     panel._errorText(validationError("Invalid rule condition_template: parser details")),
     "Le code Jinja de la règle est invalide.",
   );
