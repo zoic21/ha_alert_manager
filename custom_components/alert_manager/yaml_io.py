@@ -229,12 +229,15 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
     automatic = config.get("automatic")
     if not isinstance(automatic, dict):
         raise ValueError("config.automatic must be an object")
-    if set(automatic) != set(CATEGORIES):
-        missing = set(CATEGORIES) - set(automatic)
-        unknown = set(automatic) - set(CATEGORIES)
-        field = sorted(missing or unknown)[0]
+    # Exports created before the automation-error pack remain importable; its
+    # configuration is filled from the current defaults by validate_config().
+    allowed_missing = {"automation_errors"}
+    missing = set(CATEGORIES) - set(automatic)
+    unknown = set(automatic) - set(CATEGORIES)
+    if unknown or missing - allowed_missing:
+        field = sorted(unknown or missing)[0]
         raise ValueError(f"Invalid automatic pack configuration: {field}")
-    for category in CATEGORIES:
+    for category in automatic:
         expected_fields = set(DEFAULT_CONFIG["automatic"][category])
         actual_fields = (
             set(automatic[category]) if isinstance(automatic[category], dict) else set()

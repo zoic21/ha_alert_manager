@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .automation_errors import PACK as AUTOMATION_ERRORS_PACK
 from .base import AutomaticPack, PackConfigField, PackNeutral
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
@@ -13,6 +14,7 @@ PACKS: tuple[AutomaticPack, ...] = (
     CONNECTIVITY_PACK,
     UNIFI_PACK,
     BATTERY_PACK,
+    AUTOMATION_ERRORS_PACK,
 )
 PACKS_BY_ID = {pack.id: pack for pack in PACKS}
 

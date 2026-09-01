@@ -19,6 +19,7 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CATEGORY_AUTOMATION_ERRORS,
     DOMAIN,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
@@ -29,6 +30,7 @@ from .const import (
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID
+from .packs.automation_errors import reset_runtime as reset_automation_error_runtime
 from .storage import sort_history
 from .validation import (
     validate_config,
@@ -191,6 +193,7 @@ class _ApiMixin:
             async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
             self._emit_resume_events(previous_records)
         else:
+            reset_automation_error_runtime(self.hass)
             self._cancel_all_timers()
             self._cancel_all_device_event_timers()
         self._refresh_tracking()
@@ -354,6 +357,14 @@ class _ApiMixin:
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
+        reset_automation_runtime = (
+            not candidate["monitoring_enabled"]
+            or not candidate["automatic"][CATEGORY_AUTOMATION_ERRORS]["enabled"]
+            or any(
+                candidate[key] != self.config[key]
+                for key in ("excluded_entities", "excluded_devices", "excluded_labels")
+            )
+        )
         previous = self._configuration_snapshot()
         try:
             self.config = candidate
@@ -369,6 +380,8 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        if reset_automation_runtime:
+            reset_automation_error_runtime(self.hass)
         if coherence_schedule_changed:
             self._refresh_coherence_schedule()
         self._publish_if_changed()
@@ -389,6 +402,7 @@ class _ApiMixin:
 
         self._cancel_all_timers()
         self._cancel_all_device_event_timers()
+        reset_automation_error_runtime(self.hass)
         try:
             self._recovery_active = False
             self.config = candidate

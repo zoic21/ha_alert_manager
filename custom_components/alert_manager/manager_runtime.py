@@ -19,7 +19,13 @@ from homeassistant.core import Event, State, callback
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
-from .const import ATTRIBUTE_SOURCES, CATEGORY_UNAVAILABLE, DOMAIN, VARIATION_SOURCES
+from .const import (
+    ATTRIBUTE_SOURCES,
+    CATEGORY_AUTOMATION_ERRORS,
+    CATEGORY_UNAVAILABLE,
+    DOMAIN,
+    VARIATION_SOURCES,
+)
 from .models import (
     AlertDetails,
     AlertHistoryEntry,
@@ -36,6 +42,10 @@ from .packs import PACKS, PACKS_BY_ID, PackNeutral
 _LOGGER = logging.getLogger(__name__)
 
 _PACK_CONDITION_FALLBACKS = {
+    "automatic.automation_errors": "Automation execution ended with an error",
+    "automatic.automation_errors_detail": (
+        "Automation execution ended with an error: {error}"
+    ),
     "automatic.battery": "Battery less than or equal to {threshold}%",
     "automatic.connectivity": "Connectivity is off",
     "automatic.unavailable": "State is unavailable",
@@ -91,10 +101,10 @@ class _RuntimeMixin:
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
-        if entity_id in self._rules_by_entity:
-            return True
-        if entity_id in self._record_ids_by_entity:
-            return True
+        direct_source = (
+            entity_id in self._rules_by_entity
+            or entity_id in self._record_ids_by_entity
+        )
         if "old_state" not in event.data or "new_state" not in event.data:
             return self._is_relevant_entity_id(entity_id)
         old_state = event.data.get("old_state")
@@ -109,19 +119,37 @@ class _RuntimeMixin:
             and old_state.state == new_state.state
             and old_state.attributes == new_state.attributes
         ):
-            return False
+            return direct_source
         automatic = self.config.get("automatic", {})
+        pack_relevant = False
+        automatic_eligible: bool | None = None
         for pack in PACKS:
             config = automatic.get(pack.id, {})
             if not config.get("enabled", False):
                 continue
             if not self._pack_is_available(pack.id):
                 continue
+            if (
+                pack.id == CATEGORY_AUTOMATION_ERRORS
+                and new_state is not None
+                and pack.applies(self.hass, new_state)
+            ):
+                automatic_eligible = self._is_base_eligible(
+                    entity_id
+                ) and self._is_automatic_eligible(entity_id)
+                if not automatic_eligible:
+                    continue
             if pack.should_evaluate(self.hass, new_state, config):
-                if not self._is_base_eligible(entity_id):
-                    return False
-                return self._is_automatic_eligible(entity_id)
-        return False
+                pack_relevant = True
+        if direct_source:
+            return True
+        if not pack_relevant:
+            return False
+        if automatic_eligible is None:
+            automatic_eligible = self._is_base_eligible(
+                entity_id
+            ) and self._is_automatic_eligible(entity_id)
+        return automatic_eligible
 
     def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
         """Update automatic tracked membership without evaluating alert candidates."""
@@ -1023,6 +1051,7 @@ class _RuntimeMixin:
             (domain == "binary_sensor" and "connectivity" in pack_ids)
             or (domain == "device_tracker" and "unifi" in pack_ids)
             or (domain == "sensor" and "battery" in pack_ids)
+            or (domain == "automation" and CATEGORY_AUTOMATION_ERRORS in pack_ids)
         )
 
     def _tracked_count(self) -> int:

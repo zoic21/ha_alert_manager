@@ -107,6 +107,7 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "connectivity",
         "unifi",
         "battery",
+        "automation_errors",
     ]
     assert all(pack["translation_key"] == pack["id"] for pack in packs)
     assert all("name" not in pack and "description" not in pack for pack in packs)

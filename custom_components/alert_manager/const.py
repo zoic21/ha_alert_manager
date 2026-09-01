@@ -97,11 +97,13 @@ CATEGORY_UNAVAILABLE: Final = "unavailable"
 CATEGORY_CONNECTIVITY: Final = "connectivity"
 CATEGORY_UNIFI: Final = "unifi"
 CATEGORY_BATTERY: Final = "battery"
+CATEGORY_AUTOMATION_ERRORS: Final = "automation_errors"
 CATEGORIES: Final = (
     CATEGORY_UNAVAILABLE,
     CATEGORY_CONNECTIVITY,
     CATEGORY_UNIFI,
     CATEGORY_BATTERY,
+    CATEGORY_AUTOMATION_ERRORS,
 )
 
 DEFAULT_CONFIG: Final = {
@@ -128,6 +130,10 @@ DEFAULT_CONFIG: Final = {
             "delay": None,
             "threshold": DEFAULT_BATTERY_THRESHOLD,
             "device_thresholds": {},
+        },
+        CATEGORY_AUTOMATION_ERRORS: {
+            "enabled": True,
+            "delay": None,
         },
     },
     "rules": [],

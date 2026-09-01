@@ -43,6 +43,8 @@
     },
     "conditions": {
       "automatic": {
+        "automation_errors": "Automation execution ended with an error",
+        "automation_errors_detail": "Automation execution ended with an error: {error}",
         "battery": "Battery less than or equal to {threshold}%",
         "connectivity": "Connectivity is off",
         "unavailable": "State is unavailable",
@@ -220,6 +222,10 @@
       "unacknowledge": "Remove acknowledgement"
     },
     "packs": {
+      "automation_errors": {
+        "description": "Monitors automations whose execution ends with an error.",
+        "name": "Automation errors"
+      },
       "battery": {
         "description": "Monitors battery sensors at or below their threshold.",
         "name": "Low batteries"

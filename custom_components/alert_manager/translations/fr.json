@@ -43,6 +43,8 @@
     },
     "conditions": {
       "automatic": {
+        "automation_errors": "L’automatisation s’est terminée en erreur",
+        "automation_errors_detail": "L’automatisation s’est terminée en erreur : {error}",
         "battery": "Batterie inférieure ou égale à {threshold} %",
         "connectivity": "Connectivité désactivée",
         "unavailable": "État indisponible",
@@ -220,6 +222,10 @@
       "unacknowledge": "Retirer l’acquittement"
     },
     "packs": {
+      "automation_errors": {
+        "description": "Surveille les automatisations dont une exécution se termine en erreur.",
+        "name": "Automatisations en erreur"
+      },
       "battery": {
         "description": "Surveille les capteurs de batterie inférieurs ou égaux à leur seuil.",
         "name": "Batteries faibles"

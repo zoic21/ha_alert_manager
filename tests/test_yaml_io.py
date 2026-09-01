@@ -322,6 +322,22 @@ def test_pre_dev14_export_without_pending_display_delay_uses_default() -> None:
     assert parse_config_yaml(legacy)["pending_display_delay"] == 10
 
 
+def test_older_export_without_automation_errors_pack_uses_default() -> None:
+    """Exports created before the new pack remain importable."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace(
+        "    automation_errors:\n      enabled: true\n      delay: null\n",
+        "",
+    )
+
+    imported = parse_config_yaml(legacy)
+
+    assert imported["automatic"]["automation_errors"] == {
+        "enabled": True,
+        "delay": None,
+    }
+
+
 def test_dev14_active_display_delay_import_is_migrated() -> None:
     """The short-lived dev14 YAML key keeps its value with corrected semantics."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
@@ -385,7 +401,7 @@ def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, en
     assert imported_rule_id != "stable-multi-rule"
     assert result["summary"] == {
         "rules": 1,
-        "enabled_packs": 4,
+        "enabled_packs": 5,
         "entity_delays": 0,
         "warnings": [],
     }

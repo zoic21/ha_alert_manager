@@ -111,6 +111,26 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-device_thresholds-device-0/);
   assert.match(markup, /value="15"/);
+
+  const automationErrors = renderAutomatic({
+    availablePacks: [{
+      id: "automation_errors",
+      available: true,
+      translation_key: "automation_errors",
+    }],
+    config: {
+      automatic: {
+        automation_errors: { enabled: true, delay: null },
+      },
+    },
+    draft: {},
+    busy: false,
+    renderNumberField: (id) => `<number id="${id}"></number>`,
+    t,
+  });
+  assert.match(automationErrors, /packs\.automation_errors\.name/);
+  assert.match(automationErrors, /auto-automation_errors-enabled[^>]*checked/);
+  assert.match(automationErrors, /auto-automation_errors-delay/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {
