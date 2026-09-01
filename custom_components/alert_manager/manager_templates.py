@@ -659,5 +659,5 @@ class _TemplatesMixin:
             if not self._is_allowed_rule_source(record.details.entity_id)
         ]
         for alert_id in own_ids:
-            self.records.pop(alert_id)
+            self._pop_record(alert_id)
         return bool(own_ids)

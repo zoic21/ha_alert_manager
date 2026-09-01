@@ -108,10 +108,6 @@ export const responsiveStyles = `
       max-width: 44vw;
       overflow-x: auto;
     }
-    ha-dialog.alert-details-dialog {
-      --ha-dialog-width-md: calc(100vw - 24px);
-      --ha-dialog-max-width: calc(100vw - 24px);
-    }
     .alert-details-list {
       width: 100%;
       min-width: 0;

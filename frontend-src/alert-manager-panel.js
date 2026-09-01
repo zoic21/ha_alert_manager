@@ -6,7 +6,7 @@ import {
   compareTableRows, configureDateRangePicker, dateMatches, dateRangeDefaults, dialogEventTarget,
   displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
   handleAlertDetailsSelection, handleAlertTableAction, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
-  nativeAlertLink, nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
+  nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
   nativeRuleCell, nativeSortColumn, nativeStatusCell, nativeTableCell, nativeTableColumns,
   nativeTableData, nativeTimelineCell, navigate, openAlertDetails, openMoreInfo,
   overviewContentScroller, preserveOverviewScrollAfterMoreInfo, refreshAlertTableData,
@@ -167,7 +167,6 @@ class AlertManagerPanel extends HTMLElement {
   _nativeEntityIdCell = nativeEntityIdCell;
   _nativeDeviceCell = nativeDeviceCell;
   _nativeRuleCell = nativeRuleCell;
-  _nativeAlertLink = nativeAlertLink;
   _nativeTimelineCell = nativeTimelineCell;
   _alertDetailsItems = alertDetailsItems;
   _renderAlertDetails = renderAlertDetailsPanel;

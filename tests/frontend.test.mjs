@@ -1099,43 +1099,22 @@ const tablePanel = () => {
   return panel;
 };
 
-test("alert table links keep entity, rule and device navigation separate from row details", () => {
+test("alert table cells leave every click to the row details action", () => {
   const panel = tablePanel();
   panel._config.rules = [{ id: "temperature", name: "Température baie" }];
   const row = panel._tableRows("overview")[0];
-  const calls = [];
-  panel._openMoreInfo = (entityId) => calls.push(["entity", entityId]);
-  panel._navigate = (path) => calls.push(["device", path]);
-  panel._openRuleEditor = (ruleId, options) => calls.push(["rule", ruleId, options]);
-  const event = () => ({
-    prevented: false,
-    stopped: false,
-    preventDefault() { this.prevented = true; },
-    stopPropagation() { this.stopped = true; },
-  });
-
   const entity = panel._nativeEntityCell(row).children[0];
-  const entityEvent = event();
-  entity.listeners.click(entityEvent);
-  assert.equal(entityEvent.prevented, true);
-  assert.equal(entityEvent.stopped, true);
 
-  const entityId = panel._nativeEntityIdCell(row);
-  entityId.listeners.click(event());
-  const device = panel._nativeDeviceCell(row);
-  device.listeners.click(event());
-  const rule = panel._nativeRuleCell(row);
-  rule.listeners.click(event());
-  const narrowDevice = panel._nativeEntityCell(row, true, "overview").children[1].children[0];
-  narrowDevice.listeners.click(event());
+  assert.equal(entity.tagName, "SPAN");
+  assert.equal(entity.listeners, undefined);
+  assert.equal(panel._nativeEntityIdCell(row), "sensor.rack");
+  assert.equal(panel._nativeDeviceCell(row), "Sonde rack");
+  assert.equal(panel._nativeRuleCell(row), "Température baie");
 
-  assert.deepEqual(calls, [
-    ["entity", "sensor.rack"],
-    ["entity", "sensor.rack"],
-    ["device", "/config/devices/device/device-rack"],
-    ["rule", "temperature", { navigate: true }],
-    ["device", "/config/devices/device/device-rack"],
-  ]);
+  const narrowDevice = panel._nativeEntityCell(row, true, "overview")
+    .children[1].children[0];
+  assert.equal(narrowDevice.textContent, "Sonde rack");
+  assert.equal(narrowDevice.listeners, undefined);
 });
 
 test("clicking an alert row opens its detail dialog instead of entity more info", () => {
@@ -1188,8 +1167,10 @@ test("alert details header uses the entity name and reverses its acknowledgement
   const activeRow = panel._tableRows("overview").find((row) => row.status === "active");
   panel._openAlertDetails("overview", activeRow);
 
+  assert.equal(panel._alertDetailsDialog.tagName, "HA-ADAPTIVE-DIALOG");
   assert.equal(panel._alertDetailsDialog.headerTitle, "Température rack");
   assert.equal(panel._alertDetailsDialog.width, "medium");
+  assert.equal(panel._alertDetailsDialog.flexContent, true);
 
   const acknowledgedRow = panel._tableRows("overview")
     .find((row) => row.status === "acknowledged");
@@ -1233,6 +1214,7 @@ test("alert details use compact rows without forcing internal dialog width", () 
   assert.doesNotMatch(styles, /min-width:min\(620px/);
   assert.doesNotMatch(styles, /mdi:chevron-right/);
   assert.doesNotMatch(styles, /\.alert-details-item\{[^}]*background:/);
+  assert.match(styles, /ha-adaptive-dialog\.alert-details-dialog\{[^}]*--ha-bottom-sheet-max-height:/);
 });
 
 test("more info opens only after the alert details dialog is fully closed", async () => {
