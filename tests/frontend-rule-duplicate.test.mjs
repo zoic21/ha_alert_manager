@@ -78,7 +78,7 @@ test("narrow panel shell cancels the duplicated Home Assistant toolbar offset", 
 
   assert.match(
     styles,
-    /@media\(max-width:870px\),\(max-height:500px\)\{#panel-shell\{margin-block-start:calc\(\s*0px - var\(--header-height,56px\) - var\(--safe-area-inset-top,0px\)\s*\)\}\}/,
+    /@media\(max-width:870px\),\(max-height:500px\)\{#panel-shell\{margin-block-start:calc\(\s*0px - var\(--header-height,56px\)\s*\)\}\}/,
   );
 });
 

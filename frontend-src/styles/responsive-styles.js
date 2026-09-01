@@ -6,7 +6,7 @@ export const responsiveStyles = `
   @media (max-width: 870px), (max-height: 500px) {
     #panel-shell {
       margin-block-start: calc(
-        0px - var(--header-height, 56px) - var(--safe-area-inset-top, 0px)
+        0px - var(--header-height, 56px)
       );
     }
   }
