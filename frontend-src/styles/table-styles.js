@@ -109,9 +109,11 @@ export const tableStyles = `
     outline: 2px solid var(--primary-color, #03a9f4);
     outline-offset: 2px;
   }
-  ha-dialog.alert-details-dialog {
+  ha-adaptive-dialog.alert-details-dialog {
     --ha-dialog-width-md: 580px;
     --ha-dialog-max-width: calc(100vw - 24px);
+    --ha-bottom-sheet-height: calc(100dvh - max(var(--safe-area-inset-top), 48px));
+    --ha-bottom-sheet-max-height: var(--ha-bottom-sheet-height);
   }
   .alert-details-summary {
     display: flex;

@@ -93,9 +93,7 @@ class _RuntimeMixin:
         """Return whether this state transition can change source-owned output."""
         if entity_id in self._rules_by_entity:
             return True
-        if any(
-            record.details.entity_id == entity_id for record in self.records.values()
-        ):
+        if entity_id in self._record_ids_by_entity:
             return True
         if "old_state" not in event.data or "new_state" not in event.data:
             return self._is_relevant_entity_id(entity_id)
@@ -291,10 +289,10 @@ class _RuntimeMixin:
                 )
                 changed = True
 
-            for alert_id, original_record in tuple(self.records.items()):
-                if original_record.details.entity_id != old_entity_id:
+            for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
+                original_record = self._pop_record(alert_id)
+                if original_record is None:
                     continue
-                self.records.pop(alert_id, None)
                 self._cancel_timer(alert_id)
                 if (
                     original_record.details.type == "rule"
@@ -305,7 +303,7 @@ class _RuntimeMixin:
                     )
                 else:
                     new_alert_id = f"{original_record.details.type}:{new_entity_id}"
-                existing_record = self.records.pop(new_alert_id, None)
+                existing_record = self._pop_record(new_alert_id)
                 if existing_record is not None:
                     self._cancel_timer(new_alert_id)
                 record = (
@@ -318,7 +316,7 @@ class _RuntimeMixin:
                 )
                 record.details.entity_id = new_entity_id
                 record.details.id = new_alert_id
-                self.records[new_alert_id] = record
+                self._set_record(record)
                 changed = True
 
             if old_entity_id in self._queued_evaluation_entities:
@@ -457,7 +455,7 @@ class _RuntimeMixin:
             for state in self.hass.states.async_all()
             if self._is_relevant_entity_id(state.entity_id)
         }
-        entity_ids.update(record.details.entity_id for record in self.records.values())
+        entity_ids.update(self._record_ids_by_entity)
         entity_ids.update(
             entity_id for rule in self.rules for entity_id in rule.entity_ids
         )
@@ -494,11 +492,7 @@ class _RuntimeMixin:
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
         self._update_automatic_tracking_for_entity(entity_id, state)
-        existing_ids = {
-            alert_id
-            for alert_id, record in self.records.items()
-            if record.details.entity_id == entity_id
-        }
+        existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         if restoring and (state is None or state.state == STATE_UNKNOWN):
             for alert_id in existing_ids:
                 record = self.records[alert_id]
@@ -517,11 +511,7 @@ class _RuntimeMixin:
                 emit_events=emit_events,
             )
             immediate_changed = persisted_changed
-        existing_ids = {
-            alert_id
-            for alert_id, record in self.records.items()
-            if record.details.entity_id == entity_id
-        }
+        existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
@@ -539,7 +529,7 @@ class _RuntimeMixin:
                     detected_at,
                     min(self.config["pending_display_delay"], delay),
                 )
-                self.records[alert_id] = record
+                self._set_record(record)
                 persisted_changed = True
                 immediate_changed = True
             else:
@@ -586,7 +576,9 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         for alert_id in existing_ids - candidates.keys():
-            record = self.records.pop(alert_id)
+            record = self._pop_record(alert_id)
+            if record is None:
+                continue
             self._cancel_timer(alert_id)
             persisted_changed = True
             immediate_changed = True
@@ -653,7 +645,7 @@ class _RuntimeMixin:
                 reset = not found or current != record.details.value
             if not reset:
                 continue
-            self.records.pop(alert_id)
+            self._pop_record(alert_id)
             self._cancel_timer(alert_id)
             changed = True
             if record.status is AlertStatus.ACTIVE:
@@ -1011,9 +1003,7 @@ class _RuntimeMixin:
             return False
         if entity_id in self._rules_by_entity:
             return True
-        if any(
-            record.details.entity_id == entity_id for record in self.records.values()
-        ):
+        if entity_id in self._record_ids_by_entity:
             return True
         if not self._is_automatic_eligible(entity_id):
             return False

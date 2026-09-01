@@ -678,19 +678,10 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (!globalThis.document?.createElement) return row.entityName;
     const content = document.createElement("span");
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
-    const name = row.entityId ? document.createElement("a") : document.createElement("span");
+    const name = document.createElement("span");
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
-    if (row.entityId) {
-      name.href = "#";
-      name.className = "table-cell-link";
-      name.title = row.entityId;
-      name.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this._openMoreInfo(row.entityId);
-      });
-    }
+    if (row.entityId) name.title = row.entityId;
     content.append(name);
     if (!narrow && row.labels?.length) {
       const labels = document.createElement("span");
@@ -747,45 +738,15 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
 }
 
 export function nativeEntityIdCell(row) {
-    return this._nativeAlertLink(row.entityId, {
-      action: () => this._openMoreInfo(row.entityId),
-      href: "#",
-    });
+    return row.entityId || "—";
 }
 
 export function nativeDeviceCell(row) {
-    if (!row.deviceId) return row.device || "—";
-    const path = `/config/devices/device/${encodeURIComponent(row.deviceId)}`;
-    return this._nativeAlertLink(row.device || row.deviceId, {
-      action: () => this._navigate(path),
-      href: path,
-    });
+    return row.device || row.deviceId || "—";
 }
 
 export function nativeRuleCell(row) {
-    const ruleExists = row.customRule && row.ruleId && (this._config?.rules ?? []).some(
-      (rule) => String(rule.id) === String(row.ruleId),
-    );
-    if (!ruleExists) return row.rule || "—";
-    return this._nativeAlertLink(row.rule, {
-      action: () => this._openRuleEditor(row.ruleId, { navigate: true }),
-      href: "/alert-manager/rules",
-    });
-}
-
-export function nativeAlertLink(label, { action, href }) {
-    if (!label) return "—";
-    if (!globalThis.document?.createElement) return label;
-    const link = document.createElement("a");
-    link.className = "table-cell-link";
-    link.href = href;
-    link.textContent = label;
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      action();
-    });
-    return link;
+    return row.rule || "—";
 }
 
 export function alertDetailsItems(kind, row) {
@@ -935,14 +896,13 @@ export function renderAlertDetailsPanel(kind, row) {
 export function openAlertDetails(kind, row) {
     if (!globalThis.document?.createElement || !this.shadowRoot?.append) return;
     this._closeAlertDetailsDialog();
-    const dialog = document.createElement("ha-dialog");
+    const dialog = document.createElement("ha-adaptive-dialog");
     dialog.className = "alert-details-dialog";
     dialog.hass = this._hass;
     dialog.headerTitle = row.entityName || row.entityId;
     dialog.heading = row.entityName || row.entityId;
     dialog.width = "medium";
-    dialog.scrimClickAction = "close";
-    dialog.escapeKeyAction = "close";
+    dialog.flexContent = true;
     dialog.innerHTML = this._renderAlertDetails(kind, row);
     dialog.addEventListener("closed", () => {
       if (this._alertDetailsDialog === dialog) this._alertDetailsDialog = null;

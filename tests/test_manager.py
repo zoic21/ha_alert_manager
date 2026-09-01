@@ -43,6 +43,14 @@ def make_manager(hass, entry):
     return manager
 
 
+def assert_record_index(manager):
+    """Assert the entity lookup cache is derived exactly from live records."""
+    expected = {}
+    for alert_id, record in manager.records.items():
+        expected.setdefault(record.details.entity_id, set()).add(alert_id)
+    assert manager._record_ids_by_entity == expected
+
+
 def fire_device_event_timers(hass):
     """Run every pending 10-second device-event debounce timer."""
     for timer in list(hass.timers):
@@ -112,8 +120,35 @@ def test_normal_to_pending_and_no_duplicate(hass, entry):
     manager = make_manager(hass, entry)
     assert set(manager.records) == {"unavailable:sensor.unas"}
     assert manager.records["unavailable:sensor.unas"].status is AlertStatus.PENDING
+    assert_record_index(manager)
     run(manager.async_evaluate_entity("sensor.unas"))
     assert len(manager.records) == 1
+    assert_record_index(manager)
+
+
+def test_record_index_avoids_full_scans_for_one_entity_evaluation(hass, entry):
+    """State routing and evaluation use the entity cache, not all records."""
+
+    class NoFullScanRecords(dict):
+        def items(self):
+            raise AssertionError("entity evaluation scanned every record")
+
+        def values(self):
+            raise AssertionError("state routing scanned every record")
+
+    hass.states.set("sensor.unas", "unavailable")
+    manager = make_manager(hass, entry)
+    manager.records = NoFullScanRecords(manager.records)
+
+    assert manager._state_event_affects_source(Event(), "sensor.unas") is True
+    run(
+        manager.async_evaluate_entity(
+            "sensor.unas",
+            save=False,
+            publish=False,
+        )
+    )
+    assert manager._record_ids_by_entity == {"sensor.unas": {"unavailable:sensor.unas"}}
 
 
 def test_matching_updates_keep_the_original_trigger_value(hass, entry):
@@ -148,6 +183,7 @@ def test_pending_cancellation(hass, entry):
     hass.states.set("sensor.test", "20")
     run(manager.async_evaluate_entity("sensor.test"))
     assert manager.records == {}
+    assert_record_index(manager)
     assert not [item for item in hass.bus.fired if item[0] == EVENT_ALERT_RESOLVED]
 
 
@@ -320,6 +356,7 @@ def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
     set_now(start + timedelta(seconds=300))
     second = make_manager(hass, entry)
     assert second.records["unavailable:sensor.test"].due_at == due
+    assert_record_index(second)
     set_now(start + timedelta(seconds=901))
     run(second.async_evaluate_entity("sensor.test"))
     started_before = len(
@@ -328,6 +365,7 @@ def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
     run(second.async_unload())
     third = make_manager(hass, entry)
     assert third.records["unavailable:sensor.test"].status is AlertStatus.ACTIVE
+    assert_record_index(third)
     started_after = len(
         [item for item in hass.bus.fired if item[0] == EVENT_ALERT_STARTED]
     )
@@ -1405,6 +1443,7 @@ def test_rule_write_failures_restore_create_update_and_delete(hass, entry):
         run(manager.async_create_rule(payload))
     assert manager.get_config()["rules"] == []
     assert manager.records == {}
+    assert_record_index(manager)
 
     manager.storage.async_save = original_save
     rule = run(manager.async_create_rule(payload))
@@ -1416,11 +1455,13 @@ def test_rule_write_failures_restore_create_update_and_delete(hass, entry):
         run(manager.async_update_rule(rule["id"], {"duration": 0}))
     assert manager.get_config() == before_config
     assert manager.records == before_records
+    assert_record_index(manager)
 
     with pytest.raises(OSError, match="storage unavailable"):
         run(manager.async_delete_rule(rule["id"]))
     assert manager.get_config() == before_config
     assert manager.records == before_records
+    assert_record_index(manager)
 
 
 def test_custom_rule_entities_have_independent_lifecycles(hass, entry, set_now):

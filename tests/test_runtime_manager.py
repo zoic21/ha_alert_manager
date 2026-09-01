@@ -753,6 +753,10 @@ def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_no
         assert manager.config["excluded_entities"] == ["sensor.new"]
         assert old_alert_id not in manager.records
         record = manager.records[new_alert_id]
+        assert old_alert_id not in manager._record_ids_by_entity.get(
+            "sensor.old", set()
+        )
+        assert manager._record_ids_by_entity == {"sensor.new": {new_alert_id}}
         assert record.detected_at == detected_at
         assert record.active_since == active_since
         assert record.acknowledged_by == "Admin"
@@ -792,6 +796,8 @@ def test_runtime_rule_cleanup_remains_silent(hass, entry):
 
         await manager.async_update_rule(created["id"], {"enabled": False})
 
+        assert manager.records == {}
+        assert manager._record_ids_by_entity == {}
         assert not [
             event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
         ]

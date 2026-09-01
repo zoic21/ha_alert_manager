@@ -54,6 +54,7 @@ class AlertManager(
         self._config_mutation_lock = asyncio.Lock()
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
+        self._record_ids_by_entity: dict[str, set[str]] = {}
         self.history: list[AlertHistoryEntry] = []
         self._pending_history: list[AlertHistoryEntry] = []
         self._rules: list[Rule] = []
@@ -142,6 +143,7 @@ class AlertManager(
         self._variation_baselines = self.storage.variation_baselines
         await self._async_load_condition_translations()
         self.records = records
+        self._rebuild_record_index()
         self.history = history
         if self._trim_history():
             history_migrated = True

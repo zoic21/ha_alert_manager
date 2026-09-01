@@ -31,6 +31,48 @@ _LOGGER = logging.getLogger(__name__)
 class _StateMixin:
     """Maintain live alert state, durability, timers and emitted events."""
 
+    def _rebuild_record_index(self) -> None:
+        """Rebuild the entity lookup cache from authoritative runtime records."""
+        index: dict[str, set[str]] = {}
+        for alert_id, record in self.records.items():
+            index.setdefault(record.details.entity_id, set()).add(alert_id)
+        self._record_ids_by_entity = index
+
+    def _set_record(self, record: AlertRecord) -> None:
+        """Store one authoritative record and update its entity lookup entry."""
+        alert_id = record.details.id
+        previous = self.records.get(alert_id)
+        if (
+            previous is not None
+            and previous.details.entity_id != record.details.entity_id
+        ):
+            self._remove_record_from_index(alert_id, previous.details.entity_id)
+        self.records[alert_id] = record
+        self._record_ids_by_entity.setdefault(record.details.entity_id, set()).add(
+            alert_id
+        )
+
+    def _pop_record(self, alert_id: str) -> AlertRecord | None:
+        """Remove one authoritative record and its entity lookup entry."""
+        record = self.records.pop(alert_id, None)
+        if record is not None:
+            self._remove_record_from_index(alert_id, record.details.entity_id)
+        return record
+
+    def _replace_records(self, records: dict[str, AlertRecord]) -> None:
+        """Replace authoritative records and rebuild the derived lookup cache."""
+        self.records = records
+        self._rebuild_record_index()
+
+    def _remove_record_from_index(self, alert_id: str, entity_id: str) -> None:
+        """Discard one cached record id and remove empty entity buckets."""
+        record_ids = self._record_ids_by_entity.get(entity_id)
+        if record_ids is None:
+            return
+        record_ids.discard(alert_id)
+        if not record_ids:
+            self._record_ids_by_entity.pop(entity_id, None)
+
     def _build_public_snapshot(
         self,
     ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:

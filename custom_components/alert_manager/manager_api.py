@@ -177,7 +177,7 @@ class _ApiMixin:
             await self._async_save_state()
         except Exception:
             self.config = previous_config
-            self.records = previous_records
+            self._replace_records(previous_records)
             self._pending_history = previous_pending_history
             self._variation_baselines = previous_variation_baselines
             self.storage.variation_baselines = self._variation_baselines
@@ -391,7 +391,7 @@ class _ApiMixin:
         try:
             self._recovery_active = False
             self.config = candidate
-            self.records = {}
+            self._replace_records({})
             self.history = []
             self._pending_history = []
             self._clear_variation_baselines()
@@ -600,11 +600,12 @@ class _ApiMixin:
         self._cancel_all_timers()
         (
             self.config,
-            self.records,
+            records,
             self._pending_history,
             self._variation_baselines,
             self._variation_baselines_dirty,
         ) = snapshot
+        self._replace_records(records)
         self.storage.variation_baselines = self._variation_baselines
         self._rebuild_rule_index()
         self._refresh_tracking()
@@ -614,7 +615,7 @@ class _ApiMixin:
         """Remove configuration-owned instances without user resolution events."""
         for entity_id in entity_ids:
             alert_id = f"rule:{rule_id}:{entity_id}"
-            if self.records.pop(alert_id, None) is not None:
+            if self._pop_record(alert_id) is not None:
                 self._cancel_timer(alert_id)
 
     def _rule_index(self, rule_id: str) -> int:
