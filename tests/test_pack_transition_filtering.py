@@ -226,6 +226,28 @@ def test_tracking_lifecycle_does_not_evaluate_normal_unavailable_source(hass, en
     asyncio.run(scenario())
 
 
+def test_tracking_recomputes_when_pack_applicability_changes(hass, entry):
+    """State attributes still update tracking when pack applicability changes."""
+
+    async def scenario():
+        hass.states.set("sensor.dynamic", "50")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        manager.config["automatic"][unavailable.PACK.id]["enabled"] = False
+        manager.config["automatic"][battery.PACK.id]["enabled"] = True
+        manager._refresh_tracking()
+        assert "sensor.dynamic" not in manager._automatic_tracked_entities
+
+        old_state = hass.states.get("sensor.dynamic")
+        hass.states.set("sensor.dynamic", "50", {ATTR_DEVICE_CLASS: "battery"})
+        new_state = hass.states.get("sensor.dynamic")
+        manager._state_changed(_state_event("sensor.dynamic", old_state, new_state))
+
+        assert "sensor.dynamic" in manager._automatic_tracked_entities
+
+    asyncio.run(scenario())
+
+
 def test_same_primary_state_attribute_rule_is_not_filtered(hass, entry):
     """Pack filtering must not suppress custom rules driven by attribute changes."""
 
