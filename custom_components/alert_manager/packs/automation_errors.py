@@ -12,7 +12,7 @@ from ..const import CATEGORY_AUTOMATION_ERRORS
 from .automation_trace import AutomationTraceRef, get_automation_run_traces
 from .base import AutomaticPack, PackMatch, PackNeutral
 
-_DATA_CYCLES: HassKey[dict[str, "_AutomationCycle"]] = HassKey(
+_DATA_CYCLES: HassKey[dict[str, _AutomationCycle]] = HassKey(
     "alert_manager_automation_error_cycles"
 )
 
