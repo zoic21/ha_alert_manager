@@ -30,6 +30,7 @@ This file extends the repository-level `AGENTS.md` for everything under
 | `api/alert-manager-api.js` | The only direct `hass.callWS` boundary, plus loading and refresh coordination. |
 | `views/*.js` | One tab's markup, actions, hydration, and targeted refreshes. |
 | `components/alert-table.js` | Shared alert/history table behavior and Home Assistant data-table integration. |
+| `components/config-backups.js` | Backup list, downloads, and shared restore confirmation. |
 | `components/rule-editor.js` | Rule drawer, visual/YAML editors, validation display, and draft handling. |
 | `utils/escaping.js` | HTML escaping for dynamic markup. |
 | `utils/formatting.js` | Display-only formatting and rule summaries. |

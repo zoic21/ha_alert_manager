@@ -55,6 +55,8 @@ def _serialize_config_mutation(
 
     @wraps(method)
     async def locked(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.recovery_active and method.__name__ != "async_import_config":
+            raise ValueError("Configuration recovery is required before making changes")
         async with self._config_mutation_lock:
             return await method(self, *args, **kwargs)
 
@@ -197,6 +199,9 @@ class _ApiMixin:
 
     async def _async_sync_monitoring_notification(self) -> None:
         """Keep one localized persistent startup warning in sync."""
+        if self.recovery_active:
+            async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
+            return
         if self.monitoring_enabled:
             async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
             return
@@ -266,6 +271,8 @@ class _ApiMixin:
 
     def export_config_yaml(self) -> str:
         """Return a deterministic, runtime-free YAML configuration export."""
+        if self.recovery_active:
+            raise ValueError("Restore or import a configuration before exporting")
         return dump_config_yaml(self.config)
 
     def preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
@@ -368,43 +375,54 @@ class _ApiMixin:
 
     @_serialize_config_mutation
     async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
-        """Atomically replace configuration after fully parsing its YAML document.
-
-        Runtime records are never read from the import. They are reconciled
-        against the newly valid configuration and persisted together with it in
-        one Store write. A failed write restores the in-memory configuration,
-        records and pending timers.
-        """
+        """Replace configuration through one validated, recoverable transaction."""
         candidate = parse_config_yaml(raw_yaml)
         candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
         previous = self._configuration_snapshot()
+        previous_history = list(self.history)
+        previous_recovery_active = self.recovery_active
+        previous_monitoring_enabled = self.monitoring_enabled
+        history_cleared = False
 
         self._cancel_all_timers()
         self._cancel_all_device_event_timers()
         try:
+            self._recovery_active = False
             self.config = candidate
+            self.records = {}
+            self.history = []
+            self._pending_history = []
             self._clear_variation_baselines()
             self._rebuild_rule_index()
-            if self.monitoring_enabled:
-                self._resume_pending_alerts(dt_util.now())
-            else:
-                self._freeze_pending_alerts(dt_util.now())
+            self._refresh_pack_entry_listeners()
+            self._pack_availability = self._current_pack_availability()
             await self.async_evaluate_all(
                 save=False,
                 publish=False,
                 emit_events=False,
             )
             self._reschedule_hidden_pending_visibility(dt_util.now())
-            await self._async_save_state()
+            await self.history_storage.async_save([])
+            history_cleared = True
+            await self.storage.async_save(self.config, self.records)
+            self._immediate_state_save_required = False
+            self._variation_baselines_dirty = False
         except Exception:
+            self._recovery_active = previous_recovery_active
             self._restore_configuration_snapshot(previous)
+            self.history = previous_history
+            if history_cleared:
+                try:
+                    await self.history_storage.async_save(previous_history)
+                except Exception:
+                    _LOGGER.exception(
+                        "Unable to restore alert history after failed config import"
+                    )
             raise
 
-        monitoring_changed = (
-            previous[0].get("monitoring_enabled", True) != self.monitoring_enabled
-        )
+        monitoring_changed = previous_monitoring_enabled != self.monitoring_enabled
         coherence_schedule_changed = (
             previous[0].get("coherence_schedule", "none")
             != self.config["coherence_schedule"]
@@ -419,8 +437,13 @@ class _ApiMixin:
                 self._cancel_all_timers()
                 self._cancel_all_device_event_timers()
             async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
-        if coherence_schedule_changed:
+        if coherence_schedule_changed or previous_recovery_active:
             self._refresh_coherence_schedule()
+        self._refresh_tracking()
+        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        await self._async_sync_monitoring_notification()
+        if previous_recovery_active:
+            await self._async_resolve_config_recovery()
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 

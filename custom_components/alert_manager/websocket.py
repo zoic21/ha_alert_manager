@@ -298,8 +298,72 @@ async def websocket_config_export(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Return a runtime-free YAML configuration export to an administrator."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        raw_yaml = manager.export_config_yaml()
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], {"yaml": raw_yaml})
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/config/recovery/get"}
+)
+async def websocket_config_recovery_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return recovery state and automatic backup metadata."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(msg["id"], {"yaml": manager.export_config_yaml()})
+        connection.send_result(msg["id"], await manager.async_get_recovery_status())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/config/backups/download",
+        vol.Required("backup_id"): vol.All(str, vol.Length(min=1, max=64)),
+    }
+)
+async def websocket_config_backup_download(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Download one validated automatic configuration backup."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_get_config_backup_download(msg["backup_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/config/backups/restore",
+        vol.Required("backup_id"): vol.All(str, vol.Length(min=1, max=64)),
+        vol.Required("confirmed"): True,
+    }
+)
+async def websocket_config_backup_restore(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Restore one backup only after explicit administrator confirmation."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_restore_config_backup(msg["backup_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin
@@ -390,6 +454,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_rule_yaml_update,
         websocket_rule_delete,
         websocket_config_export,
+        websocket_config_recovery_get,
+        websocket_config_backup_download,
+        websocket_config_backup_restore,
         websocket_config_import_validate,
         websocket_config_import,
     ):

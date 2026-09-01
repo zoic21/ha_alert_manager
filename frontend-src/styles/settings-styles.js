@@ -82,6 +82,46 @@ export const settingsStyles = `
     justify-content: flex-end;
     margin-top: 4px;
   }
+  .config-backups {
+    display: grid;
+    gap: 12px;
+  }
+  .config-backups h3 {
+    margin: 0;
+    font-size: var(--ha-font-size-l, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .config-backups small {
+    margin-top: 4px;
+  }
+  .config-backup-list {
+    display: grid;
+  }
+  .config-backup-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .config-backup-details {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .config-backup-details span {
+    color: var(--secondary-text-color, #727272);
+  }
+  .config-backup-actions {
+    flex-wrap: wrap;
+  }
+  .config-backup-confirmation {
+    max-width: 520px;
+    padding: 8px 24px 20px;
+    white-space: pre-line;
+  }
 
   /* Coherence */
   .coherence-panel {

@@ -21,7 +21,10 @@ export function refreshOverviewData() {
 }
 
 export function renderOverview(context) {
-    const { alerts, selectedStatuses, pageMessages, rows, renderAlertTable, t } = context;
+    const {
+      alerts, selectedStatuses, pageMessages, rows,
+      renderAlertTable, t,
+    } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
     const summary = `${pageMessages}
       <section class="summary">

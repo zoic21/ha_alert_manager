@@ -5,13 +5,19 @@ from __future__ import annotations
 import logging
 import math
 from copy import deepcopy
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
 from .const import (
+    CONFIG_BACKUP_LIMIT,
+    CONFIG_BACKUP_STORAGE_KEY,
+    CONFIG_BACKUP_STORAGE_VERSION,
     DEFAULT_COHERENCE_SCAN_ESPHOME,
     DEFAULT_COHERENCE_SCHEDULE,
     DEFAULT_CONFIG,
@@ -24,8 +30,13 @@ from .const import (
     STORAGE_VERSION,
 )
 from .models import AlertHistoryEntry, AlertRecord
+from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ConfigStorageError(ValueError):
+    """Report an unusable main store without discarding its configuration."""
 
 
 class AlertManagerStore(Store[dict[str, Any]]):
@@ -41,7 +52,10 @@ class AlertManagerStore(Store[dict[str, Any]]):
         if old_major_version > STORAGE_VERSION:
             raise NotImplementedError
         migrated = deepcopy(old_data)
-        config, _changed = _migrate_config_shape(migrated.get("config", {}))
+        stored_config = migrated.get("config")
+        if not isinstance(stored_config, dict):
+            raise ConfigStorageError("Stored configuration must be an object")
+        config, _changed = _migrate_config_shape(stored_config)
         migrated["config"] = config
         _migrate_acknowledgement_shape(migrated.get("alerts", {}))
         _migrate_pending_visibility_shape(migrated.get("alerts", {}))
@@ -67,14 +81,32 @@ class AlertManagerStorage:
     async def async_load(
         self,
     ) -> tuple[dict[str, Any], dict[str, AlertRecord], bool]:
-        """Load and validate stored data, falling back safely."""
-        raw = await self._store.async_load()
-        if not isinstance(raw, dict):
+        """Load stored data and reject unusable configuration without writing."""
+        raw_snapshot = await self._async_read_store_snapshot()
+        try:
+            raw = await self._store.async_load()
+        except ConfigStorageError:
+            raise
+        except Exception as err:
+            raise ConfigStorageError(
+                f"Unable to read or migrate stored configuration: {err}"
+            ) from err
+        if raw is None:
+            if raw_snapshot is not None:
+                raise ConfigStorageError(
+                    "Existing configuration storage could not be loaded"
+                )
             self.variation_baselines = {}
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
-        migrated_config, migrated = self._migrate_config(raw.get("config", {}))
+        if not isinstance(raw, dict):
+            raise ConfigStorageError("Stored Alert Manager data must be an object")
+        stored_config = raw.get("config")
+        if not isinstance(stored_config, dict):
+            raise ConfigStorageError("Stored configuration must be an object")
+
+        migrated_config, migrated = self._migrate_config(stored_config)
         self.variation_baselines, baselines_migrated = _load_variation_baselines(
             raw.get("variation_baselines", {})
         )
@@ -115,6 +147,14 @@ class AlertManagerStorage:
             records[alert_id] = record
         return config, records, migrated
 
+    async def _async_read_store_snapshot(self) -> str | None:
+        """Capture an existing store before Home Assistant may rename corruption."""
+        try:
+            path = Path(self._store.path)
+            return await self._hass.async_add_executor_job(path.read_text, "utf-8")
+        except (AttributeError, OSError, UnicodeError):
+            return None
+
     def _migrate_config(self, stored: Any) -> tuple[dict[str, Any], bool]:
         """Apply idempotent migrations that may consult Home Assistant registries."""
         config, changed = _migrate_config_shape(stored)
@@ -146,6 +186,108 @@ class AlertManagerStorage:
                 "variation_baselines": dict(self.variation_baselines),
             }
         )
+
+
+class AlertManagerConfigBackupStorage:
+    """Store the three newest validated configuration exports."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize an independent atomic backup store."""
+        self._store = Store[dict[str, Any]](
+            hass,
+            CONFIG_BACKUP_STORAGE_VERSION,
+            CONFIG_BACKUP_STORAGE_KEY,
+            atomic_writes=True,
+        )
+
+    async def _async_load_valid(self) -> list[dict[str, Any]]:
+        """Return valid exports without rewriting a damaged backup store."""
+        raw = await self._store.async_load()
+        if raw is None:
+            return []
+        if not isinstance(raw, dict) or not isinstance(raw.get("backups"), list):
+            _LOGGER.error("Ignoring invalid Alert Manager configuration backup store")
+            return []
+        valid: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in raw["backups"]:
+            if not isinstance(item, dict):
+                continue
+            backup_id = item.get("id")
+            created_at = item.get("created_at")
+            raw_yaml = item.get("yaml")
+            if (
+                not isinstance(backup_id, str)
+                or not backup_id
+                or backup_id in seen
+                or not isinstance(created_at, str)
+                or not isinstance(raw_yaml, str)
+            ):
+                continue
+            try:
+                parsed_at = datetime.fromisoformat(created_at)
+                if parsed_at.tzinfo is None:
+                    raise ValueError
+                config = parse_config_yaml(raw_yaml)
+            except (TypeError, ValueError):
+                _LOGGER.warning("Ignoring invalid configuration backup %r", backup_id)
+                continue
+            seen.add(backup_id)
+            valid.append(
+                {
+                    "id": backup_id,
+                    "created_at": parsed_at.astimezone(UTC).isoformat(),
+                    "yaml": raw_yaml,
+                    "rules": len(config["rules"]),
+                }
+            )
+        return sorted(valid, key=lambda item: item["created_at"], reverse=True)[
+            :CONFIG_BACKUP_LIMIT
+        ]
+
+    async def async_list(self) -> list[dict[str, Any]]:
+        """Return safe metadata for the administrator frontend."""
+        return [
+            {
+                "id": item["id"],
+                "created_at": item["created_at"],
+                "rules": item["rules"],
+            }
+            for item in await self._async_load_valid()
+        ]
+
+    async def async_get(self, backup_id: str) -> dict[str, Any] | None:
+        """Return one validated export by opaque id."""
+        return next(
+            (
+                item
+                for item in await self._async_load_valid()
+                if item["id"] == backup_id
+            ),
+            None,
+        )
+
+    async def async_create(
+        self, raw_yaml: str, *, created_at: datetime
+    ) -> dict[str, Any]:
+        """Validate through the import parser before rotating atomically."""
+        config = parse_config_yaml(raw_yaml)
+        timestamp = created_at.astimezone(UTC).isoformat()
+        backup = {
+            "id": uuid4().hex,
+            "created_at": timestamp,
+            "yaml": raw_yaml,
+            "rules": len(config["rules"]),
+        }
+        current = await self._async_load_valid()
+        await self._store.async_save(
+            {"backups": [backup, *current][:CONFIG_BACKUP_LIMIT]}
+        )
+        return {
+            "id": backup["id"],
+            "created_at": backup["created_at"],
+            "rules": backup["rules"],
+        }
 
 
 def _load_variation_baselines(raw: Any) -> tuple[dict[str, float], bool]:

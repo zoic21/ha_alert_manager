@@ -108,7 +108,7 @@ def test_monitoring_persistence_failure_restores_state_and_timer(hass, entry):
         run(manager.async_set_monitoring(False))
     assert manager.monitoring_enabled is True
     assert set(manager.records) == {"unavailable:sensor.pending"}
-    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 1
+    assert len(manager._timers) == 1
 
 
 def test_resume_preserves_pending_time_without_duplicate_timers_or_events(
@@ -138,12 +138,11 @@ def test_resume_preserves_pending_time_without_duplicate_timers_or_events(
     )
     assert manager.records["unavailable:sensor.new"].status is AlertStatus.PENDING
     assert event_data(hass, EVENT_ALERT_STARTED) == []
-    live_timers = [timer for timer in hass.timers if not timer["cancelled"]]
-    assert len(live_timers) == 2
+    assert len(manager._timers) == 2
 
     assert run(manager.async_set_monitoring(True)) is False
     assert event_data(hass, EVENT_ALERT_STARTED) == []
-    assert len([timer for timer in hass.timers if not timer["cancelled"]]) == 2
+    assert len(manager._timers) == 2
 
 
 def test_pending_pause_survives_disabled_restart(hass, entry, set_now):

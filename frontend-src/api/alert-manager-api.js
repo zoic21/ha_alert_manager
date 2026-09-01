@@ -16,6 +16,7 @@ export async function load() {
       this._api.call({ type: "alert_manager/history/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
       this._api.call({ type: "alert_manager/coherence/get" }),
+      this._api.call({ type: "alert_manager/config/recovery/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -29,6 +30,7 @@ export async function load() {
         this._history,
         this._historyConfig,
         this._coherence,
+        this._configRecovery,
         this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;

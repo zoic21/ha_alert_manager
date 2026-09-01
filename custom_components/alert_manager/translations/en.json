@@ -159,6 +159,18 @@
       "notification_message": "Alert Manager monitoring is disabled. Turn on “Alert Manager Monitoring” to resume alert detection.",
       "notification_title": "Alert Manager monitoring disabled"
     },
+    "recovery": {
+      "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",
+      "backups_title": "Automatic backups",
+      "confirm_message": "The current configuration, runtime alerts and history will be replaced by the backup from {date}.\n\nRules: {rules}\n\nContinue?",
+      "confirm_title": "Restore configuration backup?",
+      "download": "Download",
+      "no_backups": "No valid automatic backup is available.",
+      "notification_message": "Alert Manager could not load its configuration and started with the default configuration. No backup was restored automatically. Open Alert Manager settings, then Export / Import, to choose a backup.",
+      "notification_title": "Alert Manager configuration problem",
+      "restore": "Restore",
+      "rule_count": "{count} rules"
+    },
     "operators": {
       "above": "greater than",
       "below": "less than",
@@ -349,6 +361,8 @@
       "alert_acknowledged": "Alert acknowledged",
       "alert_unacknowledged": "Acknowledgement removed",
       "automatic_saved": "Automatic monitoring saved",
+      "backup_downloaded": "Backup downloaded",
+      "backup_restored": "Configuration backup restored",
       "config_exported": "Configuration exported",
       "config_imported": "Configuration imported",
       "history_cleared": "History cleared",

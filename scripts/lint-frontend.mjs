@@ -5,6 +5,7 @@ const filenames = [
   "alert-manager-panel.js",
   "api/alert-manager-api.js",
   "components/alert-table.js",
+  "components/config-backups.js",
   "components/rule-editor.js",
   "styles/base-styles.js",
   "styles/table-styles.js",

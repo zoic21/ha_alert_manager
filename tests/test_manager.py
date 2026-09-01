@@ -265,7 +265,10 @@ def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
     set_now(start)
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
-    timer = hass.timers[-1]
+    timer = min(
+        (timer for timer in hass.timers if not timer["cancelled"]),
+        key=lambda item: item["point"],
+    )
     assert timer["action"]._hass_callback is True
 
     async def fire_timer():
@@ -1293,9 +1296,9 @@ def test_coherence_schedule_is_replaced_and_cancelled_with_configuration(hass, e
     ]
 
 
-def test_existing_self_rules_are_removed_during_migration(hass, entry):
-    """An inert self-rule from an earlier release is cleaned without data loss."""
-    hass.stores["alert_manager"] = {
+def test_existing_self_rules_are_preserved_for_manual_recovery(hass, entry):
+    """An obsolete invalid self-rule is preserved instead of being deleted."""
+    stored = {
         "config": {
             "rules": [
                 {
@@ -1310,11 +1313,13 @@ def test_existing_self_rules_are_removed_during_migration(hass, entry):
         },
         "alerts": {},
     }
+    hass.stores["alert_manager"] = deepcopy(stored)
 
     manager = make_manager(hass, entry)
 
+    assert manager.recovery_active is True
     assert manager.get_config()["rules"] == []
-    assert hass.stores["alert_manager"]["config"]["rules"] == []
+    assert hass.stores["alert_manager"] == stored
 
 
 def test_state_listener_skips_irrelevant_entities(hass, entry):
@@ -1871,18 +1876,18 @@ def test_pack_availability_cleans_timers_and_preserves_enabled_choice(
     assert metadata["battery"]["available"] is True
     assert metadata["unifi"]["available"] is False
     assert manager.records == {}
-    assert not [timer for timer in hass.timers if not timer["cancelled"]]
+    assert manager._timers == {}
 
     unifi_entry = config_entry(hass, "unifi")
     assert run(manager.async_refresh_pack_availability()) is True
     assert "unifi:device_tracker.ap" in manager.records
     assert manager.get_config()["automatic"]["unifi"]["enabled"] is True
-    assert [timer for timer in hass.timers if not timer["cancelled"]]
+    assert manager._timers
 
     unifi_entry.state = ConfigEntryState.NOT_LOADED
     assert run(manager.async_refresh_pack_availability()) is True
     assert manager.records == {}
-    assert not [timer for timer in hass.timers if not timer["cancelled"]]
+    assert manager._timers == {}
     assert manager.get_config()["automatic"]["unifi"]["enabled"] is True
 
     unifi_entry.state = ConfigEntryState.LOADED
@@ -2253,15 +2258,17 @@ def test_invalid_alerts_collection_is_ignored(hass, entry):
     assert hass.stores["alert_manager"]["alerts"] == {}
 
 
-def test_invalid_stored_configuration_is_replaced_with_defaults(hass, entry):
-    """A malformed stored rule is cleaned instead of failing every startup."""
-    hass.stores["alert_manager"] = {
+def test_invalid_stored_configuration_is_preserved_for_recovery(hass, entry):
+    """A malformed stored rule is never overwritten by startup defaults."""
+    stored = {
         "config": {"rules": [{"id": "incomplete"}]},
         "alerts": {},
     }
+    hass.stores["alert_manager"] = deepcopy(stored)
     manager = make_manager(hass, entry)
+    assert manager.recovery_active is True
     assert manager.get_config()["rules"] == []
-    assert hass.stores["alert_manager"]["config"]["rules"] == []
+    assert hass.stores["alert_manager"] == stored
 
 
 def test_unload_reload_cleans_listeners_and_timers(hass, entry):
