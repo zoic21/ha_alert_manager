@@ -813,7 +813,7 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
     "alert_manager/coherence/get": retainedCoherence,
     "alert_manager/config/recovery/get": {
-      active: false, failed_config_available: false, backups: [],
+      active: false, backups: [],
     },
     "config/label_registry/list": [],
   };
@@ -853,7 +853,7 @@ test("backup restore is sent only after the native confirmation action", async (
     id: "backup-1", created_at: "2026-08-30T03:00:00+00:00", rules: 18,
   };
   panel._configRecovery = {
-    active: true, failed_config_available: true, backups: [backup],
+    active: true, backups: [backup],
   };
   panel._render = () => {};
   panel._refreshUiState = () => {};

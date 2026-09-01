@@ -26,7 +26,7 @@ from .const import (
     SIGNAL_MONITORING_UPDATED,
 )
 from .validation import validate_config
-from .yaml_io import dump_config_yaml, dump_failed_config_yaml
+from .yaml_io import dump_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,36 +37,11 @@ class _RecoveryMixin:
     @property
     def recovery_active(self) -> bool:
         """Return whether startup rejected the persisted configuration."""
-        return self._recovery_state is not None
+        return self._recovery_active
 
-    def _enter_config_recovery(
-        self,
-        reason: str,
-        *,
-        faulty_config: Any = None,
-        failed_content: str | None = None,
-    ) -> None:
-        """Keep diagnostic data in memory without mutating the main store."""
-        failed_download: dict[str, str] | None = None
-        if failed_content is not None:
-            failed_download = {
-                "content": failed_content,
-                "content_type": "application/json;charset=utf-8",
-                "filename": "alert-manager-failed-storage.json",
-            }
-        elif faulty_config is not None:
-            try:
-                failed_download = {
-                    "content": dump_failed_config_yaml(faulty_config),
-                    "content_type": "application/yaml;charset=utf-8",
-                    "filename": "alert-manager-failed-config.yaml",
-                }
-            except Exception:  # pragma: no cover - diagnostic serialization guard
-                _LOGGER.exception("Unable to serialize rejected configuration")
-        self._recovery_state = {
-            "reason": reason,
-            "failed_download": failed_download,
-        }
+    def _enter_config_recovery(self) -> None:
+        """Protect the rejected store until an administrator restores a backup."""
+        self._recovery_active = True
 
     async def _async_list_config_backups(self) -> list[dict[str, Any]]:
         """Isolate backup-store failures from the administrator panel."""
@@ -77,16 +52,9 @@ class _RecoveryMixin:
             return []
 
     async def async_get_recovery_status(self) -> dict[str, Any]:
-        """Return recovery state and the shared backup list."""
-        failed_available = bool(
-            self._recovery_state and self._recovery_state.get("failed_download")
-        )
+        """Return the storage guard state and shared backup list."""
         return {
             "active": self.recovery_active,
-            "reason": (
-                self._recovery_state.get("reason") if self._recovery_state else None
-            ),
-            "failed_config_available": failed_available,
             "backups": await self._async_list_config_backups(),
         }
 
@@ -101,17 +69,6 @@ class _RecoveryMixin:
             "content_type": "application/yaml;charset=utf-8",
             "filename": f"alert-manager-backup-{timestamp}.yaml",
         }
-
-    def get_failed_config_download(self) -> dict[str, str]:
-        """Return the rejected configuration without exposing Home Assistant storage."""
-        failed_download = (
-            self._recovery_state.get("failed_download")
-            if self._recovery_state
-            else None
-        )
-        if not failed_download:
-            raise ValueError("No rejected configuration is available")
-        return dict(failed_download)
 
     async def async_restore_config_backup(self, backup_id: str) -> dict[str, Any]:
         """Restore through the exact complete-import transaction."""
@@ -228,9 +185,9 @@ class _RecoveryMixin:
         )
         message = resources.get(
             f"{prefix}.notification_message",
-            "Alert Manager could not load its configuration and started with an "
-            "empty in-memory configuration. No backup was restored automatically. "
-            "Open Alert Manager settings, then Export / Import, to choose a backup.",
+            "Alert Manager could not load its configuration and started with the "
+            "default configuration. No backup was restored automatically. Open "
+            "Alert Manager settings, then Export / Import, to choose a backup.",
         )
         async_create_persistent_notification(
             self.hass,

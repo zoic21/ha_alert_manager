@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from copy import deepcopy
@@ -39,18 +38,6 @@ _LOGGER = logging.getLogger(__name__)
 class ConfigStorageError(ValueError):
     """Report an unusable main store without discarding its configuration."""
 
-    def __init__(
-        self,
-        message: str,
-        *,
-        faulty_config: Any = None,
-        failed_content: str | None = None,
-    ) -> None:
-        """Keep a defensive copy when a diagnostic export is possible."""
-        super().__init__(message)
-        self.faulty_config = deepcopy(faulty_config)
-        self.failed_content = failed_content
-
 
 class AlertManagerStore(Store[dict[str, Any]]):
     """Store with an explicit migration entry point for future schemas."""
@@ -67,10 +54,7 @@ class AlertManagerStore(Store[dict[str, Any]]):
         migrated = deepcopy(old_data)
         stored_config = migrated.get("config")
         if not isinstance(stored_config, dict):
-            raise ConfigStorageError(
-                "Stored configuration must be an object",
-                faulty_config=stored_config,
-            )
+            raise ConfigStorageError("Stored configuration must be an object")
         config, _changed = _migrate_config_shape(stored_config)
         migrated["config"] = config
         _migrate_acknowledgement_shape(migrated.get("alerts", {}))
@@ -105,25 +89,12 @@ class AlertManagerStorage:
             raise
         except Exception as err:
             raise ConfigStorageError(
-                f"Unable to read or migrate stored configuration: {err}",
-                failed_content=raw_snapshot,
+                f"Unable to read or migrate stored configuration: {err}"
             ) from err
         if raw is None:
             if raw_snapshot is not None:
-                faulty_config: Any = None
-                try:
-                    envelope = json.loads(raw_snapshot)
-                    data = envelope.get("data") if isinstance(envelope, dict) else None
-                    if isinstance(data, dict):
-                        faulty_config = data.get("config")
-                except (TypeError, ValueError):
-                    pass
                 raise ConfigStorageError(
-                    "Existing configuration storage could not be loaded",
-                    faulty_config=faulty_config,
-                    failed_content=(
-                        None if faulty_config is not None else raw_snapshot
-                    ),
+                    "Existing configuration storage could not be loaded"
                 )
             self.variation_baselines = {}
             config, migrated = self._migrate_config({})
@@ -133,10 +104,7 @@ class AlertManagerStorage:
             raise ConfigStorageError("Stored Alert Manager data must be an object")
         stored_config = raw.get("config")
         if not isinstance(stored_config, dict):
-            raise ConfigStorageError(
-                "Stored configuration must be an object",
-                faulty_config=stored_config,
-            )
+            raise ConfigStorageError("Stored configuration must be an object")
 
         migrated_config, migrated = self._migrate_config(stored_config)
         self.variation_baselines, baselines_migrated = _load_variation_baselines(

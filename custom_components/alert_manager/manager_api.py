@@ -272,9 +272,7 @@ class _ApiMixin:
     def export_config_yaml(self) -> str:
         """Return a deterministic, runtime-free YAML configuration export."""
         if self.recovery_active:
-            raise ValueError(
-                "The rejected configuration must be downloaded from recovery"
-            )
+            raise ValueError("Restore or import a configuration before exporting")
         return dump_config_yaml(self.config)
 
     def preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
@@ -384,14 +382,14 @@ class _ApiMixin:
         summary = import_summary(candidate)
         previous = self._configuration_snapshot()
         previous_history = list(self.history)
-        previous_recovery_state = deepcopy(self._recovery_state)
+        previous_recovery_active = self.recovery_active
         previous_monitoring_enabled = self.monitoring_enabled
         history_cleared = False
 
         self._cancel_all_timers()
         self._cancel_all_device_event_timers()
         try:
-            self._recovery_state = None
+            self._recovery_active = False
             self.config = candidate
             self.records = {}
             self.history = []
@@ -412,7 +410,7 @@ class _ApiMixin:
             self._immediate_state_save_required = False
             self._variation_baselines_dirty = False
         except Exception:
-            self._recovery_state = previous_recovery_state
+            self._recovery_active = previous_recovery_active
             self._restore_configuration_snapshot(previous)
             self.history = previous_history
             if history_cleared:
@@ -439,12 +437,12 @@ class _ApiMixin:
                 self._cancel_all_timers()
                 self._cancel_all_device_event_timers()
             async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
-        if coherence_schedule_changed or previous_recovery_state is not None:
+        if coherence_schedule_changed or previous_recovery_active:
             self._refresh_coherence_schedule()
         self._refresh_tracking()
         async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         await self._async_sync_monitoring_notification()
-        if previous_recovery_state is not None:
+        if previous_recovery_active:
             await self._async_resolve_config_recovery()
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}

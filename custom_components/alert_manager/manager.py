@@ -20,7 +20,6 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
-from .const import CATEGORIES
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
@@ -31,18 +30,10 @@ from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
     AlertManagerStorage,
-    ConfigStorageError,
 )
 from .validation import validate_config
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _empty_runtime_config() -> dict[str, Any]:
-    """Return a valid configuration that cannot create alerts."""
-    return validate_config(
-        {"automatic": {category: {"enabled": False} for category in CATEGORIES}}
-    )
 
 
 class AlertManager(
@@ -108,7 +99,7 @@ class AlertManager(
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
         self._immediate_state_save_required = False
-        self._recovery_state: dict[str, Any] | None = None
+        self._recovery_active = False
         self._config_backup_schedule_unsubscribe: Callable[[], None] | None = None
 
     @property
@@ -128,25 +119,13 @@ class AlertManager(
             loaded_config, records, migrated = await self.storage.async_load()
             candidate = validate_config(loaded_config)
             self._validate_config_rule_sources(candidate)
-        except Exception as err:
+        except Exception:
             _LOGGER.exception(
-                "Stored configuration is unusable; entering recovery mode without "
-                "writing defaults"
+                "Stored configuration is unusable; starting with defaults without "
+                "writing them"
             )
-            faulty_config = (
-                err.faulty_config
-                if isinstance(err, ConfigStorageError)
-                else loaded_config
-            )
-            failed_content = (
-                err.failed_content if isinstance(err, ConfigStorageError) else None
-            )
-            self._enter_config_recovery(
-                str(err),
-                faulty_config=faulty_config,
-                failed_content=failed_content,
-            )
-            self.config = _empty_runtime_config()
+            self._enter_config_recovery()
+            self.config = validate_config({})
             records = {}
             migrated = False
             self.storage.variation_baselines = {}

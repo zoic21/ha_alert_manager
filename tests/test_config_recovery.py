@@ -105,6 +105,7 @@ def test_backup_rotation_keeps_exactly_three_newest_valid_exports(hass):
 
 def test_invalid_startup_preserves_main_store_and_enters_manual_recovery(hass, entry):
     """An obsolete invalid rule can never be replaced by DEFAULT_CONFIG."""
+    hass.states.set("sensor.unavailable_target", "unavailable")
     backup_storage = AlertManagerConfigBackupStorage(hass)
     backup = run(
         backup_storage.async_create(
@@ -126,22 +127,14 @@ def test_invalid_startup_preserves_main_store_and_enters_manual_recovery(hass, e
     assert hass.stores["alert_manager"] == faulty_store
     assert hass.notifications[RECOVERY_NOTIFICATION_ID]
     assert (
-        "configuration vide" in hass.notifications[RECOVERY_NOTIFICATION_ID]["message"]
+        "configuration par défaut"
+        in hass.notifications[RECOVERY_NOTIFICATION_ID]["message"]
     )
     status = run(manager.async_get_recovery_status())
     assert status["active"] is True
-    assert status["failed_config_available"] is True
     assert status["backups"] == [backup]
-    assert (
-        "old-rule-new-version-cannot-validate"
-        in manager.get_failed_config_download()["content"]
-    )
-    assert manager.get_config()["rules"] == []
-    assert all(
-        not pack_config["enabled"]
-        for pack_config in manager.get_config()["automatic"].values()
-    )
-    assert manager.public_snapshot()["tracked_count"] == 0
+    assert manager.get_config() == validate_config({})
+    assert manager.records
     assert run(manager.async_get_recovery_status())["backups"] == [backup]
 
 
@@ -173,7 +166,7 @@ def test_main_store_read_error_starts_recovery_without_writing_defaults(hass, en
     assert CONFIG_BACKUP_STORAGE_KEY not in hass.stores
     assert RECOVERY_NOTIFICATION_ID in hass.notifications
     status = run(manager.async_get_recovery_status())
-    assert status["failed_config_available"] is False
+    assert status == {"active": True, "backups": []}
 
 
 def test_home_assistant_silent_corrupt_store_fallback_is_not_treated_as_first_start(
@@ -190,15 +183,13 @@ def test_home_assistant_silent_corrupt_store_fallback_is_not_treated_as_first_st
 
     assert manager.recovery_active is True
     assert "alert_manager" not in hass.stores
-    failed = manager.get_failed_config_download()
-    assert failed["filename"] == "alert-manager-failed-storage.json"
-    assert failed["content"] == '{"version": 1, "data": {broken json'
+    assert manager.get_config() == validate_config({})
 
 
 def test_explicit_backup_restore_uses_import_and_clears_recovery_notification(
     hass, entry
 ):
-    """The empty fallback persists only until an administrator restores a backup."""
+    """The default fallback persists only until an administrator restores a backup."""
     backup_storage = AlertManagerConfigBackupStorage(hass)
     backup_yaml = dump_config_yaml(validate_config({}))
     backup = run(

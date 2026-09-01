@@ -20,7 +20,6 @@ from custom_components.alert_manager.websocket import (
     websocket_config_import_validate,
     websocket_config_recovery_get,
     websocket_config_update,
-    websocket_failed_config_download,
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
@@ -214,10 +213,9 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
             websocket_config_backup_restore,
             {"id": 22, "backup_id": "one", "confirmed": True},
         ),
-        (websocket_failed_config_download, {"id": 23}),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 18
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 17
     assert connection.results == []
 
 
@@ -278,25 +276,6 @@ def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, en
     )
     assert connection.errors == []
     assert connection.results[-1][1]["config"] == manager.get_config()
-
-
-def test_admin_can_download_rejected_configuration_through_recovery_api(hass, entry):
-    """Diagnostic content is mediated by the backend rather than storage paths."""
-    hass.stores["alert_manager"] = {
-        "config": {"rules": [{"id": "incomplete"}]},
-        "alerts": {},
-    }
-    manager = AlertManager(hass, entry)
-    asyncio.run(manager.async_setup())
-    hass.data[DATA_MANAGER] = manager
-    connection = Connection(admin=True)
-
-    asyncio.run(websocket_failed_config_download(hass, connection, {"id": 53}))
-
-    assert connection.errors == []
-    payload = connection.results[-1][1]
-    assert payload["filename"] == "alert-manager-failed-config.yaml"
-    assert "incomplete" in payload["content"]
 
 
 def test_coherence_get_websocket_restores_last_result_without_scanning(hass, entry):

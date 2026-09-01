@@ -166,7 +166,7 @@
       "confirm_title": "Restaurer cette sauvegarde de configuration ?",
       "download": "Télécharger",
       "no_backups": "Aucune sauvegarde automatique valide n’est disponible.",
-      "notification_message": "Alert Manager n’a pas pu charger correctement sa configuration et a démarré avec une configuration vide uniquement en mémoire. Aucune sauvegarde n’a été restaurée automatiquement. Ouvrez les paramètres Alert Manager, puis Export / Import, pour choisir une sauvegarde.",
+      "notification_message": "Alert Manager n’a pas pu charger correctement sa configuration et a démarré avec la configuration par défaut. Aucune sauvegarde n’a été restaurée automatiquement. Ouvrez les paramètres Alert Manager, puis Export / Import, pour choisir une sauvegarde.",
       "notification_title": "Problème de configuration Alert Manager",
       "restore": "Restaurer",
       "rule_count": "{count} règles"

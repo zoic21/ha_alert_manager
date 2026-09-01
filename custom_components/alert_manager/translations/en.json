@@ -166,7 +166,7 @@
       "confirm_title": "Restore configuration backup?",
       "download": "Download",
       "no_backups": "No valid automatic backup is available.",
-      "notification_message": "Alert Manager could not load its configuration and started with an empty in-memory configuration. No backup was restored automatically. Open Alert Manager settings, then Export / Import, to choose a backup.",
+      "notification_message": "Alert Manager could not load its configuration and started with the default configuration. No backup was restored automatically. Open Alert Manager settings, then Export / Import, to choose a backup.",
       "notification_title": "Alert Manager configuration problem",
       "restore": "Restore",
       "rule_count": "{count} rules"

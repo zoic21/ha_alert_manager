@@ -185,16 +185,6 @@ def dump_config_yaml(config: Mapping[str, Any]) -> str:
     )
 
 
-def dump_failed_config_yaml(config: Any) -> str:
-    """Serialize only a rejected configuration for administrator diagnostics."""
-    return _dump_yaml(
-        {
-            "diagnostic": "Alert Manager configuration rejected during startup",
-            "config": deepcopy(config),
-        }
-    )
-
-
 def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
     """Parse one complete configuration import with an intentionally strict schema."""
     document = _load_yaml(raw_yaml, description="Configuration")

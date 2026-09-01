@@ -369,25 +369,6 @@ async def websocket_config_backup_restore(
 @websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
-    {vol.Required("type"): "alert_manager/config/recovery/failed/download"}
-)
-async def websocket_failed_config_download(
-    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
-) -> None:
-    """Download the rejected configuration through an admin-only API."""
-    if (manager := _manager(hass, connection, msg["id"])) is None:
-        return
-    try:
-        result = manager.get_failed_config_download()
-    except ValueError as err:
-        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
-        return
-    connection.send_result(msg["id"], result)
-
-
-@websocket_api.require_admin
-@websocket_api.async_response
-@websocket_api.websocket_command(
     {
         vol.Required("type"): "alert_manager/config/import/validate",
         vol.Required("yaml"): str,
@@ -476,7 +457,6 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_recovery_get,
         websocket_config_backup_download,
         websocket_config_backup_restore,
-        websocket_failed_config_download,
         websocket_config_import_validate,
         websocket_config_import,
     ):

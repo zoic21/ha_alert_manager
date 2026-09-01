@@ -5373,7 +5373,7 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
-    this._configRecovery = { active: false, reason: null, failed_config_available: false, backups: [] };
+    this._configRecovery = { active: false, backups: [] };
     this._backupRestoreCandidate = null;
     this._coherence = null;
     this._coherenceLoading = false;
