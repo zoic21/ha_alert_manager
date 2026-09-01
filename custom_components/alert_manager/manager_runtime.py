@@ -127,18 +127,7 @@ class _RuntimeMixin:
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            if pack.state_change_handler is not None:
-                if new_state is None or not pack.applies(self.hass, new_state):
-                    continue
-                automatic_eligible = self._is_base_eligible(
-                    entity_id
-                ) and self._is_automatic_eligible(entity_id)
-                if not automatic_eligible:
-                    continue
-                if pack.handle_state_change(self.hass, old_state, new_state, config):
-                    pack_relevant = True
-                continue
-            if pack.should_evaluate(self.hass, new_state, config):
+            if pack.should_evaluate(self.hass, new_state, config, old_state=old_state):
                 pack_relevant = True
         if (
             entity_id in self._rules_by_entity

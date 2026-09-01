@@ -373,6 +373,10 @@ class _ApiMixin:
             ):
                 self._clear_variation_baselines()
             self._rebuild_rule_index()
+            if reset_all_pack_runtimes:
+                reset_pack_runtimes(self.hass)
+            elif disabled_pack_ids:
+                reset_pack_runtimes(self.hass, disabled_pack_ids)
             await self.async_evaluate_all(save=False, publish=False)
             if "pending_display_delay" in changes:
                 self._reschedule_hidden_pending_visibility(dt_util.now())
@@ -380,10 +384,6 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
-        if reset_all_pack_runtimes:
-            reset_pack_runtimes(self.hass)
-        elif disabled_pack_ids:
-            reset_pack_runtimes(self.hass, disabled_pack_ids)
         if coherence_schedule_changed:
             self._refresh_coherence_schedule()
         self._publish_if_changed()

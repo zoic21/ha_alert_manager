@@ -21,7 +21,7 @@ def test_should_evaluate_always_applies_new_state_first(hass):
         applies_calls += 1
         return state.entity_id.startswith("sensor.match_")
 
-    def transition_filter(_hass, _new_state, _config):
+    def transition_filter(_hass, _old_state, _new_state, _config):
         nonlocal filter_calls
         filter_calls += 1
         return True

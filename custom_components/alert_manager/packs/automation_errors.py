@@ -128,13 +128,13 @@ def _process_completed_traces(cycle: _AutomationCycle) -> None:
             cycle.error = str(summary["error"])
 
 
-def _handle_state_change(
+def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
     new_state: State,
     _config: dict[str, Any],
 ) -> bool:
-    """Capture starts, accumulate each decrease and evaluate completed runs."""
+    """Capture starts and request grouped evaluation on each decrease."""
     previous = _current(old_state) if old_state is not None else None
     current = _current(new_state)
     if previous is None or current is None:
@@ -147,10 +147,7 @@ def _handle_state_change(
         cycle.expected_runs += current - previous
         _capture_running_traces(hass, new_state.entity_id, cycle)
         return False
-    if current < previous:
-        _process_completed_traces(cycle)
-        return True
-    return False
+    return current < previous
 
 
 def _failure_threshold(config: dict[str, Any], entity_id: str) -> int:
@@ -220,7 +217,7 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
-    state_change_handler=_handle_state_change,
+    transition_filter=_should_evaluate,
     reset_handler=_reset_runtime,
     config_fields=(
         PackConfigField(
