@@ -9,7 +9,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from custom_components.alert_manager.const import INTEGRATION_VERSION
+from custom_components.alert_manager.const import (
+    INTEGRATION_VERSION,
+    MAX_RULE_CONDITION_TEMPLATE_LENGTH,
+    MAX_RULE_ENTITY_IDS,
+    MAX_RULE_MESSAGE_LENGTH,
+    MAX_RULE_NAME_LENGTH,
+    MAX_RULES,
+)
 from custom_components.alert_manager.models import (
     AlertDetails,
     AlertHistoryEntry,
@@ -766,6 +773,53 @@ def test_rule_entity_ids_must_be_unique():
                 "duration": 60,
             }
         )
+
+
+def test_rule_collection_and_entity_counts_are_bounded():
+    """Large admin payloads are rejected before every item is traversed."""
+    with pytest.raises(ValueError, match=f"at most {MAX_RULES}"):
+        validate_config({"rules": [{}] * (MAX_RULES + 1)})
+
+    with pytest.raises(ValueError, match=f"at most {MAX_RULE_ENTITY_IDS}"):
+        validate_rule_payload(
+            {
+                "name": "Too many entities",
+                "entity_ids": ["sensor.test"] * (MAX_RULE_ENTITY_IDS + 1),
+                "operator": "equals",
+                "value": "on",
+                "duration": 60,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("name", "x" * (MAX_RULE_NAME_LENGTH + 1), "name is too long"),
+        (
+            "message",
+            "x" * (MAX_RULE_MESSAGE_LENGTH + 1),
+            f"must not exceed {MAX_RULE_MESSAGE_LENGTH}",
+        ),
+        (
+            "condition_template",
+            "x" * (MAX_RULE_CONDITION_TEMPLATE_LENGTH + 1),
+            f"at most {MAX_RULE_CONDITION_TEMPLATE_LENGTH}",
+        ),
+    ],
+)
+def test_rule_text_fields_are_bounded(field, value, message):
+    """Every user-controlled rule text field has an explicit size limit."""
+    payload = {
+        "name": "Bounded rule",
+        "entity_ids": ["sensor.test"],
+        "operator": "equals",
+        "value": "on",
+        "duration": 60,
+        field: value,
+    }
+    with pytest.raises(ValueError, match=message):
+        validate_rule_payload(payload)
 
 
 @pytest.mark.parametrize(

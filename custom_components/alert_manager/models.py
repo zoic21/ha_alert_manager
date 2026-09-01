@@ -15,6 +15,10 @@ from uuid import uuid4
 from .const import (
     ATTRIBUTE_SOURCES,
     MAX_DELAY,
+    MAX_RULE_CONDITION_TEMPLATE_LENGTH,
+    MAX_RULE_ENTITY_IDS,
+    MAX_RULE_MESSAGE_LENGTH,
+    MAX_RULE_NAME_LENGTH,
     MIN_DELAY,
     OPERATORS,
     VALUE_SOURCES,
@@ -602,12 +606,16 @@ class Rule:
             raise ValueError("Rule id is required")
         if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("Rule name is required")
-        if len(self.name) > 255:
+        if len(self.name) > MAX_RULE_NAME_LENGTH:
             raise ValueError("Rule name is too long")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")
         if any(not isinstance(entity_id, str) for entity_id in self.entity_ids):
             raise ValueError("Rule entity_ids must contain strings")
+        if len(self.entity_ids) > MAX_RULE_ENTITY_IDS:
+            raise ValueError(
+                f"Rule entity_ids must contain at most {MAX_RULE_ENTITY_IDS} items"
+            )
         if len(set(self.entity_ids)) != len(self.entity_ids):
             raise ValueError("An entity cannot be repeated in the same rule")
         if self.source not in VALUE_SOURCES:
@@ -633,19 +641,22 @@ class Rule:
         if self.source not in ATTRIBUTE_SOURCES and self.attribute is not None:
             raise ValueError("Attribute must be empty for non-attribute rules")
         if self.message is not None and (
-            not isinstance(self.message, str) or len(self.message) > 1024
+            not isinstance(self.message, str)
+            or len(self.message) > MAX_RULE_MESSAGE_LENGTH
         ):
-            raise ValueError("Rule message must not exceed 1024 characters")
+            raise ValueError(
+                f"Rule message must not exceed {MAX_RULE_MESSAGE_LENGTH} characters"
+            )
         if not isinstance(self.update_message_when_active, bool):
             raise ValueError("Rule update_message_when_active must be a boolean")
         if self.condition_template is not None and (
             not isinstance(self.condition_template, str)
             or not self.condition_template.strip()
-            or len(self.condition_template) > 65_536
+            or len(self.condition_template) > MAX_RULE_CONDITION_TEMPLATE_LENGTH
         ):
             raise ValueError(
                 "Rule condition_template must be non-empty text of at most "
-                "65536 characters"
+                f"{MAX_RULE_CONDITION_TEMPLATE_LENGTH} characters"
             )
         if self.source == "jinja" and self.condition_template is None:
             raise ValueError("Rule condition_template is required for Jinja-only rules")

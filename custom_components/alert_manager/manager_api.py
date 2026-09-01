@@ -33,6 +33,7 @@ from .storage import sort_history
 from .validation import (
     validate_config,
     validate_config_update,
+    validate_rule_count,
     validate_rule_payload,
     validate_rule_update_fields,
 )
@@ -450,6 +451,7 @@ class _ApiMixin:
     @_serialize_config_mutation
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
+        validate_rule_count(len(self.config["rules"]) + 1)
         rule = validate_rule_payload(data)
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)

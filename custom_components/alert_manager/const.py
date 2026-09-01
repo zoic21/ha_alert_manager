@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.0.5-dev19"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.11"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.12"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -87,6 +87,11 @@ COHERENCE_SCHEDULE_HOUR: Final = 3
 COHERENCE_SCHEDULE_MINUTE: Final = 5
 MIN_HISTORY_LIMIT: Final = 0
 MAX_HISTORY_LIMIT: Final = 1000
+MAX_RULES: Final = 1000
+MAX_RULE_ENTITY_IDS: Final = 1000
+MAX_RULE_NAME_LENGTH: Final = 255
+MAX_RULE_MESSAGE_LENGTH: Final = 1024
+MAX_RULE_CONDITION_TEMPLATE_LENGTH: Final = 65_536
 
 CATEGORY_UNAVAILABLE: Final = "unavailable"
 CATEGORY_CONNECTIVITY: Final = "connectivity"
