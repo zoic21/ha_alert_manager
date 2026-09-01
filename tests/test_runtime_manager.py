@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from homeassistant.const import ATTR_DEVICE_CLASS
@@ -221,7 +222,9 @@ def test_sensors_reuse_last_published_snapshot(hass, entry, monkeypatch):
     assert calls == 0
 
 
-def test_ordinary_state_change_skips_unavailable_only_evaluation(hass, entry):
+def test_ordinary_state_change_skips_unavailable_only_evaluation(
+    hass, entry, monkeypatch
+):
     """Normal value churn is ignored when only unavailable could match it."""
 
     async def scenario():
@@ -230,18 +233,24 @@ def test_ordinary_state_change_skips_unavailable_only_evaluation(hass, entry):
         await manager.async_setup()
         old_state = hass.states.get("sensor.noisy")
         before = list(entry.created_task_names)
+        base_eligible = Mock(wraps=manager._is_base_eligible)
+        automatic_eligible = Mock(wraps=manager._is_automatic_eligible)
+        monkeypatch.setattr(manager, "_is_base_eligible", base_eligible)
+        monkeypatch.setattr(manager, "_is_automatic_eligible", automatic_eligible)
 
         hass.states.set("sensor.noisy", "2")
         new_state = hass.states.get("sensor.noisy")
         manager._state_changed(_state_event("sensor.noisy", old_state, new_state))
 
+        assert base_eligible.call_count == 0
+        assert automatic_eligible.call_count == 0
         assert entry.created_task_names == before
         assert manager._evaluation_flush_scheduled is False
 
     asyncio.run(scenario())
 
 
-def test_unavailable_transition_remains_evaluated(hass, entry):
+def test_unavailable_transition_remains_evaluated(hass, entry, monkeypatch):
     """Entering unavailable still opens the automatic alert after filtering."""
 
     async def scenario():
@@ -249,10 +258,17 @@ def test_unavailable_transition_remains_evaluated(hass, entry):
         manager = AlertManager(hass, entry)
         await manager.async_setup()
         old_state = hass.states.get("sensor.noisy")
+        base_eligible = Mock(wraps=manager._is_base_eligible)
+        automatic_eligible = Mock(wraps=manager._is_automatic_eligible)
+        monkeypatch.setattr(manager, "_is_base_eligible", base_eligible)
+        monkeypatch.setattr(manager, "_is_automatic_eligible", automatic_eligible)
 
         hass.states.set("sensor.noisy", "unavailable")
         new_state = hass.states.get("sensor.noisy")
         manager._state_changed(_state_event("sensor.noisy", old_state, new_state))
+
+        assert base_eligible.call_count == 1
+        assert automatic_eligible.call_count == 1
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 

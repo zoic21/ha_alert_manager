@@ -110,11 +110,6 @@ class _RuntimeMixin:
             and old_state.attributes == new_state.attributes
         ):
             return False
-        if not self._is_base_eligible(entity_id) or not self._is_automatic_eligible(
-            entity_id
-        ):
-            return False
-
         automatic = self.config.get("automatic", {})
         for pack in PACKS:
             config = automatic.get(pack.id, {})
@@ -123,7 +118,9 @@ class _RuntimeMixin:
             if not self._pack_is_available(pack.id):
                 continue
             if pack.should_evaluate(self.hass, new_state, config):
-                return True
+                if not self._is_base_eligible(entity_id):
+                    return False
+                return self._is_automatic_eligible(entity_id)
         return False
 
     def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
@@ -132,6 +129,14 @@ class _RuntimeMixin:
             return False
         new_state = event.data.get("new_state")
         if new_state is not None and not isinstance(new_state, State):
+            return False
+        old_state = event.data.get("old_state")
+        if (
+            isinstance(old_state, State)
+            and new_state is not None
+            and self._has_applicable_automatic_pack(old_state)
+            == self._has_applicable_automatic_pack(new_state)
+        ):
             return False
         was_tracked = entity_id in self._automatic_tracked_entities
         is_tracked = new_state is not None and self._is_automatically_tracked(new_state)
@@ -1057,10 +1062,14 @@ class _RuntimeMixin:
         return (
             self._is_base_eligible(state.entity_id)
             and self._is_automatic_eligible(state.entity_id)
-            and any(
-                self.config["automatic"][pack.id]["enabled"]
-                and self._pack_is_available(pack.id)
-                and pack.applies(self.hass, state)
-                for pack in PACKS
-            )
+            and self._has_applicable_automatic_pack(state)
+        )
+
+    def _has_applicable_automatic_pack(self, state: State) -> bool:
+        """Return whether an enabled and available pack applies to a state."""
+        return any(
+            self.config["automatic"][pack.id]["enabled"]
+            and self._pack_is_available(pack.id)
+            and pack.applies(self.hass, state)
+            for pack in PACKS
         )
