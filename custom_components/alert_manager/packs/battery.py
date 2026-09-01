@@ -83,7 +83,7 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
-    transition_filter=_should_evaluate,
+    should_evaluate=_should_evaluate,
     config_fields=(
         PackConfigField(
             id="threshold",

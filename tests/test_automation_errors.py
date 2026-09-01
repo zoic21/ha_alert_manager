@@ -127,7 +127,6 @@ def test_pack_ignores_other_domains(hass):
     state = hass.states.set("sensor.other", "on", {"current": 0})
 
     assert not automation_errors.PACK.applies(hass, state)
-    assert not automation_errors.PACK.should_evaluate(hass, state, {})
     assert automation_errors.PACK.evaluate(hass, state, {}) is None
 
 

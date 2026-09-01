@@ -57,7 +57,7 @@ class PackConfigField:
         }
 
 
-PackTransitionFilter = Callable[
+PackShouldEvaluate = Callable[
     [HomeAssistant, State | None, State, dict[str, Any]], bool
 ]
 PackResetHandler = Callable[[HomeAssistant], None]
@@ -73,25 +73,9 @@ class AutomaticPack:
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
-    transition_filter: PackTransitionFilter | None = None
+    should_evaluate: PackShouldEvaluate | None = None
     reset_handler: PackResetHandler | None = None
     config_fields: tuple[PackConfigField, ...] = ()
-
-    def should_evaluate(
-        self,
-        hass: HomeAssistant,
-        new_state: State | None,
-        config: dict[str, Any],
-        *,
-        old_state: State | None = None,
-    ) -> bool:
-        """Return whether a record-free entity state is worth evaluating."""
-        if new_state is None or not self.applies(hass, new_state):
-            return False
-        if self.transition_filter is not None:
-            return self.transition_filter(hass, old_state, new_state, config)
-        # Future packs without a filter stay conservative for applicable states.
-        return True
 
     def reset_runtime(self, hass: HomeAssistant) -> None:
         """Discard optional transient state owned by this pack."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -11,9 +12,11 @@ import pytest
 from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import Event, State
 
+from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.packs import PACKS
 from custom_components.alert_manager.sensor import AlertManagerSensor
 
 
@@ -246,6 +249,40 @@ def test_ordinary_state_change_skips_unavailable_only_evaluation(
         assert automatic_eligible.call_count == 0
         assert entry.created_task_names == before
         assert manager._evaluation_flush_scheduled is False
+
+    asyncio.run(scenario())
+
+
+def test_runtime_checks_pack_applicability_before_should_evaluate(
+    hass, entry, monkeypatch
+):
+    """A pack callback is never invoked for an unrelated entity domain."""
+
+    async def scenario():
+        hass.states.set("sensor.unrelated", "1")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        calls = 0
+
+        def should_evaluate(_hass, _old_state, _new_state, _config):
+            nonlocal calls
+            calls += 1
+            return True
+
+        patched_packs = tuple(
+            replace(pack, should_evaluate=should_evaluate)
+            if pack.id == "automation_errors"
+            else pack
+            for pack in PACKS
+        )
+        monkeypatch.setattr(manager_runtime, "PACKS", patched_packs)
+
+        old_state = hass.states.get("sensor.unrelated")
+        hass.states.set("sensor.unrelated", "2")
+        new_state = hass.states.get("sensor.unrelated")
+        manager._state_changed(_state_event("sensor.unrelated", old_state, new_state))
+
+        assert calls == 0
 
     asyncio.run(scenario())
 

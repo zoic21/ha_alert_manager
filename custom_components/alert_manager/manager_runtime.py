@@ -127,8 +127,13 @@ class _RuntimeMixin:
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            if pack.should_evaluate(self.hass, new_state, config, old_state=old_state):
-                pack_relevant = True
+            if new_state is None or not pack.applies(self.hass, new_state):
+                continue
+            if pack.should_evaluate is not None and not pack.should_evaluate(
+                self.hass, old_state, new_state, config
+            ):
+                continue
+            pack_relevant = True
         if (
             entity_id in self._rules_by_entity
             or entity_id in self._record_ids_by_entity

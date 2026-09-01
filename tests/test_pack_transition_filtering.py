@@ -1,4 +1,4 @@
-"""Automatic-pack transition filtering regression tests."""
+"""Automatic-pack should-evaluate regression tests."""
 
 from __future__ import annotations
 
@@ -26,15 +26,20 @@ def _state_event(entity_id, old_state, new_state):
     )
 
 
+def _should_evaluate(pack, hass, new_state, config, old_state=None):
+    callback = pack.should_evaluate
+    assert callback is not None
+    return callback(hass, old_state, new_state, config)
+
+
 def test_unavailable_pack_filters_only_interesting_new_state(hass):
     """Unavailable is interesting only when the new state is unavailable."""
     normal = hass.states.set("sensor.source", "1")
     unavailable_state = hass.states.set("sensor.source", "unavailable")
     config = {"enabled": True}
 
-    assert not unavailable.PACK.should_evaluate(hass, normal, config)
-    assert unavailable.PACK.should_evaluate(hass, unavailable_state, config)
-    assert not unavailable.PACK.should_evaluate(hass, None, config)
+    assert not _should_evaluate(unavailable.PACK, hass, normal, config)
+    assert _should_evaluate(unavailable.PACK, hass, unavailable_state, config)
 
 
 def test_connectivity_pack_filters_only_unavailable(hass):
@@ -45,10 +50,9 @@ def test_connectivity_pack_filters_only_unavailable(hass):
     unavailable_state = hass.states.set("binary_sensor.link", "unavailable", attributes)
     config = {"enabled": True}
 
-    assert connectivity.PACK.should_evaluate(hass, on_state, config)
-    assert connectivity.PACK.should_evaluate(hass, off_state, config)
-    assert not connectivity.PACK.should_evaluate(hass, unavailable_state, config)
-    assert not connectivity.PACK.should_evaluate(hass, None, config)
+    assert _should_evaluate(connectivity.PACK, hass, on_state, config)
+    assert _should_evaluate(connectivity.PACK, hass, off_state, config)
+    assert not _should_evaluate(connectivity.PACK, hass, unavailable_state, config)
 
 
 def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_entry):
@@ -61,12 +65,12 @@ def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_ent
         "device_thresholds": {device_id: 30},
     }
 
-    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "40"), config)
-    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "30"), config)
-    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "29"), config)
-    assert battery.PACK.should_evaluate(hass, _battery_state(hass, "31"), config)
-    assert not battery.PACK.should_evaluate(
-        hass, _battery_state(hass, "unavailable"), config
+    assert _should_evaluate(battery.PACK, hass, _battery_state(hass, "40"), config)
+    assert _should_evaluate(battery.PACK, hass, _battery_state(hass, "30"), config)
+    assert _should_evaluate(battery.PACK, hass, _battery_state(hass, "29"), config)
+    assert _should_evaluate(battery.PACK, hass, _battery_state(hass, "31"), config)
+    assert not _should_evaluate(
+        battery.PACK, hass, _battery_state(hass, "unavailable"), config
     )
 
 
