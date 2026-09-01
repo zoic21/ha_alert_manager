@@ -1,6 +1,12 @@
 import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 
+const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
+
+function isNumberMapField(field) {
+  return NUMBER_MAP_FIELD_TYPES.has(field.type);
+}
+
 export function renderAutomatic(context) {
     const { availablePacks, config, draft, busy, renderNumberField, t } = context;
     return `<form id="automatic-form" class="automatic-grid">
@@ -55,14 +61,14 @@ export function renderPackField(pack, field, config, context) {
         { step: field.step ?? "any" },
       );
     }
-    if (field.type !== "device_number_map") return "";
+    if (!isNumberMapField(field)) return "";
     const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
       <span class="field-label">${esc(label)}</span>
       <small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small>
       <div class="pack-map-list">
         ${rows.map((row, index) => `<div class="pack-map-row">
-          <ha-selector id="auto-${pack.id}-${field.id}-device-${index}"></ha-selector>
+          <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
           <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
         </div>`).join("")}
@@ -88,27 +94,31 @@ export async function saveAutomatic() {
           );
           continue;
         }
-        if (field.type !== "device_number_map") continue;
+        if (!isNumberMapField(field)) continue;
         const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
         const values = {};
         for (const row of rows) {
-          if (!row.device_id || !Number.isFinite(row.value)) {
+          if (!row.target_id || !Number.isFinite(row.value)) {
             this._notice = {
               kind: "error",
-              text: this._t("automatic.device_threshold_validation"),
+              text: this._t(
+                `automatic.fields.${field.translation_key}.validation`,
+              ),
             };
             this._refreshUiState();
             return;
           }
-          if (Object.hasOwn(values, row.device_id)) {
+          if (Object.hasOwn(values, row.target_id)) {
             this._notice = {
               kind: "error",
-              text: this._t("automatic.duplicate_device_threshold"),
+              text: this._t(
+                `automatic.fields.${field.translation_key}.duplicate`,
+              ),
             };
             this._refreshUiState();
             return;
           }
-          values[row.device_id] = row.value;
+          values[row.target_id] = row.value;
         }
         automatic[pack.id][field.id] = values;
       }
@@ -135,10 +145,10 @@ export function ensureAutomaticDraft() {
     for (const pack of this._packs) {
       const fields = {};
       for (const field of pack.config_fields ?? []) {
-        if (field.type !== "device_number_map") continue;
+        if (!isNumberMapField(field)) continue;
         fields[field.id] = Object.entries(
           this._config.automatic?.[pack.id]?.[field.id] ?? {},
-        ).map(([device_id, value]) => ({ device_id, value }));
+        ).map(([target_id, value]) => ({ target_id, value }));
       }
       this._automaticMapDraft[pack.id] = fields;
     }
@@ -158,14 +168,16 @@ export function hydrateAutomaticControls() {
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
     for (const field of pack.config_fields ?? []) {
-      if (field.type !== "device_number_map") continue;
+      if (!isNumberMapField(field)) continue;
       const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
       rows.forEach((row, index) => {
         this._configureSelector(
-          `auto-${pack.id}-${field.id}-device-${index}`,
-          { device: {} },
-          row.device_id,
-          (value) => { row.device_id = typeof value === "string" ? value : ""; },
+          `auto-${pack.id}-${field.id}-target-${index}`,
+          field.type === "entity_number_map"
+            ? { entity: field.entity_domain ? { domain: field.entity_domain } : {} }
+            : { device: {} },
+          row.target_id,
+          (value) => { row.target_id = typeof value === "string" ? value : ""; },
         );
       });
     }
@@ -184,7 +196,11 @@ export async function handleAutomaticAction(action, button) {
     const rows = this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId];
     const field = this._packs.find((pack) => pack.id === button.dataset.packId)
       ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
-    if (rows) rows.push({ device_id: "", value: Number(field?.default ?? 0) });
+    const minimum = Number(field?.minimum ?? -1000000000);
+    const maximum = Number(field?.maximum ?? 1000000000);
+    if (rows) {
+      rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
+    }
     this._render();
     return true;
   }

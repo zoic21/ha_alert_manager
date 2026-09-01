@@ -99,7 +99,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     config: { automatic: { battery: { enabled: true, delay: 60 } } },
     draft: {
       battery: {
-        device_thresholds: [{ device_id: "device-1", value: 15 }],
+        device_thresholds: [{ target_id: "device-1", value: 15 }],
       },
     },
     busy: false,
@@ -109,7 +109,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
 
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
-  assert.match(markup, /auto-battery-device_thresholds-device-0/);
+  assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /value="15"/);
 
   const automationErrors = renderAutomatic({
@@ -117,13 +117,30 @@ test("automatic rendering uses prepared configuration and draft data", () => {
       id: "automation_errors",
       available: true,
       translation_key: "automation_errors",
+      config_fields: [{
+        id: "failure_thresholds",
+        type: "entity_number_map",
+        translation_key: "failure_thresholds",
+        minimum: 1,
+        maximum: 100,
+        step: 1,
+        entity_domain: "automation",
+      }],
     }],
     config: {
       automatic: {
-        automation_errors: { enabled: true, delay: null },
+        automation_errors: {
+          enabled: true,
+          delay: null,
+          failure_thresholds: { "automation.test": 3 },
+        },
       },
     },
-    draft: {},
+    draft: {
+      automation_errors: {
+        failure_thresholds: [{ target_id: "automation.test", value: 3 }],
+      },
+    },
     busy: false,
     renderNumberField: (id) => `<number id="${id}"></number>`,
     t,
@@ -131,6 +148,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(automationErrors, /packs\.automation_errors\.name/);
   assert.match(automationErrors, /auto-automation_errors-enabled[^>]*checked/);
   assert.match(automationErrors, /auto-automation_errors-delay/);
+  assert.match(automationErrors, /auto-automation_errors-failure_thresholds-target-0/);
+  assert.match(automationErrors, /value="3"/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {

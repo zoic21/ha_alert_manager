@@ -18,13 +18,19 @@
     },
     "automatic": {
       "aria_enable": "Enable {name}",
-      "device_threshold_validation": "Each row must contain a device and a valid numeric threshold.",
-      "duplicate_device_threshold": "A device can have only one custom threshold.",
       "empty_delay_help": "Leave the delay empty to use the global delay.",
       "fields": {
         "device_thresholds": {
+          "duplicate": "A device can have only one custom threshold.",
           "help": "The device threshold takes precedence over the global threshold.",
-          "label": "Custom thresholds by device"
+          "label": "Custom thresholds by device",
+          "validation": "Each row must contain a device and a valid numeric threshold."
+        },
+        "failure_thresholds": {
+          "duplicate": "An automation can have only one failure threshold.",
+          "help": "By default, one failed cycle triggers an alert. Set a higher threshold for automations that must fail several consecutive cycles.",
+          "label": "Consecutive failure thresholds by automation",
+          "validation": "Each row must contain an automation and a valid whole number."
         },
         "threshold": {
           "label": "Global threshold"

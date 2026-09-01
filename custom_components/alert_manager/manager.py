@@ -26,7 +26,7 @@ from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
-from .packs.automation_errors import reset_runtime as reset_automation_error_runtime
+from .packs import reset_pack_runtimes
 from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
@@ -235,6 +235,6 @@ class AlertManager(
             cancel()
         self._timers.clear()
         self._cancel_all_device_event_timers()
-        reset_automation_error_runtime(self.hass)
+        reset_pack_runtimes(self.hass)
         if not self.recovery_active:
             await self._async_save_state()

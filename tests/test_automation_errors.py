@@ -231,6 +231,42 @@ def test_error_then_error_keeps_and_updates_alert(hass, entry):
     asyncio.run(scenario())
 
 
+def test_per_automation_consecutive_failure_threshold(hass, entry):
+    """A configured automation alerts only after enough failed cycles."""
+
+    async def scenario():
+        runtime = await _Scenario.create(hass, entry)
+        runtime.manager.config["automatic"]["automation_errors"][
+            "failure_thresholds"
+        ] = {runtime.entity_id: 3}
+        alert_id = "automation_errors:automation.test"
+
+        for index in range(2):
+            failed = runtime.start(f"failed-{index}")
+            runtime.finish(failed, f"Failure {index}")
+            await runtime.flush()
+            assert alert_id not in runtime.manager.records
+
+        failed = runtime.start("failed-2")
+        runtime.finish(failed, "Third consecutive failure")
+        await runtime.flush()
+        assert runtime.manager.records[alert_id].details.condition.endswith(
+            "Third consecutive failure"
+        )
+
+        success = runtime.start("success")
+        runtime.finish(success)
+        await runtime.flush()
+        assert alert_id not in runtime.manager.records
+
+        failed = runtime.start("failed-after-success")
+        runtime.finish(failed, "Counter restarted")
+        await runtime.flush()
+        assert alert_id not in runtime.manager.records
+
+    asyncio.run(scenario())
+
+
 def test_parallel_cycle_accumulates_error_beyond_ha_trace_limit(hass, entry):
     """Each decrease is accumulated even after HA evicts an older run trace."""
 

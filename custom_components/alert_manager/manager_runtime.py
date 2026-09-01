@@ -21,7 +21,6 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTRIBUTE_SOURCES,
-    CATEGORY_AUTOMATION_ERRORS,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
     VARIATION_SOURCES,
@@ -101,10 +100,6 @@ class _RuntimeMixin:
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
-        direct_source = (
-            entity_id in self._rules_by_entity
-            or entity_id in self._record_ids_by_entity
-        )
         if "old_state" not in event.data or "new_state" not in event.data:
             return self._is_relevant_entity_id(entity_id)
         old_state = event.data.get("old_state")
@@ -119,7 +114,10 @@ class _RuntimeMixin:
             and old_state.state == new_state.state
             and old_state.attributes == new_state.attributes
         ):
-            return direct_source
+            return (
+                entity_id in self._rules_by_entity
+                or entity_id in self._record_ids_by_entity
+            )
         automatic = self.config.get("automatic", {})
         pack_relevant = False
         automatic_eligible: bool | None = None
@@ -129,19 +127,23 @@ class _RuntimeMixin:
                 continue
             if not self._pack_is_available(pack.id):
                 continue
-            if (
-                pack.id == CATEGORY_AUTOMATION_ERRORS
-                and new_state is not None
-                and pack.applies(self.hass, new_state)
-            ):
+            if pack.state_change_handler is not None:
+                if new_state is None or not pack.applies(self.hass, new_state):
+                    continue
                 automatic_eligible = self._is_base_eligible(
                     entity_id
                 ) and self._is_automatic_eligible(entity_id)
                 if not automatic_eligible:
                     continue
+                if pack.handle_state_change(self.hass, old_state, new_state, config):
+                    pack_relevant = True
+                continue
             if pack.should_evaluate(self.hass, new_state, config):
                 pack_relevant = True
-        if direct_source:
+        if (
+            entity_id in self._rules_by_entity
+            or entity_id in self._record_ids_by_entity
+        ):
             return True
         if not pack_relevant:
             return False
@@ -1036,23 +1038,8 @@ class _RuntimeMixin:
             return True
         if not self._is_automatic_eligible(entity_id):
             return False
-        domain = entity_id.partition(".")[0]
-        automatic = self.config.get("automatic", {})
-        unavailable = automatic.get(CATEGORY_UNAVAILABLE, {})
-        if unavailable.get("enabled"):
-            return True
-        pack_ids = {
-            pack.id
-            for pack in PACKS
-            if automatic.get(pack.id, {}).get("enabled", False)
-            and self._pack_is_available(pack.id)
-        }
-        return (
-            (domain == "binary_sensor" and "connectivity" in pack_ids)
-            or (domain == "device_tracker" and "unifi" in pack_ids)
-            or (domain == "sensor" and "battery" in pack_ids)
-            or (domain == "automation" and CATEGORY_AUTOMATION_ERRORS in pack_ids)
-        )
+        state = self.hass.states.get(entity_id)
+        return state is not None and self._has_applicable_automatic_pack(state)
 
     def _tracked_count(self) -> int:
         """Count enabled custom instances and unique automatic sources."""

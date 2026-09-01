@@ -754,6 +754,46 @@ def test_pack_declared_device_number_map_is_strictly_validated():
         )
 
 
+def test_pack_declared_entity_number_map_is_strictly_validated():
+    """Entity maps enforce their declared domain, bounds and integer step."""
+    normalized = validate_config(
+        {
+            "automatic": {
+                "automation_errors": {"failure_thresholds": {"automation.test": "3"}}
+            }
+        }
+    )
+    assert normalized["automatic"]["automation_errors"]["failure_thresholds"] == {
+        "automation.test": 3
+    }
+    with pytest.raises(ValueError, match="outside the automation domain"):
+        validate_config(
+            {
+                "automatic": {
+                    "automation_errors": {"failure_thresholds": {"sensor.test": 3}}
+                }
+            }
+        )
+    with pytest.raises(ValueError, match="must be an integer"):
+        validate_config(
+            {
+                "automatic": {
+                    "automation_errors": {
+                        "failure_thresholds": {"automation.test": 2.5}
+                    }
+                }
+            }
+        )
+    with pytest.raises(ValueError, match="between 1 and 100"):
+        validate_config(
+            {
+                "automatic": {
+                    "automation_errors": {"failure_thresholds": {"automation.test": 0}}
+                }
+            }
+        )
+
+
 def test_pack_source_files_have_no_localized_fallback_text():
     """Pack modules contain logic and translation keys, never localized prose."""
     pack_directory = Path(__file__).parents[1] / "custom_components/alert_manager/packs"

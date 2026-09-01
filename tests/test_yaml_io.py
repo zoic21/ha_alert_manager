@@ -326,7 +326,10 @@ def test_older_export_without_automation_errors_pack_uses_default() -> None:
     """Exports created before the new pack remain importable."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
     legacy = exported.replace(
-        "    automation_errors:\n      enabled: true\n      delay: null\n",
+        "    automation_errors:\n"
+        "      enabled: true\n"
+        "      delay: null\n"
+        "      failure_thresholds: {}\n",
         "",
     )
 
@@ -335,6 +338,7 @@ def test_older_export_without_automation_errors_pack_uses_default() -> None:
     assert imported["automatic"]["automation_errors"] == {
         "enabled": True,
         "delay": None,
+        "failure_thresholds": {},
     }
 
 

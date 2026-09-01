@@ -457,6 +457,11 @@ const completeConfig = () => ({
     connectivity: { enabled: true, delay: 900 },
     unifi: { enabled: true, delay: 900 },
     battery: { enabled: true, delay: 900, threshold: 15, device_thresholds: {} },
+    automation_errors: {
+      enabled: true,
+      delay: null,
+      failure_thresholds: { "automation.test": 3 },
+    },
   },
   rules: [],
   global_delay: 900,
@@ -746,6 +751,24 @@ const completePacks = () => [
         maximum: 1000000000,
         step: "any",
         unit: "%",
+      },
+    ],
+  },
+  {
+    id: "automation_errors",
+    translation_key: "automation_errors",
+    prerequisites: [],
+    available: true,
+    config_fields: [
+      {
+        id: "failure_thresholds",
+        type: "entity_number_map",
+        translation_key: "failure_thresholds",
+        default: {},
+        minimum: 1,
+        maximum: 100,
+        step: 1,
+        entity_domain: "automation",
       },
     ],
   },
@@ -2303,6 +2326,8 @@ test("automatic monitoring action serializes all category controls", async () =>
     "#auto-battery-enabled": { checked: true },
     "#auto-battery-delay": { value: "240" },
     "#auto-battery-threshold": { value: "12" },
+    "#auto-automation_errors-enabled": { checked: true },
+    "#auto-automation_errors-delay": { value: "" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   let call;
@@ -2315,7 +2340,40 @@ test("automatic monitoring action serializes all category controls", async () =>
     connectivity: { enabled: false, delay: 120 },
     unifi: { enabled: true, delay: 180 },
     battery: { enabled: true, delay: 240, threshold: 12, device_thresholds: {} },
+    automation_errors: {
+      enabled: true,
+      delay: null,
+      failure_thresholds: { "automation.test": 3 },
+    },
   });
+});
+
+test("automation failure thresholds use an automation entity selector", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._render = () => {};
+  panel._automaticMapDraft = {
+    automation_errors: { failure_thresholds: [] },
+  };
+
+  await panel._handleClick(actionEvent("add-pack-map-row", null, {
+    packId: "automation_errors",
+    fieldId: "failure_thresholds",
+  }));
+  assert.deepEqual(panel._automaticMapDraft.automation_errors.failure_thresholds, [
+    { target_id: "", value: 1 },
+  ]);
+
+  let selector;
+  panel._configureSelector = (...args) => { selector = args; };
+  panel._hydrateAutomaticControls();
+  assert.equal(
+    selector[0],
+    "auto-automation_errors-failure_thresholds-target-0",
+  );
+  assert.deepEqual(selector[1], { entity: { domain: "automation" } });
 });
 
 test("automatic packs are rendered only from available backend metadata", () => {
