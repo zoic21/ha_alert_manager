@@ -17,7 +17,8 @@ import {
 } from "./components/alert-table.js";
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
-  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS, useNativeBottomSheet,
+  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS,
+  updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
@@ -51,7 +52,7 @@ import {
   nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
   replaceRule, ruleTableRows, toggleRule,
 } from "./views/rules.js";
-import { captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
+import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
   handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
@@ -81,6 +82,7 @@ class AlertManagerPanel extends HTMLElement {
   _renderConfigBackups = renderConfigBackups;
   _useNativeBottomSheet = useNativeBottomSheet;
   _loadNativeBottomSheet = loadNativeBottomSheet;
+  _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -117,6 +119,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
+  _captureAutomaticConfigurationValues = captureAutomaticConfigurationValues;
   _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
@@ -327,6 +330,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set narrow(value) {
+    const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
     this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
@@ -337,6 +341,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    this._updateDrawerLayout(previousNarrow);
   }
 
   _upgradeProperty(name) {

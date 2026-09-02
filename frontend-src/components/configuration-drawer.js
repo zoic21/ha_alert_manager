@@ -42,6 +42,24 @@ export async function loadNativeBottomSheet() {
   return this._nativeBottomSheetLoadPromise;
 }
 
+export function updateDrawerLayout(previousNarrow) {
+  if (
+    Boolean(previousNarrow) === this._narrow
+    || !this.isConnected
+    || (this._editingRule === null && !this._configurationDrawer)
+  ) return;
+  if (this._editingRule !== null) this._captureRuleDraft();
+  if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
+  if (this._activeTab === "settings") this._captureEntityDelayValues();
+  if (!this._narrow) {
+    this._render();
+    return;
+  }
+  void this._loadNativeBottomSheet().then((loaded) => {
+    if (loaded && this.isConnected && this._narrow) this._render();
+  });
+}
+
 export async function handleBottomSheetClosed(panel, actionHandlers, event) {
   const action = event.target?.dataset?.closeAction;
   if (!action) return;

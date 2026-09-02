@@ -417,6 +417,29 @@ test("a directly loaded panel replays pre-upgrade Home Assistant properties", ()
   assert.equal(loads, 1);
 });
 
+test("an open side drawer follows Home Assistant narrow resize changes", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "settings";
+  panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
+  let captures = 0;
+  let renders = 0;
+  panel._captureEntityDelayValues = () => { captures += 1; };
+  panel._loadNativeBottomSheet = async () => true;
+  panel._render = () => { renders += 1; };
+
+  panel.narrow = true;
+  await Promise.resolve();
+  assert.equal(captures, 1);
+  assert.equal(renders, 1);
+
+  panel.narrow = false;
+  assert.equal(captures, 2);
+  assert.equal(renders, 2);
+  panel.narrow = false;
+  assert.equal(renders, 2);
+});
+
 test("new rules start enabled with safe defaults", () => {
   assert.deepEqual(newRuleDefaults(), {
     name: "",

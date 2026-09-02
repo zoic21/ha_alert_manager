@@ -2124,6 +2124,24 @@ async function loadNativeBottomSheet() {
   return this._nativeBottomSheetLoadPromise;
 }
 
+function updateDrawerLayout(previousNarrow) {
+  if (
+    Boolean(previousNarrow) === this._narrow
+    || !this.isConnected
+    || (this._editingRule === null && !this._configurationDrawer)
+  ) return;
+  if (this._editingRule !== null) this._captureRuleDraft();
+  if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
+  if (this._activeTab === "settings") this._captureEntityDelayValues();
+  if (!this._narrow) {
+    this._render();
+    return;
+  }
+  void this._loadNativeBottomSheet().then((loaded) => {
+    if (loaded && this.isConnected && this._narrow) this._render();
+  });
+}
+
 async function handleBottomSheetClosed(panel, actionHandlers, event) {
   const action = event.target?.dataset?.closeAction;
   if (!action) return;
@@ -5928,6 +5946,7 @@ class AlertManagerPanel extends HTMLElement {
   _renderConfigBackups = renderConfigBackups;
   _useNativeBottomSheet = useNativeBottomSheet;
   _loadNativeBottomSheet = loadNativeBottomSheet;
+  _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -5964,6 +5983,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
+  _captureAutomaticConfigurationValues = captureAutomaticConfigurationValues;
   _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
@@ -6174,6 +6194,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set narrow(value) {
+    const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
     this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
@@ -6184,6 +6205,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    this._updateDrawerLayout(previousNarrow);
   }
 
   _upgradeProperty(name) {
