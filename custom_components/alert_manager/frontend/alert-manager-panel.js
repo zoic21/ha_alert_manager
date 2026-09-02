@@ -604,43 +604,142 @@ class AlertManagerApi {
   }
 }
 
+const PANEL_STATE_CACHE = new WeakMap();
+
+function panelStateCacheKey(hass) {
+  const key = hass?.connection ?? hass;
+  return key && (typeof key === "object" || typeof key === "function") ? key : null;
+}
+
+function rememberPanelState() {
+    const key = panelStateCacheKey(this._hass);
+    if (!key || !this._config) return;
+    PANEL_STATE_CACHE.set(key, {
+      language: this._language,
+      translations: this._translations,
+      englishTranslations: this._englishTranslations,
+      config: this._config,
+      alerts: this._alerts,
+      packs: this._packs,
+      historyConfig: this._historyConfig,
+      configRecovery: this._configRecovery,
+      labels: this._labels,
+      monitoringEnabled: this._monitoringEnabled,
+    });
+}
+
+function restorePanelState() {
+    const key = panelStateCacheKey(this._hass);
+    const cached = key ? PANEL_STATE_CACHE.get(key) : null;
+    if (!cached || cached.language !== this._language) return false;
+    this._translations = cached.translations;
+    this._englishTranslations = cached.englishTranslations;
+    this._config = cached.config;
+    this._alerts = cached.alerts;
+    this._packs = cached.packs;
+    this._historyConfig = cached.historyConfig;
+    this._configRecovery = cached.configRecovery;
+    this._labels = cached.labels;
+    this._monitoringEnabled = cached.monitoringEnabled;
+    this._loading = false;
+    this._cachedStateNeedsRefresh = true;
+    return true;
+}
+
+function setHass(value) {
+    const language = value?.locale?.language || "en";
+    const languageChanged = language !== this._language;
+    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
+      ?.attributes?.scanned_at ?? null;
+    const coherenceChanged = Boolean(
+      scannedAt && scannedAt !== this._coherenceScannedAt,
+    );
+    this._coherenceScannedAt = scannedAt;
+    this._hass = value;
+    this._language = language;
+    if (!this._config) this._restorePanelState();
+    const alertsChanged = this._syncSensor();
+    if (this.isConnected && this._config && this._coherenceLoaded && coherenceChanged) {
+      void this._refreshCoherence();
+    }
+    if (
+      this.isConnected
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) {
+      this._load();
+    } else if (this.isConnected && languageChanged && !this._translationPromise) {
+      this._reloadTranslations();
+    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
+      this._refreshOverviewData();
+      void this._refreshAlerts();
+    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
+      this._refreshHistory();
+    } else if (this.isConnected) {
+      this._hydrateSelectors();
+    }
+}
+
+function refreshTabData(tab) {
+    if (!this._hass || !this._config) return;
+    if (tab === "history") {
+      void this._refreshHistory();
+    } else if (tab === "coherence") {
+      void this._refreshCoherence();
+    } else if (tab === "overview" && !this._loadPromise) {
+      void this._refreshAlerts();
+    }
+}
+
 async function load() {
+    const initialLoad = !this._config;
+    this._cachedStateNeedsRefresh = false;
     this._loadPromise = Promise.all([
       this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
       this._api.call({ type: "alert_manager/packs/list" }),
-      this._api.call({ type: "alert_manager/history/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
-      this._api.call({ type: "alert_manager/coherence/get" }),
       this._api.call({ type: "alert_manager/config/recovery/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
-    this._loading = true;
-    this._render();
+    if (initialLoad) {
+      this._loading = true;
+      this._render();
+    }
     try {
       [
         this._config,
         this._alerts,
         this._packs,
-        this._history,
         this._historyConfig,
-        this._coherence,
         this._configRecovery,
         this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
-      this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
       this._resetSettingsDraft();
       this._resetAutomaticDraft();
       this._syncSensor();
       this._notice = null;
+      this._rememberPanelState();
+      if (["history", "coherence"].includes(this._activeTab)) {
+        this._refreshTabData(this._activeTab);
+      }
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._loading = false;
       this._loadPromise = null;
-      this._render();
+      if (initialLoad) {
+        this._render();
+      } else if (this._activeTab === "overview") {
+        this._refreshOverviewData();
+      } else if (this._activeTab === "rules") {
+        this._refreshRulesData();
+      } else {
+        this._refreshUiState();
+        this._hydrateSelectors();
+      }
     }
 }
 
@@ -649,7 +748,9 @@ async function refreshHistory() {
     this._historyLoadPromise = this._api.call({ type: "alert_manager/history/list" });
     try {
       this._history = await this._historyLoadPromise;
+      this._historyLoaded = true;
     } catch (error) {
+      this._historyLoaded = true;
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._historyLoadPromise = null;
@@ -665,8 +766,10 @@ async function refreshCoherence() {
     });
     try {
       this._coherence = await this._coherenceLoadPromise;
+      this._coherenceLoaded = true;
       this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
     } catch (error) {
+      this._coherenceLoaded = true;
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._coherenceLoadPromise = null;
@@ -686,6 +789,7 @@ async function refreshAlerts() {
     });
     try {
       this._alerts = await this._alertsRefreshPromise;
+      this._rememberPanelState();
       if (this.isConnected && this._activeTab === "overview") {
         this._refreshOverviewData();
       }
@@ -2932,18 +3036,26 @@ function refreshHistoryData() {
       return;
     }
     this._refreshAlertTableData("history", tablePage);
+    const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
+    if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
 }
 
 function renderHistory(context) {
-    const { limit, pageMessages, rows, renderAlertTable, t } = context;
+    const { busy, limit, pageMessages, rows, renderAlertTable, t } = context;
     if (limit === 0) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
+    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+      <div class="history-header">
+        <div><h2>${esc(t("history.title"))}</h2></div>
+        <div class="history-page-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
+      </div>
+    </ha-card>`;
     return renderAlertTable(
       "history",
       rows,
-      pageMessages,
+      header,
     );
 }
 
@@ -2952,6 +3064,7 @@ function renderHistoryPanel() {
       ?? this._history?.retention_limit ?? 100);
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
     return renderHistory({
+      busy: this._busy,
       limit,
       pageMessages: this._renderPageMessages(),
       rows: this._tableRows("history", events),
@@ -4198,7 +4311,7 @@ async function handleAutomaticAction(action, button) {
 // Source: frontend-src/views/settings.js
 function renderSettings(context) {
     const {
-      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
@@ -4230,7 +4343,6 @@ function renderSettings(context) {
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
             <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
@@ -4299,7 +4411,6 @@ function renderSettingsPanel() {
       config: this._config,
       settingsDraft: this._settingsDraft,
       historyConfig: this._historyConfig,
-      historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
@@ -4455,7 +4566,7 @@ async function saveSettings() {
           retention_limit: historyLimit,
         });
         this._config = { ...this._config, history_limit: historyLimit };
-        await this._refreshHistory();
+        if (this._historyLoaded) await this._refreshHistory();
       }
       this._resetSettingsDraft();
       this._configurationDrawer = null;
@@ -5080,24 +5191,9 @@ const settingsStyles = `
   }
   .history-settings-row {
     display: grid;
-    grid-template-columns: minmax(260px, 420px) auto;
-    grid-template-areas: "label ." "input action";
+    max-width: 420px;
     align-items: center;
-    gap: 6px 16px;
-  }
-  .history-limit-label {
-    grid-area: label;
-  }
-  #history-limit {
-    grid-area: input;
-  }
-  .history-actions {
-    grid-area: action;
-    align-self: start;
-    min-height: 56px;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
+    gap: 6px;
   }
   .history-limit-help {
     margin-top: 0;
@@ -5149,23 +5245,23 @@ const settingsStyles = `
   }
 
   /* Coherence */
-  .coherence-panel {
+  .coherence-panel, .history-panel {
     padding: 20px;
   }
-  .coherence-header {
+  .coherence-header, .history-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
     padding: 0;
   }
-  .coherence-header > div {
+  .coherence-header > div, .history-header > div {
     min-width: 0;
   }
-  .coherence-header ha-button {
+  .coherence-header ha-button, .history-header ha-button {
     flex: none;
   }
-  .coherence-actions {
+  .coherence-actions, .history-page-actions {
     display: grid;
     flex: none;
     gap: 8px;
@@ -5689,14 +5785,14 @@ const responsiveStyles = `
     .panel {
       padding: 15px;
     }
-    .coherence-panel {
+    .coherence-panel, .history-panel {
       padding: 15px;
     }
-    .coherence-header {
+    .coherence-header, .history-header {
       align-items: stretch;
       flex-direction: column;
     }
-    .coherence-header ha-button {
+    .coherence-header ha-button, .history-header ha-button {
       width: 100%;
     }
     .deleted-entity-row {
@@ -5728,15 +5824,6 @@ const responsiveStyles = `
     .ignored-reference-add ha-button {
       width: 100%;
       margin-top: 0;
-    }
-    .history-settings-row {
-      grid-template-columns: 1fr;
-      grid-template-areas: "label" "input" "action";
-    }
-    .history-actions {
-      align-self: auto;
-      align-items: center;
-      justify-content: flex-start;
     }
     .config-backup-row {
       grid-template-columns: 1fr;
@@ -5833,6 +5920,9 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _refreshTabData = refreshTabData;
+  _rememberPanelState = rememberPanelState;
+  _restorePanelState = restorePanelState;
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
@@ -5994,9 +6084,11 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
     this._backupRestoreCandidate = null;
     this._coherence = null;
+    this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
@@ -6012,6 +6104,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorError = null;
     this._ruleDirty = false;
     this._loading = true;
+    this._cachedStateNeedsRefresh = false;
     this._busy = false;
     this._notice = null;
     this._monitoringEnabled = true;
@@ -6050,32 +6143,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set hass(value) {
-    const language = value?.locale?.language || "en";
-    const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
-      ?.attributes?.scanned_at ?? null;
-    const coherenceChanged = Boolean(
-      scannedAt && scannedAt !== this._coherenceScannedAt,
-    );
-    this._coherenceScannedAt = scannedAt;
-    this._hass = value;
-    this._language = language;
-    const alertsChanged = this._syncSensor();
-    if (this.isConnected && this._config && coherenceChanged) {
-      void this._refreshCoherence();
-    }
-    if (this.isConnected && !this._config && !this._loadPromise) {
-      this._load();
-    } else if (this.isConnected && languageChanged && !this._translationPromise) {
-      this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
-      void this._refreshAlerts();
-    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
-      this._refreshHistory();
-    } else if (this.isConnected) {
-      this._hydrateSelectors();
-    }
+    setHass.call(this, value);
   }
 
   get hass() {
@@ -6098,9 +6166,8 @@ class AlertManagerPanel extends HTMLElement {
       this._activeTab = activeTab;
       this._configurationDrawer = null;
       this._notice = null;
-      if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
-      if (activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(activeTab);
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
@@ -6137,7 +6204,12 @@ class AlertManagerPanel extends HTMLElement {
     this.toggleAttribute?.("companion-app", isCompanionApp());
     if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
-    if (this._hass && !this._config && !this._loadPromise) this._load();
+    if (
+      this._hass
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) this._load();
+    this._refreshTabData(this._activeTab);
     if (!this._timer) {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
@@ -6248,6 +6320,7 @@ class AlertManagerPanel extends HTMLElement {
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
       "enable-monitoring",
+      "clear-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
       "save-automatic",
@@ -6373,6 +6446,12 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderTab() {
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
+    if (this._activeTab === "history" && !this._historyLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
+    if (this._activeTab === "coherence" && !this._coherenceLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
     if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
@@ -6415,7 +6494,7 @@ class AlertManagerPanel extends HTMLElement {
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
-      if (this._activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(this._activeTab);
       return;
     }
     for (const handler of ACTION_HANDLERS) {

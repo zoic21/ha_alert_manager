@@ -105,24 +105,9 @@ export const settingsStyles = `
   }
   .history-settings-row {
     display: grid;
-    grid-template-columns: minmax(260px, 420px) auto;
-    grid-template-areas: "label ." "input action";
+    max-width: 420px;
     align-items: center;
-    gap: 6px 16px;
-  }
-  .history-limit-label {
-    grid-area: label;
-  }
-  #history-limit {
-    grid-area: input;
-  }
-  .history-actions {
-    grid-area: action;
-    align-self: start;
-    min-height: 56px;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
+    gap: 6px;
   }
   .history-limit-help {
     margin-top: 0;
@@ -174,23 +159,23 @@ export const settingsStyles = `
   }
 
   /* Coherence */
-  .coherence-panel {
+  .coherence-panel, .history-panel {
     padding: 20px;
   }
-  .coherence-header {
+  .coherence-header, .history-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
     padding: 0;
   }
-  .coherence-header > div {
+  .coherence-header > div, .history-header > div {
     min-width: 0;
   }
-  .coherence-header ha-button {
+  .coherence-header ha-button, .history-header ha-button {
     flex: none;
   }
-  .coherence-actions {
+  .coherence-actions, .history-page-actions {
     display: grid;
     flex: none;
     gap: 8px;

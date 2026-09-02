@@ -64,7 +64,10 @@ test("history rendering handles enabled and disabled states without panel state"
     renderAlertTable: (kind, rows, header) => `${kind}:${rows[0].id}:${header}`,
     t,
   });
-  assert.equal(enabled, "history:row-1:<messages></messages>");
+  assert.match(enabled, /^history:row-1:<messages><\/messages>/);
+  assert.match(enabled, /class="panel history-panel"/);
+  assert.match(enabled, /history\.title/);
+  assert.match(enabled, /data-action="clear-history"/);
 });
 
 test("coherence rendering receives scan state and statistics explicitly", () => {

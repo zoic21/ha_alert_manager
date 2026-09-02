@@ -8,7 +8,7 @@ import {
 
 export function renderSettings(context) {
     const {
-      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
@@ -40,7 +40,6 @@ export function renderSettings(context) {
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
             <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
@@ -109,7 +108,6 @@ export function renderSettingsPanel() {
       config: this._config,
       settingsDraft: this._settingsDraft,
       historyConfig: this._historyConfig,
-      historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
@@ -265,7 +263,7 @@ export async function saveSettings() {
           retention_limit: historyLimit,
         });
         this._config = { ...this._config, history_limit: historyLimit };
-        await this._refreshHistory();
+        if (this._historyLoaded) await this._refreshHistory();
       }
       this._resetSettingsDraft();
       this._configurationDrawer = null;

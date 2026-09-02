@@ -1,5 +1,6 @@
 import {
   AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
+  refreshTabData, rememberPanelState, restorePanelState, setHass,
 } from "./api/alert-manager-api.js";
 import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
@@ -72,6 +73,9 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _refreshTabData = refreshTabData;
+  _rememberPanelState = rememberPanelState;
+  _restorePanelState = restorePanelState;
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
@@ -233,9 +237,11 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
     this._backupRestoreCandidate = null;
     this._coherence = null;
+    this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
@@ -251,6 +257,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorError = null;
     this._ruleDirty = false;
     this._loading = true;
+    this._cachedStateNeedsRefresh = false;
     this._busy = false;
     this._notice = null;
     this._monitoringEnabled = true;
@@ -289,32 +296,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set hass(value) {
-    const language = value?.locale?.language || "en";
-    const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
-      ?.attributes?.scanned_at ?? null;
-    const coherenceChanged = Boolean(
-      scannedAt && scannedAt !== this._coherenceScannedAt,
-    );
-    this._coherenceScannedAt = scannedAt;
-    this._hass = value;
-    this._language = language;
-    const alertsChanged = this._syncSensor();
-    if (this.isConnected && this._config && coherenceChanged) {
-      void this._refreshCoherence();
-    }
-    if (this.isConnected && !this._config && !this._loadPromise) {
-      this._load();
-    } else if (this.isConnected && languageChanged && !this._translationPromise) {
-      this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
-      void this._refreshAlerts();
-    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
-      this._refreshHistory();
-    } else if (this.isConnected) {
-      this._hydrateSelectors();
-    }
+    setHass.call(this, value);
   }
 
   get hass() {
@@ -337,9 +319,8 @@ class AlertManagerPanel extends HTMLElement {
       this._activeTab = activeTab;
       this._configurationDrawer = null;
       this._notice = null;
-      if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
-      if (activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(activeTab);
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
@@ -376,7 +357,12 @@ class AlertManagerPanel extends HTMLElement {
     this.toggleAttribute?.("companion-app", isCompanionApp());
     if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
-    if (this._hass && !this._config && !this._loadPromise) this._load();
+    if (
+      this._hass
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) this._load();
+    this._refreshTabData(this._activeTab);
     if (!this._timer) {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
@@ -487,6 +473,7 @@ class AlertManagerPanel extends HTMLElement {
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
       "enable-monitoring",
+      "clear-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
       "save-automatic",
@@ -612,6 +599,12 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderTab() {
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
+    if (this._activeTab === "history" && !this._historyLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
+    if (this._activeTab === "coherence" && !this._coherenceLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
     if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
@@ -654,7 +647,7 @@ class AlertManagerPanel extends HTMLElement {
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
-      if (this._activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(this._activeTab);
       return;
     }
     for (const handler of ACTION_HANDLERS) {
