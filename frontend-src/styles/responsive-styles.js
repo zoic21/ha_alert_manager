@@ -6,6 +6,52 @@ export const responsiveStyles = `
     margin-block-start: calc(0px - var(--header-height, 56px));
   }
 
+  /* The native bottom sheet is selected from Home Assistant's narrow state,
+   * which becomes active before this panel's small-screen media query. Keep
+   * these overrides tied to the component so the desktop drawer cannot remain
+   * visible inside it at intermediate widths. */
+  ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
+    position: fixed;
+    z-index: 6;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    --side-drawer-mobile-border-radius: var(
+      --ha-dialog-border-radius,
+      var(--ha-border-radius-2xl, 14px)
+    );
+    --ha-bottom-sheet-border-radius: var(--side-drawer-mobile-border-radius);
+    --ha-bottom-sheet-border-width: 2px;
+    --ha-bottom-sheet-border-style: solid;
+    --ha-bottom-sheet-border-color: var(--primary-color);
+    --ha-bottom-sheet-surface-background: var(--card-background-color);
+  }
+  .side-drawer-bottom-sheet ha-card.side-drawer {
+    position: static;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    border-width: 0;
+    overflow: hidden;
+    --ha-card-border-radius: var(--side-drawer-mobile-border-radius);
+    border-start-start-radius: var(--side-drawer-mobile-border-radius);
+    border-start-end-radius: var(--side-drawer-mobile-border-radius);
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  .side-drawer-bottom-sheet .side-drawer-form {
+    min-height: 0;
+  }
+  .side-drawer-bottom-sheet .rule-editor-resize {
+    display: none;
+  }
+  .side-drawer-bottom-sheet .side-drawer-actions {
+    flex-wrap: wrap;
+  }
+  .side-drawer-bottom-sheet .side-drawer-actions .action-spacer {
+    display: none;
+  }
+
   /* Medium screens */
   @media (max-width: 1000px) {
     .summary {
@@ -137,38 +183,6 @@ export const responsiveStyles = `
     .alert-details-status-icon {
       width: 36px;
       height: 36px;
-    }
-    ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
-      position: fixed;
-      z-index: 6;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      --side-drawer-mobile-border-radius: var(
-        --ha-dialog-border-radius,
-        var(--ha-border-radius-2xl, 14px)
-      );
-      --ha-bottom-sheet-border-radius: var(--side-drawer-mobile-border-radius);
-      --ha-bottom-sheet-border-width: 2px;
-      --ha-bottom-sheet-border-style: solid;
-      --ha-bottom-sheet-border-color: var(--primary-color);
-      --ha-bottom-sheet-surface-background: var(--card-background-color);
-    }
-    .side-drawer-bottom-sheet ha-card.side-drawer {
-      position: static;
-      width: 100%;
-      height: 100%;
-      max-width: none;
-      border-width: 0;
-      overflow: hidden;
-      --ha-card-border-radius: var(--side-drawer-mobile-border-radius);
-      border-start-start-radius: var(--side-drawer-mobile-border-radius);
-      border-start-end-radius: var(--side-drawer-mobile-border-radius);
-      border-end-start-radius: 0;
-      border-end-end-radius: 0;
-    }
-    .side-drawer-bottom-sheet .side-drawer-form {
-      min-height: 0;
     }
     .rule-editor-resize {
       display: none;

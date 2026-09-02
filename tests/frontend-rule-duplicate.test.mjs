@@ -110,6 +110,30 @@ test("only the narrow companion app cancels the duplicated Home Assistant toolba
   assert.equal(panel.hasAttribute("companion-app"), false);
 });
 
+test("the native bottom sheet never keeps the desktop drawer nested inside", () => {
+  const panel = new AlertManagerPanel();
+  const styles = compactCss(panel._styles());
+  const smallScreenMedia = styles.indexOf("@media(max-width:700px)");
+  const nativeSheet = styles.indexOf(
+    "ha-resizable-bottom-sheet.side-drawer-bottom-sheet{",
+  );
+
+  assert.ok(nativeSheet >= 0);
+  assert.ok(nativeSheet < smallScreenMedia);
+  assert.match(
+    styles,
+    /\.side-drawer-bottom-sheet ha-card\.side-drawer\{position:static;width:100%;height:100%;max-width:none;border-width:0/,
+  );
+  assert.match(
+    styles,
+    /\.side-drawer-bottom-sheet \.rule-editor-resize\{display:none\}/,
+  );
+  assert.match(
+    styles,
+    /\.side-drawer-bottom-sheet \.side-drawer-actions \.action-spacer\{display:none\}/,
+  );
+});
+
 test("narrow native table action rows stay gray on every table page", () => {
   const panel = new AlertManagerPanel();
   const selectors = [
