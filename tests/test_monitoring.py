@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
+from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.alert_manager.button import async_setup_entry as setup_button
 from custom_components.alert_manager.const import (
@@ -55,6 +57,7 @@ def test_monitoring_switch_defaults_on_and_persists_off(hass, entry):
     first = AlertManager(hass, entry)
     run(first.async_setup())
     switch = AlertManagerMonitoringSwitch(first)
+    switch.hass = hass
     assert switch.entity_id == "switch.alert_manager_main_monitoring"
     assert switch.is_on is True
 
@@ -67,6 +70,31 @@ def test_monitoring_switch_defaults_on_and_persists_off(hass, entry):
     run(second.async_setup())
     assert second.monitoring_enabled is False
     assert AlertManagerMonitoringSwitch(second).is_on is False
+
+
+def test_monitoring_switch_rejects_non_admin_users_but_allows_internal_calls(
+    hass, entry
+):
+    """Entity permissions cannot bypass the integration's admin-only contract."""
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    switch = AlertManagerMonitoringSwitch(manager)
+    switch.hass = hass
+    hass.auth.users["regular-user"] = SimpleNamespace(is_admin=False)
+    switch._context = SimpleNamespace(user_id="regular-user")
+
+    with pytest.raises(ServiceValidationError, match="administrator"):
+        run(switch.async_turn_off())
+    assert switch.is_on is True
+
+    switch._context = SimpleNamespace(user_id=None)
+    run(switch.async_turn_off())
+    assert switch.is_on is False
+
+    switch._context = SimpleNamespace(user_id="regular-user")
+    with pytest.raises(ServiceValidationError, match="administrator"):
+        run(switch.async_turn_on())
+    assert switch.is_on is False
 
 
 def test_disabled_monitoring_preserves_records_and_stops_detection(

@@ -53,7 +53,7 @@ import {
 import { captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
-  handleImportSelection, handleSettingsAction, hydrateSettingsControls, removeIgnoredReference,
+  handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
   renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
@@ -335,7 +335,6 @@ class AlertManagerPanel extends HTMLElement {
     const activeTab = this._tabFromRoute(value);
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       if (activeTab === "history") this._refreshHistory();
@@ -652,7 +651,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
@@ -668,10 +666,12 @@ class AlertManagerPanel extends HTMLElement {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
+    handleSettingsInput.call(this, event);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
+    handleSettingsInput.call(this, event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

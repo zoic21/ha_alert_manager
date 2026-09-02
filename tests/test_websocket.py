@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
+    websocket_alert_acknowledgements_update,
     websocket_alerts_list,
     websocket_coherence_get,
     websocket_coherence_scan,
@@ -38,7 +39,7 @@ from custom_components.alert_manager.yaml_io import dump_config_yaml
 
 class Connection:
     def __init__(self, *, admin):
-        self.user = SimpleNamespace(is_admin=admin)
+        self.user = SimpleNamespace(is_admin=admin, name="Loïc")
         self.errors = []
         self.results = []
 
@@ -86,6 +87,34 @@ def test_websocket_invalid_frontend_data_gets_readable_error(hass, entry):
     assert connection.results == []
     assert connection.errors[0][1] == "invalid_format"
     assert "between" in connection.errors[0][2]
+
+
+def test_bulk_acknowledgement_websocket_uses_one_transaction(hass, entry):
+    """The panel can update several alerts through one backend write."""
+    for entity_id in ("sensor.one", "sensor.two"):
+        hass.states.set(entity_id, "unavailable")
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    asyncio.run(manager.async_update_config({"global_delay": 0}))
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    alert_ids = ["unavailable:sensor.one", "unavailable:sensor.two"]
+    saves = hass.store_save_count
+
+    asyncio.run(
+        websocket_alert_acknowledgements_update(
+            hass,
+            connection,
+            {"id": 25, "alert_ids": alert_ids, "acknowledged": True},
+        )
+    )
+
+    assert connection.errors == []
+    assert connection.results == [(25, {"updated": alert_ids})]
+    assert hass.store_save_count == saves + 1
+    assert all(
+        manager.records[alert_id].acknowledged_by == "Loïc" for alert_id in alert_ids
+    )
 
 
 def test_websocket_exposes_backend_pack_metadata(hass, entry):
@@ -211,6 +240,14 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
     for command, message in (
         (websocket_config_get, {"id": 6}),
         (websocket_alerts_list, {"id": 7}),
+        (
+            websocket_alert_acknowledgements_update,
+            {
+                "id": 24,
+                "alert_ids": ["unavailable:sensor.test"],
+                "acknowledged": True,
+            },
+        ),
         (websocket_packs_list, {"id": 8}),
         (websocket_rules_list, {"id": 9}),
         (websocket_rule_yaml_validate, {"id": 10, "yaml": "name: test"}),
@@ -232,7 +269,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 18
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 19
     assert connection.results == []
 
 

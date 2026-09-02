@@ -1752,19 +1752,24 @@ test("selection mode selects visible rows and mixed bulk actions affect compatib
   assert.match(toolbar, /Désacquitter \(1\)/);
 
   const calls = [];
-  panel._hass.callService = async (...args) => { calls.push(args); };
+  panel._api.call = async (message) => { calls.push(message); };
   panel._render = () => {};
   await panel._bulkAlertAction("acknowledge");
-  assert.deepEqual(calls, [[
-    "alert_manager", "acknowledge", { alert_id: "rule:temperature:sensor.rack" },
-  ]]);
+  assert.deepEqual(calls, [{
+    type: "alert_manager/alerts/acknowledgement/update",
+    alert_ids: ["rule:temperature:sensor.rack"],
+    acknowledged: true,
+  }]);
   assert.equal(panel._alerts.active_count, 0);
   assert.equal(panel._alerts.acknowledge_count, 2);
   assert.match(panel._notice.text, /1 alerte/);
 
   await panel._bulkAlertAction("unacknowledge");
-  assert.equal(calls.filter((call) => call[1] === "unacknowledge").length, 1);
-  assert.equal(calls[1][2].alert_id, "unavailable:sensor.acknowledged");
+  assert.deepEqual(calls[1], {
+    type: "alert_manager/alerts/acknowledgement/update",
+    alert_ids: ["unavailable:sensor.acknowledged"],
+    acknowledged: false,
+  });
   assert.equal(panel._selectedAlertIds.has("battery:sensor.pending"), true);
 });
 
@@ -2380,6 +2385,23 @@ test("rule editor navigation actions open, edit and cancel predictably", async (
   assert.equal(panel._editingRule, null);
 });
 
+test("tab and route navigation preserve a dirty rule draft", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "rules";
+  panel._editingRule = { id: "rule-id", name: "Unsaved" };
+  panel._ruleDirty = true;
+  panel._render = () => {};
+
+  await panel._handleClick({
+    target: { closest: () => ({ dataset: { action: "tab", tab: "settings" } }) },
+  });
+  assert.deepEqual(panel._editingRule, { id: "rule-id", name: "Unsaved" });
+
+  panel.route = { path: "/alert-manager/overview" };
+  assert.deepEqual(panel._editingRule, { id: "rule-id", name: "Unsaved" });
+});
+
 test("automatic monitoring action serializes all category controls", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -2695,6 +2717,29 @@ test("ESPHome scan switch keeps its draft value before saving", () => {
   const settings = panel._renderSettings();
   assert.match(settings, /id="coherence-scan-esphome"/);
   assert.doesNotMatch(settings, /id="coherence-scan-esphome"[^>]+checked/);
+});
+
+test("settings scalar drafts survive a structural rerender", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+
+  panel._handleInput({ target: { id: "global-delay", value: "321" } });
+  panel._handleInput({ target: { id: "pending-display-delay", value: "12" } });
+  panel._handleInput({ target: { id: "history-limit", value: "42" } });
+  panel._settingsDraft.coherence_schedule = "weekly";
+
+  const settings = panel._renderSettings();
+  assert.match(settings, /id="global-delay"[^>]+value="321"/);
+  assert.match(settings, /id="pending-display-delay"[^>]+value="12"/);
+  assert.match(settings, /id="history-limit"[^>]+value="42"/);
+  const select = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === "#coherence-schedule" ? select : null
+  );
+  panel._hydrateSettingsControls();
+  assert.equal(select.value, "weekly");
 });
 
 test("ignored coherence references use compact chips with safe add and remove behavior", async () => {

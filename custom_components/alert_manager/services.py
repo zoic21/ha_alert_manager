@@ -15,6 +15,7 @@ from .const import (
     SERVICE_UNACKNOWLEDGE,
 )
 from .manager import AlertManager
+from .permissions import async_require_admin
 
 SERVICE_SCHEMA = vol.Schema(
     {vol.Required(ATTR_ALERT_ID): vol.All(cv.string, vol.Length(min=1))}
@@ -23,17 +24,8 @@ SERVICE_SCHEMA = vol.Schema(
 
 async def _actor_name(hass: HomeAssistant, call: ServiceCall) -> str | None:
     """Resolve an administrator display name without exposing its internal id."""
-    user_id = call.context.user_id
-    if user_id is None:
-        # Calls without a user context are internal Home Assistant calls. Keep
-        # those available so automations/scripts can use the actions normally.
-        return None
-    user = await hass.auth.async_get_user(user_id)
-    if user is None or not user.is_admin:
-        raise ServiceValidationError(
-            "Alert Manager acknowledge actions require an administrator"
-        )
-    return user.name or None
+    user = await async_require_admin(hass, call.context)
+    return (user.name or None) if user is not None else None
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:

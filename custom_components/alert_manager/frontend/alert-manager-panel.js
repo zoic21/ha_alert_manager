@@ -2798,33 +2798,31 @@ async function bulkAlertAction(service) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
-    const results = await Promise.allSettled(rows.map((row) => this._hass.callService(
-      "alert_manager",
-      service,
-      { alert_id: row.id },
-    )));
-    const succeeded = rows.filter((_row, index) => results[index].status === "fulfilled");
-    for (const row of succeeded) {
-      this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
-      this._selectedAlertIds.delete(row.id);
-    }
-    const failed = rows.length - succeeded.length;
-    this._notice = failed
-      ? {
-        kind: "error",
-        text: this._t("table.selection.partial", { count: succeeded.length, failed }),
+    try {
+      await this._api.call({
+        type: "alert_manager/alerts/acknowledgement/update",
+        alert_ids: rows.map((row) => row.id),
+        acknowledged: service === "acknowledge",
+      });
+      for (const row of rows) {
+        this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
+        this._selectedAlertIds.delete(row.id);
       }
-      : {
+      this._notice = {
         kind: "success",
         text: this._t(
           service === "acknowledge" ? "table.selection.acknowledged_result" : "table.selection.unacknowledged_result",
-          { count: succeeded.length },
+          { count: rows.length },
         ),
       };
-    this._busy = false;
-    this._refreshOverviewData();
-    this._updateSelectionToolbar();
-    this._refreshUiState();
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._busy = false;
+      this._refreshOverviewData();
+      this._updateSelectionToolbar();
+      this._refreshUiState();
+    }
 }
 
 function applyOptimisticAcknowledgement(alertId, acknowledged) {
@@ -4208,8 +4206,8 @@ function renderSettings(context) {
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -4231,7 +4229,7 @@ function renderSettings(context) {
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
             <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
@@ -4483,7 +4481,11 @@ function resetSettingsDraft() {
 function ensureSettingsDraft() {
     if (this._settingsDraft && this._entityDelayDraft) return;
     this._settingsDraft = {
+      global_delay: this._config.global_delay,
+      pending_display_delay: this._config.pending_display_delay,
+      coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
+      history_limit: this._historyConfig.retention_limit,
       coherence_ignored_entity_references: [
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
@@ -4494,6 +4496,18 @@ function ensureSettingsDraft() {
     this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
       ([entity_id, delay]) => ({ entity_id, delay }),
     );
+}
+
+function handleSettingsInput(event) {
+    const fields = {
+      "global-delay": "global_delay",
+      "pending-display-delay": "pending_display_delay",
+      "history-limit": "history_limit",
+    };
+    const field = fields[event.target?.id];
+    if (!field) return;
+    this._ensureSettingsDraft();
+    this._settingsDraft[field] = String(event.target.value ?? "");
 }
 
 function captureEntityDelayValues() {
@@ -4531,7 +4545,10 @@ function hydrateSettingsControls() {
       value,
       label: this._t(`settings.coherence_schedules.${value}`),
     })),
-    this._config.coherence_schedule ?? "none",
+    this._settingsDraft.coherence_schedule,
+    (value) => {
+      this._settingsDraft.coherence_schedule = value;
+    },
   );
   this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
     if (this._configuredControls.has(chip)) return;
@@ -6079,7 +6096,6 @@ class AlertManagerPanel extends HTMLElement {
     const activeTab = this._tabFromRoute(value);
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       if (activeTab === "history") this._refreshHistory();
@@ -6396,7 +6412,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
@@ -6412,10 +6427,12 @@ class AlertManagerPanel extends HTMLElement {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
+    handleSettingsInput.call(this, event);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
+    handleSettingsInput.call(this, event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

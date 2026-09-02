@@ -57,33 +57,31 @@ export async function bulkAlertAction(service) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
-    const results = await Promise.allSettled(rows.map((row) => this._hass.callService(
-      "alert_manager",
-      service,
-      { alert_id: row.id },
-    )));
-    const succeeded = rows.filter((_row, index) => results[index].status === "fulfilled");
-    for (const row of succeeded) {
-      this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
-      this._selectedAlertIds.delete(row.id);
-    }
-    const failed = rows.length - succeeded.length;
-    this._notice = failed
-      ? {
-        kind: "error",
-        text: this._t("table.selection.partial", { count: succeeded.length, failed }),
+    try {
+      await this._api.call({
+        type: "alert_manager/alerts/acknowledgement/update",
+        alert_ids: rows.map((row) => row.id),
+        acknowledged: service === "acknowledge",
+      });
+      for (const row of rows) {
+        this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
+        this._selectedAlertIds.delete(row.id);
       }
-      : {
+      this._notice = {
         kind: "success",
         text: this._t(
           service === "acknowledge" ? "table.selection.acknowledged_result" : "table.selection.unacknowledged_result",
-          { count: succeeded.length },
+          { count: rows.length },
         ),
       };
-    this._busy = false;
-    this._refreshOverviewData();
-    this._updateSelectionToolbar();
-    this._refreshUiState();
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._busy = false;
+      this._refreshOverviewData();
+      this._updateSelectionToolbar();
+      this._refreshUiState();
+    }
 }
 
 export function applyOptimisticAcknowledgement(alertId, acknowledged) {
