@@ -14,10 +14,10 @@ import {
   resetTableFilters, syncNarrowTableHeaderBackgrounds, tableColumns, tableRows,
   tableSortStateColumn, tableStateGroupColumn, updateSelectionToolbar,
 } from "./components/alert-table.js";
+import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
-  applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups,
-  renderBackupRestoreDialogPanel, renderConfigBackups,
-} from "./components/config-backups.js";
+  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS, useNativeBottomSheet,
+} from "./components/configuration-drawer.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
   duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
@@ -28,10 +28,7 @@ import {
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
 import { esc } from "./utils/escaping.js";
-import {
-  conditionText, date, durationText, historyDurationText, lines, newRuleDefaults,
-  remaining, updateCountdowns,
-} from "./utils/formatting.js";
+import { conditionText, date, durationText, historyDurationText, lines, newRuleDefaults, remaining, updateCountdowns } from "./utils/formatting.js";
 import {
   ensureCoherenceTableState, ensureRulesTableState, loadTablePreferences, makeTableState,
   saveCoherenceTableState, saveRulesTableState, saveTablePreferences,
@@ -42,9 +39,7 @@ import {
   refreshOverviewData, renderOverviewPanel,
   updateAlertAcknowledgement,
 } from "./views/overview.js";
-import {
-  handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel,
-} from "./views/history.js";
+import { handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
 import {
   coherenceStatsMarkup, coherenceTableRows, handleCoherenceAction, hydrateCoherenceTable,
   nativeCoherenceActionCell, nativeCoherenceEntityCell, openCoherenceLink,
@@ -55,16 +50,11 @@ import {
   nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
   replaceRule, ruleTableRows, toggleRule,
 } from "./views/rules.js";
+import { captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
 import {
-  captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction,
-  hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft,
-  saveAutomatic,
-} from "./views/automatic.js";
-import {
-  captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft,
-  exportConfiguration, handleImportSelection, handleSettingsAction, hydrateSettingsControls,
-  removeIgnoredReference, renderSettingsPanel, resetSettingsDraft, saveSettings,
-  setEntityDelayEntity,
+  captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
+  handleImportSelection, handleSettingsAction, hydrateSettingsControls, removeIgnoredReference,
+  renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
   handleConfigBackupAction,
@@ -85,6 +75,8 @@ class AlertManagerPanel extends HTMLElement {
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
+  _useNativeBottomSheet = useNativeBottomSheet;
+  _loadNativeBottomSheet = loadNativeBottomSheet;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -279,6 +271,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
     this._alertDetailsDialog = null;
+    this._nativeBottomSheetLoadPromise = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("keydown", (event) => this._handleKeydown(event));
@@ -287,6 +280,7 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
     this.shadowRoot.addEventListener("input", (event) => this._handleInput(event));
     this.shadowRoot.addEventListener("change", (event) => this._handleChange(event));
+    this.shadowRoot.addEventListener("bottom-sheet-closed", (event) => void handleBottomSheetClosed(this, ACTION_HANDLERS, event));
     this.shadowRoot.addEventListener("wa-select", (event) => {
       void this._handleMenuSelected(event);
     });
@@ -354,6 +348,7 @@ class AlertManagerPanel extends HTMLElement {
 
   set narrow(value) {
     this._narrow = Boolean(value);
+    this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
       "[data-alert-table-page]",
       "[data-coherence-table-page]",
@@ -379,6 +374,8 @@ class AlertManagerPanel extends HTMLElement {
     for (const property of ["panel", "route", "narrow", "hass"]) {
       this._upgradeProperty(property);
     }
+    this.toggleAttribute?.("companion-app", isCompanionApp());
+    if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
     if (this._hass && !this._config && !this._loadPromise) this._load();
     if (!this._timer) {
@@ -650,6 +647,9 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (this._narrow && SIDE_DRAWER_OPEN_ACTIONS.has(action)) {
+      await this._loadNativeBottomSheet();
+    }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
       this._editingRule = null;

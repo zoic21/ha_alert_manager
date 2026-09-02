@@ -1,14 +1,9 @@
 export const responsiveStyles = `
-  /* Home Assistant already renders the main panel toolbar around custom panels.
-   * Its native tabs subpage still reserves a second toolbar on narrow screens,
-   * where the tabs themselves move to the bottom. Move that duplicate toolbar
-   * behind the main one so the content and bottom tabs stay inside the viewport. */
-  @media (max-width: 870px), (max-height: 500px) {
-    #panel-shell {
-      margin-block-start: calc(
-        0px - var(--header-height, 56px)
-      );
-    }
+  /* The companion app already provides the panel toolbar. Its native tabs
+   * subpage still reserves another one in narrow mode, so only cancel that
+   * duplicate in the app. A narrow desktop browser still needs its toolbar. */
+  :host([companion-app][narrow]) #panel-shell {
+    margin-block-start: calc(0px - var(--header-height, 56px));
   }
 
   /* Medium screens */
@@ -143,15 +138,28 @@ export const responsiveStyles = `
       width: 36px;
       height: 36px;
     }
-    ha-card.side-drawer {
-      inset-block-start: var(--header-height, 56px);
-      inset-block-end: calc(var(--header-height, 56px) + var(--safe-area-inset-bottom, 0px));
-      inset-inline-end: 0;
+    ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
+      position: fixed;
+      z-index: 6;
+      inset: 0;
       width: 100%;
+      height: 100%;
+      --ha-bottom-sheet-border-width: 2px;
+      --ha-bottom-sheet-border-style: solid;
+      --ha-bottom-sheet-border-color: var(--primary-color);
+      --ha-bottom-sheet-surface-background: var(--card-background-color);
+    }
+    .side-drawer-bottom-sheet ha-card.side-drawer {
+      position: static;
+      width: 100%;
+      height: 100%;
       max-width: none;
       border-width: 0;
       overflow: hidden;
       --ha-card-border-radius: var(--ha-border-radius-square, 0);
+    }
+    .side-drawer-bottom-sheet .side-drawer-form {
+      min-height: 0;
     }
     .rule-editor-resize {
       display: none;

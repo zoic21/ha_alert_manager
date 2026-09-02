@@ -1,6 +1,7 @@
 import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
+import { renderSideDrawer } from "./configuration-drawer.js";
 
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -136,7 +137,7 @@ export function refreshRuleEditor() {
       this._render();
       return;
     }
-    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer").forEach((node) => node.remove());
+    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer,.side-drawer-bottom-sheet").forEach((node) => node.remove());
     layout.classList.toggle("has-editor", this._editingRule !== null);
     layout.style.setProperty("--rule-editor-width", `${this._ruleEditorWidth}px`);
     if (this._editingRule !== null) {
@@ -184,6 +185,7 @@ export function renderRuleEditor(context) {
       yamlError,
       t,
       duplicateLabel,
+      useBottomSheet = false,
       renderTextField,
       renderNumberField,
     } = context;
@@ -191,8 +193,7 @@ export function renderRuleEditor(context) {
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
-    return `<div class="side-drawer-backdrop rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+    const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
@@ -205,6 +206,12 @@ export function renderRuleEditor(context) {
         <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
+    return renderSideDrawer({
+      drawer,
+      backdropClass: "rule-editor-backdrop",
+      closeAction: "cancel-rule",
+      useBottomSheet,
+    });
 }
 
 export function renderRuleEditorPanel() {
@@ -216,6 +223,7 @@ export function renderRuleEditorPanel() {
       yamlError: this._ruleYamlError,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
+      useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
     });

@@ -162,6 +162,25 @@ test("rule editor rendering is pure and receives all dependencies explicitly", (
   assert.match(markup, /Duplicate/);
 });
 
+test("rule editor uses the native resizable bottom sheet on mobile", () => {
+  const markup = renderRuleEditor({
+    rule: normalizeRuleDraft(rule()),
+    mode: "visual",
+    busy: false,
+    editorError: null,
+    yamlError: null,
+    t,
+    duplicateLabel: "Duplicate",
+    useBottomSheet: true,
+    renderTextField: () => "<ha-input></ha-input>",
+    renderNumberField: () => "<ha-input></ha-input>",
+  });
+
+  assert.match(markup, /^<ha-resizable-bottom-sheet/);
+  assert.match(markup, /data-close-action="cancel-rule"/);
+  assert.doesNotMatch(markup, /side-drawer-backdrop/);
+});
+
 test("rule draft capture, serialization and validation are independently testable", () => {
   const fields = new Map([
     ["name", { value: "  Presence  " }],

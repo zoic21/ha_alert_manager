@@ -1003,9 +1003,12 @@ function tableRows(kind, historyEvents = []) {
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
-      const message = source.type === "rule"
+      const renderedMessage = source.type === "rule"
         ? (source.message || "")
         : (source.condition_key ? condition : (source.message || ""));
+      const message = String(renderedMessage).trim() === String(condition).trim()
+        ? ""
+        : renderedMessage;
       const finalLabel = history
         ? this._t(source.acknowledged ? "history.resolved_acknowledged" : "history.resolved")
         : this._t(`table.status.${status}`);
@@ -1976,6 +1979,71 @@ async function handleConfigBackupAction(action, button) {
 }
 
 // Source: frontend-src/components/configuration-drawer.js
+const SIDE_DRAWER_OPEN_ACTIONS = new Set([
+  "new-rule",
+  "open-automatic-configuration",
+  "open-deleted-entities",
+  "open-settings-configuration",
+]);
+
+const isCompanionApp = () => Boolean(
+  window.externalAppV2
+  || window.externalApp
+  || window.webkit?.messageHandlers?.externalBus,
+);
+
+function useNativeBottomSheet() {
+  return Boolean(this._narrow && customElements.get("ha-resizable-bottom-sheet"));
+}
+
+// Home Assistant registers this native component in its lazy automation editor
+// bundle. Load that same route instead of maintaining a local bottom-sheet copy.
+async function loadNativeBottomSheet() {
+  if (!this._narrow || this._useNativeBottomSheet()) return true;
+  if (this._nativeBottomSheetLoadPromise) return this._nativeBottomSheetLoadPromise;
+  this._nativeBottomSheetLoadPromise = (async () => {
+    const homeAssistant = document.querySelector?.("home-assistant");
+    const main = homeAssistant?.shadowRoot?.querySelector?.("home-assistant-main");
+    const resolver = main?.shadowRoot?.querySelector?.("partial-panel-resolver");
+    const configPath = Object.values(this._hass?.panels ?? {})
+      .find((panel) => panel.component_name === "config")?.url_path;
+    const loadConfig = configPath
+      ? resolver?.routerOptions?.routes?.[configPath]?.load
+      : undefined;
+    if (typeof loadConfig === "function") await loadConfig();
+    if (!customElements.get("ha-panel-config")) return false;
+    const configPanel = document.createElement("ha-panel-config");
+    const loadAutomation = configPanel.routerOptions?.routes?.automation?.load;
+    if (typeof loadAutomation === "function") await loadAutomation();
+    return Boolean(customElements.get("ha-resizable-bottom-sheet"));
+  })().catch(() => false);
+  return this._nativeBottomSheetLoadPromise;
+}
+
+async function handleBottomSheetClosed(panel, actionHandlers, event) {
+  const action = event.target?.dataset?.closeAction;
+  if (!action) return;
+  const button = { dataset: { action } };
+  for (const handler of actionHandlers) {
+    if (await handler.call(panel, action, button, event)) return;
+  }
+}
+
+function renderSideDrawer({
+  drawer,
+  backdropClass,
+  closeAction,
+  useBottomSheet = false,
+}) {
+  if (useBottomSheet) {
+    return `<ha-resizable-bottom-sheet class="side-drawer-bottom-sheet" data-close-action="${esc(closeAction)}">
+      ${drawer}
+    </ha-resizable-bottom-sheet>`;
+  }
+  return `<div class="side-drawer-backdrop ${esc(backdropClass)}" data-action="${esc(closeAction)}" aria-hidden="true"></div>
+    ${drawer}`;
+}
+
 function renderConfigurationDrawer({
   title,
   ariaLabel,
@@ -1983,9 +2051,9 @@ function renderConfigurationDrawer({
   saveAction,
   saveLabel,
   busy,
+  useBottomSheet = false,
 }) {
-  return `<div class="side-drawer-backdrop configuration-drawer-backdrop" data-action="close-configuration-drawer" aria-hidden="true"></div>
-    <ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
+  const drawer = `<ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
       <ha-dialog-header show-border>
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
@@ -1995,9 +2063,16 @@ function renderConfigurationDrawer({
         <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
       </div>
     </ha-card>`;
+  return renderSideDrawer({
+    drawer,
+    backdropClass: "configuration-drawer-backdrop",
+    closeAction: "close-configuration-drawer",
+    useBottomSheet,
+  });
 }
 
 function replaceConfigurationDrawer(root, markup) {
+  root?.querySelector?.(".side-drawer-bottom-sheet")?.remove?.();
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
   if (root && markup) root.insertAdjacentHTML("beforeend", markup);
@@ -2138,7 +2213,7 @@ function refreshRuleEditor() {
       this._render();
       return;
     }
-    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer").forEach((node) => node.remove());
+    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer,.side-drawer-bottom-sheet").forEach((node) => node.remove());
     layout.classList.toggle("has-editor", this._editingRule !== null);
     layout.style.setProperty("--rule-editor-width", `${this._ruleEditorWidth}px`);
     if (this._editingRule !== null) {
@@ -2186,6 +2261,7 @@ function renderRuleEditor(context) {
       yamlError,
       t,
       duplicateLabel,
+      useBottomSheet = false,
       renderTextField,
       renderNumberField,
     } = context;
@@ -2193,8 +2269,7 @@ function renderRuleEditor(context) {
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
-    return `<div class="side-drawer-backdrop rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+    const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
@@ -2207,6 +2282,12 @@ function renderRuleEditor(context) {
         <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
+    return renderSideDrawer({
+      drawer,
+      backdropClass: "rule-editor-backdrop",
+      closeAction: "cancel-rule",
+      useBottomSheet,
+    });
 }
 
 function renderRuleEditorPanel() {
@@ -2218,6 +2299,7 @@ function renderRuleEditorPanel() {
       yamlError: this._ruleYamlError,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
+      useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
     });
@@ -3119,7 +3201,9 @@ function nativeCoherenceActionCell(row) {
     return button;
 }
 
-function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, t }) {
+function renderDeletedEntitiesDrawer({
+  data, loading, error, formatDate, useBottomSheet = false, t,
+}) {
     const entities = data?.entities ?? [];
     const content = loading
       ? `<div class="loading compact">${esc(t("coherence.deleted_entities.loading"))}</div>`
@@ -3139,8 +3223,7 @@ function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, t }) {
                 </div>
               </div>`).join("")}</div>`
             : `<div class="empty compact">${esc(t("coherence.deleted_entities.empty"))}</div>`}`;
-    return `<div class="side-drawer-backdrop deleted-entities-drawer-backdrop" data-action="close-deleted-entities" aria-hidden="true"></div>
-      <ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
+    const drawer = `<ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
         <ha-dialog-header show-border>
           <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-deleted-entities" aria-label="${esc(t("coherence.deleted_entities.close"))}"></ha-icon-button>
           <span slot="title">${esc(t("coherence.deleted_entities.title"))}</span>
@@ -3149,6 +3232,12 @@ function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, t }) {
           <section class="side-drawer-section">${content}</section>
         </div>
       </ha-card>`;
+    return renderSideDrawer({
+      drawer,
+      backdropClass: "deleted-entities-drawer-backdrop",
+      closeAction: "close-deleted-entities",
+      useBottomSheet,
+    });
 }
 
 function coherenceActionsMarkup({ loading, deletedEntitiesLoading, t }) {
@@ -3168,6 +3257,7 @@ function renderCoherence(context) {
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
       deletedEntitiesOpen = false,
+      useBottomSheet = false,
       formatDate = (value) => value,
       t,
     } = context;
@@ -3178,6 +3268,7 @@ function renderCoherence(context) {
           loading: deletedEntitiesLoading,
           error: deletedEntitiesError,
           formatDate,
+          useBottomSheet,
           t,
         })
       : "";
@@ -3219,6 +3310,7 @@ function renderCoherencePanel() {
       deletedEntitiesLoading: this._deletedEntitiesState.loading,
       deletedEntitiesError: this._deletedEntitiesState.error,
       deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
     });
@@ -3760,7 +3852,8 @@ function drawerFields(pack) {
 
 function renderAutomatic(context) {
     const {
-      availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+      availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+      renderNumberField, t,
     } = context;
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
@@ -3788,7 +3881,8 @@ function renderAutomatic(context) {
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
       ${renderAutomaticConfigurationDrawer({
-        availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+        availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+        renderNumberField, t,
       })}
     </form>`;
 }
@@ -3801,6 +3895,7 @@ function renderAutomaticPanel() {
       draft: this._automaticMapDraft,
       configurationDrawer: this._configurationDrawer,
       busy: this._busy,
+      useBottomSheet: this._useNativeBottomSheet(),
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
@@ -3817,7 +3912,8 @@ function packConfigurationCount(pack, config, draft) {
 
 function renderAutomaticConfigurationDrawer(context) {
   const {
-    availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+    availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+    renderNumberField, t,
   } = context;
   if (configurationDrawer?.kind !== "automatic") return "";
   const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
@@ -3839,6 +3935,7 @@ function renderAutomaticConfigurationDrawer(context) {
     saveAction: "save-automatic",
     saveLabel: t("buttons.save"),
     busy,
+    useBottomSheet,
   });
 }
 
@@ -3993,6 +4090,7 @@ function refreshAutomaticConfigurationDrawer() {
     draft: this._automaticMapDraft,
     configurationDrawer: this._configurationDrawer,
     busy: this._busy,
+    useBottomSheet: this._useNativeBottomSheet(),
     renderNumberField: (...args) => this._numberField(...args),
     t: (key, replacements) => this._t(key, replacements),
   }));
@@ -4085,7 +4183,7 @@ async function handleAutomaticAction(action, button) {
 function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, configurationDrawer, busy,
+      ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
@@ -4131,7 +4229,7 @@ function renderSettings(context) {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
-        settingsDraft, entityDelayDraft, configurationDrawer, busy, t,
+        settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -4141,7 +4239,9 @@ function renderSettingsConfigurationEntry(id, label, count, t) {
 }
 
 function renderSettingsConfigurationDrawer(context) {
-  const { settingsDraft, entityDelayDraft, configurationDrawer, busy, t } = context;
+  const {
+    settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+  } = context;
   if (configurationDrawer?.kind !== "settings") return "";
   const id = configurationDrawer.id;
   let title;
@@ -4173,6 +4273,7 @@ function renderSettingsConfigurationDrawer(context) {
     saveAction: "save-settings",
     saveLabel: t("buttons.save"),
     busy,
+    useBottomSheet,
   });
 }
 
@@ -4187,6 +4288,7 @@ function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       busy: this._busy,
+      useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
@@ -4479,6 +4581,7 @@ function refreshSettingsConfigurationDrawer() {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     busy: this._busy,
+    useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
   }));
   this._hydrateSelectors();
@@ -5458,16 +5561,11 @@ const stateStyles = `
 
 // Source: frontend-src/styles/responsive-styles.js
 const responsiveStyles = `
-  /* Home Assistant already renders the main panel toolbar around custom panels.
-   * Its native tabs subpage still reserves a second toolbar on narrow screens,
-   * where the tabs themselves move to the bottom. Move that duplicate toolbar
-   * behind the main one so the content and bottom tabs stay inside the viewport. */
-  @media (max-width: 870px), (max-height: 500px) {
-    #panel-shell {
-      margin-block-start: calc(
-        0px - var(--header-height, 56px)
-      );
-    }
+  /* The companion app already provides the panel toolbar. Its native tabs
+   * subpage still reserves another one in narrow mode, so only cancel that
+   * duplicate in the app. A narrow desktop browser still needs its toolbar. */
+  :host([companion-app][narrow]) #panel-shell {
+    margin-block-start: calc(0px - var(--header-height, 56px));
   }
 
   /* Medium screens */
@@ -5602,15 +5700,28 @@ const responsiveStyles = `
       width: 36px;
       height: 36px;
     }
-    ha-card.side-drawer {
-      inset-block-start: var(--header-height, 56px);
-      inset-block-end: calc(var(--header-height, 56px) + var(--safe-area-inset-bottom, 0px));
-      inset-inline-end: 0;
+    ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
+      position: fixed;
+      z-index: 6;
+      inset: 0;
       width: 100%;
+      height: 100%;
+      --ha-bottom-sheet-border-width: 2px;
+      --ha-bottom-sheet-border-style: solid;
+      --ha-bottom-sheet-border-color: var(--primary-color);
+      --ha-bottom-sheet-surface-background: var(--card-background-color);
+    }
+    .side-drawer-bottom-sheet ha-card.side-drawer {
+      position: static;
+      width: 100%;
+      height: 100%;
       max-width: none;
       border-width: 0;
       overflow: hidden;
       --ha-card-border-radius: var(--ha-border-radius-square, 0);
+    }
+    .side-drawer-bottom-sheet .side-drawer-form {
+      min-height: 0;
     }
     .rule-editor-resize {
       display: none;
@@ -5667,6 +5778,8 @@ class AlertManagerPanel extends HTMLElement {
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
+  _useNativeBottomSheet = useNativeBottomSheet;
+  _loadNativeBottomSheet = loadNativeBottomSheet;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -5861,6 +5974,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
     this._alertDetailsDialog = null;
+    this._nativeBottomSheetLoadPromise = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
     this.shadowRoot.addEventListener("keydown", (event) => this._handleKeydown(event));
@@ -5869,6 +5983,7 @@ class AlertManagerPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (event) => this._handleSubmit(event));
     this.shadowRoot.addEventListener("input", (event) => this._handleInput(event));
     this.shadowRoot.addEventListener("change", (event) => this._handleChange(event));
+    this.shadowRoot.addEventListener("bottom-sheet-closed", (event) => void handleBottomSheetClosed(this, ACTION_HANDLERS, event));
     this.shadowRoot.addEventListener("wa-select", (event) => {
       void this._handleMenuSelected(event);
     });
@@ -5936,6 +6051,7 @@ class AlertManagerPanel extends HTMLElement {
 
   set narrow(value) {
     this._narrow = Boolean(value);
+    this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
       "[data-alert-table-page]",
       "[data-coherence-table-page]",
@@ -5961,6 +6077,8 @@ class AlertManagerPanel extends HTMLElement {
     for (const property of ["panel", "route", "narrow", "hass"]) {
       this._upgradeProperty(property);
     }
+    this.toggleAttribute?.("companion-app", isCompanionApp());
+    if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
     if (this._hass && !this._config && !this._loadPromise) this._load();
     if (!this._timer) {
@@ -6232,6 +6350,9 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (this._narrow && SIDE_DRAWER_OPEN_ACTIONS.has(action)) {
+      await this._loadNativeBottomSheet();
+    }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
       this._editingRule = null;

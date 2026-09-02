@@ -1,5 +1,6 @@
 import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { renderSideDrawer } from "../components/configuration-drawer.js";
 import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
 
 export function coherenceStatsMarkup() {
@@ -210,7 +211,9 @@ export function nativeCoherenceActionCell(row) {
     return button;
 }
 
-export function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, t }) {
+export function renderDeletedEntitiesDrawer({
+  data, loading, error, formatDate, useBottomSheet = false, t,
+}) {
     const entities = data?.entities ?? [];
     const content = loading
       ? `<div class="loading compact">${esc(t("coherence.deleted_entities.loading"))}</div>`
@@ -230,8 +233,7 @@ export function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, 
                 </div>
               </div>`).join("")}</div>`
             : `<div class="empty compact">${esc(t("coherence.deleted_entities.empty"))}</div>`}`;
-    return `<div class="side-drawer-backdrop deleted-entities-drawer-backdrop" data-action="close-deleted-entities" aria-hidden="true"></div>
-      <ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
+    const drawer = `<ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
         <ha-dialog-header show-border>
           <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-deleted-entities" aria-label="${esc(t("coherence.deleted_entities.close"))}"></ha-icon-button>
           <span slot="title">${esc(t("coherence.deleted_entities.title"))}</span>
@@ -240,6 +242,12 @@ export function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, 
           <section class="side-drawer-section">${content}</section>
         </div>
       </ha-card>`;
+    return renderSideDrawer({
+      drawer,
+      backdropClass: "deleted-entities-drawer-backdrop",
+      closeAction: "close-deleted-entities",
+      useBottomSheet,
+    });
 }
 
 function coherenceActionsMarkup({ loading, deletedEntitiesLoading, t }) {
@@ -259,6 +267,7 @@ export function renderCoherence(context) {
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
       deletedEntitiesOpen = false,
+      useBottomSheet = false,
       formatDate = (value) => value,
       t,
     } = context;
@@ -269,6 +278,7 @@ export function renderCoherence(context) {
           loading: deletedEntitiesLoading,
           error: deletedEntitiesError,
           formatDate,
+          useBottomSheet,
           t,
         })
       : "";
@@ -310,6 +320,7 @@ export function renderCoherencePanel() {
       deletedEntitiesLoading: this._deletedEntitiesState.loading,
       deletedEntitiesError: this._deletedEntitiesState.error,
       deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
     });

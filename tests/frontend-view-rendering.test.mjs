@@ -5,6 +5,7 @@ import { renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
+import { renderConfigurationDrawer } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
   renderCoherence, renderDeletedEntitiesDrawer,
@@ -107,6 +108,34 @@ test("deleted entity drawer renders retained registry entries safely", () => {
   assert.match(markup, /Old sensor/);
   assert.match(markup, /24\/08\/2026 12:00:00/);
   assert.doesNotMatch(markup, /sensor\.deleted_<unsafe>/);
+});
+
+test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
+  const configuration = renderConfigurationDrawer({
+    title: "Configuration",
+    ariaLabel: "Fermer",
+    content: "<div>Contenu</div>",
+    saveAction: "save-settings",
+    saveLabel: "Enregistrer",
+    busy: false,
+    useBottomSheet: true,
+  });
+  const deletedEntities = renderDeletedEntitiesDrawer({
+    data: { entities: [] },
+    loading: false,
+    error: null,
+    formatDate: (value) => value,
+    useBottomSheet: true,
+    t,
+  });
+
+  for (const markup of [configuration, deletedEntities]) {
+    assert.match(markup, /^<ha-resizable-bottom-sheet/);
+    assert.match(markup, /class="side-drawer-bottom-sheet"/);
+    assert.doesNotMatch(markup, /side-drawer-backdrop/);
+  }
+  assert.match(configuration, /data-close-action="close-configuration-drawer"/);
+  assert.match(deletedEntities, /data-close-action="close-deleted-entities"/);
 });
 
 test("automatic rendering uses prepared configuration and draft data", () => {

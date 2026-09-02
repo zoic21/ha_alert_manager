@@ -286,9 +286,12 @@ export function tableRows(kind, historyEvents = []) {
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
-      const message = source.type === "rule"
+      const renderedMessage = source.type === "rule"
         ? (source.message || "")
         : (source.condition_key ? condition : (source.message || ""));
+      const message = String(renderedMessage).trim() === String(condition).trim()
+        ? ""
+        : renderedMessage;
       const finalLabel = history
         ? this._t(source.acknowledged ? "history.resolved_acknowledged" : "history.resolved")
         : this._t(`table.status.${status}`);

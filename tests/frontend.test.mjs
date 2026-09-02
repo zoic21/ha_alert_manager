@@ -1245,6 +1245,19 @@ test("alert details expose translated fields and contextual links", () => {
   assert.doesNotMatch(html, /data-action="close-alert-details"/);
 });
 
+test("an alert message identical to its condition is not displayed twice", () => {
+  const panel = tablePanel();
+  const condition = "État supérieur à 33 °C pendant 30 s";
+  panel._alerts.alerts = [currentAlert({ message: `  ${condition}\n` })];
+
+  const row = panel._tableRows("overview")[0];
+  const html = panel._renderAlertDetails("overview", row);
+
+  assert.equal(row.message, "");
+  assert.doesNotMatch(html, /data-detail-key="message"/);
+  assert.match(html, /data-detail-key="condition"/);
+});
+
 test("alert details header uses the entity name and reverses its acknowledgement action", () => {
   const panel = tablePanel();
   panel.shadowRoot.append = () => {};
@@ -1389,7 +1402,8 @@ test("dashboard renders one compact table with the required default columns and 
   const pending = rows.find((row) => row.status === "pending");
   assert.equal(active.value, "34.5 °C");
   assert.equal(active.condition, "État supérieur à 33 °C pendant 30 s");
-  assert.equal(pending.message, "Batterie inférieure ou égale à 15 %");
+  assert.equal(pending.message, "");
+  assert.equal(pending.condition, "Batterie inférieure ou égale à 15 %");
   assert.equal(panel._nativeTableCell("overview", active, "integration"), "MQTT");
   const status = panel._nativeStatusCell(active, "overview");
   assert.equal(status.attributes["aria-label"], "Alerte active");
@@ -3527,7 +3541,7 @@ test("structured automatic and generated rule conditions are localized", () => {
   table._translations = TRANSLATIONS.en;
   const automatic = table._tableRows("overview").find((row) => row.source.type === "battery");
   assert.equal(automatic.condition, "Battery less than or equal to 15%");
-  assert.equal(automatic.message, "Battery less than or equal to 15%");
+  assert.equal(automatic.message, "");
 });
 
 

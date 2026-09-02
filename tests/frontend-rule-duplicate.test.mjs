@@ -17,6 +17,16 @@ globalThis.HTMLElement = class {
     };
     return this.shadowRoot;
   }
+
+  toggleAttribute(name, force) {
+    this._attributes ??= new Set();
+    if (force) this._attributes.add(name);
+    else this._attributes.delete(name);
+  }
+
+  hasAttribute(name) {
+    return this._attributes?.has(name) ?? false;
+  }
 };
 
 globalThis.customElements = {
@@ -72,14 +82,20 @@ test("overview keeps summary spacing inside the gray header at every width", () 
   );
 });
 
-test("narrow panel shell cancels the duplicated Home Assistant toolbar offset", () => {
+test("only the narrow companion app cancels the duplicated Home Assistant toolbar", () => {
   const panel = new AlertManagerPanel();
   const styles = compactCss(panel._styles());
 
   assert.match(
     styles,
-    /@media\(max-width:870px\),\(max-height:500px\)\{#panel-shell\{margin-block-start:calc\(\s*0px - var\(--header-height,56px\)\s*\)\}\}/,
+    /:host\(\[companion-app\]\[narrow\]\) #panel-shell\{margin-block-start:calc\(0px - var\(--header-height,56px\)\)\}/,
   );
+  assert.doesNotMatch(styles, /@media\(max-width:870px\),\(max-height:500px\)/);
+  assert.match(styles, /--ha-bottom-sheet-border-color:var\(--primary-color\)/);
+
+  panel.narrow = true;
+  assert.equal(panel.hasAttribute("narrow"), true);
+  assert.equal(panel.hasAttribute("companion-app"), false);
 });
 
 test("narrow native table action rows stay gray on every table page", () => {

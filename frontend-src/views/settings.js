@@ -9,7 +9,7 @@ import {
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, configurationDrawer, busy,
+      ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
@@ -55,7 +55,7 @@ export function renderSettings(context) {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
-        settingsDraft, entityDelayDraft, configurationDrawer, busy, t,
+        settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -65,7 +65,9 @@ export function renderSettingsConfigurationEntry(id, label, count, t) {
 }
 
 export function renderSettingsConfigurationDrawer(context) {
-  const { settingsDraft, entityDelayDraft, configurationDrawer, busy, t } = context;
+  const {
+    settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+  } = context;
   if (configurationDrawer?.kind !== "settings") return "";
   const id = configurationDrawer.id;
   let title;
@@ -97,6 +99,7 @@ export function renderSettingsConfigurationDrawer(context) {
     saveAction: "save-settings",
     saveLabel: t("buttons.save"),
     busy,
+    useBottomSheet,
   });
 }
 
@@ -111,6 +114,7 @@ export function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       busy: this._busy,
+      useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
@@ -403,6 +407,7 @@ export function refreshSettingsConfigurationDrawer() {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     busy: this._busy,
+    useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
   }));
   this._hydrateSelectors();

@@ -17,7 +17,8 @@ function drawerFields(pack) {
 
 export function renderAutomatic(context) {
     const {
-      availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+      availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+      renderNumberField, t,
     } = context;
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
@@ -45,7 +46,8 @@ export function renderAutomatic(context) {
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
       ${renderAutomaticConfigurationDrawer({
-        availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+        availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+        renderNumberField, t,
       })}
     </form>`;
 }
@@ -58,6 +60,7 @@ export function renderAutomaticPanel() {
       draft: this._automaticMapDraft,
       configurationDrawer: this._configurationDrawer,
       busy: this._busy,
+      useBottomSheet: this._useNativeBottomSheet(),
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
@@ -74,7 +77,8 @@ export function packConfigurationCount(pack, config, draft) {
 
 export function renderAutomaticConfigurationDrawer(context) {
   const {
-    availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+    availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
+    renderNumberField, t,
   } = context;
   if (configurationDrawer?.kind !== "automatic") return "";
   const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
@@ -96,6 +100,7 @@ export function renderAutomaticConfigurationDrawer(context) {
     saveAction: "save-automatic",
     saveLabel: t("buttons.save"),
     busy,
+    useBottomSheet,
   });
 }
 
@@ -250,6 +255,7 @@ export function refreshAutomaticConfigurationDrawer() {
     draft: this._automaticMapDraft,
     configurationDrawer: this._configurationDrawer,
     busy: this._busy,
+    useBottomSheet: this._useNativeBottomSheet(),
     renderNumberField: (...args) => this._numberField(...args),
     t: (key, replacements) => this._t(key, replacements),
   }));
