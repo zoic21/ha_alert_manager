@@ -199,6 +199,7 @@ class Registry:
     def __init__(self, kind: str):
         self.kind = kind
         self.entries = {}
+        self.deleted_entities = {}
         self.labels = {}
 
     def async_get(self, item_id):

@@ -88,6 +88,14 @@
         "type": "Type"
       },
       "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration.",
+      "deleted_entities": {
+        "button": "Entités supprimées",
+        "close": "Fermer les entités supprimées",
+        "description": "Les 50 dernières entités supprimées encore conservées par Home Assistant.",
+        "empty": "Aucune entité supprimée n’est conservée par Home Assistant.",
+        "loading": "Chargement des entités supprimées…",
+        "title": "Entités supprimées"
+      },
       "empty": "Aucune référence vers une entité manquante.",
       "not_scanned": "L’analyse n’a pas encore été lancée.",
       "open": "Ouvrir",

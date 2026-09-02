@@ -6,7 +6,9 @@ import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
-import { renderCoherence } from "../frontend-src/views/coherence.js";
+import {
+  renderCoherence, renderDeletedEntitiesDrawer,
+} from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import { renderOverview } from "../frontend-src/views/overview.js";
 import { renderSettings } from "../frontend-src/views/settings.js";
@@ -71,6 +73,7 @@ test("coherence rendering receives scan state and statistics explicitly", () => 
   });
   assert.match(empty, /data-action="scan-coherence" disabled/);
   assert.match(empty, /coherence.scanning/);
+  assert.match(empty, /appearance="outlined" data-action="open-deleted-entities"/);
 
   const scanned = renderCoherence({
     result: { issue_count: 1 },
@@ -81,6 +84,29 @@ test("coherence rendering receives scan state and statistics explicitly", () => 
   });
   assert.match(scanned, /data-coherence-table-page/);
   assert.match(scanned, /<strong>1<\/strong>/);
+});
+
+test("deleted entity drawer renders retained registry entries safely", () => {
+  const markup = renderDeletedEntitiesDrawer({
+    data: {
+      entities: [{
+        entity_id: "sensor.deleted_<unsafe>",
+        name: "Old sensor",
+        platform: "test",
+        deleted_at: "2026-08-24T12:00:00+00:00",
+      }],
+    },
+    loading: false,
+    error: null,
+    formatDate: () => "24/08/2026 12:00:00",
+    t,
+  });
+
+  assert.match(markup, /class="side-drawer deleted-entities-drawer"/);
+  assert.match(markup, /sensor\.deleted_&lt;unsafe&gt;/);
+  assert.match(markup, /Old sensor/);
+  assert.match(markup, /24\/08\/2026 12:00:00/);
+  assert.doesNotMatch(markup, /sensor\.deleted_<unsafe>/);
 });
 
 test("automatic rendering uses prepared configuration and draft data", () => {

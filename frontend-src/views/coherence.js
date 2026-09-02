@@ -1,5 +1,6 @@
-import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
+import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
 
 export function coherenceStatsMarkup() {
     const result = this._coherence;
@@ -209,16 +210,76 @@ export function nativeCoherenceActionCell(row) {
     return button;
 }
 
+export function renderDeletedEntitiesDrawer({ data, loading, error, formatDate, t }) {
+    const entities = data?.entities ?? [];
+    const content = loading
+      ? `<div class="loading compact">${esc(t("coherence.deleted_entities.loading"))}</div>`
+      : error
+        ? `<ha-alert alert-type="error">${esc(error)}</ha-alert>`
+        : `<p class="deleted-entities-description">${esc(t("coherence.deleted_entities.description"))}</p>
+          ${entities.length
+            ? `<div class="deleted-entities-list" role="list">${entities.map((entry) => `
+              <div class="deleted-entity-row" role="listitem">
+                <div class="deleted-entity-primary">
+                  <code>${esc(entry.entity_id)}</code>
+                  ${entry.name ? `<span>${esc(entry.name)}</span>` : ""}
+                </div>
+                <div class="deleted-entity-metadata">
+                  <span>${esc(entry.platform)}</span>
+                  <time datetime="${esc(entry.deleted_at)}">${esc(formatDate(entry.deleted_at))}</time>
+                </div>
+              </div>`).join("")}</div>`
+            : `<div class="empty compact">${esc(t("coherence.deleted_entities.empty"))}</div>`}`;
+    return `<div class="side-drawer-backdrop deleted-entities-drawer-backdrop" data-action="close-deleted-entities" aria-hidden="true"></div>
+      <ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
+        <ha-dialog-header show-border>
+          <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-deleted-entities" aria-label="${esc(t("coherence.deleted_entities.close"))}"></ha-icon-button>
+          <span slot="title">${esc(t("coherence.deleted_entities.title"))}</span>
+        </ha-dialog-header>
+        <div class="side-drawer-form">
+          <section class="side-drawer-section">${content}</section>
+        </div>
+      </ha-card>`;
+}
+
+function coherenceActionsMarkup({ loading, deletedEntitiesLoading, t }) {
+    return `<div class="coherence-actions">
+      <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+      <ha-button appearance="outlined" data-action="open-deleted-entities" ${deletedEntitiesLoading ? "disabled" : ""}>${esc(t("coherence.deleted_entities.button"))}</ha-button>
+    </div>`;
+}
+
 export function renderCoherence(context) {
-    const { result, loading, pageMessages, statsMarkup, t } = context;
+    const {
+      result,
+      loading,
+      pageMessages,
+      statsMarkup,
+      deletedEntities = null,
+      deletedEntitiesLoading = false,
+      deletedEntitiesError = null,
+      deletedEntitiesOpen = false,
+      formatDate = (value) => value,
+      t,
+    } = context;
+    const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
+    const drawer = deletedEntitiesOpen
+      ? renderDeletedEntitiesDrawer({
+          data: deletedEntities,
+          loading: deletedEntitiesLoading,
+          error: deletedEntitiesError,
+          formatDate,
+          t,
+        })
+      : "";
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
           <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
-          <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+          ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
-      </ha-card>`;
+      </ha-card>${drawer}`;
     }
     return `<hass-tabs-subpage-data-table
       id="panel-shell"
@@ -231,12 +292,12 @@ export function renderCoherence(context) {
         <ha-card outlined class="panel coherence-panel">
           <div class="coherence-header">
             <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
-            <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
+            ${actions}
           </div>
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
-    </hass-tabs-subpage-data-table>`;
+    </hass-tabs-subpage-data-table>${drawer}`;
 }
 
 export function renderCoherencePanel() {
@@ -245,11 +306,41 @@ export function renderCoherencePanel() {
       loading: this._coherenceLoading,
       pageMessages: this._coherence ? this._renderPageMessages() : "",
       statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",
+      deletedEntities: this._deletedEntitiesState.data,
+      deletedEntitiesLoading: this._deletedEntitiesState.loading,
+      deletedEntitiesError: this._deletedEntitiesState.error,
+      deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
     });
 }
 
 export async function handleCoherenceAction(action) {
+  if (action === "close-deleted-entities") {
+    if (this._configurationDrawer?.kind !== "deleted-entities") return false;
+    this._configurationDrawer = null;
+    this._render();
+    return true;
+  }
+  if (action === "open-deleted-entities") {
+    const state = this._deletedEntitiesState;
+    if (state.loading) return true;
+    this._configurationDrawer = { kind: "deleted-entities" };
+    state.loading = true;
+    state.error = null;
+    this._render();
+    try {
+      state.data = await this._api.call({
+        type: "alert_manager/coherence/deleted_entities/list",
+      });
+    } catch (error) {
+      state.error = this._errorText(error);
+    } finally {
+      state.loading = false;
+      this._render();
+    }
+    return true;
+  }
   if (action !== "scan-coherence") return false;
   if (this._coherenceLoading) return true;
   this._coherenceLoading = true;

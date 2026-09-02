@@ -48,6 +48,8 @@ from .yaml_io import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_DELETED_ENTITIES_LIMIT = 50
+
 
 def _serialize_config_mutation(
     method: Callable[..., Awaitable[Any]],
@@ -82,6 +84,25 @@ class _ApiMixin:
             "count": len(self.history),
             "retention_limit": self.config["history_limit"],
             "enabled": self.config["history_limit"] > 0,
+        }
+
+    def deleted_entities_snapshot(self) -> dict[str, Any]:
+        """Return the newest deleted entities still retained by Home Assistant."""
+        entries = sorted(
+            self._entity_registry.deleted_entities.values(),
+            key=lambda entry: entry.modified_at,
+            reverse=True,
+        )
+        return {
+            "entities": [
+                {
+                    "entity_id": entry.entity_id,
+                    "name": entry.name,
+                    "platform": entry.platform,
+                    "deleted_at": entry.modified_at.isoformat(),
+                }
+                for entry in entries[:_DELETED_ENTITIES_LIMIT]
+            ],
         }
 
     def get_history_config(self) -> dict[str, int | bool]:
