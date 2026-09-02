@@ -94,7 +94,25 @@ export function renderConfigurationDrawer({
 }
 
 export function replaceConfigurationDrawer(root, markup) {
-  root?.querySelector?.(".side-drawer-bottom-sheet")?.remove?.();
+  const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
+  if (currentBottomSheet && markup) {
+    const template = document.createElement("template");
+    template.innerHTML = markup.trim();
+    const nextBottomSheet = template.content.querySelector(
+      ".side-drawer-bottom-sheet",
+    );
+    const currentDrawer = currentBottomSheet.querySelector(
+      ".configuration-drawer",
+    );
+    const nextDrawer = nextBottomSheet?.querySelector(
+      ".configuration-drawer",
+    );
+    if (currentDrawer && nextDrawer) {
+      currentDrawer.replaceWith(nextDrawer);
+      return;
+    }
+  }
+  currentBottomSheet?.remove?.();
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
   if (root && markup) root.insertAdjacentHTML("beforeend", markup);

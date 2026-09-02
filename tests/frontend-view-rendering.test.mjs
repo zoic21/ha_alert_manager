@@ -5,7 +5,10 @@ import { renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
-import { renderConfigurationDrawer } from "../frontend-src/components/configuration-drawer.js";
+import {
+  renderConfigurationDrawer,
+  replaceConfigurationDrawer,
+} from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
   renderCoherence, renderDeletedEntitiesDrawer,
@@ -136,6 +139,62 @@ test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
   }
   assert.match(configuration, /data-close-action="close-configuration-drawer"/);
   assert.match(deletedEntities, /data-close-action="close-deleted-entities"/);
+});
+
+test("updating a mobile configuration drawer preserves its native bottom sheet", () => {
+  const nextDrawer = {};
+  const nextBottomSheet = {
+    querySelector: (selector) => (
+      selector === ".configuration-drawer" ? nextDrawer : null
+    ),
+  };
+  const template = {
+    content: {
+      querySelector: (selector) => (
+        selector === ".side-drawer-bottom-sheet" ? nextBottomSheet : null
+      ),
+    },
+    set innerHTML(value) { this.markup = value; },
+  };
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement: (tagName) => {
+      assert.equal(tagName, "template");
+      return template;
+    },
+  };
+  let replacement;
+  let bottomSheetRemoved = false;
+  let fallbackInserted = false;
+  const currentDrawer = {
+    replaceWith: (node) => { replacement = node; },
+  };
+  const currentBottomSheet = {
+    querySelector: (selector) => (
+      selector === ".configuration-drawer" ? currentDrawer : null
+    ),
+    remove: () => { bottomSheetRemoved = true; },
+  };
+  const root = {
+    querySelector: (selector) => (
+      selector === ".side-drawer-bottom-sheet" ? currentBottomSheet : null
+    ),
+    insertAdjacentHTML: () => { fallbackInserted = true; },
+  };
+
+  try {
+    replaceConfigurationDrawer(
+      root,
+      '<ha-resizable-bottom-sheet class="side-drawer-bottom-sheet"><ha-card class="configuration-drawer"></ha-card></ha-resizable-bottom-sheet>',
+    );
+  } finally {
+    globalThis.document = originalDocument;
+  }
+
+  assert.equal(replacement, nextDrawer);
+  assert.equal(bottomSheetRemoved, false);
+  assert.equal(fallbackInserted, false);
+  assert.match(template.markup, /^<ha-resizable-bottom-sheet/);
 });
 
 test("automatic rendering uses prepared configuration and draft data", () => {
