@@ -2022,6 +2022,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
   assert.match(settings, /id="settings-excluded_entities-configuration"[^>]+data-action="open-settings-configuration"/);
   assert.match(settings, /id="settings-excluded_devices-configuration"[^>]+data-action="open-settings-configuration"/);
+  assert.match(settings, /class="settings-wide settings-configuration-actions">[\s\S]*settings-excluded_entities-configuration[\s\S]*settings-excluded_devices-configuration[\s\S]*<\/div>/);
   assert.match(settings, /id="settings-entity_delays-configuration"[^>]+data-action="open-settings-configuration"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
@@ -2038,6 +2039,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.settings-form\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
+  assert.match(styles, /\.settings-configuration-actions\{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px\}/);
+  assert.match(styles, /\.fields\.configuration-drawer-fields\{grid-template-columns:1fr;width:100%;margin:0\}/);
+  assert.match(styles, /\.pack-map-heading\{[^}]*display:grid[^}]*grid-template-columns:minmax\(0,1fr\)[^}]*width:100%/);
   assert.match(styles, /\.ignored-reference-chips\{[^}]*flex-wrap:wrap/);
   assert.match(styles, /\.ignored-reference-add\{display:flex;align-items:flex-start;gap:8px\}/);
   assert.match(styles, /\.ignored-reference-add ha-input\{flex:0 1 420px\}/);

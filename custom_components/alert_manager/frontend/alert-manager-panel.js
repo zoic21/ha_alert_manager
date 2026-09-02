@@ -4015,8 +4015,10 @@ function renderSettings(context) {
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
-        ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
-        ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
+        <div class="settings-wide settings-configuration-actions">
+          ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
+          ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
+        </div>
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
@@ -4780,6 +4782,12 @@ const settingsStyles = `
   .configuration-entry ha-button {
     flex: none;
   }
+  .settings-configuration-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
   .settings-configuration-entry {
     min-height: 40px;
     justify-content: flex-start;
@@ -4791,11 +4799,12 @@ const settingsStyles = `
     justify-content: flex-end;
     border-top: 1px solid var(--divider-color, #ddd);
   }
-  .configuration-drawer-fields {
+  .fields.configuration-drawer-fields {
     grid-template-columns: 1fr;
+    width: 100%;
     margin: 0;
   }
-  .configuration-drawer-fields .full {
+  .fields.configuration-drawer-fields .full {
     grid-column: auto;
   }
   .configuration-section-heading {
@@ -5034,9 +5043,13 @@ const settingsStyles = `
   .pack-map-list {
     display: grid;
     gap: 10px;
+    width: 100%;
     margin-top: 16px;
   }
   .pack-map-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
     padding: 4px 0 16px;
     border-bottom: 1px solid var(--divider-color, #ddd);
   }
@@ -5046,7 +5059,7 @@ const settingsStyles = `
     font-weight: var(--ha-font-weight-medium, 500);
   }
   .pack-map-heading small {
-    max-width: 400px;
+    max-width: none;
     line-height: 1.45;
   }
   .pack-map-empty {
@@ -5056,6 +5069,7 @@ const settingsStyles = `
     display: grid;
     grid-template-columns: minmax(180px, 1fr) minmax(120px, 180px) auto;
     gap: 10px;
+    width: 100%;
     align-items: start;
   }
   .pack-map-row > ha-button {
