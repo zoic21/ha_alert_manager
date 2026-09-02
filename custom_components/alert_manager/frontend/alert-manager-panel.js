@@ -5706,6 +5706,11 @@ const responsiveStyles = `
       inset: 0;
       width: 100%;
       height: 100%;
+      --side-drawer-mobile-border-radius: var(
+        --ha-dialog-border-radius,
+        var(--ha-border-radius-2xl, 14px)
+      );
+      --ha-bottom-sheet-border-radius: var(--side-drawer-mobile-border-radius);
       --ha-bottom-sheet-border-width: 2px;
       --ha-bottom-sheet-border-style: solid;
       --ha-bottom-sheet-border-color: var(--primary-color);
@@ -5718,7 +5723,11 @@ const responsiveStyles = `
       max-width: none;
       border-width: 0;
       overflow: hidden;
-      --ha-card-border-radius: var(--ha-border-radius-square, 0);
+      --ha-card-border-radius: var(--side-drawer-mobile-border-radius);
+      border-start-start-radius: var(--side-drawer-mobile-border-radius);
+      border-start-end-radius: var(--side-drawer-mobile-border-radius);
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
     }
     .side-drawer-bottom-sheet .side-drawer-form {
       min-height: 0;

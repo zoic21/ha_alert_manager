@@ -92,6 +92,18 @@ test("only the narrow companion app cancels the duplicated Home Assistant toolba
   );
   assert.doesNotMatch(styles, /@media\(max-width:870px\),\(max-height:500px\)/);
   assert.match(styles, /--ha-bottom-sheet-border-color:var\(--primary-color\)/);
+  assert.match(
+    styles,
+    /--ha-bottom-sheet-border-radius:var\(--side-drawer-mobile-border-radius\)/,
+  );
+  assert.match(
+    styles,
+    /\.side-drawer-bottom-sheet ha-card\.side-drawer\{[^}]*--ha-card-border-radius:var\(--side-drawer-mobile-border-radius\)[^}]*border-start-start-radius:var\(--side-drawer-mobile-border-radius\)[^}]*border-start-end-radius:var\(--side-drawer-mobile-border-radius\)/,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.side-drawer-bottom-sheet ha-card\.side-drawer\{[^}]*--ha-card-border-radius:var\(--ha-border-radius-square,0\)/,
+  );
 
   panel.narrow = true;
   assert.equal(panel.hasAttribute("narrow"), true);
