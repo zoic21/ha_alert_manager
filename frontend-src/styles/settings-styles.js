@@ -190,6 +190,11 @@ export const settingsStyles = `
   .coherence-header ha-button {
     flex: none;
   }
+  .coherence-actions {
+    display: grid;
+    flex: none;
+    gap: 8px;
+  }
   .coherence-stats {
     display: flex;
     flex-wrap: wrap;
@@ -207,6 +212,43 @@ export const settingsStyles = `
   .coherence-scan-date.stale {
     color: var(--error-color, #db4437);
     font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .deleted-entities-description {
+    margin: 0 0 16px;
+    color: var(--secondary-text-color, #727272);
+  }
+  .deleted-entities-list {
+    display: grid;
+  }
+  .deleted-entity-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 0;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .deleted-entity-primary, .deleted-entity-metadata {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .deleted-entity-primary code {
+    overflow: hidden;
+    color: var(--primary-text-color, #212121);
+    font-weight: var(--ha-font-weight-medium, 500);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .deleted-entity-primary span, .deleted-entity-metadata {
+    color: var(--secondary-text-color, #727272);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .deleted-entity-metadata {
+    align-items: flex-end;
+    text-align: end;
   }
 
   /* Code */

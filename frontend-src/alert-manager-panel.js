@@ -66,7 +66,6 @@ import {
   removeIgnoredReference, renderSettingsPanel, resetSettingsDraft, saveSettings,
   setEntityDelayEntity,
 } from "./views/settings.js";
-
 const ACTION_HANDLERS = [
   handleConfigBackupAction,
   handleAlertTableAction,
@@ -248,6 +247,7 @@ class AlertManagerPanel extends HTMLElement {
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
+    this._deletedEntitiesState = { data: null, loading: false, error: null };
     this._historyLoadPromise = null;
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;

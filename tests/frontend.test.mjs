@@ -161,6 +161,55 @@ test("coherence scan runs only from its explicit action", async () => {
   assert.equal(panel._coherenceLoading, false);
 });
 
+test("deleted entities are loaded only when their drawer opens", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  let renders = 0;
+  panel._render = () => { renders += 1; };
+  const response = {
+    entities: [{
+      entity_id: "sensor.deleted",
+      name: null,
+      platform: "test",
+      deleted_at: "2026-08-24T12:00:00+00:00",
+    }],
+  };
+  const calls = [];
+  panel._hass = {
+    async callWS(message) {
+      calls.push(message);
+      return response;
+    },
+  };
+
+  assert.deepEqual(calls, []);
+  await panel._handleClick({
+    target: {
+      closest() {
+        return { dataset: { action: "open-deleted-entities" } };
+      },
+    },
+  });
+
+  assert.deepEqual(calls, [{
+    type: "alert_manager/coherence/deleted_entities/list",
+  }]);
+  assert.deepEqual(panel._deletedEntitiesState.data, response);
+  assert.deepEqual(panel._configurationDrawer, { kind: "deleted-entities" });
+  assert.equal(panel._deletedEntitiesState.loading, false);
+  assert.equal(renders, 2);
+
+  await panel._handleClick({
+    target: {
+      closest() {
+        return { dataset: { action: "close-deleted-entities" } };
+      },
+    },
+  });
+  assert.equal(panel._configurationDrawer, null);
+  assert.equal(renders, 3);
+});
+
 test("coherence scan date is red only when older than 48 hours", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();

@@ -61,6 +61,13 @@ export const responsiveStyles = `
     .coherence-header ha-button {
       width: 100%;
     }
+    .deleted-entity-row {
+      grid-template-columns: 1fr;
+    }
+    .deleted-entity-metadata {
+      align-items: flex-start;
+      text-align: start;
+    }
     .actions ha-button {
       width: 100%;
     }

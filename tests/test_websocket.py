@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
@@ -20,6 +21,7 @@ from custom_components.alert_manager.websocket import (
     websocket_config_import_validate,
     websocket_config_recovery_get,
     websocket_config_update,
+    websocket_deleted_entities_list,
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
@@ -221,6 +223,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_history_clear, {"id": 17, "confirmed": True}),
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
+        (websocket_deleted_entities_list, {"id": 23}),
         (websocket_config_recovery_get, {"id": 20}),
         (websocket_config_backup_download, {"id": 21, "backup_id": "one"}),
         (
@@ -229,7 +232,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 17
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 18
     assert connection.results == []
 
 
@@ -259,6 +262,36 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
 
     assert connection.errors == []
     assert connection.results == [(40, expected)]
+
+
+def test_deleted_entities_websocket_returns_newest_fifty(hass, entry):
+    """The registry remains the only source of retained deleted entities."""
+    base = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    hass.entity_registry.deleted_entities = {
+        ("sensor", "test", str(index)): SimpleNamespace(
+            entity_id=f"sensor.deleted_{index}",
+            name=f"Deleted {index}" if index % 2 else None,
+            platform="test",
+            modified_at=base + timedelta(minutes=index),
+        )
+        for index in range(52)
+    }
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_deleted_entities_list(hass, connection, {"id": 43}))
+
+    result = connection.results[-1][1]
+    assert len(result["entities"]) == 50
+    assert result["entities"][0] == {
+        "entity_id": "sensor.deleted_51",
+        "name": "Deleted 51",
+        "platform": "test",
+        "deleted_at": "2026-08-24T12:51:00+00:00",
+    }
+    assert result["entities"][-1]["entity_id"] == "sensor.deleted_2"
 
 
 def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, entry):

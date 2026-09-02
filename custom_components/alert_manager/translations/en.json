@@ -88,6 +88,14 @@
         "type": "Type"
       },
       "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files.",
+      "deleted_entities": {
+        "button": "Deleted entities",
+        "close": "Close deleted entities",
+        "description": "The 50 latest deleted entities still retained by Home Assistant.",
+        "empty": "Home Assistant is not retaining any deleted entities.",
+        "loading": "Loading deleted entities…",
+        "title": "Deleted entities"
+      },
       "empty": "No references to missing entities.",
       "not_scanned": "The scan has not been run yet.",
       "open": "Open",

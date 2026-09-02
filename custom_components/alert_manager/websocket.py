@@ -108,6 +108,19 @@ async def websocket_coherence_get(
 @websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/coherence/deleted_entities/list"}
+)
+async def websocket_deleted_entities_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return deleted entities retained by Home Assistant's entity registry."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.deleted_entities_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
     {vol.Required("type"): "alert_manager/history/config/get"}
 )
 async def websocket_history_config_get(
@@ -442,6 +455,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,
+        websocket_deleted_entities_list,
         websocket_history_config_get,
         websocket_history_config_update,
         websocket_history_clear,
