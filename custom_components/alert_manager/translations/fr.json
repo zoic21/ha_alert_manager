@@ -14,6 +14,8 @@
     "alert_details": {
       "alert_id": "ID de l’alerte",
       "aria_menu": "Actions de l’alerte",
+      "current_value": "Valeur actuelle",
+      "trigger_value": "Valeur de déclenchement",
       "title": "Détails de l’alerte"
     },
     "automatic": {

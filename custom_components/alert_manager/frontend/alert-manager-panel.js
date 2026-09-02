@@ -963,6 +963,50 @@ function displayValue(value, unit) {
     return unit ? `${rendered} ${unit}` : rendered;
 }
 
+function attributeValue(attributes, path) {
+    if (!attributes || !path) return [false, null];
+    if (Object.hasOwn(attributes, path)) return [true, attributes[path]];
+    if (!path.includes(".")) return [false, null];
+
+    let values = [attributes];
+    let usedWildcard = false;
+    for (const segment of path.split(".")) {
+      const nextValues = [];
+      if (segment === "*") {
+        usedWildcard = true;
+        for (const value of values) {
+          if (Array.isArray(value)) nextValues.push(...value);
+        }
+      } else {
+        for (const value of values) {
+          if (value && typeof value === "object" && Object.hasOwn(value, segment)) {
+            nextValues.push(value[segment]);
+          }
+        }
+      }
+      if (!nextValues.length) return [false, null];
+      values = nextValues;
+    }
+    return [true, usedWildcard ? values : values[0]];
+}
+
+function alertCurrentValue(row) {
+    const state = this._hass?.states?.[row.entityId];
+    if (!state) return "—";
+    let value = state.state;
+    const source = row.source?.source;
+    if (["attribute", "attribute_variation"].includes(source)) {
+      const [found, attribute] = attributeValue(
+        state.attributes,
+        row.source?.attribute,
+      );
+      if (!found) return "—";
+      value = attribute;
+    }
+    const unit = state.attributes?.unit_of_measurement ?? row.source?.unit;
+    return this._displayValue(value, unit);
+}
+
 function entityMetadata(source, labelRegistry) {
     const entityId = source.entity_id || "";
     const entity = this._hass?.entities?.[entityId];
@@ -1501,7 +1545,16 @@ function alertDetailsItems(kind, row) {
         label: this._t("table.columns.integration"),
         value: row.integrationLabel || row.integration,
       },
-      { key: "value", label: this._t("table.columns.value"), value: row.value },
+      ...(kind === "history" ? [] : [{
+        key: "current-value",
+        label: this._t("alert_details.current_value"),
+        value: alertCurrentValue.call(this, row),
+      }]),
+      {
+        key: "trigger-value",
+        label: this._t("alert_details.trigger_value"),
+        value: row.value,
+      },
       { key: "detected", label: this._t("table.columns.detected"), value: this._date(row.detected) },
     ];
     if (kind === "history") {
@@ -2509,7 +2562,6 @@ async function saveRuleYaml() {
     this._ruleYamlError = null;
     this._ruleDirty = false;
     this._replaceRule(updated);
-    if (id) await this._refreshAlerts();
 }
 
 function startRuleEditorResize(event) {
@@ -2590,7 +2642,6 @@ async function saveRule(form) {
       this._ruleEditorMode = "visual";
       this._ruleDirty = false;
       this._replaceRule(updated);
-      if (id) await this._refreshAlerts();
     } else if (this._notice?.kind === "error") {
       this._ruleEditorError = consumeRuleEditorNotice(this, this._t("errors.unknown"));
       this._refreshRuleEditor();

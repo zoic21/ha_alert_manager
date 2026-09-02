@@ -1237,12 +1237,50 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="more-info" data-entity-id="sensor\.rack"/);
   assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
+  assert.match(html, /data-detail-key="current-value"[\s\S]*Valeur actuelle[\s\S]*35 °C/);
+  assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /<ha-card outlined class="alert-details-card">/);
   assert.match(html, /slot="headerActionItems"[\s\S]*data-alert-id="rule:temperature:sensor\.rack"/);
   assert.match(html, /ha-dropdown-item value="acknowledge"[\s\S]*Acquitter/);
   assert.doesNotMatch(html, /mdi:chevron-right/);
   assert.doesNotMatch(html, /data-action="close-alert-details"/);
+});
+
+test("alert details read the current value from a configured attribute path", () => {
+  const panel = tablePanel();
+  panel._hass.states["sensor.rack"].attributes = {
+    metrics: { temperature: 9.2 },
+    unit_of_measurement: "°C",
+  };
+  panel._alerts.alerts = [currentAlert({
+    value: 11,
+    source: "attribute",
+    attribute: "metrics.temperature",
+  })];
+
+  const row = panel._tableRows("overview")[0];
+  const html = panel._renderAlertDetails("overview", row);
+
+  assert.match(html, /data-detail-key="current-value"[\s\S]*9\.2 °C/);
+  assert.match(html, /data-detail-key="trigger-value"[\s\S]*11 °C/);
+});
+
+test("history details label the stored value as the trigger value only", () => {
+  const panel = tablePanel();
+  const event = {
+    ...currentAlert(),
+    event_id: "history-1",
+    trigger_value: 34.5,
+    active_at: "2026-08-26T12:00:30Z",
+    resolved_at: "2026-08-26T12:15:30Z",
+    total_duration_seconds: 930,
+  };
+  const row = panel._tableRows("history", [event])[0];
+  const html = panel._renderAlertDetails("history", row);
+
+  assert.doesNotMatch(html, /data-detail-key="current-value"/);
+  assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
 });
 
 test("an alert message identical to its condition is not displayed twice", () => {
@@ -2130,12 +2168,6 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
   panel._hass = {
     callWS: async (message) => {
       calls.push(message);
-      if (message.type === "alert_manager/alerts/list") {
-        return {
-          alerts: [], pending: [], acknowledge: [],
-          active_count: 0, pending_count: 0, acknowledge_count: 0,
-        };
-      }
       if (message.type === "alert_manager/rules/delete") return { deleted: true };
       return { ...existing, ...message.rule };
     },
@@ -2149,17 +2181,15 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
   assert.equal(calls[0].type, "alert_manager/rules/update");
   assert.equal(calls[0].rule_id, "rule-id");
   assert.equal(calls[0].rule.name, "Modifiée");
-  assert.deepEqual(calls[1], { type: "alert_manager/alerts/list" });
-  assert.deepEqual(calls[2], {
+  assert.deepEqual(calls[1], {
     type: "alert_manager/rules/update",
     rule_id: "rule-id",
     rule: { enabled: false },
   });
-  assert.deepEqual(calls[3], {
+  assert.deepEqual(calls[2], {
     type: "alert_manager/rules/delete",
     rule_id: "rule-id",
   });
-  assert.equal(panel._alerts.active_count, 0);
   assert.deepEqual(panel._config.rules, []);
   assert.equal(panel._editingRule, null);
 });
@@ -2194,12 +2224,6 @@ test("saving the editor preserves the activation controlled by the table", async
   let savedRule;
   panel._hass = {
     callWS: async (message) => {
-      if (message.type === "alert_manager/alerts/list") {
-        return {
-          alerts: [], pending: [], acknowledge: [],
-          active_count: 0, pending_count: 0, acknowledge_count: 0,
-        };
-      }
       savedRule = message.rule;
       return { ...message.rule, id: "disabled-rule", version: 2 };
     },
