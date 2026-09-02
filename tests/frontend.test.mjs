@@ -2130,6 +2130,12 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
   panel._hass = {
     callWS: async (message) => {
       calls.push(message);
+      if (message.type === "alert_manager/alerts/list") {
+        return {
+          alerts: [], pending: [], acknowledge: [],
+          active_count: 0, pending_count: 0, acknowledge_count: 0,
+        };
+      }
       if (message.type === "alert_manager/rules/delete") return { deleted: true };
       return { ...existing, ...message.rule };
     },
@@ -2143,15 +2149,17 @@ test("rule edit, toggle and delete actions call their dedicated APIs", async () 
   assert.equal(calls[0].type, "alert_manager/rules/update");
   assert.equal(calls[0].rule_id, "rule-id");
   assert.equal(calls[0].rule.name, "Modifiée");
-  assert.deepEqual(calls[1], {
+  assert.deepEqual(calls[1], { type: "alert_manager/alerts/list" });
+  assert.deepEqual(calls[2], {
     type: "alert_manager/rules/update",
     rule_id: "rule-id",
     rule: { enabled: false },
   });
-  assert.deepEqual(calls[2], {
+  assert.deepEqual(calls[3], {
     type: "alert_manager/rules/delete",
     rule_id: "rule-id",
   });
+  assert.equal(panel._alerts.active_count, 0);
   assert.deepEqual(panel._config.rules, []);
   assert.equal(panel._editingRule, null);
 });
@@ -2186,6 +2194,12 @@ test("saving the editor preserves the activation controlled by the table", async
   let savedRule;
   panel._hass = {
     callWS: async (message) => {
+      if (message.type === "alert_manager/alerts/list") {
+        return {
+          alerts: [], pending: [], acknowledge: [],
+          active_count: 0, pending_count: 0, acknowledge_count: 0,
+        };
+      }
       savedRule = message.rule;
       return { ...message.rule, id: "disabled-rule", version: 2 };
     },

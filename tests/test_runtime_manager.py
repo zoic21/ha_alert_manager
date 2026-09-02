@@ -138,6 +138,33 @@ def test_explicit_message_edit_refreshes_active_alert_once(hass, entry):
     asyncio.run(scenario())
 
 
+def test_numeric_threshold_edit_immediately_resolves_active_rule(hass, entry, set_now):
+    """An edited comparison is applied to the current state immediately."""
+
+    async def scenario():
+        start = datetime(2026, 9, 2, 19, 47, 34, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.source", "9.2", {"unit_of_measurement": "°C"})
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(operator="above", value=9, duration=2400)
+        )
+        alert_id = f"rule:{created['id']}:sensor.source"
+
+        set_now(start + timedelta(minutes=40))
+        await manager.async_evaluate_entity("sensor.source")
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+        hass.bus.fired.clear()
+        await manager.async_update_rule(created["id"], {"value": 9.5})
+
+        assert alert_id not in manager.records
+        assert any(event == EVENT_ALERT_RESOLVED for event, _data in hass.bus.fired)
+
+    asyncio.run(scenario())
+
+
 def test_legacy_self_referential_rule_is_disabled(hass, entry):
     """Unsafe rules persisted by older versions are retained but disabled."""
     hass.states.set("sensor.source", "on")

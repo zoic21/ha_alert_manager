@@ -415,6 +415,7 @@ export async function saveRuleYaml() {
     this._ruleYamlError = null;
     this._ruleDirty = false;
     this._replaceRule(updated);
+    if (id) await this._refreshAlerts();
 }
 
 export function startRuleEditorResize(event) {
@@ -495,6 +496,7 @@ export async function saveRule(form) {
       this._ruleEditorMode = "visual";
       this._ruleDirty = false;
       this._replaceRule(updated);
+      if (id) await this._refreshAlerts();
     } else if (this._notice?.kind === "error") {
       this._ruleEditorError = consumeRuleEditorNotice(this, this._t("errors.unknown"));
       this._refreshRuleEditor();
