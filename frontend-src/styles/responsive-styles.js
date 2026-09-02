@@ -153,6 +153,9 @@ export const responsiveStyles = `
       align-items: stretch;
       flex-direction: column;
     }
+    .configuration-section-heading {
+      align-items: center;
+    }
     .rule-value-row {
       grid-template-columns: 1fr;
     }

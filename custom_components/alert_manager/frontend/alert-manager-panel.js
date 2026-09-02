@@ -1986,7 +1986,7 @@ function renderConfigurationDrawer({
   return `<div class="side-drawer-backdrop configuration-drawer-backdrop" data-action="close-configuration-drawer" aria-hidden="true"></div>
     <ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
       <ha-dialog-header show-border>
-        <ha-icon-button slot="navigationIcon" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
+        <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
       </ha-dialog-header>
       <div class="side-drawer-form">
@@ -3663,6 +3663,10 @@ function isNumberMapField(field) {
   return NUMBER_MAP_FIELD_TYPES.has(field.type);
 }
 
+function drawerFields(pack) {
+  return (pack.config_fields ?? []).filter(isNumberMapField);
+}
+
 function renderAutomatic(context) {
     const {
       availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
@@ -3672,6 +3676,7 @@ function renderAutomatic(context) {
         const packConfig = config.automatic[pack.id];
         const packKey = pack.translation_key || pack.id;
         const packName = t(`packs.${packKey}.name`);
+        const configurableFields = drawerFields(pack);
         return `<ha-card outlined class="panel category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
@@ -3680,8 +3685,14 @@ function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
             ${renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).length ? `<div class="field configuration-entry"><span class="field-label">${esc(t("automatic.configuration"))}</span><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
+            ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
+              pack,
+              field,
+              packConfig,
+              { draft, renderNumberField, t },
+            )).join("")}
           </div>
+          ${configurableFields.length ? `<div class="configuration-entry automatic-configuration-entry"><span class="field-label">${esc(t("automatic.configuration"))}</span><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
         </ha-card>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
@@ -3705,15 +3716,11 @@ function renderAutomaticPanel() {
 }
 
 function packConfigurationCount(pack, config, draft) {
-  return (pack.config_fields ?? []).reduce((count, field) => {
-    if (isNumberMapField(field)) {
-      const rows = draft?.[pack.id]?.[field.id];
-      return count + (rows
-        ? rows.filter((row) => row.target_id).length
-        : Object.keys(config[field.id] ?? {}).length);
-    }
-    const value = draft?.[pack.id]?.[field.id] ?? config[field.id];
-    return count + (value === field.default ? 0 : 1);
+  return drawerFields(pack).reduce((count, field) => {
+    const rows = draft?.[pack.id]?.[field.id];
+    return count + (rows
+      ? rows.filter((row) => row.target_id).length
+      : Object.keys(config[field.id] ?? {}).length);
   }, 0);
 }
 
@@ -3723,10 +3730,11 @@ function renderAutomaticConfigurationDrawer(context) {
   } = context;
   if (configurationDrawer?.kind !== "automatic") return "";
   const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
-  if (!pack?.config_fields?.length) return "";
+  const configurableFields = pack ? drawerFields(pack) : [];
+  if (!configurableFields.length) return "";
   const packConfig = config.automatic[pack.id];
   const packName = t(`packs.${pack.translation_key || pack.id}.name`);
-  const content = `<div class="fields configuration-drawer-fields">${pack.config_fields
+  const content = `<div class="fields configuration-drawer-fields">${configurableFields
     .map((field) => renderPackField(
       pack,
       field,
@@ -3760,8 +3768,10 @@ function renderPackField(pack, field, config, context) {
     if (!isNumberMapField(field)) return "";
     const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
-      <span class="field-label">${esc(label)}</span>
-      <small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small>
+      <div class="configuration-section-heading pack-map-heading">
+        <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
+        <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
+      </div>
       <div class="pack-map-list">
         ${rows.map((row, index) => `<div class="pack-map-row">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
@@ -3769,7 +3779,6 @@ function renderPackField(pack, field, config, context) {
           <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
         </div>`).join("")}
       </div>
-      <div class="actions pack-map-add-action"><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     </div>`;
 }
 
@@ -4046,13 +4055,15 @@ function renderSettingsConfigurationDrawer(context) {
   let content;
   if (id === "entity_delays") {
     title = t("settings.entity_delay");
-    content = `<div><small>${esc(t("settings.delay_help"))}</small></div>
+    content = `<div class="configuration-section-heading">
+        <small>${esc(t("settings.delay_help"))}</small>
+        <ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
+      </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
         <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
         <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
-      </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
-      <div class="actions delay-add-action"><ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>`;
+      </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
     title = t("settings.entity_exclusions");
     content = `<div class="field"><span class="field-label">${esc(title)}</span><ha-selector id="excluded-entities"></ha-selector></div>`;
@@ -4766,12 +4777,33 @@ const settingsStyles = `
   .configuration-entry ha-button {
     flex: none;
   }
+  .automatic-configuration-entry {
+    min-height: 40px;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
   .configuration-drawer-fields {
     grid-template-columns: 1fr;
     margin: 0;
   }
   .configuration-drawer-fields .full {
     grid-column: auto;
+  }
+  .configuration-section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .configuration-section-heading > div {
+    min-width: 0;
+  }
+  .configuration-section-heading small {
+    margin-top: 0;
+  }
+  .configuration-section-heading ha-button {
+    flex: none;
   }
   .ignored-reference-chips {
     display: flex;
@@ -5003,9 +5035,6 @@ const settingsStyles = `
   }
   .pack-map-row > ha-button {
     margin-top: 8px;
-  }
-  .pack-map-add-action {
-    justify-content: flex-start;
   }
 `;
 
@@ -5410,6 +5439,9 @@ const responsiveStyles = `
     .rule-section-heading, .rule-value-footer {
       align-items: stretch;
       flex-direction: column;
+    }
+    .configuration-section-heading {
+      align-items: center;
     }
     .rule-value-row {
       grid-template-columns: 1fr;

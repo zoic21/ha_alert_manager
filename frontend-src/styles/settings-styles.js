@@ -36,12 +36,33 @@ export const settingsStyles = `
   .configuration-entry ha-button {
     flex: none;
   }
+  .automatic-configuration-entry {
+    min-height: 40px;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
   .configuration-drawer-fields {
     grid-template-columns: 1fr;
     margin: 0;
   }
   .configuration-drawer-fields .full {
     grid-column: auto;
+  }
+  .configuration-section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .configuration-section-heading > div {
+    min-width: 0;
+  }
+  .configuration-section-heading small {
+    margin-top: 0;
+  }
+  .configuration-section-heading ha-button {
+    flex: none;
   }
   .ignored-reference-chips {
     display: flex;
@@ -273,8 +294,5 @@ export const settingsStyles = `
   }
   .pack-map-row > ha-button {
     margin-top: 8px;
-  }
-  .pack-map-add-action {
-    justify-content: flex-start;
   }
 `;

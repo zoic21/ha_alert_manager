@@ -5,6 +5,7 @@ import { renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
+import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import { renderCoherence } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import { renderOverview } from "../frontend-src/views/overview.js";
@@ -87,18 +88,37 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     id: "battery",
     available: true,
     translation_key: "battery",
-    config_fields: [{
-      id: "device_thresholds",
-      type: "device_number_map",
-      translation_key: "device_thresholds",
-      unit: "%",
-    }],
+    config_fields: [
+      {
+        id: "threshold",
+        type: "number",
+        translation_key: "threshold",
+        default: 15,
+        unit: "%",
+      },
+      {
+        id: "device_thresholds",
+        type: "device_number_map",
+        translation_key: "device_thresholds",
+        unit: "%",
+      },
+    ],
   };
   const markup = renderAutomatic({
     availablePacks: [pack],
-    config: { automatic: { battery: { enabled: true, delay: 60 } } },
+    config: {
+      automatic: {
+        battery: {
+          enabled: true,
+          delay: 60,
+          threshold: 15,
+          device_thresholds: { "device-1": 15 },
+        },
+      },
+    },
     draft: {
       battery: {
+        threshold: 15,
         device_thresholds: [{ target_id: "device-1", value: 15 }],
       },
     },
@@ -110,10 +130,15 @@ test("automatic rendering uses prepared configuration and draft data", () => {
 
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
+  assert.match(markup, /auto-battery-threshold[^>]*>automatic\.fields\.threshold\.label:15/);
   assert.match(markup, /auto-battery-configuration/);
+  assert.match(markup, /automatic-configuration-entry/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /value="15"/);
+  assert.match(markup, /pack-map-heading[\s\S]*data-action="add-pack-map-row"/);
+  const drawerMarkup = markup.slice(markup.indexOf("configuration-drawer-backdrop"));
+  assert.doesNotMatch(drawerMarkup, /auto-battery-threshold/);
 
   const automationErrors = renderAutomatic({
     availablePacks: [{
@@ -182,6 +207,8 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /value="sensor.new"/);
   assert.match(markup, /settings-entity_delays-configuration/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
+  assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
+  assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
 });
 

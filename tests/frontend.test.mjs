@@ -1996,10 +1996,11 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
     "Laisser le délai vide pour utiliser le délai global.",
     batteryDelay,
   );
+  const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
   const batteryConfiguration = automatic.indexOf('id="auto-battery-configuration"');
   assert.ok(batteryDelay < batteryDelayHelp);
-  assert.ok(batteryDelayHelp < batteryConfiguration);
-  assert.doesNotMatch(automatic, /id="auto-battery-threshold"/);
+  assert.ok(batteryDelayHelp < batteryThreshold);
+  assert.ok(batteryThreshold < batteryConfiguration);
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);

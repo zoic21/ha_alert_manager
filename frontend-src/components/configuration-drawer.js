@@ -1,4 +1,5 @@
 import { esc } from "../utils/escaping.js";
+import { MDI_CLOSE } from "../utils/constants.js";
 
 export function renderConfigurationDrawer({
   title,
@@ -11,7 +12,7 @@ export function renderConfigurationDrawer({
   return `<div class="side-drawer-backdrop configuration-drawer-backdrop" data-action="close-configuration-drawer" aria-hidden="true"></div>
     <ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
       <ha-dialog-header show-border>
-        <ha-icon-button slot="navigationIcon" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
+        <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
       </ha-dialog-header>
       <div class="side-drawer-form">
