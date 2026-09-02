@@ -156,10 +156,12 @@ class ConfigEntry:
         self.disabled_by = disabled_by
         self.source = source
         self.created_task_names = []
+        self.created_task_eager_starts = []
         self._state_listeners = []
 
     def async_create_task(self, hass, coroutine, name=None, eager_start=True):
         self.created_task_names.append(name)
+        self.created_task_eager_starts.append(eager_start)
         return asyncio.create_task(coroutine, name=name)
 
     def async_on_state_change(self, listener):

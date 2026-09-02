@@ -445,6 +445,7 @@ def test_jinja_dependencies_are_reverse_indexed_and_batched(hass, entry):
         assert f"rule:{rule_id}:sensor.two" in manager.records
         assert hass.store_save_count == before_saves + 1
         assert entry.created_task_names[-1] == "alert_manager state-change batch"
+        assert entry.created_task_eager_starts[-1] is False
 
     asyncio.run(scenario())
 

@@ -195,6 +195,7 @@ class _RuntimeMixin:
             self.hass,
             self._async_flush_queued_evaluations(),
             name=f"{DOMAIN} state-change batch",
+            eager_start=False,
         )
 
     async def _async_flush_queued_evaluations(self) -> None:

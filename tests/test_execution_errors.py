@@ -191,12 +191,13 @@ def test_single_success_does_not_alert(hass, entry, scenario_cls):
 
 
 def test_single_error_creates_alert_with_trace_message(hass, entry, scenario_cls):
-    """The short trace error becomes the alert condition and value."""
+    """A trace finalized after current=0 becomes the alert condition and value."""
 
     async def scenario():
         runtime = await scenario_cls.create(hass, entry)
         run = runtime.start("failed")
         runtime.finish(run, "Light service unavailable")
+        assert entry.created_task_eager_starts[-1] is False
         await runtime.flush()
 
         record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
