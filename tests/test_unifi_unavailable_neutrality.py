@@ -34,9 +34,11 @@ def test_unifi_returns_neutral_for_unavailable(hass, registry_entry):
     unavailable = _state(hass, STATE_UNAVAILABLE)
     config = {"enabled": True}
 
-    assert unifi.PACK.should_evaluate(hass, home, config)
-    assert unifi.PACK.should_evaluate(hass, away, config)
-    assert not unifi.PACK.should_evaluate(hass, unavailable, config)
+    callback = unifi.PACK.should_evaluate
+    assert callback is not None
+    assert callback(hass, None, home, config)
+    assert callback(hass, None, away, config)
+    assert not callback(hass, None, unavailable, config)
     assert isinstance(unifi.PACK.evaluate(hass, unavailable, config), PackNeutral)
 
 

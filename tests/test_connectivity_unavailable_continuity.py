@@ -27,7 +27,9 @@ def _state(hass, value, *, attributes=None):
 
 
 def _should(pack, hass, new_state):
-    return pack.should_evaluate(hass, new_state, {"enabled": True})
+    callback = pack.should_evaluate
+    assert callback is not None
+    return callback(hass, None, new_state, {"enabled": True})
 
 
 def test_connectivity_returns_neutral_for_unavailable(hass):

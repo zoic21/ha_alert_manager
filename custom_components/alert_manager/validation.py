@@ -22,7 +22,7 @@ from .const import (
     MIN_HISTORY_LIMIT,
 )
 from .models import Rule, safe_float
-from .packs import PACKS, PACKS_BY_ID
+from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
@@ -187,11 +187,8 @@ def validate_config(config: Any) -> dict[str, Any]:
             )
             category_config[field.id] = _normalize_pack_field(
                 category,
-                field.id,
-                field.type,
+                field,
                 raw_value,
-                field.minimum,
-                field.maximum,
             )
 
     rules = config.get("rules", [])
@@ -215,31 +212,47 @@ def validate_config(config: Any) -> dict[str, Any]:
 
 def _normalize_pack_field(
     pack_id: str,
-    field_id: str,
-    field_type: str,
+    field: PackConfigField,
     value: Any,
-    minimum: float | None,
-    maximum: float | None,
 ) -> Any:
     """Normalize one backend-declared pack field."""
-    path = f"automatic.{pack_id}.{field_id}"
-    if field_type == "number":
-        return _validate_pack_number(value, path, minimum, maximum)
-    if field_type == "device_number_map":
+    path = f"automatic.{pack_id}.{field.id}"
+    if field.type == "number":
+        return _validate_pack_number(
+            value, path, field.minimum, field.maximum, field.step
+        )
+    if field.type in ("device_number_map", "entity_number_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
-        normalized: dict[str, float] = {}
-        for device_id, threshold in value.items():
-            if not isinstance(device_id, str) or not _DEVICE_ID_RE.fullmatch(device_id):
-                raise ValueError(f"{path} contains an invalid device id")
-            normalized[device_id] = _validate_pack_number(
+        normalized: dict[str, float | int] = {}
+        for target_id, threshold in value.items():
+            if field.type == "device_number_map":
+                if not isinstance(target_id, str) or not _DEVICE_ID_RE.fullmatch(
+                    target_id
+                ):
+                    raise ValueError(f"{path} contains an invalid device id")
+            else:
+                try:
+                    validate_entity_id(target_id)
+                except ValueError as err:
+                    raise ValueError(f"{path} contains an invalid entity id") from err
+                if (
+                    field.entity_domains is not None
+                    and target_id.partition(".")[0] not in field.entity_domains
+                ):
+                    raise ValueError(
+                        f"{path} contains an entity outside the "
+                        f"{', '.join(field.entity_domains)} domains"
+                    )
+            normalized[target_id] = _validate_pack_number(
                 threshold,
-                f"{path}.{device_id}",
-                minimum,
-                maximum,
+                f"{path}.{target_id}",
+                field.minimum,
+                field.maximum,
+                field.step,
             )
         return normalized
-    raise ValueError(f"Unsupported pack configuration field type: {field_type}")
+    raise ValueError(f"Unsupported pack configuration field type: {field.type}")
 
 
 def _validate_pack_number(
@@ -247,7 +260,8 @@ def _validate_pack_number(
     path: str,
     minimum: float | None,
     maximum: float | None,
-) -> float:
+    step: str | float = "any",
+) -> float | int:
     """Return a finite pack number inside its declared bounds."""
     number = safe_float(value)
     if (
@@ -260,6 +274,10 @@ def _validate_pack_number(
                 f"{path} must be a finite number between {minimum:g} and {maximum:g}"
             )
         raise ValueError(f"{path} must be a finite number")
+    if step == 1:
+        if not number.is_integer():
+            raise ValueError(f"{path} must be an integer")
+        return int(number)
     return number
 
 

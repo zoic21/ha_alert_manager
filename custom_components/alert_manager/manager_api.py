@@ -28,7 +28,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
-from .packs import PACKS, PACKS_BY_ID
+from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .storage import sort_history
 from .validation import (
     validate_config,
@@ -191,6 +191,7 @@ class _ApiMixin:
             async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
             self._emit_resume_events(previous_records)
         else:
+            reset_pack_runtimes(self.hass)
             self._cancel_all_timers()
             self._cancel_all_device_event_timers()
         self._refresh_tracking()
@@ -345,7 +346,7 @@ class _ApiMixin:
             candidate["entity_delays"] = deepcopy(changes["entity_delays"])
         for pack_id, pack_changes in changes.get("automatic", {}).items():
             for field in PACKS_BY_ID[pack_id].config_fields:
-                if field.type == "device_number_map" and field.id in pack_changes:
+                if field.type.endswith("_number_map") and field.id in pack_changes:
                     candidate["automatic"][pack_id][field.id] = deepcopy(
                         pack_changes[field.id]
                     )
@@ -354,6 +355,16 @@ class _ApiMixin:
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
+        reset_all_pack_runtimes = not candidate["monitoring_enabled"] or any(
+            candidate[key] != self.config[key]
+            for key in ("excluded_entities", "excluded_devices", "excluded_labels")
+        )
+        disabled_pack_ids = {
+            pack.id
+            for pack in PACKS
+            if self.config["automatic"][pack.id]["enabled"]
+            and not candidate["automatic"][pack.id]["enabled"]
+        }
         previous = self._configuration_snapshot()
         try:
             self.config = candidate
@@ -362,6 +373,10 @@ class _ApiMixin:
             ):
                 self._clear_variation_baselines()
             self._rebuild_rule_index()
+            if reset_all_pack_runtimes:
+                reset_pack_runtimes(self.hass)
+            elif disabled_pack_ids:
+                reset_pack_runtimes(self.hass, disabled_pack_ids)
             await self.async_evaluate_all(save=False, publish=False)
             if "pending_display_delay" in changes:
                 self._reschedule_hidden_pending_visibility(dt_util.now())
@@ -389,6 +404,7 @@ class _ApiMixin:
 
         self._cancel_all_timers()
         self._cancel_all_device_event_timers()
+        reset_pack_runtimes(self.hass)
         try:
             self._recovery_active = False
             self.config = candidate

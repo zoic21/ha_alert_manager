@@ -99,7 +99,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     config: { automatic: { battery: { enabled: true, delay: 60 } } },
     draft: {
       battery: {
-        device_thresholds: [{ device_id: "device-1", value: 15 }],
+        device_thresholds: [{ target_id: "device-1", value: 15 }],
       },
     },
     busy: false,
@@ -109,8 +109,47 @@ test("automatic rendering uses prepared configuration and draft data", () => {
 
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
-  assert.match(markup, /auto-battery-device_thresholds-device-0/);
+  assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /value="15"/);
+
+  const automationErrors = renderAutomatic({
+    availablePacks: [{
+      id: "execution_errors",
+      available: true,
+      translation_key: "execution_errors",
+      config_fields: [{
+        id: "failure_thresholds",
+        type: "entity_number_map",
+        translation_key: "failure_thresholds",
+        minimum: 1,
+        maximum: 100,
+        step: 1,
+        entity_domains: ["automation", "script"],
+      }],
+    }],
+    config: {
+      automatic: {
+        execution_errors: {
+          enabled: true,
+          delay: null,
+          failure_thresholds: { "automation.test": 3 },
+        },
+      },
+    },
+    draft: {
+      execution_errors: {
+        failure_thresholds: [{ target_id: "automation.test", value: 3 }],
+      },
+    },
+    busy: false,
+    renderNumberField: (id) => `<number id="${id}"></number>`,
+    t,
+  });
+  assert.match(automationErrors, /packs\.execution_errors\.name/);
+  assert.match(automationErrors, /auto-execution_errors-enabled[^>]*checked/);
+  assert.match(automationErrors, /auto-execution_errors-delay/);
+  assert.match(automationErrors, /auto-execution_errors-failure_thresholds-target-0/);
+  assert.match(automationErrors, /value="3"/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {

@@ -107,6 +107,7 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "connectivity",
         "unifi",
         "battery",
+        "execution_errors",
     ]
     assert all(pack["translation_key"] == pack["id"] for pack in packs)
     assert all("name" not in pack and "description" not in pack for pack in packs)
@@ -122,6 +123,19 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "device_thresholds",
     ]
     assert battery["config_fields"][1]["type"] == "device_number_map"
+    execution_errors = next(pack for pack in packs if pack["id"] == "execution_errors")
+    assert execution_errors["config_fields"] == [
+        {
+            "id": "failure_thresholds",
+            "type": "entity_number_map",
+            "translation_key": "failure_thresholds",
+            "default": {},
+            "minimum": 1,
+            "maximum": 100,
+            "step": 1,
+            "entity_domains": ["automation", "script"],
+        }
+    ]
 
 
 def test_websocket_rule_actions_create_update_and_delete(hass, entry):

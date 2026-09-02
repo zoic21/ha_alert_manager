@@ -36,6 +36,7 @@ class PackConfigField:
     maximum: float | None = None
     step: str | float = "any"
     unit: str | None = None
+    entity_domains: tuple[str, ...] | None = None
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
@@ -50,12 +51,18 @@ class PackConfigField:
                 "maximum": self.maximum,
                 "step": self.step,
                 "unit": self.unit,
+                "entity_domains": list(self.entity_domains)
+                if self.entity_domains is not None
+                else None,
             }.items()
             if value is not None
         }
 
 
-PackTransitionFilter = Callable[[HomeAssistant, State, dict[str, Any]], bool]
+PackShouldEvaluate = Callable[
+    [HomeAssistant, State | None, State, dict[str, Any]], bool
+]
+PackResetHandler = Callable[[HomeAssistant], None]
 PackEvaluation = PackMatch | PackNeutral | None
 
 
@@ -68,22 +75,14 @@ class AutomaticPack:
     prerequisites: tuple[str, ...]
     applies: Callable[[HomeAssistant, State], bool]
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
-    transition_filter: PackTransitionFilter | None = None
+    should_evaluate: PackShouldEvaluate | None = None
+    reset_handler: PackResetHandler | None = None
     config_fields: tuple[PackConfigField, ...] = ()
 
-    def should_evaluate(
-        self,
-        hass: HomeAssistant,
-        new_state: State | None,
-        config: dict[str, Any],
-    ) -> bool:
-        """Return whether a record-free entity state is worth evaluating."""
-        if new_state is None or not self.applies(hass, new_state):
-            return False
-        if self.transition_filter is not None:
-            return self.transition_filter(hass, new_state, config)
-        # Future packs without a filter stay conservative for applicable states.
-        return True
+    def reset_runtime(self, hass: HomeAssistant) -> None:
+        """Discard optional transient state owned by this pack."""
+        if self.reset_handler is not None:
+            self.reset_handler(hass)
 
     def available(self, hass: HomeAssistant) -> bool:
         """Return whether every required integration has one usable entry."""

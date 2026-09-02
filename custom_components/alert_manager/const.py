@@ -102,6 +102,7 @@ CATEGORIES: Final = (
     CATEGORY_CONNECTIVITY,
     CATEGORY_UNIFI,
     CATEGORY_BATTERY,
+    "execution_errors",
 )
 
 DEFAULT_CONFIG: Final = {
@@ -128,6 +129,11 @@ DEFAULT_CONFIG: Final = {
             "delay": None,
             "threshold": DEFAULT_BATTERY_THRESHOLD,
             "device_thresholds": {},
+        },
+        "execution_errors": {
+            "enabled": True,
+            "delay": None,
+            "failure_thresholds": {},
         },
     },
     "rules": [],

@@ -52,6 +52,7 @@ def _effective_threshold(
 
 def _should_evaluate(
     _hass: HomeAssistant,
+    _old_state: State | None,
     new_state: State,
     _config: dict[str, Any],
 ) -> bool:
@@ -82,7 +83,7 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
-    transition_filter=_should_evaluate,
+    should_evaluate=_should_evaluate,
     config_fields=(
         PackConfigField(
             id="threshold",

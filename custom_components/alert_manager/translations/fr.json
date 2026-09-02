@@ -18,13 +18,19 @@
     },
     "automatic": {
       "aria_enable": "Activer {name}",
-      "device_threshold_validation": "Chaque ligne doit contenir un appareil et un seuil numérique valide.",
-      "duplicate_device_threshold": "Un appareil ne peut avoir qu’un seul seuil personnalisé.",
       "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
       "fields": {
         "device_thresholds": {
+          "duplicate": "Un appareil ne peut avoir qu’un seul seuil personnalisé.",
           "help": "Le seuil de l’appareil est prioritaire sur le seuil global.",
-          "label": "Seuils personnalisés par appareil"
+          "label": "Seuils personnalisés par appareil",
+          "validation": "Chaque ligne doit contenir un appareil et un seuil numérique valide."
+        },
+        "failure_thresholds": {
+          "duplicate": "Une automatisation ou un script ne peut avoir qu’un seul seuil d’échecs.",
+          "help": "Par défaut, un cycle en erreur déclenche une alerte. Augmentez ce seuil pour les automatisations ou scripts qui doivent échouer plusieurs cycles consécutifs.",
+          "label": "Seuils d’échecs consécutifs par automatisation ou script",
+          "validation": "Chaque ligne doit contenir une automatisation ou un script et un nombre entier valide."
         },
         "threshold": {
           "label": "Seuil global"
@@ -43,6 +49,8 @@
     },
     "conditions": {
       "automatic": {
+        "execution_errors": "L’exécution s’est terminée en erreur",
+        "execution_errors_detail": "L’exécution s’est terminée en erreur : {error}",
         "battery": "Batterie inférieure ou égale à {threshold} %",
         "connectivity": "Connectivité désactivée",
         "unavailable": "État indisponible",
@@ -220,6 +228,10 @@
       "unacknowledge": "Retirer l’acquittement"
     },
     "packs": {
+      "execution_errors": {
+        "description": "Surveille les automatisations et les scripts dont une exécution se termine en erreur.",
+        "name": "Automatisations et scripts en erreur"
+      },
       "battery": {
         "description": "Surveille les capteurs de batterie inférieurs ou égaux à leur seuil.",
         "name": "Batteries faibles"

@@ -1440,6 +1440,7 @@ def test_state_listener_skips_irrelevant_entities(hass, entry):
                     "connectivity": {"enabled": False},
                     "unifi": {"enabled": False},
                     "battery": {"enabled": False},
+                    "execution_errors": {"enabled": False},
                 }
             }
         )

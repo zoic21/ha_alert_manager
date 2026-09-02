@@ -35,6 +35,12 @@ components = _module("homeassistant.components", package=True)
 helpers = _module("homeassistant.helpers", package=True)
 util = _module("homeassistant.util", package=True)
 
+automation_component = _module("homeassistant.components.automation")
+automation_component.DATA_COMPONENT = "automation_component"
+trace_component = _module("homeassistant.components.trace", package=True)
+trace_const = _module("homeassistant.components.trace.const")
+trace_const.DATA_TRACE = "trace"
+
 const = _module("homeassistant.const")
 
 

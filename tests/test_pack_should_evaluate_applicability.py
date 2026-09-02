@@ -1,4 +1,4 @@
-"""Automatic pack applicability filtering regressions."""
+"""Automatic pack should-evaluate callback regressions."""
 
 from __future__ import annotations
 
@@ -11,69 +11,40 @@ def _state(entity_id: str, value: str, attributes=None) -> State:
     return State(entity_id, value, attributes or {})
 
 
-def test_should_evaluate_always_applies_new_state_first(hass):
-    """Unrelated states stop before the pack-specific interest filter."""
-    applies_calls = 0
-    filter_calls = 0
+def test_should_evaluate_receives_the_complete_transition(hass):
+    """The optional callback receives both states and the pack configuration."""
+    received = None
 
-    def applies(_hass, state):
-        nonlocal applies_calls
-        applies_calls += 1
-        return state.entity_id.startswith("sensor.match_")
-
-    def transition_filter(_hass, _new_state, _config):
-        nonlocal filter_calls
-        filter_calls += 1
+    def should_evaluate(_hass, old_state, new_state, config):
+        nonlocal received
+        received = (old_state, new_state, config)
         return True
 
-    pack = AutomaticPack(
-        id="test",
-        translation_key="test",
-        prerequisites=(),
-        applies=applies,
-        evaluate=lambda _hass, _state, _config: None,
-        transition_filter=transition_filter,
-    )
-
-    assert not pack.should_evaluate(hass, _state("sensor.other", "on"), {})
-    assert applies_calls == 1
-    assert filter_calls == 0
-
-    assert pack.should_evaluate(hass, _state("sensor.match_one", "on"), {})
-    assert applies_calls == 2
-    assert filter_calls == 1
-
-
-def test_should_evaluate_ignores_missing_new_state(hass):
-    """Record-free entity removal has nothing to evaluate."""
-    calls = 0
-
-    def applies(_hass, _state):
-        nonlocal calls
-        calls += 1
-        return True
-
-    pack = AutomaticPack(
-        id="test",
-        translation_key="test",
-        prerequisites=(),
-        applies=applies,
-        evaluate=lambda _hass, _state, _config: None,
-    )
-
-    assert not pack.should_evaluate(hass, None, {})
-    assert calls == 0
-
-
-def test_should_evaluate_default_filter_accepts_applicable_state(hass):
-    """Packs without a custom interest filter stay conservative."""
     pack = AutomaticPack(
         id="test",
         translation_key="test",
         prerequisites=(),
         applies=lambda _hass, state: state.entity_id.startswith("sensor.match_"),
         evaluate=lambda _hass, _state, _config: None,
+        should_evaluate=should_evaluate,
+    )
+    old_state = _state("sensor.match_one", "off")
+    new_state = _state("sensor.match_one", "on")
+    config = {"enabled": True}
+
+    assert pack.should_evaluate is not None
+    assert pack.should_evaluate(hass, old_state, new_state, config)
+    assert received == (old_state, new_state, config)
+
+
+def test_should_evaluate_is_optional():
+    """Packs without a custom callback use the runtime's default path."""
+    pack = AutomaticPack(
+        id="test",
+        translation_key="test",
+        prerequisites=(),
+        applies=lambda _hass, _state: True,
+        evaluate=lambda _hass, _state, _config: None,
     )
 
-    assert not pack.should_evaluate(hass, _state("sensor.other", "on"), {})
-    assert pack.should_evaluate(hass, _state("sensor.match_one", "on"), {})
+    assert pack.should_evaluate is None
