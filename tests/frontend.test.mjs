@@ -2413,15 +2413,17 @@ test("configuration buttons count automatic and settings entries", () => {
     automatic,
     /id="auto-execution_errors-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/,
   );
+  assert.doesNotMatch(automatic, /automatic-configuration-entry[^>]*><span/);
 
   panel._config.excluded_entities = ["sensor.one", "sensor.two"];
   panel._config.excluded_devices = ["a".repeat(32)];
   panel._config.entity_delays = { "sensor.one": 30 };
   panel._resetSettingsDraft();
   const settings = panel._renderSettings();
-  assert.match(settings, /id="settings-excluded_entities-configuration"[\s\S]*?>Configuration \(2\)<\/ha-button>/);
-  assert.match(settings, /id="settings-excluded_devices-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/);
-  assert.match(settings, /id="settings-entity_delays-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/);
+  assert.match(settings, /id="settings-excluded_entities-configuration"[\s\S]*?>Entités exclues \(2\)<\/ha-button>/);
+  assert.match(settings, /id="settings-excluded_devices-configuration"[\s\S]*?>Appareils exclus \(1\)<\/ha-button>/);
+  assert.match(settings, /id="settings-entity_delays-configuration"[\s\S]*?>Délais particuliers par entité \(1\)<\/ha-button>/);
+  assert.doesNotMatch(settings, /settings-configuration-entry[^>]*><span/);
 });
 
 test("automatic and settings configuration render in the shared side drawer", () => {
@@ -2433,6 +2435,12 @@ test("automatic and settings configuration render in the shared side drawer", ()
   const automatic = panel._renderAutomatic();
   assert.match(automatic, /class="side-drawer configuration-drawer"/);
   assert.match(automatic, /auto-execution_errors-failure_thresholds-target-0/);
+  assert.match(automatic, /pack-map-heading[\s\S]*pack-map-list/);
+
+  panel._configurationDrawer = { kind: "automatic", id: "battery" };
+  const battery = panel._renderAutomatic();
+  assert.match(battery, /Aucun seuil particulier par appareil\./);
+  assert.match(battery, /class="empty compact pack-map-empty"/);
 
   panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
   panel._resetSettingsDraft();

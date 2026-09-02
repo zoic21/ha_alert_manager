@@ -25,12 +25,14 @@
       "fields": {
         "device_thresholds": {
           "duplicate": "Un appareil ne peut avoir qu’un seul seuil personnalisé.",
+          "empty": "Aucun seuil particulier par appareil.",
           "help": "Le seuil de l’appareil est prioritaire sur le seuil global.",
           "label": "Seuils personnalisés par appareil",
           "validation": "Chaque ligne doit contenir un appareil et un seuil numérique valide."
         },
         "failure_thresholds": {
           "duplicate": "Une automatisation ou un script ne peut avoir qu’un seul seuil d’échecs.",
+          "empty": "Aucun seuil d’échecs particulier.",
           "help": "Par défaut, un cycle en erreur déclenche une alerte. Augmentez ce seuil pour les automatisations ou scripts qui doivent échouer plusieurs cycles consécutifs.",
           "label": "Seuils d’échecs consécutifs par automatisation ou script",
           "validation": "Chaque ligne doit contenir une automatisation ou un script et un nombre entier valide."
@@ -47,6 +49,7 @@
       "cancel": "Annuler",
       "close": "Fermer",
       "configuration": "Configuration ({count})",
+      "configuration_named": "{name} ({count})",
       "delete": "Supprimer",
       "remove": "Retirer",
       "save": "Enregistrer"

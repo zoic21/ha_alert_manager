@@ -3692,7 +3692,7 @@ function renderAutomatic(context) {
               { draft, renderNumberField, t },
             )).join("")}
           </div>
-          ${configurableFields.length ? `<div class="configuration-entry automatic-configuration-entry"><span class="field-label">${esc(t("automatic.configuration"))}</span><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
+          ${configurableFields.length ? `<div class="configuration-entry automatic-configuration-entry"><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
         </ha-card>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
@@ -3773,11 +3773,11 @@ function renderPackField(pack, field, config, context) {
         <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
       </div>
       <div class="pack-map-list">
-        ${rows.map((row, index) => `<div class="pack-map-row">
+        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
           <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
-        </div>`).join("")}
+        </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
 }
@@ -4044,7 +4044,7 @@ function renderSettings(context) {
 }
 
 function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry"><span class="field-label">${esc(label)}</span><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration", { count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
 }
 
 function renderSettingsConfigurationDrawer(context) {
@@ -4398,7 +4398,10 @@ function updateSettingsConfigurationCount(id) {
   const count = id === "entity_delays"
     ? this._entityDelayDraft.length
     : this._settingsDraft[id].length;
-  button.textContent = this._t("buttons.configuration", { count });
+  button.textContent = this._t("buttons.configuration_named", {
+    name: button.dataset.configurationLabel,
+    count,
+  });
 }
 
 async function handleSettingsAction(action, button) {
@@ -4777,10 +4780,15 @@ const settingsStyles = `
   .configuration-entry ha-button {
     flex: none;
   }
+  .settings-configuration-entry {
+    min-height: 40px;
+    justify-content: flex-start;
+  }
   .automatic-configuration-entry {
     min-height: 40px;
     margin-top: 18px;
     padding-top: 12px;
+    justify-content: flex-end;
     border-top: 1px solid var(--divider-color, #ddd);
   }
   .configuration-drawer-fields {
@@ -4798,6 +4806,7 @@ const settingsStyles = `
   }
   .configuration-section-heading > div {
     min-width: 0;
+    flex: 1;
   }
   .configuration-section-heading small {
     margin-top: 0;
@@ -5025,7 +5034,23 @@ const settingsStyles = `
   .pack-map-list {
     display: grid;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 16px;
+  }
+  .pack-map-heading {
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--divider-color, #ddd);
+  }
+  .pack-map-heading .field-label {
+    display: block;
+    font-size: var(--ha-font-size-l, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .pack-map-heading small {
+    max-width: 400px;
+    line-height: 1.45;
+  }
+  .pack-map-empty {
+    padding-block: 32px;
   }
   .pack-map-row {
     display: grid;

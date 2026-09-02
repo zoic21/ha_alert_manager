@@ -36,10 +36,15 @@ export const settingsStyles = `
   .configuration-entry ha-button {
     flex: none;
   }
+  .settings-configuration-entry {
+    min-height: 40px;
+    justify-content: flex-start;
+  }
   .automatic-configuration-entry {
     min-height: 40px;
     margin-top: 18px;
     padding-top: 12px;
+    justify-content: flex-end;
     border-top: 1px solid var(--divider-color, #ddd);
   }
   .configuration-drawer-fields {
@@ -57,6 +62,7 @@ export const settingsStyles = `
   }
   .configuration-section-heading > div {
     min-width: 0;
+    flex: 1;
   }
   .configuration-section-heading small {
     margin-top: 0;
@@ -284,7 +290,23 @@ export const settingsStyles = `
   .pack-map-list {
     display: grid;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 16px;
+  }
+  .pack-map-heading {
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--divider-color, #ddd);
+  }
+  .pack-map-heading .field-label {
+    display: block;
+    font-size: var(--ha-font-size-l, 16px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .pack-map-heading small {
+    max-width: 400px;
+    line-height: 1.45;
+  }
+  .pack-map-empty {
+    padding-block: 32px;
   }
   .pack-map-row {
     display: grid;

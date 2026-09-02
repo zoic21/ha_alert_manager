@@ -59,7 +59,7 @@ export function renderSettings(context) {
 }
 
 export function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry"><span class="field-label">${esc(label)}</span><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration", { count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
 }
 
 export function renderSettingsConfigurationDrawer(context) {
@@ -413,7 +413,10 @@ export function updateSettingsConfigurationCount(id) {
   const count = id === "entity_delays"
     ? this._entityDelayDraft.length
     : this._settingsDraft[id].length;
-  button.textContent = this._t("buttons.configuration", { count });
+  button.textContent = this._t("buttons.configuration_named", {
+    name: button.dataset.configurationLabel,
+    count,
+  });
 }
 
 export async function handleSettingsAction(action, button) {

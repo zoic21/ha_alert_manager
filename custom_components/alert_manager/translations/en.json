@@ -25,12 +25,14 @@
       "fields": {
         "device_thresholds": {
           "duplicate": "A device can have only one custom threshold.",
+          "empty": "No device-specific threshold.",
           "help": "The device threshold takes precedence over the global threshold.",
           "label": "Custom thresholds by device",
           "validation": "Each row must contain a device and a valid numeric threshold."
         },
         "failure_thresholds": {
           "duplicate": "An automation or script can have only one failure threshold.",
+          "empty": "No specific failure threshold.",
           "help": "By default, one failed cycle triggers an alert. Set a higher threshold for automations or scripts that must fail several consecutive cycles.",
           "label": "Consecutive failure thresholds by automation or script",
           "validation": "Each row must contain an automation or script and a valid whole number."
@@ -47,6 +49,7 @@
       "cancel": "Cancel",
       "close": "Close",
       "configuration": "Configuration ({count})",
+      "configuration_named": "{name} ({count})",
       "delete": "Delete",
       "remove": "Remove",
       "save": "Save"
