@@ -36,7 +36,7 @@ class PackConfigField:
     maximum: float | None = None
     step: str | float = "any"
     unit: str | None = None
-    entity_domain: str | None = None
+    entity_domains: tuple[str, ...] | None = None
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
@@ -51,7 +51,9 @@ class PackConfigField:
                 "maximum": self.maximum,
                 "step": self.step,
                 "unit": self.unit,
-                "entity_domain": self.entity_domain,
+                "entity_domains": list(self.entity_domains)
+                if self.entity_domains is not None
+                else None,
             }.items()
             if value is not None
         }

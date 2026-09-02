@@ -755,22 +755,32 @@ def test_pack_declared_device_number_map_is_strictly_validated():
 
 
 def test_pack_declared_entity_number_map_is_strictly_validated():
-    """Entity maps enforce their declared domain, bounds and integer step."""
+    """Entity maps enforce their declared domains, bounds and integer step."""
     normalized = validate_config(
         {
             "automatic": {
-                "automation_errors": {"failure_thresholds": {"automation.test": "3"}}
+                "execution_errors": {"failure_thresholds": {"automation.test": "3"}}
             }
         }
     )
-    assert normalized["automatic"]["automation_errors"]["failure_thresholds"] == {
+    assert normalized["automatic"]["execution_errors"]["failure_thresholds"] == {
         "automation.test": 3
     }
-    with pytest.raises(ValueError, match="outside the automation domain"):
+    script = validate_config(
+        {
+            "automatic": {
+                "execution_errors": {"failure_thresholds": {"script.test": "4"}}
+            }
+        }
+    )
+    assert script["automatic"]["execution_errors"]["failure_thresholds"] == {
+        "script.test": 4
+    }
+    with pytest.raises(ValueError, match="outside the automation, script domains"):
         validate_config(
             {
                 "automatic": {
-                    "automation_errors": {"failure_thresholds": {"sensor.test": 3}}
+                    "execution_errors": {"failure_thresholds": {"sensor.test": 3}}
                 }
             }
         )
@@ -778,9 +788,7 @@ def test_pack_declared_entity_number_map_is_strictly_validated():
         validate_config(
             {
                 "automatic": {
-                    "automation_errors": {
-                        "failure_thresholds": {"automation.test": 2.5}
-                    }
+                    "execution_errors": {"failure_thresholds": {"automation.test": 2.5}}
                 }
             }
         )
@@ -788,7 +796,7 @@ def test_pack_declared_entity_number_map_is_strictly_validated():
         validate_config(
             {
                 "automatic": {
-                    "automation_errors": {"failure_thresholds": {"automation.test": 0}}
+                    "execution_errors": {"failure_thresholds": {"automation.test": 0}}
                 }
             }
         )

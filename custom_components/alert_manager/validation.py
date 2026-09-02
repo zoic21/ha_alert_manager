@@ -237,12 +237,12 @@ def _normalize_pack_field(
                 except ValueError as err:
                     raise ValueError(f"{path} contains an invalid entity id") from err
                 if (
-                    field.entity_domain is not None
-                    and target_id.partition(".")[0] != field.entity_domain
+                    field.entity_domains is not None
+                    and target_id.partition(".")[0] not in field.entity_domains
                 ):
                     raise ValueError(
                         f"{path} contains an entity outside the "
-                        f"{field.entity_domain} domain"
+                        f"{', '.join(field.entity_domains)} domains"
                     )
             normalized[target_id] = _validate_pack_number(
                 threshold,

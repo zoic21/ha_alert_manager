@@ -3802,7 +3802,7 @@ function hydrateAutomaticControls() {
         this._configureSelector(
           `auto-${pack.id}-${field.id}-target-${index}`,
           field.type === "entity_number_map"
-            ? { entity: field.entity_domain ? { domain: field.entity_domain } : {} }
+            ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
             : { device: {} },
           row.target_id,
           (value) => { row.target_id = typeof value === "string" ? value : ""; },

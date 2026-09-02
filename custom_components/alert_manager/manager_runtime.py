@@ -41,10 +41,8 @@ from .packs import PACKS, PACKS_BY_ID, PackNeutral
 _LOGGER = logging.getLogger(__name__)
 
 _PACK_CONDITION_FALLBACKS = {
-    "automatic.automation_errors": "Automation execution ended with an error",
-    "automatic.automation_errors_detail": (
-        "Automation execution ended with an error: {error}"
-    ),
+    "automatic.execution_errors": "Execution ended with an error",
+    "automatic.execution_errors_detail": ("Execution ended with an error: {error}"),
     "automatic.battery": "Battery less than or equal to {threshold}%",
     "automatic.connectivity": "Connectivity is off",
     "automatic.unavailable": "State is unavailable",

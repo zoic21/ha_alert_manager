@@ -6,10 +6,10 @@ from collections.abc import Collection
 
 from homeassistant.core import HomeAssistant
 
-from .automation_errors import PACK as AUTOMATION_ERRORS_PACK
 from .base import AutomaticPack, PackConfigField, PackNeutral
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
+from .execution_errors import PACK as EXECUTION_ERRORS_PACK
 from .unavailable import PACK as UNAVAILABLE_PACK
 from .unifi import PACK as UNIFI_PACK
 
@@ -18,7 +18,7 @@ PACKS: tuple[AutomaticPack, ...] = (
     CONNECTIVITY_PACK,
     UNIFI_PACK,
     BATTERY_PACK,
-    AUTOMATION_ERRORS_PACK,
+    EXECUTION_ERRORS_PACK,
 )
 PACKS_BY_ID = {pack.id: pack for pack in PACKS}
 

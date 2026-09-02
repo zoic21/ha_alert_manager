@@ -27,10 +27,10 @@
           "validation": "Each row must contain a device and a valid numeric threshold."
         },
         "failure_thresholds": {
-          "duplicate": "An automation can have only one failure threshold.",
-          "help": "By default, one failed cycle triggers an alert. Set a higher threshold for automations that must fail several consecutive cycles.",
-          "label": "Consecutive failure thresholds by automation",
-          "validation": "Each row must contain an automation and a valid whole number."
+          "duplicate": "An automation or script can have only one failure threshold.",
+          "help": "By default, one failed cycle triggers an alert. Set a higher threshold for automations or scripts that must fail several consecutive cycles.",
+          "label": "Consecutive failure thresholds by automation or script",
+          "validation": "Each row must contain an automation or script and a valid whole number."
         },
         "threshold": {
           "label": "Global threshold"
@@ -49,8 +49,8 @@
     },
     "conditions": {
       "automatic": {
-        "automation_errors": "Automation execution ended with an error",
-        "automation_errors_detail": "Automation execution ended with an error: {error}",
+        "execution_errors": "Execution ended with an error",
+        "execution_errors_detail": "Execution ended with an error: {error}",
         "battery": "Battery less than or equal to {threshold}%",
         "connectivity": "Connectivity is off",
         "unavailable": "State is unavailable",
@@ -228,9 +228,9 @@
       "unacknowledge": "Remove acknowledgement"
     },
     "packs": {
-      "automation_errors": {
-        "description": "Monitors automations whose execution ends with an error.",
-        "name": "Automation errors"
+      "execution_errors": {
+        "description": "Monitors automations and scripts whose execution ends with an error.",
+        "name": "Automation and script errors"
       },
       "battery": {
         "description": "Monitors battery sensors at or below their threshold.",

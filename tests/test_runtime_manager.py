@@ -271,7 +271,7 @@ def test_runtime_checks_pack_applicability_before_should_evaluate(
 
         patched_packs = tuple(
             replace(pack, should_evaluate=should_evaluate)
-            if pack.id == "automation_errors"
+            if pack.id == "execution_errors"
             else pack
             for pack in PACKS
         )

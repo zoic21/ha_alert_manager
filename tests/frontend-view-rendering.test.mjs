@@ -114,9 +114,9 @@ test("automatic rendering uses prepared configuration and draft data", () => {
 
   const automationErrors = renderAutomatic({
     availablePacks: [{
-      id: "automation_errors",
+      id: "execution_errors",
       available: true,
-      translation_key: "automation_errors",
+      translation_key: "execution_errors",
       config_fields: [{
         id: "failure_thresholds",
         type: "entity_number_map",
@@ -124,12 +124,12 @@ test("automatic rendering uses prepared configuration and draft data", () => {
         minimum: 1,
         maximum: 100,
         step: 1,
-        entity_domain: "automation",
+        entity_domains: ["automation", "script"],
       }],
     }],
     config: {
       automatic: {
-        automation_errors: {
+        execution_errors: {
           enabled: true,
           delay: null,
           failure_thresholds: { "automation.test": 3 },
@@ -137,7 +137,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
       },
     },
     draft: {
-      automation_errors: {
+      execution_errors: {
         failure_thresholds: [{ target_id: "automation.test", value: 3 }],
       },
     },
@@ -145,10 +145,10 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     renderNumberField: (id) => `<number id="${id}"></number>`,
     t,
   });
-  assert.match(automationErrors, /packs\.automation_errors\.name/);
-  assert.match(automationErrors, /auto-automation_errors-enabled[^>]*checked/);
-  assert.match(automationErrors, /auto-automation_errors-delay/);
-  assert.match(automationErrors, /auto-automation_errors-failure_thresholds-target-0/);
+  assert.match(automationErrors, /packs\.execution_errors\.name/);
+  assert.match(automationErrors, /auto-execution_errors-enabled[^>]*checked/);
+  assert.match(automationErrors, /auto-execution_errors-delay/);
+  assert.match(automationErrors, /auto-execution_errors-failure_thresholds-target-0/);
   assert.match(automationErrors, /value="3"/);
 });
 
