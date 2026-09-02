@@ -102,6 +102,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
         device_thresholds: [{ target_id: "device-1", value: 15 }],
       },
     },
+    configurationDrawer: { kind: "automatic", id: "battery" },
     busy: false,
     renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
     t,
@@ -109,6 +110,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
 
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
+  assert.match(markup, /auto-battery-configuration/);
+  assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /value="15"/);
 
@@ -131,7 +134,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
       automatic: {
         execution_errors: {
           enabled: true,
-          delay: null,
+          delay: 0,
           failure_thresholds: { "automation.test": 3 },
         },
       },
@@ -141,6 +144,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
         failure_thresholds: [{ target_id: "automation.test", value: 3 }],
       },
     },
+    configurationDrawer: { kind: "automatic", id: "execution_errors" },
     busy: false,
     renderNumberField: (id) => `<number id="${id}"></number>`,
     t,
@@ -158,11 +162,15 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     settingsDraft: {
       coherence_scan_esphome: true,
       coherence_ignored_entity_references: ["sensor.old"],
+      excluded_labels: [],
+      excluded_entities: [],
+      excluded_devices: [],
     },
     historyConfig: { retention_limit: 100 },
     historyEvents: [{ id: "event-1" }],
     entityDelayDraft: [{ entity_id: "sensor.test", delay: 60 }],
     ignoredReferenceDraft: "sensor.new",
+    configurationDrawer: { kind: "settings", id: "entity_delays" },
     busy: false,
     renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
     t,
@@ -172,6 +180,8 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /coherence-scan-esphome[^>]*checked/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
+  assert.match(markup, /settings-entity_delays-configuration/);
+  assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
 });
 

@@ -88,11 +88,11 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
 
   assert.match(
     markup,
-    /<div class="actions rule-editor-actions"><ha-alert class="rule-editor-error" alert-type="error" role="alert">La borne inférieure/,
+    /<div class="actions side-drawer-actions rule-editor-actions"><ha-alert class="rule-editor-error" alert-type="error" role="alert">La borne inférieure/,
   );
-  assert.match(styles, /\.rule-editor-actions\{flex-wrap:wrap\}/);
+  assert.match(styles, /\.side-drawer-actions\{flex-wrap:wrap\}/);
   assert.match(styles, /\.rule-editor-error\{flex:1 0 100%;width:100%;margin:0 0 4px\}/);
-  assert.match(styles, /\.rule-editor-actions\{position:sticky;bottom:0/);
+  assert.match(styles, /\.side-drawer-actions\{position:sticky;bottom:0/);
 });
 
 test("rules content reserves the editor position and a visible gap", () => {
@@ -105,7 +105,7 @@ test("rules content reserves the editor position and a visible gap", () => {
   );
   assert.match(
     styles,
-    /\.rules-layout\{--rule-editor-width:560px;--rule-editor-inline-end:24px;--rule-editor-content-gap:16px\}/,
+    /\.rules-layout\{--rule-editor-width:560px;--rule-editor-inline-end:24px;--rule-editor-content-gap:16px;--side-drawer-width:var\(--rule-editor-width\);--side-drawer-inline-end:var\(--rule-editor-inline-end\)\}/,
   );
   assert.doesNotMatch(
     styles,
@@ -119,11 +119,11 @@ test("the rule drawer clips its contents into complete rounded bottom corners", 
 
   assert.match(
     styles,
-    /ha-card\.rule-editor-drawer\{[^}]*border-radius:var\(--ha-card-border-radius\)/,
+    /ha-card\.side-drawer\{[^}]*border-radius:var\(--ha-card-border-radius\)/,
   );
   assert.match(
     styles,
-    /\.rule-editor-form\{[^}]*border-end-start-radius:var\(--ha-card-border-radius\);border-end-end-radius:var\(--ha-card-border-radius\)/,
+    /\.side-drawer-form\{[^}]*border-end-start-radius:var\(--ha-card-border-radius\);border-end-end-radius:var\(--ha-card-border-radius\)/,
   );
 });
 

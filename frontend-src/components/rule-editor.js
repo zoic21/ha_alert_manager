@@ -191,8 +191,8 @@ export function renderRuleEditor(context) {
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
-    return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+    return `<div class="side-drawer-backdrop rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
+    <ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
@@ -200,9 +200,9 @@ export function renderRuleEditor(context) {
         ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
         <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
-      <form id="rule-form" class="rule-editor-form">
+      <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
 }

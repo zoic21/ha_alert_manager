@@ -328,7 +328,7 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
     legacy = exported.replace(
         "    execution_errors:\n"
         "      enabled: true\n"
-        "      delay: null\n"
+        "      delay: 0\n"
         "      failure_thresholds: {}\n",
         "",
     )
@@ -337,7 +337,7 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
 
     assert imported["automatic"]["execution_errors"] == {
         "enabled": True,
-        "delay": None,
+        "delay": 0,
         "failure_thresholds": {},
     }
 

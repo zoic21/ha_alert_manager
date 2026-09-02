@@ -1974,6 +1974,34 @@ async function handleConfigBackupAction(action, button) {
   return false;
 }
 
+// Source: frontend-src/components/configuration-drawer.js
+function renderConfigurationDrawer({
+  title,
+  ariaLabel,
+  content,
+  saveAction,
+  saveLabel,
+  busy,
+}) {
+  return `<div class="side-drawer-backdrop configuration-drawer-backdrop" data-action="close-configuration-drawer" aria-hidden="true"></div>
+    <ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
+      <ha-dialog-header show-border>
+        <ha-icon-button slot="navigationIcon" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
+        <span slot="title">${esc(title)}</span>
+      </ha-dialog-header>
+      <div class="side-drawer-form">
+        <section class="side-drawer-section">${content}</section>
+        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
+      </div>
+    </ha-card>`;
+}
+
+function replaceConfigurationDrawer(root, markup) {
+  root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
+  root?.querySelector?.(".configuration-drawer")?.remove?.();
+  if (root && markup) root.insertAdjacentHTML("beforeend", markup);
+}
+
 // Source: frontend-src/components/rule-editor.js
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -2164,8 +2192,8 @@ function renderRuleEditor(context) {
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
-    return `<div class="rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
-    <ha-card outlined class="rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
+    return `<div class="side-drawer-backdrop rule-editor-backdrop" data-action="cancel-rule" aria-hidden="true"></div>
+    <ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
@@ -2173,9 +2201,9 @@ function renderRuleEditor(context) {
         ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
         <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
-      <form id="rule-form" class="rule-editor-form">
+      <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
-        <div class="actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
 }
@@ -3636,7 +3664,9 @@ function isNumberMapField(field) {
 }
 
 function renderAutomatic(context) {
-    const { availablePacks, config, draft, busy, renderNumberField, t } = context;
+    const {
+      availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+    } = context;
     return `<form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
         const packConfig = config.automatic[pack.id];
@@ -3650,16 +3680,14 @@ function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
             ${renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).map((field) => renderPackField(
-              pack,
-              field,
-              packConfig,
-              { draft, renderNumberField, t },
-            )).join("")}
+            ${(pack.config_fields ?? []).length ? `<div class="field configuration-entry"><span class="field-label">${esc(t("automatic.configuration"))}</span><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
           </div>
         </ha-card>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
+      ${renderAutomaticConfigurationDrawer({
+        availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+      })}
     </form>`;
 }
 
@@ -3669,10 +3697,50 @@ function renderAutomaticPanel() {
       availablePacks: this._packs.filter((pack) => pack.available),
       config: this._config,
       draft: this._automaticMapDraft,
+      configurationDrawer: this._configurationDrawer,
       busy: this._busy,
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+}
+
+function packConfigurationCount(pack, config, draft) {
+  return (pack.config_fields ?? []).reduce((count, field) => {
+    if (isNumberMapField(field)) {
+      const rows = draft?.[pack.id]?.[field.id];
+      return count + (rows
+        ? rows.filter((row) => row.target_id).length
+        : Object.keys(config[field.id] ?? {}).length);
+    }
+    const value = draft?.[pack.id]?.[field.id] ?? config[field.id];
+    return count + (value === field.default ? 0 : 1);
+  }, 0);
+}
+
+function renderAutomaticConfigurationDrawer(context) {
+  const {
+    availablePacks, config, draft, configurationDrawer, busy, renderNumberField, t,
+  } = context;
+  if (configurationDrawer?.kind !== "automatic") return "";
+  const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
+  if (!pack?.config_fields?.length) return "";
+  const packConfig = config.automatic[pack.id];
+  const packName = t(`packs.${pack.translation_key || pack.id}.name`);
+  const content = `<div class="fields configuration-drawer-fields">${pack.config_fields
+    .map((field) => renderPackField(
+      pack,
+      field,
+      packConfig,
+      { draft, renderNumberField, t },
+    )).join("")}</div>`;
+  return renderConfigurationDrawer({
+    title: packName,
+    ariaLabel: t("automatic.close_configuration_aria", { name: packName }),
+    content,
+    saveAction: "save-automatic",
+    saveLabel: t("buttons.save"),
+    busy,
+  });
 }
 
 function renderPackField(pack, field, config, context) {
@@ -3682,7 +3750,7 @@ function renderPackField(pack, field, config, context) {
       return renderNumberField(
         `auto-${pack.id}-${field.id}`,
         label,
-        config[field.id],
+        draft[pack.id]?.[field.id] ?? config[field.id],
         field.unit ?? "",
         field.minimum ?? -1000000000,
         field.maximum ?? 1000000000,
@@ -3707,7 +3775,7 @@ function renderPackField(pack, field, config, context) {
 
 async function saveAutomatic() {
     this._ensureAutomaticDraft();
-    this._captureAutomaticMapValues();
+    captureAutomaticConfigurationValues.call(this);
     const automatic = {};
     for (const pack of this._packs.filter((item) => item.available)) {
       const delayValue = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`).value;
@@ -3718,7 +3786,7 @@ async function saveAutomatic() {
       for (const field of pack.config_fields ?? []) {
         if (field.type === "number") {
           automatic[pack.id][field.id] = Number(
-            this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`).value,
+            this._automaticMapDraft[pack.id]?.[field.id] ?? field.default,
           );
           continue;
         }
@@ -3757,7 +3825,12 @@ async function saveAutomatic() {
     );
     if (config) {
       this._config = config;
+      this._configurationDrawer = null;
       this._resetAutomaticDraft();
+      replaceConfigurationDrawer(
+        this.shadowRoot?.querySelector?.("#automatic-form"),
+        "",
+      );
       this._refreshUiState();
     }
 }
@@ -3773,10 +3846,13 @@ function ensureAutomaticDraft() {
     for (const pack of this._packs) {
       const fields = {};
       for (const field of pack.config_fields ?? []) {
-        if (!isNumberMapField(field)) continue;
-        fields[field.id] = Object.entries(
-          this._config.automatic?.[pack.id]?.[field.id] ?? {},
-        ).map(([target_id, value]) => ({ target_id, value }));
+        const configured = this._config.automatic?.[pack.id]?.[field.id]
+          ?? field.default;
+        fields[field.id] = isNumberMapField(field)
+          ? Object.entries(configured ?? {}).map(
+            ([target_id, value]) => ({ target_id, value }),
+          )
+          : configured;
       }
       this._automaticMapDraft[pack.id] = fields;
     }
@@ -3790,6 +3866,51 @@ function captureAutomaticMapValues() {
       ]?.[Number(input.dataset.packIndex)];
       if (row) row.value = Number(input.value);
     });
+}
+
+function captureAutomaticConfigurationValues() {
+  captureAutomaticMapValues.call(this);
+  for (const pack of this._packs) {
+    for (const field of pack.config_fields ?? []) {
+      if (field.type !== "number") continue;
+      const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
+      if (input && this._automaticMapDraft?.[pack.id]) {
+        this._automaticMapDraft[pack.id][field.id] = Number(input.value);
+      }
+    }
+  }
+}
+
+function refreshAutomaticConfigurationDrawer() {
+  const form = this.shadowRoot?.querySelector?.("#automatic-form");
+  if (!form) {
+    this._render();
+    return;
+  }
+  replaceConfigurationDrawer(form, renderAutomaticConfigurationDrawer({
+    availablePacks: this._packs.filter((pack) => pack.available),
+    config: this._config,
+    draft: this._automaticMapDraft,
+    configurationDrawer: this._configurationDrawer,
+    busy: this._busy,
+    renderNumberField: (...args) => this._numberField(...args),
+    t: (key, replacements) => this._t(key, replacements),
+  }));
+  this._hydrateSelectors();
+  this._decorateActionIcons();
+}
+
+function updateAutomaticConfigurationCount(packId) {
+  const pack = this._packs.find((item) => item.id === packId);
+  const button = this.shadowRoot?.querySelector?.(`#auto-${packId}-configuration`);
+  if (!pack || !button) return;
+  button.textContent = this._t("buttons.configuration", {
+    count: packConfigurationCount(
+      pack,
+      this._config.automatic[pack.id],
+      this._automaticMapDraft,
+    ),
+  });
 }
 
 function hydrateAutomaticControls() {
@@ -3818,9 +3939,27 @@ async function handleAutomaticAction(action, button) {
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveAutomatic();
     return true;
   }
+  if (action === "open-automatic-configuration") {
+    this._ensureAutomaticDraft();
+    captureAutomaticConfigurationValues.call(this);
+    this._configurationDrawer = { kind: "automatic", id: button.dataset.packId };
+    refreshAutomaticConfigurationDrawer.call(this);
+    return true;
+  }
+  if (
+    action === "close-configuration-drawer"
+    && this._configurationDrawer?.kind === "automatic"
+  ) {
+    const packId = this._configurationDrawer.id;
+    captureAutomaticConfigurationValues.call(this);
+    this._configurationDrawer = null;
+    refreshAutomaticConfigurationDrawer.call(this);
+    updateAutomaticConfigurationCount.call(this, packId);
+    return true;
+  }
   if (action === "add-pack-map-row") {
     this._ensureAutomaticDraft();
-    this._captureAutomaticMapValues();
+    captureAutomaticConfigurationValues.call(this);
     const rows = this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId];
     const field = this._packs.find((pack) => pack.id === button.dataset.packId)
       ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
@@ -3829,14 +3968,14 @@ async function handleAutomaticAction(action, button) {
     if (rows) {
       rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
     }
-    this._render();
+    refreshAutomaticConfigurationDrawer.call(this);
     return true;
   }
   if (action === "remove-pack-map-row") {
-    this._captureAutomaticMapValues();
+    captureAutomaticConfigurationValues.call(this);
     const rows = this._automaticMapDraft?.[button.dataset.packId]?.[button.dataset.fieldId];
     rows?.splice(Number(button.dataset.index), 1);
-    this._render();
+    refreshAutomaticConfigurationDrawer.call(this);
     return true;
   }
   return false;
@@ -3846,7 +3985,8 @@ async function handleAutomaticAction(action, button) {
 function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, busy, recoveryActive = false, configBackupsMarkup = "",
+      ignoredReferenceDraft, configurationDrawer, busy,
+      recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
@@ -3866,8 +4006,8 @@ function renderSettings(context) {
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
-        <div class="field"><span class="field-label">${esc(t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">${esc(t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+        ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
+        ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
@@ -3879,13 +4019,8 @@ function renderSettings(context) {
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
-        <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
-          <ha-selector id="delay-entity-${index}"></ha-selector>
-          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
-        </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
-        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+      <ha-card outlined class="panel settings-card"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+        ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
@@ -3893,7 +4028,48 @@ function renderSettings(context) {
         ${configBackupsMarkup}
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      ${renderSettingsConfigurationDrawer({
+        settingsDraft, entityDelayDraft, configurationDrawer, busy, t,
+      })}
     </form>`;
+}
+
+function renderSettingsConfigurationEntry(id, label, count, t) {
+  return `<div class="configuration-entry"><span class="field-label">${esc(label)}</span><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration", { count }))}</ha-button></div>`;
+}
+
+function renderSettingsConfigurationDrawer(context) {
+  const { settingsDraft, entityDelayDraft, configurationDrawer, busy, t } = context;
+  if (configurationDrawer?.kind !== "settings") return "";
+  const id = configurationDrawer.id;
+  let title;
+  let content;
+  if (id === "entity_delays") {
+    title = t("settings.entity_delay");
+    content = `<div><small>${esc(t("settings.delay_help"))}</small></div>
+      <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
+        <ha-selector id="delay-entity-${index}"></ha-selector>
+        <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+      </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
+      <div class="actions delay-add-action"><ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>`;
+  } else if (id === "excluded_entities") {
+    title = t("settings.entity_exclusions");
+    content = `<div class="field"><span class="field-label">${esc(title)}</span><ha-selector id="excluded-entities"></ha-selector></div>`;
+  } else if (id === "excluded_devices") {
+    title = t("settings.device_exclusions");
+    content = `<div class="field"><span class="field-label">${esc(title)}</span><ha-selector id="excluded-devices"></ha-selector></div>`;
+  } else {
+    return "";
+  }
+  return renderConfigurationDrawer({
+    title,
+    ariaLabel: t("settings.close_configuration_aria", { name: title }),
+    content,
+    saveAction: "save-settings",
+    saveLabel: t("buttons.save"),
+    busy,
+  });
 }
 
 function renderSettingsPanel() {
@@ -3905,6 +4081,7 @@ function renderSettingsPanel() {
       historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
+      configurationDrawer: this._configurationDrawer,
       busy: this._busy,
       recoveryActive: this._configRecovery?.active === true,
       configBackupsMarkup: this._renderConfigBackups({
@@ -4059,6 +4236,11 @@ async function saveSettings() {
         await this._refreshHistory();
       }
       this._resetSettingsDraft();
+      this._configurationDrawer = null;
+      replaceConfigurationDrawer(
+        this.shadowRoot?.querySelector?.("#settings-form"),
+        "",
+      );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
@@ -4157,6 +4339,7 @@ function hydrateSettingsControls() {
         value,
         this._settingsDraft.excluded_entities,
       );
+      updateSettingsConfigurationCount.call(this, "excluded_entities");
     },
   );
   this._configureSelector(
@@ -4168,6 +4351,7 @@ function hydrateSettingsControls() {
         value,
         this._settingsDraft.excluded_devices,
       );
+      updateSettingsConfigurationCount.call(this, "excluded_devices");
     },
   );
   this._entityDelayDraft.forEach((row, index) => {
@@ -4180,10 +4364,57 @@ function hydrateSettingsControls() {
   });
 }
 
+function refreshSettingsConfigurationDrawer() {
+  const form = this.shadowRoot?.querySelector?.("#settings-form");
+  if (!form) {
+    this._render();
+    return;
+  }
+  replaceConfigurationDrawer(form, renderSettingsConfigurationDrawer({
+    settingsDraft: this._settingsDraft,
+    entityDelayDraft: this._entityDelayDraft,
+    configurationDrawer: this._configurationDrawer,
+    busy: this._busy,
+    t: (key, replacements) => this._t(key, replacements),
+  }));
+  this._hydrateSelectors();
+  this._decorateActionIcons();
+}
+
+function updateSettingsConfigurationCount(id) {
+  const button = this.shadowRoot?.querySelector?.(`#settings-${id}-configuration`);
+  if (!button) return;
+  const count = id === "entity_delays"
+    ? this._entityDelayDraft.length
+    : this._settingsDraft[id].length;
+  button.textContent = this._t("buttons.configuration", { count });
+}
+
 async function handleSettingsAction(action, button) {
   if (action === "save-settings") {
     const form = this.shadowRoot.querySelector("#settings-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
+    return true;
+  }
+  if (action === "open-settings-configuration") {
+    this._ensureSettingsDraft();
+    this._captureEntityDelayValues();
+    this._configurationDrawer = {
+      kind: "settings",
+      id: button.dataset.configurationId,
+    };
+    refreshSettingsConfigurationDrawer.call(this);
+    return true;
+  }
+  if (
+    action === "close-configuration-drawer"
+    && this._configurationDrawer?.kind === "settings"
+  ) {
+    const id = this._configurationDrawer.id;
+    this._captureEntityDelayValues();
+    this._configurationDrawer = null;
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, id);
     return true;
   }
   if (action === "add-ignored-reference") {
@@ -4203,13 +4434,15 @@ async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
-    this._render();
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
-    this._render();
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }
   return false;
@@ -4524,6 +4757,22 @@ const settingsStyles = `
   .settings-wide {
     grid-column: 1/-1;
   }
+  .configuration-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .configuration-entry ha-button {
+    flex: none;
+  }
+  .configuration-drawer-fields {
+    grid-template-columns: 1fr;
+    margin: 0;
+  }
+  .configuration-drawer-fields .full {
+    grid-column: auto;
+  }
   .ignored-reference-chips {
     display: flex;
     flex-wrap: wrap;
@@ -4789,6 +5038,8 @@ const ruleEditorStyles = `
     --rule-editor-width: 560px;
     --rule-editor-inline-end: 24px;
     --rule-editor-content-gap: 16px;
+    --side-drawer-width: var(--rule-editor-width);
+    --side-drawer-inline-end: var(--rule-editor-inline-end);
   }
   .rules-layout [data-rules-table-page] {
     --alert-manager-rule-table-width: 100%;
@@ -4798,13 +5049,13 @@ const ruleEditorStyles = `
       100% - var(--rule-editor-width) - var(--rule-editor-inline-end) - var(--rule-editor-content-gap)
     );
   }
-  ha-card.rule-editor-drawer {
+  ha-card.side-drawer {
     position: fixed;
     z-index: 6;
     inset-block-start: calc(var(--header-height, 56px) + 16px);
     inset-block-end: 16px;
-    inset-inline-end: var(--rule-editor-inline-end);
-    width: var(--rule-editor-width);
+    inset-inline-end: var(--side-drawer-inline-end, 24px);
+    width: var(--side-drawer-width, 560px);
     max-width: calc(100vw - 64px);
     display: flex;
     flex-direction: column;
@@ -4814,14 +5065,14 @@ const ruleEditorStyles = `
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
     border-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-drawer ha-dialog-header {
+  .side-drawer ha-dialog-header {
     flex: none;
     background: var(--ha-dialog-surface-background, var(--card-background-color, #fff));
     border-radius: var(--ha-card-border-radius);
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  .rule-editor-form {
+  .side-drawer-form {
     flex: 1;
     min-height: 0;
     overflow: auto;
@@ -4831,7 +5082,7 @@ const ruleEditorStyles = `
     border-end-start-radius: var(--ha-card-border-radius);
     border-end-end-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-section {
+  .rule-editor-section, .side-drawer-section {
     padding: 20px;
     background: var(--card-background-color, #fff);
     border-bottom: 1px solid var(--divider-color, #ddd);
@@ -4906,7 +5157,7 @@ const ruleEditorStyles = `
     color: var(--error-color, #db4437);
     overflow-wrap: anywhere;
   }
-  .rule-editor-actions {
+  .side-drawer-actions {
     position: sticky;
     bottom: 0;
     z-index: 1;
@@ -4954,7 +5205,7 @@ const ruleEditorStyles = `
   .rule-editor-resize:focus-visible {
     outline: none;
   }
-  .rule-editor-backdrop {
+  .side-drawer-backdrop {
     display: none;
   }
   .delay-list {
@@ -5026,7 +5277,7 @@ const responsiveStyles = `
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
     }
-    .rule-editor-backdrop {
+    .side-drawer-backdrop {
       display: block;
       position: fixed;
       z-index: 5;
@@ -5143,7 +5394,7 @@ const responsiveStyles = `
       width: 36px;
       height: 36px;
     }
-    ha-card.rule-editor-drawer {
+    ha-card.side-drawer {
       inset-block-start: var(--header-height, 56px);
       inset-block-end: calc(var(--header-height, 56px) + var(--safe-area-inset-bottom, 0px));
       inset-inline-end: 0;
@@ -5166,10 +5417,10 @@ const responsiveStyles = `
     .rule-value-row ha-button {
       margin-top: 0;
     }
-    .rule-editor-actions {
+    .side-drawer-actions {
       flex-wrap: wrap;
     }
-    .rule-editor-actions .action-spacer {
+    .side-drawer-actions .action-spacer {
       display: none;
     }
   }
@@ -5393,6 +5644,7 @@ class AlertManagerPanel extends HTMLElement {
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
     this._automaticMapDraft = null;
+    this._configurationDrawer = null;
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
@@ -5460,6 +5712,7 @@ class AlertManagerPanel extends HTMLElement {
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
       this._editingRule = null;
+      this._configurationDrawer = null;
       this._notice = null;
       if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
@@ -5770,6 +6023,7 @@ class AlertManagerPanel extends HTMLElement {
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
       this._editingRule = null;
+      this._configurationDrawer = null;
       this._notice = null;
       this._render();
       if (this._activeTab === "overview") void this._refreshAlerts();

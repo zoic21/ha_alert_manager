@@ -18,6 +18,9 @@
     },
     "automatic": {
       "aria_enable": "Enable {name}",
+      "close_configuration_aria": "Close {name} configuration",
+      "configuration": "Configuration",
+      "configure_aria": "Configure {name}",
       "empty_delay_help": "Leave the delay empty to use the global delay.",
       "fields": {
         "device_thresholds": {
@@ -43,6 +46,7 @@
       "add": "Add",
       "cancel": "Cancel",
       "close": "Close",
+      "configuration": "Configuration ({count})",
       "delete": "Delete",
       "remove": "Remove",
       "save": "Save"
@@ -333,6 +337,8 @@
       "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",
       "coherence_ignored_entity_reference_validation": "Enter a valid complete reference, for example toto.plop.",
       "coherence_settings": "Coherence analysis",
+      "close_configuration_aria": "Close {name} configuration",
+      "configure_aria": "Configure {name}",
       "coherence_schedules": {
         "daily": "Once a day",
         "monthly": "Once a month",

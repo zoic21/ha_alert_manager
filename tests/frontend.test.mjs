@@ -459,7 +459,7 @@ const completeConfig = () => ({
     battery: { enabled: true, delay: 900, threshold: 15, device_thresholds: {} },
     execution_errors: {
       enabled: true,
-      delay: null,
+      delay: 0,
       failure_thresholds: { "automation.test": 3 },
     },
   },
@@ -1996,9 +1996,10 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
     "Laisser le délai vide pour utiliser le délai global.",
     batteryDelay,
   );
-  const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
+  const batteryConfiguration = automatic.indexOf('id="auto-battery-configuration"');
   assert.ok(batteryDelay < batteryDelayHelp);
-  assert.ok(batteryDelayHelp < batteryThreshold);
+  assert.ok(batteryDelayHelp < batteryConfiguration);
+  assert.doesNotMatch(automatic, /id="auto-battery-threshold"/);
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
@@ -2018,11 +2019,11 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
-  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('id="excluded-entities"'));
-  assert.ok(settings.indexOf('id="excluded-entities"') < settings.indexOf('id="excluded-devices"'));
-  assert.match(settings, /<ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start"/);
+  assert.match(settings, /id="settings-excluded_entities-configuration"[^>]+data-action="open-settings-configuration"/);
+  assert.match(settings, /id="settings-excluded_devices-configuration"[^>]+data-action="open-settings-configuration"/);
+  assert.match(settings, /id="settings-entity_delays-configuration"[^>]+data-action="open-settings-configuration"/);
+  assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
-  assert.ok(settings.indexOf('class="delay-list"') < settings.indexOf('data-action="add-entity-delay"'));
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
   assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));
@@ -2152,6 +2153,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   const editor = panel._renderRuleEditor();
   panel._ensureSettingsDraft();
   panel._entityDelayDraft = [{ entity_id: "sensor.one", delay: 30 }];
+  panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
   const settings = panel._renderSettings();
 
   assert.match(rules, /<hass-tabs-subpage-data-table[\s\S]*data-rules-table-page/);
@@ -2169,7 +2171,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(rules, /data-action="delete-rule"/);
   assert.match(rules, /<ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start"/);
   assert.ok(rules.indexOf("</ha-data-table>") < rules.indexOf('data-action="new-rule"'));
-  assert.match(editor, /<ha-card outlined class="rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
+  assert.match(editor, /<ha-card outlined class="side-drawer rule-editor-drawer"[\s\S]*<ha-dialog-header show-border>[\s\S]*<ha-icon-button id="rule-editor-close"/);
   assert.match(editor, /<ha-dropdown slot="actionItems" data-rule-editor-menu/);
   assert.match(editor, /<ha-icon-button slot="trigger"/);
   assert.match(editor, /<ha-dropdown-item value="switch-editor">[\s\S]*Modifier en YAML/);
@@ -2198,12 +2200,12 @@ test("rule rows and editor use native Home Assistant components", () => {
     styles,
     /#rules-table\{[^}]*--data-table-row-height/,
   );
-  assert.match(styles, /ha-card\.rule-editor-drawer\{position:fixed/);
+  assert.match(styles, /ha-card\.side-drawer\{position:fixed/);
   assert.doesNotMatch(styles, /main\.rules-page/);
   assert.match(styles, /main\{width:100%;max-width:none/);
   assert.match(styles, /\.rules-layout\.has-editor \[data-rules-table-page\]\{--alert-manager-rule-table-width:calc\(\s*100% - var\(--rule-editor-width\) - var\(--rule-editor-inline-end\) - var\(--rule-editor-content-gap\)\s*\)\}/);
-  assert.match(styles, /ha-card\.rule-editor-drawer\{[^}]*inset-inline-end:var\(--rule-editor-inline-end\)/);
-  assert.match(styles, /\.rule-editor-form\{[^}]*overflow:auto/);
+  assert.match(styles, /ha-card\.side-drawer\{[^}]*inset-inline-end:var\(--side-drawer-inline-end,24px\)/);
+  assert.match(styles, /\.side-drawer-form\{[^}]*overflow:auto/);
   assert.match(styles, /\.rule-editor-resize\{[^}]*cursor:ew-resize/);
   let fullRenders = 0;
   let editorRefreshes = 0;
@@ -2393,6 +2395,55 @@ test("automatic packs are rendered only from available backend metadata", () => 
   assert.match(html, /auto-battery-enabled/);
   assert.doesNotMatch(html, /auto-unifi-enabled|Équipements UniFi/);
   assert.doesNotMatch(html, /CATEGORIES|État unavailable sur toutes les entités/);
+});
+
+test("configuration buttons count automatic and settings entries", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+
+  const automatic = panel._renderAutomatic();
+  assert.match(
+    automatic,
+    /id="auto-battery-configuration"[\s\S]*?>Configuration \(0\)<\/ha-button>/,
+  );
+  assert.match(
+    automatic,
+    /id="auto-execution_errors-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/,
+  );
+
+  panel._config.excluded_entities = ["sensor.one", "sensor.two"];
+  panel._config.excluded_devices = ["a".repeat(32)];
+  panel._config.entity_delays = { "sensor.one": 30 };
+  panel._resetSettingsDraft();
+  const settings = panel._renderSettings();
+  assert.match(settings, /id="settings-excluded_entities-configuration"[\s\S]*?>Configuration \(2\)<\/ha-button>/);
+  assert.match(settings, /id="settings-excluded_devices-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/);
+  assert.match(settings, /id="settings-entity_delays-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/);
+});
+
+test("automatic and settings configuration render in the shared side drawer", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._configurationDrawer = { kind: "automatic", id: "execution_errors" };
+  const automatic = panel._renderAutomatic();
+  assert.match(automatic, /class="side-drawer configuration-drawer"/);
+  assert.match(automatic, /auto-execution_errors-failure_thresholds-target-0/);
+
+  panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
+  panel._resetSettingsDraft();
+  panel._config.entity_delays = { "sensor.one": 30 };
+  const delays = panel._renderSettings();
+  assert.match(delays, /class="side-drawer configuration-drawer"/);
+  assert.match(delays, /data-delay-index="0"[^>]*value="30"/);
+
+  panel._configurationDrawer = { kind: "settings", id: "excluded_entities" };
+  assert.match(panel._renderSettings(), /<ha-selector id="excluded-entities"><\/ha-selector>/);
+  panel._configurationDrawer = { kind: "settings", id: "excluded_devices" };
+  assert.match(panel._renderSettings(), /<ha-selector id="excluded-devices"><\/ha-selector>/);
 });
 
 test("an empty pack delay serializes as the global fallback", async () => {
@@ -3519,7 +3570,7 @@ test("rule editor keeps only save in the footer", () => {
 
   panel._editingRule = {};
   const createHtml = panel._renderRuleEditor();
-  const createFooter = createHtml.match(/<div class="actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  const createFooter = createHtml.match(/<div class="actions side-drawer-actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
   assert.match(createFooter, /data-action="save-rule"/);
   assert.doesNotMatch(createFooter, /data-action="cancel-rule"/);
   assert.doesNotMatch(createFooter, /data-action="delete-rule"/);
@@ -3527,7 +3578,7 @@ test("rule editor keeps only save in the footer", () => {
 
   panel._editingRule = { ...newRuleDefaults(), id: "rule-1", name: "Test" };
   const editHtml = panel._renderRuleEditor();
-  const editFooter = editHtml.match(/<div class="actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  const editFooter = editHtml.match(/<div class="actions side-drawer-actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
   assert.match(editFooter, /data-action="save-rule"/);
   assert.doesNotMatch(editFooter, /data-action="cancel-rule"/);
   assert.doesNotMatch(editFooter, /data-action="delete-rule"/);

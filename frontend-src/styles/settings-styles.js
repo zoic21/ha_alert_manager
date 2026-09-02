@@ -27,6 +27,22 @@ export const settingsStyles = `
   .settings-wide {
     grid-column: 1/-1;
   }
+  .configuration-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .configuration-entry ha-button {
+    flex: none;
+  }
+  .configuration-drawer-fields {
+    grid-template-columns: 1fr;
+    margin: 0;
+  }
+  .configuration-drawer-fields .full {
+    grid-column: auto;
+  }
   .ignored-reference-chips {
     display: flex;
     flex-wrap: wrap;

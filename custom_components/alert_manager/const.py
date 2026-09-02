@@ -132,7 +132,7 @@ DEFAULT_CONFIG: Final = {
         },
         "execution_errors": {
             "enabled": True,
-            "delay": None,
+            "delay": 0,
             "failure_thresholds": {},
         },
     },

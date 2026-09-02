@@ -26,6 +26,8 @@ export const ruleEditorStyles = `
     --rule-editor-width: 560px;
     --rule-editor-inline-end: 24px;
     --rule-editor-content-gap: 16px;
+    --side-drawer-width: var(--rule-editor-width);
+    --side-drawer-inline-end: var(--rule-editor-inline-end);
   }
   .rules-layout [data-rules-table-page] {
     --alert-manager-rule-table-width: 100%;
@@ -35,13 +37,13 @@ export const ruleEditorStyles = `
       100% - var(--rule-editor-width) - var(--rule-editor-inline-end) - var(--rule-editor-content-gap)
     );
   }
-  ha-card.rule-editor-drawer {
+  ha-card.side-drawer {
     position: fixed;
     z-index: 6;
     inset-block-start: calc(var(--header-height, 56px) + 16px);
     inset-block-end: 16px;
-    inset-inline-end: var(--rule-editor-inline-end);
-    width: var(--rule-editor-width);
+    inset-inline-end: var(--side-drawer-inline-end, 24px);
+    width: var(--side-drawer-width, 560px);
     max-width: calc(100vw - 64px);
     display: flex;
     flex-direction: column;
@@ -51,14 +53,14 @@ export const ruleEditorStyles = `
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
     border-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-drawer ha-dialog-header {
+  .side-drawer ha-dialog-header {
     flex: none;
     background: var(--ha-dialog-surface-background, var(--card-background-color, #fff));
     border-radius: var(--ha-card-border-radius);
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  .rule-editor-form {
+  .side-drawer-form {
     flex: 1;
     min-height: 0;
     overflow: auto;
@@ -68,7 +70,7 @@ export const ruleEditorStyles = `
     border-end-start-radius: var(--ha-card-border-radius);
     border-end-end-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-section {
+  .rule-editor-section, .side-drawer-section {
     padding: 20px;
     background: var(--card-background-color, #fff);
     border-bottom: 1px solid var(--divider-color, #ddd);
@@ -143,7 +145,7 @@ export const ruleEditorStyles = `
     color: var(--error-color, #db4437);
     overflow-wrap: anywhere;
   }
-  .rule-editor-actions {
+  .side-drawer-actions {
     position: sticky;
     bottom: 0;
     z-index: 1;
@@ -191,7 +193,7 @@ export const ruleEditorStyles = `
   .rule-editor-resize:focus-visible {
     outline: none;
   }
-  .rule-editor-backdrop {
+  .side-drawer-backdrop {
     display: none;
   }
   .delay-list {

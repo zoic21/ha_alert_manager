@@ -274,6 +274,7 @@ class AlertManagerPanel extends HTMLElement {
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
     this._automaticMapDraft = null;
+    this._configurationDrawer = null;
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
@@ -341,6 +342,7 @@ class AlertManagerPanel extends HTMLElement {
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
       this._editingRule = null;
+      this._configurationDrawer = null;
       this._notice = null;
       if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
@@ -651,6 +653,7 @@ class AlertManagerPanel extends HTMLElement {
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
       this._editingRule = null;
+      this._configurationDrawer = null;
       this._notice = null;
       this._render();
       if (this._activeTab === "overview") void this._refreshAlerts();

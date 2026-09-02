@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from custom_components.alert_manager.const import (
+    DEFAULT_CONFIG,
     INTEGRATION_VERSION,
     MAX_RULE_CONDITION_TEMPLATE_LENGTH,
     MAX_RULE_ENTITY_IDS,
@@ -38,6 +39,12 @@ from custom_components.alert_manager.validation import (
     validate_rule_payload,
     validate_rule_update_fields,
 )
+
+
+def test_execution_errors_pack_alerts_without_delay_by_default():
+    """Only execution failures bypass the general 900-second default delay."""
+    assert DEFAULT_CONFIG["global_delay"] == 900
+    assert DEFAULT_CONFIG["automatic"]["execution_errors"]["delay"] == 0
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ const sourceNames = [
   "api/alert-manager-api.js",
   "components/alert-table.js",
   "components/config-backups.js",
+  "components/configuration-drawer.js",
   "components/rule-editor.js",
   "views/overview.js",
   "views/history.js",

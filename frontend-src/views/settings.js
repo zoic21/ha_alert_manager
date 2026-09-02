@@ -1,11 +1,16 @@
 import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { downloadTextPayload } from "../components/config-backups.js";
+import {
+  renderConfigurationDrawer,
+  replaceConfigurationDrawer,
+} from "../components/configuration-drawer.js";
 
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
-      ignoredReferenceDraft, busy, recoveryActive = false, configBackupsMarkup = "",
+      ignoredReferenceDraft, configurationDrawer, busy,
+      recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
@@ -25,8 +30,8 @@ export function renderSettings(context) {
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
-        <div class="field"><span class="field-label">${esc(t("settings.entity_exclusions"))}</span><ha-selector id="excluded-entities"></ha-selector></div>
-        <div class="field"><span class="field-label">${esc(t("settings.device_exclusions"))}</span><ha-selector id="excluded-devices"></ha-selector></div>
+        ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
+        ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
@@ -38,13 +43,8 @@ export function renderSettings(context) {
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
-        <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
-          <ha-selector id="delay-entity-${index}"></ha-selector>
-          <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
-        </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
-        <div class="actions delay-add-action"><ha-button appearance="accent" variant="brand" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+      <ha-card outlined class="panel settings-card"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+        ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
@@ -52,7 +52,48 @@ export function renderSettings(context) {
         ${configBackupsMarkup}
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      ${renderSettingsConfigurationDrawer({
+        settingsDraft, entityDelayDraft, configurationDrawer, busy, t,
+      })}
     </form>`;
+}
+
+export function renderSettingsConfigurationEntry(id, label, count, t) {
+  return `<div class="configuration-entry"><span class="field-label">${esc(label)}</span><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration", { count }))}</ha-button></div>`;
+}
+
+export function renderSettingsConfigurationDrawer(context) {
+  const { settingsDraft, entityDelayDraft, configurationDrawer, busy, t } = context;
+  if (configurationDrawer?.kind !== "settings") return "";
+  const id = configurationDrawer.id;
+  let title;
+  let content;
+  if (id === "entity_delays") {
+    title = t("settings.entity_delay");
+    content = `<div><small>${esc(t("settings.delay_help"))}</small></div>
+      <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
+        <ha-selector id="delay-entity-${index}"></ha-selector>
+        <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+      </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>
+      <div class="actions delay-add-action"><ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>`;
+  } else if (id === "excluded_entities") {
+    title = t("settings.entity_exclusions");
+    content = `<div class="field"><span class="field-label">${esc(title)}</span><ha-selector id="excluded-entities"></ha-selector></div>`;
+  } else if (id === "excluded_devices") {
+    title = t("settings.device_exclusions");
+    content = `<div class="field"><span class="field-label">${esc(title)}</span><ha-selector id="excluded-devices"></ha-selector></div>`;
+  } else {
+    return "";
+  }
+  return renderConfigurationDrawer({
+    title,
+    ariaLabel: t("settings.close_configuration_aria", { name: title }),
+    content,
+    saveAction: "save-settings",
+    saveLabel: t("buttons.save"),
+    busy,
+  });
 }
 
 export function renderSettingsPanel() {
@@ -64,6 +105,7 @@ export function renderSettingsPanel() {
       historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
+      configurationDrawer: this._configurationDrawer,
       busy: this._busy,
       recoveryActive: this._configRecovery?.active === true,
       configBackupsMarkup: this._renderConfigBackups({
@@ -218,6 +260,11 @@ export async function saveSettings() {
         await this._refreshHistory();
       }
       this._resetSettingsDraft();
+      this._configurationDrawer = null;
+      replaceConfigurationDrawer(
+        this.shadowRoot?.querySelector?.("#settings-form"),
+        "",
+      );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
@@ -316,6 +363,7 @@ export function hydrateSettingsControls() {
         value,
         this._settingsDraft.excluded_entities,
       );
+      updateSettingsConfigurationCount.call(this, "excluded_entities");
     },
   );
   this._configureSelector(
@@ -327,6 +375,7 @@ export function hydrateSettingsControls() {
         value,
         this._settingsDraft.excluded_devices,
       );
+      updateSettingsConfigurationCount.call(this, "excluded_devices");
     },
   );
   this._entityDelayDraft.forEach((row, index) => {
@@ -339,10 +388,57 @@ export function hydrateSettingsControls() {
   });
 }
 
+export function refreshSettingsConfigurationDrawer() {
+  const form = this.shadowRoot?.querySelector?.("#settings-form");
+  if (!form) {
+    this._render();
+    return;
+  }
+  replaceConfigurationDrawer(form, renderSettingsConfigurationDrawer({
+    settingsDraft: this._settingsDraft,
+    entityDelayDraft: this._entityDelayDraft,
+    configurationDrawer: this._configurationDrawer,
+    busy: this._busy,
+    t: (key, replacements) => this._t(key, replacements),
+  }));
+  this._hydrateSelectors();
+  this._decorateActionIcons();
+}
+
+export function updateSettingsConfigurationCount(id) {
+  const button = this.shadowRoot?.querySelector?.(`#settings-${id}-configuration`);
+  if (!button) return;
+  const count = id === "entity_delays"
+    ? this._entityDelayDraft.length
+    : this._settingsDraft[id].length;
+  button.textContent = this._t("buttons.configuration", { count });
+}
+
 export async function handleSettingsAction(action, button) {
   if (action === "save-settings") {
     const form = this.shadowRoot.querySelector("#settings-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
+    return true;
+  }
+  if (action === "open-settings-configuration") {
+    this._ensureSettingsDraft();
+    this._captureEntityDelayValues();
+    this._configurationDrawer = {
+      kind: "settings",
+      id: button.dataset.configurationId,
+    };
+    refreshSettingsConfigurationDrawer.call(this);
+    return true;
+  }
+  if (
+    action === "close-configuration-drawer"
+    && this._configurationDrawer?.kind === "settings"
+  ) {
+    const id = this._configurationDrawer.id;
+    this._captureEntityDelayValues();
+    this._configurationDrawer = null;
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, id);
     return true;
   }
   if (action === "add-ignored-reference") {
@@ -362,13 +458,15 @@ export async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
-    this._render();
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
-    this._render();
+    refreshSettingsConfigurationDrawer.call(this);
+    updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }
   return false;

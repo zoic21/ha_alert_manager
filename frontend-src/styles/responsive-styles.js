@@ -19,7 +19,7 @@ export const responsiveStyles = `
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
     }
-    .rule-editor-backdrop {
+    .side-drawer-backdrop {
       display: block;
       position: fixed;
       z-index: 5;
@@ -136,7 +136,7 @@ export const responsiveStyles = `
       width: 36px;
       height: 36px;
     }
-    ha-card.rule-editor-drawer {
+    ha-card.side-drawer {
       inset-block-start: var(--header-height, 56px);
       inset-block-end: calc(var(--header-height, 56px) + var(--safe-area-inset-bottom, 0px));
       inset-inline-end: 0;
@@ -159,10 +159,10 @@ export const responsiveStyles = `
     .rule-value-row ha-button {
       margin-top: 0;
     }
-    .rule-editor-actions {
+    .side-drawer-actions {
       flex-wrap: wrap;
     }
-    .rule-editor-actions .action-spacer {
+    .side-drawer-actions .action-spacer {
       display: none;
     }
   }
