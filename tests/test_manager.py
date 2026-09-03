@@ -2434,4 +2434,4 @@ def test_unload_reload_cleans_listeners_and_timers(hass, entry):
     assert all(timer["cancelled"] for timer in hass.timers)
     reloaded = make_manager(hass, entry)
     assert reloaded.records
-    assert sum(len(items) for items in hass.bus.listeners.values()) == 5
+    assert sum(len(items) for items in hass.bus.listeners.values()) == 9

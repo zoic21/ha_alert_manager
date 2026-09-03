@@ -113,6 +113,17 @@ class _ApiMixin:
             "enabled": self.config["history_limit"] > 0,
         }
 
+    async def async_test_notification_profile(self, profile_id: str) -> dict[str, Any]:
+        """Send a test without creating or changing any alert state."""
+        return await self.notifications.async_test_profile(profile_id)
+
+    async def _async_refresh_notification_runtime(self) -> None:
+        """Apply config changes without coupling them to alert persistence."""
+        try:
+            await self.notification_runtime.async_config_updated()
+        except Exception:
+            _LOGGER.exception("Unable to refresh Alert Manager notification runtime")
+
     async def async_test_rule(
         self, data: dict[str, Any], *, rule_id: str | None = None
     ) -> dict[str, Any]:
@@ -424,6 +435,7 @@ class _ApiMixin:
             self._cancel_all_timers()
             self._cancel_all_device_event_timers()
         self._refresh_tracking()
+        await self._async_refresh_notification_runtime()
         self._publish_if_changed(force=True)
         async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         return True
@@ -623,7 +635,8 @@ class _ApiMixin:
                 self._pack_runtime.clear()
             elif disabled_pack_ids:
                 reset_pack_runtimes(self.hass, disabled_pack_ids)
-            await self.async_evaluate_all(save=False, publish=False)
+            if set(changes) != {"notification_profiles"}:
+                await self.async_evaluate_all(save=False, publish=False)
             if "pending_display_delay" in changes:
                 self._reschedule_hidden_pending_visibility(dt_util.now())
             await self._async_save_state()
@@ -632,6 +645,7 @@ class _ApiMixin:
             raise
         if coherence_schedule_changed:
             self._refresh_coherence_schedule()
+        await self._async_refresh_notification_runtime()
         self._publish_if_changed()
         return self.get_config()
 
@@ -709,6 +723,7 @@ class _ApiMixin:
         await self._async_sync_monitoring_notification()
         if previous_recovery_active:
             await self._async_resolve_config_recovery()
+        await self._async_refresh_notification_runtime()
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 

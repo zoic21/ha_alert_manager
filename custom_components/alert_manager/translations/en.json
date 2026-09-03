@@ -212,6 +212,14 @@
       "notification_message": "Alert Manager monitoring is disabled. Turn on “Alert Manager Monitoring” to resume alert detection.",
       "notification_title": "Alert Manager monitoring disabled"
     },
+    "notifications": {
+      "grouped_alerts": "{count} alerts",
+      "reminder_title": "Alert Manager — {count} active alert(s)",
+      "resolved_title": "Alert Manager — {count} back to normal",
+      "started_title": "Alert Manager — {count} new alert(s)",
+      "test_message": "This confirms that the notification profile works.",
+      "test_title": "Alert Manager — Test notification"
+    },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",
       "backups_title": "Automatic backups",

@@ -212,6 +212,14 @@
       "notification_message": "La surveillance Alert Manager est désactivée. Activez « Surveillance Alert Manager » pour reprendre la détection des alertes.",
       "notification_title": "Surveillance Alert Manager désactivée"
     },
+    "notifications": {
+      "grouped_alerts": "{count} alertes",
+      "reminder_title": "Alert Manager — {count} alerte(s) active(s)",
+      "resolved_title": "Alert Manager — {count} retour(s) à la normale",
+      "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
+      "test_message": "Ce message confirme que le profil de notification fonctionne.",
+      "test_title": "Alert Manager — Notification de test"
+    },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",
       "backups_title": "Sauvegardes automatiques",

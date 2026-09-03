@@ -116,11 +116,16 @@ class ServiceValidationError(Exception):
     pass
 
 
+class HomeAssistantError(Exception):
+    pass
+
+
 class TemplateError(Exception):
     pass
 
 
 exceptions.ServiceValidationError = ServiceValidationError
+exceptions.HomeAssistantError = HomeAssistantError
 exceptions.TemplateError = TemplateError
 
 config_entries = _module("homeassistant.config_entries")
@@ -493,6 +498,12 @@ def async_dismiss_notification(hass, notification_id):
 persistent_notification.async_create = async_create_notification
 persistent_notification.async_dismiss = async_dismiss_notification
 
+notify_module = _module("homeassistant.components.notify")
+notify_module.ATTR_MESSAGE = "message"
+notify_module.ATTR_TITLE = "title"
+notify_module.DOMAIN = "notify"
+notify_module.SERVICE_SEND_MESSAGE = "send_message"
+
 entity_platform = _module("homeassistant.helpers.entity_platform")
 entity_platform.AddConfigEntryEntitiesCallback = object
 
@@ -575,6 +586,7 @@ class FakeStates:
 class FakeServices:
     def __init__(self):
         self.handlers = {}
+        self.calls = []
 
     def async_register(self, domain, service, handler, schema=None):
         self.handlers[(domain, service)] = (handler, schema)
@@ -582,7 +594,25 @@ class FakeServices:
     def async_remove(self, domain, service):
         self.handlers.pop((domain, service), None)
 
-    async def async_call(self, domain, service, data, *, context=None):
+    async def async_call(
+        self,
+        domain,
+        service,
+        data,
+        *,
+        blocking=False,
+        context=None,
+        target=None,
+    ):
+        self.calls.append(
+            {
+                "domain": domain,
+                "service": service,
+                "data": data,
+                "blocking": blocking,
+                "target": target,
+            }
+        )
         handler, schema = self.handlers[(domain, service)]
         validated = schema(data) if schema is not None else data
         await handler(ServiceCall(validated, context=context))

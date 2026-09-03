@@ -26,6 +26,8 @@ from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
+from .notification_runtime import NotificationRuntime
+from .notifications import NotificationManager
 from .packs import OCCURRENCE_PACKS, reset_pack_runtimes
 from .storage import (
     AlertManagerConfigBackupStorage,
@@ -49,6 +51,16 @@ class AlertManager(
         self.storage = AlertManagerStorage(hass)
         self.history_storage = AlertManagerHistoryStorage(hass)
         self.config_backup_storage = AlertManagerConfigBackupStorage(hass)
+        self.notifications = NotificationManager(
+            hass, lambda: self.config.get("notification_profiles", [])
+        )
+        self.notification_runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: self.config,
+            lambda: self.records,
+            self.notifications,
+        )
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
         self._area_registry = ar.async_get(hass)
@@ -162,6 +174,7 @@ class AlertManager(
             self.storage.pack_runtime = self._pack_runtime
             migrated = True
         await self._async_load_condition_translations()
+        self.notifications.set_translations(self._condition_translations)
         self.records = records
         self._rebuild_record_index()
         self.history = history
@@ -226,6 +239,7 @@ class AlertManager(
         await self._async_sync_monitoring_notification()
         self._refresh_coherence_schedule()
         await self._async_initialize_config_backups()
+        await self.notification_runtime.async_setup()
 
     def _refresh_coherence_schedule(self) -> None:
         """Replace the optional low-frequency coherence scan listener."""
@@ -238,6 +252,7 @@ class AlertManager(
 
     async def async_unload(self) -> None:
         """Remove listeners and timers, persisting a final snapshot."""
+        await self.notification_runtime.async_unload()
         self._cancel_template_dependency_timers()
         self._cancel_all_pack_rechecks()
         self._unloading = True
