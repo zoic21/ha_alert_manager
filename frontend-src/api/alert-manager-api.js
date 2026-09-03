@@ -6,6 +6,14 @@ export class AlertManagerApi {
   call(message) {
     return this._getHass().callWS(message);
   }
+
+  testRule(rule, ruleId = "") {
+    return this.call({
+      type: "alert_manager/rules/test",
+      rule,
+      ...(ruleId ? { rule_id: ruleId } : {}),
+    });
+  }
 }
 
 const PANEL_STATE_CACHE = new WeakMap();

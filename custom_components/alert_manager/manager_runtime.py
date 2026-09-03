@@ -20,10 +20,8 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    ATTRIBUTE_SOURCES,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
-    VARIATION_SOURCES,
 )
 from .models import (
     AlertDetails,
@@ -33,10 +31,10 @@ from .models import (
     Rule,
     advance_record,
     calculate_due_at,
-    extract_attribute_value,
     safe_float,
 )
 from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, PackNeutral, PackOccurrence
+from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -781,9 +779,7 @@ class _RuntimeMixin:
 
     def _rule_current_value(self, rule: Rule, state: State) -> tuple[bool, Any]:
         """Read one rule source, including dotted list-wildcard attributes."""
-        if rule.source in ATTRIBUTE_SOURCES:
-            return extract_attribute_value(state.attributes, rule.attribute or "")
-        return True, state.state
+        return rule_current_value(rule, state)
 
     @staticmethod
     def _variation_key(rule: Rule, entity_id: str) -> str:
@@ -823,6 +819,53 @@ class _RuntimeMixin:
         variation = current - baseline
         return True, 0.0 if variation == 0 else variation
 
+    def _evaluate_custom_rule(
+        self,
+        rule: Rule,
+        state: State,
+        *,
+        dry_run: bool = False,
+        allow_runtime_baseline: bool = True,
+    ) -> RuleEvaluation:
+        """Evaluate one custom rule through the shared runtime/tester engine."""
+
+        def evaluate_condition(
+            candidate: Rule, current_state: State, current: Any
+        ) -> tuple[bool | None, str | None]:
+            return self._evaluate_rule_condition_template(
+                candidate,
+                current_state,
+                current,
+                track=not dry_run,
+            )
+
+        def resolve_baseline(
+            candidate: Rule, current_state: State, current: float
+        ) -> float | None:
+            if not allow_runtime_baseline:
+                return None
+            key = self._variation_key(candidate, current_state.entity_id)
+            baseline = self._variation_baselines.get(key)
+            if baseline is not None or dry_run:
+                return baseline
+            found, _variation = self._variation_value(candidate, current_state, current)
+            return self._variation_baselines.get(key) if found else None
+
+        return evaluate_rule(
+            rule,
+            state,
+            evaluate_condition=evaluate_condition,
+            resolve_baseline=resolve_baseline,
+            on_variation_gate_false=(
+                None
+                if dry_run
+                else lambda candidate, entity_id: self._clear_variation_baseline(
+                    candidate, entity_id
+                )
+            ),
+            evaluate_all_conditions=dry_run,
+        )
+
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
         if not self._is_base_eligible(state.entity_id):
@@ -849,27 +892,10 @@ class _RuntimeMixin:
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
                 continue
-            if rule.source in VARIATION_SOURCES:
-                found, raw_current = self._rule_current_value(rule, state)
-                numeric_current = safe_float(raw_current) if found else None
-                if numeric_current is None:
-                    continue
-                if not self._rule_template_matches(rule, state, numeric_current):
-                    self._clear_variation_baseline(rule, entity_id)
-                    continue
-                found, current = self._variation_value(rule, state, numeric_current)
-                if not found or not rule.matches(current):
-                    continue
-            else:
-                found, current = self._rule_current_value(rule, state)
-                if not found:
-                    continue
-                if rule.source not in ("jinja", "unchanged") and not rule.matches(
-                    current
-                ):
-                    continue
-                if not self._rule_template_matches(rule, state, current):
-                    continue
+            evaluation = self._evaluate_custom_rule(rule, state)
+            if evaluation.result is not True:
+                continue
+            current = evaluation.value
             alert_id = f"rule:{rule.id}:{entity_id}"
             rendered_message = self._render_rule_message(rule, state, current)
             condition = self._rule_condition(rule, state)

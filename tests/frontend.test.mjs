@@ -4064,13 +4064,14 @@ test("new rule saves message and condition drafts when selector hosts still expo
   );
 });
 
-test("rule editor keeps only save in the footer", () => {
+test("rule editor keeps Test and Save in the visual footer", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
 
   panel._editingRule = {};
   const createHtml = panel._renderRuleEditor();
   const createFooter = createHtml.match(/<div class="actions side-drawer-actions rule-editor-actions">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  assert.match(createFooter, /data-action="test-rule"/);
   assert.match(createFooter, /data-action="save-rule"/);
   assert.doesNotMatch(createFooter, /data-action="cancel-rule"/);
   assert.doesNotMatch(createFooter, /data-action="delete-rule"/);

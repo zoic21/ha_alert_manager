@@ -226,6 +226,29 @@ async def websocket_rules_list(
 @websocket_api.async_response
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "alert_manager/rules/test",
+        vol.Required("rule"): dict,
+        vol.Optional("rule_id"): str,
+    }
+)
+async def websocket_rule_test(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Evaluate a draft rule without changing Alert Manager state."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_test_rule(msg["rule"], rule_id=msg.get("rule_id"))
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "alert_manager/rules/create",
         vol.Required("rule"): dict,
     }
@@ -493,6 +516,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_history_clear,
         websocket_packs_list,
         websocket_rules_list,
+        websocket_rule_test,
         websocket_rule_create,
         websocket_rule_update,
         websocket_rule_yaml_validate,

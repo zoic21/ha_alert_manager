@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
+from datetime import UTC
 from functools import wraps
 from typing import Any
 
@@ -13,6 +14,12 @@ from homeassistant.components.persistent_notification import (
 )
 from homeassistant.components.persistent_notification import (
     async_dismiss as async_dismiss_persistent_notification,
+)
+from homeassistant.const import (
+    ATTR_FRIENDLY_NAME,
+    ATTR_UNIT_OF_MEASUREMENT,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.translation import async_get_translations
@@ -84,6 +91,196 @@ class _ApiMixin:
             "count": len(self.history),
             "retention_limit": self.config["history_limit"],
             "enabled": self.config["history_limit"] > 0,
+        }
+
+    async def async_test_rule(
+        self, data: dict[str, Any], *, rule_id: str | None = None
+    ) -> dict[str, Any]:
+        """Evaluate a complete draft rule without mutating manager state."""
+        existing_rule: Rule | None = None
+        if rule_id is None:
+            validate_rule_count(len(self.config["rules"]) + 1)
+            rule = validate_rule_payload(data)
+        else:
+            validate_rule_update_fields(data)
+            existing = self.config["rules"][self._rule_index(rule_id)]
+            existing_rule = Rule.from_dict(existing)
+            rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
+        self._validate_rule_sources(rule)
+        self._validate_rule_template(rule)
+
+        baseline_compatible = existing_rule is not None and (
+            existing_rule.enabled,
+            existing_rule.source,
+            existing_rule.attribute,
+            existing_rule.condition_template,
+        ) == (
+            rule.enabled,
+            rule.source,
+            rule.attribute,
+            rule.condition_template,
+        )
+        inactivity_compatible = existing_rule is not None and (
+            existing_rule.enabled,
+            existing_rule.source,
+            existing_rule.attribute,
+            existing_rule.operator,
+            existing_rule.condition_template,
+        ) == (
+            rule.enabled,
+            rule.source,
+            rule.attribute,
+            rule.operator,
+            rule.condition_template,
+        )
+
+        results = [
+            self._test_rule_entity(
+                rule,
+                entity_id,
+                allow_runtime_baseline=baseline_compatible,
+                allow_runtime_inactivity=inactivity_compatible,
+            )
+            for entity_id in rule.entity_ids
+        ]
+        return {
+            "enabled": rule.enabled,
+            "duration": rule.duration,
+            "total": len(results),
+            "matched_count": sum(item["status"] == "match" for item in results),
+            "not_matched_count": sum(item["status"] == "no_match" for item in results),
+            "indeterminate_count": sum(
+                item["status"] == "indeterminate" for item in results
+            ),
+            "error_count": sum(item["status"] == "error" for item in results),
+            "results": results,
+        }
+
+    def _test_rule_entity(
+        self,
+        rule: Rule,
+        entity_id: str,
+        *,
+        allow_runtime_baseline: bool,
+        allow_runtime_inactivity: bool,
+    ) -> dict[str, Any]:
+        """Return one compact rule test result for one selected entity."""
+        state = self.hass.states.get(entity_id)
+        base = {
+            "entity_id": entity_id,
+            "name": (
+                state.attributes.get(ATTR_FRIENDLY_NAME, entity_id)
+                if state is not None
+                else entity_id
+            ),
+            "state": state.state if state is not None else None,
+            "source": rule.source,
+            "attribute": rule.attribute,
+            "operator": (
+                None if rule.source in ("jinja", "unchanged") else rule.operator
+            ),
+            "comparison_value": (
+                None
+                if rule.source in ("jinja", "unchanged") or rule.operator == "unchanged"
+                else rule.value
+            ),
+            "duration": rule.duration,
+            "unit": (
+                state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+                if state is not None
+                else None
+            ),
+        }
+        if state is None:
+            return {**base, "status": "error", "reason": "entity_not_found"}
+        if not self._is_base_eligible(entity_id):
+            return {**base, "status": "error", "reason": "entity_disabled"}
+        if state.state == STATE_UNAVAILABLE:
+            return {**base, "status": "no_match", "reason": "state_unavailable"}
+        if state.state == STATE_UNKNOWN:
+            return {**base, "status": "no_match", "reason": "state_unknown"}
+
+        evaluation = self._evaluate_custom_rule(
+            rule,
+            state,
+            dry_run=True,
+            allow_runtime_baseline=allow_runtime_baseline,
+        )
+        message, message_error = (None, None)
+        if evaluation.error_code is None:
+            message, message_error = self._render_rule_message_for_test(
+                rule, state, evaluation.value
+            )
+        status = (
+            "indeterminate"
+            if evaluation.error_code == "baseline_unavailable"
+            else "error"
+            if evaluation.error_code is not None
+            else "match"
+            if evaluation.result is True
+            else "no_match"
+        )
+        result = {
+            **base,
+            "status": status,
+            "raw_value": evaluation.raw_value,
+            "value": evaluation.value,
+            "comparison_result": evaluation.comparison_result,
+            "jinja_result": evaluation.jinja_result,
+            "final_result": evaluation.result,
+            "baseline": evaluation.baseline,
+            "message": message,
+            "message_error": message_error,
+            "reason": evaluation.error_code,
+            "error_detail": evaluation.error_detail,
+        }
+        if rule.source in VARIATION_SOURCES:
+            result["current_value"] = evaluation.raw_value
+            result["variation"] = (
+                evaluation.value if evaluation.baseline is not None else None
+            )
+        if rule.source == "unchanged" or rule.operator == "unchanged":
+            result.update(
+                self._test_rule_inactivity(
+                    rule,
+                    state,
+                    allow_runtime=allow_runtime_inactivity,
+                )
+            )
+        return result
+
+    def _test_rule_inactivity(
+        self, rule: Rule, state: Any, *, allow_runtime: bool
+    ) -> dict[str, Any]:
+        """Read the same inactivity reference available to normal evaluation."""
+        reference = None
+        if allow_runtime:
+            record = self.records.get(f"rule:{rule.id}:{state.entity_id}")
+            if record is not None:
+                reference = record.detected_at
+        if reference is None and rule.condition_template is None:
+            if rule.source == "unchanged":
+                reference = state.last_updated
+            elif rule.source == "state":
+                reference = getattr(state, "last_changed", state.last_updated)
+        if reference is None:
+            return {
+                "unchanged_since": None,
+                "unchanged_seconds": None,
+                "duration_reached": None,
+            }
+        elapsed = max(
+            0,
+            int(
+                (
+                    dt_util.now().astimezone(UTC) - reference.astimezone(UTC)
+                ).total_seconds()
+            ),
+        )
+        return {
+            "unchanged_since": reference.isoformat(),
+            "unchanged_seconds": elapsed,
+            "duration_reached": elapsed >= rule.duration,
         }
 
     def deleted_entities_snapshot(self) -> dict[str, Any]:

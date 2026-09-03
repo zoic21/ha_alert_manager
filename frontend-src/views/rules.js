@@ -365,6 +365,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleEditorError = null;
+    this._clearRuleTestResult();
     this._ruleDirty = false;
     if (navigate) this._render();
     else this._refreshRuleEditor();
@@ -421,6 +422,7 @@ export function replaceRule(rule) {
     else this._config.rules[index] = rule;
     if (this._editingRule?.id === rule.id) {
       this._editingRule = { ...this._editingRule, enabled: rule.enabled };
+      this._clearRuleTestResult();
     }
     this._refreshRulesData();
     if (this._editingRule === null) this._refreshRuleEditor();
@@ -428,6 +430,7 @@ export function replaceRule(rule) {
 
 export async function handleRulesAction(action, button) {
   if (action === "new-rule") {
+    this._clearRuleTestResult();
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -447,6 +450,7 @@ export async function handleRulesAction(action, button) {
   if (action === "add-rule-value") {
     this._captureRuleDraft();
     this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
+    this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleEditor();
     return true;
@@ -456,6 +460,7 @@ export async function handleRulesAction(action, button) {
     const values = this._ruleValueList(this._editingRule.value);
     values.splice(Number(button.dataset.index), 1);
     this._editingRule.value = values.length ? values : [""];
+    this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleEditor();
     return true;
@@ -465,6 +470,13 @@ export async function handleRulesAction(action, button) {
     if (form && !this._busy) {
       if (this._ruleEditorMode === "yaml") await this._saveRuleYaml();
       else if (this._reportFormValidity(form)) await this._saveRule(form);
+    }
+    return true;
+  }
+  if (action === "test-rule") {
+    const form = this.shadowRoot.querySelector("#rule-form");
+    if (form && !this._ruleTestLoading && this._reportFormValidity(form)) {
+      await this._testRule(form);
     }
     return true;
   }

@@ -613,6 +613,14 @@ class AlertManagerApi {
   call(message) {
     return this._getHass().callWS(message);
   }
+
+  testRule(rule, ruleId = "") {
+    return this.call({
+      type: "alert_manager/rules/test",
+      rule,
+      ...(ruleId ? { rule_id: ruleId } : {}),
+    });
+  }
 }
 
 const PANEL_STATE_CACHE = new WeakMap();
@@ -2352,17 +2360,23 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
     } else {
       ruleValue = String(value("value") ?? currentRule.value ?? "");
     }
+    const selectorEntityIds = selectorValues.entityIds;
+    const entityIds = Array.isArray(selectorEntityIds)
+      && selectorEntityIds.length === 0
+      && currentRule.entity_ids?.length
+      ? currentRule.entity_ids
+      : selectorEntityIds ?? currentRule.entity_ids ?? [];
     return {
       ...currentRule,
       name: String(value("name") ?? currentRule.name ?? ""),
-      entity_ids: [...(currentRule.entity_ids ?? [])],
+      entity_ids: Array.isArray(entityIds) ? [...entityIds] : [String(entityIds)],
       enabled: Boolean(currentRule.enabled ?? true),
       source,
       attribute: String(value("attribute") ?? currentRule.attribute ?? ""),
       operator,
       value: ruleValue,
       duration: Number(value("duration") ?? currentRule.duration ?? 900),
-      message: String(currentRule.message ?? selectorValues.message ?? ""),
+      message: String(selectorValues.message || currentRule.message || ""),
       update_message_when_active: Boolean(
         form.querySelector?.("#rule-update-message-when-active")?.checked
           ?? form.elements?.namedItem?.("update_message_when_active")?.checked
@@ -2370,7 +2384,7 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
           ?? false
       ),
       condition_template: String(
-        currentRule.condition_template ?? selectorValues.conditionTemplate ?? "",
+        selectorValues.conditionTemplate || currentRule.condition_template || "",
       ),
       flapping_enabled: Boolean(
         form.querySelector?.("#rule-flapping-enabled")?.checked
@@ -2450,6 +2464,170 @@ function clearRuleEditorError() {
     this.shadowRoot?.querySelector?.(".rule-editor-error")?.remove?.();
 }
 
+function ruleTestValue(value, unit = null) {
+    if (value === null || value === undefined) return null;
+    let rendered;
+    if (typeof value === "string") rendered = value;
+    else if (typeof value === "object") {
+      try {
+        rendered = JSON.stringify(value);
+      } catch (_error) {
+        rendered = String(value);
+      }
+    } else rendered = String(value);
+    return unit ? `${rendered} ${unit}` : rendered;
+}
+
+function ruleTestBoolean(value, t) {
+    if (value === null || value === undefined) return null;
+    return t(value ? "rules.test.true" : "rules.test.false");
+}
+
+function ruleTestDetail(label, value) {
+    if (value === null || value === undefined || value === "") return "";
+    return `<div class="rule-test-detail"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
+}
+
+function ruleTestReason(result, t) {
+    if (!result.reason) return "";
+    const detail = result.error_detail ? ` (${result.error_detail})` : "";
+    return `${t(`rules.test.reasons.${result.reason}`)}${detail}`;
+}
+
+function ruleTestCondition(result, t) {
+    if (!result.operator) return null;
+    const expected = ruleTestValue(result.comparison_value);
+    return expected === null
+      ? t(`operators.${result.operator}`)
+      : `${t(`operators.${result.operator}`)} ${expected}`;
+}
+
+function ruleTestSource(result, t) {
+    const keys = {
+      state: "source_state",
+      attribute: "source_attribute",
+      state_variation: "source_state_variation",
+      attribute_variation: "source_attribute_variation",
+      unchanged: "source_unchanged",
+      jinja: "source_jinja",
+    };
+    return t(`rules.${keys[result.source] ?? "source"}`);
+}
+
+function ruleTestConclusion(result, t, formatDuration) {
+    if (result.status === "error") return t("rules.test.conclusion_error");
+    if (result.status === "indeterminate") {
+      return t("rules.test.conclusion_indeterminate");
+    }
+    if (result.status === "no_match") return t("rules.test.conclusion_no_match");
+    return Number(result.duration) === 0
+      ? t("rules.test.conclusion_immediate")
+      : t("rules.test.conclusion_pending", {
+        duration: formatDuration(result.duration),
+      });
+}
+
+function renderRuleTestResult(result, context) {
+    if (!result) return "";
+    const { t, formatDuration } = context;
+    if (result.request_error) {
+      return `<ha-alert class="rule-test-summary" alert-type="error" role="alert"><strong>${esc(t("rules.test.title_error"))}</strong><div>${esc(result.request_error)}</div></ha-alert>`;
+    }
+    const alertType = result.error_count === result.total
+      ? "error"
+      : result.indeterminate_count > 0 || result.error_count > 0
+      ? "warning"
+      : result.matched_count > 0 ? "success" : "info";
+    const summary = t("rules.test.summary", {
+      matched: result.matched_count,
+      total: result.total,
+    });
+    const notices = [
+      result.indeterminate_count
+        ? t("rules.test.summary_indeterminate", { count: result.indeterminate_count })
+        : "",
+      result.error_count
+        ? t("rules.test.summary_errors", { count: result.error_count })
+        : "",
+      result.enabled === false ? t("rules.test.disabled_notice") : "",
+    ].filter(Boolean);
+    const items = (result.results ?? []).map((item) => {
+      const statusIcon = item.status === "match"
+        ? "mdi:check-circle"
+        : item.status === "no_match"
+        ? "mdi:close-circle-outline"
+        : item.status === "indeterminate"
+        ? "mdi:help-circle-outline"
+        : "mdi:alert-circle";
+      const statusLabel = t(`rules.test.status_${item.status}`);
+      const reason = ruleTestReason(item, t);
+      const unchanged = item.unchanged_seconds === null
+        || item.unchanged_seconds === undefined
+        ? null
+        : t("rules.test.unchanged_elapsed", {
+          duration: formatDuration(item.unchanged_seconds),
+        });
+      const messageError = item.message_error
+        ? t("rules.test.message_error", { error: item.message_error })
+        : null;
+      return `<ha-expansion-panel outlined class="rule-test-entity">
+        <div slot="header" class="rule-test-entity-header"><ha-icon icon="${statusIcon}"></ha-icon><code>${esc(item.entity_id)}</code><span>${esc(statusLabel)}</span></div>
+        <div class="rule-test-details">
+          ${ruleTestDetail(t("rules.test.entity"), item.name)}
+          ${ruleTestDetail(t("rules.test.source"), ruleTestSource(item, t))}
+          ${ruleTestDetail(t("rules.test.attribute"), item.attribute)}
+          ${ruleTestDetail(t("rules.test.current_state"), ruleTestValue(item.state, item.source === "state" ? item.unit : null))}
+          ${ruleTestDetail(t("rules.test.extracted_value"), ruleTestValue(item.raw_value ?? item.value, item.source !== "jinja" ? item.unit : null))}
+          ${ruleTestDetail(t("rules.test.condition"), ruleTestCondition(item, t))}
+          ${ruleTestDetail(t("rules.test.comparison_result"), ruleTestBoolean(item.comparison_result, t))}
+          ${ruleTestDetail(t("rules.test.jinja_result"), ruleTestBoolean(item.jinja_result, t))}
+          ${ruleTestDetail(t("rules.test.baseline"), ruleTestValue(item.baseline, item.unit))}
+          ${ruleTestDetail(t("rules.test.current_value"), ruleTestValue(item.current_value, item.unit))}
+          ${ruleTestDetail(t("rules.test.variation"), ruleTestValue(item.variation, item.unit))}
+          ${ruleTestDetail(t("rules.test.unchanged"), unchanged)}
+          ${ruleTestDetail(t("rules.test.duration_reached"), ruleTestBoolean(item.duration_reached, t))}
+          ${ruleTestDetail(t("rules.test.final_result"), ruleTestBoolean(item.final_result, t))}
+          ${ruleTestDetail(t("rules.test.delay"), formatDuration(item.duration))}
+          ${ruleTestDetail(t("rules.test.reason"), reason)}
+          ${item.message ? `<ha-alert class="rule-test-message" alert-type="info"><strong>${esc(t("rules.test.generated_message"))}</strong><div>${esc(item.message)}</div></ha-alert>` : ""}
+          ${messageError ? `<ha-alert class="rule-test-message" alert-type="error">${esc(messageError)}</ha-alert>` : ""}
+          <p class="rule-test-conclusion">${esc(ruleTestConclusion(item, t, formatDuration))}</p>
+        </div>
+      </ha-expansion-panel>`;
+    }).join("");
+    return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status"><strong>${esc(t("rules.test.title"))}</strong><div>${esc(summary)}</div>${notices.map((notice) => `<div>${esc(notice)}</div>`).join("")}</ha-alert><div class="rule-test-entities">${items}</div>`;
+}
+
+function renderRuleTestResultPanel() {
+    return renderRuleTestResult(this._ruleTestResult, {
+      t: (key, replacements) => this._t(key, replacements),
+      formatDuration: (value) => this._durationText(value),
+    });
+}
+
+function updateRuleTestDisplay({ scroll = false } = {}) {
+    const result = this.shadowRoot?.querySelector?.("[data-rule-test-result]");
+    if (result) result.innerHTML = this._renderRuleTestResult();
+    const button = this.shadowRoot?.querySelector?.('[data-action="test-rule"]');
+    if (button) {
+      button.disabled = Boolean(this._ruleTestLoading);
+      button.loading = Boolean(this._ruleTestLoading);
+      button.toggleAttribute?.("loading", Boolean(this._ruleTestLoading));
+    }
+    if (!scroll) return;
+    const form = this.shadowRoot?.querySelector?.("#rule-form");
+    if (typeof form?.scrollTo === "function") {
+      form.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (form) form.scrollTop = 0;
+}
+
+function clearRuleTestResult() {
+    this._ruleTestSequence += 1;
+    this._ruleTestLoading = false;
+    this._ruleTestResult = null;
+    this._updateRuleTestDisplay();
+}
+
 function ruleAttributeOptions() {
     const attributes = new Set();
     for (const entityId of this._editingRule?.entity_ids ?? []) {
@@ -2481,6 +2659,8 @@ function renderRuleEditor(context) {
       busy,
       editorError,
       yamlError,
+      testResult,
+      testLoading,
       t,
       duplicateLabel,
       useBottomSheet = false,
@@ -2493,6 +2673,8 @@ function renderRuleEditor(context) {
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({
         rule, t, renderTextField, renderNumberField, flappingAvailable,
+        testResult,
+        renderTestResult: context.renderTestResult,
       });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
@@ -2504,7 +2686,7 @@ function renderRuleEditor(context) {
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
-        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
     </ha-card>`;
     return renderSideDrawer({
@@ -2522,22 +2704,29 @@ function renderRuleEditorPanel() {
       busy: this._busy,
       editorError: this._ruleEditorError,
       yamlError: this._ruleYamlError,
+      testResult: this._ruleTestResult,
+      testLoading: this._ruleTestLoading,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
       useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
+      renderTestResult: (result) => renderRuleTestResult(result, {
+        t: (key, replacements) => this._t(key, replacements),
+        formatDuration: (value) => this._durationText(value),
+      }),
       flappingAvailable: Boolean(this._config?.automatic?.flapping?.enabled),
     });
 }
 
 function renderRuleVisualEditor(context) {
-    const { rule, t, renderTextField, renderNumberField, flappingAvailable = false } = context;
+    const { rule, t, renderTextField, renderNumberField, flappingAvailable = false, testResult, renderTestResult = () => "" } = context;
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
     return `
+        <div class="rule-test-result" data-rule-test-result>${renderTestResult(testResult)}</div>
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
@@ -2646,6 +2835,7 @@ async function duplicateRuleDraft() {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleEditorError = null;
+    this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleEditor();
 }
@@ -2655,6 +2845,7 @@ function handleRuleInput(event) {
     const target = event.target;
     if (target?.closest?.("#rule-form")) {
       this._clearRuleEditorError();
+      this._clearRuleTestResult();
       this._ruleDirty = true;
     }
     if (target?.id === "rule-yaml-editor") {
@@ -2670,12 +2861,14 @@ function cancelRuleEditor() {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
+    this._clearRuleTestResult();
     this._clearRuleEditorError();
     this._refreshRuleEditor();
 }
 
 async function switchRuleEditor() {
     this._clearRuleEditorError();
+    this._clearRuleTestResult();
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
       this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
@@ -2778,6 +2971,7 @@ function resetRuleEditorWidth(event) {
 async function saveRule(form) {
     this._clearRuleEditorError();
     const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
+      entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
       conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
       message: this.shadowRoot.querySelector("#rule-message-template")?.value,
     });
@@ -2810,10 +3004,47 @@ async function saveRule(form) {
     }
 }
 
+async function testRule(form) {
+    this._clearRuleEditorError();
+    const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
+      entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
+      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
+      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
+    });
+    const rule = serializeRuleDraft(draft);
+    const id = String(this._editingRule?.id ?? "");
+    this._editingRule = { ...draft, ...(id ? { id } : {}) };
+    const validation = validateRuleDraft(rule);
+    if (!validation.valid) {
+      this._ruleTestResult = { request_error: this._t(validation.errorKey) };
+      this._updateRuleTestDisplay({ scroll: true });
+      return;
+    }
+
+    const sequence = ++this._ruleTestSequence;
+    this._ruleTestResult = null;
+    this._ruleTestLoading = true;
+    this._updateRuleTestDisplay();
+    try {
+      const result = await this._api.testRule(rule, id);
+      if (sequence !== this._ruleTestSequence) return;
+      this._ruleTestResult = result;
+    } catch (error) {
+      if (sequence !== this._ruleTestSequence) return;
+      this._ruleTestResult = { request_error: this._errorText(error) };
+    } finally {
+      if (sequence === this._ruleTestSequence) {
+        this._ruleTestLoading = false;
+        this._updateRuleTestDisplay({ scroll: true });
+      }
+    }
+}
+
 function captureRuleDraft() {
     const form = this.shadowRoot.querySelector?.("#rule-form");
     if (!form || this._editingRule === null) return;
     this._editingRule = captureRuleDraftFromForm(form, this._editingRule, {
+      entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
       conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
       message: this.shadowRoot.querySelector("#rule-message-template")?.value,
     });
@@ -3986,6 +4217,7 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleEditorError = null;
+    this._clearRuleTestResult();
     this._ruleDirty = false;
     if (navigate) this._render();
     else this._refreshRuleEditor();
@@ -4042,6 +4274,7 @@ function replaceRule(rule) {
     else this._config.rules[index] = rule;
     if (this._editingRule?.id === rule.id) {
       this._editingRule = { ...this._editingRule, enabled: rule.enabled };
+      this._clearRuleTestResult();
     }
     this._refreshRulesData();
     if (this._editingRule === null) this._refreshRuleEditor();
@@ -4049,6 +4282,7 @@ function replaceRule(rule) {
 
 async function handleRulesAction(action, button) {
   if (action === "new-rule") {
+    this._clearRuleTestResult();
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -4068,6 +4302,7 @@ async function handleRulesAction(action, button) {
   if (action === "add-rule-value") {
     this._captureRuleDraft();
     this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
+    this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleEditor();
     return true;
@@ -4077,6 +4312,7 @@ async function handleRulesAction(action, button) {
     const values = this._ruleValueList(this._editingRule.value);
     values.splice(Number(button.dataset.index), 1);
     this._editingRule.value = values.length ? values : [""];
+    this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleEditor();
     return true;
@@ -4086,6 +4322,13 @@ async function handleRulesAction(action, button) {
     if (form && !this._busy) {
       if (this._ruleEditorMode === "yaml") await this._saveRuleYaml();
       else if (this._reportFormValidity(form)) await this._saveRule(form);
+    }
+    return true;
+  }
+  if (action === "test-rule") {
+    const form = this.shadowRoot.querySelector("#rule-form");
+    if (form && !this._ruleTestLoading && this._reportFormValidity(form)) {
+      await this._testRule(form);
     }
     return true;
   }
@@ -5959,6 +6202,58 @@ const ruleEditorStyles = `
     width: 100%;
     margin: 0 0 4px;
   }
+  .rule-test-result:empty {
+    display: none;
+  }
+  .rule-test-result:not(:empty) {
+    padding: 16px 20px;
+    background: var(--card-background-color, #fff);
+    border-bottom: 1px solid var(--divider-color, #ddd);
+  }
+  .rule-test-summary {
+    display: block;
+  }
+  .rule-test-summary strong, .rule-test-message strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+  .rule-test-entities {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .rule-test-entity-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .rule-test-entity-header code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rule-test-details {
+    display: grid;
+    gap: 8px;
+    padding: 4px 16px 16px;
+  }
+  .rule-test-detail {
+    display: grid;
+    grid-template-columns: minmax(120px, .8fr) minmax(0, 1.2fr);
+    gap: 12px;
+  }
+  .rule-test-detail strong {
+    overflow-wrap: anywhere;
+    text-align: end;
+  }
+  .rule-test-message {
+    margin-top: 4px;
+  }
+  .rule-test-conclusion {
+    margin: 4px 0 0;
+  }
   .action-spacer {
     flex: 1;
   }
@@ -6155,6 +6450,10 @@ const responsiveStyles = `
     .actions ha-button {
       width: 100%;
     }
+    .rule-editor-actions ha-button {
+      width: auto;
+      flex: 1;
+    }
     .rules-header {
       align-items: stretch;
       flex-direction: column;
@@ -6229,6 +6528,13 @@ const responsiveStyles = `
       align-items: stretch;
       flex-direction: column;
     }
+    .rule-test-detail {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+    .rule-test-detail strong {
+      text-align: start;
+    }
     .configuration-section-heading {
       align-items: center;
     }
@@ -6268,7 +6574,6 @@ const ACTION_HANDLERS = [
   handleSettingsAction,
   handleRulesAction,
 ];
-
 class AlertManagerPanel extends HTMLElement {
   _load = load;
   _refreshHistory = refreshHistory;
@@ -6380,9 +6685,12 @@ class AlertManagerPanel extends HTMLElement {
   _refreshRuleEditor = refreshRuleEditor;
   _openRuleEditor = openRuleEditor;
   _clearRuleEditorError = clearRuleEditorError;
+  _clearRuleTestResult = clearRuleTestResult;
   _ruleAttributeOptions = ruleAttributeOptions;
   _refreshRuleAttributeSelector = refreshRuleAttributeSelector;
   _renderRuleEditor = renderRuleEditorPanel;
+  _renderRuleTestResult = renderRuleTestResultPanel;
+  _updateRuleTestDisplay = updateRuleTestDisplay;
   _ruleValueList = ruleValueList;
   _ruleSummary = ruleSummary;
   _duplicateRuleLabel = duplicateRuleLabel;
@@ -6397,6 +6705,7 @@ class AlertManagerPanel extends HTMLElement {
   _stopRuleEditorResize = stopRuleEditorResize;
   _resetRuleEditorWidth = resetRuleEditorWidth;
   _saveRule = saveRule;
+  _testRule = testRule;
   _captureRuleDraft = captureRuleDraft;
   _date = date;
   _remaining = remaining;
@@ -6417,7 +6726,6 @@ class AlertManagerPanel extends HTMLElement {
   _hydrateRuleEditorControls = hydrateRuleEditorControls;
   _hydrateAutomaticControls = hydrateAutomaticControls;
   _hydrateSettingsControls = hydrateSettingsControls;
-
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -6458,6 +6766,9 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleEditorError = null;
+    this._ruleTestResult = null;
+    this._ruleTestLoading = false;
+    this._ruleTestSequence = 0;
     this._ruleDirty = false;
     this._loading = true;
     this._cachedStateNeedsRefresh = false;
@@ -6501,7 +6812,6 @@ class AlertManagerPanel extends HTMLElement {
   set hass(value) {
     setHass.call(this, value);
   }
-
   get hass() {
     return this._hass;
   }
@@ -6514,7 +6824,6 @@ class AlertManagerPanel extends HTMLElement {
   set panel(value) {
     this._panel = value;
   }
-
   set route(value) {
     this._route = value;
     const activeTab = this._tabFromRoute(value);
@@ -6543,7 +6852,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     this._updateDrawerLayout(previousNarrow);
   }
-
   _upgradeProperty(name) {
     if (!Object.prototype.hasOwnProperty.call(this, name)) return;
     const value = this[name];
@@ -6580,7 +6888,6 @@ class AlertManagerPanel extends HTMLElement {
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();
   }
-
   _tabs() {
     const tabs = TABS.map(({ path, translationKey, iconPath }) => ({
       path,
@@ -6667,7 +6974,6 @@ class AlertManagerPanel extends HTMLElement {
   _renderPageMessages() {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
-
   _pageMessagesContent() {
     return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
@@ -6727,6 +7033,7 @@ class AlertManagerPanel extends HTMLElement {
         // value-changed. Mirror the value so later reads are never stale.
         element.value = eventValue;
         if (id.startsWith("rule-")) this._clearRuleEditorError();
+        if (id.startsWith("rule-")) this._clearRuleTestResult();
         onChange(eventValue);
         if (id === "rule-entity-ids") this._refreshRuleAttributeSelector();
       }
@@ -6754,6 +7061,7 @@ class AlertManagerPanel extends HTMLElement {
     element.addEventListener("selected", (event) => {
       element.value = event.detail?.value;
       if (id.startsWith("rule-")) this._clearRuleEditorError();
+      if (id.startsWith("rule-")) this._clearRuleTestResult();
       onChange?.(event.detail?.value);
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
@@ -6870,6 +7178,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _handleChange(event) {
     handleSettingsInput.call(this, event);
+    if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);
@@ -6923,7 +7232,6 @@ class AlertManagerPanel extends HTMLElement {
       else if (this._reportFormValidity(form)) await this._saveRule(form);
     }
   }
-
   _reportFormValidity(form) {
     let valid = form.reportValidity?.() ?? true;
     form.querySelectorAll?.("ha-input").forEach((field) => {
@@ -6940,7 +7248,6 @@ class AlertManagerPanel extends HTMLElement {
     return panelStyles();
   }
 }
-
 if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
 }

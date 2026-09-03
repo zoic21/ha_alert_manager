@@ -30,6 +30,7 @@ from custom_components.alert_manager.websocket import (
     websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
+    websocket_rule_test,
     websocket_rule_update,
     websocket_rule_yaml_validate,
     websocket_rules_list,
@@ -232,6 +233,37 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     assert manager.get_config()["rules"] == []
 
 
+def test_websocket_rule_test_is_admin_only_and_returns_draft_result(hass, entry):
+    """The dedicated endpoint evaluates a complete unsaved draft."""
+    hass.states.set("sensor.temperature", "18.2")
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    payload = {
+        "name": "Temperature",
+        "entity_ids": ["sensor.temperature"],
+        "enabled": False,
+        "source": "state",
+        "operator": "below",
+        "value": "19",
+        "duration": 600,
+    }
+
+    asyncio.run(
+        websocket_rule_test(
+            hass,
+            connection,
+            {"id": 55, "type": "alert_manager/rules/test", "rule": payload},
+        )
+    )
+
+    assert connection.errors == []
+    assert connection.results[0][0] == 55
+    assert connection.results[0][1]["matched_count"] == 1
+    assert manager.config["rules"] == []
+
+
 def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entry):
     """Read, YAML, history and import/export APIs all inherit the admin guard."""
     manager = AlertManager(hass, entry)
@@ -251,6 +283,20 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
         (websocket_packs_list, {"id": 8}),
         (websocket_rules_list, {"id": 9}),
+        (
+            websocket_rule_test,
+            {
+                "id": 26,
+                "rule": {
+                    "name": "Test",
+                    "entity_ids": ["sensor.test"],
+                    "source": "state",
+                    "operator": "equals",
+                    "value": "on",
+                    "duration": 0,
+                },
+            },
+        ),
         (websocket_rule_yaml_validate, {"id": 10, "yaml": "name: test"}),
         (websocket_config_export, {"id": 11}),
         (websocket_config_import_validate, {"id": 12, "yaml": "version: 1"}),
@@ -270,7 +316,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 19
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 20
     assert connection.results == []
 
 
