@@ -5754,6 +5754,7 @@ const settingsStyles = `
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(110px, 1fr));
+    align-items: end;
     gap: 10px;
   }
   .pack-configuration[hidden],

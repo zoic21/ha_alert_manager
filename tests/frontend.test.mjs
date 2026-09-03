@@ -2405,6 +2405,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   const styles = compactCss(panel._styles());
   assert.match(styles, /\.delay-row\{[^}]*align-items:start/);
   assert.match(styles, /\.delay-row>ha-button\{margin-top:8px\}/);
+  assert.match(styles, /\.pack-settings-values\{[^}]*align-items:end/);
   assert.doesNotMatch(
     styles,
     /#rules-table\{[^}]*--data-table-row-height/,
