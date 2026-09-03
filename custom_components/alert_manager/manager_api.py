@@ -28,7 +28,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
-from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, reset_pack_runtimes
+from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .storage import sort_history
 from .validation import (
     validate_config,
@@ -197,8 +197,7 @@ class _ApiMixin:
             else:
                 self._freeze_pending_alerts(dt_util.now())
                 self._clear_variation_baselines()
-                for pack in OCCURRENCE_PACKS:
-                    self._pack_runtime.pop(pack.id, None)
+                self._pack_runtime.clear()
             await self._async_save_state()
         except Exception:
             self.config = previous_config
@@ -395,12 +394,9 @@ class _ApiMixin:
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
-        exclusions_changed = any(
+        reset_all_pack_runtimes = not candidate["monitoring_enabled"] or any(
             candidate[key] != self.config[key]
             for key in ("excluded_entities", "excluded_devices", "excluded_labels")
-        )
-        reset_all_pack_runtimes = (
-            not candidate["monitoring_enabled"] or exclusions_changed
         )
         disabled_pack_ids = {
             pack.id
@@ -416,27 +412,11 @@ class _ApiMixin:
             ):
                 self._clear_variation_baselines()
             self._rebuild_rule_index()
-            if disabled_pack_ids:
-                self._resolve_pack_records(disabled_pack_ids, dt_util.now())
-                for pack_id in disabled_pack_ids:
-                    self._pack_runtime.pop(pack_id, None)
-            if exclusions_changed:
-                occurrence_pack_ids = {pack.id for pack in OCCURRENCE_PACKS}
-                ineligible_entities = {
-                    record.details.entity_id
-                    for record in self.records.values()
-                    if record.details.type in occurrence_pack_ids
-                    and not self._is_automatic_eligible(record.details.entity_id)
-                }
-                self._resolve_pack_records(
-                    occurrence_pack_ids,
-                    dt_util.now(),
-                    entity_ids=ineligible_entities,
-                )
+            for pack_id in disabled_pack_ids:
+                self._pack_runtime.pop(pack_id, None)
             if reset_all_pack_runtimes:
                 reset_pack_runtimes(self.hass)
-                for pack in OCCURRENCE_PACKS:
-                    self._pack_runtime.pop(pack.id, None)
+                self._pack_runtime.clear()
             elif disabled_pack_ids:
                 reset_pack_runtimes(self.hass, disabled_pack_ids)
             await self.async_evaluate_all(save=False, publish=False)

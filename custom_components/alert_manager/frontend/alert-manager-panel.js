@@ -4195,11 +4195,11 @@ async function saveAutomatic() {
     captureAutomaticConfigurationValues.call(this);
     const automatic = {};
     for (const pack of this._packs.filter((item) => item.available)) {
-      const delayInput = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
       automatic[pack.id] = {
         enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`).checked,
       };
       if (pack.uses_delay !== false) {
+        const delayInput = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
         automatic[pack.id].delay = delayInput.value === "" ? null : Number(delayInput.value);
       }
       for (const field of pack.config_fields ?? []) {

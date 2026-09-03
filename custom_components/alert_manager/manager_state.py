@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -23,7 +24,7 @@ from .const import (
     SIGNAL_HISTORY_UPDATED,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
-from .packs import PackGeneratedAlert
+from .packs.base import PackGeneratedAlert
 from .storage import sort_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,32 +74,6 @@ class _StateMixin:
         record_ids.discard(alert_id)
         if not record_ids:
             self._record_ids_by_entity.pop(entity_id, None)
-
-    def _resolve_pack_records(
-        self,
-        pack_ids: set[str],
-        now: datetime,
-        *,
-        entity_ids: set[str] | None = None,
-        emit_events: bool = True,
-    ) -> bool:
-        """Remove records owned by disabled packs using the normal lifecycle."""
-        changed = False
-        for alert_id, record in tuple(self.records.items()):
-            if record.details.type not in pack_ids or (
-                entity_ids is not None and record.details.entity_id not in entity_ids
-            ):
-                continue
-            self._pop_record(alert_id)
-            self._cancel_timer(alert_id)
-            changed = True
-            if record.status is AlertStatus.ACTIVE:
-                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
-                if emit_events:
-                    self._fire_resolved(record, now)
-        if changed:
-            self._immediate_state_save_required = True
-        return changed
 
     def _build_public_snapshot(
         self,
@@ -373,18 +348,21 @@ class _StateMixin:
         condition = self._localized_pack_condition(
             generated.condition_key, generated.condition_params
         )
-        details = self._details(
-            occurrence.state,
-            alert_id,
-            pack_id,
-            condition,
+        details = replace(
+            source,
+            id=alert_id,
+            type=pack_id,
             value=generated.value,
+            condition=condition,
             condition_key=generated.condition_key,
             condition_params=generated.condition_params,
-            rule_id=source.rule_id,
             rule_name=generated.rule_name,
             message=condition,
             source=source.id,
+            operator=None,
+            comparison_value=None,
+            attribute=None,
+            unit=None,
         )
         record = self.records.get(alert_id)
         if record is None:

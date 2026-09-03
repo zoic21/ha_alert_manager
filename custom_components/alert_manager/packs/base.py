@@ -78,7 +78,6 @@ class PackOccurrence:
     """Describe one genuinely new source anomaly seen during normal runtime."""
 
     source: AlertDetails
-    state: State
     occurred_at: datetime
     active_alert_ids: Collection[str] = frozenset()
 

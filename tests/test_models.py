@@ -761,6 +761,45 @@ def test_pack_declared_device_number_map_is_strictly_validated():
         )
 
 
+def test_pack_declared_device_settings_map_is_strictly_validated():
+    """Structured device overrides require every bounded pack setting."""
+    device_id = "a" * 32
+    normalized = validate_config(
+        {
+            "automatic": {
+                "flapping": {
+                    "device_overrides": {
+                        device_id: {
+                            "occurrences": "3",
+                            "window": "600",
+                            "recovery": "120",
+                        }
+                    }
+                }
+            }
+        }
+    )
+    assert normalized["automatic"]["flapping"]["device_overrides"] == {
+        device_id: {"occurrences": 3, "window": 600, "recovery": 120}
+    }
+    with pytest.raises(ValueError, match="Missing .* recovery"):
+        validate_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "device_overrides": {
+                            device_id: {"occurrences": 3, "window": 600}
+                        }
+                    }
+                }
+            }
+        )
+    with pytest.raises(ValueError, match="between 2 and 1000"):
+        validate_config({"automatic": {"flapping": {"occurrences": 1001}}})
+    with pytest.raises(ValueError, match="Unknown automatic.flapping field: delay"):
+        validate_config_update({"automatic": {"flapping": {"delay": 0}}})
+
+
 def test_pack_declared_entity_number_map_is_strictly_validated():
     """Entity maps enforce their declared domains, bounds and integer step."""
     normalized = validate_config(

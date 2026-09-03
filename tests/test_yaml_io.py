@@ -342,6 +342,24 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
     }
 
 
+def test_older_export_without_flapping_pack_uses_disabled_default() -> None:
+    """Exports created before flapping remain importable without enabling it."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace(
+        "    flapping:\n"
+        "      enabled: false\n"
+        "      occurrences: 5\n"
+        "      window: 3600\n"
+        "      recovery: 1800\n"
+        "      device_overrides: {}\n",
+        "",
+    )
+
+    imported = parse_config_yaml(legacy)
+
+    assert imported["automatic"]["flapping"] == DEFAULT_CONFIG["automatic"]["flapping"]
+
+
 def test_dev14_active_display_delay_import_is_migrated() -> None:
     """The short-lived dev14 YAML key keeps its value with corrected semantics."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))

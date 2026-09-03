@@ -6,13 +6,15 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from homeassistant.core import Event, State
+from homeassistant.core import Event
 
 from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertDetails, AlertStatus
+from custom_components.alert_manager.packs import flapping
 from custom_components.alert_manager.packs.base import PackOccurrence
-from custom_components.alert_manager.packs.flapping import PACK
+
+PACK = flapping.PACK
 
 
 def run(coroutine):
@@ -101,10 +103,7 @@ def test_threshold_activates_immediately_without_flapping_pending(hass, entry, s
         if item["type"] == "flapping"
     ]
     assert manager.history == []
-    assert (
-        len(manager._pack_runtime["flapping"]["sources"]["unavailable:sensor.test"])
-        == 3
-    )
+    assert len(manager._pack_runtime["flapping"]["unavailable:sensor.test"]) == 3
 
 
 def test_live_state_batch_observes_once_and_uses_one_store_write(hass, entry, set_now):
@@ -134,8 +133,8 @@ def test_live_state_batch_observes_once_and_uses_one_store_write(hass, entry, se
 
     first, writes = run(transition("unavailable", old_state, start))
     assert writes == 1
-    stored_sources = hass.stores["alert_manager"]["pack_runtime"]["flapping"]["sources"]
-    assert len(stored_sources["unavailable:sensor.test"]) == 1
+    stored_sources = hass.stores["alert_manager"]["pack_runtime"]["flapping"]
+    assert stored_sources["unavailable:sensor.test"] == [start.timestamp()]
     normal, _writes = run(transition("ok", first, start + timedelta(seconds=1)))
     _second, writes = run(
         transition("unavailable", normal, start + timedelta(seconds=2))
@@ -196,6 +195,25 @@ def test_occurrence_pack_runs_once_after_every_entity_in_batch(
     }
 
 
+def test_disabled_occurrence_pack_adds_no_work_to_source_creation(
+    hass, entry, set_now, monkeypatch
+):
+    """No occurrence objects are built while every consumer is disabled."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+
+    def unexpected_occurrence(**_kwargs):
+        raise AssertionError("disabled occurrence pack entered the hot path")
+
+    monkeypatch.setattr(manager_runtime, "PackOccurrence", unexpected_occurrence)
+    live_state(manager, hass, "sensor.test", "unavailable")
+
+    assert "unavailable:sensor.test" in manager.records
+    assert manager._pack_runtime == {}
+
+
 def test_old_occurrences_leave_the_window(hass, entry, set_now):
     """Only occurrences inside the configured rolling window count."""
     start = datetime(2026, 9, 3, 8, tzinfo=UTC)
@@ -208,7 +226,7 @@ def test_old_occurrences_leave_the_window(hass, entry, set_now):
     occurrence(manager, hass, set_now, start + timedelta(seconds=10))
     occurrence(manager, hass, set_now, start + timedelta(seconds=71))
     assert "flapping:unavailable:sensor.test" not in manager.records
-    stored = manager._pack_runtime["flapping"]["sources"]["unavailable:sensor.test"]
+    stored = manager._pack_runtime["flapping"]["unavailable:sensor.test"]
     assert len(stored) == 1
 
 
@@ -290,7 +308,7 @@ def test_technical_reevaluations_do_not_create_occurrences(hass, entry, set_now)
     configure(manager, occurrences=2)
     run(manager.async_evaluate_all(restoring=True))
     run(manager.async_evaluate_all())
-    assert manager._pack_runtime.get("flapping", {}).get("sources", {}) == {}
+    assert manager._pack_runtime.get("flapping", {}) == {}
     assert not [
         record
         for record in manager.records.values()
@@ -302,7 +320,6 @@ def test_flapping_pack_does_not_observe_itself(hass, set_now):
     """A generated flapping alert can never feed the pack's own memory."""
     now = datetime(2026, 9, 3, 8, tzinfo=UTC)
     set_now(now)
-    state = State("sensor.test", "unavailable")
     source = AlertDetails(
         id="flapping:unavailable:sensor.test",
         type="flapping",
@@ -314,12 +331,51 @@ def test_flapping_pack_does_not_observe_itself(hass, set_now):
     data = {}
     result = PACK.occurrence_batch_handler(
         hass,
-        (PackOccurrence(source=source, state=state, occurred_at=now),),
+        (PackOccurrence(source=source, occurred_at=now),),
         {"occurrences": 2, "window": 60, "recovery": 60},
         data,
     )
     assert result == ()
     assert data == {}
+
+
+def test_occurrence_memory_keeps_only_the_newest_sources(hass, set_now, monkeypatch):
+    """The pack enforces its source bound even between periodic cleanups."""
+    now = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(now)
+    monkeypatch.setattr(flapping, "MAX_SOURCES", 2)
+    occurrences = tuple(
+        PackOccurrence(
+            source=AlertDetails(
+                id=f"unavailable:sensor.test_{index}",
+                type="unavailable",
+                entity_id=f"sensor.test_{index}",
+                name=f"Test {index}",
+                value="unavailable",
+                condition="Unavailable",
+            ),
+            occurred_at=now + timedelta(seconds=index),
+        )
+        for index in range(3)
+    )
+    data = {}
+
+    PACK.occurrence_batch_handler(
+        hass,
+        occurrences,
+        {
+            "occurrences": 5,
+            "window": 60,
+            "recovery": 60,
+            "device_overrides": {},
+        },
+        data,
+    )
+
+    assert set(data) == {
+        "unavailable:sensor.test_1",
+        "unavailable:sensor.test_2",
+    }
 
 
 def test_new_occurrence_extends_resolution_and_timer_resolves(hass, entry, set_now):
@@ -374,7 +430,7 @@ def test_active_alert_and_occurrences_survive_restart(hass, entry, set_now):
     run(reloaded.async_setup())
     assert reloaded.records[alert_id].status is AlertStatus.ACTIVE
     assert reloaded.records[alert_id].expires_at == expected_deadline
-    assert reloaded._pack_runtime["flapping"]["sources"]
+    assert reloaded._pack_runtime["flapping"]
     assert any(
         timer["point"] == expected_deadline and not timer["cancelled"]
         for timer in hass.timers
@@ -439,9 +495,36 @@ def test_disabling_pack_cancels_alert_timer_and_keeps_history(hass, entry, set_n
     run(manager.async_update_config({"automatic": {"flapping": {"enabled": False}}}))
     assert alert_id not in manager.records
     assert "flapping" not in manager._pack_runtime
+    assert flapping._LAST_CLEANUP not in hass.data
     assert manager.history[0].id == alert_id
     assert not [
         timer
         for timer in hass.timers
         if timer["point"] == start + timedelta(seconds=130) and not timer["cancelled"]
+    ]
+
+
+def test_excluding_source_resolves_flapping_through_normal_evaluation(
+    hass, entry, set_now
+):
+    """Generic eligibility removes a deadline alert and its timer."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=2, recovery=120)
+    occurrence(manager, hass, set_now, start)
+    occurrence(manager, hass, set_now, start + timedelta(seconds=10))
+    alert_id = "flapping:unavailable:sensor.test"
+    deadline = manager.records[alert_id].expires_at
+
+    run(manager.async_update_config({"excluded_entities": ["sensor.test"]}))
+
+    assert alert_id not in manager.records
+    assert manager._pack_runtime == {}
+    assert manager.history[0].id == alert_id
+    assert not [
+        timer
+        for timer in hass.timers
+        if timer["point"] == deadline and not timer["cancelled"]
     ]

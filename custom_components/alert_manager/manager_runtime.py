@@ -231,8 +231,18 @@ class _RuntimeMixin:
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
+            occurrence_packs = (
+                tuple(
+                    pack
+                    for pack in OCCURRENCE_PACKS
+                    if self.config["automatic"][pack.id]["enabled"]
+                    and self._pack_is_available(pack.id)
+                )
+                if collect_occurrences and not restoring
+                else ()
+            )
             new_occurrences: list[PackOccurrence] | None = (
-                [] if collect_occurrences and not restoring else None
+                [] if occurrence_packs else None
             )
             for entity_id in entity_ids:
                 try:
@@ -247,11 +257,7 @@ class _RuntimeMixin:
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
             if new_occurrences:
                 batch = tuple(new_occurrences)
-                for pack in OCCURRENCE_PACKS:
-                    if not self.config["automatic"][pack.id][
-                        "enabled"
-                    ] or not self._pack_is_available(pack.id):
-                        continue
+                for pack in occurrence_packs:
                     for generated in pack.occurrence_batch_handler(
                         self.hass,
                         batch,
@@ -611,7 +617,6 @@ class _RuntimeMixin:
                     _new_occurrences.append(
                         PackOccurrence(
                             source=details,
-                            state=state,
                             occurred_at=now,
                             active_alert_ids=self.records.keys(),
                         )
@@ -662,7 +667,15 @@ class _RuntimeMixin:
         for alert_id in existing_ids - candidates.keys():
             record = self.records.get(alert_id)
             if record is not None and record.expires_at is not None:
-                continue
+                pack_config = self.config["automatic"].get(record.details.type)
+                if (
+                    pack_config is not None
+                    and pack_config["enabled"]
+                    and self._pack_is_available(record.details.type)
+                    and self._is_base_eligible(entity_id)
+                    and self._is_automatic_eligible(entity_id)
+                ):
+                    continue
             record = self._pop_record(alert_id)
             if record is None:
                 continue
