@@ -77,6 +77,7 @@ class AlertManagerStorage:
             minor_version=STORAGE_MINOR_VERSION,
         )
         self.variation_baselines: dict[str, float] = {}
+        self.pack_runtime: dict[str, dict[str, Any]] = {}
 
     async def async_load(
         self,
@@ -97,6 +98,7 @@ class AlertManagerStorage:
                     "Existing configuration storage could not be loaded"
                 )
             self.variation_baselines = {}
+            self.pack_runtime = {}
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
@@ -111,6 +113,17 @@ class AlertManagerStorage:
             raw.get("variation_baselines", {})
         )
         migrated |= baselines_migrated
+        raw_pack_runtime = raw.get("pack_runtime", {})
+        if isinstance(raw_pack_runtime, dict):
+            self.pack_runtime = {
+                pack_id: deepcopy(data)
+                for pack_id, data in raw_pack_runtime.items()
+                if isinstance(pack_id, str) and isinstance(data, dict)
+            }
+            migrated |= len(self.pack_runtime) != len(raw_pack_runtime)
+        else:
+            self.pack_runtime = {}
+            migrated = True
         config = _merge_dict(deepcopy(DEFAULT_CONFIG), migrated_config)
         records: dict[str, AlertRecord] = {}
         raw_alerts = raw.get("alerts", {})
@@ -184,6 +197,7 @@ class AlertManagerStorage:
                     for alert_id, record in records.items()
                 },
                 "variation_baselines": dict(self.variation_baselines),
+                "pack_runtime": deepcopy(self.pack_runtime),
             }
         )
 

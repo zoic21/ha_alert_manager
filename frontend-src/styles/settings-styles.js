@@ -356,4 +356,26 @@ export const settingsStyles = `
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
+  .pack-settings-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pack-settings-values {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    gap: 10px;
+  }
+  .pack-source-list {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .pack-source-row {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: 12px;
+  }
 `;

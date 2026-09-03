@@ -78,6 +78,9 @@ DATA_COHERENCE_SCAN_TASK: HassKey = HassKey(f"{DOMAIN}_coherence_scan_task")
 DEFAULT_DELAY: Final = 900
 DEFAULT_PENDING_DISPLAY_DELAY: Final = 10
 DEFAULT_BATTERY_THRESHOLD: Final = 15.0
+DEFAULT_FLAPPING_OCCURRENCES: Final = 5
+DEFAULT_FLAPPING_WINDOW: Final = 3600
+DEFAULT_FLAPPING_RECOVERY: Final = 1800
 DEFAULT_EXCLUSION_LABEL: Final = "pas_d_alerte"
 DEFAULT_HISTORY_LIMIT: Final = 100
 DEFAULT_COHERENCE_SCHEDULE: Final = "none"
@@ -97,12 +100,14 @@ CATEGORY_UNAVAILABLE: Final = "unavailable"
 CATEGORY_CONNECTIVITY: Final = "connectivity"
 CATEGORY_UNIFI: Final = "unifi"
 CATEGORY_BATTERY: Final = "battery"
+CATEGORY_FLAPPING: Final = "flapping"
 CATEGORIES: Final = (
     CATEGORY_UNAVAILABLE,
     CATEGORY_CONNECTIVITY,
     CATEGORY_UNIFI,
     CATEGORY_BATTERY,
     "execution_errors",
+    CATEGORY_FLAPPING,
 )
 
 DEFAULT_CONFIG: Final = {
@@ -134,6 +139,25 @@ DEFAULT_CONFIG: Final = {
             "enabled": True,
             "delay": 0,
             "failure_thresholds": {},
+        },
+        CATEGORY_FLAPPING: {
+            "enabled": False,
+            "occurrences": DEFAULT_FLAPPING_OCCURRENCES,
+            "window": DEFAULT_FLAPPING_WINDOW,
+            "recovery": DEFAULT_FLAPPING_RECOVERY,
+            "source_packs": {
+                CATEGORY_UNAVAILABLE: {
+                    "occurrences": None,
+                    "window": None,
+                    "recovery": None,
+                },
+                CATEGORY_CONNECTIVITY: {
+                    "occurrences": None,
+                    "window": None,
+                    "recovery": None,
+                },
+            },
+            "device_overrides": {},
         },
     },
     "rules": [],

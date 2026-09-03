@@ -36,13 +36,17 @@ from .models import (
     extract_attribute_value,
     safe_float,
 )
-from .packs import PACKS, PACKS_BY_ID, PackNeutral
+from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, PackNeutral, PackOccurrence
 
 _LOGGER = logging.getLogger(__name__)
 
 _PACK_CONDITION_FALLBACKS = {
     "automatic.execution_errors": "Execution ended with an error",
     "automatic.execution_errors_detail": ("Execution ended with an error: {error}"),
+    "automatic.flapping": (
+        "Instability detected: {count} occurrences within {duration}. "
+        "Source: {source}. Last occurrence: {last_occurrence}"
+    ),
     "automatic.battery": "Battery less than or equal to {threshold}%",
     "automatic.connectivity": "Connectivity is off",
     "automatic.unavailable": "State is unavailable",
@@ -94,6 +98,7 @@ class _RuntimeMixin:
         self._queue_entity_evaluations(
             affected_entities,
             restoring=not self.hass.is_running,
+            collect_occurrences=self.hass.is_running,
         )
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
@@ -170,7 +175,11 @@ class _RuntimeMixin:
 
     @callback
     def _queue_entity_evaluations(
-        self, entity_ids: Iterable[str], *, restoring: bool = False
+        self,
+        entity_ids: Iterable[str],
+        *,
+        restoring: bool = False,
+        collect_occurrences: bool = False,
     ) -> None:
         """Coalesce state bursts into one evaluation task and one Store write."""
         if self._unloading or not self.monitoring_enabled:
@@ -180,9 +189,14 @@ class _RuntimeMixin:
             for entity_id in entity_ids
             if entity_id and self._is_allowed_rule_source(entity_id)
         )
-        if not self._queued_evaluation_entities and not self._queued_public_refresh:
+        if (
+            not self._queued_evaluation_entities
+            and not self._queued_public_refresh
+            and not self._queued_expired_alert_ids
+        ):
             return
         self._queued_evaluation_restoring |= restoring
+        self._queued_evaluation_collect_occurrences |= collect_occurrences
         self._schedule_evaluation_flush()
 
     @callback
@@ -204,25 +218,54 @@ class _RuntimeMixin:
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
                 self._queued_evaluation_restoring = False
+                self._queued_evaluation_collect_occurrences = False
+                self._queued_expired_alert_ids.clear()
                 self._queued_public_refresh = False
                 return
             entity_ids = sorted(self._queued_evaluation_entities)
             self._queued_evaluation_entities.clear()
             restoring = self._queued_evaluation_restoring
             self._queued_evaluation_restoring = False
+            collect_occurrences = self._queued_evaluation_collect_occurrences
+            self._queued_evaluation_collect_occurrences = False
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
+            occurrence_packs = (
+                tuple(
+                    pack
+                    for pack in OCCURRENCE_PACKS
+                    if self.config["automatic"][pack.id]["enabled"]
+                    and self._pack_is_available(pack.id)
+                )
+                if collect_occurrences and not restoring
+                else ()
+            )
+            new_occurrences: list[PackOccurrence] | None = (
+                [] if occurrence_packs else None
+            )
             for entity_id in entity_ids:
                 try:
                     await self.async_evaluate_entity(
                         entity_id,
                         restoring=restoring,
+                        _new_occurrences=new_occurrences,
                         save=False,
                         publish=False,
                     )
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
+            if new_occurrences:
+                batch = tuple(new_occurrences)
+                for pack in occurrence_packs:
+                    for generated in pack.occurrence_batch_handler(
+                        self.hass,
+                        batch,
+                        self.config,
+                        self._pack_runtime.setdefault(pack.id, {}),
+                    ):
+                        self._apply_generated_alert(pack.id, generated)
+            self._resolve_expired_alerts(dt_util.now())
             immediate_save_required = self._immediate_state_save_required
             if immediate_save_required:
                 await self._async_save_state()
@@ -235,7 +278,11 @@ class _RuntimeMixin:
         finally:
             self._evaluation_flush_scheduled = False
             if (
-                (self._queued_evaluation_entities or self._queued_public_refresh)
+                (
+                    self._queued_evaluation_entities
+                    or self._queued_public_refresh
+                    or self._queued_expired_alert_ids
+                )
                 and not self._unloading
                 and self.monitoring_enabled
             ):
@@ -495,6 +542,9 @@ class _RuntimeMixin:
                 publish=False,
                 emit_events=emit_events,
             )
+        for record in self.records.values():
+            if record.expires_at is not None and record.details.id not in self._timers:
+                self._schedule_timer(record)
         immediate_save_required = self._immediate_state_save_required
         if save and immediate_save_required:
             await self._async_save_state()
@@ -512,6 +562,7 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
+        _new_occurrences: list[PackOccurrence] | None = None,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if self._unloading or not self.monitoring_enabled:
@@ -542,6 +593,9 @@ class _RuntimeMixin:
         candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
+        collect_occurrences = (
+            _new_occurrences is not None and self._is_automatic_eligible(entity_id)
+        )
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
@@ -559,6 +613,14 @@ class _RuntimeMixin:
                 self._set_record(record)
                 persisted_changed = True
                 immediate_changed = True
+                if collect_occurrences:
+                    _new_occurrences.append(
+                        PackOccurrence(
+                            source=details,
+                            occurred_at=now,
+                            active_alert_ids=self.records.keys(),
+                        )
+                    )
             else:
                 details.value = record.details.value
                 if record.details != details:
@@ -603,6 +665,17 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         for alert_id in existing_ids - candidates.keys():
+            record = self.records.get(alert_id)
+            if record is not None and record.expires_at is not None:
+                pack_config = self.config["automatic"].get(record.details.type)
+                if (
+                    pack_config is not None
+                    and pack_config["enabled"]
+                    and self._pack_is_available(record.details.type)
+                    and self._is_base_eligible(entity_id)
+                    and self._is_automatic_eligible(entity_id)
+                ):
+                    continue
             record = self._pop_record(alert_id)
             if record is None:
                 continue

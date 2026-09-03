@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, State
+
+from ..models import AlertDetails
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +40,7 @@ class PackConfigField:
     step: str | float = "any"
     unit: str | None = None
     entity_domains: tuple[str, ...] | None = None
+    fields: tuple[PackConfigField, ...] = ()
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
@@ -54,6 +58,9 @@ class PackConfigField:
                 "entity_domains": list(self.entity_domains)
                 if self.entity_domains is not None
                 else None,
+                "fields": [field.as_public_dict() for field in self.fields]
+                if self.fields
+                else None,
             }.items()
             if value is not None
         }
@@ -67,8 +74,44 @@ PackEvaluation = PackMatch | PackNeutral | None
 
 
 @dataclass(frozen=True, slots=True)
+class PackOccurrence:
+    """Describe one genuinely new source anomaly seen during normal runtime."""
+
+    source: AlertDetails
+    occurred_at: datetime
+    active_alert_ids: Collection[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class PackGeneratedAlert:
+    """Describe an immediate alert emitted by an occurrence-driven pack."""
+
+    occurrence: PackOccurrence
+    key: str
+    condition_key: str
+    condition_params: dict[str, Any]
+    value: Any
+    resolve_at: datetime
+    rule_name: str | None = None
+
+
+PackOccurrenceBatchHandler = Callable[
+    # The complete validated configuration lets an occurrence consumer select
+    # and configure source packs or rules without runtime-specific coupling.
+    [HomeAssistant, tuple[PackOccurrence, ...], dict[str, Any], dict[str, Any]],
+    tuple[PackGeneratedAlert, ...],
+]
+
+
+@dataclass(frozen=True, slots=True)
 class AutomaticPack:
-    """Stable metadata and isolated evaluation function for an automatic pack."""
+    """Stable metadata and isolated evaluation function for an automatic pack.
+
+    ``occurrence_batch_handler`` opts a pack into one callback after a live
+    evaluation batch. It receives only anomalies whose source record was newly
+    created in that batch, plus the complete validated configuration; startup
+    and configuration reevaluations are excluded.
+    """
 
     id: str
     translation_key: str
@@ -78,6 +121,8 @@ class AutomaticPack:
     should_evaluate: PackShouldEvaluate | None = None
     reset_handler: PackResetHandler | None = None
     config_fields: tuple[PackConfigField, ...] = ()
+    uses_delay: bool = True
+    occurrence_batch_handler: PackOccurrenceBatchHandler | None = None
 
     def reset_runtime(self, hass: HomeAssistant) -> None:
         """Discard optional transient state owned by this pack."""
@@ -106,6 +151,8 @@ class AutomaticPack:
             "prerequisites": list(self.prerequisites),
             "available": self.available(hass),
         }
+        if not self.uses_delay:
+            result["uses_delay"] = False
         if self.config_fields:
             result["config_fields"] = [
                 field.as_public_dict() for field in self.config_fields

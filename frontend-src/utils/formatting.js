@@ -18,6 +18,10 @@ const newRuleDefaults = () => ({
   message: "",
   update_message_when_active: false,
   condition_template: "",
+  flapping_enabled: false,
+  flapping_occurrences: null,
+  flapping_window: null,
+  flapping_recovery: null,
 });
 
 const yamlValue = (value) => {
@@ -55,6 +59,10 @@ const ruleToYaml = (rule) => {
     `message: ${yamlValue(rule.message)}`,
     `update_message_when_active: ${yamlValue(rule.update_message_when_active ?? false)}`,
     `condition_template: ${yamlValue(rule.condition_template)}`,
+    `flapping_enabled: ${yamlValue(rule.flapping_enabled ?? false)}`,
+    `flapping_occurrences: ${yamlValue(rule.flapping_occurrences)}`,
+    `flapping_window: ${yamlValue(rule.flapping_window)}`,
+    `flapping_recovery: ${yamlValue(rule.flapping_recovery)}`,
   );
   return `${lines.join("\n")}\n`;
 };
@@ -114,6 +122,9 @@ export function conditionText(alert) {
           duration: this._durationText(params.duration),
         })}`
         : "";
+    } else if (alert.condition_key === "automatic.flapping") {
+      params.duration = this._durationText(params.duration_seconds ?? params.duration);
+      params.last_occurrence = this._date(params.last_occurrence);
     } else if (alert.condition_key === "rule.selected_unchanged") {
       const sourceKey = params.source === "attribute"
         ? "conditions.sources.attribute"

@@ -356,6 +356,7 @@ class AlertRecord:
     due_at: datetime
     delay: int
     active_since: datetime | None = None
+    expires_at: datetime | None = None
     visible_at: datetime | None = None
     paused_at: datetime | None = None
     paused_seconds: float = 0.0
@@ -375,12 +376,28 @@ class AlertRecord:
         )
 
     @classmethod
+    def active_until(
+        cls, details: AlertDetails, now: datetime, expires_at: datetime
+    ) -> AlertRecord:
+        """Create an immediately active alert with a real resolution deadline."""
+        return cls(
+            details=details,
+            status=AlertStatus.ACTIVE,
+            detected_at=now,
+            due_at=now,
+            delay=0,
+            active_since=now,
+            expires_at=expires_at,
+        )
+
+    @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertRecord:
         """Deserialize a persisted record with strict temporal invariants."""
         if not isinstance(data, dict):
             raise ValueError("Alert record must be an object")
         active_since = data.get("active_since")
         visible_at = data.get("visible_at")
+        expires_at = data.get("expires_at")
         status = AlertStatus(data["status"])
         if status is AlertStatus.NORMAL:
             raise ValueError("Normal alerts must not be persisted")
@@ -401,6 +418,11 @@ class AlertRecord:
         parsed_visible_at = (
             _parse_aware_datetime(visible_at, "visible_at")
             if visible_at is not None and status is AlertStatus.PENDING
+            else None
+        )
+        parsed_expires_at = (
+            _parse_aware_datetime(expires_at, "expires_at")
+            if expires_at is not None
             else None
         )
         paused_at = data.get("paused_at")
@@ -427,6 +449,8 @@ class AlertRecord:
             raise ValueError("Active alerts must not have visible_at")
         if status is AlertStatus.ACTIVE and parsed_paused_at is not None:
             raise ValueError("Active alerts cannot retain a monitoring pause")
+        if status is AlertStatus.PENDING and parsed_expires_at is not None:
+            raise ValueError("Pending alerts cannot have a resolution deadline")
         if parsed_active_since is not None and parsed_active_since.astimezone(
             UTC
         ) < detected_at.astimezone(UTC):
@@ -437,6 +461,10 @@ class AlertRecord:
                 raise ValueError("Alert visible_at must not precede detected_at")
             if visible_utc > due_at.astimezone(UTC):
                 raise ValueError("Alert visible_at must not follow due_at")
+        if parsed_expires_at is not None and parsed_expires_at.astimezone(
+            UTC
+        ) < parsed_active_since.astimezone(UTC):
+            raise ValueError("Alert expires_at must not precede active_since")
         acknowledged = data.get("acknowledged", False)
         if not isinstance(acknowledged, bool):
             raise ValueError("Alert acknowledged must be a boolean")
@@ -469,6 +497,7 @@ class AlertRecord:
             due_at=due_at,
             delay=delay,
             active_since=parsed_active_since,
+            expires_at=parsed_expires_at,
             visible_at=parsed_visible_at,
             paused_at=parsed_paused_at,
             paused_seconds=float(paused_seconds),
@@ -492,6 +521,8 @@ class AlertRecord:
         }
         if self.visible_at is not None:
             result["visible_at"] = self.visible_at.isoformat()
+        if self.expires_at is not None:
+            result["expires_at"] = self.expires_at.isoformat()
         if self.paused_at is not None:
             result["paused_at"] = self.paused_at.isoformat()
         if self.paused_seconds:
@@ -516,6 +547,8 @@ class AlertRecord:
             result["visible_at"] = self.visible_at.isoformat()
         if self.active_since is not None:
             result["active_since"] = self.active_since.isoformat()
+            if self.expires_at is not None:
+                result["expires_at"] = self.expires_at.isoformat()
             result["acknowledged"] = self.acknowledged
             if self.acknowledged:
                 result["acknowledged_at"] = self.acknowledged_at.isoformat()
@@ -546,6 +579,10 @@ class Rule:
     message: str | None = None
     update_message_when_active: bool = False
     condition_template: str | None = None
+    flapping_enabled: bool = False
+    flapping_occurrences: int | None = None
+    flapping_window: int | None = None
+    flapping_recovery: int | None = None
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -664,6 +701,22 @@ class Rule:
             raise ValueError("Rule condition_template is required for Variation rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
+        if not isinstance(self.flapping_enabled, bool):
+            raise ValueError("Rule flapping_enabled must be a boolean")
+        for field_name, value, minimum in (
+            ("flapping_occurrences", self.flapping_occurrences, 2),
+            ("flapping_window", self.flapping_window, 1),
+            ("flapping_recovery", self.flapping_recovery, 1),
+        ):
+            if value is None:
+                continue
+            maximum = 1000 if field_name == "flapping_occurrences" else 31_536_000
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"Rule {field_name} must be an integer")
+            if not minimum <= value <= maximum:
+                raise ValueError(
+                    f"Rule {field_name} must be between {minimum} and {maximum}"
+                )
         if (
             isinstance(self.version, bool)
             or not isinstance(self.version, int)

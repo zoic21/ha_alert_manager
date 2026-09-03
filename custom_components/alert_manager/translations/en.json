@@ -39,10 +39,32 @@
           "label": "Consecutive failure thresholds by automation or script",
           "validation": "Each row must contain an automation or script and a valid whole number."
         },
+        "flapping_device_overrides": {
+          "duplicate": "A device can have only one custom configuration.",
+          "empty": "No device-specific configuration.",
+          "help": "Device values take precedence over the global configuration.",
+          "label": "Device-specific configurations",
+          "validation": "Each row must contain a device and three valid values."
+        },
+        "flapping_occurrences": {
+          "label": "Number of occurrences"
+        },
+        "flapping_recovery": {
+          "label": "Delay before returning to normal"
+        },
+        "flapping_source_packs": {
+          "help": "Enable flapping detection for each automatic source pack. Empty values inherit the device-specific configuration, then the global configuration.",
+          "label": "Monitored packs",
+          "validation": "Each override must be empty or contain a valid number."
+        },
+        "flapping_window": {
+          "label": "Detection window"
+        },
         "threshold": {
           "label": "Global threshold"
         }
       },
+      "enable_source_pack": "Enable source pack {name}",
       "pack_delay": "Pack delay",
       "save": "Save automatic monitoring"
     },
@@ -60,6 +82,7 @@
       "automatic": {
         "execution_errors": "Execution ended with an error",
         "execution_errors_detail": "Execution ended with an error: {error}",
+        "flapping": "Instability detected: {count} occurrences within {duration}. Source: {source}. Last occurrence: {last_occurrence}",
         "battery": "Battery less than or equal to {threshold}%",
         "connectivity": "Connectivity is off",
         "unavailable": "State is unavailable",
@@ -249,6 +272,10 @@
         "description": "Monitors automations and scripts whose execution ends with an error.",
         "name": "Automation and script errors"
       },
+      "flapping": {
+        "description": "Detects anomalies that repeatedly appear and disappear, even before their normal activation.",
+        "name": "Flapping / Instability"
+      },
       "battery": {
         "description": "Monitors battery sensors at or below their threshold.",
         "name": "Low batteries"
@@ -304,6 +331,10 @@
       "editor_information_help": "Identify the rule and select the monitored entities.",
       "editor_trigger": "Trigger",
       "editor_trigger_help": "Add a delay and customize the exposed message.",
+      "flapping_enabled": "Enable flapping detection",
+      "flapping_help": "Count each new occurrence of this rule. Optional values inherit the device-specific configuration, then the global flapping configuration.",
+      "flapping_inherit_help": "Leave empty to inherit the default value.",
+      "flapping_title": "Flapping / Instability",
       "empty": "No custom rules.",
       "empty_filtered": "No rules match the search and filters.",
       "entities": "Entities",

@@ -260,7 +260,8 @@ class _TemplatesMixin:
         def timer_due(_now: datetime) -> None:
             self._template_time_timer = None
             self._queue_entity_evaluations(
-                {key[2] for key in self._template_time_dependencies}
+                {key[2] for key in self._template_time_dependencies},
+                collect_occurrences=True,
             )
             if self._template_time_dependencies:
                 self._schedule_template_time_tick()
@@ -280,7 +281,9 @@ class _TemplatesMixin:
         def timer_due(_now: datetime) -> None:
             self._template_rate_limit_timers.pop(dependency_key, None)
             if dependency_key in self._template_dynamic_infos:
-                self._queue_entity_evaluations((dependency_key[2],))
+                self._queue_entity_evaluations(
+                    (dependency_key[2],), collect_occurrences=True
+                )
 
         self._template_rate_limit_timers[dependency_key] = (
             async_track_point_in_utc_time(self.hass, timer_due, when)

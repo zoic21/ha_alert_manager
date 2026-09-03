@@ -342,6 +342,57 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
     }
 
 
+def test_older_export_without_flapping_pack_uses_disabled_default() -> None:
+    """Exports created before flapping remain importable without enabling it."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace(
+        "    flapping:\n"
+        "      enabled: false\n"
+        "      occurrences: 5\n"
+        "      window: 3600\n"
+        "      recovery: 1800\n"
+        "      source_packs:\n"
+        "        unavailable:\n"
+        "          occurrences: null\n"
+        "          window: null\n"
+        "          recovery: null\n"
+        "        connectivity:\n"
+        "          occurrences: null\n"
+        "          window: null\n"
+        "          recovery: null\n"
+        "      device_overrides: {}\n",
+        "",
+    )
+
+    imported = parse_config_yaml(legacy)
+
+    assert imported["automatic"]["flapping"] == DEFAULT_CONFIG["automatic"]["flapping"]
+
+
+def test_older_flapping_export_without_source_selection_uses_defaults() -> None:
+    """The first flapping YAML shape gains its default source packs on import."""
+    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
+    legacy = exported.replace(
+        "      source_packs:\n"
+        "        unavailable:\n"
+        "          occurrences: null\n"
+        "          window: null\n"
+        "          recovery: null\n"
+        "        connectivity:\n"
+        "          occurrences: null\n"
+        "          window: null\n"
+        "          recovery: null\n",
+        "",
+    )
+
+    imported = parse_config_yaml(legacy)
+
+    assert imported["automatic"]["flapping"]["source_packs"] == {
+        "unavailable": {"occurrences": None, "window": None, "recovery": None},
+        "connectivity": {"occurrences": None, "window": None, "recovery": None},
+    }
+
+
 def test_dev14_active_display_delay_import_is_migrated() -> None:
     """The short-lived dev14 YAML key keeps its value with corrected semantics."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
