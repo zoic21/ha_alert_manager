@@ -201,24 +201,13 @@ export const ruleEditorStyles = `
     white-space: nowrap;
   }
   .rule-test-details {
-    display: grid;
-    gap: 8px;
-    padding: 4px 16px 16px;
-  }
-  .rule-test-detail {
-    display: grid;
-    grid-template-columns: minmax(120px, .8fr) minmax(0, 1.2fr);
-    gap: 12px;
-  }
-  .rule-test-detail strong {
-    overflow-wrap: anywhere;
-    text-align: end;
+    padding: 4px 0 12px;
   }
   .rule-test-message {
-    margin-top: 4px;
+    margin: 4px 16px 0;
   }
   .rule-test-conclusion {
-    margin: 4px 0 0;
+    margin: 4px 16px 0;
   }
   .action-spacer {
     flex: 1;

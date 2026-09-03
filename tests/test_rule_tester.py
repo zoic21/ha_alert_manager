@@ -369,6 +369,41 @@ def test_variation_reads_existing_baseline_but_never_creates_one(hass, entry):
     assert runtime_snapshot(manager, hass) == before
 
 
+def test_variation_diagnostic_continues_after_a_false_jinja_gate(hass, entry):
+    """A dry run exposes the comparison while Jinja keeps the final result false."""
+    hass.states.set("sensor.source", "10")
+    hass.states.set("binary_sensor.guard", "on")
+    manager = make_manager(hass, entry)
+    created = run(
+        manager.async_create_rule(
+            rule(
+                source="state_variation",
+                operator="above",
+                value=5,
+                condition_template=("{{ is_state('binary_sensor.guard', 'on') }}"),
+                message="Variation {{ value }}",
+            )
+        )
+    )
+    hass.states.set("sensor.source", "18")
+    hass.states.set("binary_sensor.guard", "off")
+    before = runtime_snapshot(manager, hass)
+    draft = {
+        key: value for key, value in created.items() if key not in ("id", "version")
+    }
+
+    result = run(manager.async_test_rule(draft, rule_id=created["id"]))["results"][0]
+
+    assert result["status"] == "no_match"
+    assert result["jinja_result"] is False
+    assert result["comparison_result"] is True
+    assert result["final_result"] is False
+    assert result["baseline"] == 10
+    assert result["variation"] == 8
+    assert result["message"] == "Variation 8.0"
+    assert runtime_snapshot(manager, hass) == before
+
+
 def test_unsaved_variation_definition_change_does_not_reuse_old_baseline(hass, entry):
     """A draft change that would reset runtime also hides the saved baseline."""
     hass.states.set("sensor.source", "10", {"power": 100})

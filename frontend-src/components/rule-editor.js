@@ -178,15 +178,7 @@ export function clearRuleEditorError() {
 
 function ruleTestValue(value, unit = null) {
     if (value === null || value === undefined) return null;
-    let rendered;
-    if (typeof value === "string") rendered = value;
-    else if (typeof value === "object") {
-      try {
-        rendered = JSON.stringify(value);
-      } catch (_error) {
-        rendered = String(value);
-      }
-    } else rendered = String(value);
+    const rendered = typeof value === "object" ? JSON.stringify(value) : String(value);
     return unit ? `${rendered} ${unit}` : rendered;
 }
 
@@ -197,7 +189,7 @@ function ruleTestBoolean(value, t) {
 
 function ruleTestDetail(label, value) {
     if (value === null || value === undefined || value === "") return "";
-    return `<div class="rule-test-detail"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
+    return `<div class="alert-details-item"><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`;
 }
 
 function ruleTestReason(result, t) {
@@ -212,18 +204,6 @@ function ruleTestCondition(result, t) {
     return expected === null
       ? t(`operators.${result.operator}`)
       : `${t(`operators.${result.operator}`)} ${expected}`;
-}
-
-function ruleTestSource(result, t) {
-    const keys = {
-      state: "source_state",
-      attribute: "source_attribute",
-      state_variation: "source_state_variation",
-      attribute_variation: "source_attribute_variation",
-      unchanged: "source_unchanged",
-      jinja: "source_jinja",
-    };
-    return t(`rules.${keys[result.source] ?? "source"}`);
 }
 
 function ruleTestConclusion(result, t, formatDuration) {
@@ -264,6 +244,7 @@ export function renderRuleTestResult(result, context) {
       result.enabled === false ? t("rules.test.disabled_notice") : "",
     ].filter(Boolean);
     const items = (result.results ?? []).map((item) => {
+      const variation = VARIATION_RULE_SOURCES.has(item.source);
       const statusIcon = item.status === "match"
         ? "mdi:check-circle"
         : item.status === "no_match"
@@ -285,11 +266,12 @@ export function renderRuleTestResult(result, context) {
       return `<ha-expansion-panel outlined class="rule-test-entity">
         <div slot="header" class="rule-test-entity-header"><ha-icon icon="${statusIcon}"></ha-icon><code>${esc(item.entity_id)}</code><span>${esc(statusLabel)}</span></div>
         <div class="rule-test-details">
+          <dl class="alert-details-list">
           ${ruleTestDetail(t("rules.test.entity"), item.name)}
-          ${ruleTestDetail(t("rules.test.source"), ruleTestSource(item, t))}
+          ${ruleTestDetail(t("rules.test.source"), t(`rules.source_${item.source}`))}
           ${ruleTestDetail(t("rules.test.attribute"), item.attribute)}
           ${ruleTestDetail(t("rules.test.current_state"), ruleTestValue(item.state, item.source === "state" ? item.unit : null))}
-          ${ruleTestDetail(t("rules.test.extracted_value"), ruleTestValue(item.raw_value ?? item.value, item.source !== "jinja" ? item.unit : null))}
+          ${variation ? "" : ruleTestDetail(t("rules.test.extracted_value"), ruleTestValue(item.raw_value ?? item.value, item.source !== "jinja" ? item.unit : null))}
           ${ruleTestDetail(t("rules.test.condition"), ruleTestCondition(item, t))}
           ${ruleTestDetail(t("rules.test.comparison_result"), ruleTestBoolean(item.comparison_result, t))}
           ${ruleTestDetail(t("rules.test.jinja_result"), ruleTestBoolean(item.jinja_result, t))}
@@ -301,6 +283,7 @@ export function renderRuleTestResult(result, context) {
           ${ruleTestDetail(t("rules.test.final_result"), ruleTestBoolean(item.final_result, t))}
           ${ruleTestDetail(t("rules.test.delay"), formatDuration(item.duration))}
           ${ruleTestDetail(t("rules.test.reason"), reason)}
+          </dl>
           ${item.message ? `<ha-alert class="rule-test-message" alert-type="info"><strong>${esc(t("rules.test.generated_message"))}</strong><div>${esc(item.message)}</div></ha-alert>` : ""}
           ${messageError ? `<ha-alert class="rule-test-message" alert-type="error">${esc(messageError)}</ha-alert>` : ""}
           <p class="rule-test-conclusion">${esc(ruleTestConclusion(item, t, formatDuration))}</p>
@@ -310,8 +293,8 @@ export function renderRuleTestResult(result, context) {
     return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status"><strong>${esc(t("rules.test.title"))}</strong><div>${esc(summary)}</div>${notices.map((notice) => `<div>${esc(notice)}</div>`).join("")}</ha-alert><div class="rule-test-entities">${items}</div>`;
 }
 
-export function renderRuleTestResultPanel() {
-    return renderRuleTestResult(this._ruleTestResult, {
+export function renderRuleTestResultPanel(result = this._ruleTestResult) {
+    return renderRuleTestResult(result, {
       t: (key, replacements) => this._t(key, replacements),
       formatDuration: (value) => this._durationText(value),
     });
@@ -334,6 +317,7 @@ export function updateRuleTestDisplay({ scroll = false } = {}) {
 }
 
 export function clearRuleTestResult() {
+    if (!this._ruleTestLoading && this._ruleTestResult === null) return;
     this._ruleTestSequence += 1;
     this._ruleTestLoading = false;
     this._ruleTestResult = null;
@@ -423,10 +407,7 @@ export function renderRuleEditorPanel() {
       useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
-      renderTestResult: (result) => renderRuleTestResult(result, {
-        t: (key, replacements) => this._t(key, replacements),
-        formatDuration: (value) => this._durationText(value),
-      }),
+      renderTestResult: (result) => this._renderRuleTestResult(result),
       flappingAvailable: Boolean(this._config?.automatic?.flapping?.enabled),
     });
 }
@@ -682,16 +663,10 @@ export function resetRuleEditorWidth(event) {
 
 export async function saveRule(form) {
     this._clearRuleEditorError();
-    const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
-      entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
-      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
-      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
-    });
+    const draft = this._captureRuleDraft(form);
+    if (!draft) return;
     const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
-    // _call renders a busy state. Keep the submitted values as the editor draft so
-    // that render cannot clear the form, especially when the backend rejects it.
-    this._editingRule = { ...draft, ...(id ? { id } : {}) };
     const validation = validateRuleDraft(rule);
     if (!validation.valid) {
       this._ruleEditorError = this._t(validation.errorKey);
@@ -718,14 +693,10 @@ export async function saveRule(form) {
 
 export async function testRule(form) {
     this._clearRuleEditorError();
-    const draft = captureRuleDraftFromForm(form, this._editingRule ?? {}, {
-      entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
-      conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
-      message: this.shadowRoot.querySelector("#rule-message-template")?.value,
-    });
+    const draft = this._captureRuleDraft(form);
+    if (!draft) return;
     const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
-    this._editingRule = { ...draft, ...(id ? { id } : {}) };
     const validation = validateRuleDraft(rule);
     if (!validation.valid) {
       this._ruleTestResult = { request_error: this._t(validation.errorKey) };
@@ -752,14 +723,16 @@ export async function testRule(form) {
     }
 }
 
-export function captureRuleDraft() {
-    const form = this.shadowRoot.querySelector?.("#rule-form");
-    if (!form || this._editingRule === null) return;
+export function captureRuleDraft(
+  form = this.shadowRoot.querySelector?.("#rule-form"),
+) {
+    if (!form || this._editingRule === null) return null;
     this._editingRule = captureRuleDraftFromForm(form, this._editingRule, {
       entityIds: this.shadowRoot.querySelector("#rule-entity-ids")?.value,
       conditionTemplate: this.shadowRoot.querySelector("#rule-condition-template")?.value,
       message: this.shadowRoot.querySelector("#rule-message-template")?.value,
     });
+    return this._editingRule;
 }
 
 export function hydrateRuleEditor(root, context) {

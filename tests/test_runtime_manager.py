@@ -531,6 +531,45 @@ def test_variation_reference_follows_required_jinja_window(hass, entry):
     asyncio.run(scenario())
 
 
+def test_variation_template_error_resets_reference(hass, entry, monkeypatch):
+    """A failed Jinja gate ends the current variation window."""
+
+    async def scenario():
+        hass.states.set("sensor.source", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(
+                source="state_variation",
+                operator="above",
+                value=5,
+                duration=0,
+                condition_template="{{ true }}",
+            )
+        )
+        baseline_key = f"{created['id']}:sensor.source"
+        assert manager._variation_baselines[baseline_key] == 10
+
+        monkeypatch.setattr(
+            manager,
+            "_evaluate_rule_condition_template",
+            lambda _rule, _state, _current, *, track: (None, "render failed"),
+        )
+        evaluation = manager._evaluate_custom_rule(
+            manager._rules[0],
+            hass.states.get("sensor.source"),
+            dry_run=True,
+        )
+        assert evaluation.error_code == "condition_template_error"
+        assert manager._variation_baselines[baseline_key] == 10
+
+        await manager.async_evaluate_entity("sensor.source")
+
+        assert baseline_key not in manager._variation_baselines
+
+    asyncio.run(scenario())
+
+
 def test_variation_reference_survives_restart_while_gate_remains_true(hass, entry):
     """A restart cannot silently move the beginning of an ongoing window."""
 

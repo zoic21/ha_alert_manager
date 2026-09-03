@@ -22,6 +22,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CATEGORY_UNAVAILABLE,
     DOMAIN,
+    VARIATION_SOURCES,
 )
 from .models import (
     AlertDetails,
@@ -828,43 +829,39 @@ class _RuntimeMixin:
         allow_runtime_baseline: bool = True,
     ) -> RuleEvaluation:
         """Evaluate one custom rule through the shared runtime/tester engine."""
+        variation = rule.source in VARIATION_SOURCES
 
-        def evaluate_condition(
-            candidate: Rule, current_state: State, current: Any
-        ) -> tuple[bool | None, str | None]:
+        def evaluate_condition(current: Any) -> tuple[bool | None, str | None]:
             return self._evaluate_rule_condition_template(
-                candidate,
-                current_state,
+                rule,
+                state,
                 current,
                 track=not dry_run,
             )
 
-        def resolve_baseline(
-            candidate: Rule, current_state: State, current: float
-        ) -> float | None:
-            if not allow_runtime_baseline:
-                return None
-            key = self._variation_key(candidate, current_state.entity_id)
-            baseline = self._variation_baselines.get(key)
-            if baseline is not None or dry_run:
-                return baseline
-            found, _variation = self._variation_value(candidate, current_state, current)
-            return self._variation_baselines.get(key) if found else None
+        baseline = (
+            self._variation_baselines.get(self._variation_key(rule, state.entity_id))
+            if allow_runtime_baseline and variation
+            else None
+        )
 
-        return evaluate_rule(
+        evaluation = evaluate_rule(
             rule,
             state,
             evaluate_condition=evaluate_condition,
-            resolve_baseline=resolve_baseline,
-            on_variation_gate_false=(
-                None
-                if dry_run
-                else lambda candidate, entity_id: self._clear_variation_baseline(
-                    candidate, entity_id
-                )
-            ),
+            baseline=baseline,
+            use_current_as_baseline=not dry_run and allow_runtime_baseline,
             evaluate_all_conditions=dry_run,
         )
+        if not dry_run and variation:
+            if (
+                evaluation.jinja_result is False
+                or evaluation.error_code == "condition_template_error"
+            ):
+                self._clear_variation_baseline(rule, state.entity_id)
+            elif baseline is None and evaluation.baseline is not None:
+                self._variation_value(rule, state, evaluation.raw_value)
+        return evaluation
 
     def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
         """Build the deduplicated current alert candidates for one state."""
