@@ -11,9 +11,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -26,6 +27,7 @@ from .const import (
     NOTIFICATION_BATCH_SECONDS,
     NOTIFICATION_STORAGE_KEY,
     NOTIFICATION_STORAGE_VERSION,
+    SIGNAL_NOTIFICATION_LIFECYCLE,
 )
 from .models import AlertRecord, AlertStatus
 from .notifications import (
@@ -56,7 +58,7 @@ class _NotificationItem:
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
-        """Build a bounded item from a public lifecycle event payload."""
+        """Build a bounded item from a lifecycle payload."""
         alert_id = data.get("id")
         entity_id = data.get("entity_id")
         if not isinstance(alert_id, str) or not alert_id:
@@ -139,11 +141,13 @@ class NotificationRuntime:
         self._setup_complete = False
         self._accept_events = True
         self._events_pause_depth = 0
+        self._event_generation = 0
 
     @callback
     def pause_events(self) -> None:
         """Ignore lifecycle events manufactured by a configuration rebuild."""
         self._events_pause_depth += 1
+        self._event_generation += 1
         self._accept_events = False
 
     @callback
@@ -169,25 +173,36 @@ class NotificationRuntime:
                 batch.cancel()
         self._batches.clear()
 
+    async def async_discard_alerts(self, alert_ids: set[str]) -> None:
+        """Forget alerts silently removed by their owning configuration."""
+        if not alert_ids:
+            return
+        async with self._runtime_lock:
+            runtime_changed = False
+            for profile_runtime in self._runtime.values():
+                for alert_id in alert_ids:
+                    if profile_runtime.pop(alert_id, None) is not None:
+                        runtime_changed = True
+            for key, batch in tuple(self._batches.items()):
+                for alert_id in alert_ids:
+                    batch.items.pop(alert_id, None)
+                if batch.items:
+                    continue
+                if batch.cancel is not None:
+                    batch.cancel()
+                self._batches.pop(key, None)
+            if runtime_changed:
+                self._schedule_runtime_save()
+                self._schedule_reminder_timer()
+
     async def async_setup(self) -> None:
         """Restore runtime state, then subscribe after initial alert evaluation."""
         await self._async_load_runtime()
-        self._unsubscribe.extend(
-            (
-                self.hass.bus.async_listen(
-                    EVENT_ALERT_STARTED, self._event_received(EVENT_ALERT_STARTED)
-                ),
-                self.hass.bus.async_listen(
-                    EVENT_ALERT_RESOLVED, self._event_received(EVENT_ALERT_RESOLVED)
-                ),
-                self.hass.bus.async_listen(
-                    EVENT_ALERT_ACKNOWLEDGED,
-                    self._event_received(EVENT_ALERT_ACKNOWLEDGED),
-                ),
-                self.hass.bus.async_listen(
-                    EVENT_ALERT_UNACKNOWLEDGED,
-                    self._event_received(EVENT_ALERT_UNACKNOWLEDGED),
-                ),
+        self._unsubscribe.append(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_NOTIFICATION_LIFECYCLE,
+                self._lifecycle_event_received,
             )
         )
         self._setup_complete = True
@@ -269,25 +284,36 @@ class NotificationRuntime:
         await self._async_save_runtime()
         self._schedule_reminder_timer()
 
-    def _event_received(self, event_type: str) -> Callable[[Event], None]:
-        """Create a non-blocking bus callback for one lifecycle event."""
-
-        @callback
-        def received(event: Event) -> None:
-            if self._unloading or not self._accept_events:
-                return
-            self._create_task(
-                self._async_handle_event(event_type, event.data),
-                f"alert_manager notification {event_type}",
-            )
-
-        return received
+    @callback
+    def _lifecycle_event_received(
+        self, event_type: str, data: Mapping[str, Any]
+    ) -> None:
+        """Snapshot one trusted internal lifecycle signal without blocking."""
+        if self._unloading or not self._accept_events:
+            return
+        config = self._config_getter()
+        if not config.get("monitoring_enabled", True) or not any(
+            profile.get("enabled")
+            for profile in config.get("notification_profiles", [])
+        ):
+            return
+        generation = self._event_generation
+        self._create_task(
+            self._async_handle_event(event_type, dict(data), generation=generation),
+            f"alert_manager notification {event_type}",
+        )
 
     async def _async_handle_event(
-        self, event_type: str, data: Mapping[str, Any]
+        self,
+        event_type: str,
+        data: Mapping[str, Any],
+        *,
+        generation: int | None = None,
     ) -> None:
         """Route one lifecycle event into profile batches and reminder state."""
         async with self._runtime_lock:
+            if generation is not None and generation != self._event_generation:
+                return
             await self._async_handle_event_locked(event_type, data)
 
     async def _async_handle_event_locked(
@@ -653,17 +679,31 @@ class NotificationRuntime:
             return
         if not isinstance(raw, dict) or not isinstance(raw.get("profiles", {}), dict):
             return
-        for profile_id, raw_entries in raw.get("profiles", {}).items():
-            if not isinstance(profile_id, str) or not isinstance(raw_entries, dict):
+        self._persisted_runtime = raw
+        raw_profiles = raw.get("profiles", {})
+        profile_ids = {
+            profile["id"]
+            for profile in self._config_getter().get("notification_profiles", [])
+            if profile.get("enabled")
+        }
+        active_alert_ids = {
+            alert_id
+            for alert_id, record in self._records_getter().items()
+            if record.status is AlertStatus.ACTIVE
+        }
+        for profile_id in profile_ids:
+            raw_entries = raw_profiles.get(profile_id)
+            if not isinstance(raw_entries, dict):
                 continue
             entries: dict[str, _RuntimeEntry] = {}
-            for alert_id, raw_entry in raw_entries.items():
-                if not isinstance(alert_id, str) or not isinstance(raw_entry, dict):
+            for alert_id in active_alert_ids:
+                raw_entry = raw_entries.get(alert_id)
+                if not isinstance(raw_entry, dict):
                     continue
                 next_reminder = _parse_datetime(raw_entry.get("next_reminder"))
                 entries[alert_id] = _RuntimeEntry(next_reminder=next_reminder)
-            self._runtime[profile_id] = entries
-        self._persisted_runtime = self._runtime_payload()
+            if entries:
+                self._runtime[profile_id] = entries
 
     async def _async_save_runtime(self) -> None:
         """Persist minimal recipient state without touching AlertRecord."""

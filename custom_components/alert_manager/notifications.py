@@ -243,7 +243,7 @@ def profile_matches_labels(
 ) -> bool:
     """Return whether a profile's optional label filter accepts an alert."""
     configured = profile["label_ids"]
-    return not configured or not set(configured).isdisjoint(label_ids)
+    return not configured or any(label_id in label_ids for label_id in configured)
 
 
 def resolve_notification_policy(
@@ -328,11 +328,11 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
             f"{path}.fallback_targets duplicates primary target: {sorted(overlap)[0]}"
         )
 
-    label_ids = _validate_string_list(value.get("label_ids", []), f"{path}.label_ids")
-    if len(label_ids) > MAX_NOTIFICATION_LABELS:
-        raise ValueError(
-            f"{path}.label_ids must contain at most {MAX_NOTIFICATION_LABELS} items"
-        )
+    label_ids = _validate_string_list(
+        value.get("label_ids", []),
+        f"{path}.label_ids",
+        maximum=MAX_NOTIFICATION_LABELS,
+    )
     default_policy = _validate_policy(
         value.get("default_policy"), f"{path}.default_policy", partial=False
     )
@@ -397,11 +397,8 @@ def _validate_policy(value: Any, path: str, *, partial: bool) -> dict[str, Any]:
     """Normalize a complete policy or a partial inherited override."""
     if not isinstance(value, dict):
         raise ValueError(f"{path} must be an object")
-    unknown = set(value) - _POLICY_KEYS
-    if partial:
-        unknown -= {"selector_type", "selector_id"}
-    if unknown:
-        raise ValueError(f"Unknown {path} field: {sorted(unknown)[0]}")
+    allowed = _POLICY_KEYS | ({"selector_type", "selector_id"} if partial else set())
+    _reject_unknown(value, allowed, path)
     if not partial and (missing := _POLICY_KEYS - value.keys()):
         raise ValueError(f"Missing {path} field: {sorted(missing)[0]}")
 
@@ -429,27 +426,27 @@ def _validate_policy(value: Any, path: str, *, partial: bool) -> dict[str, Any]:
 
 def _validate_notify_targets(value: Any, path: str, *, required: bool) -> list[str]:
     """Validate a bounded ordered list of native notify entity ids."""
-    targets = _validate_string_list(value, path)
+    targets = _validate_string_list(value, path, maximum=MAX_NOTIFICATION_TARGETS)
     if required and not targets:
         raise ValueError(f"{path} must contain at least one notify entity")
-    if len(targets) > MAX_NOTIFICATION_TARGETS:
-        raise ValueError(
-            f"{path} must contain at most {MAX_NOTIFICATION_TARGETS} items"
-        )
     for entity_id in targets:
         if not valid_entity_id(entity_id) or not entity_id.startswith("notify."):
             raise ValueError(f"{path} contains an invalid notify entity id")
     return targets
 
 
-def _validate_string_list(value: Any, path: str) -> list[str]:
+def _validate_string_list(value: Any, path: str, *, maximum: int) -> list[str]:
     """Validate, trim and deduplicate an ordered list of identifiers."""
     if not isinstance(value, list):
         raise ValueError(f"{path} must be a list")
+    if len(value) > maximum:
+        raise ValueError(f"{path} must contain at most {maximum} items")
     result: list[str] = []
+    seen: set[str] = set()
     for item in value:
         normalized = _non_empty_string(item, path, maximum=255)
-        if normalized not in result:
+        if normalized not in seen:
+            seen.add(normalized)
             result.append(normalized)
     return result
 

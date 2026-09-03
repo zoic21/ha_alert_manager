@@ -25,6 +25,7 @@ SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"
 SIGNAL_COHERENCE_UPDATED: Final = "alert_manager_coherence_updated"
+SIGNAL_NOTIFICATION_LIFECYCLE: Final = "alert_manager_notification_lifecycle"
 
 MAIN_DEVICE_IDENTIFIER: Final = "main"
 MAIN_DEVICE_NAME: Final = "Alert Manager - Général"

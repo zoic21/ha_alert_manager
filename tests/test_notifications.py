@@ -8,7 +8,12 @@ from copy import deepcopy
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.alert_manager.const import DEFAULT_CONFIG
+from custom_components.alert_manager.const import (
+    DEFAULT_CONFIG,
+    EVENT_ALERT_STARTED,
+    MAX_NOTIFICATION_LABELS,
+    MAX_NOTIFICATION_TARGETS,
+)
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.notifications import (
     NotificationManager,
@@ -147,22 +152,46 @@ def test_profile_only_update_skips_alert_reevaluation(hass, entry) -> None:
 
 
 def test_profile_update_failure_always_resumes_notification_events(hass, entry) -> None:
-    """A failed configuration transaction cannot leave delivery paused."""
+    """A failed profile update resumes delivery without losing a pending batch."""
 
     async def scenario() -> None:
         manager = AlertManager(hass, entry)
         await manager.async_setup()
+        profile = _profile()
+        profile["label_ids"] = []
+        await manager.async_update_config({"notification_profiles": [profile]})
+        alert_id = "unavailable:sensor.test"
+        await manager.notification_runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            {
+                "id": alert_id,
+                "entity_id": "sensor.test",
+                "name": "Test",
+                "type": "unavailable",
+                "condition": "Unavailable",
+            },
+        )
+        assert (
+            alert_id in manager.notification_runtime._batches[("loic", "started")].items
+        )
 
         async def fail_save(*_args, **_kwargs) -> None:
             raise RuntimeError("storage unavailable")
 
         original_save = manager.storage.async_save
         manager.storage.async_save = fail_save
+        changed_profile = deepcopy(profile)
+        changed_profile["name"] = "Changed"
         with pytest.raises(RuntimeError, match="storage unavailable"):
-            await manager.async_update_config({"notification_profiles": [_profile()]})
+            await manager.async_update_config(
+                {"notification_profiles": [changed_profile]}
+            )
 
         assert manager.notification_runtime._accept_events is True
         assert manager.notification_runtime._events_pause_depth == 0
+        assert (
+            alert_id in manager.notification_runtime._batches[("loic", "started")].items
+        )
         manager.storage.async_save = original_save
         await manager.async_unload()
 
@@ -202,6 +231,98 @@ def test_invalid_profiles_are_rejected(change: dict, message: str) -> None:
         validate_config(
             {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "maximum"),
+    [
+        (
+            "primary_targets",
+            "notify.mobile_app_phone",
+            MAX_NOTIFICATION_TARGETS,
+        ),
+        ("label_ids", "important", MAX_NOTIFICATION_LABELS),
+    ],
+)
+def test_profile_list_limits_apply_before_deduplication(
+    field: str, value: str, maximum: int
+) -> None:
+    """Duplicate values cannot bypass raw input complexity limits."""
+    profile = _profile()
+    profile[field] = [value] * (maximum + 1)
+
+    with pytest.raises(ValueError, match=f"at most {maximum} items"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+
+
+def test_policy_rejects_non_string_field_names_with_stable_error() -> None:
+    """Malformed YAML mappings raise a validation error instead of TypeError."""
+    profile = _profile()
+    profile["default_policy"][1] = True
+
+    with pytest.raises(ValueError, match="field names must be strings"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+
+
+def test_rule_deletion_cleans_notification_runtime_and_exception(hass, entry) -> None:
+    """Deleting a rule leaves no pending delivery, reminder or orphan override."""
+
+    async def scenario() -> None:
+        hass.states.set("sensor.test", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Hot sensor",
+                "entity_ids": ["sensor.test"],
+                "operator": "above",
+                "value": 8,
+                "duration": 0,
+            }
+        )
+        profile = _profile()
+        profile["label_ids"] = []
+        profile["exceptions"][0]["selector_id"] = rule["id"]
+        await manager.async_update_config({"notification_profiles": [profile]})
+        alert_id = f"rule:{rule['id']}:sensor.test"
+        await manager.notification_runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            {
+                "id": alert_id,
+                "entity_id": "sensor.test",
+                "name": "Hot sensor",
+                "type": "custom_rule",
+                "rule_id": rule["id"],
+                "condition": "Above 8",
+            },
+        )
+        assert alert_id in manager.notification_runtime._runtime["loic"]
+        assert (
+            alert_id in manager.notification_runtime._batches[("loic", "started")].items
+        )
+
+        await manager.async_delete_rule(rule["id"])
+
+        configured_profile = manager.get_config()["notification_profiles"][0]
+        assert all(
+            exception.get("selector_id") != rule["id"]
+            for exception in configured_profile["exceptions"]
+        )
+        assert all(
+            alert_id not in profile_runtime
+            for profile_runtime in manager.notification_runtime._runtime.values()
+        )
+        assert all(
+            alert_id not in batch.items
+            for batch in manager.notification_runtime._batches.values()
+        )
+        await manager.async_unload()
+
+    asyncio.run(scenario())
 
 
 def test_yaml_round_trip_rebinds_rule_exceptions_to_new_rule_ids() -> None:

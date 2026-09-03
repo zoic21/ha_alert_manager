@@ -22,6 +22,7 @@ from .const import (
     LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
+    SIGNAL_NOTIFICATION_LIFECYCLE,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
 from .packs.base import PackGeneratedAlert
@@ -458,17 +459,28 @@ class _StateMixin:
 
     def _fire_started(self, record: AlertRecord) -> None:
         """Emit the documented start event exactly on activation."""
-        self.hass.bus.async_fire(EVENT_ALERT_STARTED, record.as_public_dict())
+        data = record.as_public_dict()
+        async_dispatcher_send(
+            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_STARTED, data
+        )
+        self.hass.bus.async_fire(EVENT_ALERT_STARTED, data)
 
     def _fire_resolved(self, record: AlertRecord, now: datetime) -> None:
         """Emit resolution information without retaining history."""
         data = record.as_public_dict()
         data["resolved_at"] = now.isoformat()
+        async_dispatcher_send(
+            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_RESOLVED, data
+        )
         self.hass.bus.async_fire(EVENT_ALERT_RESOLVED, data)
 
     def _fire_acknowledged(self, record: AlertRecord) -> None:
         """Emit an acknowledgement event only after durable state changed."""
-        self.hass.bus.async_fire(EVENT_ALERT_ACKNOWLEDGED, record.as_public_dict())
+        data = record.as_public_dict()
+        async_dispatcher_send(
+            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_ACKNOWLEDGED, data
+        )
+        self.hass.bus.async_fire(EVENT_ALERT_ACKNOWLEDGED, data)
 
     def _fire_unacknowledged(
         self,
@@ -487,6 +499,9 @@ class _StateMixin:
             data["previous_acknowledged_at"] = previous_at.isoformat()
         if previous_by is not None:
             data["previous_acknowledged_by"] = previous_by
+        async_dispatcher_send(
+            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_UNACKNOWLEDGED, data
+        )
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
     def _schedule_new_device_alerts(self, devices: dict[str, dict[str, Any]]) -> None:

@@ -399,7 +399,6 @@ class _ApiMixin:
             return False
 
         with self.notification_runtime.events_paused():
-            self.notification_runtime.discard_batches()
             previous_config = deepcopy(self.config)
             previous_records = deepcopy(self.records)
             previous_pending_history = list(self._pending_history)
@@ -433,6 +432,7 @@ class _ApiMixin:
                 self._reschedule_record_timers()
                 raise
 
+            self.notification_runtime.discard_batches()
             if enabled:
                 async_dismiss_persistent_notification(
                     self.hass, MONITORING_NOTIFICATION_ID
@@ -644,8 +644,6 @@ class _ApiMixin:
             else nullcontext()
         )
         with event_pause:
-            if notification_profiles_changed:
-                self.notification_runtime.discard_batches()
             previous = self._configuration_snapshot()
             try:
                 self.config = candidate
@@ -669,6 +667,8 @@ class _ApiMixin:
             except Exception:
                 self._restore_configuration_snapshot(previous)
                 raise
+            if notification_profiles_changed:
+                self.notification_runtime.discard_batches()
             await self._async_refresh_notification_runtime(
                 reset_reminders=notification_events_paused
             )
@@ -730,6 +730,7 @@ class _ApiMixin:
                         )
                 raise
 
+            self.notification_runtime.discard_batches()
             monitoring_changed = previous_monitoring_enabled != self.monitoring_enabled
             coherence_schedule_changed = (
                 previous[0].get("coherence_schedule", "none")
@@ -835,6 +836,20 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        alert_ids_to_discard: set[str] = set()
+        for entity_id in removed_entities:
+            alert_id = f"rule:{rule_id}:{entity_id}"
+            current = self.records.get(alert_id)
+            if (
+                self.monitoring_enabled
+                and rule.enabled
+                and entity_id in rule.entity_ids
+                and current is not None
+                and current.status is AlertStatus.ACTIVE
+            ):
+                continue
+            alert_ids_to_discard.add(alert_id)
+        await self.notification_runtime.async_discard_alerts(alert_ids_to_discard)
         self._publish_if_changed()
         return rule.as_dict()
 
@@ -853,6 +868,13 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             del self.config["rules"][index]
+            for profile in self.config.get("notification_profiles", []):
+                profile["exceptions"] = [
+                    exception
+                    for exception in profile["exceptions"]
+                    if exception["selector_type"] != "rule"
+                    or exception["selector_id"] != rule_id
+                ]
             self._rebuild_rule_index()
             if self.monitoring_enabled:
                 self._remove_rule_instances(rule_id, set(rule.entity_ids))
@@ -862,6 +884,9 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        await self.notification_runtime.async_discard_alerts(
+            {f"rule:{rule_id}:{entity_id}" for entity_id in rule.entity_ids}
+        )
         self._publish_if_changed()
 
     def _configuration_snapshot(
