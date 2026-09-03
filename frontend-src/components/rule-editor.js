@@ -511,6 +511,7 @@ export function captureRuleDraft() {
 }
 
 export function hydrateRuleEditor(root, context) {
+  hydrateRuleEditorMenu(root, context.onMenuSelected);
   const closeButton = root?.querySelector?.("#rule-editor-close");
   if (closeButton) {
     closeButton.label = context.closeLabel;
@@ -555,6 +556,18 @@ export function hydrateRuleEditor(root, context) {
   );
 }
 
+export function hydrateRuleEditorMenu(root, onSelected) {
+  const menu = root?.querySelector?.("[data-rule-editor-menu]");
+  if (!menu?.addEventListener) return;
+  menu._alertManagerOnSelected = onSelected;
+  if (menu._alertManagerMenuConfigured) return;
+  menu.addEventListener("wa-select", (event) => {
+    event.stopPropagation();
+    void menu._alertManagerOnSelected?.(event);
+  });
+  menu._alertManagerMenuConfigured = true;
+}
+
 export function hydrateRuleEditorControls() {
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
@@ -588,6 +601,7 @@ export function hydrateRuleEditorControls() {
     attributeOptions: this._ruleAttributeOptions(),
     configureSelect: (...args) => this._configureSelect(...args),
     configureSelector: (...args) => this._configureSelector(...args),
+    onMenuSelected: (event) => this._handleSelected(event),
     onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "state";
       this._captureRuleDraft();
