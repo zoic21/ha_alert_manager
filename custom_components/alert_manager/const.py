@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "2.0.5-dev34"
+INTEGRATION_VERSION: Final = "2.1.0"
 FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.12"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
@@ -87,8 +87,8 @@ COHERENCE_SCHEDULE_HOUR: Final = 3
 COHERENCE_SCHEDULE_MINUTE: Final = 5
 MIN_HISTORY_LIMIT: Final = 0
 MAX_HISTORY_LIMIT: Final = 1000
-MAX_RULES: Final = 1000
-MAX_RULE_ENTITY_IDS: Final = 1000
+MAX_RULES: Final = 500
+MAX_RULE_ENTITY_IDS: Final = 50
 MAX_RULE_NAME_LENGTH: Final = 255
 MAX_RULE_MESSAGE_LENGTH: Final = 1024
 MAX_RULE_CONDITION_TEMPLATE_LENGTH: Final = 65_536

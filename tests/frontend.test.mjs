@@ -1124,12 +1124,12 @@ test("backend rule validation errors are localized without leaking English", () 
     "Les valeurs de comparaison doivent être uniques.",
   );
   assert.equal(
-    panel._errorText(validationError("Rule entity_ids must contain at most 1000 items")),
-    "Une règle ne peut pas surveiller plus de 1 000 entités.",
+    panel._errorText(validationError("Rule entity_ids must contain at most 50 items")),
+    "Une règle ne peut pas surveiller plus de 50 entités.",
   );
   assert.equal(
-    panel._errorText(validationError("rules must contain at most 1000 items")),
-    "La configuration ne peut pas contenir plus de 1 000 règles.",
+    panel._errorText(validationError("rules must contain at most 500 items")),
+    "La configuration ne peut pas contenir plus de 500 règles.",
   );
   assert.equal(
     panel._errorText(validationError("Rule condition_template must be non-empty text of at most 65536 characters")),

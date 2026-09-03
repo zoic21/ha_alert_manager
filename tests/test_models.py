@@ -832,6 +832,34 @@ def test_rule_entity_ids_must_be_unique():
 
 def test_rule_collection_and_entity_counts_are_bounded():
     """Large admin payloads are rejected before every item is traversed."""
+    assert MAX_RULES == 500
+    assert MAX_RULE_ENTITY_IDS == 50
+
+    entity_ids = [f"sensor.test_{index}" for index in range(MAX_RULE_ENTITY_IDS)]
+    rule = validate_rule_payload(
+        {
+            "name": "Maximum entities",
+            "entity_ids": entity_ids,
+            "operator": "equals",
+            "value": "on",
+            "duration": 60,
+        }
+    )
+    assert rule.entity_ids == entity_ids
+
+    rules = [
+        {
+            "id": f"rule-{index}",
+            "name": f"Rule {index}",
+            "entity_ids": ["sensor.test"],
+            "operator": "equals",
+            "value": "on",
+            "duration": 60,
+        }
+        for index in range(MAX_RULES)
+    ]
+    assert len(validate_config({"rules": rules})["rules"]) == MAX_RULES
+
     with pytest.raises(ValueError, match=f"at most {MAX_RULES}"):
         validate_config({"rules": [{}] * (MAX_RULES + 1)})
 
