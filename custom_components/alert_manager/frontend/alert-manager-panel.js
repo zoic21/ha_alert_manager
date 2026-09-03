@@ -5754,7 +5754,7 @@ const settingsStyles = `
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(110px, 1fr));
-    align-items: end;
+    align-items: stretch;
     gap: 10px;
   }
   .pack-configuration[hidden],
@@ -5766,6 +5766,9 @@ const settingsStyles = `
     display: grid;
     gap: 6px;
     min-width: 0;
+  }
+  .pack-setting-field {
+    grid-template-rows: 1fr auto;
   }
   .pack-setting-field .field-label {
     line-height: 1.3;
