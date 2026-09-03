@@ -193,6 +193,23 @@ export const responsiveStyles = `
     .configuration-section-heading {
       align-items: center;
     }
+    .notification-section-header,
+    .notification-profile-row,
+    .notification-exceptions-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .notification-profile-actions {
+      justify-content: flex-start;
+    }
+    .notification-profile-actions ha-button {
+      width: auto;
+    }
+    .notification-profile-fields,
+    .notification-policy-grid,
+    .notification-exception-grid {
+      grid-template-columns: 1fr;
+    }
     .rule-value-row {
       grid-template-columns: 1fr;
     }

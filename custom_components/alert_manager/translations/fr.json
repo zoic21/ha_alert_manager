@@ -213,12 +213,71 @@
       "notification_title": "Surveillance Alert Manager désactivée"
     },
     "notifications": {
+      "add": "Ajouter un profil",
+      "close_aria": "Fermer le profil de notification",
+      "defaults": "Comportement par défaut",
+      "delete_confirm": "Supprimer le profil de notification {name} ?",
+      "disabled": "Désactivé",
+      "empty": "Aucun profil de notification configuré.",
+      "enabled": "Activé",
+      "exception_number": "Exception {count}",
+      "exceptions": "Exceptions",
+      "exceptions_help": "Les surcharges sont appliquées dans cet ordre : pack, première étiquette correspondante, puis règle.",
+      "fallback_help": "Utilisées uniquement si toutes les destinations principales signalent une erreur d’envoi.",
+      "fallback_targets": "Destinations de secours",
       "grouped_alerts": "{count} alertes",
+      "help": "Route les alertes groupées vers les entités de notification natives de Home Assistant.",
+      "labels": "Étiquettes du profil",
+      "labels_help": "Si elles sont renseignées, seules les entités ou appareils portant l’une de ces étiquettes correspondent au profil.",
+      "name": "Nom du profil",
+      "never": "Jamais",
+      "new": "Nouveau profil de notification",
+      "no": "Non",
+      "no_exceptions": "Aucune exception configurée.",
+      "on_resolved": "Retour à la normale",
+      "on_start": "Nouvelle alerte",
+      "override": {
+        "false": "Non",
+        "inherit": "Hériter",
+        "true": "Oui"
+      },
+      "policy_summary": "Nouvelle : {start} · Résolue : {resolved} · Rappel : {reminder} · Exceptions : {exceptions}",
+      "primary_targets": "Destinations principales",
+      "primary_targets_help": "Chaque destination principale est essayée indépendamment.",
+      "reminder": "Intervalle de rappel",
+      "reminder_help": "Laissez vide pour désactiver les rappels.",
+      "reminder_modes": {
+        "custom": "Intervalle personnalisé",
+        "inherit": "Hériter",
+        "never": "Jamais"
+      },
       "reminder_title": "Alert Manager — {count} alerte(s) active(s)",
       "resolved_title": "Alert Manager — {count} retour(s) à la normale",
+      "seconds": "{count} s",
+      "selector": "Cible",
+      "selector_type": "Type d’exception",
+      "selector_types": {
+        "label": "Étiquette",
+        "pack": "Pack automatique",
+        "rule": "Règle personnalisée"
+      },
       "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
+      "targets_summary": "{count} destination(s) principale(s) · {fallback} secours",
+      "test": "Tester",
+      "test_failed": "Échec du test pour : {targets}",
       "test_message": "Ce message confirme que le profil de notification fonctionne.",
-      "test_title": "Alert Manager — Notification de test"
+      "test_success": "Notification de test envoyée.",
+      "test_title": "Alert Manager — Notification de test",
+      "title": "Notifications",
+      "validation": {
+        "duplicate_target": "Une destination de secours ne peut pas être aussi une destination principale.",
+        "name": "Saisissez un nom de profil.",
+        "override": "Chaque exception doit modifier au moins un réglage.",
+        "primary": "Sélectionnez au moins une entité de notification principale.",
+        "reminder": "Les intervalles de rappel doivent être des nombres entiers d’au moins 60 secondes.",
+        "selector": "Sélectionnez une cible pour chaque exception."
+      },
+      "yes": "Oui"
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",
@@ -257,395 +316,4 @@
       "device": "Équipement",
       "device_fallback": "Appareil",
       "empty_active": "Aucune alerte active.",
-      "empty_acknowledged": "Aucune alerte acquittée.",
-      "empty_upcoming": "Aucune alerte à venir.",
-      "remaining": "Temps restant",
-      "show_other_alerts": "Afficher les autres ({count})",
-      "hide_other_alerts": "Masquer les autres",
-      "section_acknowledged": "Alertes acquittées",
-      "section_active": "Alertes actives",
-      "section_upcoming": "Alertes à venir",
-      "status_acknowledged": "Acquittée",
-      "status_acknowledged_count": "Acquittées : {count}",
-      "status_active": "Active",
-      "status_active_count": "Actives : {count}",
-      "status_pending": "À venir",
-      "status_pending_count": "À venir : {count}",
-      "summary_acknowledged": "Alertes acquittées",
-      "summary_active": "Alertes actives",
-      "summary_pending": "Alertes à venir",
-      "summary_tracked": "Total suivi",
-      "unacknowledge": "Retirer l’acquittement"
-    },
-    "packs": {
-      "execution_errors": {
-        "description": "Surveille les automatisations et les scripts dont une exécution se termine en erreur.",
-        "name": "Automatisations et scripts en erreur"
-      },
-      "flapping": {
-        "description": "Détecte les anomalies qui apparaissent et disparaissent fréquemment, même avant leur activation normale.",
-        "name": "Flapping / Instabilité"
-      },
-      "battery": {
-        "description": "Surveille les capteurs de batterie inférieurs ou égaux à leur seuil.",
-        "name": "Batteries faibles"
-      },
-      "connectivity": {
-        "description": "Surveille les capteurs de connectivité qui passent à off.",
-        "name": "Connectivité"
-      },
-      "unavailable": {
-        "description": "Surveille l’état unavailable sur toutes les entités.",
-        "name": "Entités indisponibles"
-      },
-      "unifi": {
-        "description": "Surveille les équipements suivis par un routeur UniFi.",
-        "name": "Équipements UniFi"
-      }
-    },
-    "rules": {
-      "aria_close": "Fermer",
-      "aria_create_dialog": "Créer une règle",
-      "aria_disable": "Désactiver la règle {name}",
-      "aria_edit": "Modifier la règle {name}",
-      "aria_edit_dialog": "Modifier une règle",
-      "aria_menu": "Options de l’éditeur de règle",
-      "aria_enable": "Activer la règle {name}",
-      "aria_remove_value": "Retirer la valeur {index}",
-      "aria_resize": "Redimensionner le volet",
-      "aria_value": "Valeur de comparaison {index}",
-      "attribute": "Attribut",
-      "attribute_name": "Nom de l’attribut",
-      "attribute_path_help": "Utilisez data.*.key pour comparer la clé key de chaque élément du tableau data.",
-      "attribute_variation_path_help": "Sélectionnez un attribut numérique unique. Les chemins imbriqués comme data.power sont acceptés, mais pas les jokers comme data.*.power.",
-      "condition": "Condition",
-      "condition_template": "Condition Jinja supplémentaire",
-      "condition_template_help": "Facultatif. Le template doit renvoyer true en plus de la comparaison. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
-      "condition_template_only": "Condition Jinja",
-      "condition_template_only_help": "Obligatoire. Le template doit renvoyer true pour déclencher l’alerte ; aucune autre comparaison n’est évaluée. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
-      "condition_template_variation": "Condition Jinja de début",
-      "condition_template_variation_help": "Obligatoire. La valeur de début de l’état ou de l’attribut sélectionné est capturée lorsque cette condition passe à true. Elle est conservée tant que la condition reste vraie, puis réinitialisée lorsqu’elle redevient fausse. Dans cette condition, value correspond à la valeur numérique actuelle surveillée.",
-      "condition_template_variation_required": "La condition Jinja de début est obligatoire avec une source de variation.",
-      "condition_template_selected_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de la valeur ou de l’attribut sélectionné. Variables supplémentaires : entity_id, state et value.",
-      "condition_template_unchanged_help": "Facultatif. Le template doit renvoyer true en plus de l’absence de changement de l’état et des attributs. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
-      "condition_template_required": "La condition Jinja est obligatoire lorsque la source est « Jinja ».",
-      "create": "Créer",
-      "delete_confirm": "Supprimer la règle « {name} » ?",
-      "description": "Comparaisons, absence de changement et conditions Jinja sur vos entités.",
-      "duration": "Durée",
-      "discard_confirm": "Abandonner les modifications non enregistrées de la règle ?",
-      "edit_visually": "Modifier visuellement",
-      "edit_yaml": "Modifier en YAML",
-      "editor_condition_help": "Définissez ce qui doit déclencher l’alerte.",
-      "editor_information": "Informations",
-      "editor_information_help": "Identifiez la règle et choisissez les entités surveillées.",
-      "editor_trigger": "Déclenchement",
-      "editor_trigger_help": "Ajoutez une temporisation et personnalisez le message exposé.",
-      "flapping_enabled": "Activer la détection de flapping",
-      "flapping_help": "Compte chaque nouvelle occurrence de cette règle. Les valeurs facultatives héritent de la configuration particulière de l’appareil, puis de la configuration globale du flapping.",
-      "flapping_inherit_help": "Laissez vide pour hériter de la valeur par défaut.",
-      "flapping_title": "Flapping / Instabilité",
-      "empty": "Aucune règle personnalisée.",
-      "empty_filtered": "Aucune règle ne correspond à la recherche et aux filtres.",
-      "entities": "Entités",
-      "entities_help": "Chaque entité est évaluée indépendamment.",
-      "message_optional": "Message facultatif",
-      "message_help": "Compatible Jinja. Toutes les fonctions Jinja et entités de Home Assistant sont accessibles. Variables supplémentaires : entity_id, state et value.",
-      "update_message_when_active": "Mettre à jour le message pendant l’alerte",
-      "update_message_when_active_help": "Désactivé par défaut : le message reste figé à l’activation. Activez cette option pour recalculer et publier le message lorsque ses données Jinja changent, même si l’alerte est déjà active.",
-      "lower_bound": "Borne inférieure",
-      "modify": "Modifier",
-      "multiple_any": "L’alerte se déclenche dès qu’une valeur correspond.",
-      "multiple_none": "L’alerte se déclenche seulement lorsqu’aucune valeur ne correspond.",
-      "name": "Nom",
-      "new": "Nouvelle règle",
-      "new_subtitle": "Nouvelle règle personnalisée",
-      "operator": "Opérateur",
-      "search": "Rechercher dans les règles",
-      "source": "Source",
-      "source_attribute": "Attribut",
-      "source_attribute_variation": "Variation d’un attribut",
-      "source_jinja": "Jinja",
-      "source_state": "État principal",
-      "source_state_variation": "Variation de l’état principal",
-      "source_unchanged": "Aucun changement",
-      "status": "Statut",
-      "status_active": "Actif",
-      "status_inactive": "Inactif",
-      "title": "Règles personnalisées",
-      "test": {
-        "baseline": "Valeur de référence",
-        "attribute": "Attribut configuré",
-        "comparison_result": "Résultat de la comparaison",
-        "condition": "Condition",
-        "conclusion_error": "Cette entité ne peut pas être évaluée tant que l’erreur n’est pas corrigée.",
-        "conclusion_immediate": "La condition est vraie. Cette règle deviendrait active immédiatement.",
-        "conclusion_indeterminate": "La condition de départ est vraie, mais le résultat complet ne peut pas encore être déterminé.",
-        "conclusion_no_match": "Cette règle ne déclencherait actuellement aucune alerte pour cette entité.",
-        "conclusion_pending": "La condition est vraie. Avec le délai configuré de {duration}, cette règle entrerait en attente avant de devenir active.",
-        "current_state": "État actuel brut",
-        "current_value": "Valeur actuelle",
-        "delay": "Délai configuré",
-        "disabled_notice": "La règle est désactivée, mais sa condition a été évaluée pour ce test.",
-        "duration_reached": "Durée atteinte",
-        "entity": "Entité",
-        "extracted_value": "Valeur réellement utilisée",
-        "false": "faux",
-        "final_result": "Résultat final",
-        "generated_message": "Message généré",
-        "jinja_result": "Condition Jinja",
-        "message_error": "Le message Jinja n’a pas pu être rendu : {error}",
-        "reason": "Diagnostic",
-        "reasons": {
-          "attribute_not_found": "L’attribut configuré est introuvable.",
-          "baseline_unavailable": "La condition de départ est actuellement vraie, mais aucune valeur de référence n’a encore été enregistrée. La variation réelle commencera à être calculée lorsque la règle sera active dans Alert Manager.",
-          "condition_template_error": "La condition Jinja n’a pas pu être rendue.",
-          "entity_disabled": "L’entité ou son appareil est désactivé dans Home Assistant.",
-          "entity_not_found": "L’entité n’existe pas dans Home Assistant.",
-          "numeric_source_required": "La valeur lue n’est pas numérique alors que cet opérateur exige un nombre.",
-          "state_unavailable": "L’entité est indisponible ; les règles personnalisées ne sont pas évaluées dans cet état.",
-          "state_unknown": "L’état de l’entité est inconnu ; la règle personnalisée ne correspond pas."
-        },
-        "status_error": "Erreur",
-        "status_indeterminate": "Indéterminé",
-        "status_match": "Condition vraie",
-        "status_no_match": "Condition fausse",
-        "source": "Source configurée",
-        "summary": "Correspondances actuelles : {matched} sur {total} entités.",
-        "summary_errors": "Erreurs d’évaluation : {count}.",
-        "summary_indeterminate": "Résultats indéterminés : {count}.",
-        "title": "Résultat du test",
-        "title_error": "Impossible de tester la règle",
-        "true": "vrai",
-        "unchanged": "Absence de changement",
-        "unchanged_elapsed": "Aucun changement depuis {duration}",
-        "variation": "Variation calculée"
-      },
-      "upper_bound": "Borne supérieure",
-      "value": "Valeur de comparaison",
-      "values": "Valeurs de comparaison",
-      "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Les sources state_variation et attribute_variation comparent valeur_actuelle - valeur_au_début et exigent condition_template : la référence est capturée lorsque ce template passe à true, puis réinitialisée lorsqu’il redevient false. attribute_variation exige aussi un attribut numérique sans joker. Les variations acceptent les opérateurs above, below, between et outside. Les opérateurs between et outside utilisent value: [borne_inférieure, borne_supérieure] ; l’opérateur unchanged n’utilise pas value. Un attribut data.*.key parcourt chaque élément du tableau data pour les comparaisons classiques. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée. Avec source: jinja, seule condition_template est évaluée et elle devient obligatoire. update_message_when_active permet de continuer à recalculer un message Jinja après l’activation.",
-      "yaml_invalid": "La règle YAML est invalide.",
-      "yaml_title": "Règle YAML"
-    },
-    "settings": {
-      "alert_display": "Affichage des alertes",
-      "coherence_schedule": "Analyse automatique de cohérence",
-      "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
-      "coherence_scan_esphome": "Analyser le dossier ESPHome",
-      "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
-      "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
-      "coherence_ignored_entity_references_help": "Ajoutez les références exactes à ignorer, par exemple toto.plop.",
-      "coherence_ignored_entity_reference_placeholder": "Exemple : toto.plop",
-      "coherence_ignored_entity_reference_validation": "Saisissez une référence complète valide, par exemple toto.plop.",
-      "coherence_settings": "Analyse de cohérence",
-      "close_configuration_aria": "Fermer la configuration de {name}",
-      "configure_aria": "Configurer {name}",
-      "coherence_schedules": {
-        "daily": "Une fois par jour",
-        "monthly": "Une fois par mois",
-        "none": "Aucune",
-        "weekly": "Une fois par semaine"
-      },
-      "pending_display_delay": "Délai d’affichage des alertes à venir",
-      "pending_display_delay_help": "Une alerte à venir attend ce délai avant d’être affichée. Si elle devient active plus tôt, elle apparaît immédiatement comme active sans passer par la liste des alertes à venir.",
-      "aria_delay": "Délai en secondes",
-      "aria_remove_delay": "Supprimer ce délai",
-      "delay_help": "Prioritaire sur le délai du pack et le délai global.",
-      "delay_validation": "Chaque délai particulier doit avoir une entité et un nombre entier positif.",
-      "device_exclusions": "Appareils exclus",
-      "duplicate_delay": "L’entité {entity_id} possède déjà un délai particulier.",
-      "duplicate_delay_save": "L’entité {entity_id} est présente deux fois dans les délais.",
-      "entity_delay": "Délais particuliers par entité",
-      "entity_exclusions": "Entités exclues",
-      "exclusions": "Exclusions de la surveillance",
-      "explicit_exclusions": "Exclusions explicites",
-      "general": "Paramètres généraux",
-      "global_delay": "Délai global",
-      "global_delay_help": "Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.",
-      "history_clear": "Effacer l’historique",
-      "history_clear_confirm": "Effacer définitivement tout l’historique des alertes ?\n\nCette opération est irréversible. Les alertes actives, à venir et acquittées ne seront pas modifiées.",
-      "history_limit": "Nombre d’événements historiques conservés",
-      "history_limit_help": "De 0 à 1000 événements. La valeur par défaut est 100 ; 0 désactive la conservation du nouvel historique.",
-      "history_limit_validation": "Le nombre d’événements historiques doit être un entier compris entre 0 et 1000.",
-      "history_settings": "Historique",
-      "label_exclusions": "Labels exclus des surveillances automatiques",
-      "labels_help": "Une règle personnalisée ignore ces labels.",
-      "no_delay": "Aucun délai particulier.",
-      "save": "Enregistrer les paramètres",
-      "transfer_help": "L’export ne contient que la configuration persistante. L’import remplace entièrement la configuration actuelle.",
-      "transfer_title": "Export et import de configuration",
-      "export": "Exporter en YAML",
-      "import": "Importer un YAML",
-      "import_confirm": "La configuration actuelle sera entièrement remplacée.\n\nRègles : {rules}\nPacks activés : {packs}\nDélais particuliers : {delays}\n\nContinuer ?",
-      "import_read_error": "Impossible de lire le fichier sélectionné."
-    },
-    "success": {
-      "alert_acknowledged": "Alerte acquittée",
-      "alert_unacknowledged": "Acquittement retiré",
-      "automatic_saved": "Surveillance automatique enregistrée",
-      "backup_downloaded": "Sauvegarde téléchargée",
-      "backup_restored": "Sauvegarde de configuration restaurée",
-      "config_exported": "Configuration exportée",
-      "config_imported": "Configuration importée",
-      "history_cleared": "Historique effacé",
-      "rule_created": "Règle créée",
-      "rule_deleted": "Règle supprimée",
-      "rule_disabled": "Règle désactivée",
-      "rule_enabled": "Règle activée",
-      "rule_updated": "Règle modifiée",
-      "settings_saved": "Paramètres enregistrés"
-    },
-    "table": {
-      "columns": {
-        "area": "Zone",
-        "condition": "Condition",
-        "detected": "Détectée le",
-        "device": "Appareil",
-        "duration": "Durée",
-        "entity": "Entité",
-        "entity_id": "ID de l’entité",
-        "integration": "Intégration",
-        "message": "Message",
-        "move_down": "Descendre la colonne {column}",
-        "move_up": "Monter la colonne {column}",
-        "reset": "Restaurer les colonnes par défaut",
-        "resolved": "Résolue le",
-        "rule": "Règle",
-        "status": "Statut",
-        "timeline": "Active depuis / Temps restant",
-        "title": "Colonnes",
-        "value": "Valeur"
-      },
-      "empty_current": "Aucune alerte en cours.",
-      "empty_filtered": "Aucune ligne ne correspond à la recherche et aux filtres.",
-      "filters": {
-        "all": "Tous",
-        "detected_from": "Détectée à partir du",
-        "detected_to": "Détectée jusqu’au",
-        "domain": "Domaine",
-        "integration": "Intégration",
-        "labels": "Étiquettes",
-        "no_options": "Aucune option disponible",
-        "reset": "Réinitialiser les filtres",
-        "resolved_from": "Résolue à partir du",
-        "resolved_to": "Résolue jusqu’au",
-        "title": "Filtres"
-      },
-      "group": {
-        "area": "Zone",
-        "device": "Appareil",
-        "none": "Aucun groupement",
-        "rule": "Règle",
-        "status": "Statut",
-        "title": "Grouper par"
-      },
-      "groups": {
-        "without_area": "Sans zone",
-        "without_device": "Sans appareil",
-        "without_rule": "Sans règle",
-        "without_status": "Sans statut"
-      },
-      "monitoring_suspended": "Délai suspendu — surveillance désactivée",
-      "search": "Rechercher dans les alertes",
-      "selection": {
-        "acknowledge": "Acquitter ({count})",
-        "acknowledged_result": "{count} alerte(s) acquittée(s)",
-        "close": "Fermer le mode sélection",
-        "count": "{count} sélectionnée(s)",
-        "open": "Activer la sélection multiple",
-        "partial": "{count} alerte(s) modifiée(s), {failed} échec(s)",
-        "select": "Sélectionner",
-        "toolbar": "Actions sur les alertes sélectionnées",
-        "unacknowledge": "Désacquitter ({count})",
-        "unacknowledged_result": "Acquittement retiré pour {count} alerte(s)"
-      },
-      "sort": {
-        "activated": "Date d’activation",
-        "asc": "Croissant",
-        "desc": "Décroissant",
-        "detected": "Date de détection",
-        "device": "Appareil",
-        "direction": "Ordre",
-        "entity_name": "Entité",
-        "remaining": "Temps restant",
-        "resolved": "Date de résolution",
-        "rule": "Règle",
-        "status": "Statut",
-        "title": "Trier par",
-        "value": "Valeur"
-      },
-      "status": {
-        "acknowledged": "Alerte acquittée",
-        "active": "Alerte active",
-        "pending": "Alerte à venir"
-      },
-      "toolbar": "Outils du tableau des alertes",
-      "visible_count": "{visible} sur {total}"
-    },
-    "tabs": {
-      "automatic": "Surveillance automatique",
-      "coherence": "Cohérence",
-      "history": "Historique",
-      "overview": "Vue d’ensemble",
-      "rules": "Règles personnalisées",
-      "settings": "Configuration"
-    },
-    "unavailable": "Configuration indisponible.",
-    "units": {
-      "events": "événements",
-      "seconds": "secondes"
-    }
-  },
-  "services": {
-    "acknowledge": {
-      "name": "Acquitter une alerte",
-      "description": "Acquitte une alerte active d’Alert Manager sans la résoudre.",
-      "fields": {
-        "alert_id": {
-          "name": "Identifiant de l’alerte",
-          "description": "Identifiant stable exact de l’alerte active à acquitter."
-        }
-      }
-    },
-    "unacknowledge": {
-      "name": "Retirer l’acquittement d’une alerte",
-      "description": "Retire l’acquittement d’une alerte active d’Alert Manager.",
-      "fields": {
-        "alert_id": {
-          "name": "Identifiant de l’alerte",
-          "description": "Identifiant stable exact de l’alerte active dont l’acquittement est retiré."
-        }
-      }
-    }
-  },
-  "entity": {
-    "button": {
-      "check_coherence": {
-        "name": "Vérifier la cohérence"
-      }
-    },
-    "sensor": {
-      "coherence_issue": {
-        "name": "Entités inexistantes"
-      },
-      "device_main_active": {
-        "name": "Appareils en alerte"
-      },
-      "main_acknowledge": {
-        "name": "Alertes acquittées"
-      },
-      "main_active": {
-        "name": "Alertes actives"
-      },
-      "main_pending": {
-        "name": "Alertes à venir"
-      }
-    },
-    "switch": {
-      "main_monitoring": {
-        "name": "Surveillance Alert Manager"
-      }
-    }
-  }
-}
+      "empty_acknowl

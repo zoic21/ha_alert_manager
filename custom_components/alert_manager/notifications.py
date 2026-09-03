@@ -210,6 +210,9 @@ class NotificationManager:
         except HomeAssistantError as err:
             _LOGGER.warning("Notification delivery to %s failed: %s", target, err)
             return str(err)[:500]
+        except Exception as err:  # Delivery must never leak into alert lifecycle tasks.
+            _LOGGER.exception("Unexpected notification delivery failure to %s", target)
+            return (str(err) or type(err).__name__)[:500]
         return None
 
 

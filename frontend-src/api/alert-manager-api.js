@@ -144,6 +144,7 @@ export async function load() {
       this._loadPromise = null;
       if (initialLoad) {
         this._render();
+        this._openAlertDeepLink();
       } else if (this._activeTab === "overview") {
         this._refreshOverviewData();
       } else if (this._activeTab === "rules") {

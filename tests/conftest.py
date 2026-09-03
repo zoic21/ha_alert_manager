@@ -594,6 +594,9 @@ class FakeServices:
     def async_remove(self, domain, service):
         self.handlers.pop((domain, service), None)
 
+    def has_service(self, domain, service):
+        return (domain, service) in self.handlers
+
     async def async_call(
         self,
         domain,

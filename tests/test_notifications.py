@@ -220,3 +220,58 @@ def test_test_notification_uses_fallback_without_creating_runtime_state(
     ]
     assert attempted[0][1] == "Alert Manager — Test notification"
     assert "/alert-manager" in attempted[0][2]
+
+
+def test_mobile_app_delivery_keeps_click_target_in_transport_layer(
+    hass, registry_entry
+) -> None:
+    """Companion targets use their existing service only for click metadata."""
+    registry_entry(hass, "notify.phone", platform="mobile_app")
+    received = []
+
+    async def send(call):
+        received.append(call.data)
+
+    hass.services.async_register("notify", "phone", send)
+    manager = NotificationManager(hass, lambda: [])
+
+    result = asyncio.run(
+        manager.async_send(
+            primary_targets=["notify.phone"],
+            fallback_targets=[],
+            title="Title",
+            message="Message",
+            click_url="/alert-manager?alert=battery%3Asensor.test",
+        )
+    )
+
+    assert result["success"] is True
+    assert hass.services.calls[0]["service"] == "phone"
+    assert received[0]["data"] == {
+        "url": "/alert-manager?alert=battery%3Asensor.test",
+        "clickAction": "/alert-manager?alert=battery%3Asensor.test",
+    }
+
+
+def test_unexpected_primary_failure_is_isolated_and_uses_fallback(hass) -> None:
+    """A broken notify integration cannot leak into alert lifecycle tasks."""
+
+    async def send(_domain, _service, _data, **kwargs):
+        if kwargs["target"]["entity_id"] == "notify.primary":
+            raise RuntimeError("broken integration")
+
+    hass.services.async_call = send
+    manager = NotificationManager(hass, lambda: [])
+
+    result = asyncio.run(
+        manager.async_send(
+            primary_targets=["notify.primary"],
+            fallback_targets=["notify.fallback"],
+            title="Title",
+            message="Message",
+        )
+    )
+
+    assert result["success"] is True
+    assert result["used_fallback"] is True
+    assert result["delivered_targets"] == ["notify.fallback"]

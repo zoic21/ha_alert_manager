@@ -5,11 +5,21 @@ import {
   renderConfigurationDrawer,
   replaceConfigurationDrawer,
 } from "../components/configuration-drawer.js";
+import {
+  captureNotificationProfileDraft,
+  cloneNotificationProfile,
+  hydrateNotificationProfileControls,
+  newNotificationProfileDraft,
+  notificationProfileValidationError,
+  renderNotificationProfileDrawer,
+  renderNotificationProfiles,
+} from "../components/notification-profiles.js";
 
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
-      ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
+      ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
+      packs, rules, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
@@ -35,6 +45,11 @@ export function renderSettings(context) {
           ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
         </div>
       </div></ha-card>
+      ${renderNotificationProfiles({
+        profiles: settingsDraft.notification_profiles ?? [],
+        busy,
+        t,
+      })}
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
@@ -54,7 +69,8 @@ export function renderSettings(context) {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
-        settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+        settingsDraft, entityDelayDraft, configurationDrawer,
+        notificationProfileDraft, packs, rules, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -65,8 +81,19 @@ export function renderSettingsConfigurationEntry(id, label, count, t) {
 
 export function renderSettingsConfigurationDrawer(context) {
   const {
-    settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+    settingsDraft, entityDelayDraft, configurationDrawer,
+    notificationProfileDraft, packs, rules, busy, useBottomSheet, t,
   } = context;
+  if (configurationDrawer?.kind === "notification") {
+    return renderNotificationProfileDrawer({
+      draft: notificationProfileDraft,
+      packs,
+      rules,
+      busy,
+      useBottomSheet,
+      t,
+    });
+  }
   if (configurationDrawer?.kind !== "settings") return "";
   const id = configurationDrawer.id;
   let title;
@@ -111,6 +138,9 @@ export function renderSettingsPanel() {
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
+      notificationProfileDraft: this._notificationProfileDraft,
+      packs: this._packs.filter((pack) => pack.available),
+      rules: this._config.rules ?? [],
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -246,6 +276,9 @@ export async function saveSettings() {
       excluded_entities: [...this._settingsDraft.excluded_entities],
       excluded_devices: [...this._settingsDraft.excluded_devices],
       entity_delays: entityDelays,
+      notification_profiles: (this._settingsDraft.notification_profiles ?? []).map(
+        cloneNotificationProfile,
+      ),
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
@@ -284,219 +317,4 @@ export function resetSettingsDraft() {
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
-}
-
-export function ensureSettingsDraft() {
-    if (this._settingsDraft && this._entityDelayDraft) return;
-    this._settingsDraft = {
-      global_delay: this._config.global_delay,
-      pending_display_delay: this._config.pending_display_delay,
-      coherence_schedule: this._config.coherence_schedule ?? "none",
-      coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
-      history_limit: this._historyConfig.retention_limit,
-      coherence_ignored_entity_references: [
-        ...(this._config.coherence_ignored_entity_references ?? []),
-      ],
-      excluded_labels: [...(this._config.excluded_labels ?? [])],
-      excluded_entities: [...(this._config.excluded_entities ?? [])],
-      excluded_devices: [...(this._config.excluded_devices ?? [])],
-    };
-    this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
-      ([entity_id, delay]) => ({ entity_id, delay }),
-    );
-}
-
-export function handleSettingsInput(event) {
-    const fields = {
-      "global-delay": "global_delay",
-      "pending-display-delay": "pending_display_delay",
-      "history-limit": "history_limit",
-    };
-    const field = fields[event.target?.id];
-    if (!field) return;
-    this._ensureSettingsDraft();
-    this._settingsDraft[field] = String(event.target.value ?? "");
-}
-
-export function captureEntityDelayValues() {
-    if (!this._entityDelayDraft) return;
-    this.shadowRoot.querySelectorAll("[data-delay-index]").forEach((input) => {
-      const row = this._entityDelayDraft[Number(input.dataset.delayIndex)];
-      if (row) row.delay = Number(input.value);
-    });
-}
-
-export function setEntityDelayEntity(index, value) {
-    if (!this._entityDelayDraft) return;
-    const entityId = typeof value === "string" ? value : "";
-    if (
-      entityId
-      && this._entityDelayDraft.some(
-        (row, rowIndex) => rowIndex !== index && row.entity_id === entityId,
-      )
-    ) {
-      this._notice = {
-        kind: "error",
-        text: this._t("settings.duplicate_delay", { entity_id: entityId }),
-      };
-      this._render();
-      return;
-    }
-    this._entityDelayDraft[index].entity_id = entityId;
-}
-
-export function hydrateSettingsControls() {
-  this._ensureSettingsDraft();
-  this._configureSelect(
-    "coherence-schedule",
-    ["none", "daily", "weekly", "monthly"].map((value) => ({
-      value,
-      label: this._t(`settings.coherence_schedules.${value}`),
-    })),
-    this._settingsDraft.coherence_schedule,
-    (value) => {
-      this._settingsDraft.coherence_schedule = value;
-    },
-  );
-  this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
-    if (this._configuredControls.has(chip)) return;
-    chip.label = chip.dataset.ignoredReference;
-    chip.selected = true;
-    chip.addEventListener("remove", (event) => {
-      event.stopPropagation();
-      this._removeIgnoredReference(chip.dataset.ignoredReference);
-    });
-    this._configuredControls.add(chip);
-  });
-  this._configureSelector(
-    "excluded-labels",
-    { label: { multiple: true } },
-    this._settingsDraft.excluded_labels,
-    (value) => {
-      this._settingsDraft.excluded_labels = this._multipleSelectorValue(
-        value,
-        this._settingsDraft.excluded_labels,
-      );
-    },
-  );
-  this._configureSelector(
-    "excluded-entities",
-    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
-    this._settingsDraft.excluded_entities,
-    (value) => {
-      this._settingsDraft.excluded_entities = this._multipleSelectorValue(
-        value,
-        this._settingsDraft.excluded_entities,
-      );
-      updateSettingsConfigurationCount.call(this, "excluded_entities");
-    },
-  );
-  this._configureSelector(
-    "excluded-devices",
-    { device: { multiple: true } },
-    this._settingsDraft.excluded_devices,
-    (value) => {
-      this._settingsDraft.excluded_devices = this._multipleSelectorValue(
-        value,
-        this._settingsDraft.excluded_devices,
-      );
-      updateSettingsConfigurationCount.call(this, "excluded_devices");
-    },
-  );
-  this._entityDelayDraft.forEach((row, index) => {
-    this._configureSelector(
-      `delay-entity-${index}`,
-      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
-      row.entity_id || "",
-      (value) => this._setEntityDelayEntity(index, value),
-    );
-  });
-}
-
-export function refreshSettingsConfigurationDrawer() {
-  const form = this.shadowRoot?.querySelector?.("#settings-form");
-  if (!form) {
-    this._render();
-    return;
-  }
-  replaceConfigurationDrawer(form, renderSettingsConfigurationDrawer({
-    settingsDraft: this._settingsDraft,
-    entityDelayDraft: this._entityDelayDraft,
-    configurationDrawer: this._configurationDrawer,
-    busy: this._busy,
-    useBottomSheet: this._useNativeBottomSheet(),
-    t: (key, replacements) => this._t(key, replacements),
-  }));
-  this._hydrateSelectors();
-  this._decorateActionIcons();
-}
-
-export function updateSettingsConfigurationCount(id) {
-  const button = this.shadowRoot?.querySelector?.(`#settings-${id}-configuration`);
-  if (!button) return;
-  const count = id === "entity_delays"
-    ? this._entityDelayDraft.length
-    : this._settingsDraft[id].length;
-  button.textContent = this._t("buttons.configuration_named", {
-    name: button.dataset.configurationLabel,
-    count,
-  });
-}
-
-export async function handleSettingsAction(action, button) {
-  if (action === "save-settings") {
-    const form = this.shadowRoot.querySelector("#settings-form");
-    if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
-    return true;
-  }
-  if (action === "open-settings-configuration") {
-    this._ensureSettingsDraft();
-    this._captureEntityDelayValues();
-    this._configurationDrawer = {
-      kind: "settings",
-      id: button.dataset.configurationId,
-    };
-    refreshSettingsConfigurationDrawer.call(this);
-    return true;
-  }
-  if (
-    action === "close-configuration-drawer"
-    && this._configurationDrawer?.kind === "settings"
-  ) {
-    const id = this._configurationDrawer.id;
-    this._captureEntityDelayValues();
-    this._configurationDrawer = null;
-    refreshSettingsConfigurationDrawer.call(this);
-    updateSettingsConfigurationCount.call(this, id);
-    return true;
-  }
-  if (action === "add-ignored-reference") {
-    if (this._commitIgnoredReferenceInput()) this._notice = null;
-    this._render();
-    return true;
-  }
-  if (action === "export-config") {
-    await this._exportConfiguration();
-    return true;
-  }
-  if (action === "choose-config-import") {
-    this.shadowRoot.querySelector("#config-import-file")?.click();
-    return true;
-  }
-  if (action === "add-entity-delay") {
-    this._ensureSettingsDraft();
-    this._captureEntityDelayValues();
-    this._entityDelayDraft.push({ entity_id: "", delay: 900 });
-    refreshSettingsConfigurationDrawer.call(this);
-    updateSettingsConfigurationCount.call(this, "entity_delays");
-    return true;
-  }
-  if (action === "remove-entity-delay") {
-    this._captureEntityDelayValues();
-    this._entityDelayDraft.splice(Number(button.dataset.index), 1);
-    refreshSettingsConfigurationDrawer.call(this);
-    updateSettingsConfigurationCount.call(this, "entity_delays");
-    return true;
-  }
-  return false;
-}
+    this._notificationProfileDraft
