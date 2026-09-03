@@ -21,11 +21,13 @@ import {
   updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
 import {
-  cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
+  cancelRuleEditor, captureRuleDraft, clearRuleEditorError, clearRuleTestResult,
+  duplicateRuleDraft,
   duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
-  refreshRuleEditor, renderRuleEditorPanel, resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
-  ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth,
-  startRuleEditorResize, stopRuleEditorResize, switchRuleEditor,
+  refreshRuleEditor, renderRuleEditorPanel, renderRuleTestResultPanel,
+  resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
+  ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth, testRule,
+  startRuleEditorResize, stopRuleEditorResize, switchRuleEditor, updateRuleTestDisplay,
 } from "./components/rule-editor.js";
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
@@ -68,7 +70,6 @@ const ACTION_HANDLERS = [
   handleSettingsAction,
   handleRulesAction,
 ];
-
 class AlertManagerPanel extends HTMLElement {
   _load = load;
   _refreshHistory = refreshHistory;
@@ -180,9 +181,12 @@ class AlertManagerPanel extends HTMLElement {
   _refreshRuleEditor = refreshRuleEditor;
   _openRuleEditor = openRuleEditor;
   _clearRuleEditorError = clearRuleEditorError;
+  _clearRuleTestResult = clearRuleTestResult;
   _ruleAttributeOptions = ruleAttributeOptions;
   _refreshRuleAttributeSelector = refreshRuleAttributeSelector;
   _renderRuleEditor = renderRuleEditorPanel;
+  _renderRuleTestResult = renderRuleTestResultPanel;
+  _updateRuleTestDisplay = updateRuleTestDisplay;
   _ruleValueList = ruleValueList;
   _ruleSummary = ruleSummary;
   _duplicateRuleLabel = duplicateRuleLabel;
@@ -197,6 +201,7 @@ class AlertManagerPanel extends HTMLElement {
   _stopRuleEditorResize = stopRuleEditorResize;
   _resetRuleEditorWidth = resetRuleEditorWidth;
   _saveRule = saveRule;
+  _testRule = testRule;
   _captureRuleDraft = captureRuleDraft;
   _date = date;
   _remaining = remaining;
@@ -217,7 +222,6 @@ class AlertManagerPanel extends HTMLElement {
   _hydrateRuleEditorControls = hydrateRuleEditorControls;
   _hydrateAutomaticControls = hydrateAutomaticControls;
   _hydrateSettingsControls = hydrateSettingsControls;
-
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -258,6 +262,9 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleEditorError = null;
+    this._ruleTestResult = null;
+    this._ruleTestLoading = false;
+    this._ruleTestSequence = 0;
     this._ruleDirty = false;
     this._loading = true;
     this._cachedStateNeedsRefresh = false;
@@ -301,7 +308,6 @@ class AlertManagerPanel extends HTMLElement {
   set hass(value) {
     setHass.call(this, value);
   }
-
   get hass() {
     return this._hass;
   }
@@ -314,7 +320,6 @@ class AlertManagerPanel extends HTMLElement {
   set panel(value) {
     this._panel = value;
   }
-
   set route(value) {
     this._route = value;
     const activeTab = this._tabFromRoute(value);
@@ -343,7 +348,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     this._updateDrawerLayout(previousNarrow);
   }
-
   _upgradeProperty(name) {
     if (!Object.prototype.hasOwnProperty.call(this, name)) return;
     const value = this[name];
@@ -380,7 +384,6 @@ class AlertManagerPanel extends HTMLElement {
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();
   }
-
   _tabs() {
     const tabs = TABS.map(({ path, translationKey, iconPath }) => ({
       path,
@@ -467,7 +470,6 @@ class AlertManagerPanel extends HTMLElement {
   _renderPageMessages() {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
-
   _pageMessagesContent() {
     return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
       ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
@@ -527,6 +529,7 @@ class AlertManagerPanel extends HTMLElement {
         // value-changed. Mirror the value so later reads are never stale.
         element.value = eventValue;
         if (id.startsWith("rule-")) this._clearRuleEditorError();
+        if (id.startsWith("rule-")) this._clearRuleTestResult();
         onChange(eventValue);
         if (id === "rule-entity-ids") this._refreshRuleAttributeSelector();
       }
@@ -554,6 +557,7 @@ class AlertManagerPanel extends HTMLElement {
     element.addEventListener("selected", (event) => {
       element.value = event.detail?.value;
       if (id.startsWith("rule-")) this._clearRuleEditorError();
+      if (id.startsWith("rule-")) this._clearRuleTestResult();
       onChange?.(event.detail?.value);
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
@@ -670,6 +674,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _handleChange(event) {
     handleSettingsInput.call(this, event);
+    if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);
@@ -723,7 +728,6 @@ class AlertManagerPanel extends HTMLElement {
       else if (this._reportFormValidity(form)) await this._saveRule(form);
     }
   }
-
   _reportFormValidity(form) {
     let valid = form.reportValidity?.() ?? true;
     form.querySelectorAll?.("ha-input").forEach((field) => {
@@ -740,9 +744,7 @@ class AlertManagerPanel extends HTMLElement {
     return panelStyles();
   }
 }
-
 if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
 }
-
 export { AlertManagerPanel, makeTableState, lines, newRuleDefaults };

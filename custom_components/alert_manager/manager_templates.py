@@ -333,44 +333,83 @@ class _TemplatesMixin:
             if not self._is_allowed_rule_source(entity_id)
         }
 
-    def _rule_template_matches(self, rule: Rule, state: State, current: Any) -> bool:
-        """Render and index an optional Home Assistant Jinja condition."""
+    @staticmethod
+    def _render_rule_template_info(
+        template: Template, state: State, current: Any
+    ) -> Any:
+        """Render a rule template with the single shared Alert Manager context."""
+        return template.async_render_to_info(
+            {
+                "entity_id": state.entity_id,
+                "state": state,
+                "value": current,
+            }
+        )
+
+    def _evaluate_rule_condition_template(
+        self,
+        rule: Rule,
+        state: State,
+        current: Any,
+        *,
+        track: bool,
+    ) -> tuple[bool | None, str | None]:
+        """Render a condition, optionally indexing dependencies for the runtime."""
         if rule.condition_template is None:
-            return True
+            return None, None
         pair = (rule.id, state.entity_id)
         try:
-            render_info = self._rule_templates[rule.id].async_render_to_info(
-                {
-                    "entity_id": state.entity_id,
-                    "state": state,
-                    "value": current,
-                }
-            )
-            self._rule_template_render_info[pair] = render_info
+            if track:
+                template = self._rule_templates[rule.id]
+            else:
+                template = Template(rule.condition_template, self.hass)
+                template.ensure_valid()
+            render_info = self._render_rule_template_info(template, state, current)
             result = str(render_info.result()).lower() == "true"
-        except TemplateError as err:
-            _LOGGER.warning(
-                "Jinja condition failed for rule %s and entity %s: %s",
-                rule.id,
-                state.entity_id,
-                err,
-            )
-            return False
+        except (KeyError, TemplateError) as err:
+            if track:
+                _LOGGER.warning(
+                    "Jinja condition failed for rule %s and entity %s: %s",
+                    rule.id,
+                    state.entity_id,
+                    err,
+                )
+            return None, str(err)
 
-        dependency_key = ("condition", rule.id, state.entity_id)
         own_entities = self._render_info_has_own_dependency(render_info)
         if own_entities:
-            self._rule_template_render_info.pop(pair, None)
-            self._remove_dependency_key(dependency_key)
-            _LOGGER.error(
-                "Ignored unsafe Jinja condition for rule %s because it depends on "
-                "Alert Manager entities: %s",
-                rule.id,
-                ", ".join(sorted(own_entities)),
-            )
-            return False
-        self._index_render_info("condition", pair, render_info)
-        return result
+            if track:
+                self._rule_template_render_info.pop(pair, None)
+                self._remove_dependency_key(("condition", rule.id, state.entity_id))
+                _LOGGER.error(
+                    "Ignored unsafe Jinja condition for rule %s because it depends "
+                    "on Alert Manager entities: %s",
+                    rule.id,
+                    ", ".join(sorted(own_entities)),
+                )
+            return None, ", ".join(sorted(own_entities))
+        if track:
+            self._rule_template_render_info[pair] = render_info
+            self._index_render_info("condition", pair, render_info)
+        return result, None
+
+    def _render_rule_message_for_test(
+        self, rule: Rule, state: State, current: Any
+    ) -> tuple[str | None, str | None]:
+        """Render a draft message without touching runtime template caches."""
+        if rule.message is None:
+            return None, None
+        try:
+            template = Template(rule.message, self.hass)
+            template.ensure_valid()
+            render_info = self._render_rule_template_info(template, state, current)
+            rendered = str(render_info.result()).strip()
+        except TemplateError as err:
+            return None, str(err)
+        own_entities = self._render_info_has_own_dependency(render_info)
+        if own_entities:
+            return None, ", ".join(sorted(own_entities))
+        return rendered or None, None
 
     def _render_rule_message(
         self,
@@ -397,14 +436,8 @@ class _TemplatesMixin:
             if not force:
                 return record.details.message
             try:
-                render_info = self._rule_message_templates[
-                    rule.id
-                ].async_render_to_info(
-                    {
-                        "entity_id": state.entity_id,
-                        "state": state,
-                        "value": current,
-                    }
+                render_info = self._render_rule_template_info(
+                    self._rule_message_templates[rule.id], state, current
                 )
                 rendered = str(render_info.result()).strip()
                 return rendered or None
@@ -418,12 +451,8 @@ class _TemplatesMixin:
                 return None
 
         try:
-            render_info = self._rule_message_templates[rule.id].async_render_to_info(
-                {
-                    "entity_id": state.entity_id,
-                    "state": state,
-                    "value": current,
-                }
+            render_info = self._render_rule_template_info(
+                self._rule_message_templates[rule.id], state, current
             )
             self._rule_message_render_info[pair] = render_info
             rendered = str(render_info.result()).strip()

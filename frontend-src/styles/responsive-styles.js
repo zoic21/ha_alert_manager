@@ -112,6 +112,10 @@ export const responsiveStyles = `
     .actions ha-button {
       width: 100%;
     }
+    .rule-editor-actions ha-button {
+      width: auto;
+      flex: 1;
+    }
     .rules-header {
       align-items: stretch;
       flex-direction: column;
@@ -185,6 +189,13 @@ export const responsiveStyles = `
     .rule-section-heading, .rule-value-footer {
       align-items: stretch;
       flex-direction: column;
+    }
+    .rule-test-detail {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+    .rule-test-detail strong {
+      text-align: start;
     }
     .configuration-section-heading {
       align-items: center;

@@ -168,6 +168,58 @@ export const ruleEditorStyles = `
     width: 100%;
     margin: 0 0 4px;
   }
+  .rule-test-result:empty {
+    display: none;
+  }
+  .rule-test-result:not(:empty) {
+    padding: 16px 20px;
+    background: var(--card-background-color, #fff);
+    border-bottom: 1px solid var(--divider-color, #ddd);
+  }
+  .rule-test-summary {
+    display: block;
+  }
+  .rule-test-summary strong, .rule-test-message strong {
+    display: block;
+    margin-bottom: 4px;
+  }
+  .rule-test-entities {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .rule-test-entity-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .rule-test-entity-header code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rule-test-details {
+    display: grid;
+    gap: 8px;
+    padding: 4px 16px 16px;
+  }
+  .rule-test-detail {
+    display: grid;
+    grid-template-columns: minmax(120px, .8fr) minmax(0, 1.2fr);
+    gap: 12px;
+  }
+  .rule-test-detail strong {
+    overflow-wrap: anywhere;
+    text-align: end;
+  }
+  .rule-test-message {
+    margin-top: 4px;
+  }
+  .rule-test-conclusion {
+    margin: 4px 0 0;
+  }
   .action-spacer {
     flex: 1;
   }
