@@ -5,6 +5,7 @@ import {
   captureRuleDraftFromForm,
   hydrateRuleEditor,
   normalizeRuleDraft,
+  refreshRuleConditionSection,
   renderRuleEditor,
   serializeRuleDraft,
   validateRuleDraft,
@@ -140,6 +141,25 @@ test("rules hydration is idempotent and events use the latest context", () => {
   assert.deepEqual(searches, ["humidity"]);
 });
 
+test("the edited rule uses the native table row highlight", () => {
+  const selections = [];
+  const nativeTable = {
+    style: { setProperty() {} },
+    select(ids, clear) { selections.push({ ids, clear }); },
+  };
+  const table = tablePage();
+  table.shadowRoot.querySelector = () => nativeTable;
+  const root = { querySelector: () => table };
+
+  hydrateRules(root, hydrationContext({ editingRuleId: "rule-1" }));
+  hydrateRules(root, hydrationContext({ editingRuleId: null }));
+
+  assert.deepEqual(selections, [
+    { ids: ["rule-1"], clear: true },
+    { ids: [], clear: true },
+  ]);
+});
+
 test("rule editor rendering is pure and receives all dependencies explicitly", () => {
   const draft = normalizeRuleDraft(rule({ operator: "between", value: ["10", "20"] }));
   const before = structuredClone(draft);
@@ -160,6 +180,34 @@ test("rule editor rendering is pure and receives all dependencies explicitly", (
   assert.match(markup, /data-field="lower-bound"/);
   assert.match(markup, /data-field="upper-bound"/);
   assert.match(markup, /Duplicate/);
+});
+
+test("condition updates replace only their section and preserve the editor scroller", () => {
+  const form = { scrollTop: 428 };
+  const section = { outerHTML: "" };
+  let editorRefreshes = 0;
+  let hydrations = 0;
+  const panel = {
+    _editingRule: rule({ source: "state_variation", operator: "between" }),
+    _t: t,
+    _refreshRuleEditor() { editorRefreshes += 1; },
+    _hydrateRuleEditorControls() { hydrations += 1; },
+    shadowRoot: {
+      querySelector(selector) {
+        if (selector === "#rule-form") return form;
+        if (selector === "[data-rule-condition-section]") return section;
+        return null;
+      },
+    },
+  };
+
+  refreshRuleConditionSection.call(panel);
+
+  assert.equal(editorRefreshes, 0);
+  assert.equal(hydrations, 1);
+  assert.equal(form.scrollTop, 428);
+  assert.match(section.outerHTML, /data-rule-condition-section/);
+  assert.match(section.outerHTML, /data-field="lower-bound"/);
 });
 
 test("rule editor uses the native resizable bottom sheet on mobile", () => {
