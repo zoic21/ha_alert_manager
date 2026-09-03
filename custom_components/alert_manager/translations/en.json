@@ -358,4 +358,353 @@
         "name": "Unavailable entities"
       },
       "unifi": {
-        "description": "Monit
+        "description": "Monitors devices tracked by a UniFi router.",
+        "name": "UniFi devices"
+      }
+    },
+    "rules": {
+      "aria_close": "Close",
+      "aria_create_dialog": "Create a rule",
+      "aria_disable": "Disable rule {name}",
+      "aria_edit": "Edit rule {name}",
+      "aria_edit_dialog": "Edit a rule",
+      "aria_menu": "Rule editor options",
+      "aria_enable": "Enable rule {name}",
+      "aria_remove_value": "Remove value {index}",
+      "aria_resize": "Resize the drawer",
+      "aria_value": "Comparison value {index}",
+      "attribute": "Attribute",
+      "attribute_name": "Attribute name",
+      "attribute_path_help": "Use data.*.key to compare the key field from every item in the data array.",
+      "attribute_variation_path_help": "Select one numeric attribute. Nested paths such as data.power are supported, but wildcards such as data.*.power are not.",
+      "condition": "Condition",
+      "condition_template": "Additional Jinja condition",
+      "condition_template_help": "Optional. The template must return true in addition to the comparison. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_only": "Jinja condition",
+      "condition_template_only_help": "Required. The template must return true to trigger the alert; no other comparison is evaluated. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_variation": "Starting Jinja condition",
+      "condition_template_variation_help": "Required. The starting value of the selected state or attribute is captured when this condition becomes true. It is kept while the condition remains true, then reset when it becomes false again. In this condition, value is the current monitored numeric value.",
+      "condition_template_variation_required": "The starting Jinja condition is required with a variation source.",
+      "condition_template_selected_unchanged_help": "Optional. The template must return true in addition to the selected state value or attribute remaining unchanged. Additional variables: entity_id, state and value.",
+      "condition_template_unchanged_help": "Optional. The template must return true in addition to the state and attributes remaining unchanged. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "condition_template_required": "The Jinja condition is required when the source is “Jinja”.",
+      "create": "Create",
+      "delete_confirm": "Delete rule “{name}”?",
+      "description": "Comparisons, no-change monitoring and Jinja conditions for your entities.",
+      "duration": "Duration",
+      "discard_confirm": "Discard unsaved rule changes?",
+      "edit_visually": "Edit visually",
+      "edit_yaml": "Edit in YAML",
+      "editor_condition_help": "Define what triggers the alert.",
+      "editor_information": "Information",
+      "editor_information_help": "Identify the rule and select the monitored entities.",
+      "editor_trigger": "Trigger",
+      "editor_trigger_help": "Add a delay and customize the exposed message.",
+      "flapping_enabled": "Enable flapping detection",
+      "flapping_help": "Count each new occurrence of this rule. Optional values inherit the device-specific configuration, then the global flapping configuration.",
+      "flapping_inherit_help": "Leave empty to inherit the default value.",
+      "flapping_title": "Flapping / Instability",
+      "empty": "No custom rules.",
+      "empty_filtered": "No rules match the search and filters.",
+      "entities": "Entities",
+      "entities_help": "Each entity is evaluated independently.",
+      "message_optional": "Optional message",
+      "message_help": "Supports Jinja. All Home Assistant Jinja functions and entities are available. Additional variables: entity_id, state and value.",
+      "update_message_when_active": "Update the message while active",
+      "update_message_when_active_help": "Off by default: the message remains frozen at activation. Enable this option to recalculate and publish the message when its Jinja data changes, even while the alert is already active.",
+      "lower_bound": "Lower bound",
+      "modify": "Edit",
+      "multiple_any": "The alert triggers as soon as one value matches.",
+      "multiple_none": "The alert triggers only when none of the values match.",
+      "name": "Name",
+      "new": "New rule",
+      "new_subtitle": "New custom rule",
+      "operator": "Operator",
+      "search": "Search rules",
+      "source": "Source",
+      "source_attribute": "Attribute",
+      "source_attribute_variation": "Attribute variation",
+      "source_jinja": "Jinja",
+      "source_state": "Main state",
+      "source_state_variation": "Main state variation",
+      "source_unchanged": "No change",
+      "status": "Status",
+      "status_active": "Active",
+      "status_inactive": "Inactive",
+      "title": "Custom rules",
+      "test": {
+        "baseline": "Reference value",
+        "attribute": "Configured attribute",
+        "comparison_result": "Comparison result",
+        "condition": "Condition",
+        "conclusion_error": "This entity cannot be evaluated until the error is fixed.",
+        "conclusion_immediate": "The condition is true. This rule would become active immediately.",
+        "conclusion_indeterminate": "The starting condition is true, but the complete result cannot be determined yet.",
+        "conclusion_no_match": "This rule would not currently trigger an alert for this entity.",
+        "conclusion_pending": "The condition is true. With the configured {duration} delay, this rule would remain pending before becoming active.",
+        "current_state": "Raw current state",
+        "current_value": "Current value",
+        "delay": "Configured delay",
+        "disabled_notice": "The rule is disabled, but its condition was evaluated for this test.",
+        "duration_reached": "Duration reached",
+        "entity": "Entity",
+        "extracted_value": "Value actually used",
+        "false": "false",
+        "final_result": "Final result",
+        "generated_message": "Generated message",
+        "jinja_result": "Jinja condition",
+        "message_error": "The Jinja message could not be rendered: {error}",
+        "reason": "Diagnostic",
+        "reasons": {
+          "attribute_not_found": "The configured attribute could not be found.",
+          "baseline_unavailable": "The starting condition is currently true, but no reference value has been recorded yet. The real variation will start being calculated when the rule is active in Alert Manager.",
+          "condition_template_error": "The Jinja condition could not be rendered.",
+          "entity_disabled": "The entity or its device is disabled in Home Assistant.",
+          "entity_not_found": "The entity does not exist in Home Assistant.",
+          "numeric_source_required": "The value read is not numeric, but this operator requires a number.",
+          "state_unavailable": "The entity is unavailable; custom rules are not evaluated in this state.",
+          "state_unknown": "The entity state is unknown; the custom rule does not match."
+        },
+        "status_error": "Error",
+        "status_indeterminate": "Indeterminate",
+        "status_match": "Condition true",
+        "status_no_match": "Condition false",
+        "source": "Configured source",
+        "summary": "Current matches: {matched} of {total} entities.",
+        "summary_errors": "Evaluation errors: {count}.",
+        "summary_indeterminate": "Indeterminate results: {count}.",
+        "title": "Test result",
+        "title_error": "Unable to test the rule",
+        "true": "true",
+        "unchanged": "No change",
+        "unchanged_elapsed": "No change for {duration}",
+        "variation": "Calculated variation"
+      },
+      "upper_bound": "Upper bound",
+      "value": "Comparison value",
+      "values": "Comparison values",
+      "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. The state_variation and attribute_variation sources compare current_value - starting_value and require condition_template: the reference is captured when that template becomes true, then reset when it becomes false. attribute_variation also requires one numeric attribute without wildcards. Variations accept above, below, between and outside. The between and outside operators use value: [lower_bound, upper_bound]; unchanged has no value. An attribute path such as data.*.key checks every array item for regular comparisons. With source: unchanged, state and attributes are monitored together. With source: jinja, only condition_template is evaluated and it is required. update_message_when_active keeps recalculating a Jinja message after activation.",
+      "yaml_invalid": "The YAML rule is invalid.",
+      "yaml_title": "YAML rule"
+    },
+    "settings": {
+      "alert_display": "Alert display",
+      "coherence_schedule": "Automatic coherence scan",
+      "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
+      "coherence_scan_esphome": "Scan the ESPHome folder",
+      "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
+      "coherence_ignored_entity_references": "References ignored by the coherence scan",
+      "coherence_ignored_entity_references_help": "Add exact references to ignore, for example toto.plop.",
+      "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",
+      "coherence_ignored_entity_reference_validation": "Enter a valid complete reference, for example toto.plop.",
+      "coherence_settings": "Coherence analysis",
+      "close_configuration_aria": "Close {name} configuration",
+      "configure_aria": "Configure {name}",
+      "coherence_schedules": {
+        "daily": "Once a day",
+        "monthly": "Once a month",
+        "none": "None",
+        "weekly": "Once a week"
+      },
+      "pending_display_delay": "Pending alert display delay",
+      "pending_display_delay_help": "A pending alert waits for this delay before being displayed. If it becomes active sooner, it appears immediately as active without first appearing in the pending list.",
+      "aria_delay": "Delay in seconds",
+      "aria_remove_delay": "Delete this delay",
+      "delay_help": "Takes priority over the pack delay and global delay.",
+      "delay_validation": "Each entity-specific delay must have an entity and a positive whole number.",
+      "device_exclusions": "Excluded devices",
+      "duplicate_delay": "Entity {entity_id} already has an entity-specific delay.",
+      "duplicate_delay_save": "Entity {entity_id} appears twice in entity-specific delays.",
+      "entity_delay": "Entity-specific delays",
+      "entity_exclusions": "Excluded entities",
+      "exclusions": "Monitoring exclusions",
+      "explicit_exclusions": "Explicit exclusions",
+      "general": "General settings",
+      "global_delay": "Global delay",
+      "global_delay_help": "This delay is used when no entity-specific or pack delay is defined.",
+      "history_clear": "Clear history",
+      "history_clear_confirm": "Permanently clear the complete alert history?\n\nThis operation is irreversible. Current active, upcoming and acknowledged alerts will not be changed.",
+      "history_limit": "Number of historical events retained",
+      "history_limit_help": "From 0 to 1000 events. The default is 100; 0 disables storage of future history.",
+      "history_limit_validation": "The number of historical events must be an integer from 0 to 1000.",
+      "history_settings": "History",
+      "label_exclusions": "Labels excluded from automatic monitoring",
+      "labels_help": "Custom rules ignore these labels.",
+      "no_delay": "No entity-specific delays.",
+      "save": "Save settings",
+      "transfer_help": "Export contains only persistent configuration. Import replaces the complete current configuration.",
+      "transfer_title": "Configuration export and import",
+      "export": "Export YAML",
+      "import": "Import YAML",
+      "import_confirm": "The current configuration will be completely replaced.\n\nRules: {rules}\nEnabled packs: {packs}\nEntity-specific delays: {delays}\n\nContinue?",
+      "import_read_error": "Unable to read the selected file."
+    },
+    "success": {
+      "alert_acknowledged": "Alert acknowledged",
+      "alert_unacknowledged": "Acknowledgement removed",
+      "automatic_saved": "Automatic monitoring saved",
+      "backup_downloaded": "Backup downloaded",
+      "backup_restored": "Configuration backup restored",
+      "config_exported": "Configuration exported",
+      "config_imported": "Configuration imported",
+      "history_cleared": "History cleared",
+      "rule_created": "Rule created",
+      "rule_deleted": "Rule deleted",
+      "rule_disabled": "Rule disabled",
+      "rule_enabled": "Rule enabled",
+      "rule_updated": "Rule updated",
+      "settings_saved": "Settings saved"
+    },
+    "table": {
+      "columns": {
+        "area": "Area",
+        "condition": "Condition",
+        "detected": "Detected",
+        "device": "Device",
+        "duration": "Duration",
+        "entity": "Entity",
+        "entity_id": "Entity ID",
+        "integration": "Integration",
+        "message": "Message",
+        "move_down": "Move {column} down",
+        "move_up": "Move {column} up",
+        "reset": "Restore default columns",
+        "resolved": "Resolved",
+        "rule": "Rule",
+        "status": "Status",
+        "timeline": "Active since / Time remaining",
+        "title": "Columns",
+        "value": "Value"
+      },
+      "empty_current": "No current alerts.",
+      "empty_filtered": "No rows match the search and filters.",
+      "filters": {
+        "all": "All",
+        "detected_from": "Detected from",
+        "detected_to": "Detected to",
+        "domain": "Domain",
+        "integration": "Integration",
+        "labels": "Labels",
+        "no_options": "No options available",
+        "reset": "Reset filters",
+        "resolved_from": "Resolved from",
+        "resolved_to": "Resolved to",
+        "title": "Filters"
+      },
+      "group": {
+        "area": "Area",
+        "device": "Device",
+        "none": "No grouping",
+        "rule": "Rule",
+        "status": "Status",
+        "title": "Group by"
+      },
+      "groups": {
+        "without_area": "No area",
+        "without_device": "No device",
+        "without_rule": "No rule",
+        "without_status": "No status"
+      },
+      "monitoring_suspended": "Delay suspended — monitoring disabled",
+      "search": "Search alerts",
+      "selection": {
+        "acknowledge": "Acknowledge ({count})",
+        "acknowledged_result": "Acknowledged {count} alert(s)",
+        "close": "Close selection mode",
+        "count": "{count} selected",
+        "open": "Enable multiple selection",
+        "partial": "Changed {count} alert(s), {failed} failure(s)",
+        "select": "Select",
+        "toolbar": "Selected alert actions",
+        "unacknowledge": "Unacknowledge ({count})",
+        "unacknowledged_result": "Removed acknowledgement from {count} alert(s)"
+      },
+      "sort": {
+        "activated": "Activation date",
+        "asc": "Ascending",
+        "desc": "Descending",
+        "detected": "Detection date",
+        "device": "Device",
+        "direction": "Order",
+        "entity_name": "Entity",
+        "remaining": "Time remaining",
+        "resolved": "Resolution date",
+        "rule": "Rule",
+        "status": "Status",
+        "title": "Sort by",
+        "value": "Value"
+      },
+      "status": {
+        "acknowledged": "Acknowledged alert",
+        "active": "Active alert",
+        "pending": "Upcoming alert"
+      },
+      "toolbar": "Alert table tools",
+      "visible_count": "{visible} of {total}"
+    },
+    "tabs": {
+      "automatic": "Automatic monitoring",
+      "coherence": "Coherence",
+      "history": "History",
+      "overview": "Overview",
+      "rules": "Custom rules",
+      "settings": "Configuration"
+    },
+    "unavailable": "Configuration unavailable.",
+    "units": {
+      "events": "events",
+      "seconds": "seconds"
+    }
+  },
+  "services": {
+    "acknowledge": {
+      "name": "Acknowledge alert",
+      "description": "Acknowledge one active Alert Manager alert without resolving it.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "Exact stable ID of the active alert to acknowledge."
+        }
+      }
+    },
+    "unacknowledge": {
+      "name": "Remove alert acknowledgement",
+      "description": "Remove the acknowledgement from one active Alert Manager alert.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "Exact stable ID of the active alert whose acknowledgement is removed."
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "check_coherence": {
+        "name": "Check configuration coherence"
+      }
+    },
+    "sensor": {
+      "coherence_issue": {
+        "name": "Missing entities"
+      },
+      "device_main_active": {
+        "name": "Devices in alert"
+      },
+      "main_acknowledge": {
+        "name": "Acknowledged alerts"
+      },
+      "main_active": {
+        "name": "Active alerts"
+      },
+      "main_pending": {
+        "name": "Upcoming alerts"
+      }
+    },
+    "switch": {
+      "main_monitoring": {
+        "name": "Alert Manager Monitoring"
+      }
+    }
+  }
+}

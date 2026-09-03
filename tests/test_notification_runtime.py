@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from custom_components.alert_manager.const import (
     DEFAULT_CONFIG,
@@ -102,7 +103,6 @@ def test_start_resolved_inside_batch_window_is_cancelled(hass, entry) -> None:
 
         assert runtime._batches == {}
         assert delivery.calls == []
-        assert all(timer["cancelled"] for timer in hass.timers)
         await runtime.async_unload()
 
     asyncio.run(scenario())
@@ -128,7 +128,9 @@ def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> N
                 device_id=device_id,
             ),
         )
-        first_deadline = hass.timers[-1]["point"]
+        first_deadline = max(
+            timer["point"] for timer in hass.timers if not timer["cancelled"]
+        )
         await runtime._async_handle_event(
             EVENT_ALERT_STARTED,
             _event_data(
@@ -138,16 +140,96 @@ def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> N
             ),
         )
 
-        active_timers = [timer for timer in hass.timers if not timer["cancelled"]]
-        assert len(active_timers) == 1
-        assert active_timers[0]["point"] == first_deadline
-        active_timers[0]["action"](first_deadline)
+        batch_timers = [
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"] and timer["point"] == first_deadline
+        ]
+        assert len(batch_timers) == 1
+        batch_timers[0]["action"](first_deadline)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
         assert len(delivery.calls) == 1
         assert delivery.calls[0]["click_url"] == "/alert-manager"
         assert delivery.calls[0]["message"] == "• Thermostat — 2 alerts"
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_runtime_writes_are_coalesced_during_an_event_burst(hass, entry) -> None:
+    """Many lifecycle events schedule one runtime storage write."""
+
+    async def scenario() -> None:
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+
+        for index in range(25):
+            await runtime._async_handle_event(
+                EVENT_ALERT_STARTED,
+                _event_data(
+                    f"unavailable:sensor.test_{index}",
+                    entity_id=f"sensor.test_{index}",
+                    device_id=None,
+                ),
+            )
+
+        save_timers = [
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and timer["point"] == datetime(2026, 8, 24, 12, 0, 1, tzinfo=UTC)
+        ]
+        assert len(save_timers) == 1
+        assert hass.store_save_count == 0
+
+        save_timers[0]["action"](save_timers[0]["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert hass.store_save_count == 1
+        assert (
+            len(hass.stores["alert_manager.notifications"]["profiles"]["profile"]) == 25
+        )
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_resolution_cleans_runtime_after_matching_label_is_removed(hass, entry) -> None:
+    """A label change cannot leave a resolved alert persisted indefinitely."""
+
+    async def scenario() -> None:
+        profile = _profile()
+        profile["label_ids"] = ["important"]
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        hass.entity_registry.entries["sensor.test"] = SimpleNamespace(
+            labels={"important"}, device_id=None
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        event = _event_data(
+            "unavailable:sensor.test",
+            entity_id="sensor.test",
+            device_id=None,
+        )
+
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        hass.entity_registry.entries["sensor.test"].labels = set()
+        runtime.registry_changed()
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+
+        assert runtime._runtime.get("profile", {}) == {}
         await runtime.async_unload()
 
     asyncio.run(scenario())

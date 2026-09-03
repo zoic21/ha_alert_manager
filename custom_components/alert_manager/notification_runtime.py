@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -35,6 +36,8 @@ from .notifications import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_RUNTIME_SAVE_DELAY_SECONDS = 1
 
 
 @dataclass(slots=True)
@@ -130,20 +133,33 @@ class NotificationRuntime:
         self._batches: dict[tuple[str, str], _PendingBatch] = {}
         self._unsubscribe: list[Callable[[], None]] = []
         self._reminder_cancel: Callable[[], None] | None = None
+        self._runtime_save_cancel: Callable[[], None] | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
         self._unloading = False
         self._setup_complete = False
         self._accept_events = True
+        self._events_pause_depth = 0
 
     @callback
     def pause_events(self) -> None:
         """Ignore lifecycle events manufactured by a configuration rebuild."""
+        self._events_pause_depth += 1
         self._accept_events = False
 
     @callback
     def resume_events(self) -> None:
         """Resume normal lifecycle consumption after runtime reconciliation."""
-        self._accept_events = True
+        self._events_pause_depth = max(0, self._events_pause_depth - 1)
+        self._accept_events = self._events_pause_depth == 0
+
+    @contextmanager
+    def events_paused(self) -> Iterator[None]:
+        """Guarantee lifecycle consumption resumes after a config transaction."""
+        self.pause_events()
+        try:
+            yield
+        finally:
+            self.resume_events()
 
     @callback
     def discard_batches(self) -> None:
@@ -184,6 +200,7 @@ class NotificationRuntime:
             unsubscribe()
         self._unsubscribe.clear()
         self._cancel_reminder_timer()
+        self._cancel_runtime_save()
         self.discard_batches()
         for task in tuple(self._tasks):
             task.cancel()
@@ -248,6 +265,7 @@ class NotificationRuntime:
                     runtime.next_reminder = now + timedelta(
                         seconds=policy.reminder_interval
                     )
+        self._cancel_runtime_save()
         await self._async_save_runtime()
         self._schedule_reminder_timer()
 
@@ -284,8 +302,17 @@ class NotificationRuntime:
         labels = self._labels_for(item.entity_id, item.device_id)
         changed = False
         for profile in config.get("notification_profiles", []):
-            if not profile.get("enabled") or not profile_matches_labels(
-                profile, labels
+            if not profile.get("enabled"):
+                continue
+            profile_id = profile["id"]
+            matches_labels = profile_matches_labels(profile, labels)
+            tracks_alert = item.alert_id in self._runtime.get(profile_id, {})
+            if event_type == EVENT_ALERT_RESOLVED:
+                tracks_alert = tracks_alert or self._batch_contains(
+                    profile_id, "started", item.alert_id
+                )
+            if not matches_labels and not (
+                event_type == EVENT_ALERT_RESOLVED and tracks_alert
             ):
                 continue
             policy = resolve_notification_policy(
@@ -294,7 +321,6 @@ class NotificationRuntime:
                 rule_id=item.rule_id,
                 label_ids=labels,
             )
-            profile_id = profile["id"]
             if event_type == EVENT_ALERT_STARTED:
                 runtime = self._runtime.setdefault(profile_id, {}).setdefault(
                     item.alert_id, _RuntimeEntry()
@@ -332,7 +358,7 @@ class NotificationRuntime:
                 )
                 changed = True
         if changed:
-            await self._async_save_runtime()
+            self._schedule_runtime_save()
             self._schedule_reminder_timer()
 
     def _queue_batch(self, profile_id: str, kind: str, item: _NotificationItem) -> None:
@@ -373,6 +399,11 @@ class NotificationRuntime:
                 batch.cancel()
             self._batches.pop(key, None)
         return True
+
+    def _batch_contains(self, profile_id: str, kind: str, alert_id: str) -> bool:
+        """Return whether an alert is retained in one unsent batch."""
+        batch = self._batches.get((profile_id, kind))
+        return batch is not None and alert_id in batch.items
 
     async def _async_flush_batch(self, profile_id: str, kind: str) -> None:
         """Render and deliver one profile batch outside alert transitions."""
@@ -423,4 +454,276 @@ class NotificationRuntime:
             if not profile.get("enabled"):
                 continue
             due_items: list[_NotificationItem] = []
-  
+            profile_runtime = self._runtime.get(profile["id"], {})
+            for alert_id, runtime in list(profile_runtime.items()):
+                if runtime.next_reminder is None or runtime.next_reminder > now:
+                    continue
+                record = records.get(alert_id)
+                if (
+                    record is None
+                    or record.status is not AlertStatus.ACTIVE
+                    or record.acknowledged
+                ):
+                    profile_runtime.pop(alert_id, None)
+                    changed = True
+                    continue
+                labels = self._labels_for(
+                    record.details.entity_id, record.details.device_id
+                )
+                if not profile_matches_labels(profile, labels):
+                    profile_runtime.pop(alert_id, None)
+                    changed = True
+                    continue
+                policy = _policy_for_record(profile, record, labels)
+                if policy.reminder_interval is None:
+                    runtime.next_reminder = None
+                    changed = True
+                    continue
+                item = _NotificationItem.from_event(record.as_public_dict())
+                if item is not None:
+                    due_items.append(item)
+                runtime.next_reminder = now + timedelta(
+                    seconds=policy.reminder_interval
+                )
+                changed = True
+            if due_items:
+                title, message = self._render_batch("reminder", due_items)
+                deliveries.append(
+                    (
+                        profile,
+                        title,
+                        message,
+                        self._batch_url("started", due_items),
+                    )
+                )
+        if changed:
+            self._schedule_runtime_save()
+        self._schedule_reminder_timer()
+        return deliveries
+
+    def _schedule_reminder_timer(self) -> None:
+        """Keep exactly one timer for the earliest reminder deadline."""
+        self._cancel_reminder_timer()
+        if self._unloading or not self._config_getter().get("monitoring_enabled", True):
+            return
+        deadlines = [
+            runtime.next_reminder
+            for profile_runtime in self._runtime.values()
+            for runtime in profile_runtime.values()
+            if runtime.next_reminder is not None
+        ]
+        if not deadlines:
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._reminder_cancel = None
+            if not self._unloading:
+                self._create_task(
+                    self._async_send_reminders(),
+                    "alert_manager notification reminders",
+                )
+
+        self._reminder_cancel = async_track_point_in_utc_time(
+            self.hass, timer_due, min(deadlines).astimezone(UTC)
+        )
+
+    def _cancel_reminder_timer(self) -> None:
+        """Cancel the shared reminder deadline if present."""
+        if self._reminder_cancel is not None:
+            self._reminder_cancel()
+            self._reminder_cancel = None
+
+    @callback
+    def _schedule_runtime_save(self) -> None:
+        """Coalesce a burst of runtime mutations into one storage write."""
+        if self._unloading or self._runtime_save_cancel is not None:
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._runtime_save_cancel = None
+            if not self._unloading:
+                self._create_task(
+                    self._async_flush_runtime_save(),
+                    "alert_manager notification runtime save",
+                )
+
+        self._runtime_save_cancel = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            dt_util.now().astimezone(UTC)
+            + timedelta(seconds=_RUNTIME_SAVE_DELAY_SECONDS),
+        )
+
+    async def _async_flush_runtime_save(self) -> None:
+        """Persist the latest coalesced snapshot under the runtime lock."""
+        async with self._runtime_lock:
+            await self._async_save_runtime()
+
+    @callback
+    def _cancel_runtime_save(self) -> None:
+        """Cancel a pending coalesced write before a forced save."""
+        if self._runtime_save_cancel is not None:
+            self._runtime_save_cancel()
+            self._runtime_save_cancel = None
+
+    def _render_batch(
+        self, kind: str, items: list[_NotificationItem]
+    ) -> tuple[str, str]:
+        """Render compact device-grouped notification text."""
+        count = len(items)
+        title_key = {
+            "started": "started_title",
+            "resolved": "resolved_title",
+            "reminder": "reminder_title",
+        }[kind]
+        fallback = {
+            "started": f"Alert Manager — {count} new alert(s)",
+            "resolved": f"Alert Manager — {count} back to normal",
+            "reminder": f"Alert Manager — {count} active alert(s)",
+        }[kind]
+        title = self._delivery.text(title_key, fallback).replace("{count}", str(count))
+        grouped: dict[str, list[_NotificationItem]] = {}
+        for item in items:
+            key = (
+                f"device:{item.device_id}"
+                if item.device_id
+                else f"entity:{item.entity_id}"
+            )
+            grouped.setdefault(key, []).append(item)
+        lines: list[str] = []
+        for grouped_items in grouped.values():
+            first = grouped_items[0]
+            name = first.device_name or first.name
+            if len(grouped_items) > 1:
+                summary = self._delivery.text(
+                    "grouped_alerts", "{count} alerts"
+                ).replace("{count}", str(len(grouped_items)))
+            else:
+                summary = first.message or first.condition or first.alert_type
+            lines.append(f"• {name} — {summary}")
+        return title, "\n".join(lines)
+
+    @staticmethod
+    def _batch_url(kind: str, items: list[_NotificationItem]) -> str:
+        """Return a stable panel URL, specializing only unambiguous live alerts."""
+        if kind != "resolved" and len(items) == 1:
+            return f"/alert-manager?alert={quote(items[0].alert_id, safe='')}"
+        if kind == "resolved" and len(items) == 1:
+            return "/alert-manager/history"
+        return "/alert-manager"
+
+    def _profile(self, profile_id: str) -> dict[str, Any]:
+        """Resolve one enabled profile or raise a stable API error."""
+        for profile in self._config_getter().get("notification_profiles", []):
+            if profile["id"] == profile_id:
+                if not profile["enabled"]:
+                    raise ValueError(f"Notification profile is disabled: {profile_id}")
+                return profile
+        raise ValueError(f"Unknown notification profile id: {profile_id}")
+
+    def _labels_for(self, entity_id: str, device_id: str | None) -> frozenset[str]:
+        """Cache the union of native entity and device labels without scans."""
+        cache_key = f"{entity_id}|{device_id or ''}"
+        if cache_key in self._label_cache:
+            return self._label_cache[cache_key]
+        labels: set[str] = set()
+        entity_entry = self._entity_registry.async_get(entity_id)
+        labels.update(getattr(entity_entry, "labels", ()) or ())
+        resolved_device_id = device_id or getattr(entity_entry, "device_id", None)
+        if resolved_device_id:
+            device = self._device_registry.async_get(resolved_device_id)
+            labels.update(getattr(device, "labels", ()) or ())
+        result = frozenset(labels)
+        self._label_cache[cache_key] = result
+        return result
+
+    @callback
+    def registry_changed(self) -> None:
+        """Invalidate derived labels from the manager's registry listener."""
+        self._label_cache.clear()
+
+    async def _async_load_runtime(self) -> None:
+        """Load only valid bounded reminder state from the independent store."""
+        try:
+            raw = await self._store.async_load()
+        except Exception:
+            _LOGGER.exception("Unable to load Alert Manager notification runtime")
+            return
+        if not isinstance(raw, dict) or not isinstance(raw.get("profiles", {}), dict):
+            return
+        for profile_id, raw_entries in raw.get("profiles", {}).items():
+            if not isinstance(profile_id, str) or not isinstance(raw_entries, dict):
+                continue
+            entries: dict[str, _RuntimeEntry] = {}
+            for alert_id, raw_entry in raw_entries.items():
+                if not isinstance(alert_id, str) or not isinstance(raw_entry, dict):
+                    continue
+                next_reminder = _parse_datetime(raw_entry.get("next_reminder"))
+                entries[alert_id] = _RuntimeEntry(next_reminder=next_reminder)
+            self._runtime[profile_id] = entries
+        self._persisted_runtime = self._runtime_payload()
+
+    async def _async_save_runtime(self) -> None:
+        """Persist minimal recipient state without touching AlertRecord."""
+        payload = self._runtime_payload()
+        if payload == self._persisted_runtime:
+            return
+        try:
+            await self._store.async_save(payload)
+        except Exception:
+            _LOGGER.exception("Unable to persist Alert Manager notification runtime")
+            return
+        self._persisted_runtime = payload
+
+    def _runtime_payload(self) -> dict[str, Any]:
+        """Build the deterministic independent store payload."""
+        return {
+            "profiles": {
+                profile_id: {
+                    alert_id: runtime.as_dict()
+                    for alert_id, runtime in sorted(entries.items())
+                }
+                for profile_id, entries in sorted(self._runtime.items())
+                if entries
+            }
+        }
+
+    def _create_task(self, coroutine: Any, name: str) -> None:
+        """Track an integration-owned task so unload remains deterministic."""
+        task = self.entry.async_create_task(self.hass, coroutine, name=name)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+
+def _policy_for_record(
+    profile: dict[str, Any], record: AlertRecord, labels: frozenset[str]
+) -> NotificationPolicy:
+    """Resolve a profile policy from authoritative alert metadata."""
+    return resolve_notification_policy(
+        profile,
+        pack_id=record.details.type if record.details.rule_id is None else None,
+        rule_id=record.details.rule_id,
+        label_ids=labels,
+    )
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    """Parse an aware stored datetime, ignoring malformed runtime data."""
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _optional_text(value: Any) -> str | None:
+    """Return bounded event text or null."""
+    if not isinstance(value, str) or not value:
+        return None
+    return value[:1024]

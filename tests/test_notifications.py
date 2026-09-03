@@ -9,6 +9,7 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.alert_manager.const import DEFAULT_CONFIG
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.notifications import (
     NotificationManager,
     profile_matches_labels,
@@ -102,6 +103,70 @@ def test_profile_label_filter_matches_entity_or_device_labels() -> None:
     assert profile_matches_labels(profile, {"important"})
     assert profile_matches_labels(profile, {"unrelated", "important"})
     assert not profile_matches_labels(profile, {"unrelated"})
+
+
+def test_identical_notification_profile_update_is_a_no_op(hass, entry) -> None:
+    """Resubmitting unchanged profiles avoids persistence and reevaluation."""
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        saves_before = hass.store_save_count
+
+        result = await manager.async_update_config({"notification_profiles": []})
+
+        assert result["notification_profiles"] == []
+        assert hass.store_save_count == saves_before
+        assert manager.notification_runtime._accept_events is True
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_profile_only_update_skips_alert_reevaluation(hass, entry) -> None:
+    """Saving profiles updates their runtime without scanning all entities."""
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        async def unexpected_evaluation(**_kwargs) -> bool:
+            raise AssertionError("notification profile update reevaluated alerts")
+
+        manager.async_evaluate_all = unexpected_evaluation
+        result = await manager.async_update_config(
+            {"notification_profiles": [_profile()]}
+        )
+
+        assert result["notification_profiles"][0]["id"] == "loic"
+        assert manager.notification_runtime._accept_events is True
+        assert manager.notification_runtime._events_pause_depth == 0
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_profile_update_failure_always_resumes_notification_events(hass, entry) -> None:
+    """A failed configuration transaction cannot leave delivery paused."""
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        async def fail_save(*_args, **_kwargs) -> None:
+            raise RuntimeError("storage unavailable")
+
+        original_save = manager.storage.async_save
+        manager.storage.async_save = fail_save
+        with pytest.raises(RuntimeError, match="storage unavailable"):
+            await manager.async_update_config({"notification_profiles": [_profile()]})
+
+        assert manager.notification_runtime._accept_events is True
+        assert manager.notification_runtime._events_pause_depth == 0
+        manager.storage.async_save = original_save
+        await manager.async_unload()
+
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize(
