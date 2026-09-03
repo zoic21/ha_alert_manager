@@ -460,15 +460,15 @@ export function renderRuleConditionSection({ rule, t }) {
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const comparisonFree = jinjaOnly || unchanged;
-    return `<section class="rule-editor-section" data-rule-condition-section>
-      <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
-      <div class="fields">
-        <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-        <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
-        ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
-        <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
-      </div>
-    </section>`;
+    return `<div data-rule-condition-section><section class="rule-editor-section">
+        <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
+        <div class="fields">
+          <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+          <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+          ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
+          <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+        </div>
+      </section></div>`;
 }
 
 export function renderRuleYamlEditor({ yamlError, t }) {

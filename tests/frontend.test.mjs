@@ -2395,7 +2395,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
   assert.match(editor, /class="field rule-attribute-field" hidden/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
-  assert.match(editor, /<section class="rule-editor-section" data-rule-condition-section>[\s\S]*<h3>Condition<\/h3>/);
+  assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
   assert.match(editor, /<ha-dropdown-item value="delete-rule" variant="danger">[\s\S]*Supprimer<\/ha-dropdown-item>/);
   assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
@@ -2452,40 +2452,6 @@ test("attribute input follows the selected rule source without rerendering", () 
   assert.equal(attribute.hidden, false);
   source.listener({ detail: { value: "state" } });
   assert.equal(attribute.hidden, true);
-});
-
-test("structural source and operator changes refresh only the condition section", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
-  panel._editingRule = { ...ruleValues(), source: "state", operator: "above" };
-  panel._hass = { states: {} };
-  const source = {
-    addEventListener(type, listener) { if (type === "selected") this.listener = listener; },
-  };
-  const operator = {
-    addEventListener(type, listener) { if (type === "selected") this.listener = listener; },
-  };
-  const selector = { addEventListener() {} };
-  panel.shadowRoot.querySelector = (query) => ({
-    "#rule-source": source,
-    "#rule-operator": operator,
-    "#rule-entity-ids": selector,
-    "#rule-attribute": selector,
-    "#rule-condition-template": selector,
-    "#rule-message-template": selector,
-  })[query] ?? null;
-  let conditionRefreshes = 0;
-  let editorRefreshes = 0;
-  panel._refreshRuleConditionSection = () => { conditionRefreshes += 1; };
-  panel._refreshRuleEditor = () => { editorRefreshes += 1; };
-
-  panel._hydrateSelectors();
-  source.listener({ detail: { value: "state_variation" } });
-  operator.listener({ detail: { value: "between" } });
-
-  assert.equal(conditionRefreshes, 2);
-  assert.equal(editorRefreshes, 0);
 });
 
 test("rule editor width is adjustable and clamped", () => {

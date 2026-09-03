@@ -2457,20 +2457,6 @@ function refreshRuleEditor() {
     }
     this._hydrateSelectors();
     this._hydrateYamlEditor();
-    this._syncRuleTableEditingHighlight();
-}
-
-function refreshRuleConditionSection() {
-    const section = this.shadowRoot?.querySelector?.("[data-rule-condition-section]");
-    if (!section) {
-      this._refreshRuleEditor();
-      return;
-    }
-    section.outerHTML = renderRuleConditionSection({
-      rule: normalizeRuleDraft(this._editingRule ?? {}),
-      t: (key, replacements) => this._t(key, replacements),
-    });
-    this._hydrateRuleEditorControls();
 }
 
 function clearRuleEditorError() {
@@ -2716,6 +2702,10 @@ function renderRuleEditorPanel() {
 
 function renderRuleVisualEditor(context) {
     const { rule, t, renderTextField, renderNumberField, flappingAvailable = false, testResult, renderTestResult = () => "" } = context;
+    const jinjaOnly = rule.source === "jinja";
+    const variation = VARIATION_RULE_SOURCES.has(rule.source);
+    const unchanged = rule.source === "unchanged";
+    const comparisonFree = jinjaOnly || unchanged;
     return `
         <div class="rule-test-result" data-rule-test-result>${renderTestResult(testResult)}</div>
         <section class="rule-editor-section">
@@ -2725,7 +2715,15 @@ function renderRuleVisualEditor(context) {
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
-        ${renderRuleConditionSection({ rule, t })}
+        <section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
+          <div class="fields">
+            <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
+            <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+            ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
+            <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+          </div>
+        </section>
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
@@ -2741,22 +2739,6 @@ function renderRuleVisualEditor(context) {
             <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
           </div>
         </section>` : ""}`;
-}
-
-function renderRuleConditionSection({ rule, t }) {
-    const jinjaOnly = rule.source === "jinja";
-    const variation = VARIATION_RULE_SOURCES.has(rule.source);
-    const unchanged = rule.source === "unchanged";
-    const comparisonFree = jinjaOnly || unchanged;
-    return `<section class="rule-editor-section" data-rule-condition-section>
-      <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
-      <div class="fields">
-        <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-        <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
-        ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
-        <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
-      </div>
-    </section>`;
 }
 
 function renderRuleYamlEditor({ yamlError, t }) {
@@ -3149,7 +3131,7 @@ function hydrateRuleEditorControls() {
         || ["jinja", "unchanged"].includes(value)
         || VARIATION_RULE_SOURCES.has(previousSource)
         || VARIATION_RULE_SOURCES.has(value)) {
-        this._refreshRuleConditionSection();
+        this._refreshRuleEditor();
       } else {
         const attributeField = this.shadowRoot.querySelector(".rule-attribute-field");
         if (attributeField) attributeField.hidden = !ATTRIBUTE_RULE_SOURCES.has(value);
@@ -3169,7 +3151,7 @@ function hydrateRuleEditorControls() {
       } else {
         this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
       }
-      this._refreshRuleConditionSection();
+      this._refreshRuleEditor();
     },
     onEntitiesChanged: (value) => {
       this._editingRule.entity_ids = this._multipleSelectorValue(
@@ -3848,21 +3830,13 @@ async function handleCoherenceAction(action) {
 const RULES_TABLE_CONTEXT = Symbol("alert-manager-rules-table-context");
 const RULES_TABLE_HYDRATED = Symbol("alert-manager-rules-table-hydrated");
 const RULES_FILTER_HYDRATED = Symbol("alert-manager-rules-filter-hydrated");
-const RULES_TABLE_EDITING_RULE = Symbol("alert-manager-rules-table-editing-rule");
 
-async function applyRuleTableEditorState(tablePage, editingRuleId) {
-    const selectedId = editingRuleId ? String(editingRuleId) : null;
-    tablePage[RULES_TABLE_EDITING_RULE] = selectedId;
+async function applyRuleTableEditorLayout(tablePage) {
     if (tablePage.updateComplete) await tablePage.updateComplete;
-    if (tablePage[RULES_TABLE_EDITING_RULE] !== selectedId) return;
-    const table = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-    table?.style?.setProperty(
+    tablePage.shadowRoot?.querySelector?.("ha-data-table")?.style?.setProperty(
       "width",
       "var(--alert-manager-rule-table-width, 100%)",
     );
-    if (table?.updateComplete) await table.updateComplete;
-    if (tablePage[RULES_TABLE_EDITING_RULE] !== selectedId) return;
-    table?.select?.(selectedId ? [selectedId] : [], true);
 }
 
 function refreshRulesData() {
@@ -3885,13 +3859,7 @@ function refreshRulesData() {
     tablePage.noDataText = sourceRows.length
       ? this._t("rules.empty_filtered")
       : this._t("rules.empty");
-    void applyRuleTableEditorState(tablePage, this._editingRule?.id);
     this._refreshUiState();
-}
-
-function syncRuleTableEditingHighlight() {
-    const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
-    if (tablePage) void applyRuleTableEditorState(tablePage, this._editingRule?.id);
 }
 
 function ruleTableColumns(context) {
@@ -4005,7 +3973,7 @@ function hydrateRules(root, context) {
       });
       checkbox[RULES_FILTER_HYDRATED] = true;
     });
-    void applyRuleTableEditorState(tablePage, context.editingRuleId);
+    void applyRuleTableEditorLayout(tablePage);
 }
 
 function hydrateRuleTable() {
@@ -4025,7 +3993,6 @@ function hydrateRuleTable() {
       sourceRows,
       visibleRows,
       selectedFilters,
-      editingRuleId: this._editingRule?.id,
       filterPaneOpen: this._filterPaneKind === "rules",
       t: (key, replacements) => this._t(key, replacements),
       renderNameCell: (row, narrow) => this._nativeRuleNameCell(row, narrow),
@@ -4310,7 +4277,7 @@ async function handleRulesAction(action, button) {
     this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
     this._clearRuleTestResult();
     this._ruleDirty = true;
-    this._refreshRuleConditionSection();
+    this._refreshRuleEditor();
     return true;
   }
   if (action === "remove-rule-value") {
@@ -4320,7 +4287,7 @@ async function handleRulesAction(action, button) {
     this._editingRule.value = values.length ? values : [""];
     this._clearRuleTestResult();
     this._ruleDirty = true;
-    this._refreshRuleConditionSection();
+    this._refreshRuleEditor();
     return true;
   }
   if (action === "save-rule") {
@@ -6671,8 +6638,6 @@ class AlertManagerPanel extends HTMLElement {
   _navigate = navigate;
   _syncNarrowTableHeaderBackgrounds = syncNarrowTableHeaderBackgrounds;
   _refreshRuleEditor = refreshRuleEditor;
-  _refreshRuleConditionSection = refreshRuleConditionSection;
-  _syncRuleTableEditingHighlight = syncRuleTableEditingHighlight;
   _openRuleEditor = openRuleEditor;
   _clearRuleEditorError = clearRuleEditorError;
   _clearRuleTestResult = clearRuleTestResult;
@@ -7233,6 +7198,7 @@ class AlertManagerPanel extends HTMLElement {
     });
     return valid;
   }
+
   _styles() {
     return panelStyles();
   }

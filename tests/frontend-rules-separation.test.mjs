@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   captureRuleDraftFromForm,
   hydrateRuleEditor,
+  hydrateRuleEditorControls,
   normalizeRuleDraft,
   refreshRuleConditionSection,
   renderRuleEditor,
@@ -208,6 +209,37 @@ test("condition updates replace only their section and preserve the editor scrol
   assert.equal(form.scrollTop, 428);
   assert.match(section.outerHTML, /data-rule-condition-section/);
   assert.match(section.outerHTML, /data-field="lower-bound"/);
+});
+
+test("structural source and operator changes refresh only the condition section", () => {
+  let onSourceChanged;
+  let onOperatorChanged;
+  let conditionRefreshes = 0;
+  let editorRefreshes = 0;
+  const panel = {
+    _editingRule: rule(),
+    _ruleEditorMode: "visual",
+    _t: t,
+    _ruleAttributeOptions: () => [],
+    _configureSelect(id, _options, _value, onChange) {
+      if (id === "rule-source") onSourceChanged = onChange;
+      if (id === "rule-operator") onOperatorChanged = onChange;
+    },
+    _configureSelector() {},
+    _handleSelected() {},
+    _captureRuleDraft() { return this._editingRule; },
+    _ruleValueList: (value) => Array.isArray(value) ? value : [value ?? ""],
+    _refreshRuleConditionSection() { conditionRefreshes += 1; },
+    _refreshRuleEditor() { editorRefreshes += 1; },
+    shadowRoot: { querySelector() { return null; } },
+  };
+
+  hydrateRuleEditorControls.call(panel);
+  onSourceChanged("state_variation");
+  onOperatorChanged("between");
+
+  assert.equal(conditionRefreshes, 2);
+  assert.equal(editorRefreshes, 0);
 });
 
 test("rule editor uses the native resizable bottom sheet on mobile", () => {
