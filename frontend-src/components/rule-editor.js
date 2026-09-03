@@ -286,7 +286,7 @@ export function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
           <div class="fields">
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
-            ${rule.flapping_enabled ? `${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}` : ""}
+            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
           </div>
         </section>` : ""}`;
 }
@@ -678,7 +678,8 @@ export function hydrateRuleEditorControls() {
       this._captureRuleDraft();
       this._editingRule.flapping_enabled = Boolean(event.target.checked);
       this._ruleDirty = true;
-      this._refreshRuleEditor();
+      const settings = this.shadowRoot.querySelector(".rule-flapping-settings");
+      if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
 }

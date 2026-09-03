@@ -50,8 +50,12 @@ export const settingsStyles = `
     min-height: 40px;
     margin-top: 18px;
     padding-top: 12px;
+    flex-wrap: wrap;
     justify-content: flex-end;
     border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .automatic-configuration-entry.has-multiple-configurations {
+    justify-content: space-between;
   }
   .fields.configuration-drawer-fields {
     grid-template-columns: 1fr;
@@ -364,6 +368,19 @@ export const settingsStyles = `
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 10px;
+  }
+  .pack-configuration[hidden],
+  .pack-settings-values[hidden] {
+    display: none;
+  }
+  .pack-target-field,
+  .pack-setting-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .pack-setting-field .field-label {
+    line-height: 1.3;
   }
   .pack-source-list {
     display: grid;

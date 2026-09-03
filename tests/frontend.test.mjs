@@ -2199,7 +2199,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
     batteryDelay,
   );
   const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
-  const batteryConfiguration = automatic.indexOf('id="auto-battery-configuration"');
+  const batteryConfiguration = automatic.indexOf(
+    'id="auto-battery-device_thresholds-configuration"',
+  );
   assert.ok(batteryDelay < batteryDelayHelp);
   assert.ok(batteryDelayHelp < batteryThreshold);
   assert.ok(batteryThreshold < batteryConfiguration);
@@ -2604,6 +2606,41 @@ test("execution failure thresholds select automations and scripts", async () => 
   });
 });
 
+test("flapping device overrides hydrate a device selector", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = { automatic: { flapping: {
+    enabled: true,
+    device_overrides: {},
+  } } };
+  panel._packs = [{
+    id: "flapping",
+    available: true,
+    config_fields: [{
+      id: "device_overrides",
+      type: "device_settings_map",
+      fields: [{ id: "occurrences", default: 5 }],
+    }],
+  }];
+  panel._automaticMapDraft = { flapping: { device_overrides: [{
+    target_id: "", occurrences: 5,
+  }] } };
+  panel.shadowRoot.querySelector = () => null;
+  panel.shadowRoot.querySelectorAll = () => [];
+  let selector;
+  panel._configureSelector = (...args) => { selector = args; };
+
+  panel._hydrateAutomaticControls();
+
+  assert.equal(selector[0], "auto-flapping-device_overrides-target-0");
+  assert.deepEqual(selector[1], { device: {} });
+  selector[3]("device-id");
+  assert.equal(
+    panel._automaticMapDraft.flapping.device_overrides[0].target_id,
+    "device-id",
+  );
+});
+
 test("flapping saves global and per-device values without a pack delay", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -2691,7 +2728,10 @@ test("custom rule flapping options appear only with the pack and serialize overr
   const panel = new Panel();
   panel._config = completeConfig();
   panel._editingRule = { ...newRuleDefaults(), entity_ids: ["sensor.test"] };
-  assert.doesNotMatch(panel._renderRuleEditor(), /rule-flapping-enabled/);
+  const editorWithoutFlapping = panel._renderRuleEditor();
+  assert.doesNotMatch(editorWithoutFlapping, /rule-flapping-enabled/);
+  assert.match(editorWithoutFlapping, /id="rule-condition-template"/);
+  assert.match(editorWithoutFlapping, /id="rule-message-template"/);
 
   panel._config.automatic.flapping = { enabled: true };
   panel._editingRule = {
@@ -2732,6 +2772,40 @@ test("custom rule flapping options appear only with the pack and serialize overr
   );
 });
 
+test("custom rule flapping toggle keeps the drawer position", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = { ...completeConfig(), automatic: {
+    ...completeConfig().automatic,
+    flapping: { enabled: true },
+  } };
+  panel._editingRule = {
+    ...newRuleDefaults(),
+    entity_ids: ["sensor.test"],
+  };
+  panel._hass = { states: {} };
+  const toggle = {};
+  const settings = { hidden: true };
+  panel.shadowRoot.querySelector = (selector) => ({
+    "#rule-flapping-enabled": toggle,
+    ".rule-flapping-settings": settings,
+  })[selector] ?? null;
+  panel._configureSelect = () => {};
+  panel._configureSelector = () => {};
+  panel._captureRuleDraft = () => {};
+  let refreshes = 0;
+  panel._refreshRuleEditor = () => { refreshes += 1; };
+
+  panel._hydrateRuleEditorControls();
+  toggle.onchange({ target: { checked: true } });
+  assert.equal(settings.hidden, false);
+  assert.equal(panel._editingRule.flapping_enabled, true);
+  toggle.onchange({ target: { checked: false } });
+  assert.equal(settings.hidden, true);
+  assert.equal(panel._editingRule.flapping_enabled, false);
+  assert.equal(refreshes, 0);
+});
+
 test("automatic packs are rendered only from available backend metadata", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -2749,6 +2823,39 @@ test("automatic packs are rendered only from available backend metadata", () => 
   assert.doesNotMatch(html, /CATEGORIES|État unavailable sur toutes les entités/);
 });
 
+test("disabled automatic packs hide their configuration without rerendering", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._config.automatic.battery.enabled = false;
+  panel._packs = completePacks();
+
+  const html = panel._renderAutomatic();
+  assert.match(
+    html,
+    /data-pack-configuration="battery" hidden[\s\S]*auto-battery-threshold/,
+  );
+  assert.match(
+    html,
+    /data-pack-configuration="unavailable" [^>]*>[\s\S]*auto-unavailable-delay/,
+  );
+
+  const switchControl = { checked: false };
+  const configuration = { hidden: true };
+  panel.shadowRoot.querySelector = (selector) => {
+    if (selector === "#auto-battery-enabled") return switchControl;
+    if (selector === '[data-pack-configuration="battery"]') return configuration;
+    return null;
+  };
+  panel._hydrateAutomaticControls();
+  switchControl.checked = true;
+  switchControl.onchange();
+  assert.equal(configuration.hidden, false);
+  switchControl.checked = false;
+  switchControl.onchange();
+  assert.equal(configuration.hidden, true);
+});
+
 test("configuration buttons count automatic and settings entries", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -2758,11 +2865,11 @@ test("configuration buttons count automatic and settings entries", () => {
   const automatic = panel._renderAutomatic();
   assert.match(
     automatic,
-    /id="auto-battery-configuration"[\s\S]*?>Configuration \(0\)<\/ha-button>/,
+    /id="auto-battery-device_thresholds-configuration"[\s\S]*?>Configuration \(0\)<\/ha-button>/,
   );
   assert.match(
     automatic,
-    /id="auto-execution_errors-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/,
+    /id="auto-execution_errors-failure_thresholds-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/,
   );
   assert.doesNotMatch(automatic, /automatic-configuration-entry[^>]*><span/);
 

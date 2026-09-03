@@ -2566,7 +2566,7 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
           <div class="fields">
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
-            ${rule.flapping_enabled ? `${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}` : ""}
+            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
           </div>
         </section>` : ""}`;
 }
@@ -2958,7 +2958,8 @@ function hydrateRuleEditorControls() {
       this._captureRuleDraft();
       this._editingRule.flapping_enabled = Boolean(event.target.checked);
       this._ruleDirty = true;
-      this._refreshRuleEditor();
+      const settings = this.shadowRoot.querySelector(".rule-flapping-settings");
+      if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
 }
@@ -4089,7 +4090,11 @@ async function handleRulesAction(action, button) {
 
 // Source: frontend-src/views/automatic.js
 const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
-const MAP_FIELD_TYPES = new Set([...NUMBER_MAP_FIELD_TYPES, "device_settings_map"]);
+const MAP_FIELD_TYPES = new Set([
+  ...NUMBER_MAP_FIELD_TYPES,
+  "device_settings_map",
+  "pack_settings_map",
+]);
 
 function isNumberMapField(field) {
   return NUMBER_MAP_FIELD_TYPES.has(field.type);
@@ -4097,6 +4102,13 @@ function isNumberMapField(field) {
 
 function drawerFields(pack) {
   return (pack.config_fields ?? []).filter((field) => MAP_FIELD_TYPES.has(field.type));
+}
+
+function fieldConfigurationCount(pack, field, config, draft) {
+  const value = draft?.[pack.id]?.[field.id];
+  return Array.isArray(value)
+    ? value.filter((row) => row.target_id).length
+    : Object.keys(value ?? config[field.id] ?? {}).length;
 }
 
 function renderAutomatic(context) {
@@ -4110,22 +4122,32 @@ function renderAutomatic(context) {
         const packKey = pack.translation_key || pack.id;
         const packName = t(`packs.${packKey}.name`);
         const configurableFields = drawerFields(pack);
+        const configurationButtons = configurableFields.map((field) => {
+          const fieldName = t(`automatic.fields.${field.translation_key}.label`);
+          const count = fieldConfigurationCount(pack, field, packConfig, draft);
+          const label = configurableFields.length === 1
+            ? t("buttons.configuration", { count })
+            : t("buttons.configuration_named", { name: fieldName, count });
+          return `<ha-button id="auto-${pack.id}-${field.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" aria-label="${esc(t("automatic.configure_aria", { name: fieldName }))}">${esc(label)}</ha-button>`;
+        }).join("");
         return `<ha-card outlined class="panel category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
             <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
           </div>
           <p>${esc(t(`packs.${packKey}.description`))}</p>
-          <div class="fields">
-            ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).filter((field) => ["number", "pack_settings_map"].includes(field.type)).map((field) => renderPackField(
-              pack,
-              field,
-              packConfig,
-              { availablePacks, draft, renderNumberField, t },
-            )).join("")}
+          <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
+            <div class="fields">
+              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+              ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
+                pack,
+                field,
+                packConfig,
+                { availablePacks, draft, renderNumberField, t },
+              )).join("")}
+            </div>
+            ${configurationButtons ? `<div class="configuration-entry automatic-configuration-entry${configurableFields.length > 1 ? " has-multiple-configurations" : ""}">${configurationButtons}</div>` : ""}
           </div>
-          ${configurableFields.length ? `<div class="configuration-entry automatic-configuration-entry"><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
         </ha-card>`;
       }).join("")}
       <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
@@ -4150,15 +4172,6 @@ function renderAutomaticPanel() {
     });
 }
 
-function packConfigurationCount(pack, config, draft) {
-  return drawerFields(pack).reduce((count, field) => {
-    const rows = draft?.[pack.id]?.[field.id];
-    return count + (rows
-      ? rows.filter((row) => row.target_id).length
-      : Object.keys(config[field.id] ?? {}).length);
-  }, 0);
-}
-
 function renderAutomaticConfigurationDrawer(context) {
   const {
     availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
@@ -4166,20 +4179,21 @@ function renderAutomaticConfigurationDrawer(context) {
   } = context;
   if (configurationDrawer?.kind !== "automatic") return "";
   const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
-  const configurableFields = pack ? drawerFields(pack) : [];
-  if (!configurableFields.length) return "";
+  const fields = pack ? drawerFields(pack) : [];
+  const field = fields.find((item) => item.id === configurationDrawer.fieldId)
+    ?? (fields.length === 1 ? fields[0] : null);
+  if (!field) return "";
   const packConfig = config.automatic[pack.id];
-  const packName = t(`packs.${pack.translation_key || pack.id}.name`);
-  const content = `<div class="fields configuration-drawer-fields">${configurableFields
-    .map((field) => renderPackField(
-      pack,
-      field,
-      packConfig,
-      { availablePacks, draft, renderNumberField, t },
-    )).join("")}</div>`;
+  const fieldName = t(`automatic.fields.${field.translation_key}.label`);
+  const content = `<div class="fields configuration-drawer-fields">${renderPackField(
+    pack,
+    field,
+    packConfig,
+    { availablePacks, draft, renderNumberField, t },
+  )}</div>`;
   return renderConfigurationDrawer({
-    title: packName,
-    ariaLabel: t("automatic.close_configuration_aria", { name: packName }),
+    title: fieldName,
+    ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
     content,
     saveAction: "save-automatic",
     saveLabel: t("buttons.save"),
@@ -4212,7 +4226,7 @@ function renderPackField(pack, field, config, context) {
           const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
           return `<div class="pack-source-row">
             <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
-            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(settings[setting.id])}" data-pack-source-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" data-setting-id="${esc(setting.id)}" label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`).join("")}</div>
+            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(settings[setting.id])}" data-pack-source-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" data-setting-id="${esc(setting.id)}" aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
           </div>`;
         }).join("")}</div>
       </div>`;
@@ -4226,8 +4240,8 @@ function renderPackField(pack, field, config, context) {
         </div>
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
-            <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
-            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(row[setting.id])}" data-pack-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(setting.id)}" required label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`).join("")}</div>
+            <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
+            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(row[setting.id])}" data-pack-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(setting.id)}" required aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
             <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -4448,22 +4462,40 @@ function refreshAutomaticConfigurationDrawer() {
 
 function updateAutomaticConfigurationCount(packId) {
   const pack = this._packs.find((item) => item.id === packId);
-  const button = this.shadowRoot?.querySelector?.(`#auto-${packId}-configuration`);
-  if (!pack || !button) return;
-  button.textContent = this._t("buttons.configuration", {
-    count: packConfigurationCount(
-      pack,
-      this._config.automatic[pack.id],
-      this._automaticMapDraft,
-    ),
+  if (!pack) return;
+  const fields = drawerFields(pack);
+  fields.forEach((field) => {
+    const button = this.shadowRoot?.querySelector?.(
+      `#auto-${packId}-${field.id}-configuration`,
+    );
+    if (!button) return;
+    const count = fieldConfigurationCount(
+      pack, field, this._config.automatic[pack.id], this._automaticMapDraft,
+    );
+    button.textContent = fields.length === 1
+      ? this._t("buttons.configuration", { count })
+      : this._t("buttons.configuration_named", {
+        name: this._t(`automatic.fields.${field.translation_key}.label`), count,
+      });
   });
 }
 
 function hydrateAutomaticControls() {
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
+    const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
+    if (enabled) {
+      enabled.onchange = () => {
+        const configuration = this.shadowRoot.querySelector(
+          `[data-pack-configuration="${pack.id}"]`,
+        );
+        if (configuration) configuration.hidden = !enabled.checked;
+      };
+    }
     for (const field of pack.config_fields ?? []) {
-      if (!MAP_FIELD_TYPES.has(field.type)) continue;
+      if (!MAP_FIELD_TYPES.has(field.type) || field.type === "pack_settings_map") {
+        continue;
+      }
       const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
       rows.forEach((row, index) => {
         this._configureSelector(
@@ -4511,7 +4543,11 @@ async function handleAutomaticAction(action, button) {
   if (action === "open-automatic-configuration") {
     this._ensureAutomaticDraft();
     captureAutomaticConfigurationValues.call(this);
-    this._configurationDrawer = { kind: "automatic", id: button.dataset.packId };
+    this._configurationDrawer = {
+      kind: "automatic",
+      id: button.dataset.packId,
+      fieldId: button.dataset.fieldId,
+    };
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
   }
@@ -5387,8 +5423,12 @@ const settingsStyles = `
     min-height: 40px;
     margin-top: 18px;
     padding-top: 12px;
+    flex-wrap: wrap;
     justify-content: flex-end;
     border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .automatic-configuration-entry.has-multiple-configurations {
+    justify-content: space-between;
   }
   .fields.configuration-drawer-fields {
     grid-template-columns: 1fr;
@@ -5702,6 +5742,19 @@ const settingsStyles = `
     grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 10px;
   }
+  .pack-configuration[hidden],
+  .pack-settings-values[hidden] {
+    display: none;
+  }
+  .pack-target-field,
+  .pack-setting-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .pack-setting-field .field-label {
+    line-height: 1.3;
+  }
   .pack-source-list {
     display: grid;
     gap: 12px;
@@ -5817,6 +5870,12 @@ const ruleEditorStyles = `
   }
   .rule-attribute-field[hidden] {
     display: none;
+  }
+  .rule-flapping-settings[hidden] {
+    display: none;
+  }
+  .rule-flapping-settings {
+    grid-column: 1 / -1;
   }
   .rule-values-field {
     gap: 10px;

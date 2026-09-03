@@ -98,6 +98,12 @@ export const ruleEditorStyles = `
   .rule-attribute-field[hidden] {
     display: none;
   }
+  .rule-flapping-settings[hidden] {
+    display: none;
+  }
+  .rule-flapping-settings {
+    grid-column: 1 / -1;
+  }
   .rule-values-field {
     gap: 10px;
   }

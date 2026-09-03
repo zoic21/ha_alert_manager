@@ -23,6 +23,7 @@
       "close_configuration_aria": "Close {name} configuration",
       "configuration": "Configuration",
       "configure_aria": "Configure {name}",
+      "device": "Device",
       "empty_delay_help": "Leave the delay empty to use the global delay.",
       "fields": {
         "device_thresholds": {

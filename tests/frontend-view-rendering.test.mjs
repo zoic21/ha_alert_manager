@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  packConfigurationCount,
-  renderAutomatic,
-} from "../frontend-src/views/automatic.js";
+import { renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
@@ -251,7 +248,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold[^>]*>automatic\.fields\.threshold\.label:15/);
-  assert.match(markup, /auto-battery-configuration/);
+  assert.match(markup, /auto-battery-device_thresholds-configuration/);
   assert.match(markup, /automatic-configuration-entry/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
@@ -301,7 +298,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(automationErrors, /value="3"/);
 });
 
-test("flapping renders without a delay and reuses the device configuration drawer", () => {
+test("flapping renders source packs and device overrides in separate drawers", () => {
   const numberFields = [
     { id: "occurrences", type: "number", translation_key: "flapping_occurrences", default: 5, minimum: 2, maximum: 100, step: 1 },
     { id: "window", type: "number", translation_key: "flapping_window", default: 3600, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
@@ -371,7 +368,7 @@ test("flapping renders without a delay and reuses the device configuration drawe
     ],
     config,
     draft,
-    configurationDrawer: { kind: "automatic", id: "flapping" },
+    configurationDrawer: { kind: "automatic", id: "flapping", fieldId: "source_packs" },
     busy: false,
     renderNumberField: (id) => `<number id="${id}"></number>`,
     t,
@@ -381,12 +378,9 @@ test("flapping renders without a delay and reuses the device configuration drawe
   assert.match(markup, /auto-flapping-occurrences/);
   assert.match(markup, /auto-flapping-window/);
   assert.match(markup, /auto-flapping-recovery/);
-  assert.match(markup, /auto-flapping-configuration/);
-  assert.equal(
-    packConfigurationCount(pack, config.automatic.flapping, draft),
-    1,
-  );
-  assert.match(markup, /auto-flapping-device_overrides-target-0/);
+  assert.match(markup, /auto-flapping-source_packs-configuration/);
+  assert.match(markup, /auto-flapping-device_overrides-configuration/);
+  assert.match(markup, /automatic-configuration-entry has-multiple-configurations/);
   assert.match(markup, /data-setting-id="occurrences"/);
   assert.match(markup, /data-setting-id="window"/);
   assert.match(markup, /data-setting-id="recovery"/);
@@ -394,6 +388,28 @@ test("flapping renders without a delay and reuses the device configuration drawe
   assert.match(markup, /data-source-pack-id="connectivity"[^>]*checked/);
   assert.match(markup, /data-source-pack-id="battery"/);
   assert.match(markup, /data-pack-source-values="battery" hidden/);
+  assert.doesNotMatch(markup, /auto-flapping-device_overrides-target-0/);
+
+  const deviceMarkup = renderAutomatic({
+    availablePacks: [
+      pack,
+      { id: "unavailable", available: true, translation_key: "unavailable" },
+      { id: "connectivity", available: true, translation_key: "connectivity" },
+      { id: "battery", available: true, translation_key: "battery" },
+    ],
+    config,
+    draft,
+    configurationDrawer: {
+      kind: "automatic", id: "flapping", fieldId: "device_overrides",
+    },
+    busy: false,
+    renderNumberField: (id) => `<number id="${id}"></number>`,
+    t,
+  });
+  assert.match(deviceMarkup, /auto-flapping-device_overrides-target-0/);
+  assert.match(deviceMarkup, /automatic\.device/);
+  assert.match(deviceMarkup, /class="pack-setting-field"/);
+  assert.doesNotMatch(deviceMarkup, /data-pack-source-toggle/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {

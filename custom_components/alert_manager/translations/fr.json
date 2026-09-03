@@ -23,6 +23,7 @@
       "close_configuration_aria": "Fermer la configuration de {name}",
       "configuration": "Configuration",
       "configure_aria": "Configurer {name}",
+      "device": "Appareil",
       "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
       "fields": {
         "device_thresholds": {
