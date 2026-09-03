@@ -3092,7 +3092,11 @@ test("deleting a notification profile saves only profiles", async () => {
     },
     exceptions: [],
   };
-  panel._config = { ...completeConfig(), notification_profiles: [profile] };
+  const otherProfile = { ...profile, id: "tablet", name: "Tablet" };
+  panel._config = {
+    ...completeConfig(),
+    notification_profiles: [otherProfile, profile],
+  };
   panel._historyConfig = { retention_limit: 100, enabled: true };
   panel._ensureSettingsDraft();
   panel._settingsDraft.global_delay = "321";
@@ -3106,15 +3110,15 @@ test("deleting a notification profile saves only profiles", async () => {
   };
 
   await panel._handleClick(
-    actionEvent("delete-notification-profile", null, { index: "0" }),
+    actionEvent("delete-notification-profile", null, { profileId: "phone" }),
   );
 
   assert.deepEqual(requests, [{
     type: "alert_manager/config/update",
-    config: { notification_profiles: [] },
+    config: { notification_profiles: [otherProfile] },
   }]);
   assert.equal(panel._settingsDraft.global_delay, "321");
-  assert.deepEqual(panel._settingsDraft.notification_profiles, []);
+  assert.deepEqual(panel._settingsDraft.notification_profiles, [otherProfile]);
 });
 
 test("native Home Assistant selectors are configured for multiple values", () => {

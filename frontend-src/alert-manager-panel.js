@@ -20,7 +20,7 @@ import {
   handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS,
   updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
-import { captureNotificationProfileDraft } from "./components/notification-profiles.js";
+import { captureNotificationProfileDraft, handleNotificationProfileAction } from "./components/notification-profiles.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, clearRuleTestResult,
   duplicateRuleDraft, duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
@@ -58,7 +58,7 @@ import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureA
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
   handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
-  renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
+  refreshSettingsConfigurationDrawer, renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
   handleConfigBackupAction,
@@ -67,6 +67,7 @@ const ACTION_HANDLERS = [
   handleHistoryAction,
   handleCoherenceAction,
   handleAutomaticAction,
+  handleNotificationProfileAction,
   handleSettingsAction,
   handleRulesAction,
 ];
@@ -131,6 +132,7 @@ class AlertManagerPanel extends HTMLElement {
   _ensureSettingsDraft = ensureSettingsDraft;
   _captureEntityDelayValues = captureEntityDelayValues;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
+  _refreshSettingsConfigurationDrawer = refreshSettingsConfigurationDrawer;
   _setEntityDelayEntity = setEntityDelayEntity;
   _refreshAlertTableData = refreshAlertTableData;
   _loadNativeDateRangePicker = loadNativeDateRangePicker;
@@ -170,7 +172,8 @@ class AlertManagerPanel extends HTMLElement {
   _nativeTimelineCell = nativeTimelineCell;
   _alertDetailsItems = alertDetailsItems;
   _renderAlertDetails = renderAlertDetailsPanel;
-  _openAlertDetails = openAlertDetails; _openAlertDeepLink = openAlertDeepLink;
+  _openAlertDetails = openAlertDetails;
+  _openAlertDeepLink = openAlertDeepLink;
   _closeAlertDetailsDialog = closeAlertDetailsDialog;
   _openMoreInfo = openMoreInfo;
   _overviewContentScroller = overviewContentScroller;
@@ -288,7 +291,8 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
-    this._alertDetailsDialog = null; this._handledAlertDeepLink = null;
+    this._alertDetailsDialog = null;
+    this._handledAlertDeepLink = null;
     this._nativeBottomSheetLoadPromise = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
@@ -305,19 +309,16 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
-
   set hass(value) {
     setHass.call(this, value);
   }
   get hass() {
     return this._hass;
   }
-
   async _handleMenuSelected(event) {
     if (await this._handleAlertDetailsSelection(event)) return;
     await this._handleSelected(event);
   }
-
   set panel(value) {
     this._panel = value;
   }
@@ -708,7 +709,6 @@ class AlertManagerPanel extends HTMLElement {
       void this._handleClick({ target: summary });
     }
   }
-
   async _handleSubmit(event) {
     event.preventDefault();
     if (this._busy) return;

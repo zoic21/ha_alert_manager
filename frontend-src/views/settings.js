@@ -1,4 +1,10 @@
-import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
+import {
+  ALERT_MANAGER_ENTITY_IDS,
+  MAX_DURATION_SECONDS,
+  MDI_DOWNLOAD,
+  MDI_PLUS,
+  MDI_UPLOAD,
+} from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import {
@@ -6,11 +12,8 @@ import {
   replaceConfigurationDrawer,
 } from "../components/configuration-drawer.js";
 import {
-  captureNotificationProfileDraft,
   cloneNotificationProfile,
   hydrateNotificationProfileControls,
-  newNotificationProfileDraft,
-  notificationProfileValidationError,
   renderNotificationProfileDrawer,
   renderNotificationProfiles,
 } from "../components/notification-profiles.js";
@@ -19,15 +22,15 @@ export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
-      packs, rules, busy, useBottomSheet,
+      busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -70,7 +73,7 @@ export function renderSettings(context) {
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
-        notificationProfileDraft, packs, rules, busy, useBottomSheet, t,
+        notificationProfileDraft, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -82,13 +85,11 @@ export function renderSettingsConfigurationEntry(id, label, count, t) {
 export function renderSettingsConfigurationDrawer(context) {
   const {
     settingsDraft, entityDelayDraft, configurationDrawer,
-    notificationProfileDraft, packs, rules, busy, useBottomSheet, t,
+    notificationProfileDraft, busy, useBottomSheet, t,
   } = context;
   if (configurationDrawer?.kind === "notification") {
     return renderNotificationProfileDrawer({
       draft: notificationProfileDraft,
-      packs,
-      rules,
       busy,
       useBottomSheet,
       t,
@@ -106,7 +107,7 @@ export function renderSettingsConfigurationDrawer(context) {
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
-        <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
         <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
@@ -139,8 +140,6 @@ export function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
-      packs: this._packs.filter((pack) => pack.available),
-      rules: this._config.rules ?? [],
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -310,42 +309,12 @@ export async function saveSettings() {
     }
 }
 
-export async function saveNotificationProfiles(candidateProfiles) {
-  const profiles = candidateProfiles.map(
-    cloneNotificationProfile,
-  );
-  this._busy = true;
-  this._notice = null;
-  this._refreshUiState();
-  let saved = false;
-  try {
-    this._config = await this._api.call({
-      type: "alert_manager/config/update",
-      config: { notification_profiles: profiles },
-    });
-    this._settingsDraft.notification_profiles = (
-      this._config.notification_profiles ?? []
-    ).map(cloneNotificationProfile);
-    this._notificationProfileDraft = null;
-    this._notificationProfileIndex = -1;
-    this._configurationDrawer = null;
-    this._notice = { kind: "success", text: this._t("success.settings_saved") };
-    saved = true;
-  } catch (error) {
-    this._notice = { kind: "error", text: this._errorText(error) };
-  } finally {
-    this._busy = false;
-    if (saved) this._render();
-    else this._refreshUiState();
-  }
-}
-
 export function resetSettingsDraft() {
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
     this._notificationProfileDraft = null;
-    this._notificationProfileIndex = -1;
+    this._notificationProfileId = null;
 }
 
 export function ensureSettingsDraft() {
@@ -476,7 +445,10 @@ export function hydrateSettingsControls() {
       (value) => this._setEntityDelayEntity(index, value),
     );
   });
-  hydrateNotificationProfileControls(this);
+  hydrateNotificationProfileControls(this, {
+    packs: this._packs.filter((pack) => pack.available),
+    rules: this._config.rules ?? [],
+  });
 }
 
 export function refreshSettingsConfigurationDrawer() {
@@ -490,8 +462,6 @@ export function refreshSettingsConfigurationDrawer() {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     notificationProfileDraft: this._notificationProfileDraft,
-    packs: this._packs.filter((pack) => pack.available),
-    rules: this._config.rules ?? [],
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
@@ -513,92 +483,6 @@ export function updateSettingsConfigurationCount(id) {
 }
 
 export async function handleSettingsAction(action, button) {
-  if (action === "new-notification-profile") {
-    this._ensureSettingsDraft();
-    this._notificationProfileDraft = newNotificationProfileDraft();
-    this._notificationProfileIndex = -1;
-    this._configurationDrawer = { kind: "notification" };
-    this._render();
-    return true;
-  }
-  if (action === "edit-notification-profile") {
-    this._ensureSettingsDraft();
-    const index = Number(button.dataset.index);
-    const profile = this._settingsDraft.notification_profiles[index];
-    if (!profile) return true;
-    this._notificationProfileDraft = cloneNotificationProfile(profile);
-    this._notificationProfileIndex = index;
-    this._configurationDrawer = { kind: "notification" };
-    this._render();
-    return true;
-  }
-  if (action === "save-notification-profile") {
-    captureNotificationProfileDraft(this);
-    const error = notificationProfileValidationError(
-      this._notificationProfileDraft,
-      (key) => this._t(key),
-    );
-    if (error) {
-      this._notice = { kind: "error", text: error };
-      this._refreshUiState();
-      return true;
-    }
-    const profile = cloneNotificationProfile(this._notificationProfileDraft);
-    const profiles = (this._settingsDraft.notification_profiles ?? []).map(
-      cloneNotificationProfile,
-    );
-    if (this._notificationProfileIndex < 0) {
-      profiles.push(profile);
-    } else {
-      profiles[this._notificationProfileIndex] = profile;
-    }
-    await saveNotificationProfiles.call(this, profiles);
-    return true;
-  }
-  if (action === "delete-notification-profile") {
-    this._ensureSettingsDraft();
-    const index = Number(button.dataset.index);
-    const profile = this._settingsDraft.notification_profiles[index];
-    if (!profile || !window.confirm(this._t("notifications.delete_confirm", { name: profile.name }))) {
-      return true;
-    }
-    const profiles = this._settingsDraft.notification_profiles.filter(
-      (_item, profileIndex) => profileIndex !== index,
-    );
-    await saveNotificationProfiles.call(this, profiles);
-    return true;
-  }
-  if (action === "test-notification-profile") {
-    const result = await this._call(
-      {
-        type: "alert_manager/notifications/test",
-        profile_id: button.dataset.profileId,
-      },
-      "",
-    );
-    if (!result) return true;
-    const failed = (result.failed_targets ?? []).map((item) => item.entity_id).join(", ");
-    this._notice = result.success
-      ? { kind: "success", text: this._t("notifications.test_success") }
-      : { kind: "error", text: this._t("notifications.test_failed", { targets: failed }) };
-    this._refreshUiState();
-    return true;
-  }
-  if (action === "add-notification-exception") {
-    captureNotificationProfileDraft(this);
-    this._notificationProfileDraft.exceptions.push({
-      selector_type: "pack",
-      selector_id: "",
-    });
-    this._render();
-    return true;
-  }
-  if (action === "remove-notification-exception") {
-    captureNotificationProfileDraft(this);
-    this._notificationProfileDraft.exceptions.splice(Number(button.dataset.index), 1);
-    this._render();
-    return true;
-  }
   if (action === "save-settings") {
     const form = this.shadowRoot.querySelector("#settings-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
@@ -612,16 +496,6 @@ export async function handleSettingsAction(action, button) {
       id: button.dataset.configurationId,
     };
     refreshSettingsConfigurationDrawer.call(this);
-    return true;
-  }
-  if (
-    action === "close-configuration-drawer"
-    && this._configurationDrawer?.kind === "notification"
-  ) {
-    this._configurationDrawer = null;
-    this._notificationProfileDraft = null;
-    this._notificationProfileIndex = -1;
-    this._render();
     return true;
   }
   if (
