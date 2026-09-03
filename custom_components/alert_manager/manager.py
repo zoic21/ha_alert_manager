@@ -26,7 +26,7 @@ from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
-from .packs import PACKS, reset_pack_runtimes
+from .packs import OCCURRENCE_PACKS, reset_pack_runtimes
 from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
@@ -149,9 +149,8 @@ class AlertManager(
         self._pack_runtime = self.storage.pack_runtime
         runtime_pack_ids = {
             pack.id
-            for pack in PACKS
-            if pack.occurrence_batch_handler is not None
-            and self.config["automatic"][pack.id]["enabled"]
+            for pack in OCCURRENCE_PACKS
+            if self.config["automatic"][pack.id]["enabled"]
         }
         if set(self._pack_runtime) - runtime_pack_ids:
             self._pack_runtime = {

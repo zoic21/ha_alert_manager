@@ -23,6 +23,7 @@ from .const import (
     SIGNAL_HISTORY_UPDATED,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
+from .packs import PackGeneratedAlert
 from .storage import sort_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -360,6 +361,59 @@ class _StateMixin:
             record.paused_at = None
             changed = True
         return changed
+
+    def _apply_generated_alert(
+        self, pack_id: str, generated: PackGeneratedAlert
+    ) -> None:
+        """Create or refresh one immediate, deadline-driven pack alert."""
+        occurrence = generated.occurrence
+        source = occurrence.source
+        now = occurrence.occurred_at
+        alert_id = f"{pack_id}:{generated.key}"
+        condition = self._localized_pack_condition(
+            generated.condition_key, generated.condition_params
+        )
+        details = self._details(
+            occurrence.state,
+            alert_id,
+            pack_id,
+            condition,
+            value=generated.value,
+            condition_key=generated.condition_key,
+            condition_params=generated.condition_params,
+            rule_id=source.rule_id,
+            rule_name=generated.rule_name,
+            message=condition,
+            source=source.id,
+        )
+        record = self.records.get(alert_id)
+        if record is None:
+            record = AlertRecord.active_until(details, now, generated.resolve_at)
+            self._set_record(record)
+            self._fire_started(record)
+        else:
+            record.details = details
+            record.expires_at = generated.resolve_at
+        self._cancel_timer(alert_id)
+        self._schedule_timer(record)
+
+    def _resolve_expired_alerts(self, now: datetime) -> None:
+        """Resolve queued active deadlines after any same-batch occurrences."""
+        alert_ids = set(self._queued_expired_alert_ids)
+        self._queued_expired_alert_ids.clear()
+        for alert_id in alert_ids:
+            record = self.records.get(alert_id)
+            if record is None or record.expires_at is None:
+                continue
+            if now.astimezone(UTC) < record.expires_at.astimezone(UTC):
+                self._schedule_timer(record)
+                continue
+            record = self._pop_record(alert_id)
+            if record is None:
+                continue
+            self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+            self._fire_resolved(record, now)
+            self._immediate_state_save_required = True
 
     def _reschedule_record_timers(self) -> None:
         """Restore pending transition and presentation timers."""

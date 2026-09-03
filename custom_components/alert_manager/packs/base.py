@@ -96,16 +96,9 @@ class PackGeneratedAlert:
     rule_name: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class PackOccurrenceResult:
-    """Report a persisted batch change and any alerts it generated."""
-
-    alerts: tuple[PackGeneratedAlert, ...] = ()
-
-
 PackOccurrenceBatchHandler = Callable[
     [HomeAssistant, tuple[PackOccurrence, ...], dict[str, Any], dict[str, Any]],
-    PackOccurrenceResult | None,
+    tuple[PackGeneratedAlert, ...],
 ]
 
 

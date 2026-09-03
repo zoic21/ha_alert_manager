@@ -12,7 +12,6 @@ from .base import (
     PackGeneratedAlert,
     PackNeutral,
     PackOccurrence,
-    PackOccurrenceResult,
 )
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
@@ -30,6 +29,9 @@ PACKS: tuple[AutomaticPack, ...] = (
     FLAPPING_PACK,
 )
 PACKS_BY_ID = {pack.id: pack for pack in PACKS}
+OCCURRENCE_PACKS = tuple(
+    pack for pack in PACKS if pack.occurrence_batch_handler is not None
+)
 
 
 def reset_pack_runtimes(
@@ -42,6 +44,7 @@ def reset_pack_runtimes(
 
 
 __all__ = [
+    "OCCURRENCE_PACKS",
     "PACKS",
     "PACKS_BY_ID",
     "AutomaticPack",
@@ -49,6 +52,5 @@ __all__ = [
     "PackGeneratedAlert",
     "PackNeutral",
     "PackOccurrence",
-    "PackOccurrenceResult",
     "reset_pack_runtimes",
 ]

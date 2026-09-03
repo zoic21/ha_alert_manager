@@ -134,6 +134,8 @@ def test_live_state_batch_observes_once_and_uses_one_store_write(hass, entry, se
 
     first, writes = run(transition("unavailable", old_state, start))
     assert writes == 1
+    stored_sources = hass.stores["alert_manager"]["pack_runtime"]["flapping"]["sources"]
+    assert len(stored_sources["unavailable:sensor.test"]) == 1
     normal, _writes = run(transition("ok", first, start + timedelta(seconds=1)))
     _second, writes = run(
         transition("unavailable", normal, start + timedelta(seconds=2))
@@ -163,10 +165,10 @@ def test_occurrence_pack_runs_once_after_every_entity_in_batch(
     wrapped_pack = replace(PACK, occurrence_batch_handler=handler)
     monkeypatch.setattr(
         manager_runtime,
-        "PACKS",
+        "OCCURRENCE_PACKS",
         tuple(
             wrapped_pack if pack.id == wrapped_pack.id else pack
-            for pack in manager_runtime.PACKS
+            for pack in manager_runtime.OCCURRENCE_PACKS
         ),
     )
 
@@ -316,7 +318,7 @@ def test_flapping_pack_does_not_observe_itself(hass, set_now):
         {"occurrences": 2, "window": 60, "recovery": 60},
         data,
     )
-    assert result is None
+    assert result == ()
     assert data == {}
 
 

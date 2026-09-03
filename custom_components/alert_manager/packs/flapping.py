@@ -13,7 +13,6 @@ from .base import (
     PackConfigField,
     PackGeneratedAlert,
     PackOccurrence,
-    PackOccurrenceResult,
 )
 
 PACK_ID = "flapping"
@@ -140,7 +139,7 @@ def _process_occurrences(
     occurrences: tuple[PackOccurrence, ...],
     config: dict[str, Any],
     data: dict[str, Any],
-) -> PackOccurrenceResult | None:
+) -> tuple[PackGeneratedAlert, ...]:
     """Record one evaluation batch and emit alerts reaching the threshold."""
     relevant = tuple(
         occurrence
@@ -149,7 +148,7 @@ def _process_occurrences(
         and not occurrence.source.id.startswith(f"{PACK_ID}:")
     )
     if not relevant:
-        return None
+        return ()
 
     _cleanup(
         hass,
@@ -192,7 +191,7 @@ def _process_occurrences(
                 rule_name=occurrence.source.rule_name or occurrence.source.condition,
             )
         )
-    return PackOccurrenceResult(alerts=tuple(generated_alerts))
+    return tuple(generated_alerts)
 
 
 def _number_field(

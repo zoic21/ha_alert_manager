@@ -36,7 +36,7 @@ from .models import (
     extract_attribute_value,
     safe_float,
 )
-from .packs import PACKS, PACKS_BY_ID, PackGeneratedAlert, PackNeutral, PackOccurrence
+from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, PackNeutral, PackOccurrence
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -246,7 +246,19 @@ class _RuntimeMixin:
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
             if new_occurrences:
-                self._process_occurrence_batch(new_occurrences, emit_events=True)
+                batch = tuple(new_occurrences)
+                for pack in OCCURRENCE_PACKS:
+                    if not self.config["automatic"][pack.id][
+                        "enabled"
+                    ] or not self._pack_is_available(pack.id):
+                        continue
+                    for generated in pack.occurrence_batch_handler(
+                        self.hass,
+                        batch,
+                        self.config["automatic"][pack.id],
+                        self._pack_runtime.setdefault(pack.id, {}),
+                    ):
+                        self._apply_generated_alert(pack.id, generated)
             self._resolve_expired_alerts(dt_util.now())
             immediate_save_required = self._immediate_state_save_required
             if immediate_save_required:
@@ -671,100 +683,6 @@ class _RuntimeMixin:
         ):
             self._publish_if_changed()
         return persisted_changed
-
-    def _process_occurrence_batch(
-        self,
-        occurrences: list[PackOccurrence],
-        *,
-        emit_events: bool,
-    ) -> None:
-        """Offer all new anomalies to interested packs after evaluation."""
-        batch = tuple(occurrences)
-        changed = False
-        for pack in PACKS:
-            if (
-                pack.occurrence_batch_handler is None
-                or not self.config["automatic"][pack.id]["enabled"]
-                or not self._pack_is_available(pack.id)
-            ):
-                continue
-            runtime_data = self._pack_runtime.setdefault(pack.id, {})
-            result = pack.occurrence_batch_handler(
-                self.hass,
-                batch,
-                self.config["automatic"][pack.id],
-                runtime_data,
-            )
-            if result is None:
-                continue
-            changed = True
-            for generated in result.alerts:
-                self._apply_generated_alert(
-                    pack.id,
-                    generated,
-                    emit_events=emit_events,
-                )
-        if changed:
-            self.storage.pack_runtime = self._pack_runtime
-            self._immediate_state_save_required = True
-
-    def _apply_generated_alert(
-        self,
-        pack_id: str,
-        generated: PackGeneratedAlert,
-        *,
-        emit_events: bool,
-    ) -> None:
-        """Create or refresh one immediate, deadline-driven pack alert."""
-        occurrence = generated.occurrence
-        source = occurrence.source
-        now = occurrence.occurred_at
-        alert_id = f"{pack_id}:{generated.key}"
-        condition = self._localized_pack_condition(
-            generated.condition_key, generated.condition_params
-        )
-        details = self._details(
-            occurrence.state,
-            alert_id,
-            pack_id,
-            condition,
-            value=generated.value,
-            condition_key=generated.condition_key,
-            condition_params=generated.condition_params,
-            rule_id=source.rule_id,
-            rule_name=generated.rule_name,
-            message=condition,
-            source=source.id,
-        )
-        record = self.records.get(alert_id)
-        if record is None:
-            record = AlertRecord.active_until(details, now, generated.resolve_at)
-            self._set_record(record)
-            if emit_events:
-                self._fire_started(record)
-        else:
-            record.details = details
-            record.expires_at = generated.resolve_at
-        self._cancel_timer(alert_id)
-        self._schedule_timer(record)
-
-    def _resolve_expired_alerts(self, now: datetime) -> None:
-        """Resolve queued active deadlines after any same-batch occurrences."""
-        alert_ids = set(self._queued_expired_alert_ids)
-        self._queued_expired_alert_ids.clear()
-        for alert_id in alert_ids:
-            record = self.records.get(alert_id)
-            if record is None or record.expires_at is None:
-                continue
-            if now.astimezone(UTC) < record.expires_at.astimezone(UTC):
-                self._schedule_timer(record)
-                continue
-            record = self._pop_record(alert_id)
-            if record is None:
-                continue
-            self._pending_history.append(AlertHistoryEntry.resolved(record, now))
-            self._fire_resolved(record, now)
-            self._immediate_state_save_required = True
 
     def _is_live_message_only_change(
         self, record: AlertRecord, details: AlertDetails

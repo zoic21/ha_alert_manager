@@ -28,7 +28,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
-from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
+from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .storage import sort_history
 from .validation import (
     validate_config,
@@ -197,9 +197,8 @@ class _ApiMixin:
             else:
                 self._freeze_pending_alerts(dt_util.now())
                 self._clear_variation_baselines()
-                for pack in PACKS:
-                    if pack.occurrence_batch_handler is not None:
-                        self._pack_runtime.pop(pack.id, None)
+                for pack in OCCURRENCE_PACKS:
+                    self._pack_runtime.pop(pack.id, None)
             await self._async_save_state()
         except Exception:
             self.config = previous_config
@@ -422,11 +421,7 @@ class _ApiMixin:
                 for pack_id in disabled_pack_ids:
                     self._pack_runtime.pop(pack_id, None)
             if exclusions_changed:
-                occurrence_pack_ids = {
-                    pack.id
-                    for pack in PACKS
-                    if pack.occurrence_batch_handler is not None
-                }
+                occurrence_pack_ids = {pack.id for pack in OCCURRENCE_PACKS}
                 ineligible_entities = {
                     record.details.entity_id
                     for record in self.records.values()
@@ -440,9 +435,8 @@ class _ApiMixin:
                 )
             if reset_all_pack_runtimes:
                 reset_pack_runtimes(self.hass)
-                for pack in PACKS:
-                    if pack.occurrence_batch_handler is not None:
-                        self._pack_runtime.pop(pack.id, None)
+                for pack in OCCURRENCE_PACKS:
+                    self._pack_runtime.pop(pack.id, None)
             elif disabled_pack_ids:
                 reset_pack_runtimes(self.hass, disabled_pack_ids)
             await self.async_evaluate_all(save=False, publish=False)
