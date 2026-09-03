@@ -20,6 +20,7 @@ Quelques exemples :
 - une batterie passe sous 15 % ;
 - un capteur de connectivité reste à `off` ;
 - un appareil UniFi reste `not_home` ;
+- une automatisation ou un script se termine en erreur ;
 - un réfrigérateur consomme plus de 200 W pendant 2 heures ;
 - une température reste en dehors d’une plage attendue ;
 - une valeur ou un attribut ne change plus depuis trop longtemps ;
@@ -31,49 +32,17 @@ La différence importante avec une simple notification : le problème **reste vi
 ## Ce qu’Alert Manager vous apporte
 
 - **Un tableau de bord central** pour les alertes actives, à venir et acquittées.
-- **Une surveillance automatique** des problèmes courants : entités indisponibles, connectivité, batteries faibles et appareils UniFi.
+- **Une surveillance automatique** des problèmes courants : entités indisponibles, connectivité, batteries faibles, appareils UniFi et automatisations ou scripts en erreur.
 - **Des règles personnalisées puissantes** pour les états, attributs, plages de valeurs, absences de changement et conditions Jinja.
 - **Une analyse de cohérence de la configuration** pour retrouver les références vers des entités disparues et revenir vers la configuration concernée lorsque c’est possible.
 - **L’acquittement et l’historique** pour suivre un problème sans perdre de vue son état réel.
 - **Recherche, filtres, tri, groupement et colonnes personnalisables**, avec une vue adaptée au mobile.
 - **Des exclusions et temporisations** pour éviter que les situations normales ou les micro-coupures deviennent du bruit.
+- **L’export YAML et des sauvegardes automatiques de la configuration**, avec une récupération guidée si la configuration enregistrée devient invalide.
 - **Des entités et événements Home Assistant** pour alimenter vos propres dashboards et automatisations de notification.
 - **Une interface en français et en anglais**.
 
 Alert Manager ne vous impose **aucun système de notification**. Les notifications restent de simples automatisations Home Assistant : vous choisissez qui notifier, comment et quand.
-
-## Les nouveautés de la v2
-
-### Analyse de cohérence
-
-Une configuration Home Assistant évolue en permanence : entités renommées, intégrations supprimées, dashboards réorganisés… Il est facile de laisser une ancienne référence derrière soi et de ne la découvrir que bien plus tard.
-
-Alert Manager v2 peut analyser votre configuration et signaler les références vers des entités qui n’existent plus. Le résultat indique l’objet concerné, le fichier et la ligne lorsqu’ils sont disponibles, avec un accès direct vers la page Home Assistant correspondante dès que possible.
-
-L’analyse couvre la configuration Home Assistant, notamment les dashboards, automatisations, scripts, templates et blueprints, avec la possibilité d’inclure ou non ESPHome. Elle peut être lancée manuellement ou automatiquement, et le dernier résultat est conservé après un redémarrage afin de toujours savoir quand l’installation a été vérifiée pour la dernière fois.
-
-Les références particulières connues peuvent être ignorées si nécessaire, tandis que les références dynamiques sont volontairement écartées autant que possible afin de limiter les faux positifs.
-
-### Des règles personnalisées beaucoup plus expressives
-
-Les règles personnalisées couvrent désormais davantage de cas concrets sans devoir créer au préalable un template sensor ou une automatisation dédiée :
-
-- égalité, différence et recherche de texte ;
-- seuils numériques, plages **entre** deux valeurs ou **en dehors** de ces bornes ;
-- plusieurs valeurs acceptées ;
-- attributs imbriqués et tableaux comme `data.*.key` ;
-- variation de l’état principal ou d’un attribut numérique depuis une valeur de début capturée lorsqu’une condition Jinja obligatoire devient vraie ;
-- alerte lorsque **l’entité entière ne change plus** ;
-- alerte lorsque seul **un état ou un attribut précis ne change plus** ;
-- Jinja comme condition complémentaire ou comme logique complète de la règle ;
-- messages Jinja personnalisés, avec mise à jour facultative pendant que l’alerte est active.
-
-Une règle peut surveiller plusieurs entités indépendamment, utiliser sa propre temporisation, être éditée visuellement ou en YAML et être dupliquée lorsqu’une règle proche est nécessaire.
-En YAML, les règles entièrement basées sur Jinja utilisent désormais la valeur explicite `source: jinja` ; les règles existantes en `source: none` sont migrées automatiquement.
-
-### Une interface plus agréable au quotidien
-
-La liste principale met d’abord l’accent sur les problèmes actifs et reprend les contrôles de tableau de Home Assistant pour la recherche, les filtres, le tri, le groupement et le choix des colonnes visibles. Les pages des règles personnalisées et de cohérence suivent la même logique, tandis que l’affichage mobile conserve les informations essentielles sans perdre l’accès aux détails.
 
 ## Captures d’écran
 
@@ -156,18 +125,29 @@ Alert Manager peut surveiller automatiquement plusieurs problèmes courants :
 | Connectivité | un `binary_sensor` avec `device_class: connectivity` reste à `off` |
 | Batterie faible | un capteur de batterie atteint le seuil configuré |
 | UniFi | un `device_tracker` UniFi reste absent de `home` |
+| Automatisations et scripts en erreur | une exécution d’`automation` ou de `script` se termine en erreur |
 
 Chaque surveillance peut être activée indépendamment. Les délais et exclusions se règlent depuis l’interface, et les seuils de batterie peuvent être adaptés lorsque certains appareils ont besoin de limites différentes.
+
+La surveillance des erreurs d’automatisation et de script n’a aucun délai par défaut. Une exécution suivante terminée avec succès résout l’alerte. Pour certaines automatisations ou certains scripts, il est possible d’exiger plusieurs cycles d’exécution consécutifs en erreur avant de la déclencher.
 
 ## Règles personnalisées
 
 Pour tout le reste, vous pouvez créer vos propres règles directement depuis le panneau Alert Manager.
 
-Une règle peut surveiller une ou plusieurs entités indépendamment et utiliser l’état de l’entité, un attribut, la variation de l’état principal ou d’un attribut numérique depuis une valeur de début définie par une condition, une condition d’absence de changement ou une logique entièrement basée sur Jinja. Les temporisations permettent d’exiger qu’une situation persiste avant de devenir une alerte, afin qu’une courte anomalie ne remplisse pas inutilement le dashboard.
+Une règle peut surveiller une ou plusieurs entités indépendamment et utiliser :
+
+- l’état de l’entité ou un attribut imbriqué, y compris un tableau comme `data.*.key` ;
+- des comparaisons d’égalité, de texte, de seuil numérique, **entre** deux valeurs ou **en dehors** de ces bornes ;
+- la variation de l’état ou d’un attribut numérique depuis le moment où une condition Jinja devient vraie ;
+- l’absence de tout changement, ou seulement un état ou un attribut précis qui ne change plus ;
+- une condition Jinja en complément d’une comparaison, ou Jinja comme logique complète de la règle.
+
+Les temporisations permettent d’exiger qu’une situation persiste avant de devenir une alerte, afin qu’une courte anomalie ne remplisse pas inutilement le dashboard. Les messages Jinja personnalisés sont figés par défaut au déclenchement, mais peuvent être maintenus à jour pendant toute la durée de l’alerte.
 
 Cela couvre par exemple les températures anormales, les consommations électriques inhabituelles, l’âge d’une sauvegarde, les codes d’erreur, les capteurs qui ne se mettent plus à jour ou presque n’importe quel état exposé par Home Assistant.
 
-Les règles peuvent être éditées visuellement ou en YAML. La configuration complète d’Alert Manager peut également être exportée et importée en YAML.
+Les règles peuvent être éditées visuellement ou en YAML et dupliquées depuis le panneau. Une règle peut surveiller jusqu’à 50 entités et une configuration peut contenir jusqu’à 500 règles. En YAML, les règles entièrement basées sur Jinja utilisent `source: jinja` ; les anciennes règles en `source: none` sont migrées automatiquement.
 
 ### Exemples
 
@@ -195,7 +175,21 @@ condition_template: "{{ state.state == 'heating' }}"
 Cette règle évalue chaque clé de message du tableau data de Bayrol. Elle ne peut devenir active que lorsqu’aucun des états attendus de débit, de démarrage ou de mode enjoy n’est présent ; sa condition Jinja impose aussi que le débit soit présent.
 
 ```yaml
-
+name: "Alerte Bayrol"
+enabled: true
+entity_ids:
+  - "sensor.bayrol_messages"
+source: "attribute"
+attribute: "data.*.key"
+operator: "not_contains"
+value:
+  - "al_no_flow_bnc"
+  - "al_start_delay"
+  - "enjoy"
+duration: 5400
+message: "{% if state_attr('sensor.bayrol_messages','data') %}\n{% for item in state_attr('sensor.bayrol_messages','data') %}     \n    {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}       \n      {{ item.message | replace(\"\\n\",\" \") }}  \n    {% endif %}      \n{% endfor %}     \n{% endif %}"
+update_message_when_active: false
+condition_template: "{% set flow = states('binary_sensor.bayrol_flow_contact') %}\n{{ (flow == 'on') }}"
 ```
 
 ## Analyse de cohérence
@@ -205,6 +199,14 @@ La page **Cohérence** compare les références statiques d’entités trouvées
 Lorsqu’un problème est trouvé, Alert Manager indique d’où il vient et permet, lorsque c’est possible, d’ouvrir directement l’automatisation, le script, le dashboard, le template ou l’autre objet Home Assistant concerné. Les résultats sont conservés entre les redémarrages et sont également exposés via `sensor.alert_manager_coherence_issue`, ce qui permet de surveiller l’échec d’un contrôle de cohérence comme n’importe quel autre problème.
 
 Les analyses peuvent être lancées à la demande ou automatiquement chaque jour, chaque semaine ou chaque mois. L’analyse du dossier ESPHome peut être désactivée et certaines références connues peuvent être ignorées depuis la configuration.
+
+Cette page donne également accès aux 50 dernières entités supprimées encore conservées par Home Assistant, avec leur date de suppression et leur intégration. La liste est lue directement dans le registre d’entités de Home Assistant : Alert Manager ne maintient pas son propre historique des suppressions.
+
+## Export et récupération de la configuration
+
+La configuration complète peut être exportée et importée en YAML. Alert Manager conserve également les trois derniers exports quotidiens valides de la configuration. Ils peuvent être téléchargés ou restaurés depuis la page Configuration.
+
+Si la configuration enregistrée ne peut pas être chargée au démarrage, Alert Manager démarre de façon sûre avec les valeurs par défaut, affiche un avertissement persistant et laisse un administrateur choisir une sauvegarde. Aucune restauration n’est effectuée silencieusement. La restauration d’une sauvegarde complète remplace la configuration actuelle, les alertes en cours et l’historique.
 
 ## Cycle de vie d’une alerte
 
@@ -216,6 +218,8 @@ Une alerte peut être :
 - **Résolue** lorsque la condition anormale disparaît.
 
 Les alertes résolues peuvent être conservées dans l’historique, ce qui permet de repérer les problèmes récurrents au lieu de seulement voir ce qui ne va pas à l’instant présent.
+
+Un clic sur une alerte ouvre son détail, notamment la valeur qui l’a déclenchée et sa valeur actuelle, avec un accès contextuel à l’entité Home Assistant concernée lorsqu’il est disponible.
 
 ## Être notifié sans être spammé
 
