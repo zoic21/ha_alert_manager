@@ -73,6 +73,26 @@ def _serialize_config_mutation(
     return locked
 
 
+def _variation_reference_signature(
+    rule: Rule,
+) -> tuple[bool, str, str | None, str | None]:
+    """Return the rule fields that define one variation reference window."""
+    return rule.enabled, rule.source, rule.attribute, rule.condition_template
+
+
+def _inactivity_reference_signature(
+    rule: Rule,
+) -> tuple[bool, str, str | None, str, str | None]:
+    """Return the rule fields that define one inactivity window."""
+    return (
+        rule.enabled,
+        rule.source,
+        rule.attribute,
+        rule.operator,
+        rule.condition_template,
+    )
+
+
 class _ApiMixin:
     """Expose the manager contract consumed by WebSocket, services and sensors."""
 
@@ -110,28 +130,12 @@ class _ApiMixin:
         self._validate_rule_template(rule)
 
         baseline_compatible = existing_rule is not None and (
-            existing_rule.enabled,
-            existing_rule.source,
-            existing_rule.attribute,
-            existing_rule.condition_template,
-        ) == (
-            rule.enabled,
-            rule.source,
-            rule.attribute,
-            rule.condition_template,
+            _variation_reference_signature(existing_rule)
+            == _variation_reference_signature(rule)
         )
         inactivity_compatible = existing_rule is not None and (
-            existing_rule.enabled,
-            existing_rule.source,
-            existing_rule.attribute,
-            existing_rule.operator,
-            existing_rule.condition_template,
-        ) == (
-            rule.enabled,
-            rule.source,
-            rule.attribute,
-            rule.operator,
-            rule.condition_template,
+            _inactivity_reference_signature(existing_rule)
+            == _inactivity_reference_signature(rule)
         )
 
         results = [
@@ -207,7 +211,9 @@ class _ApiMixin:
             allow_runtime_baseline=allow_runtime_baseline,
         )
         message, message_error = (None, None)
-        if evaluation.error_code is None:
+        if evaluation.error_code is None and (
+            rule.source not in VARIATION_SOURCES or evaluation.baseline is not None
+        ):
             message, message_error = self._render_rule_message_for_test(
                 rule, state, evaluation.value
             )
@@ -748,15 +754,8 @@ class _ApiMixin:
             variation_definition_changed = (
                 old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
             ) and (
-                old_rule.enabled,
-                old_rule.source,
-                old_rule.attribute,
-                old_rule.condition_template,
-            ) != (
-                rule.enabled,
-                rule.source,
-                rule.attribute,
-                rule.condition_template,
+                _variation_reference_signature(old_rule)
+                != _variation_reference_signature(rule)
             )
             if variation_definition_changed:
                 for entity_id in set(old_rule.entity_ids) | set(rule.entity_ids):
@@ -773,15 +772,8 @@ class _ApiMixin:
             )
             new_inactivity = rule.source == "unchanged" or rule.operator == "unchanged"
             inactivity_changed = (old_inactivity or new_inactivity) and (
-                old_rule.source,
-                old_rule.attribute,
-                old_rule.operator,
-                old_rule.condition_template,
-            ) != (
-                rule.source,
-                rule.attribute,
-                rule.operator,
-                rule.condition_template,
+                _inactivity_reference_signature(old_rule)
+                != _inactivity_reference_signature(rule)
             )
             if inactivity_changed:
                 removed_entities.update(set(old_rule.entity_ids) & set(rule.entity_ids))

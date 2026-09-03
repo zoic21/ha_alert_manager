@@ -201,6 +201,7 @@ test("multi-entity results stay compact and use Home Assistant components", () =
   assert.equal((markup.match(/<ha-expansion-panel/g) ?? []).length, 3);
   assert.match(markup, /<ha-alert class="rule-test-summary"/);
   assert.match(markup, /<ha-icon icon="mdi:check-circle"/);
+  assert.match(markup, /<dl class="alert-details-list">/);
   assert.doesNotMatch(markup, /<ha-card/);
 });
 

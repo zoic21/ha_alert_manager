@@ -190,13 +190,6 @@ export const responsiveStyles = `
       align-items: stretch;
       flex-direction: column;
     }
-    .rule-test-detail {
-      grid-template-columns: 1fr;
-      gap: 2px;
-    }
-    .rule-test-detail strong {
-      text-align: start;
-    }
     .configuration-section-heading {
       align-items: center;
     }
