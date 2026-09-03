@@ -114,6 +114,9 @@ export function conditionText(alert) {
           duration: this._durationText(params.duration),
         })}`
         : "";
+    } else if (alert.condition_key === "automatic.flapping") {
+      params.duration = this._durationText(params.duration_seconds ?? params.duration);
+      params.last_occurrence = this._date(params.last_occurrence);
     } else if (alert.condition_key === "rule.selected_unchanged") {
       const sourceKey = params.source === "attribute"
         ? "conditions.sources.attribute"

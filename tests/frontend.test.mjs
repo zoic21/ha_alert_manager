@@ -2596,6 +2596,70 @@ test("execution failure thresholds select automations and scripts", async () => 
   });
 });
 
+test("flapping saves global and per-device values without a pack delay", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const fields = [
+    { id: "occurrences", type: "number", default: 5 },
+    { id: "window", type: "number", default: 3600 },
+    { id: "recovery", type: "number", default: 1800 },
+  ];
+  panel._config = {
+    automatic: {
+      flapping: {
+        enabled: true,
+        occurrences: 5,
+        window: 3600,
+        recovery: 1800,
+        device_overrides: {},
+      },
+    },
+  };
+  panel._packs = [{
+    id: "flapping",
+    available: true,
+    uses_delay: false,
+    config_fields: [
+      ...fields,
+      { id: "device_overrides", type: "device_settings_map", fields },
+    ],
+  }];
+  panel._automaticMapDraft = {
+    flapping: {
+      occurrences: 4,
+      window: 900,
+      recovery: 300,
+      device_overrides: [{
+        target_id: "a".repeat(32), occurrences: 2, window: 60, recovery: 30,
+      }],
+    },
+  };
+  panel._render = () => {};
+  const controls = {
+    "#auto-flapping-enabled": { checked: true },
+    "#auto-flapping-occurrences": { value: "4" },
+    "#auto-flapping-window": { value: "900" },
+    "#auto-flapping-recovery": { value: "300" },
+  };
+  panel.shadowRoot.querySelector = (selector) => controls[selector];
+  panel.shadowRoot.querySelectorAll = () => [];
+  let call;
+  panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
+
+  await panel._saveAutomatic();
+
+  assert.deepEqual(call.config.automatic.flapping, {
+    enabled: true,
+    occurrences: 4,
+    window: 900,
+    recovery: 300,
+    device_overrides: {
+      ["a".repeat(32)]: { occurrences: 2, window: 60, recovery: 30 },
+    },
+  });
+  assert.equal(Object.hasOwn(call.config.automatic.flapping, "delay"), false);
+});
+
 test("automatic packs are rendered only from available backend metadata", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();

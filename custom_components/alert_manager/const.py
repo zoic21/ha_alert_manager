@@ -97,12 +97,14 @@ CATEGORY_UNAVAILABLE: Final = "unavailable"
 CATEGORY_CONNECTIVITY: Final = "connectivity"
 CATEGORY_UNIFI: Final = "unifi"
 CATEGORY_BATTERY: Final = "battery"
+CATEGORY_FLAPPING: Final = "flapping"
 CATEGORIES: Final = (
     CATEGORY_UNAVAILABLE,
     CATEGORY_CONNECTIVITY,
     CATEGORY_UNIFI,
     CATEGORY_BATTERY,
     "execution_errors",
+    CATEGORY_FLAPPING,
 )
 
 DEFAULT_CONFIG: Final = {
@@ -134,6 +136,13 @@ DEFAULT_CONFIG: Final = {
             "enabled": True,
             "delay": 0,
             "failure_thresholds": {},
+        },
+        CATEGORY_FLAPPING: {
+            "enabled": False,
+            "occurrences": 5,
+            "window": 3600,
+            "recovery": 1800,
+            "device_overrides": {},
         },
     },
     "rules": [],

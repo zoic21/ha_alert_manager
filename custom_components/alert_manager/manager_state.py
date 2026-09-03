@@ -22,7 +22,7 @@ from .const import (
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
 )
-from .models import AlertRecord, AlertStatus, calculate_due_at
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
 from .storage import sort_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,6 +72,32 @@ class _StateMixin:
         record_ids.discard(alert_id)
         if not record_ids:
             self._record_ids_by_entity.pop(entity_id, None)
+
+    def _resolve_pack_records(
+        self,
+        pack_ids: set[str],
+        now: datetime,
+        *,
+        entity_ids: set[str] | None = None,
+        emit_events: bool = True,
+    ) -> bool:
+        """Remove records owned by disabled packs using the normal lifecycle."""
+        changed = False
+        for alert_id, record in tuple(self.records.items()):
+            if record.details.type not in pack_ids or (
+                entity_ids is not None and record.details.entity_id not in entity_ids
+            ):
+                continue
+            self._pop_record(alert_id)
+            self._cancel_timer(alert_id)
+            changed = True
+            if record.status is AlertStatus.ACTIVE:
+                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                if emit_events:
+                    self._fire_resolved(record, now)
+        if changed:
+            self._immediate_state_save_required = True
+        return changed
 
     def _build_public_snapshot(
         self,
@@ -234,6 +260,7 @@ class _StateMixin:
             self._immediate_state_save_required = False
             self._variation_baselines_dirty = False
             return
+        self.storage.pack_runtime = self._pack_runtime
         await self.storage.async_save(self.config, self.records)
         self._immediate_state_save_required = False
         self._variation_baselines_dirty = False
@@ -339,7 +366,7 @@ class _StateMixin:
         if not self.monitoring_enabled:
             return
         for record in self.records.values():
-            if record.status is AlertStatus.PENDING:
+            if record.status is AlertStatus.PENDING or record.expires_at is not None:
                 self._schedule_timer(record)
 
     def _reschedule_hidden_pending_visibility(self, now: datetime) -> None:
@@ -357,11 +384,14 @@ class _StateMixin:
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
-        if record.status is not AlertStatus.PENDING:
+        if record.status is AlertStatus.ACTIVE and record.expires_at is not None:
+            when = record.expires_at.astimezone(UTC)
+        elif record.status is AlertStatus.PENDING:
+            when = record.due_at.astimezone(UTC)
+            if record.visible_at is not None and not self._pending_is_visible(record):
+                when = min(when, record.visible_at.astimezone(UTC))
+        else:
             return
-        when = record.due_at.astimezone(UTC)
-        if record.visible_at is not None and not self._pending_is_visible(record):
-            when = min(when, record.visible_at.astimezone(UTC))
 
         @callback
         def timer_due(_now: datetime) -> None:
@@ -381,6 +411,10 @@ class _StateMixin:
             return
         record = self.records.get(alert_id)
         if record is None:
+            return
+        if record.status is AlertStatus.ACTIVE and record.expires_at is not None:
+            self._queued_expired_alert_ids.add(alert_id)
+            self._queue_entity_evaluations(())
             return
         self._queued_public_refresh = True
         self._queue_entity_evaluations((record.details.entity_id,))

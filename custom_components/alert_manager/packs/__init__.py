@@ -6,10 +6,18 @@ from collections.abc import Collection
 
 from homeassistant.core import HomeAssistant
 
-from .base import AutomaticPack, PackConfigField, PackNeutral
+from .base import (
+    AutomaticPack,
+    PackConfigField,
+    PackGeneratedAlert,
+    PackNeutral,
+    PackOccurrence,
+    PackOccurrenceResult,
+)
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
 from .execution_errors import PACK as EXECUTION_ERRORS_PACK
+from .flapping import PACK as FLAPPING_PACK
 from .unavailable import PACK as UNAVAILABLE_PACK
 from .unifi import PACK as UNIFI_PACK
 
@@ -19,6 +27,7 @@ PACKS: tuple[AutomaticPack, ...] = (
     UNIFI_PACK,
     BATTERY_PACK,
     EXECUTION_ERRORS_PACK,
+    FLAPPING_PACK,
 )
 PACKS_BY_ID = {pack.id: pack for pack in PACKS}
 
@@ -37,6 +46,9 @@ __all__ = [
     "PACKS_BY_ID",
     "AutomaticPack",
     "PackConfigField",
+    "PackGeneratedAlert",
     "PackNeutral",
+    "PackOccurrence",
+    "PackOccurrenceResult",
     "reset_pack_runtimes",
 ]

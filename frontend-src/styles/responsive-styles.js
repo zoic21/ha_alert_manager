@@ -149,6 +149,10 @@ export const responsiveStyles = `
       width: 100%;
       margin-top: 0;
     }
+    .pack-settings-values {
+      grid-column: 1;
+      grid-template-columns: 1fr;
+    }
     .table-page-top {
       padding: 12px 12px 0;
     }

@@ -39,6 +39,22 @@
           "label": "Consecutive failure thresholds by automation or script",
           "validation": "Each row must contain an automation or script and a valid whole number."
         },
+        "flapping_device_overrides": {
+          "duplicate": "A device can have only one custom configuration.",
+          "empty": "No device-specific configuration.",
+          "help": "Device values take precedence over the global configuration.",
+          "label": "Device-specific configurations",
+          "validation": "Each row must contain a device and three valid values."
+        },
+        "flapping_occurrences": {
+          "label": "Number of occurrences"
+        },
+        "flapping_recovery": {
+          "label": "Delay before returning to normal"
+        },
+        "flapping_window": {
+          "label": "Duration"
+        },
         "threshold": {
           "label": "Global threshold"
         }
@@ -60,6 +76,7 @@
       "automatic": {
         "execution_errors": "Execution ended with an error",
         "execution_errors_detail": "Execution ended with an error: {error}",
+        "flapping": "Instability detected: {count} occurrences within {duration}. Source: {source}. Last occurrence: {last_occurrence}",
         "battery": "Battery less than or equal to {threshold}%",
         "connectivity": "Connectivity is off",
         "unavailable": "State is unavailable",
@@ -248,6 +265,10 @@
       "execution_errors": {
         "description": "Monitors automations and scripts whose execution ends with an error.",
         "name": "Automation and script errors"
+      },
+      "flapping": {
+        "description": "Detects anomalies that repeatedly appear and disappear, even before their normal activation.",
+        "name": "Flapping / Instability"
       },
       "battery": {
         "description": "Monitors battery sensors at or below their threshold.",

@@ -26,7 +26,7 @@ from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
-from .packs import reset_pack_runtimes
+from .packs import PACKS, reset_pack_runtimes
 from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
@@ -62,6 +62,7 @@ class AlertManager(
         self._rules_by_entity: dict[str, list[Rule]] = {}
         self._variation_baselines: dict[str, float] = {}
         self._variation_baselines_dirty = False
+        self._pack_runtime: dict[str, dict[str, Any]] = {}
         self._unsubscribers: list[Callable[[], None]] = []
         self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
@@ -90,6 +91,8 @@ class AlertManager(
         self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
+        self._queued_evaluation_observe_occurrences = False
+        self._queued_expired_alert_ids: set[str] = set()
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
@@ -131,6 +134,7 @@ class AlertManager(
             records = {}
             migrated = False
             self.storage.variation_baselines = {}
+            self.storage.pack_runtime = {}
             history, history_migrated = [], False
         else:
             self.config = candidate
@@ -142,6 +146,21 @@ class AlertManager(
                 )
                 history, history_migrated = [], False
         self._variation_baselines = self.storage.variation_baselines
+        self._pack_runtime = self.storage.pack_runtime
+        runtime_pack_ids = {
+            pack.id
+            for pack in PACKS
+            if pack.occurrence_handler is not None
+            and self.config["automatic"][pack.id]["enabled"]
+        }
+        if set(self._pack_runtime) - runtime_pack_ids:
+            self._pack_runtime = {
+                pack_id: data
+                for pack_id, data in self._pack_runtime.items()
+                if pack_id in runtime_pack_ids
+            }
+            self.storage.pack_runtime = self._pack_runtime
+            migrated = True
         await self._async_load_condition_translations()
         self.records = records
         self._rebuild_record_index()

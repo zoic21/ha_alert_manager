@@ -6,13 +6,14 @@ import {
 } from "../components/configuration-drawer.js";
 
 const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
+const MAP_FIELD_TYPES = new Set([...NUMBER_MAP_FIELD_TYPES, "device_settings_map"]);
 
 function isNumberMapField(field) {
   return NUMBER_MAP_FIELD_TYPES.has(field.type);
 }
 
 function drawerFields(pack) {
-  return (pack.config_fields ?? []).filter(isNumberMapField);
+  return (pack.config_fields ?? []).filter((field) => MAP_FIELD_TYPES.has(field.type));
 }
 
 export function renderAutomatic(context) {
@@ -33,7 +34,7 @@ export function renderAutomatic(context) {
           </div>
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
-            ${renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+            ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
             ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
               pack,
               field,
@@ -118,6 +119,22 @@ export function renderPackField(pack, field, config, context) {
         { step: field.step ?? "any" },
       );
     }
+    if (field.type === "device_settings_map") {
+      const rows = draft[pack.id]?.[field.id] ?? [];
+      return `<div class="field full pack-map-field">
+        <div class="configuration-section-heading pack-map-heading">
+          <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
+          <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
+        </div>
+        <div class="pack-map-list">
+          ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
+            <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
+            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(row[setting.id])}" data-pack-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(setting.id)}" required label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`).join("")}</div>
+            <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
+          </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
+        </div>
+      </div>`;
+    }
     if (!isNumberMapField(field)) return "";
     const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
@@ -140,16 +157,42 @@ export async function saveAutomatic() {
     captureAutomaticConfigurationValues.call(this);
     const automatic = {};
     for (const pack of this._packs.filter((item) => item.available)) {
-      const delayValue = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`).value;
+      const delayInput = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
       automatic[pack.id] = {
         enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`).checked,
-        delay: delayValue === "" ? null : Number(delayValue),
       };
+      if (pack.uses_delay !== false) {
+        automatic[pack.id].delay = delayInput.value === "" ? null : Number(delayInput.value);
+      }
       for (const field of pack.config_fields ?? []) {
         if (field.type === "number") {
           automatic[pack.id][field.id] = Number(
             this._automaticMapDraft[pack.id]?.[field.id] ?? field.default,
           );
+          continue;
+        }
+        if (field.type === "device_settings_map") {
+          const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
+          const values = {};
+          for (const row of rows) {
+            const settingsValid = (field.fields ?? []).every(
+              (setting) => Number.isFinite(row[setting.id]),
+            );
+            if (!row.target_id || !settingsValid || Object.hasOwn(values, row.target_id)) {
+              this._notice = {
+                kind: "error",
+                text: this._t(
+                  `automatic.fields.${field.translation_key}.${row.target_id && settingsValid ? "duplicate" : "validation"}`,
+                ),
+              };
+              this._refreshUiState();
+              return;
+            }
+            values[row.target_id] = Object.fromEntries(
+              (field.fields ?? []).map((setting) => [setting.id, row[setting.id]]),
+            );
+          }
+          automatic[pack.id][field.id] = values;
           continue;
         }
         if (!isNumberMapField(field)) continue;
@@ -210,7 +253,11 @@ export function ensureAutomaticDraft() {
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
-        fields[field.id] = isNumberMapField(field)
+        fields[field.id] = field.type === "device_settings_map"
+          ? Object.entries(configured ?? {}).map(
+            ([target_id, settings]) => ({ target_id, ...settings }),
+          )
+          : isNumberMapField(field)
           ? Object.entries(configured ?? {}).map(
             ([target_id, value]) => ({ target_id, value }),
           )
@@ -227,6 +274,12 @@ export function captureAutomaticMapValues() {
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
       if (row) row.value = Number(input.value);
+    });
+    this.shadowRoot.querySelectorAll("[data-pack-setting]").forEach((input) => {
+      const row = this._automaticMapDraft[input.dataset.packSetting]?.[
+        input.dataset.packField
+      ]?.[Number(input.dataset.packIndex)];
+      if (row) row[input.dataset.settingId] = Number(input.value);
     });
 }
 
@@ -280,7 +333,7 @@ export function hydrateAutomaticControls() {
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
     for (const field of pack.config_fields ?? []) {
-      if (!isNumberMapField(field)) continue;
+      if (!MAP_FIELD_TYPES.has(field.type)) continue;
       const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
       rows.forEach((row, index) => {
         this._configureSelector(
@@ -326,10 +379,19 @@ export async function handleAutomaticAction(action, button) {
     const rows = this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId];
     const field = this._packs.find((pack) => pack.id === button.dataset.packId)
       ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
-    const minimum = Number(field?.minimum ?? -1000000000);
-    const maximum = Number(field?.maximum ?? 1000000000);
     if (rows) {
-      rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
+      if (field?.type === "device_settings_map") {
+        rows.push({
+          target_id: "",
+          ...Object.fromEntries((field.fields ?? []).map(
+            (setting) => [setting.id, setting.default],
+          )),
+        });
+      } else {
+        const minimum = Number(field?.minimum ?? -1000000000);
+        const maximum = Number(field?.maximum ?? 1000000000);
+        rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
+      }
     }
     refreshAutomaticConfigurationDrawer.call(this);
     return true;

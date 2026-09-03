@@ -712,8 +712,8 @@ def test_jinja_time_dependency_refreshes_at_next_minute(hass, entry, set_now):
     timer = hass.timers[-1]
     assert timer["point"] == datetime(2026, 8, 27, 12, 35, tzinfo=UTC)
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
     timer["action"](timer["point"])
     assert queued == ["sensor.source"]
@@ -740,8 +740,8 @@ def test_jinja_lifecycle_uses_the_lifecycle_filter_only(hass, entry):
         ),
     )
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
 
     manager._state_changed(_state_event("sensor.new", None, State("sensor.new", "on")))
@@ -763,8 +763,8 @@ def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_n
     dependency_key = ("condition", "rule-id", "sensor.source")
     manager._index_render_info("condition", ("rule-id", "sensor.source"), info)
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
 
     assert not manager._dynamic_dependency_matches(

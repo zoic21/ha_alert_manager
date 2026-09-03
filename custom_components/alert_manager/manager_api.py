@@ -184,6 +184,7 @@ class _ApiMixin:
         previous_pending_history = list(self._pending_history)
         previous_variation_baselines = dict(self._variation_baselines)
         previous_variation_dirty = self._variation_baselines_dirty
+        previous_pack_runtime = deepcopy(self._pack_runtime)
         self.config["monitoring_enabled"] = enabled
         try:
             if enabled:
@@ -196,6 +197,9 @@ class _ApiMixin:
             else:
                 self._freeze_pending_alerts(dt_util.now())
                 self._clear_variation_baselines()
+                for pack in PACKS:
+                    if pack.occurrence_handler is not None:
+                        self._pack_runtime.pop(pack.id, None)
             await self._async_save_state()
         except Exception:
             self.config = previous_config
@@ -204,6 +208,8 @@ class _ApiMixin:
             self._variation_baselines = previous_variation_baselines
             self.storage.variation_baselines = self._variation_baselines
             self._variation_baselines_dirty = previous_variation_dirty
+            self._pack_runtime = previous_pack_runtime
+            self.storage.pack_runtime = self._pack_runtime
             self._cancel_all_timers()
             self._reschedule_record_timers()
             raise
@@ -381,7 +387,7 @@ class _ApiMixin:
             candidate["entity_delays"] = deepcopy(changes["entity_delays"])
         for pack_id, pack_changes in changes.get("automatic", {}).items():
             for field in PACKS_BY_ID[pack_id].config_fields:
-                if field.type.endswith("_number_map") and field.id in pack_changes:
+                if field.type.endswith("_map") and field.id in pack_changes:
                     candidate["automatic"][pack_id][field.id] = deepcopy(
                         pack_changes[field.id]
                     )
@@ -390,9 +396,12 @@ class _ApiMixin:
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
-        reset_all_pack_runtimes = not candidate["monitoring_enabled"] or any(
+        exclusions_changed = any(
             candidate[key] != self.config[key]
             for key in ("excluded_entities", "excluded_devices", "excluded_labels")
+        )
+        reset_all_pack_runtimes = (
+            not candidate["monitoring_enabled"] or exclusions_changed
         )
         disabled_pack_ids = {
             pack.id
@@ -408,8 +417,30 @@ class _ApiMixin:
             ):
                 self._clear_variation_baselines()
             self._rebuild_rule_index()
+            if disabled_pack_ids:
+                self._resolve_pack_records(disabled_pack_ids, dt_util.now())
+                for pack_id in disabled_pack_ids:
+                    self._pack_runtime.pop(pack_id, None)
+            if exclusions_changed:
+                occurrence_pack_ids = {
+                    pack.id for pack in PACKS if pack.occurrence_handler is not None
+                }
+                ineligible_entities = {
+                    record.details.entity_id
+                    for record in self.records.values()
+                    if record.details.type in occurrence_pack_ids
+                    and not self._is_automatic_eligible(record.details.entity_id)
+                }
+                self._resolve_pack_records(
+                    occurrence_pack_ids,
+                    dt_util.now(),
+                    entity_ids=ineligible_entities,
+                )
             if reset_all_pack_runtimes:
                 reset_pack_runtimes(self.hass)
+                for pack in PACKS:
+                    if pack.occurrence_handler is not None:
+                        self._pack_runtime.pop(pack.id, None)
             elif disabled_pack_ids:
                 reset_pack_runtimes(self.hass, disabled_pack_ids)
             await self.async_evaluate_all(save=False, publish=False)
@@ -447,6 +478,8 @@ class _ApiMixin:
             self.history = []
             self._pending_history = []
             self._clear_variation_baselines()
+            self._pack_runtime = {}
+            self.storage.pack_runtime = self._pack_runtime
             self._rebuild_rule_index()
             self._refresh_pack_entry_listeners()
             self._pack_availability = self._current_pack_availability()
@@ -629,6 +662,7 @@ class _ApiMixin:
         list[AlertHistoryEntry],
         dict[str, float],
         bool,
+        dict[str, dict[str, Any]],
     ]:
         """Copy the state needed to roll back a failed configuration write."""
         return (
@@ -637,6 +671,7 @@ class _ApiMixin:
             list(self._pending_history),
             dict(self._variation_baselines),
             self._variation_baselines_dirty,
+            deepcopy(self._pack_runtime),
         )
 
     def _restore_configuration_snapshot(
@@ -647,6 +682,7 @@ class _ApiMixin:
             list[AlertHistoryEntry],
             dict[str, float],
             bool,
+            dict[str, dict[str, Any]],
         ],
     ) -> None:
         """Restore configuration, records, indexes and pending timers."""
@@ -657,9 +693,11 @@ class _ApiMixin:
             self._pending_history,
             self._variation_baselines,
             self._variation_baselines_dirty,
+            self._pack_runtime,
         ) = snapshot
         self._replace_records(records)
         self.storage.variation_baselines = self._variation_baselines
+        self.storage.pack_runtime = self._pack_runtime
         self._rebuild_rule_index()
         self._refresh_tracking()
         self._reschedule_record_timers()

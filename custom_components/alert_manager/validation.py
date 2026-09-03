@@ -43,7 +43,11 @@ _CONFIG_UPDATE_KEYS = {
     "rules",
 }
 _AUTOMATIC_KEYS = {
-    pack.id: {"enabled", "delay", *(field.id for field in pack.config_fields)}
+    pack.id: {
+        "enabled",
+        *(("delay",) if pack.uses_delay else ()),
+        *(field.id for field in pack.config_fields),
+    }
     for pack in PACKS
 }
 # Accepted only so a cached V1 panel can finish one safe migration update.
@@ -173,14 +177,16 @@ def validate_config(config: Any) -> dict[str, Any]:
         if not isinstance(enabled, bool):
             raise ValueError(f"automatic.{category}.enabled must be a boolean")
         category_config["enabled"] = enabled
-        pack_delay = incoming.get("delay", category_config["delay"])
-        category_config["delay"] = (
-            None
-            if pack_delay is None
-            else validate_delay(pack_delay, f"automatic.{category}.delay")
-        )
+        pack = PACKS_BY_ID[category]
+        if pack.uses_delay:
+            pack_delay = incoming.get("delay", category_config["delay"])
+            category_config["delay"] = (
+                None
+                if pack_delay is None
+                else validate_delay(pack_delay, f"automatic.{category}.delay")
+            )
 
-        for field in PACKS_BY_ID[category].config_fields:
+        for field in pack.config_fields:
             raw_value = incoming.get(
                 field.id,
                 category_config.get(field.id, deepcopy(field.default)),
@@ -252,6 +258,36 @@ def _normalize_pack_field(
                 field.step,
             )
         return normalized
+    if field.type == "device_settings_map":
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be an object")
+        normalized_settings: dict[str, dict[str, float | int]] = {}
+        allowed = {item.id: item for item in field.fields}
+        for device_id, raw_settings in value.items():
+            if not isinstance(device_id, str) or not _DEVICE_ID_RE.fullmatch(device_id):
+                raise ValueError(f"{path} contains an invalid device id")
+            if not isinstance(raw_settings, dict):
+                raise ValueError(f"{path}.{device_id} must be an object")
+            unknown = _unknown_keys(raw_settings, set(allowed))
+            if unknown:
+                raise ValueError(
+                    f"Unknown {path}.{device_id} field: {sorted(unknown)[0]}"
+                )
+            missing = set(allowed) - raw_settings.keys()
+            if missing:
+                raise ValueError(
+                    f"Missing {path}.{device_id} field: {sorted(missing)[0]}"
+                )
+            normalized_settings[device_id] = {
+                setting_id: _normalize_pack_field(
+                    pack_id,
+                    setting,
+                    raw_settings[setting_id],
+                )
+                for setting_id, setting in allowed.items()
+                if setting_id in raw_settings
+            }
+        return normalized_settings
     raise ValueError(f"Unsupported pack configuration field type: {field.type}")
 
 

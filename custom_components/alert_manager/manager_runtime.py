@@ -36,13 +36,17 @@ from .models import (
     extract_attribute_value,
     safe_float,
 )
-from .packs import PACKS, PACKS_BY_ID, PackNeutral
+from .packs import PACKS, PACKS_BY_ID, PackGeneratedAlert, PackNeutral, PackOccurrence
 
 _LOGGER = logging.getLogger(__name__)
 
 _PACK_CONDITION_FALLBACKS = {
     "automatic.execution_errors": "Execution ended with an error",
     "automatic.execution_errors_detail": ("Execution ended with an error: {error}"),
+    "automatic.flapping": (
+        "Instability detected: {count} occurrences within {duration}. "
+        "Source: {source}. Last occurrence: {last_occurrence}"
+    ),
     "automatic.battery": "Battery less than or equal to {threshold}%",
     "automatic.connectivity": "Connectivity is off",
     "automatic.unavailable": "State is unavailable",
@@ -94,6 +98,7 @@ class _RuntimeMixin:
         self._queue_entity_evaluations(
             affected_entities,
             restoring=not self.hass.is_running,
+            observe_occurrences=self.hass.is_running,
         )
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
@@ -170,7 +175,11 @@ class _RuntimeMixin:
 
     @callback
     def _queue_entity_evaluations(
-        self, entity_ids: Iterable[str], *, restoring: bool = False
+        self,
+        entity_ids: Iterable[str],
+        *,
+        restoring: bool = False,
+        observe_occurrences: bool = False,
     ) -> None:
         """Coalesce state bursts into one evaluation task and one Store write."""
         if self._unloading or not self.monitoring_enabled:
@@ -180,9 +189,14 @@ class _RuntimeMixin:
             for entity_id in entity_ids
             if entity_id and self._is_allowed_rule_source(entity_id)
         )
-        if not self._queued_evaluation_entities and not self._queued_public_refresh:
+        if (
+            not self._queued_evaluation_entities
+            and not self._queued_public_refresh
+            and not self._queued_expired_alert_ids
+        ):
             return
         self._queued_evaluation_restoring |= restoring
+        self._queued_evaluation_observe_occurrences |= observe_occurrences
         self._schedule_evaluation_flush()
 
     @callback
@@ -204,12 +218,16 @@ class _RuntimeMixin:
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
                 self._queued_evaluation_restoring = False
+                self._queued_evaluation_observe_occurrences = False
+                self._queued_expired_alert_ids.clear()
                 self._queued_public_refresh = False
                 return
             entity_ids = sorted(self._queued_evaluation_entities)
             self._queued_evaluation_entities.clear()
             restoring = self._queued_evaluation_restoring
             self._queued_evaluation_restoring = False
+            observe_occurrences = self._queued_evaluation_observe_occurrences
+            self._queued_evaluation_observe_occurrences = False
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
@@ -218,11 +236,13 @@ class _RuntimeMixin:
                     await self.async_evaluate_entity(
                         entity_id,
                         restoring=restoring,
+                        observe_occurrences=observe_occurrences,
                         save=False,
                         publish=False,
                     )
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
+            self._resolve_expired_alerts(dt_util.now())
             immediate_save_required = self._immediate_state_save_required
             if immediate_save_required:
                 await self._async_save_state()
@@ -235,7 +255,11 @@ class _RuntimeMixin:
         finally:
             self._evaluation_flush_scheduled = False
             if (
-                (self._queued_evaluation_entities or self._queued_public_refresh)
+                (
+                    self._queued_evaluation_entities
+                    or self._queued_public_refresh
+                    or self._queued_expired_alert_ids
+                )
                 and not self._unloading
                 and self.monitoring_enabled
             ):
@@ -472,6 +496,7 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
+        observe_occurrences: bool = False,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading or not self.monitoring_enabled:
@@ -494,7 +519,11 @@ class _RuntimeMixin:
                 save=False,
                 publish=False,
                 emit_events=emit_events,
+                observe_occurrences=observe_occurrences,
             )
+        for record in self.records.values():
+            if record.expires_at is not None and record.details.id not in self._timers:
+                self._schedule_timer(record)
         immediate_save_required = self._immediate_state_save_required
         if save and immediate_save_required:
             await self._async_save_state()
@@ -512,6 +541,7 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
+        observe_occurrences: bool = False,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if self._unloading or not self.monitoring_enabled:
@@ -559,6 +589,12 @@ class _RuntimeMixin:
                 self._set_record(record)
                 persisted_changed = True
                 immediate_changed = True
+                if observe_occurrences:
+                    occurrence_changed = self._observe_new_occurrence(
+                        state, details, now, emit_events=emit_events
+                    )
+                    persisted_changed |= occurrence_changed
+                    immediate_changed |= occurrence_changed
             else:
                 details.value = record.details.value
                 if record.details != details:
@@ -603,6 +639,9 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         for alert_id in existing_ids - candidates.keys():
+            record = self.records.get(alert_id)
+            if record is not None and record.expires_at is not None:
+                continue
             record = self._pop_record(alert_id)
             if record is None:
                 continue
@@ -623,6 +662,112 @@ class _RuntimeMixin:
         ):
             self._publish_if_changed()
         return persisted_changed
+
+    def _observe_new_occurrence(
+        self,
+        state: State,
+        details: AlertDetails,
+        now: datetime,
+        *,
+        emit_events: bool,
+    ) -> bool:
+        """Offer one new source anomaly to generic occurrence-driven packs."""
+        if not self._is_automatic_eligible(details.entity_id):
+            return False
+        occurrence = PackOccurrence(
+            source=details,
+            state=state,
+            occurred_at=now,
+            active_alert_ids=self.records.keys(),
+        )
+        changed = False
+        for pack in PACKS:
+            if (
+                pack.occurrence_handler is None
+                or not self.config["automatic"][pack.id]["enabled"]
+                or not self._pack_is_available(pack.id)
+            ):
+                continue
+            runtime_data = self._pack_runtime.setdefault(pack.id, {})
+            result = pack.occurrence_handler(
+                self.hass,
+                occurrence,
+                self.config["automatic"][pack.id],
+                runtime_data,
+            )
+            if result is None:
+                continue
+            changed = True
+            if result.alert is not None:
+                self._apply_generated_alert(
+                    pack.id,
+                    state,
+                    details,
+                    result.alert,
+                    now,
+                    emit_events=emit_events,
+                )
+        if changed:
+            self.storage.pack_runtime = self._pack_runtime
+        return changed
+
+    def _apply_generated_alert(
+        self,
+        pack_id: str,
+        state: State,
+        source: AlertDetails,
+        generated: PackGeneratedAlert,
+        now: datetime,
+        *,
+        emit_events: bool,
+    ) -> None:
+        """Create or refresh one immediate, deadline-driven pack alert."""
+        alert_id = f"{pack_id}:{generated.key}"
+        condition = self._localized_pack_condition(
+            generated.condition_key, generated.condition_params
+        )
+        details = self._details(
+            state,
+            alert_id,
+            pack_id,
+            condition,
+            value=generated.value,
+            condition_key=generated.condition_key,
+            condition_params=generated.condition_params,
+            rule_id=source.rule_id,
+            rule_name=generated.rule_name,
+            message=condition,
+            source=source.id,
+        )
+        record = self.records.get(alert_id)
+        if record is None:
+            record = AlertRecord.active_until(details, now, generated.resolve_at)
+            self._set_record(record)
+            if emit_events:
+                self._fire_started(record)
+        else:
+            record.details = details
+            record.expires_at = generated.resolve_at
+        self._cancel_timer(alert_id)
+        self._schedule_timer(record)
+
+    def _resolve_expired_alerts(self, now: datetime) -> None:
+        """Resolve queued active deadlines after any same-batch occurrences."""
+        alert_ids = set(self._queued_expired_alert_ids)
+        self._queued_expired_alert_ids.clear()
+        for alert_id in alert_ids:
+            record = self.records.get(alert_id)
+            if record is None or record.expires_at is None:
+                continue
+            if now.astimezone(UTC) < record.expires_at.astimezone(UTC):
+                self._schedule_timer(record)
+                continue
+            record = self._pop_record(alert_id)
+            if record is None:
+                continue
+            self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+            self._fire_resolved(record, now)
+            self._immediate_state_save_required = True
 
     def _is_live_message_only_change(
         self, record: AlertRecord, details: AlertDetails

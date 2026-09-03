@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderAutomatic } from "../frontend-src/views/automatic.js";
+import {
+  packConfigurationCount,
+  renderAutomatic,
+} from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
@@ -296,6 +299,75 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(automationErrors, /auto-execution_errors-delay/);
   assert.match(automationErrors, /auto-execution_errors-failure_thresholds-target-0/);
   assert.match(automationErrors, /value="3"/);
+});
+
+test("flapping renders without a delay and reuses the device configuration drawer", () => {
+  const numberFields = [
+    { id: "occurrences", type: "number", translation_key: "flapping_occurrences", default: 5, minimum: 2, maximum: 100, step: 1 },
+    { id: "window", type: "number", translation_key: "flapping_window", default: 3600, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
+    { id: "recovery", type: "number", translation_key: "flapping_recovery", default: 1800, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
+  ];
+  const pack = {
+    id: "flapping",
+    available: true,
+    translation_key: "flapping",
+    uses_delay: false,
+    config_fields: [
+      ...numberFields,
+      {
+        id: "device_overrides",
+        type: "device_settings_map",
+        translation_key: "flapping_device_overrides",
+        fields: numberFields,
+      },
+    ],
+  };
+  const config = {
+    automatic: {
+      flapping: {
+        enabled: true,
+        occurrences: 5,
+        window: 3600,
+        recovery: 1800,
+        device_overrides: {
+          "device-1": { occurrences: 3, window: 600, recovery: 120 },
+        },
+      },
+    },
+  };
+  const draft = {
+    flapping: {
+      occurrences: 5,
+      window: 3600,
+      recovery: 1800,
+      device_overrides: [{
+        target_id: "device-1", occurrences: 3, window: 600, recovery: 120,
+      }],
+    },
+  };
+  const markup = renderAutomatic({
+    availablePacks: [pack],
+    config,
+    draft,
+    configurationDrawer: { kind: "automatic", id: "flapping" },
+    busy: false,
+    renderNumberField: (id) => `<number id="${id}"></number>`,
+    t,
+  });
+
+  assert.doesNotMatch(markup, /auto-flapping-delay/);
+  assert.match(markup, /auto-flapping-occurrences/);
+  assert.match(markup, /auto-flapping-window/);
+  assert.match(markup, /auto-flapping-recovery/);
+  assert.match(markup, /auto-flapping-configuration/);
+  assert.equal(
+    packConfigurationCount(pack, config.automatic.flapping, draft),
+    1,
+  );
+  assert.match(markup, /auto-flapping-device_overrides-target-0/);
+  assert.match(markup, /data-setting-id="occurrences"/);
+  assert.match(markup, /data-setting-id="window"/);
+  assert.match(markup, /data-setting-id="recovery"/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {
