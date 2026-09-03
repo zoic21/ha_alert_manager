@@ -54,6 +54,9 @@ globalThis.document = {
 };
 
 const { AlertManagerPanel } = await import("../frontend-src/alert-manager-panel.js");
+const { hydrateRuleEditorMenu } = await import(
+  "../frontend-src/components/rule-editor.js"
+);
 
 const rule = () => ({
   id: "rule-1",
@@ -194,6 +197,35 @@ test("rule editor menu follows Home Assistant actions styling", () => {
   assert.match(markup, /value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"/);
   assert.match(markup, /value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"><\/ha-icon>Dupliquer/);
   assert.match(markup, /value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"/);
+});
+
+test("rule editor menu handles selections on the dropdown itself", async () => {
+  const listeners = new Map();
+  const menu = {
+    dataset: {},
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+  };
+  const root = {
+    querySelector(selector) {
+      return selector === "[data-rule-editor-menu]" ? menu : null;
+    },
+  };
+  const selections = [];
+  hydrateRuleEditorMenu(root, (event) => selections.push(event.detail.value));
+  hydrateRuleEditorMenu(root, (event) => selections.push(`updated:${event.detail.value}`));
+
+  let propagationStopped = false;
+  listeners.get("wa-select")({
+    detail: { value: "duplicate-rule" },
+    stopPropagation() { propagationStopped = true; },
+  });
+  await Promise.resolve();
+
+  assert.equal(listeners.size, 1);
+  assert.equal(propagationStopped, true);
+  assert.deepEqual(selections, ["updated:duplicate-rule"]);
 });
 
 test("attribute mode uses a Home Assistant selector instead of a plain text input", () => {
