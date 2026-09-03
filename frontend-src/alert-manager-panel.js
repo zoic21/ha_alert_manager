@@ -22,9 +22,8 @@ import {
 } from "./components/configuration-drawer.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, clearRuleTestResult,
-  duplicateRuleDraft,
-  duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
-  refreshRuleEditor, renderRuleEditorPanel, renderRuleTestResultPanel,
+  duplicateRuleDraft, duplicateRuleLabel, handleRuleInput, hydrateRuleEditorControls, refreshRuleAttributeSelector,
+  refreshRuleConditionSection, refreshRuleEditor, renderRuleEditorPanel, renderRuleTestResultPanel,
   resetRuleEditorWidth, resizeRuleEditor, ruleAttributeOptions,
   ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth, testRule,
   startRuleEditorResize, stopRuleEditorResize, switchRuleEditor, updateRuleTestDisplay,
@@ -52,7 +51,7 @@ import {
 import {
   deleteRule, handleRulesAction, handleSelected, hydrateRuleTable, nativeRuleEntitiesCell,
   nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
-  replaceRule, ruleTableRows, toggleRule,
+  replaceRule, ruleTableRows, syncRuleTableEditingHighlight, toggleRule,
 } from "./views/rules.js";
 import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
 import {
@@ -179,6 +178,8 @@ class AlertManagerPanel extends HTMLElement {
   _navigate = navigate;
   _syncNarrowTableHeaderBackgrounds = syncNarrowTableHeaderBackgrounds;
   _refreshRuleEditor = refreshRuleEditor;
+  _refreshRuleConditionSection = refreshRuleConditionSection;
+  _syncRuleTableEditingHighlight = syncRuleTableEditingHighlight;
   _openRuleEditor = openRuleEditor;
   _clearRuleEditorError = clearRuleEditorError;
   _clearRuleTestResult = clearRuleTestResult;
@@ -739,7 +740,6 @@ class AlertManagerPanel extends HTMLElement {
     });
     return valid;
   }
-
   _styles() {
     return panelStyles();
   }

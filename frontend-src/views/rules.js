@@ -5,13 +5,21 @@ import { DEFAULT_RULES_TABLE_STATE, RULES_COLUMNS, RULES_SECONDARY_COLUMNS } fro
 const RULES_TABLE_CONTEXT = Symbol("alert-manager-rules-table-context");
 const RULES_TABLE_HYDRATED = Symbol("alert-manager-rules-table-hydrated");
 const RULES_FILTER_HYDRATED = Symbol("alert-manager-rules-filter-hydrated");
+const RULES_TABLE_EDITING_RULE = Symbol("alert-manager-rules-table-editing-rule");
 
-async function applyRuleTableEditorLayout(tablePage) {
+async function applyRuleTableEditorState(tablePage, editingRuleId) {
+    const selectedId = editingRuleId ? String(editingRuleId) : null;
+    tablePage[RULES_TABLE_EDITING_RULE] = selectedId;
     if (tablePage.updateComplete) await tablePage.updateComplete;
-    tablePage.shadowRoot?.querySelector?.("ha-data-table")?.style?.setProperty(
+    if (tablePage[RULES_TABLE_EDITING_RULE] !== selectedId) return;
+    const table = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+    table?.style?.setProperty(
       "width",
       "var(--alert-manager-rule-table-width, 100%)",
     );
+    if (table?.updateComplete) await table.updateComplete;
+    if (tablePage[RULES_TABLE_EDITING_RULE] !== selectedId) return;
+    table?.select?.(selectedId ? [selectedId] : [], true);
 }
 
 export function refreshRulesData() {
@@ -34,7 +42,13 @@ export function refreshRulesData() {
     tablePage.noDataText = sourceRows.length
       ? this._t("rules.empty_filtered")
       : this._t("rules.empty");
+    void applyRuleTableEditorState(tablePage, this._editingRule?.id);
     this._refreshUiState();
+}
+
+export function syncRuleTableEditingHighlight() {
+    const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
+    if (tablePage) void applyRuleTableEditorState(tablePage, this._editingRule?.id);
 }
 
 export function ruleTableColumns(context) {
@@ -148,7 +162,7 @@ export function hydrateRules(root, context) {
       });
       checkbox[RULES_FILTER_HYDRATED] = true;
     });
-    void applyRuleTableEditorLayout(tablePage);
+    void applyRuleTableEditorState(tablePage, context.editingRuleId);
 }
 
 export function hydrateRuleTable() {
@@ -168,6 +182,7 @@ export function hydrateRuleTable() {
       sourceRows,
       visibleRows,
       selectedFilters,
+      editingRuleId: this._editingRule?.id,
       filterPaneOpen: this._filterPaneKind === "rules",
       t: (key, replacements) => this._t(key, replacements),
       renderNameCell: (row, narrow) => this._nativeRuleNameCell(row, narrow),
@@ -452,7 +467,7 @@ export async function handleRulesAction(action, button) {
     this._editingRule.value = [...this._ruleValueList(this._editingRule.value), ""];
     this._clearRuleTestResult();
     this._ruleDirty = true;
-    this._refreshRuleEditor();
+    this._refreshRuleConditionSection();
     return true;
   }
   if (action === "remove-rule-value") {
@@ -462,7 +477,7 @@ export async function handleRulesAction(action, button) {
     this._editingRule.value = values.length ? values : [""];
     this._clearRuleTestResult();
     this._ruleDirty = true;
-    this._refreshRuleEditor();
+    this._refreshRuleConditionSection();
     return true;
   }
   if (action === "save-rule") {
