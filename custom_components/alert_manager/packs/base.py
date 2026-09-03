@@ -87,6 +87,7 @@ class PackOccurrence:
 class PackGeneratedAlert:
     """Describe an immediate alert emitted by an occurrence-driven pack."""
 
+    occurrence: PackOccurrence
     key: str
     condition_key: str
     condition_params: dict[str, Any]
@@ -97,20 +98,25 @@ class PackGeneratedAlert:
 
 @dataclass(frozen=True, slots=True)
 class PackOccurrenceResult:
-    """Report a persisted occurrence-data change and an optional alert."""
+    """Report a persisted batch change and any alerts it generated."""
 
-    alert: PackGeneratedAlert | None = None
+    alerts: tuple[PackGeneratedAlert, ...] = ()
 
 
-PackOccurrenceHandler = Callable[
-    [HomeAssistant, PackOccurrence, dict[str, Any], dict[str, Any]],
+PackOccurrenceBatchHandler = Callable[
+    [HomeAssistant, tuple[PackOccurrence, ...], dict[str, Any], dict[str, Any]],
     PackOccurrenceResult | None,
 ]
 
 
 @dataclass(frozen=True, slots=True)
 class AutomaticPack:
-    """Stable metadata and isolated evaluation function for an automatic pack."""
+    """Stable metadata and isolated evaluation function for an automatic pack.
+
+    ``occurrence_batch_handler`` opts a pack into one callback after a live
+    evaluation batch. It receives only anomalies whose source record was newly
+    created in that batch; startup and configuration reevaluations are excluded.
+    """
 
     id: str
     translation_key: str
@@ -121,7 +127,7 @@ class AutomaticPack:
     reset_handler: PackResetHandler | None = None
     config_fields: tuple[PackConfigField, ...] = ()
     uses_delay: bool = True
-    occurrence_handler: PackOccurrenceHandler | None = None
+    occurrence_batch_handler: PackOccurrenceBatchHandler | None = None
 
     def reset_runtime(self, hass: HomeAssistant) -> None:
         """Discard optional transient state owned by this pack."""

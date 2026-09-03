@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from homeassistant.core import Event, State
 
+from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertDetails, AlertStatus
 from custom_components.alert_manager.packs.base import PackOccurrence
@@ -41,14 +43,33 @@ def configure(manager, *, occurrences=3, window=3600, recovery=1800, overrides=N
     )
 
 
+def live_state(manager, hass, entity_id, value, attributes=None):
+    """Send one state transition through the normal live evaluation batch."""
+
+    async def transition():
+        old_state = hass.states.get(entity_id)
+        new_state = hass.states.set(entity_id, value, attributes)
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": entity_id,
+                    "old_state": old_state,
+                    "new_state": new_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    run(transition())
+
+
 def occurrence(
     manager, hass, set_now, when, entity_id="sensor.test", *, attributes=None
 ):
     set_now(when)
-    hass.states.set(entity_id, "unavailable", attributes)
-    run(manager.async_evaluate_entity(entity_id, observe_occurrences=True))
-    hass.states.set(entity_id, "ok", attributes)
-    run(manager.async_evaluate_entity(entity_id, observe_occurrences=True))
+    live_state(manager, hass, entity_id, "unavailable", attributes)
+    live_state(manager, hass, entity_id, "ok", attributes)
 
 
 def test_threshold_activates_immediately_without_flapping_pending(hass, entry, set_now):
@@ -121,6 +142,58 @@ def test_live_state_batch_observes_once_and_uses_one_store_write(hass, entry, se
     assert "flapping:unavailable:sensor.test" in manager.records
 
 
+def test_occurrence_pack_runs_once_after_every_entity_in_batch(
+    hass, entry, set_now, monkeypatch
+):
+    """Occurrence packs receive one complete callback after source evaluation."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.one", "ok")
+    hass.states.set("sensor.two", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=3)
+    calls = []
+    original_handler = PACK.occurrence_batch_handler
+    assert original_handler is not None
+
+    def handler(hass_arg, occurrences, config, data):
+        calls.append(occurrences)
+        return original_handler(hass_arg, occurrences, config, data)
+
+    wrapped_pack = replace(PACK, occurrence_batch_handler=handler)
+    monkeypatch.setattr(
+        manager_runtime,
+        "PACKS",
+        tuple(
+            wrapped_pack if pack.id == wrapped_pack.id else pack
+            for pack in manager_runtime.PACKS
+        ),
+    )
+
+    async def transition_burst():
+        for entity_id in ("sensor.one", "sensor.two"):
+            old_state = hass.states.get(entity_id)
+            new_state = hass.states.set(entity_id, "unavailable")
+            manager._state_changed(
+                Event(
+                    {
+                        "entity_id": entity_id,
+                        "old_state": old_state,
+                        "new_state": new_state,
+                    }
+                )
+            )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    run(transition_burst())
+    assert len(calls) == 1
+    assert {item.source.id for item in calls[0]} == {
+        "unavailable:sensor.one",
+        "unavailable:sensor.two",
+    }
+
+
 def test_old_occurrences_leave_the_window(hass, entry, set_now):
     """Only occurrences inside the configured rolling window count."""
     start = datetime(2026, 9, 3, 8, tzinfo=UTC)
@@ -169,10 +242,8 @@ def test_rule_and_pack_source_ids_are_independent(hass, entry, set_now):
 
     for offset in (0, 30):
         set_now(start + timedelta(seconds=offset))
-        hass.states.set("sensor.test", "bad")
-        run(manager.async_evaluate_entity("sensor.test", observe_occurrences=True))
-        hass.states.set("sensor.test", "ok")
-        run(manager.async_evaluate_entity("sensor.test", observe_occurrences=True))
+        live_state(manager, hass, "sensor.test", "bad")
+        live_state(manager, hass, "sensor.test", "ok")
 
     assert f"flapping:rule:{first['id']}:sensor.test" in manager.records
     assert f"flapping:rule:{second['id']}:sensor.test" in manager.records
@@ -184,8 +255,7 @@ def test_rule_and_pack_source_ids_are_independent(hass, entry, set_now):
         (91, "ok"),
     ):
         set_now(start + timedelta(seconds=offset))
-        hass.states.set("sensor.test", value)
-        run(manager.async_evaluate_entity("sensor.test", observe_occurrences=True))
+        live_state(manager, hass, "sensor.test", value)
     assert "flapping:unavailable:sensor.test" in manager.records
 
 
@@ -200,12 +270,10 @@ def test_two_automatic_packs_on_one_entity_are_independent(hass, entry, set_now)
 
     for offset, value in ((0, "unavailable"), (1, "50"), (2, "10"), (3, "50")):
         set_now(start + timedelta(seconds=offset))
-        hass.states.set("sensor.test", value, attributes)
-        run(manager.async_evaluate_entity("sensor.test", observe_occurrences=True))
+        live_state(manager, hass, "sensor.test", value, attributes)
     for offset, value in ((10, "unavailable"), (11, "50"), (12, "10"), (13, "50")):
         set_now(start + timedelta(seconds=offset))
-        hass.states.set("sensor.test", value, attributes)
-        run(manager.async_evaluate_entity("sensor.test", observe_occurrences=True))
+        live_state(manager, hass, "sensor.test", value, attributes)
 
     assert "flapping:unavailable:sensor.test" in manager.records
     assert "flapping:battery:sensor.test" in manager.records
@@ -242,9 +310,9 @@ def test_flapping_pack_does_not_observe_itself(hass, set_now):
         condition="Instability",
     )
     data = {}
-    result = PACK.occurrence_handler(
+    result = PACK.occurrence_batch_handler(
         hass,
-        PackOccurrence(source=source, state=state, occurred_at=now),
+        (PackOccurrence(source=source, state=state, occurred_at=now),),
         {"occurrences": 2, "window": 60, "recovery": 60},
         data,
     )

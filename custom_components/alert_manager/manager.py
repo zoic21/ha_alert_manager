@@ -91,7 +91,7 @@ class AlertManager(
         self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
         self._queued_evaluation_restoring = False
-        self._queued_evaluation_observe_occurrences = False
+        self._queued_evaluation_collect_occurrences = False
         self._queued_expired_alert_ids: set[str] = set()
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
@@ -150,7 +150,7 @@ class AlertManager(
         runtime_pack_ids = {
             pack.id
             for pack in PACKS
-            if pack.occurrence_handler is not None
+            if pack.occurrence_batch_handler is not None
             and self.config["automatic"][pack.id]["enabled"]
         }
         if set(self._pack_runtime) - runtime_pack_ids:

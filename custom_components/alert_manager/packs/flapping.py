@@ -135,51 +135,64 @@ def _cleanup(
         sources.pop(source_id, None)
 
 
-def _observe(
+def _process_occurrences(
     hass: HomeAssistant,
-    occurrence: PackOccurrence,
+    occurrences: tuple[PackOccurrence, ...],
     config: dict[str, Any],
     data: dict[str, Any],
 ) -> PackOccurrenceResult | None:
-    """Record one source occurrence and emit an immediate alert at the threshold."""
-    if occurrence.source.type == PACK_ID or occurrence.source.id.startswith(
-        f"{PACK_ID}:"
-    ):
+    """Record one evaluation batch and emit alerts reaching the threshold."""
+    relevant = tuple(
+        occurrence
+        for occurrence in occurrences
+        if occurrence.source.type != PACK_ID
+        and not occurrence.source.id.startswith(f"{PACK_ID}:")
+    )
+    if not relevant:
         return None
 
-    now = occurrence.occurred_at.astimezone(UTC)
-    _cleanup(hass, data, config, now)
-    sources = data["sources"]
-    source_id = occurrence.source.id
-    threshold, window, recovery = _settings(occurrence, config)
-    cutoff = now - timedelta(seconds=window)
-    timestamps = [
-        item for item in _parse_timestamps(sources.get(source_id)) if item >= cutoff
-    ]
-    timestamps.append(now)
-    timestamps = timestamps[-threshold:]
-    sources[source_id] = [item.isoformat() for item in timestamps]
-
-    alert_id = f"{PACK_ID}:{source_id}"
-    if len(timestamps) < threshold and alert_id not in occurrence.active_alert_ids:
-        return PackOccurrenceResult()
-
-    return PackOccurrenceResult(
-        alert=PackGeneratedAlert(
-            key=source_id,
-            condition_key="automatic.flapping",
-            condition_params={
-                "count": len(timestamps),
-                "duration": _compact_duration(window),
-                "duration_seconds": window,
-                "source": occurrence.source.rule_name or occurrence.source.condition,
-                "last_occurrence": now.isoformat(),
-            },
-            value=len(timestamps),
-            resolve_at=now + timedelta(seconds=recovery),
-            rule_name=occurrence.source.rule_name or occurrence.source.condition,
-        )
+    _cleanup(
+        hass,
+        data,
+        config,
+        max(occurrence.occurred_at for occurrence in relevant).astimezone(UTC),
     )
+    sources = data["sources"]
+    generated_alerts: list[PackGeneratedAlert] = []
+    for occurrence in relevant:
+        now = occurrence.occurred_at.astimezone(UTC)
+        source_id = occurrence.source.id
+        threshold, window, recovery = _settings(occurrence, config)
+        cutoff = now - timedelta(seconds=window)
+        timestamps = [
+            item for item in _parse_timestamps(sources.get(source_id)) if item >= cutoff
+        ]
+        timestamps.append(now)
+        timestamps = timestamps[-threshold:]
+        sources[source_id] = [item.isoformat() for item in timestamps]
+
+        alert_id = f"{PACK_ID}:{source_id}"
+        if len(timestamps) < threshold and alert_id not in occurrence.active_alert_ids:
+            continue
+        generated_alerts.append(
+            PackGeneratedAlert(
+                occurrence=occurrence,
+                key=source_id,
+                condition_key="automatic.flapping",
+                condition_params={
+                    "count": len(timestamps),
+                    "duration": _compact_duration(window),
+                    "duration_seconds": window,
+                    "source": occurrence.source.rule_name
+                    or occurrence.source.condition,
+                    "last_occurrence": now.isoformat(),
+                },
+                value=len(timestamps),
+                resolve_at=now + timedelta(seconds=recovery),
+                rule_name=occurrence.source.rule_name or occurrence.source.condition,
+            )
+        )
+    return PackOccurrenceResult(alerts=tuple(generated_alerts))
 
 
 def _number_field(
@@ -215,7 +228,7 @@ PACK = AutomaticPack(
     applies=_never_applies,
     evaluate=_never_matches,
     uses_delay=False,
-    occurrence_handler=_observe,
+    occurrence_batch_handler=_process_occurrences,
     config_fields=(
         _OCCURRENCES_FIELD,
         _WINDOW_FIELD,

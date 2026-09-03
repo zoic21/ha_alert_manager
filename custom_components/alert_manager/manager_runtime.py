@@ -98,7 +98,7 @@ class _RuntimeMixin:
         self._queue_entity_evaluations(
             affected_entities,
             restoring=not self.hass.is_running,
-            observe_occurrences=self.hass.is_running,
+            collect_occurrences=self.hass.is_running,
         )
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
@@ -179,7 +179,7 @@ class _RuntimeMixin:
         entity_ids: Iterable[str],
         *,
         restoring: bool = False,
-        observe_occurrences: bool = False,
+        collect_occurrences: bool = False,
     ) -> None:
         """Coalesce state bursts into one evaluation task and one Store write."""
         if self._unloading or not self.monitoring_enabled:
@@ -196,7 +196,7 @@ class _RuntimeMixin:
         ):
             return
         self._queued_evaluation_restoring |= restoring
-        self._queued_evaluation_observe_occurrences |= observe_occurrences
+        self._queued_evaluation_collect_occurrences |= collect_occurrences
         self._schedule_evaluation_flush()
 
     @callback
@@ -218,7 +218,7 @@ class _RuntimeMixin:
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
                 self._queued_evaluation_restoring = False
-                self._queued_evaluation_observe_occurrences = False
+                self._queued_evaluation_collect_occurrences = False
                 self._queued_expired_alert_ids.clear()
                 self._queued_public_refresh = False
                 return
@@ -226,22 +226,27 @@ class _RuntimeMixin:
             self._queued_evaluation_entities.clear()
             restoring = self._queued_evaluation_restoring
             self._queued_evaluation_restoring = False
-            observe_occurrences = self._queued_evaluation_observe_occurrences
-            self._queued_evaluation_observe_occurrences = False
+            collect_occurrences = self._queued_evaluation_collect_occurrences
+            self._queued_evaluation_collect_occurrences = False
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
+            new_occurrences: list[PackOccurrence] | None = (
+                [] if collect_occurrences and not restoring else None
+            )
             for entity_id in entity_ids:
                 try:
                     await self.async_evaluate_entity(
                         entity_id,
                         restoring=restoring,
-                        observe_occurrences=observe_occurrences,
+                        _new_occurrences=new_occurrences,
                         save=False,
                         publish=False,
                     )
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
+            if new_occurrences:
+                self._process_occurrence_batch(new_occurrences, emit_events=True)
             self._resolve_expired_alerts(dt_util.now())
             immediate_save_required = self._immediate_state_save_required
             if immediate_save_required:
@@ -496,7 +501,6 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
-        observe_occurrences: bool = False,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
         if self._unloading or not self.monitoring_enabled:
@@ -519,7 +523,6 @@ class _RuntimeMixin:
                 save=False,
                 publish=False,
                 emit_events=emit_events,
-                observe_occurrences=observe_occurrences,
             )
         for record in self.records.values():
             if record.expires_at is not None and record.details.id not in self._timers:
@@ -541,7 +544,7 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
-        observe_occurrences: bool = False,
+        _new_occurrences: list[PackOccurrence] | None = None,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if self._unloading or not self.monitoring_enabled:
@@ -572,6 +575,9 @@ class _RuntimeMixin:
         candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
+        collect_occurrences = (
+            _new_occurrences is not None and self._is_automatic_eligible(entity_id)
+        )
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
@@ -589,12 +595,15 @@ class _RuntimeMixin:
                 self._set_record(record)
                 persisted_changed = True
                 immediate_changed = True
-                if observe_occurrences:
-                    occurrence_changed = self._observe_new_occurrence(
-                        state, details, now, emit_events=emit_events
+                if collect_occurrences:
+                    _new_occurrences.append(
+                        PackOccurrence(
+                            source=details,
+                            state=state,
+                            occurred_at=now,
+                            active_alert_ids=self.records.keys(),
+                        )
                     )
-                    persisted_changed |= occurrence_changed
-                    immediate_changed |= occurrence_changed
             else:
                 details.value = record.details.value
                 if record.details != details:
@@ -663,71 +672,59 @@ class _RuntimeMixin:
             self._publish_if_changed()
         return persisted_changed
 
-    def _observe_new_occurrence(
+    def _process_occurrence_batch(
         self,
-        state: State,
-        details: AlertDetails,
-        now: datetime,
+        occurrences: list[PackOccurrence],
         *,
         emit_events: bool,
-    ) -> bool:
-        """Offer one new source anomaly to generic occurrence-driven packs."""
-        if not self._is_automatic_eligible(details.entity_id):
-            return False
-        occurrence = PackOccurrence(
-            source=details,
-            state=state,
-            occurred_at=now,
-            active_alert_ids=self.records.keys(),
-        )
+    ) -> None:
+        """Offer all new anomalies to interested packs after evaluation."""
+        batch = tuple(occurrences)
         changed = False
         for pack in PACKS:
             if (
-                pack.occurrence_handler is None
+                pack.occurrence_batch_handler is None
                 or not self.config["automatic"][pack.id]["enabled"]
                 or not self._pack_is_available(pack.id)
             ):
                 continue
             runtime_data = self._pack_runtime.setdefault(pack.id, {})
-            result = pack.occurrence_handler(
+            result = pack.occurrence_batch_handler(
                 self.hass,
-                occurrence,
+                batch,
                 self.config["automatic"][pack.id],
                 runtime_data,
             )
             if result is None:
                 continue
             changed = True
-            if result.alert is not None:
+            for generated in result.alerts:
                 self._apply_generated_alert(
                     pack.id,
-                    state,
-                    details,
-                    result.alert,
-                    now,
+                    generated,
                     emit_events=emit_events,
                 )
         if changed:
             self.storage.pack_runtime = self._pack_runtime
-        return changed
+            self._immediate_state_save_required = True
 
     def _apply_generated_alert(
         self,
         pack_id: str,
-        state: State,
-        source: AlertDetails,
         generated: PackGeneratedAlert,
-        now: datetime,
         *,
         emit_events: bool,
     ) -> None:
         """Create or refresh one immediate, deadline-driven pack alert."""
+        occurrence = generated.occurrence
+        source = occurrence.source
+        now = occurrence.occurred_at
         alert_id = f"{pack_id}:{generated.key}"
         condition = self._localized_pack_condition(
             generated.condition_key, generated.condition_params
         )
         details = self._details(
-            state,
+            occurrence.state,
             alert_id,
             pack_id,
             condition,

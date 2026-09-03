@@ -261,7 +261,7 @@ class _TemplatesMixin:
             self._template_time_timer = None
             self._queue_entity_evaluations(
                 {key[2] for key in self._template_time_dependencies},
-                observe_occurrences=True,
+                collect_occurrences=True,
             )
             if self._template_time_dependencies:
                 self._schedule_template_time_tick()
@@ -282,7 +282,7 @@ class _TemplatesMixin:
             self._template_rate_limit_timers.pop(dependency_key, None)
             if dependency_key in self._template_dynamic_infos:
                 self._queue_entity_evaluations(
-                    (dependency_key[2],), observe_occurrences=True
+                    (dependency_key[2],), collect_occurrences=True
                 )
 
         self._template_rate_limit_timers[dependency_key] = (
