@@ -8,7 +8,7 @@ import {
 
 export function renderSettings(context) {
     const {
-      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
@@ -16,8 +16,8 @@ export function renderSettings(context) {
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -39,8 +39,7 @@ export function renderSettings(context) {
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
@@ -109,7 +108,6 @@ export function renderSettingsPanel() {
       config: this._config,
       settingsDraft: this._settingsDraft,
       historyConfig: this._historyConfig,
-      historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
@@ -265,7 +263,7 @@ export async function saveSettings() {
           retention_limit: historyLimit,
         });
         this._config = { ...this._config, history_limit: historyLimit };
-        await this._refreshHistory();
+        if (this._historyLoaded) await this._refreshHistory();
       }
       this._resetSettingsDraft();
       this._configurationDrawer = null;
@@ -291,7 +289,11 @@ export function resetSettingsDraft() {
 export function ensureSettingsDraft() {
     if (this._settingsDraft && this._entityDelayDraft) return;
     this._settingsDraft = {
+      global_delay: this._config.global_delay,
+      pending_display_delay: this._config.pending_display_delay,
+      coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
+      history_limit: this._historyConfig.retention_limit,
       coherence_ignored_entity_references: [
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
@@ -302,6 +304,18 @@ export function ensureSettingsDraft() {
     this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
       ([entity_id, delay]) => ({ entity_id, delay }),
     );
+}
+
+export function handleSettingsInput(event) {
+    const fields = {
+      "global-delay": "global_delay",
+      "pending-display-delay": "pending_display_delay",
+      "history-limit": "history_limit",
+    };
+    const field = fields[event.target?.id];
+    if (!field) return;
+    this._ensureSettingsDraft();
+    this._settingsDraft[field] = String(event.target.value ?? "");
 }
 
 export function captureEntityDelayValues() {
@@ -339,7 +353,10 @@ export function hydrateSettingsControls() {
       value,
       label: this._t(`settings.coherence_schedules.${value}`),
     })),
-    this._config.coherence_schedule ?? "none",
+    this._settingsDraft.coherence_schedule,
+    (value) => {
+      this._settingsDraft.coherence_schedule = value;
+    },
   );
   this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
     if (this._configuredControls.has(chip)) return;

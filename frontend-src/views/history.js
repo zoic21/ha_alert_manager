@@ -11,18 +11,26 @@ export function refreshHistoryData() {
       return;
     }
     this._refreshAlertTableData("history", tablePage);
+    const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
+    if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
 }
 
 export function renderHistory(context) {
-    const { limit, pageMessages, rows, renderAlertTable, t } = context;
+    const { busy, limit, pageMessages, rows, renderAlertTable, t } = context;
     if (limit === 0) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
+    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+      <div class="history-header">
+        <div><h2>${esc(t("history.title"))}</h2></div>
+        <div class="history-page-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
+      </div>
+    </ha-card>`;
     return renderAlertTable(
       "history",
       rows,
-      pageMessages,
+      header,
     );
 }
 
@@ -31,6 +39,7 @@ export function renderHistoryPanel() {
       ?? this._history?.retention_limit ?? 100);
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
     return renderHistory({
+      busy: this._busy,
       limit,
       pageMessages: this._renderPageMessages(),
       rows: this._tableRows("history", events),

@@ -16,33 +16,29 @@ from .base import AutomaticPack, PackConfigField, PackMatch, PackNeutral
 PACK_ID = "execution_errors"
 _SUPPORTED_DOMAINS = ("automation", "script")
 
-_DATA_CYCLES: HassKey[dict[str, _ExecutionCycle]] = HassKey(
+_DATA_CYCLES: HassKey[dict[str, _ExecutionTracker]] = HassKey(
     "alert_manager_execution_error_cycles"
 )
 
 
 @dataclass(slots=True)
 class _ExecutionCycle:
-    """Minimal state retained until one current=0 cycle is complete."""
+    """Trace references retained until one execution cycle is complete."""
 
-    active: bool = False
     expected_runs: int = 0
     completed_runs: int = 0
     traces: dict[str, _ExecutionTrace] = field(default_factory=dict)
     failed: bool = False
     error: str | None = None
-    result_ready: bool = False
-    consecutive_failures: int = 0
 
-    def start(self) -> None:
-        """Discard the previous result and begin a new execution cycle."""
-        self.active = True
-        self.expected_runs = 0
-        self.completed_runs = 0
-        self.traces.clear()
-        self.failed = False
-        self.error = None
-        self.result_ready = False
+
+@dataclass(slots=True)
+class _ExecutionTracker:
+    """Current cycle, completed cycles awaiting evaluation and failure count."""
+
+    active: _ExecutionCycle | None = None
+    completed: list[_ExecutionCycle] = field(default_factory=list)
+    consecutive_failures: int = 0
 
 
 class _ExecutionTrace(Protocol):
@@ -89,7 +85,7 @@ def _current(state: State) -> int | None:
     return value
 
 
-def _cycles(hass: HomeAssistant) -> dict[str, _ExecutionCycle]:
+def _cycles(hass: HomeAssistant) -> dict[str, _ExecutionTracker]:
     """Return runtime-only cycle state for this Home Assistant instance."""
     return hass.data.setdefault(_DATA_CYCLES, {})
 
@@ -131,6 +127,11 @@ def _process_completed_traces(cycle: _ExecutionCycle) -> None:
             cycle.error = str(summary["error"])
 
 
+def _cycle_is_complete(cycle: _ExecutionCycle) -> bool:
+    """Return whether every captured run has a finalized short trace."""
+    return not cycle.traces and cycle.completed_runs == cycle.expected_runs
+
+
 def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
@@ -143,12 +144,14 @@ def _should_evaluate(
     if previous is None or current is None:
         return False
     cycles = _cycles(hass)
-    cycle = cycles.setdefault(new_state.entity_id, _ExecutionCycle())
+    tracker = cycles.setdefault(new_state.entity_id, _ExecutionTracker())
     if current > previous:
-        if previous == 0 or not cycle.active:
-            cycle.start()
-        cycle.expected_runs += current - previous
-        _capture_running_traces(hass, new_state.entity_id, cycle)
+        if previous == 0 or tracker.active is None:
+            if tracker.active is not None:
+                tracker.completed.append(tracker.active)
+            tracker.active = _ExecutionCycle()
+        tracker.active.expected_runs += current - previous
+        _capture_running_traces(hass, new_state.entity_id, tracker.active)
         return False
     return current < previous
 
@@ -171,40 +174,44 @@ def _evaluate(
         return PackNeutral()
 
     cycles = _cycles(hass)
-    cycle = cycles.get(state.entity_id)
-    if cycle is None:
-        cycle = cycles[state.entity_id] = _ExecutionCycle()
+    tracker = cycles.get(state.entity_id)
+    if tracker is None:
+        tracker = cycles[state.entity_id] = _ExecutionTracker()
         if current > 0:
-            cycle.start()
-            cycle.expected_runs = current
-            _capture_running_traces(hass, state.entity_id, cycle)
+            tracker.active = _ExecutionCycle(expected_runs=current)
+            _capture_running_traces(hass, state.entity_id, tracker.active)
         return PackNeutral()
 
-    if cycle.active:
-        _capture_running_traces(hass, state.entity_id, cycle)
-        _process_completed_traces(cycle)
-    if current > 0:
-        return PackNeutral()
-    if cycle.active:
-        if cycle.traces or cycle.completed_runs != cycle.expected_runs:
-            return PackNeutral()
-        cycle.active = False
-        cycle.result_ready = True
-        if cycle.failed:
-            cycle.consecutive_failures += 1
+    if tracker.active is not None:
+        _capture_running_traces(hass, state.entity_id, tracker.active)
+        _process_completed_traces(tracker.active)
+        if current == 0 and _cycle_is_complete(tracker.active):
+            tracker.completed.append(tracker.active)
+            tracker.active = None
+
+    result: _ExecutionCycle | None = None
+    while tracker.completed:
+        completed = tracker.completed[0]
+        _process_completed_traces(completed)
+        if not _cycle_is_complete(completed):
+            break
+        result = tracker.completed.pop(0)
+        if result.failed:
+            tracker.consecutive_failures += 1
         else:
-            cycle.consecutive_failures = 0
-    if not cycle.result_ready:
+            tracker.consecutive_failures = 0
+
+    if result is None:
         return PackNeutral()
-    if not cycle.failed:
+    if not result.failed:
         return None
-    if cycle.consecutive_failures < _failure_threshold(config, state.entity_id):
+    if tracker.consecutive_failures < _failure_threshold(config, state.entity_id):
         return PackNeutral()
-    if cycle.error:
+    if result.error:
         return PackMatch(
             condition_key="automatic.execution_errors_detail",
-            condition_params={"error": cycle.error},
-            value=cycle.error,
+            condition_params={"error": result.error},
+            value=result.error,
         )
     return PackMatch(condition_key="automatic.execution_errors")
 

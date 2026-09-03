@@ -289,6 +289,30 @@ def test_per_entity_consecutive_failure_threshold(hass, entry, scenario_cls):
     asyncio.run(scenario())
 
 
+def test_back_to_back_failures_survive_the_deferred_evaluation(
+    hass, entry, scenario_cls
+):
+    """A new run cannot erase the completed cycle awaiting the asyncio worker."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        runtime.manager.config["automatic"]["execution_errors"][
+            "failure_thresholds"
+        ] = {runtime.entity_id: 2}
+
+        first = runtime.start("failed-1")
+        runtime.finish(first, "First failure")
+        second = runtime.start("failed-2")
+        runtime.finish(second, "Second failure")
+        assert entry.created_task_eager_starts[-1] is False
+        await runtime.flush()
+
+        record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
+        assert record.details.condition.endswith("Second failure")
+
+    asyncio.run(scenario())
+
+
 def test_parallel_cycle_accumulates_error_beyond_ha_trace_limit(
     hass, entry, scenario_cls
 ):

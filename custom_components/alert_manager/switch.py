@@ -17,6 +17,7 @@ from .const import (
     SIGNAL_MONITORING_UPDATED,
 )
 from .manager import AlertManager
+from .permissions import async_require_admin
 
 
 async def async_setup_entry(
@@ -63,10 +64,12 @@ class AlertManagerMonitoringSwitch(SwitchEntity):
 
     async def async_turn_on(self, **_kwargs: object) -> None:
         """Resume monitoring and reconcile the current Home Assistant state."""
+        await async_require_admin(self.hass, getattr(self, "_context", None))
         await self.manager.async_set_monitoring(True)
 
     async def async_turn_off(self, **_kwargs: object) -> None:
         """Suspend all new detection without deleting existing alerts."""
+        await async_require_admin(self.hass, getattr(self, "_context", None))
         await self.manager.async_set_monitoring(False)
 
     @callback

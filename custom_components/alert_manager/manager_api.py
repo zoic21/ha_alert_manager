@@ -306,41 +306,55 @@ class _ApiMixin:
 
     async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Acknowledge one active alert and persist before publishing it."""
-        record = self._active_record_for_service(alert_id)
-        if record.acknowledged:
-            return False
-        now = dt_util.now()
-        record.acknowledged = True
-        record.acknowledged_at = now
-        record.acknowledged_by = actor
-        try:
-            await self._async_save_state()
-        except Exception:
-            record.clear_acknowledgement()
-            raise
-        self._publish_if_changed()
-        self._fire_acknowledged(record)
-        return True
+        return bool(await self.async_set_acknowledgements([alert_id], True, actor))
 
     async def async_unacknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Remove acknowledgement from one active alert idempotently."""
-        record = self._active_record_for_service(alert_id)
-        if not record.acknowledged:
-            return False
+        return bool(await self.async_set_acknowledgements([alert_id], False, actor))
+
+    async def async_set_acknowledgements(
+        self, alert_ids: list[str], acknowledged: bool, actor: str | None
+    ) -> list[str]:
+        """Apply one durable acknowledgement transaction to several alerts."""
+        records = [
+            self._active_record_for_service(alert_id)
+            for alert_id in dict.fromkeys(alert_ids)
+        ]
+        changes = [record for record in records if record.acknowledged != acknowledged]
+        if not changes:
+            return []
         now = dt_util.now()
-        previous_at = record.acknowledged_at
-        previous_by = record.acknowledged_by
-        record.clear_acknowledgement()
+        previous = [
+            (
+                record,
+                record.acknowledged,
+                record.acknowledged_at,
+                record.acknowledged_by,
+            )
+            for record in changes
+        ]
+        for record in changes:
+            if acknowledged:
+                record.acknowledged = True
+                record.acknowledged_at = now
+                record.acknowledged_by = actor
+            else:
+                record.clear_acknowledgement()
         try:
             await self._async_save_state()
         except Exception:
-            record.acknowledged = True
-            record.acknowledged_at = previous_at
-            record.acknowledged_by = previous_by
+            for record, was_acknowledged, previous_at, previous_by in previous:
+                record.acknowledged = was_acknowledged
+                record.acknowledged_at = previous_at
+                record.acknowledged_by = previous_by
             raise
         self._publish_if_changed()
-        self._fire_unacknowledged(record, now, actor, previous_at, previous_by)
-        return True
+        for record, _was_acknowledged, previous_at, previous_by in previous:
+            if acknowledged:
+                self._fire_acknowledged(record)
+            else:
+                self._fire_unacknowledged(record, now, actor, previous_at, previous_by)
+        return [record.details.id for record in changes]
 
     def _active_record_for_service(self, alert_id: str) -> AlertRecord:
         """Resolve an exact active alert or raise a clear service error."""

@@ -1492,6 +1492,47 @@ def test_configuration_write_failure_restores_runtime_state(hass, entry):
     assert [timer for timer in hass.timers if not timer["cancelled"]]
 
 
+def test_runtime_write_failure_is_retried_without_another_state_change(
+    hass, entry, set_now
+):
+    """An unchanged evaluation persists a transition left dirty by a failed write."""
+    start = datetime(2026, 8, 24, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "unavailable")
+    manager = make_manager(hass, entry)
+    alert_id = "unavailable:sensor.test"
+    set_now(manager.records[alert_id].due_at + timedelta(seconds=1))
+    run(manager.async_evaluate_entity("sensor.test"))
+    assert manager.records[alert_id].status is AlertStatus.ACTIVE
+
+    original_save = manager.storage.async_save
+
+    async def fail_save(_config, _records):
+        raise OSError("storage unavailable")
+
+    manager.storage.async_save = fail_save
+    hass.states.set("sensor.test", "on")
+    with pytest.raises(OSError, match="storage unavailable"):
+        run(manager.async_evaluate_entity("sensor.test"))
+    assert alert_id not in manager.records
+    assert alert_id in hass.stores["alert_manager"]["alerts"]
+    assert manager._immediate_state_save_required is True
+    assert (
+        len([event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED])
+        == 1
+    )
+
+    manager.storage.async_save = original_save
+    run(manager.async_evaluate_entity("sensor.test"))
+
+    assert manager._immediate_state_save_required is False
+    assert hass.stores["alert_manager"]["alerts"] == {}
+    assert (
+        len([event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED])
+        == 1
+    )
+
+
 def test_rule_write_failures_restore_create_update_and_delete(hass, entry):
     """Every rule mutation rolls back fully when persistence is unavailable."""
     hass.states.set("sensor.test", "on")

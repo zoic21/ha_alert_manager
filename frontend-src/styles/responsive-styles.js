@@ -92,14 +92,14 @@ export const responsiveStyles = `
     .panel {
       padding: 15px;
     }
-    .coherence-panel {
+    .coherence-panel, .history-panel {
       padding: 15px;
     }
-    .coherence-header {
+    .coherence-header, .history-header {
       align-items: stretch;
       flex-direction: column;
     }
-    .coherence-header ha-button {
+    .coherence-header ha-button, .history-header ha-button {
       width: 100%;
     }
     .deleted-entity-row {
@@ -131,15 +131,6 @@ export const responsiveStyles = `
     .ignored-reference-add ha-button {
       width: 100%;
       margin-top: 0;
-    }
-    .history-settings-row {
-      grid-template-columns: 1fr;
-      grid-template-areas: "label" "input" "action";
-    }
-    .history-actions {
-      align-self: auto;
-      align-items: center;
-      justify-content: flex-start;
     }
     .config-backup-row {
       grid-template-columns: 1fr;

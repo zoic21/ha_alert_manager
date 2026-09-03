@@ -213,10 +213,9 @@ class _RuntimeMixin:
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
-            persisted_changed = False
             for entity_id in entity_ids:
                 try:
-                    persisted_changed |= await self.async_evaluate_entity(
+                    await self.async_evaluate_entity(
                         entity_id,
                         restoring=restoring,
                         save=False,
@@ -225,10 +224,10 @@ class _RuntimeMixin:
                 except Exception:  # pragma: no cover - isolate one bad source
                     _LOGGER.exception("Unable to evaluate %s", entity_id)
             immediate_save_required = self._immediate_state_save_required
-            if persisted_changed and immediate_save_required:
+            if immediate_save_required:
                 await self._async_save_state()
             if (
-                (persisted_changed and immediate_save_required)
+                immediate_save_required
                 or public_refresh
                 or self._tracked_count() != tracked_count_before
             ):
@@ -616,9 +615,12 @@ class _RuntimeMixin:
                     self._fire_resolved(record, now)
         if immediate_changed:
             self._immediate_state_save_required = True
-        if save and immediate_changed:
+        state_save_required = self._immediate_state_save_required
+        if save and state_save_required:
             await self._async_save_state()
-        if publish and (not persisted_changed or immediate_changed):
+        if publish and (
+            not persisted_changed or immediate_changed or state_save_required
+        ):
             self._publish_if_changed()
         return persisted_changed
 

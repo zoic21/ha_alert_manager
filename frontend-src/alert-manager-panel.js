@@ -1,5 +1,6 @@
 import {
   AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
+  refreshTabData, rememberPanelState, restorePanelState, setHass,
 } from "./api/alert-manager-api.js";
 import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
@@ -16,7 +17,8 @@ import {
 } from "./components/alert-table.js";
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
-  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS, useNativeBottomSheet,
+  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS,
+  updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
 import {
   cancelRuleEditor, captureRuleDraft, clearRuleEditorError, duplicateRuleDraft,
@@ -50,10 +52,10 @@ import {
   nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
   replaceRule, ruleTableRows, toggleRule,
 } from "./views/rules.js";
-import { captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
+import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
-  handleImportSelection, handleSettingsAction, hydrateSettingsControls, removeIgnoredReference,
+  handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
   renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
@@ -72,11 +74,15 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _refreshTabData = refreshTabData;
+  _rememberPanelState = rememberPanelState;
+  _restorePanelState = restorePanelState;
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
   _useNativeBottomSheet = useNativeBottomSheet;
   _loadNativeBottomSheet = loadNativeBottomSheet;
+  _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -113,6 +119,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
+  _captureAutomaticConfigurationValues = captureAutomaticConfigurationValues;
   _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
@@ -233,9 +240,11 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
     this._backupRestoreCandidate = null;
     this._coherence = null;
+    this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
@@ -251,6 +260,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorError = null;
     this._ruleDirty = false;
     this._loading = true;
+    this._cachedStateNeedsRefresh = false;
     this._busy = false;
     this._notice = null;
     this._monitoringEnabled = true;
@@ -289,32 +299,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set hass(value) {
-    const language = value?.locale?.language || "en";
-    const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
-      ?.attributes?.scanned_at ?? null;
-    const coherenceChanged = Boolean(
-      scannedAt && scannedAt !== this._coherenceScannedAt,
-    );
-    this._coherenceScannedAt = scannedAt;
-    this._hass = value;
-    this._language = language;
-    const alertsChanged = this._syncSensor();
-    if (this.isConnected && this._config && coherenceChanged) {
-      void this._refreshCoherence();
-    }
-    if (this.isConnected && !this._config && !this._loadPromise) {
-      this._load();
-    } else if (this.isConnected && languageChanged && !this._translationPromise) {
-      this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
-      void this._refreshAlerts();
-    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
-      this._refreshHistory();
-    } else if (this.isConnected) {
-      this._hydrateSelectors();
-    }
+    setHass.call(this, value);
   }
 
   get hass() {
@@ -335,18 +320,17 @@ class AlertManagerPanel extends HTMLElement {
     const activeTab = this._tabFromRoute(value);
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
-      if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
-      if (activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(activeTab);
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
   }
 
   set narrow(value) {
+    const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
     this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
@@ -357,6 +341,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    this._updateDrawerLayout(previousNarrow);
   }
 
   _upgradeProperty(name) {
@@ -377,7 +362,12 @@ class AlertManagerPanel extends HTMLElement {
     this.toggleAttribute?.("companion-app", isCompanionApp());
     if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
-    if (this._hass && !this._config && !this._loadPromise) this._load();
+    if (
+      this._hass
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) this._load();
+    this._refreshTabData(this._activeTab);
     if (!this._timer) {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
@@ -488,6 +478,7 @@ class AlertManagerPanel extends HTMLElement {
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
       "enable-monitoring",
+      "clear-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
       "save-automatic",
@@ -613,6 +604,12 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderTab() {
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
+    if (this._activeTab === "history" && !this._historyLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
+    if (this._activeTab === "coherence" && !this._coherenceLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
     if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
@@ -652,11 +649,10 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
-      if (this._activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(this._activeTab);
       return;
     }
     for (const handler of ACTION_HANDLERS) {
@@ -668,10 +664,12 @@ class AlertManagerPanel extends HTMLElement {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
+    handleSettingsInput.call(this, event);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
+    handleSettingsInput.call(this, event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

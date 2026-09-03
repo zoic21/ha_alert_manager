@@ -15,6 +15,10 @@ from .manager import AlertManager
 
 ERR_NOT_LOADED = "not_loaded"
 ERR_VALIDATION = "invalid_format"
+ALERT_IDS_SCHEMA = vol.All(
+    [vol.All(str, vol.Length(min=1, max=512))],
+    vol.Length(min=1, max=1000),
+)
 
 
 def _manager(
@@ -69,6 +73,33 @@ async def websocket_alerts_list(
     """Return active and pending alerts to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.public_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/alerts/acknowledgement/update",
+        vol.Required("alert_ids"): ALERT_IDS_SCHEMA,
+        vol.Required("acknowledged"): bool,
+    }
+)
+async def websocket_alert_acknowledgements_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update several acknowledgement states in one durable transaction."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        updated = await manager.async_set_acknowledgements(
+            msg["alert_ids"],
+            msg["acknowledged"],
+            getattr(connection.user, "name", None) or None,
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], {"updated": updated})
 
 
 @websocket_api.require_admin
@@ -452,6 +483,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_get,
         websocket_config_update,
         websocket_alerts_list,
+        websocket_alert_acknowledgements_update,
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,

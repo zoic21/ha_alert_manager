@@ -242,6 +242,7 @@ test("external coherence scans refresh the open panel even when the count is unc
   const panel = new Panel();
   panel._config = completeConfig();
   panel._activeTab = "coherence";
+  panel._coherenceLoaded = true;
   panel._coherenceScannedAt = "2026-08-24T12:00:00+00:00";
   panel._coherence = {
     missing_entity_count: 2,
@@ -414,6 +415,29 @@ test("a directly loaded panel replays pre-upgrade Home Assistant properties", ()
   assert.equal(panel._narrow, true);
   assert.equal(panel._activeTab, "settings");
   assert.equal(loads, 1);
+});
+
+test("an open side drawer follows Home Assistant narrow resize changes", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "settings";
+  panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
+  let captures = 0;
+  let renders = 0;
+  panel._captureEntityDelayValues = () => { captures += 1; };
+  panel._loadNativeBottomSheet = async () => true;
+  panel._render = () => { renders += 1; };
+
+  panel.narrow = true;
+  await Promise.resolve();
+  assert.equal(captures, 1);
+  assert.equal(renders, 1);
+
+  panel.narrow = false;
+  assert.equal(captures, 2);
+  assert.equal(renders, 2);
+  panel.narrow = false;
+  assert.equal(renders, 2);
 });
 
 test("new rules start enabled with safe defaults", () => {
@@ -858,17 +882,11 @@ const actionEvent = (action, id, dataset = {}) => ({
   },
 });
 
-test("initial load requests pack metadata from the backend", async () => {
+test("initial load defers history and coherence data until their tabs open", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._render = () => {};
   const calls = [];
-  const retainedCoherence = {
-    results: [{ entity_id: "sensor.gone" }],
-    missing_count: 1,
-    missing_entity_count: 1,
-    scanned_at: "2026-08-24T12:00:00+00:00",
-  };
   const responses = {
     "alert_manager/config/get": completeConfig(),
     "alert_manager/alerts/list": {
@@ -879,11 +897,7 @@ test("initial load requests pack metadata from the backend", async () => {
       pending: [],
     },
     "alert_manager/packs/list": completePacks(),
-    "alert_manager/history/list": {
-      events: [], count: 0, retention_limit: 100, enabled: true,
-    },
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
-    "alert_manager/coherence/get": retainedCoherence,
     "alert_manager/config/recovery/get": {
       active: false, backups: [],
     },
@@ -906,16 +920,90 @@ test("initial load requests pack metadata from the backend", async () => {
     "alert_manager/config/get",
     "alert_manager/alerts/list",
     "alert_manager/packs/list",
-    "alert_manager/history/list",
     "alert_manager/history/config/get",
-    "alert_manager/coherence/get",
     "alert_manager/config/recovery/get",
     "config/label_registry/list",
     "frontend/get_translations",
     "frontend/get_translations",
   ]);
   assert.deepEqual(panel._packs, completePacks());
-  assert.equal(panel._coherence, retainedCoherence);
+  assert.equal(panel._historyLoaded, false);
+  assert.equal(panel._coherenceLoaded, false);
+});
+
+test("history and coherence data load when their tabs open", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._loading = false;
+  panel._render = () => {};
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message.type);
+      if (message.type === "alert_manager/history/list") {
+        return { events: [], count: 0, retention_limit: 100, enabled: true };
+      }
+      return {
+        results: [], missing_count: 0, scanned_at: "2026-08-24T12:00:00+00:00",
+      };
+    },
+  };
+
+  await panel._handleClick(actionEvent("tab", null, { tab: "history" }));
+  await panel._handleClick(actionEvent("tab", null, { tab: "coherence" }));
+
+  assert.deepEqual(calls, [
+    "alert_manager/history/list",
+    "alert_manager/coherence/get",
+  ]);
+});
+
+test("a recreated panel renders cached state while it refreshes", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const connection = {};
+  const responses = {
+    "alert_manager/config/get": completeConfig(),
+    "alert_manager/alerts/list": {
+      active_count: 0,
+      pending_count: 0,
+      tracked_count: 0,
+      alerts: [],
+      pending: [],
+    },
+    "alert_manager/packs/list": completePacks(),
+    "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
+    "alert_manager/config/recovery/get": { active: false, backups: [] },
+    "config/label_registry/list": [],
+  };
+  const hass = {
+    connection,
+    states: {},
+    callWS: async (message) => {
+      if (message.type === "frontend/get_translations") {
+        return { resources: TRANSLATIONS[message.language] };
+      }
+      return responses[message.type];
+    },
+  };
+  const previousPanel = new Panel();
+  previousPanel._hass = hass;
+  previousPanel._config = completeConfig();
+  previousPanel._loading = false;
+  previousPanel._rememberPanelState();
+
+  const recreatedPanel = new Panel();
+  recreatedPanel._hass = hass;
+  assert.equal(recreatedPanel._restorePanelState(), true);
+  assert.deepEqual(recreatedPanel._config, completeConfig());
+  assert.equal(recreatedPanel._loading, false);
+  const loadingStates = [];
+  recreatedPanel._render = () => loadingStates.push(recreatedPanel._loading);
+
+  await recreatedPanel._load();
+
+  assert.ok(loadingStates.length > 0);
+  assert.equal(loadingStates.includes(true), false);
 });
 
 test("backup restore is sent only after the native confirmation action", async () => {
@@ -1790,19 +1878,24 @@ test("selection mode selects visible rows and mixed bulk actions affect compatib
   assert.match(toolbar, /Désacquitter \(1\)/);
 
   const calls = [];
-  panel._hass.callService = async (...args) => { calls.push(args); };
+  panel._api.call = async (message) => { calls.push(message); };
   panel._render = () => {};
   await panel._bulkAlertAction("acknowledge");
-  assert.deepEqual(calls, [[
-    "alert_manager", "acknowledge", { alert_id: "rule:temperature:sensor.rack" },
-  ]]);
+  assert.deepEqual(calls, [{
+    type: "alert_manager/alerts/acknowledgement/update",
+    alert_ids: ["rule:temperature:sensor.rack"],
+    acknowledged: true,
+  }]);
   assert.equal(panel._alerts.active_count, 0);
   assert.equal(panel._alerts.acknowledge_count, 2);
   assert.match(panel._notice.text, /1 alerte/);
 
   await panel._bulkAlertAction("unacknowledge");
-  assert.equal(calls.filter((call) => call[1] === "unacknowledge").length, 1);
-  assert.equal(calls[1][2].alert_id, "unavailable:sensor.acknowledged");
+  assert.deepEqual(calls[1], {
+    type: "alert_manager/alerts/acknowledgement/update",
+    alert_ids: ["unavailable:sensor.acknowledged"],
+    acknowledged: false,
+  });
   assert.equal(panel._selectedAlertIds.has("battery:sensor.pending"), true);
 });
 
@@ -2116,7 +2209,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /data-action="add-ignored-reference"/);
   assert.doesNotMatch(settings, /coherence-ignored-entity-references[^>]*><\/ha-selector>/);
   assert.match(settings, /Références ignorées par l’analyse de cohérence/);
-  assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"[\s\S]*data-action="clear-history"/);
+  assert.match(settings, /class="history-settings-row">[\s\S]*id="history-limit"/);
+  assert.doesNotMatch(settings, /data-action="clear-history"/);
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
@@ -2131,7 +2225,6 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
   assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings"'));
-  assert.ok(settings.indexOf('data-action="clear-history"') < settings.indexOf('class="actions settings-save-actions"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
@@ -2147,8 +2240,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.ignored-reference-add\{display:flex;align-items:flex-start;gap:8px\}/);
   assert.match(styles, /\.ignored-reference-add ha-input\{flex:0 1 420px\}/);
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
-  assert.match(styles, /\.history-settings-row\{[^}]*grid-template-areas:"label \." "input action"[^}]*align-items:center/);
-  assert.match(styles, /\.history-actions\{grid-area:action;align-self:start;min-height:56px;align-items:center/);
+  assert.match(styles, /\.history-settings-row\{[^}]*max-width:420px[^}]*align-items:center/);
+  assert.match(styles, /\.coherence-actions,\.history-page-actions\{display:grid;flex:none/);
   assert.match(styles, /\.settings-save-actions\{justify-content:flex-end;margin-top:4px\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
@@ -2416,6 +2509,23 @@ test("rule editor navigation actions open, edit and cancel predictably", async (
 
   await panel._handleClick(actionEvent("cancel-rule"));
   assert.equal(panel._editingRule, null);
+});
+
+test("tab and route navigation preserve a dirty rule draft", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._activeTab = "rules";
+  panel._editingRule = { id: "rule-id", name: "Unsaved" };
+  panel._ruleDirty = true;
+  panel._render = () => {};
+
+  await panel._handleClick({
+    target: { closest: () => ({ dataset: { action: "tab", tab: "settings" } }) },
+  });
+  assert.deepEqual(panel._editingRule, { id: "rule-id", name: "Unsaved" });
+
+  panel.route = { path: "/alert-manager/overview" };
+  assert.deepEqual(panel._editingRule, { id: "rule-id", name: "Unsaved" });
 });
 
 test("automatic monitoring action serializes all category controls", async () => {
@@ -2733,6 +2843,29 @@ test("ESPHome scan switch keeps its draft value before saving", () => {
   const settings = panel._renderSettings();
   assert.match(settings, /id="coherence-scan-esphome"/);
   assert.doesNotMatch(settings, /id="coherence-scan-esphome"[^>]+checked/);
+});
+
+test("settings scalar drafts survive a structural rerender", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+
+  panel._handleInput({ target: { id: "global-delay", value: "321" } });
+  panel._handleInput({ target: { id: "pending-display-delay", value: "12" } });
+  panel._handleInput({ target: { id: "history-limit", value: "42" } });
+  panel._settingsDraft.coherence_schedule = "weekly";
+
+  const settings = panel._renderSettings();
+  assert.match(settings, /id="global-delay"[^>]+value="321"/);
+  assert.match(settings, /id="pending-display-delay"[^>]+value="12"/);
+  assert.match(settings, /id="history-limit"[^>]+value="42"/);
+  const select = { addEventListener() {} };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === "#coherence-schedule" ? select : null
+  );
+  panel._hydrateSettingsControls();
+  assert.equal(select.value, "weekly");
 });
 
 test("ignored coherence references use compact chips with safe add and remove behavior", async () => {
@@ -3381,13 +3514,21 @@ test("history empty and disabled states are explicit and translated", () => {
   const panel = new Panel();
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
   panel._historyConfig = { retention_limit: 100, enabled: true };
-  assert.match(panel._renderHistory(), /data-alert-table-page="history"/);
+  const empty = panel._renderHistory();
+  assert.match(empty, /data-alert-table-page="history"/);
+  assert.match(empty, /class="panel history-panel"/);
+  assert.match(empty, /Historique des alertes/);
+  assert.match(empty, /data-action="clear-history" disabled/);
   const table = { addEventListener() {}, querySelectorAll() { return []; }, dataset: {} };
   panel.shadowRoot.querySelector = (selector) => (
     selector === '[data-alert-table-page="history"]' ? table : null
   );
   panel._hydrateDataTables();
   assert.equal(table.noDataText, "Aucune alerte dans l’historique.");
+  panel._history = {
+    events: [historyEvent()], count: 1, retention_limit: 100, enabled: true,
+  };
+  assert.doesNotMatch(panel._renderHistory(), /data-action="clear-history" disabled/);
   panel._historyConfig = { retention_limit: 0, enabled: false };
   const disabled = panel._renderHistory();
   assert.match(disabled, /L’historique est désactivé/);

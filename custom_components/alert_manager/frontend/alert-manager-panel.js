@@ -604,43 +604,142 @@ class AlertManagerApi {
   }
 }
 
+const PANEL_STATE_CACHE = new WeakMap();
+
+function panelStateCacheKey(hass) {
+  const key = hass?.connection ?? hass;
+  return key && (typeof key === "object" || typeof key === "function") ? key : null;
+}
+
+function rememberPanelState() {
+    const key = panelStateCacheKey(this._hass);
+    if (!key || !this._config) return;
+    PANEL_STATE_CACHE.set(key, {
+      language: this._language,
+      translations: this._translations,
+      englishTranslations: this._englishTranslations,
+      config: this._config,
+      alerts: this._alerts,
+      packs: this._packs,
+      historyConfig: this._historyConfig,
+      configRecovery: this._configRecovery,
+      labels: this._labels,
+      monitoringEnabled: this._monitoringEnabled,
+    });
+}
+
+function restorePanelState() {
+    const key = panelStateCacheKey(this._hass);
+    const cached = key ? PANEL_STATE_CACHE.get(key) : null;
+    if (!cached || cached.language !== this._language) return false;
+    this._translations = cached.translations;
+    this._englishTranslations = cached.englishTranslations;
+    this._config = cached.config;
+    this._alerts = cached.alerts;
+    this._packs = cached.packs;
+    this._historyConfig = cached.historyConfig;
+    this._configRecovery = cached.configRecovery;
+    this._labels = cached.labels;
+    this._monitoringEnabled = cached.monitoringEnabled;
+    this._loading = false;
+    this._cachedStateNeedsRefresh = true;
+    return true;
+}
+
+function setHass(value) {
+    const language = value?.locale?.language || "en";
+    const languageChanged = language !== this._language;
+    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
+      ?.attributes?.scanned_at ?? null;
+    const coherenceChanged = Boolean(
+      scannedAt && scannedAt !== this._coherenceScannedAt,
+    );
+    this._coherenceScannedAt = scannedAt;
+    this._hass = value;
+    this._language = language;
+    if (!this._config) this._restorePanelState();
+    const alertsChanged = this._syncSensor();
+    if (this.isConnected && this._config && this._coherenceLoaded && coherenceChanged) {
+      void this._refreshCoherence();
+    }
+    if (
+      this.isConnected
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) {
+      this._load();
+    } else if (this.isConnected && languageChanged && !this._translationPromise) {
+      this._reloadTranslations();
+    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
+      this._refreshOverviewData();
+      void this._refreshAlerts();
+    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
+      this._refreshHistory();
+    } else if (this.isConnected) {
+      this._hydrateSelectors();
+    }
+}
+
+function refreshTabData(tab) {
+    if (!this._hass || !this._config) return;
+    if (tab === "history") {
+      void this._refreshHistory();
+    } else if (tab === "coherence") {
+      void this._refreshCoherence();
+    } else if (tab === "overview" && !this._loadPromise) {
+      void this._refreshAlerts();
+    }
+}
+
 async function load() {
+    const initialLoad = !this._config;
+    this._cachedStateNeedsRefresh = false;
     this._loadPromise = Promise.all([
       this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
       this._api.call({ type: "alert_manager/packs/list" }),
-      this._api.call({ type: "alert_manager/history/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
-      this._api.call({ type: "alert_manager/coherence/get" }),
       this._api.call({ type: "alert_manager/config/recovery/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
-    this._loading = true;
-    this._render();
+    if (initialLoad) {
+      this._loading = true;
+      this._render();
+    }
     try {
       [
         this._config,
         this._alerts,
         this._packs,
-        this._history,
         this._historyConfig,
-        this._coherence,
         this._configRecovery,
         this._labels,
       ] = await this._loadPromise;
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
-      this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
       this._resetSettingsDraft();
       this._resetAutomaticDraft();
       this._syncSensor();
       this._notice = null;
+      this._rememberPanelState();
+      if (["history", "coherence"].includes(this._activeTab)) {
+        this._refreshTabData(this._activeTab);
+      }
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._loading = false;
       this._loadPromise = null;
-      this._render();
+      if (initialLoad) {
+        this._render();
+      } else if (this._activeTab === "overview") {
+        this._refreshOverviewData();
+      } else if (this._activeTab === "rules") {
+        this._refreshRulesData();
+      } else {
+        this._refreshUiState();
+        this._hydrateSelectors();
+      }
     }
 }
 
@@ -649,7 +748,9 @@ async function refreshHistory() {
     this._historyLoadPromise = this._api.call({ type: "alert_manager/history/list" });
     try {
       this._history = await this._historyLoadPromise;
+      this._historyLoaded = true;
     } catch (error) {
+      this._historyLoaded = true;
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._historyLoadPromise = null;
@@ -665,8 +766,10 @@ async function refreshCoherence() {
     });
     try {
       this._coherence = await this._coherenceLoadPromise;
+      this._coherenceLoaded = true;
       this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
     } catch (error) {
+      this._coherenceLoaded = true;
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._coherenceLoadPromise = null;
@@ -686,6 +789,7 @@ async function refreshAlerts() {
     });
     try {
       this._alerts = await this._alertsRefreshPromise;
+      this._rememberPanelState();
       if (this.isConnected && this._activeTab === "overview") {
         this._refreshOverviewData();
       }
@@ -2073,6 +2177,24 @@ async function loadNativeBottomSheet() {
   return this._nativeBottomSheetLoadPromise;
 }
 
+function updateDrawerLayout(previousNarrow) {
+  if (
+    Boolean(previousNarrow) === this._narrow
+    || !this.isConnected
+    || (this._editingRule === null && !this._configurationDrawer)
+  ) return;
+  if (this._editingRule !== null) this._captureRuleDraft();
+  if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
+  if (this._activeTab === "settings") this._captureEntityDelayValues();
+  if (!this._narrow) {
+    this._render();
+    return;
+  }
+  void this._loadNativeBottomSheet().then((loaded) => {
+    if (loaded && this.isConnected && this._narrow) this._render();
+  });
+}
+
 async function handleBottomSheetClosed(panel, actionHandlers, event) {
   const action = event.target?.dataset?.closeAction;
   if (!action) return;
@@ -2851,33 +2973,31 @@ async function bulkAlertAction(service) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
-    const results = await Promise.allSettled(rows.map((row) => this._hass.callService(
-      "alert_manager",
-      service,
-      { alert_id: row.id },
-    )));
-    const succeeded = rows.filter((_row, index) => results[index].status === "fulfilled");
-    for (const row of succeeded) {
-      this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
-      this._selectedAlertIds.delete(row.id);
-    }
-    const failed = rows.length - succeeded.length;
-    this._notice = failed
-      ? {
-        kind: "error",
-        text: this._t("table.selection.partial", { count: succeeded.length, failed }),
+    try {
+      await this._api.call({
+        type: "alert_manager/alerts/acknowledgement/update",
+        alert_ids: rows.map((row) => row.id),
+        acknowledged: service === "acknowledge",
+      });
+      for (const row of rows) {
+        this._applyOptimisticAcknowledgement(row.id, service === "acknowledge");
+        this._selectedAlertIds.delete(row.id);
       }
-      : {
+      this._notice = {
         kind: "success",
         text: this._t(
           service === "acknowledge" ? "table.selection.acknowledged_result" : "table.selection.unacknowledged_result",
-          { count: succeeded.length },
+          { count: rows.length },
         ),
       };
-    this._busy = false;
-    this._refreshOverviewData();
-    this._updateSelectionToolbar();
-    this._refreshUiState();
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._busy = false;
+      this._refreshOverviewData();
+      this._updateSelectionToolbar();
+      this._refreshUiState();
+    }
 }
 
 function applyOptimisticAcknowledgement(alertId, acknowledged) {
@@ -2987,18 +3107,26 @@ function refreshHistoryData() {
       return;
     }
     this._refreshAlertTableData("history", tablePage);
+    const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
+    if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
 }
 
 function renderHistory(context) {
-    const { limit, pageMessages, rows, renderAlertTable, t } = context;
+    const { busy, limit, pageMessages, rows, renderAlertTable, t } = context;
     if (limit === 0) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
+    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+      <div class="history-header">
+        <div><h2>${esc(t("history.title"))}</h2></div>
+        <div class="history-page-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
+      </div>
+    </ha-card>`;
     return renderAlertTable(
       "history",
       rows,
-      pageMessages,
+      header,
     );
 }
 
@@ -3007,6 +3135,7 @@ function renderHistoryPanel() {
       ?? this._history?.retention_limit ?? 100);
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
     return renderHistory({
+      busy: this._busy,
       limit,
       pageMessages: this._renderPageMessages(),
       rows: this._tableRows("history", events),
@@ -4253,7 +4382,7 @@ async function handleAutomaticAction(action, button) {
 // Source: frontend-src/views/settings.js
 function renderSettings(context) {
     const {
-      config, settingsDraft, historyConfig, historyEvents, entityDelayDraft,
+      config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
@@ -4261,8 +4390,8 @@ function renderSettings(context) {
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -4284,8 +4413,7 @@ function renderSettings(context) {
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
-            <div class="actions history-actions"><ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !historyEvents.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button></div>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
@@ -4354,7 +4482,6 @@ function renderSettingsPanel() {
       config: this._config,
       settingsDraft: this._settingsDraft,
       historyConfig: this._historyConfig,
-      historyEvents: this._history?.events ?? [],
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
@@ -4510,7 +4637,7 @@ async function saveSettings() {
           retention_limit: historyLimit,
         });
         this._config = { ...this._config, history_limit: historyLimit };
-        await this._refreshHistory();
+        if (this._historyLoaded) await this._refreshHistory();
       }
       this._resetSettingsDraft();
       this._configurationDrawer = null;
@@ -4536,7 +4663,11 @@ function resetSettingsDraft() {
 function ensureSettingsDraft() {
     if (this._settingsDraft && this._entityDelayDraft) return;
     this._settingsDraft = {
+      global_delay: this._config.global_delay,
+      pending_display_delay: this._config.pending_display_delay,
+      coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
+      history_limit: this._historyConfig.retention_limit,
       coherence_ignored_entity_references: [
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
@@ -4547,6 +4678,18 @@ function ensureSettingsDraft() {
     this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
       ([entity_id, delay]) => ({ entity_id, delay }),
     );
+}
+
+function handleSettingsInput(event) {
+    const fields = {
+      "global-delay": "global_delay",
+      "pending-display-delay": "pending_display_delay",
+      "history-limit": "history_limit",
+    };
+    const field = fields[event.target?.id];
+    if (!field) return;
+    this._ensureSettingsDraft();
+    this._settingsDraft[field] = String(event.target.value ?? "");
 }
 
 function captureEntityDelayValues() {
@@ -4584,7 +4727,10 @@ function hydrateSettingsControls() {
       value,
       label: this._t(`settings.coherence_schedules.${value}`),
     })),
-    this._config.coherence_schedule ?? "none",
+    this._settingsDraft.coherence_schedule,
+    (value) => {
+      this._settingsDraft.coherence_schedule = value;
+    },
   );
   this.shadowRoot.querySelectorAll("ha-input-chip[data-ignored-reference]").forEach((chip) => {
     if (this._configuredControls.has(chip)) return;
@@ -5116,24 +5262,9 @@ const settingsStyles = `
   }
   .history-settings-row {
     display: grid;
-    grid-template-columns: minmax(260px, 420px) auto;
-    grid-template-areas: "label ." "input action";
+    max-width: 420px;
     align-items: center;
-    gap: 6px 16px;
-  }
-  .history-limit-label {
-    grid-area: label;
-  }
-  #history-limit {
-    grid-area: input;
-  }
-  .history-actions {
-    grid-area: action;
-    align-self: start;
-    min-height: 56px;
-    align-items: center;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
+    gap: 6px;
   }
   .history-limit-help {
     margin-top: 0;
@@ -5185,23 +5316,23 @@ const settingsStyles = `
   }
 
   /* Coherence */
-  .coherence-panel {
+  .coherence-panel, .history-panel {
     padding: 20px;
   }
-  .coherence-header {
+  .coherence-header, .history-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
     padding: 0;
   }
-  .coherence-header > div {
+  .coherence-header > div, .history-header > div {
     min-width: 0;
   }
-  .coherence-header ha-button {
+  .coherence-header ha-button, .history-header ha-button {
     flex: none;
   }
-  .coherence-actions {
+  .coherence-actions, .history-page-actions {
     display: grid;
     flex: none;
     gap: 8px;
@@ -5725,14 +5856,14 @@ const responsiveStyles = `
     .panel {
       padding: 15px;
     }
-    .coherence-panel {
+    .coherence-panel, .history-panel {
       padding: 15px;
     }
-    .coherence-header {
+    .coherence-header, .history-header {
       align-items: stretch;
       flex-direction: column;
     }
-    .coherence-header ha-button {
+    .coherence-header ha-button, .history-header ha-button {
       width: 100%;
     }
     .deleted-entity-row {
@@ -5764,15 +5895,6 @@ const responsiveStyles = `
     .ignored-reference-add ha-button {
       width: 100%;
       margin-top: 0;
-    }
-    .history-settings-row {
-      grid-template-columns: 1fr;
-      grid-template-areas: "label" "input" "action";
-    }
-    .history-actions {
-      align-self: auto;
-      align-items: center;
-      justify-content: flex-start;
     }
     .config-backup-row {
       grid-template-columns: 1fr;
@@ -5869,11 +5991,15 @@ class AlertManagerPanel extends HTMLElement {
   _refreshHistory = refreshHistory;
   _refreshCoherence = refreshCoherence;
   _refreshAlerts = refreshAlerts;
+  _refreshTabData = refreshTabData;
+  _rememberPanelState = rememberPanelState;
+  _restorePanelState = restorePanelState;
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
   _useNativeBottomSheet = useNativeBottomSheet;
   _loadNativeBottomSheet = loadNativeBottomSheet;
+  _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
   _refreshOverviewData = refreshOverviewData;
@@ -5910,6 +6036,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetAutomaticDraft = resetAutomaticDraft;
   _ensureAutomaticDraft = ensureAutomaticDraft;
   _captureAutomaticMapValues = captureAutomaticMapValues;
+  _captureAutomaticConfigurationValues = captureAutomaticConfigurationValues;
   _renderSettings = renderSettingsPanel;
   _commitIgnoredReferenceInput = commitIgnoredReferenceInput;
   _removeIgnoredReference = removeIgnoredReference;
@@ -6030,9 +6157,11 @@ class AlertManagerPanel extends HTMLElement {
     };
     this._history = { events: [], count: 0, retention_limit: 100, enabled: true };
     this._historyConfig = { retention_limit: 100, enabled: true };
+    this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
     this._backupRestoreCandidate = null;
     this._coherence = null;
+    this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
@@ -6048,6 +6177,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorError = null;
     this._ruleDirty = false;
     this._loading = true;
+    this._cachedStateNeedsRefresh = false;
     this._busy = false;
     this._notice = null;
     this._monitoringEnabled = true;
@@ -6086,32 +6216,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   set hass(value) {
-    const language = value?.locale?.language || "en";
-    const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
-      ?.attributes?.scanned_at ?? null;
-    const coherenceChanged = Boolean(
-      scannedAt && scannedAt !== this._coherenceScannedAt,
-    );
-    this._coherenceScannedAt = scannedAt;
-    this._hass = value;
-    this._language = language;
-    const alertsChanged = this._syncSensor();
-    if (this.isConnected && this._config && coherenceChanged) {
-      void this._refreshCoherence();
-    }
-    if (this.isConnected && !this._config && !this._loadPromise) {
-      this._load();
-    } else if (this.isConnected && languageChanged && !this._translationPromise) {
-      this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
-      void this._refreshAlerts();
-    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
-      this._refreshHistory();
-    } else if (this.isConnected) {
-      this._hydrateSelectors();
-    }
+    setHass.call(this, value);
   }
 
   get hass() {
@@ -6132,18 +6237,17 @@ class AlertManagerPanel extends HTMLElement {
     const activeTab = this._tabFromRoute(value);
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
-      if (activeTab === "history") this._refreshHistory();
       if (this.isConnected) this._render();
-      if (activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(activeTab);
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
   }
 
   set narrow(value) {
+    const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
     this.toggleAttribute?.("narrow", this._narrow);
     for (const selector of [
@@ -6154,6 +6258,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    this._updateDrawerLayout(previousNarrow);
   }
 
   _upgradeProperty(name) {
@@ -6174,7 +6279,12 @@ class AlertManagerPanel extends HTMLElement {
     this.toggleAttribute?.("companion-app", isCompanionApp());
     if (this._narrow) void this._loadNativeBottomSheet();
     this._render();
-    if (this._hass && !this._config && !this._loadPromise) this._load();
+    if (
+      this._hass
+      && (!this._config || this._cachedStateNeedsRefresh)
+      && !this._loadPromise
+    ) this._load();
+    this._refreshTabData(this._activeTab);
     if (!this._timer) {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
@@ -6285,6 +6395,7 @@ class AlertManagerPanel extends HTMLElement {
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
       "enable-monitoring",
+      "clear-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
       "save-automatic",
@@ -6410,6 +6521,12 @@ class AlertManagerPanel extends HTMLElement {
 
   _renderTab() {
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
+    if (this._activeTab === "history" && !this._historyLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
+    if (this._activeTab === "coherence" && !this._coherenceLoaded) {
+      return `<div class="loading">${esc(this._t("loading"))}</div>`;
+    }
     if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
@@ -6449,11 +6566,10 @@ class AlertManagerPanel extends HTMLElement {
     }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
-      this._editingRule = null;
       this._configurationDrawer = null;
       this._notice = null;
       this._render();
-      if (this._activeTab === "overview") void this._refreshAlerts();
+      this._refreshTabData(this._activeTab);
       return;
     }
     for (const handler of ACTION_HANDLERS) {
@@ -6465,10 +6581,12 @@ class AlertManagerPanel extends HTMLElement {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
+    handleSettingsInput.call(this, event);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
+    handleSettingsInput.call(this, event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

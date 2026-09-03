@@ -119,6 +119,32 @@ def test_acknowledge_and_unacknowledge_are_persistent_and_idempotent(
     assert len(event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)) == 1
 
 
+def test_bulk_acknowledgement_uses_one_storage_write(hass, entry, set_now):
+    """A group action persists and publishes the whole selection once."""
+    start = datetime(2026, 8, 25, 14, tzinfo=UTC)
+    set_now(start)
+    for entity_id in ("sensor.one", "sensor.two"):
+        hass.states.set(entity_id, "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(manager.async_update_config({"global_delay": 0}))
+    alert_ids = ["unavailable:sensor.one", "unavailable:sensor.two"]
+    saves = hass.store_save_count
+
+    assert run(manager.async_set_acknowledgements(alert_ids, True, "Loïc")) == alert_ids
+    assert hass.store_save_count == saves + 1
+    assert all(manager.records[alert_id].acknowledged for alert_id in alert_ids)
+    assert len(event_data(hass, EVENT_ALERT_ACKNOWLEDGED)) == 2
+
+    saves = hass.store_save_count
+    assert (
+        run(manager.async_set_acknowledgements(alert_ids, False, "Loïc")) == alert_ids
+    )
+    assert hass.store_save_count == saves + 1
+    assert all(not manager.records[alert_id].acknowledged for alert_id in alert_ids)
+    assert len(event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)) == 2
+
+
 def test_acknowledgement_survives_restart_without_replaying_event(hass, entry, set_now):
     """Persisted acknowledgement reloads as state, never as a new action."""
     first, alert_id = active_manager(hass, entry, set_now)
