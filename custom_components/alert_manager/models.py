@@ -579,6 +579,10 @@ class Rule:
     message: str | None = None
     update_message_when_active: bool = False
     condition_template: str | None = None
+    flapping_enabled: bool = False
+    flapping_occurrences: int | None = None
+    flapping_window: int | None = None
+    flapping_recovery: int | None = None
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -697,6 +701,22 @@ class Rule:
             raise ValueError("Rule condition_template is required for Variation rules")
         if not isinstance(self.enabled, bool):
             raise ValueError("Rule enabled must be a boolean")
+        if not isinstance(self.flapping_enabled, bool):
+            raise ValueError("Rule flapping_enabled must be a boolean")
+        for field_name, value, minimum in (
+            ("flapping_occurrences", self.flapping_occurrences, 2),
+            ("flapping_window", self.flapping_window, 1),
+            ("flapping_recovery", self.flapping_recovery, 1),
+        ):
+            if value is None:
+                continue
+            maximum = 1000 if field_name == "flapping_occurrences" else 31_536_000
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"Rule {field_name} must be an integer")
+            if not minimum <= value <= maximum:
+                raise ValueError(
+                    f"Rule {field_name} must be between {minimum} and {maximum}"
+                )
         if (
             isinstance(self.version, bool)
             or not isinstance(self.version, int)

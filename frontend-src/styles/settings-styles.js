@@ -365,4 +365,17 @@ export const settingsStyles = `
     grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 10px;
   }
+  .pack-source-list {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .pack-source-row {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: 12px;
+  }
 `;

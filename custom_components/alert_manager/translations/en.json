@@ -52,13 +52,19 @@
         "flapping_recovery": {
           "label": "Delay before returning to normal"
         },
+        "flapping_source_packs": {
+          "help": "Enable flapping detection for each automatic source pack. Empty values inherit the device-specific configuration, then the global configuration.",
+          "label": "Monitored packs",
+          "validation": "Each override must be empty or contain a valid number."
+        },
         "flapping_window": {
-          "label": "Duration"
+          "label": "Detection window"
         },
         "threshold": {
           "label": "Global threshold"
         }
       },
+      "enable_source_pack": "Enable source pack {name}",
       "pack_delay": "Pack delay",
       "save": "Save automatic monitoring"
     },
@@ -325,6 +331,10 @@
       "editor_information_help": "Identify the rule and select the monitored entities.",
       "editor_trigger": "Trigger",
       "editor_trigger_help": "Add a delay and customize the exposed message.",
+      "flapping_enabled": "Enable flapping detection",
+      "flapping_help": "Count each new occurrence of this rule. Optional values inherit the device-specific configuration, then the global flapping configuration.",
+      "flapping_inherit_help": "Leave empty to inherit the default value.",
+      "flapping_title": "Flapping / Instability",
       "empty": "No custom rules.",
       "empty_filtered": "No rules match the search and filters.",
       "entities": "Entities",

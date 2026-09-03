@@ -27,22 +27,25 @@ def make_manager(hass, entry):
     return manager
 
 
-def configure(manager, *, occurrences=3, window=3600, recovery=1800, overrides=None):
-    run(
-        manager.async_update_config(
-            {
-                "automatic": {
-                    "flapping": {
-                        "enabled": True,
-                        "occurrences": occurrences,
-                        "window": window,
-                        "recovery": recovery,
-                        "device_overrides": overrides or {},
-                    }
-                }
-            }
-        )
-    )
+def configure(
+    manager,
+    *,
+    occurrences=3,
+    window=3600,
+    recovery=1800,
+    overrides=None,
+    source_packs=None,
+):
+    flapping_config = {
+        "enabled": True,
+        "occurrences": occurrences,
+        "window": window,
+        "recovery": recovery,
+        "device_overrides": overrides or {},
+    }
+    if source_packs is not None:
+        flapping_config["source_packs"] = source_packs
+    run(manager.async_update_config({"automatic": {"flapping": flapping_config}}))
 
 
 def live_state(manager, hass, entity_id, value, attributes=None):
@@ -245,6 +248,7 @@ def test_rule_and_pack_source_ids_are_independent(hass, entry, set_now):
                 "operator": "equals",
                 "value": "bad",
                 "duration": 900,
+                "flapping_enabled": True,
             }
         )
     )
@@ -256,6 +260,7 @@ def test_rule_and_pack_source_ids_are_independent(hass, entry, set_now):
                 "operator": "equals",
                 "value": "bad",
                 "duration": 900,
+                "flapping_enabled": True,
             }
         )
     )
@@ -286,7 +291,14 @@ def test_two_automatic_packs_on_one_entity_are_independent(hass, entry, set_now)
     set_now(start)
     hass.states.set("sensor.test", "50", attributes)
     manager = make_manager(hass, entry)
-    configure(manager, occurrences=2)
+    configure(
+        manager,
+        occurrences=2,
+        source_packs={
+            "unavailable": {"occurrences": None, "window": None, "recovery": None},
+            "battery": {"occurrences": None, "window": None, "recovery": None},
+        },
+    )
 
     for offset, value in ((0, "unavailable"), (1, "50"), (2, "10"), (3, "50")):
         set_now(start + timedelta(seconds=offset))
@@ -297,6 +309,82 @@ def test_two_automatic_packs_on_one_entity_are_independent(hass, entry, set_now)
 
     assert "flapping:unavailable:sensor.test" in manager.records
     assert "flapping:battery:sensor.test" in manager.records
+
+
+def test_custom_rule_flapping_is_opt_in_and_supports_all_overrides(
+    hass, entry, set_now
+):
+    """Rules are disabled by default and may override count, window and recovery."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=5, window=3600, recovery=1800)
+    disabled = run(
+        manager.async_create_rule(
+            {
+                "name": "Disabled flapping",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "bad",
+                "duration": 900,
+            }
+        )
+    )
+    enabled = run(
+        manager.async_create_rule(
+            {
+                "name": "Enabled flapping",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "bad",
+                "duration": 900,
+                "flapping_enabled": True,
+                "flapping_occurrences": 2,
+                "flapping_window": 20,
+                "flapping_recovery": 30,
+            }
+        )
+    )
+
+    for offset in (0, 10):
+        set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", "bad")
+        live_state(manager, hass, "sensor.test", "ok")
+
+    assert f"flapping:rule:{disabled['id']}:sensor.test" not in manager.records
+    alert = manager.records[f"flapping:rule:{enabled['id']}:sensor.test"]
+    assert alert.expires_at == start + timedelta(seconds=40)
+    assert alert.details.condition_params["duration_seconds"] == 20
+
+
+def test_automatic_pack_flapping_defaults_and_overrides(hass, entry, set_now):
+    """Only unavailable/connectivity default on; a pack may override all settings."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    attributes = {"device_class": "battery"}
+    set_now(start)
+    hass.states.set("sensor.test", "50", attributes)
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=5, window=3600, recovery=1800)
+
+    for offset, value in ((0, "10"), (1, "50"), (10, "10"), (11, "50")):
+        set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", value, attributes)
+    assert "flapping:battery:sensor.test" not in manager.records
+
+    configure(
+        manager,
+        occurrences=5,
+        window=3600,
+        recovery=1800,
+        source_packs={"battery": {"occurrences": 2, "window": 20, "recovery": 30}},
+    )
+    for offset, value in ((30, "10"), (31, "50"), (40, "10"), (41, "50")):
+        set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", value, attributes)
+    alert = manager.records["flapping:battery:sensor.test"]
+    assert alert.expires_at == start + timedelta(seconds=70)
+    assert alert.details.condition_params["duration_seconds"] == 20
 
 
 def test_technical_reevaluations_do_not_create_occurrences(hass, entry, set_now):
@@ -332,7 +420,7 @@ def test_flapping_pack_does_not_observe_itself(hass, set_now):
     result = PACK.occurrence_batch_handler(
         hass,
         (PackOccurrence(source=source, occurred_at=now),),
-        {"occurrences": 2, "window": 60, "recovery": 60},
+        {},
         data,
     )
     assert result == ()
@@ -364,10 +452,22 @@ def test_occurrence_memory_keeps_only_the_newest_sources(hass, set_now, monkeypa
         hass,
         occurrences,
         {
-            "occurrences": 5,
-            "window": 60,
-            "recovery": 60,
-            "device_overrides": {},
+            "automatic": {
+                "flapping": {
+                    "occurrences": 5,
+                    "window": 60,
+                    "recovery": 60,
+                    "device_overrides": {},
+                    "source_packs": {
+                        "unavailable": {
+                            "occurrences": None,
+                            "window": None,
+                            "recovery": None,
+                        }
+                    },
+                }
+            },
+            "rules": [],
         },
         data,
     )

@@ -800,6 +800,66 @@ def test_pack_declared_device_settings_map_is_strictly_validated():
         validate_config_update({"automatic": {"flapping": {"delay": 0}}})
 
 
+def test_flapping_source_pack_map_and_rule_overrides_are_strictly_validated():
+    """Source packs accept optional bounded settings and rules remain opt-in."""
+    normalized = validate_config(
+        {
+            "automatic": {
+                "flapping": {
+                    "source_packs": {
+                        "battery": {
+                            "occurrences": "3",
+                            "window": None,
+                            "recovery": "120",
+                        }
+                    }
+                }
+            },
+            "rules": [
+                {
+                    "id": "rule-one",
+                    "name": "Rule one",
+                    "entity_ids": ["sensor.test"],
+                    "operator": "equals",
+                    "value": "bad",
+                    "duration": 60,
+                    "flapping_enabled": True,
+                    "flapping_occurrences": 4,
+                    "flapping_window": 600,
+                    "flapping_recovery": 300,
+                }
+            ],
+        }
+    )
+    assert normalized["automatic"]["flapping"]["source_packs"] == {
+        "battery": {"occurrences": 3, "window": None, "recovery": 120}
+    }
+    assert normalized["rules"][0]["flapping_enabled"] is True
+    with pytest.raises(ValueError, match="invalid source pack"):
+        validate_config({"automatic": {"flapping": {"source_packs": {"flapping": {}}}}})
+    with pytest.raises(ValueError, match="between 2 and 1000"):
+        validate_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "source_packs": {"battery": {"occurrences": 1, "window": None}}
+                    }
+                }
+            }
+        )
+    with pytest.raises(ValueError, match="Rule flapping_recovery"):
+        validate_rule_payload(
+            {
+                "name": "Bad override",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "bad",
+                "duration": 60,
+                "flapping_recovery": 0,
+            }
+        )
+
+
 def test_pack_declared_entity_number_map_is_strictly_validated():
     """Entity maps enforce their declared domains, bounds and integer step."""
     normalized = validate_config(

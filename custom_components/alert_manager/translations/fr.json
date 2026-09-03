@@ -52,13 +52,19 @@
         "flapping_recovery": {
           "label": "Délai avant retour à la normale"
         },
+        "flapping_source_packs": {
+          "help": "Activez la détection de flapping pour chaque pack source. Les valeurs vides héritent de la configuration particulière de l’appareil, puis de la configuration globale.",
+          "label": "Packs surveillés",
+          "validation": "Chaque surcharge doit être vide ou contenir un nombre valide."
+        },
         "flapping_window": {
-          "label": "Durée"
+          "label": "Fenêtre de détection"
         },
         "threshold": {
           "label": "Seuil global"
         }
       },
+      "enable_source_pack": "Activer le pack source {name}",
       "pack_delay": "Délai propre au pack",
       "save": "Enregistrer la surveillance automatique"
     },
@@ -325,6 +331,10 @@
       "editor_information_help": "Identifiez la règle et choisissez les entités surveillées.",
       "editor_trigger": "Déclenchement",
       "editor_trigger_help": "Ajoutez une temporisation et personnalisez le message exposé.",
+      "flapping_enabled": "Activer la détection de flapping",
+      "flapping_help": "Compte chaque nouvelle occurrence de cette règle. Les valeurs facultatives héritent de la configuration particulière de l’appareil, puis de la configuration globale du flapping.",
+      "flapping_inherit_help": "Laissez vide pour hériter de la valeur par défaut.",
+      "flapping_title": "Flapping / Instabilité",
       "empty": "Aucune règle personnalisée.",
       "empty_filtered": "Aucune règle ne correspond à la recherche et aux filtres.",
       "entities": "Entités",

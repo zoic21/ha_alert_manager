@@ -261,7 +261,7 @@ class _RuntimeMixin:
                     for generated in pack.occurrence_batch_handler(
                         self.hass,
                         batch,
-                        self.config["automatic"][pack.id],
+                        self.config,
                         self._pack_runtime.setdefault(pack.id, {}),
                     ):
                         self._apply_generated_alert(pack.id, generated)

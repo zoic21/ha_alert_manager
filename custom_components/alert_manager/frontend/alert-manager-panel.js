@@ -362,6 +362,10 @@ const newRuleDefaults = () => ({
   message: "",
   update_message_when_active: false,
   condition_template: "",
+  flapping_enabled: false,
+  flapping_occurrences: null,
+  flapping_window: null,
+  flapping_recovery: null,
 });
 
 const yamlValue = (value) => {
@@ -399,6 +403,10 @@ const ruleToYaml = (rule) => {
     `message: ${yamlValue(rule.message)}`,
     `update_message_when_active: ${yamlValue(rule.update_message_when_active ?? false)}`,
     `condition_template: ${yamlValue(rule.condition_template)}`,
+    `flapping_enabled: ${yamlValue(rule.flapping_enabled ?? false)}`,
+    `flapping_occurrences: ${yamlValue(rule.flapping_occurrences)}`,
+    `flapping_window: ${yamlValue(rule.flapping_window)}`,
+    `flapping_recovery: ${yamlValue(rule.flapping_recovery)}`,
   );
   return `${lines.join("\n")}\n`;
 };
@@ -2316,6 +2324,12 @@ function formField(form, name) {
 
 function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
     const value = (name) => formField(form, name)?.value;
+    const optionalNumber = (name) => {
+      const raw = value(name);
+      return raw === undefined
+        ? currentRule[name] ?? null
+        : raw === "" ? null : Number(raw);
+    };
     const source = value("source") ?? currentRule.source ?? "state";
     const comparisonFree = ["jinja", "unchanged"].includes(source);
     const selectedOperator = value("operator") ?? currentRule.operator ?? "equals";
@@ -2358,6 +2372,14 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
       condition_template: String(
         currentRule.condition_template ?? selectorValues.conditionTemplate ?? "",
       ),
+      flapping_enabled: Boolean(
+        form.querySelector?.("#rule-flapping-enabled")?.checked
+          ?? currentRule.flapping_enabled
+          ?? false
+      ),
+      flapping_occurrences: optionalNumber("flapping_occurrences"),
+      flapping_window: optionalNumber("flapping_window"),
+      flapping_recovery: optionalNumber("flapping_recovery"),
     };
 }
 
@@ -2386,6 +2408,10 @@ function serializeRuleDraft(draft) {
       message: String(draft.message ?? "").trim() || null,
       update_message_when_active: Boolean(draft.update_message_when_active),
       condition_template: String(draft.condition_template ?? "").trim() || null,
+      flapping_enabled: Boolean(draft.flapping_enabled),
+      flapping_occurrences: draft.flapping_occurrences ?? null,
+      flapping_window: draft.flapping_window ?? null,
+      flapping_recovery: draft.flapping_recovery ?? null,
     };
 }
 
@@ -2460,11 +2486,14 @@ function renderRuleEditor(context) {
       useBottomSheet = false,
       renderTextField,
       renderNumberField,
+      flappingAvailable = false,
     } = context;
     const yamlMode = mode === "yaml";
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
-      : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
+      : renderRuleVisualEditor({
+        rule, t, renderTextField, renderNumberField, flappingAvailable,
+      });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
@@ -2498,11 +2527,12 @@ function renderRuleEditorPanel() {
       useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
+      flappingAvailable: Boolean(this._config?.automatic?.flapping?.enabled),
     });
 }
 
 function renderRuleVisualEditor(context) {
-    const { rule, t, renderTextField, renderNumberField } = context;
+    const { rule, t, renderTextField, renderNumberField, flappingAvailable = false } = context;
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
@@ -2531,7 +2561,14 @@ function renderRuleVisualEditor(context) {
             <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
-        </section>`;
+        </section>
+        ${flappingAvailable ? `<section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
+          <div class="fields">
+            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
+            ${rule.flapping_enabled ? `${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}` : ""}
+          </div>
+        </section>` : ""}`;
 }
 
 function renderRuleYamlEditor({ yamlError, t }) {
@@ -2825,6 +2862,8 @@ function hydrateRuleEditor(root, context) {
     context.draft.message ?? "",
     context.onMessageChanged,
   );
+  const flappingToggle = root?.querySelector?.("#rule-flapping-enabled");
+  if (flappingToggle) flappingToggle.onchange = context.onFlappingChanged;
 }
 
 function hydrateRuleEditorControls() {
@@ -2914,6 +2953,12 @@ function hydrateRuleEditorControls() {
     onMessageChanged: (value) => {
       this._editingRule.message = String(value ?? "");
       this._ruleDirty = true;
+    },
+    onFlappingChanged: (event) => {
+      this._captureRuleDraft();
+      this._editingRule.flapping_enabled = Boolean(event.target.checked);
+      this._ruleDirty = true;
+      this._refreshRuleEditor();
     },
   });
 }
@@ -4073,11 +4118,11 @@ function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="fields">
             ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
-            ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
+            ${(pack.config_fields ?? []).filter((field) => ["number", "pack_settings_map"].includes(field.type)).map((field) => renderPackField(
               pack,
               field,
               packConfig,
-              { draft, renderNumberField, t },
+              { availablePacks, draft, renderNumberField, t },
             )).join("")}
           </div>
           ${configurableFields.length ? `<div class="configuration-entry automatic-configuration-entry"><ha-button id="auto-${pack.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("automatic.configure_aria", { name: packName }))}">${esc(t("buttons.configuration", { count: packConfigurationCount(pack, packConfig, draft) }))}</ha-button></div>` : ""}
@@ -4130,7 +4175,7 @@ function renderAutomaticConfigurationDrawer(context) {
       pack,
       field,
       packConfig,
-      { draft, renderNumberField, t },
+      { availablePacks, draft, renderNumberField, t },
     )).join("")}</div>`;
   return renderConfigurationDrawer({
     title: packName,
@@ -4144,7 +4189,7 @@ function renderAutomaticConfigurationDrawer(context) {
 }
 
 function renderPackField(pack, field, config, context) {
-    const { draft, renderNumberField, t } = context;
+    const { availablePacks = [], draft, renderNumberField, t } = context;
     const label = t(`automatic.fields.${field.translation_key}.label`);
     if (field.type === "number") {
       return renderNumberField(
@@ -4156,6 +4201,21 @@ function renderPackField(pack, field, config, context) {
         field.maximum ?? 1000000000,
         { step: field.step ?? "any" },
       );
+    }
+    if (field.type === "pack_settings_map") {
+      const configured = draft[pack.id]?.[field.id] ?? {};
+      return `<div class="field full pack-source-field">
+        <div class="configuration-section-heading pack-map-heading"><div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div></div>
+        <div class="pack-source-list">${availablePacks.filter((sourcePack) => sourcePack.id !== pack.id).map((sourcePack) => {
+          const enabled = Object.hasOwn(configured, sourcePack.id);
+          const settings = configured[sourcePack.id] ?? {};
+          const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
+          return `<div class="pack-source-row">
+            <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
+            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(settings[setting.id])}" data-pack-source-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" data-setting-id="${esc(setting.id)}" label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`).join("")}</div>
+          </div>`;
+        }).join("")}</div>
+      </div>`;
     }
     if (field.type === "device_settings_map") {
       const rows = draft[pack.id]?.[field.id] ?? [];
@@ -4233,6 +4293,26 @@ async function saveAutomatic() {
           automatic[pack.id][field.id] = values;
           continue;
         }
+        if (field.type === "pack_settings_map") {
+          const configured = this._automaticMapDraft[pack.id]?.[field.id] ?? {};
+          const values = {};
+          for (const [sourcePackId, settings] of Object.entries(configured)) {
+            if ((field.fields ?? []).some(
+              (setting) => settings[setting.id] !== null
+                && !Number.isFinite(settings[setting.id]),
+            )) {
+              this._notice = {
+                kind: "error",
+                text: this._t(`automatic.fields.${field.translation_key}.validation`),
+              };
+              this._refreshUiState();
+              return;
+            }
+            values[sourcePackId] = { ...settings };
+          }
+          automatic[pack.id][field.id] = values;
+          continue;
+        }
         if (!isNumberMapField(field)) continue;
         const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
         const values = {};
@@ -4291,7 +4371,11 @@ function ensureAutomaticDraft() {
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
-        fields[field.id] = field.type === "device_settings_map"
+        fields[field.id] = field.type === "pack_settings_map"
+          ? Object.fromEntries(Object.entries(configured ?? {}).map(
+            ([sourcePackId, settings]) => [sourcePackId, { ...settings }],
+          ))
+          : field.type === "device_settings_map"
           ? Object.entries(configured ?? {}).map(
             ([target_id, settings]) => ({ target_id, ...settings }),
           )
@@ -4318,6 +4402,14 @@ function captureAutomaticMapValues() {
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
       if (row) row[input.dataset.settingId] = Number(input.value);
+    });
+    this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
+      const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
+        input.dataset.packField
+      ]?.[input.dataset.sourcePackId];
+      if (settings) {
+        settings[input.dataset.settingId] = input.value === "" ? null : Number(input.value);
+      }
     });
 }
 
@@ -4385,6 +4477,29 @@ function hydrateAutomaticControls() {
       });
     }
   }
+  this.shadowRoot.querySelectorAll("[data-pack-source-toggle]").forEach((toggle) => {
+    toggle.onchange = () => {
+      captureAutomaticMapValues.call(this);
+      const sources = this._automaticMapDraft[toggle.dataset.packSourceToggle]?.[
+        toggle.dataset.packField
+      ];
+      const field = this._packs.find(
+        (pack) => pack.id === toggle.dataset.packSourceToggle,
+      )?.config_fields?.find((item) => item.id === toggle.dataset.packField);
+      if (!sources || !field) return;
+      if (toggle.checked) {
+        sources[toggle.dataset.sourcePackId] ??= Object.fromEntries(
+          (field.fields ?? []).map((setting) => [setting.id, null]),
+        );
+      } else {
+        delete sources[toggle.dataset.sourcePackId];
+      }
+      const values = toggle.closest?.(".pack-source-row")?.querySelector?.(
+        "[data-pack-source-values]",
+      );
+      if (values) values.hidden = !toggle.checked;
+    };
+  });
 }
 
 async function handleAutomaticAction(action, button) {
@@ -5586,6 +5701,19 @@ const settingsStyles = `
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 10px;
+  }
+  .pack-source-list {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .pack-source-row {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: 12px;
   }
 `;
 

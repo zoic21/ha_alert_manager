@@ -96,6 +96,8 @@ class PackGeneratedAlert:
 
 
 PackOccurrenceBatchHandler = Callable[
+    # The complete validated configuration lets an occurrence consumer select
+    # and configure source packs or rules without runtime-specific coupling.
     [HomeAssistant, tuple[PackOccurrence, ...], dict[str, Any], dict[str, Any]],
     tuple[PackGeneratedAlert, ...],
 ]
@@ -107,7 +109,8 @@ class AutomaticPack:
 
     ``occurrence_batch_handler`` opts a pack into one callback after a live
     evaluation batch. It receives only anomalies whose source record was newly
-    created in that batch; startup and configuration reevaluations are excluded.
+    created in that batch, plus the complete validated configuration; startup
+    and configuration reevaluations are excluded.
     """
 
     id: str

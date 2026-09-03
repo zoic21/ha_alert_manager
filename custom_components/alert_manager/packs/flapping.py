@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from math import isfinite
 from typing import Any
@@ -9,6 +10,11 @@ from typing import Any
 from homeassistant.core import HomeAssistant, State
 from homeassistant.util.hass_dict import HassKey
 
+from ..const import (
+    DEFAULT_FLAPPING_OCCURRENCES,
+    DEFAULT_FLAPPING_RECOVERY,
+    DEFAULT_FLAPPING_WINDOW,
+)
 from .base import (
     AutomaticPack,
     PackConfigField,
@@ -17,9 +23,6 @@ from .base import (
 )
 
 PACK_ID = "flapping"
-DEFAULT_OCCURRENCES = 5
-DEFAULT_WINDOW = 3600
-DEFAULT_RECOVERY = 1800
 MAX_SOURCES = 4096
 MAX_OCCURRENCES = 1000
 MAX_DURATION = 31_536_000
@@ -43,13 +46,41 @@ def _reset(hass: HomeAssistant) -> None:
     hass.data.pop(_LAST_CLEANUP, None)
 
 
+def _source_overrides(
+    occurrence: PackOccurrence,
+    config: dict[str, Any],
+    rules_by_id: dict[str, dict[str, Any]],
+) -> dict[str, int | None] | None:
+    """Return enabled source overrides, or None when this source is not watched."""
+    if occurrence.source.rule_id is not None:
+        rule = rules_by_id.get(occurrence.source.rule_id)
+        if rule is None or not rule.get("flapping_enabled", False):
+            return None
+        return {
+            "occurrences": rule.get("flapping_occurrences"),
+            "window": rule.get("flapping_window"),
+            "recovery": rule.get("flapping_recovery"),
+        }
+    return config["automatic"][PACK_ID]["source_packs"].get(occurrence.source.type)
+
+
 def _settings(
-    occurrence: PackOccurrence, config: dict[str, Any]
-) -> tuple[int, int, int]:
-    """Resolve global settings with an optional device-specific override."""
+    occurrence: PackOccurrence,
+    config: dict[str, Any],
+    rules_by_id: dict[str, dict[str, Any]],
+) -> tuple[int, int, int] | None:
+    """Resolve source, device and global settings in descending priority."""
+    source_settings = _source_overrides(occurrence, config, rules_by_id)
+    if source_settings is None:
+        return None
+    pack_config = config["automatic"][PACK_ID]
     device_id = occurrence.source.device_id
-    settings = config["device_overrides"].get(device_id, config)
-    return settings["occurrences"], settings["window"], settings["recovery"]
+    defaults = pack_config["device_overrides"].get(device_id, pack_config)
+    return (
+        source_settings.get("occurrences") or defaults["occurrences"],
+        source_settings.get("window") or defaults["window"],
+        source_settings.get("recovery") or defaults["recovery"],
+    )
 
 
 def _timestamps(raw: Any) -> list[float]:
@@ -75,11 +106,21 @@ def _compact_duration(seconds: int) -> str:
 
 
 def _largest_limits(config: dict[str, Any]) -> tuple[int, int]:
-    """Return conservative retention limits across global and device settings."""
-    settings = (config, *config["device_overrides"].values())
+    """Return conservative retention limits across all possible overrides."""
+    pack_config = config["automatic"][PACK_ID]
+    settings = [pack_config, *pack_config["device_overrides"].values()]
+    settings.extend(pack_config["source_packs"].values())
+    settings.extend(
+        {
+            "occurrences": rule.get("flapping_occurrences"),
+            "window": rule.get("flapping_window"),
+        }
+        for rule in config["rules"]
+        if rule.get("flapping_enabled", False)
+    )
     return (
-        max(item["occurrences"] for item in settings),
-        max(item["window"] for item in settings),
+        max(item.get("occurrences") or pack_config["occurrences"] for item in settings),
+        max(item.get("window") or pack_config["window"] for item in settings),
     )
 
 
@@ -144,11 +185,20 @@ def _process_occurrences(
         max(occurrence.occurred_at for occurrence in relevant).astimezone(UTC),
     )
     generated_alerts: list[PackGeneratedAlert] = []
+    rules_by_id = (
+        {rule["id"]: rule for rule in config["rules"]}
+        if any(occurrence.source.rule_id is not None for occurrence in relevant)
+        else {}
+    )
     for occurrence in relevant:
         now = occurrence.occurred_at.astimezone(UTC)
         now_timestamp = now.timestamp()
         source_id = occurrence.source.id
-        threshold, window, recovery = _settings(occurrence, config)
+        settings = _settings(occurrence, config, rules_by_id)
+        if settings is None:
+            data.pop(source_id, None)
+            continue
+        threshold, window, recovery = settings
         cutoff = now_timestamp - window
         timestamps = [
             item for item in _timestamps(data.get(source_id)) if item >= cutoff
@@ -206,12 +256,18 @@ def _number_field(
 _OCCURRENCES_FIELD = _number_field(
     "occurrences",
     "flapping_occurrences",
-    DEFAULT_OCCURRENCES,
+    DEFAULT_FLAPPING_OCCURRENCES,
     minimum=2,
     maximum=MAX_OCCURRENCES,
 )
-_WINDOW_FIELD = _number_field("window", "flapping_window", DEFAULT_WINDOW)
-_RECOVERY_FIELD = _number_field("recovery", "flapping_recovery", DEFAULT_RECOVERY)
+_WINDOW_FIELD = _number_field("window", "flapping_window", DEFAULT_FLAPPING_WINDOW)
+_RECOVERY_FIELD = _number_field(
+    "recovery", "flapping_recovery", DEFAULT_FLAPPING_RECOVERY
+)
+_SOURCE_FIELDS = tuple(
+    replace(field, default=None)
+    for field in (_OCCURRENCES_FIELD, _WINDOW_FIELD, _RECOVERY_FIELD)
+)
 
 PACK = AutomaticPack(
     id=PACK_ID,
@@ -226,6 +282,16 @@ PACK = AutomaticPack(
         _OCCURRENCES_FIELD,
         _WINDOW_FIELD,
         _RECOVERY_FIELD,
+        PackConfigField(
+            id="source_packs",
+            type="pack_settings_map",
+            translation_key="flapping_source_packs",
+            default={
+                "unavailable": dict.fromkeys(("occurrences", "window", "recovery")),
+                "connectivity": dict.fromkeys(("occurrences", "window", "recovery")),
+            },
+            fields=_SOURCE_FIELDS,
+        ),
         PackConfigField(
             id="device_overrides",
             type="device_settings_map",

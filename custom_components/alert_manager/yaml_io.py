@@ -32,6 +32,10 @@ _RULE_YAML_KEYS = {
     "message",
     "update_message_when_active",
     "condition_template",
+    "flapping_enabled",
+    "flapping_occurrences",
+    "flapping_window",
+    "flapping_recovery",
 }
 _CONFIG_YAML_KEY_ORDER = (
     "monitoring_enabled",
@@ -132,6 +136,10 @@ def rule_to_yaml_data(
             "message": data.get("message"),
             "update_message_when_active": data.get("update_message_when_active", False),
             "condition_template": data.get("condition_template"),
+            "flapping_enabled": data.get("flapping_enabled", False),
+            "flapping_occurrences": data.get("flapping_occurrences"),
+            "flapping_window": data.get("flapping_window"),
+            "flapping_recovery": data.get("flapping_recovery"),
         }
     )
     if include_id:
@@ -242,10 +250,11 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         actual_fields = (
             set(automatic[category]) if isinstance(automatic[category], dict) else set()
         )
-        if actual_fields != expected_fields:
-            missing = expected_fields - actual_fields
+        allowed_missing_fields = {"source_packs"} if category == "flapping" else set()
+        missing = expected_fields - actual_fields
+        if actual_fields - expected_fields or missing - allowed_missing_fields:
             unknown = actual_fields - expected_fields
-            field = sorted(missing or unknown)[0]
+            field = sorted(missing - allowed_missing_fields or unknown)[0]
             raise ValueError(f"Invalid automatic.{category} field: {field}")
 
     rules = document.get("rules")

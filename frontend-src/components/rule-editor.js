@@ -44,6 +44,12 @@ function formField(form, name) {
 
 export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
     const value = (name) => formField(form, name)?.value;
+    const optionalNumber = (name) => {
+      const raw = value(name);
+      return raw === undefined
+        ? currentRule[name] ?? null
+        : raw === "" ? null : Number(raw);
+    };
     const source = value("source") ?? currentRule.source ?? "state";
     const comparisonFree = ["jinja", "unchanged"].includes(source);
     const selectedOperator = value("operator") ?? currentRule.operator ?? "equals";
@@ -86,6 +92,14 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
       condition_template: String(
         currentRule.condition_template ?? selectorValues.conditionTemplate ?? "",
       ),
+      flapping_enabled: Boolean(
+        form.querySelector?.("#rule-flapping-enabled")?.checked
+          ?? currentRule.flapping_enabled
+          ?? false
+      ),
+      flapping_occurrences: optionalNumber("flapping_occurrences"),
+      flapping_window: optionalNumber("flapping_window"),
+      flapping_recovery: optionalNumber("flapping_recovery"),
     };
 }
 
@@ -114,6 +128,10 @@ export function serializeRuleDraft(draft) {
       message: String(draft.message ?? "").trim() || null,
       update_message_when_active: Boolean(draft.update_message_when_active),
       condition_template: String(draft.condition_template ?? "").trim() || null,
+      flapping_enabled: Boolean(draft.flapping_enabled),
+      flapping_occurrences: draft.flapping_occurrences ?? null,
+      flapping_window: draft.flapping_window ?? null,
+      flapping_recovery: draft.flapping_recovery ?? null,
     };
 }
 
@@ -188,11 +206,14 @@ export function renderRuleEditor(context) {
       useBottomSheet = false,
       renderTextField,
       renderNumberField,
+      flappingAvailable = false,
     } = context;
     const yamlMode = mode === "yaml";
     const editorContent = yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
-      : renderRuleVisualEditor({ rule, t, renderTextField, renderNumberField });
+      : renderRuleVisualEditor({
+        rule, t, renderTextField, renderNumberField, flappingAvailable,
+      });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
       <ha-dialog-header show-border>
@@ -226,11 +247,12 @@ export function renderRuleEditorPanel() {
       useBottomSheet: this._useNativeBottomSheet(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
+      flappingAvailable: Boolean(this._config?.automatic?.flapping?.enabled),
     });
 }
 
 export function renderRuleVisualEditor(context) {
-    const { rule, t, renderTextField, renderNumberField } = context;
+    const { rule, t, renderTextField, renderNumberField, flappingAvailable = false } = context;
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
@@ -259,7 +281,14 @@ export function renderRuleVisualEditor(context) {
             <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
-        </section>`;
+        </section>
+        ${flappingAvailable ? `<section class="rule-editor-section">
+          <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
+          <div class="fields">
+            <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
+            ${rule.flapping_enabled ? `${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}` : ""}
+          </div>
+        </section>` : ""}`;
 }
 
 export function renderRuleYamlEditor({ yamlError, t }) {
@@ -553,6 +582,8 @@ export function hydrateRuleEditor(root, context) {
     context.draft.message ?? "",
     context.onMessageChanged,
   );
+  const flappingToggle = root?.querySelector?.("#rule-flapping-enabled");
+  if (flappingToggle) flappingToggle.onchange = context.onFlappingChanged;
 }
 
 export function hydrateRuleEditorControls() {
@@ -642,6 +673,12 @@ export function hydrateRuleEditorControls() {
     onMessageChanged: (value) => {
       this._editingRule.message = String(value ?? "");
       this._ruleDirty = true;
+    },
+    onFlappingChanged: (event) => {
+      this._captureRuleDraft();
+      this._editingRule.flapping_enabled = Boolean(event.target.checked);
+      this._ruleDirty = true;
+      this._refreshRuleEditor();
     },
   });
 }

@@ -64,6 +64,10 @@ _RULE_CLIENT_KEYS = {
     "message",
     "update_message_when_active",
     "condition_template",
+    "flapping_enabled",
+    "flapping_occurrences",
+    "flapping_window",
+    "flapping_recovery",
 }
 _REQUIRED_RULE_KEYS = {"name", "entity_ids", "duration"}
 
@@ -288,6 +292,33 @@ def _normalize_pack_field(
                 if setting_id in raw_settings
             }
         return normalized_settings
+    if field.type == "pack_settings_map":
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be an object")
+        allowed_settings = {item.id: item for item in field.fields}
+        allowed_packs = set(PACKS_BY_ID) - {pack_id}
+        normalized_packs: dict[str, dict[str, float | int | None]] = {}
+        for source_pack_id, raw_settings in value.items():
+            if source_pack_id not in allowed_packs:
+                raise ValueError(f"{path} contains an invalid source pack")
+            if not isinstance(raw_settings, dict):
+                raise ValueError(f"{path}.{source_pack_id} must be an object")
+            unknown = _unknown_keys(raw_settings, set(allowed_settings))
+            if unknown:
+                raise ValueError(
+                    f"Unknown {path}.{source_pack_id} field: {sorted(unknown)[0]}"
+                )
+            normalized_packs[source_pack_id] = {
+                setting_id: None
+                if raw_settings.get(setting_id) is None
+                else _normalize_pack_field(
+                    pack_id,
+                    setting,
+                    raw_settings[setting_id],
+                )
+                for setting_id, setting in allowed_settings.items()
+            }
+        return normalized_packs
     raise ValueError(f"Unsupported pack configuration field type: {field.type}")
 
 

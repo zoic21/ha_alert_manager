@@ -453,6 +453,10 @@ test("new rules start enabled with safe defaults", () => {
     message: "",
     update_message_when_active: false,
     condition_template: "",
+    flapping_enabled: false,
+    flapping_occurrences: null,
+    flapping_window: null,
+    flapping_recovery: null,
   });
 });
 
@@ -1083,6 +1087,10 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
         message: "État :\n{{ states('todo.liste_d_achats') }}",
         update_message_when_active: false,
         condition_template: "{{ true }}",
+        flapping_enabled: false,
+        flapping_occurrences: null,
+        flapping_window: null,
+        flapping_recovery: null,
       },
     },
   ]);
@@ -2604,6 +2612,7 @@ test("flapping saves global and per-device values without a pack delay", async (
     { id: "window", type: "number", default: 3600 },
     { id: "recovery", type: "number", default: 1800 },
   ];
+  const sourceFields = fields.map((field) => ({ ...field, default: undefined }));
   panel._config = {
     automatic: {
       flapping: {
@@ -2611,6 +2620,10 @@ test("flapping saves global and per-device values without a pack delay", async (
         occurrences: 5,
         window: 3600,
         recovery: 1800,
+        source_packs: {
+          unavailable: { occurrences: null, window: null, recovery: null },
+          connectivity: { occurrences: null, window: null, recovery: null },
+        },
         device_overrides: {},
       },
     },
@@ -2621,6 +2634,11 @@ test("flapping saves global and per-device values without a pack delay", async (
     uses_delay: false,
     config_fields: [
       ...fields,
+      {
+        id: "source_packs",
+        type: "pack_settings_map",
+        fields: sourceFields,
+      },
       { id: "device_overrides", type: "device_settings_map", fields },
     ],
   }];
@@ -2629,6 +2647,10 @@ test("flapping saves global and per-device values without a pack delay", async (
       occurrences: 4,
       window: 900,
       recovery: 300,
+      source_packs: {
+        unavailable: { occurrences: null, window: 120, recovery: null },
+        battery: { occurrences: 3, window: 600, recovery: 90 },
+      },
       device_overrides: [{
         target_id: "a".repeat(32), occurrences: 2, window: 60, recovery: 30,
       }],
@@ -2653,11 +2675,61 @@ test("flapping saves global and per-device values without a pack delay", async (
     occurrences: 4,
     window: 900,
     recovery: 300,
+    source_packs: {
+      unavailable: { occurrences: null, window: 120, recovery: null },
+      battery: { occurrences: 3, window: 600, recovery: 90 },
+    },
     device_overrides: {
       ["a".repeat(32)]: { occurrences: 2, window: 60, recovery: 30 },
     },
   });
   assert.equal(Object.hasOwn(call.config.automatic.flapping, "delay"), false);
+});
+
+test("custom rule flapping options appear only with the pack and serialize overrides", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._editingRule = { ...newRuleDefaults(), entity_ids: ["sensor.test"] };
+  assert.doesNotMatch(panel._renderRuleEditor(), /rule-flapping-enabled/);
+
+  panel._config.automatic.flapping = { enabled: true };
+  panel._editingRule = {
+    ...panel._editingRule,
+    flapping_enabled: true,
+    flapping_occurrences: null,
+    flapping_window: null,
+    flapping_recovery: null,
+  };
+  const editor = panel._renderRuleEditor();
+  assert.match(editor, /rule-flapping-enabled[^>]*checked/);
+  assert.match(editor, /data-field="flapping_occurrences"/);
+  assert.match(editor, /data-field="flapping_window"/);
+  assert.match(editor, /data-field="flapping_recovery"/);
+
+  const ruleForm = form(ruleValues({
+    flapping_occurrences: "4",
+    flapping_window: "7200",
+    flapping_recovery: "1800",
+  }));
+  const calls = [];
+  panel._hass = {
+    callWS: async (message) => {
+      calls.push(message);
+      return { ...message.rule, id: "flapping-rule", version: 2 };
+    },
+  };
+  panel._render = () => {};
+  await panel._saveRule(ruleForm);
+  assert.deepEqual(
+    {
+      enabled: calls[0].rule.flapping_enabled,
+      occurrences: calls[0].rule.flapping_occurrences,
+      window: calls[0].rule.flapping_window,
+      recovery: calls[0].rule.flapping_recovery,
+    },
+    { enabled: true, occurrences: 4, window: 7200, recovery: 1800 },
+  );
 });
 
 test("automatic packs are rendered only from available backend metadata", () => {

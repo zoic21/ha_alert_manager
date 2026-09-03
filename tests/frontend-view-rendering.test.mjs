@@ -315,6 +315,12 @@ test("flapping renders without a delay and reuses the device configuration drawe
     config_fields: [
       ...numberFields,
       {
+        id: "source_packs",
+        type: "pack_settings_map",
+        translation_key: "flapping_source_packs",
+        fields: numberFields.map((field) => ({ ...field, default: undefined })),
+      },
+      {
         id: "device_overrides",
         type: "device_settings_map",
         translation_key: "flapping_device_overrides",
@@ -324,11 +330,18 @@ test("flapping renders without a delay and reuses the device configuration drawe
   };
   const config = {
     automatic: {
+      unavailable: { enabled: true, delay: null },
+      connectivity: { enabled: true, delay: null },
+      battery: { enabled: true, delay: null },
       flapping: {
         enabled: true,
         occurrences: 5,
         window: 3600,
         recovery: 1800,
+        source_packs: {
+          unavailable: { occurrences: null, window: null, recovery: null },
+          connectivity: { occurrences: null, window: null, recovery: null },
+        },
         device_overrides: {
           "device-1": { occurrences: 3, window: 600, recovery: 120 },
         },
@@ -340,13 +353,22 @@ test("flapping renders without a delay and reuses the device configuration drawe
       occurrences: 5,
       window: 3600,
       recovery: 1800,
+      source_packs: {
+        unavailable: { occurrences: null, window: null, recovery: null },
+        connectivity: { occurrences: null, window: null, recovery: null },
+      },
       device_overrides: [{
         target_id: "device-1", occurrences: 3, window: 600, recovery: 120,
       }],
     },
   };
   const markup = renderAutomatic({
-    availablePacks: [pack],
+    availablePacks: [
+      pack,
+      { id: "unavailable", available: true, translation_key: "unavailable" },
+      { id: "connectivity", available: true, translation_key: "connectivity" },
+      { id: "battery", available: true, translation_key: "battery" },
+    ],
     config,
     draft,
     configurationDrawer: { kind: "automatic", id: "flapping" },
@@ -368,6 +390,10 @@ test("flapping renders without a delay and reuses the device configuration drawe
   assert.match(markup, /data-setting-id="occurrences"/);
   assert.match(markup, /data-setting-id="window"/);
   assert.match(markup, /data-setting-id="recovery"/);
+  assert.match(markup, /data-source-pack-id="unavailable"[^>]*checked/);
+  assert.match(markup, /data-source-pack-id="connectivity"[^>]*checked/);
+  assert.match(markup, /data-source-pack-id="battery"/);
+  assert.match(markup, /data-pack-source-values="battery" hidden/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {
