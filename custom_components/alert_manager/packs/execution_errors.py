@@ -11,10 +11,18 @@ from homeassistant.components.trace.const import DATA_TRACE
 from homeassistant.core import HomeAssistant, State
 from homeassistant.util.hass_dict import HassKey
 
-from .base import AutomaticPack, PackConfigField, PackMatch, PackNeutral
+from .base import (
+    AutomaticPack,
+    PackConfigField,
+    PackMatch,
+    PackNeutral,
+    PackRecheck,
+)
 
 PACK_ID = "execution_errors"
 _SUPPORTED_DOMAINS = ("automation", "script")
+_TRACE_RECHECK_DELAY = 0.1
+_TRACE_RECHECK_LIMIT = 5
 
 _DATA_CYCLES: HassKey[dict[str, _ExecutionTracker]] = HassKey(
     "alert_manager_execution_error_cycles"
@@ -30,6 +38,7 @@ class _ExecutionCycle:
     traces: dict[str, _ExecutionTrace] = field(default_factory=dict)
     failed: bool = False
     error: str | None = None
+    rechecks: int = 0
 
 
 @dataclass(slots=True)
@@ -165,7 +174,7 @@ def _failure_threshold(config: dict[str, Any], entity_id: str) -> int:
 
 def _evaluate(
     hass: HomeAssistant, state: State, config: dict[str, Any]
-) -> PackMatch | PackNeutral | None:
+) -> PackMatch | PackNeutral | PackRecheck | None:
     """Return the completed cycle result while preserving alerts mid-cycle."""
     if not _applies(hass, state):
         return None
@@ -185,9 +194,13 @@ def _evaluate(
     if tracker.active is not None:
         _capture_running_traces(hass, state.entity_id, tracker.active)
         _process_completed_traces(tracker.active)
-        if current == 0 and _cycle_is_complete(tracker.active):
-            tracker.completed.append(tracker.active)
-            tracker.active = None
+        if current == 0:
+            if _cycle_is_complete(tracker.active):
+                tracker.completed.append(tracker.active)
+                tracker.active = None
+            elif tracker.active.rechecks < _TRACE_RECHECK_LIMIT:
+                tracker.active.rechecks += 1
+                return PackRecheck(_TRACE_RECHECK_DELAY)
 
     result: _ExecutionCycle | None = None
     while tracker.completed:

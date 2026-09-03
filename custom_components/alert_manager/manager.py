@@ -65,6 +65,7 @@ class AlertManager(
         self._unsubscribers: list[Callable[[], None]] = []
         self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
+        self._pack_recheck_timers: dict[tuple[str, str], Callable[[], None]] = {}
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
@@ -220,6 +221,7 @@ class AlertManager(
     async def async_unload(self) -> None:
         """Remove listeners and timers, persisting a final snapshot."""
         self._cancel_template_dependency_timers()
+        self._cancel_all_pack_rechecks()
         self._unloading = True
         self._cancel_config_backup_schedule()
         if self._coherence_schedule_unsubscribe is not None:

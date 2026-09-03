@@ -6,7 +6,7 @@ from collections.abc import Collection
 
 from homeassistant.core import HomeAssistant
 
-from .base import AutomaticPack, PackConfigField, PackNeutral
+from .base import AutomaticPack, PackConfigField, PackNeutral, PackRecheck
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
 from .execution_errors import PACK as EXECUTION_ERRORS_PACK
@@ -38,5 +38,6 @@ __all__ = [
     "AutomaticPack",
     "PackConfigField",
     "PackNeutral",
+    "PackRecheck",
     "reset_pack_runtimes",
 ]
