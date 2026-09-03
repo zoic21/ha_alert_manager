@@ -12,6 +12,7 @@ from .base import (
     PackGeneratedAlert,
     PackNeutral,
     PackOccurrence,
+    PackRecheck,
 )
 from .battery import PACK as BATTERY_PACK
 from .connectivity import PACK as CONNECTIVITY_PACK
@@ -52,5 +53,6 @@ __all__ = [
     "PackGeneratedAlert",
     "PackNeutral",
     "PackOccurrence",
+    "PackRecheck",
     "reset_pack_runtimes",
 ]

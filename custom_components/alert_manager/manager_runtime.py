@@ -16,6 +16,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import Event, State, callback
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
@@ -34,7 +35,14 @@ from .models import (
     calculate_due_at,
     safe_float,
 )
-from .packs import OCCURRENCE_PACKS, PACKS, PACKS_BY_ID, PackNeutral, PackOccurrence
+from .packs import (
+    OCCURRENCE_PACKS,
+    PACKS,
+    PACKS_BY_ID,
+    PackNeutral,
+    PackOccurrence,
+    PackRecheck,
+)
 from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 
 _LOGGER = logging.getLogger(__name__)
@@ -944,11 +952,16 @@ class _RuntimeMixin:
         config = self.config["automatic"][pack_id]
         pack = PACKS_BY_ID[pack_id]
         if not config["enabled"] or not self._pack_is_available(pack_id):
+            self._cancel_pack_recheck(pack_id, state.entity_id)
             return
 
         evaluation = pack.evaluate(self.hass, state, config)
         alert_id = f"{pack_id}:{state.entity_id}"
-        if isinstance(evaluation, PackNeutral):
+        if isinstance(evaluation, PackRecheck):
+            self._schedule_pack_recheck(pack_id, state.entity_id, evaluation.delay)
+        elif not isinstance(evaluation, PackNeutral):
+            self._cancel_pack_recheck(pack_id, state.entity_id)
+        if isinstance(evaluation, PackNeutral | PackRecheck):
             record = self.records.get(alert_id)
             if record is not None:
                 result[alert_id] = (record.details, record.delay)
@@ -972,6 +985,36 @@ class _RuntimeMixin:
             ),
             self._delay_for(state, pack_id),
         )
+
+    def _schedule_pack_recheck(
+        self, pack_id: str, entity_id: str, delay: float
+    ) -> None:
+        """Schedule one deduplicated pack-requested entity evaluation."""
+        key = (pack_id, entity_id)
+        if key in self._pack_recheck_timers:
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._pack_recheck_timers.pop(key, None)
+            self._queue_entity_evaluations((entity_id,))
+
+        self._pack_recheck_timers[key] = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            dt_util.now() + timedelta(seconds=delay),
+        )
+
+    def _cancel_pack_recheck(self, pack_id: str, entity_id: str) -> None:
+        """Cancel one obsolete pack-requested evaluation."""
+        if cancel := self._pack_recheck_timers.pop((pack_id, entity_id), None):
+            cancel()
+
+    def _cancel_all_pack_rechecks(self) -> None:
+        """Cancel every delayed pack-requested evaluation."""
+        for cancel in self._pack_recheck_timers.values():
+            cancel()
+        self._pack_recheck_timers.clear()
 
     async def _async_load_condition_translations(self) -> None:
         """Cache configured-language pack messages with an English fallback."""

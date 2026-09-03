@@ -232,6 +232,55 @@ def test_error_then_success_resolves_only_after_complete_cycle(
     asyncio.run(scenario())
 
 
+def test_late_success_trace_is_rechecked_and_resolves_alert(hass, entry, scenario_cls):
+    """A trace finalized after the first evaluation resolves without another run."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        failed = runtime.start("failed")
+        runtime.finish(failed, "First failure")
+        await runtime.flush()
+        alert_id = f"execution_errors:{runtime.entity_id}"
+        assert alert_id in runtime.manager.records
+
+        success = runtime.start("late-success")
+        await runtime.flush()
+        runtime._state_change(0)
+        await runtime.flush()
+
+        key = ("execution_errors", runtime.entity_id)
+        assert alert_id in runtime.manager.records
+        assert key in runtime.manager._pack_recheck_timers
+        recheck_timer = hass.timers[-1]
+
+        success.finish()
+        recheck_timer["action"](recheck_timer["point"])
+        await runtime.flush()
+
+        assert key not in runtime.manager._pack_recheck_timers
+        assert alert_id not in runtime.manager.records
+
+    asyncio.run(scenario())
+
+
+def test_late_trace_rechecks_are_deduplicated(hass, entry, scenario_cls):
+    """Repeated neutral evaluations keep a single delayed recheck."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        run = runtime.start("late")
+        runtime._state_change(0)
+        await runtime.flush()
+        timer_count = len(hass.timers)
+
+        await runtime.manager.async_evaluate_entity(runtime.entity_id)
+
+        assert len(hass.timers) == timer_count
+        run.finish()
+
+    asyncio.run(scenario())
+
+
 def test_error_then_error_keeps_and_updates_alert(hass, entry, scenario_cls):
     """A later failed cycle retains the stable occurrence with its new message."""
 

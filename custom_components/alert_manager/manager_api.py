@@ -420,6 +420,7 @@ class _ApiMixin:
             self._emit_resume_events(previous_records)
         else:
             reset_pack_runtimes(self.hass)
+            self._cancel_all_pack_rechecks()
             self._cancel_all_timers()
             self._cancel_all_device_event_timers()
         self._refresh_tracking()

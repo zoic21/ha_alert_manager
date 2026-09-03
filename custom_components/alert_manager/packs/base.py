@@ -28,6 +28,13 @@ class PackNeutral:
 
 
 @dataclass(frozen=True, slots=True)
+class PackRecheck:
+    """Preserve the occurrence and request one delayed evaluation."""
+
+    delay: float = 0.1
+
+
+@dataclass(frozen=True, slots=True)
 class PackConfigField:
     """Describe one pack-owned configuration field for validation and the UI."""
 
@@ -70,7 +77,7 @@ PackShouldEvaluate = Callable[
     [HomeAssistant, State | None, State, dict[str, Any]], bool
 ]
 PackResetHandler = Callable[[HomeAssistant], None]
-PackEvaluation = PackMatch | PackNeutral | None
+PackEvaluation = PackMatch | PackNeutral | PackRecheck | None
 
 
 @dataclass(frozen=True, slots=True)
