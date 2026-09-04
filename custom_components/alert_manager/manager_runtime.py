@@ -73,7 +73,6 @@ class _RuntimeMixin:
         def timer_due(_now: datetime) -> None:
             self._startup_reconciliation_timer = None
             self._startup_restoring = False
-            self._startup_available_entity_ids.clear()
             entity_ids = tuple(self._startup_reconciliation_entity_ids)
             self._startup_restored_alert_ids.clear()
             self._startup_reconciliation_entity_ids.clear()
@@ -95,16 +94,14 @@ class _RuntimeMixin:
         self._startup_restoring = False
         self._startup_restored_alert_ids.clear()
         self._startup_reconciliation_entity_ids.clear()
-        self._startup_available_entity_ids.clear()
         self._startup_deferred_unavailable_since.clear()
 
     def _observe_startup_availability(self, entity_id: str, state: State) -> None:
-        """Remember that an entity produced a usable post-start state."""
+        """Forget a deferred outage once startup produced a usable state."""
         if self._startup_restoring and state.state not in (
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
         ):
-            self._startup_available_entity_ids.add(entity_id)
             self._startup_deferred_unavailable_since.pop(entity_id, None)
 
     @callback
@@ -597,11 +594,7 @@ class _RuntimeMixin:
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
             if record is None:
-                if (
-                    details.type == CATEGORY_UNAVAILABLE
-                    and self._startup_restoring
-                    and entity_id not in self._startup_available_entity_ids
-                ):
+                if details.type == CATEGORY_UNAVAILABLE and self._startup_restoring:
                     self._startup_reconciliation_entity_ids.add(entity_id)
                     self._startup_deferred_unavailable_since.setdefault(entity_id, now)
                     continue

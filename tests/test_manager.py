@@ -762,8 +762,10 @@ def test_new_startup_occurrence_is_not_protected_as_restored(hass, entry):
     run(scenario())
 
 
-def test_available_entity_outage_is_not_deferred_during_startup(hass, entry):
-    """A real outage after the first usable state is not deferred."""
+def test_restored_usable_state_does_not_expose_startup_outage(hass, entry, set_now):
+    """A usable restored value cannot bypass startup outage quarantine."""
+    start = datetime(2026, 9, 4, 16, 33, 21, tzinfo=UTC)
+    set_now(start)
 
     async def scenario():
         hass.state = CoreState.starting
@@ -789,9 +791,33 @@ def test_available_entity_outage_is_not_deferred_during_startup(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        assert (
-            manager.records["unavailable:sensor.online"].status is AlertStatus.PENDING
+        alert_id = "unavailable:sensor.online"
+        assert alert_id not in manager.records
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        deferred = manager.records[alert_id]
+        assert deferred.status is AlertStatus.PENDING
+        assert deferred.detected_at == start
+        assert deferred.visible_at == deferred.due_at
+        snapshot, _device_groups = manager._build_public_snapshot()
+        assert snapshot["pending_count"] == 0
+
+        normal_state = hass.states.set("sensor.online", "ok")
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.online",
+                    "old_state": unavailable_state,
+                    "new_state": normal_state,
+                }
+            )
         )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in manager.records
 
     run(scenario())
 
