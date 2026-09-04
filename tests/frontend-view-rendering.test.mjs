@@ -546,8 +546,10 @@ test("backup restoration uses a native confirmation dialog", () => {
     t,
   });
 
-  assert.match(markup, /^<ha-dialog/);
-  assert.match(markup, /<ha-dialog-header>/);
+  assert.match(markup, /^<ha-dialog[^>]+type="alert"[^>]+width="small"/);
+  assert.match(markup, /header-title="recovery\.confirm_title"/);
+  assert.match(markup, /aria-describedby="config-backup-confirmation"/);
+  assert.doesNotMatch(markup, /<ha-dialog-header>/);
   assert.match(markup, /<ha-dialog-footer slot="footer">/);
   assert.match(markup, /slot="secondaryAction"[^>]+data-action="cancel-config-backup-restore"/);
   assert.match(markup, /slot="primaryAction"[^>]+data-action="confirm-config-backup-restore"/);

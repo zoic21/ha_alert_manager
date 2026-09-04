@@ -289,8 +289,6 @@ export const settingsStyles = `
     flex-wrap: wrap;
   }
   .config-backup-confirmation {
-    max-width: 520px;
-    padding: 8px 24px 20px;
     white-space: pre-line;
   }
 

@@ -19,9 +19,8 @@ export function renderConfigBackups(context) {
 export function renderBackupRestoreDialog(context) {
   const { backup, busy, date, t } = context;
   if (!backup) return "";
-  return `<ha-dialog id="config-backup-restore-dialog">
-    <ha-dialog-header>${esc(t("recovery.confirm_title"))}</ha-dialog-header>
-    <div class="config-backup-confirmation">${esc(t("recovery.confirm_message", {
+  return `<ha-dialog id="config-backup-restore-dialog" type="alert" width="small" header-title="${esc(t("recovery.confirm_title"))}" aria-describedby="config-backup-confirmation">
+    <div id="config-backup-confirmation" class="config-backup-confirmation">${esc(t("recovery.confirm_message", {
       date: date(backup.created_at),
       rules: backup.rules,
     }))}</div>
