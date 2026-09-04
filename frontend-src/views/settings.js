@@ -78,11 +78,11 @@ export function renderSettings(context) {
         ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
+        <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError,
@@ -92,11 +92,11 @@ export function renderSettings(context) {
 }
 
 export function renderSettingsNavigation(t) {
-  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button type="button" appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 export function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry settings-configuration-entry"><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
 }
 
 export function renderSettingsConfigurationDrawer(context) {
@@ -121,12 +121,12 @@ export function renderSettingsConfigurationDrawer(context) {
     title = t("settings.entity_delay");
     content = `<div class="configuration-section-heading">
         <small>${esc(t("settings.delay_help"))}</small>
-        <ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
+        <ha-button type="button" appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
         <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
-        <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
     title = t("settings.entity_exclusions");

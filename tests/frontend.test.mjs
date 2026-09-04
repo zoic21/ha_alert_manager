@@ -2272,7 +2272,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /class="settings-wide settings-configuration-actions">[\s\S]*settings-excluded_entities-configuration[\s\S]*settings-excluded_devices-configuration[\s\S]*<\/div>/);
   assert.match(settings, /id="settings-entity_delays-configuration"[^>]+data-action="open-settings-configuration"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
-  assert.match(settings, /class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings"/);
+  assert.match(settings, /class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings"/);
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
   assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));

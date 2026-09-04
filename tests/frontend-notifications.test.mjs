@@ -58,7 +58,7 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
 
   assert.match(markup, /id="notification-targets"/);
   assert.match(markup, /data-notification-exception="0"/);
-  assert.match(markup, /notification-policy-switches[\s\S]*notification-policy-reminder/);
+  assert.match(markup, /notification-policy-card[\s\S]*notification-policy-switches[\s\S]*notification-policy-reminder/);
   assert.match(markup, /data-action="save-notification-profile"/);
   assert.doesNotMatch(markup, /data-options=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
@@ -88,26 +88,24 @@ test("notification validation is rendered inside the open drawer", () => {
     t,
   });
 
+  const errorIndex = markup.indexOf('<div class="configuration-drawer-banner">');
+  const formIndex = markup.indexOf('<div class="side-drawer-form">');
+  assert.ok(errorIndex > 0);
+  assert.ok(errorIndex < formIndex);
   assert.match(markup, /<ha-alert class="notification-profile-error" alert-type="error">Select one entity<\/ha-alert>/);
+  assert.match(markup, /type="button"[^>]*data-action="save-notification-profile"/);
 });
 
-test("saving without an entity refreshes the drawer and reveals the error", async () => {
+test("saving without an entity refreshes the fixed drawer error", async () => {
   const draft = newNotificationProfileDraft();
   draft.name = "Owner";
   let refreshes = 0;
-  let scrollOptions;
   const panel = {
     _notificationProfileDraft: draft,
     _notificationProfileId: null,
     _t: t,
     _refreshSettingsConfigurationDrawer: () => { refreshes += 1; },
-    shadowRoot: {
-      querySelector: (selector) => (
-        selector === ".configuration-drawer .side-drawer-form"
-          ? { scrollTo: (options) => { scrollOptions = options; } }
-          : null
-      ),
-    },
+    shadowRoot: { querySelector: () => null },
   };
 
   await handleNotificationProfileAction.call(
@@ -118,7 +116,95 @@ test("saving without an entity refreshes the drawer and reveals the error", asyn
 
   assert.equal(panel._notificationProfileValidationError, "notifications.validation.targets");
   assert.equal(refreshes, 1);
-  assert.deepEqual(scrollOptions, { top: 0, behavior: "smooth" });
+});
+
+test("a valid notification profile is serialized once and closes the drawer", async () => {
+  const draft = newNotificationProfileDraft();
+  Object.assign(draft, {
+    name: "Owner",
+    enabled: true,
+    targets: ["notify.ha_failover"],
+  });
+  const requests = [];
+  let renders = 0;
+  const controls = {
+    "#notification-profile-name": { value: "Owner" },
+    "#notification-profile-enabled": { checked: true },
+    "#notification-start": { checked: true },
+    "#notification-resolved": { checked: true },
+    "#notification-reminder": { value: "" },
+  };
+  const panel = {
+    _notificationProfileDraft: draft,
+    _notificationProfileId: null,
+    _notificationProfileValidationError: null,
+    _configurationDrawer: { kind: "notification" },
+    _settingsDraft: { notification_profiles: [] },
+    _busy: false,
+    _notice: null,
+    _t: t,
+    _refreshUiState: () => {},
+    _render: () => { renders += 1; },
+    _api: {
+      call: async (request) => {
+        requests.push(request);
+        return { notification_profiles: request.config.notification_profiles };
+      },
+    },
+    shadowRoot: { querySelector: (selector) => controls[selector] ?? null },
+  };
+
+  await handleNotificationProfileAction.call(
+    panel,
+    "save-notification-profile",
+    { dataset: {} },
+  );
+
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].config.notification_profiles[0].targets, [
+    "notify.ha_failover",
+  ]);
+  assert.equal(panel._notificationProfileDraft, null);
+  assert.equal(panel._configurationDrawer, null);
+  assert.equal(panel._notificationProfileValidationError, null);
+  assert.equal(renders, 1);
+});
+
+test("backend profile errors stay visible at the top of the drawer", async () => {
+  const draft = structuredClone(profile);
+  let drawerRefreshes = 0;
+  const controls = {
+    "#notification-profile-name": { value: draft.name },
+    "#notification-profile-enabled": { checked: true },
+    "#notification-start": { checked: true },
+    "#notification-resolved": { checked: false },
+    "#notification-reminder": { value: "300" },
+  };
+  const panel = {
+    _notificationProfileDraft: draft,
+    _notificationProfileId: draft.id,
+    _configurationDrawer: { kind: "notification" },
+    _settingsDraft: { notification_profiles: [draft] },
+    _busy: false,
+    _notice: null,
+    _t: t,
+    _errorText: () => "Profile rejected",
+    _refreshUiState: () => {},
+    _refreshSettingsConfigurationDrawer: () => { drawerRefreshes += 1; },
+    _api: { call: async () => { throw new Error("rejected"); } },
+    shadowRoot: { querySelector: (selector) => controls[selector] ?? null },
+  };
+
+  await handleNotificationProfileAction.call(
+    panel,
+    "save-notification-profile",
+    { dataset: {} },
+  );
+
+  assert.equal(panel._notice, null);
+  assert.equal(panel._notificationProfileValidationError, "Profile rejected");
+  assert.equal(panel._notificationProfileDraft.id, profile.id);
+  assert.equal(drawerRefreshes, 1);
 });
 
 test("notification exception changes refresh only the settings drawer", async () => {

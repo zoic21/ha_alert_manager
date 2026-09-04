@@ -168,11 +168,16 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
     set innerHTML(value) { this.markup = value; },
   };
   const originalDocument = globalThis.document;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const animationFrames = [];
   globalThis.document = {
     createElement: (tagName) => {
       assert.equal(tagName, "template");
       return template;
     },
+  };
+  globalThis.requestAnimationFrame = (callback) => {
+    animationFrames.push(callback);
   };
   let replacement;
   let bottomSheetRemoved = false;
@@ -202,8 +207,14 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
       root,
       '<ha-resizable-bottom-sheet class="side-drawer-bottom-sheet"><ha-card class="configuration-drawer"></ha-card></ha-resizable-bottom-sheet>',
     );
+    nextScroller.scrollTop = 0;
+    animationFrames.shift()();
+    assert.equal(nextScroller.scrollTop, 246);
+    nextScroller.scrollTop = 0;
+    animationFrames.shift()();
   } finally {
     globalThis.document = originalDocument;
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   }
 
   assert.equal(replacement, nextDrawer);

@@ -92,6 +92,7 @@ export function renderSideDrawer({
 export function renderConfigurationDrawer({
   title,
   ariaLabel,
+  banner = "",
   content,
   saveAction,
   saveLabel,
@@ -103,9 +104,10 @@ export function renderConfigurationDrawer({
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
       </ha-dialog-header>
+      ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
         <section class="side-drawer-section">${content}</section>
-        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
+        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
       </div>
     </ha-card>`;
   return renderSideDrawer({
@@ -113,6 +115,16 @@ export function renderConfigurationDrawer({
     backdropClass: "configuration-drawer-backdrop",
     closeAction: "close-configuration-drawer",
     useBottomSheet,
+  });
+}
+
+function restoreDrawerScroll(scroller, scrollTop) {
+  if (!scroller) return;
+  scroller.scrollTop = scrollTop;
+  if (typeof globalThis.requestAnimationFrame !== "function") return;
+  globalThis.requestAnimationFrame(() => {
+    scroller.scrollTop = scrollTop;
+    globalThis.requestAnimationFrame(() => { scroller.scrollTop = scrollTop; });
   });
 }
 
@@ -133,7 +145,7 @@ export function replaceConfigurationDrawer(root, markup) {
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
       const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
-      if (nextScroller) nextScroller.scrollTop = scrollTop;
+      restoreDrawerScroll(nextScroller, scrollTop);
       return;
     }
   }
@@ -145,6 +157,6 @@ export function replaceConfigurationDrawer(root, markup) {
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );
-    if (nextScroller) nextScroller.scrollTop = scrollTop;
+    restoreDrawerScroll(nextScroller, scrollTop);
   }
 }

@@ -175,34 +175,60 @@ export const settingsStyles = `
     flex-wrap: wrap;
   }
   .notification-profile-fields,
-  .notification-policy-grid,
   .notification-exception-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
-  .notification-policy-grid {
+  .fields.configuration-drawer-fields.notification-profile-fields {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 14px;
+  }
+  .fields.notification-profile-fields .full {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+  .notification-profile-enabled-field {
+    min-width: 136px;
+  }
+  .notification-profile-section {
+    margin-top: 20px;
+  }
+  .notification-profile-section > h3 {
+    margin: 0 0 8px;
+  }
+  .notification-policy-card {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
     align-items: stretch;
-    margin-bottom: 8px;
+    gap: 16px;
+    padding: 12px;
   }
   .notification-policy-switches {
     display: grid;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    align-content: center;
+    gap: 4px;
+    padding-inline-end: 16px;
+    border-inline-end: 1px solid var(--divider-color, #ddd);
   }
   .notification-policy-switches .field {
     justify-content: center;
   }
   .notification-policy-reminder {
-    height: 100%;
+    justify-content: center;
+  }
+  .configuration-drawer-banner {
+    flex: none;
+    padding: 12px 16px;
+    background: var(--card-background-color, #fff);
+    border-bottom: 1px solid var(--divider-color, #ddd);
   }
   .notification-profile-error {
     display: block;
-    margin-bottom: 16px;
   }
   .notification-exceptions-header {
     align-items: flex-start;
-    margin-top: 8px;
   }
   .notification-exception {
     display: grid;

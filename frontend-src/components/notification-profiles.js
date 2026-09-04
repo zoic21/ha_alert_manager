@@ -30,7 +30,9 @@ export function newNotificationProfileDraft() {
 
 export function cloneNotificationProfile(profile) {
   return {
-    ...profile,
+    id: profile.id,
+    name: profile.name,
+    enabled: profile.enabled,
     targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
@@ -42,7 +44,7 @@ export function renderNotificationProfiles({ profiles, busy, t }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
-      <ha-button appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
@@ -67,9 +69,9 @@ function renderProfileRow(profile, busy, t) {
       }))}</small>
     </div>
     <div class="actions notification-profile-actions">
-      <ha-button appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
-      <ha-button appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
-      <ha-button appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
+      <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
 }
@@ -79,27 +81,34 @@ export function renderNotificationProfileDrawer({
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
-  const content = `${validationError ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>` : ""}<div class="fields configuration-drawer-fields notification-profile-fields">
-    <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
-    <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
+  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+    <div class="field notification-profile-name-field"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
+    <div class="field notification-profile-enabled-field"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
-  <h3>${esc(t("notifications.defaults"))}</h3>
-  <div class="notification-policy-grid">
-    <div class="notification-policy-switches">
-      ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
-      ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
-    </div>
-    <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
-  </div>
-  <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+  <section class="notification-profile-section notification-policy-section">
+    <h3>${esc(t("notifications.defaults"))}</h3>
+    <ha-card outlined class="notification-policy-card">
+      <div class="notification-policy-switches">
+        ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
+        ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
+      </div>
+      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+    </ha-card>
+  </section>
+  <section class="notification-profile-section">
+  <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <div class="notification-exception-list">${draft.exceptions.length
     ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
-    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>`;
+    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>
+  </section>`;
   return renderConfigurationDrawer({
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
+    banner: validationError
+      ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
+      : "",
     content,
     saveAction: "save-notification-profile",
     saveLabel: t("buttons.save"),
@@ -118,7 +127,7 @@ function renderException(exception, index, t) {
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
+    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button type="button" appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
     <div class="notification-exception-grid">
       <div class="field"><span class="field-label">${esc(t("notifications.selector_type"))}</span><ha-select id="notification-exception-type-${index}"></ha-select></div>
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
@@ -296,11 +305,12 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
     panel._notice = { kind: "success", text: panel._t("success.settings_saved") };
     saved = true;
   } catch (error) {
-    panel._notice = { kind: "error", text: panel._errorText(error) };
+    panel._notice = null;
+    panel._notificationProfileValidationError = panel._errorText(error);
   } finally {
     panel._busy = false;
     if (saved) panel._render();
-    else panel._refreshUiState();
+    else panel._refreshSettingsConfigurationDrawer();
   }
 }
 
@@ -337,8 +347,6 @@ export async function handleNotificationProfileAction(action, button) {
     if (error) {
       this._notificationProfileValidationError = error;
       this._refreshSettingsConfigurationDrawer();
-      this.shadowRoot.querySelector(".configuration-drawer .side-drawer-form")
-        ?.scrollTo?.({ top: 0, behavior: "smooth" });
       return true;
     }
     this._notificationProfileValidationError = null;

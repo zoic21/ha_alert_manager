@@ -2267,6 +2267,7 @@ function renderSideDrawer({
 function renderConfigurationDrawer({
   title,
   ariaLabel,
+  banner = "",
   content,
   saveAction,
   saveLabel,
@@ -2278,9 +2279,10 @@ function renderConfigurationDrawer({
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
       </ha-dialog-header>
+      ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
         <section class="side-drawer-section">${content}</section>
-        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
+        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
       </div>
     </ha-card>`;
   return renderSideDrawer({
@@ -2288,6 +2290,16 @@ function renderConfigurationDrawer({
     backdropClass: "configuration-drawer-backdrop",
     closeAction: "close-configuration-drawer",
     useBottomSheet,
+  });
+}
+
+function restoreDrawerScroll(scroller, scrollTop) {
+  if (!scroller) return;
+  scroller.scrollTop = scrollTop;
+  if (typeof globalThis.requestAnimationFrame !== "function") return;
+  globalThis.requestAnimationFrame(() => {
+    scroller.scrollTop = scrollTop;
+    globalThis.requestAnimationFrame(() => { scroller.scrollTop = scrollTop; });
   });
 }
 
@@ -2308,7 +2320,7 @@ function replaceConfigurationDrawer(root, markup) {
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
       const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
-      if (nextScroller) nextScroller.scrollTop = scrollTop;
+      restoreDrawerScroll(nextScroller, scrollTop);
       return;
     }
   }
@@ -2320,7 +2332,7 @@ function replaceConfigurationDrawer(root, markup) {
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );
-    if (nextScroller) nextScroller.scrollTop = scrollTop;
+    restoreDrawerScroll(nextScroller, scrollTop);
   }
 }
 
@@ -2348,7 +2360,9 @@ function newNotificationProfileDraft() {
 
 function cloneNotificationProfile(profile) {
   return {
-    ...profile,
+    id: profile.id,
+    name: profile.name,
+    enabled: profile.enabled,
     targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
@@ -2360,7 +2374,7 @@ function renderNotificationProfiles({ profiles, busy, t }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
-      <ha-button appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
@@ -2385,9 +2399,9 @@ function renderProfileRow(profile, busy, t) {
       }))}</small>
     </div>
     <div class="actions notification-profile-actions">
-      <ha-button appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
-      <ha-button appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
-      <ha-button appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
+      <ha-button type="button" appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
+      <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
 }
@@ -2397,27 +2411,34 @@ function renderNotificationProfileDrawer({
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
-  const content = `${validationError ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>` : ""}<div class="fields configuration-drawer-fields notification-profile-fields">
-    <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
-    <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
+  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+    <div class="field notification-profile-name-field"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
+    <div class="field notification-profile-enabled-field"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
-  <h3>${esc(t("notifications.defaults"))}</h3>
-  <div class="notification-policy-grid">
-    <div class="notification-policy-switches">
-      ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
-      ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
-    </div>
-    <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
-  </div>
-  <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+  <section class="notification-profile-section notification-policy-section">
+    <h3>${esc(t("notifications.defaults"))}</h3>
+    <ha-card outlined class="notification-policy-card">
+      <div class="notification-policy-switches">
+        ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
+        ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
+      </div>
+      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+    </ha-card>
+  </section>
+  <section class="notification-profile-section">
+  <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <div class="notification-exception-list">${draft.exceptions.length
     ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
-    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>`;
+    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>
+  </section>`;
   return renderConfigurationDrawer({
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
+    banner: validationError
+      ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
+      : "",
     content,
     saveAction: "save-notification-profile",
     saveLabel: t("buttons.save"),
@@ -2436,7 +2457,7 @@ function renderException(exception, index, t) {
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
+    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button type="button" appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
     <div class="notification-exception-grid">
       <div class="field"><span class="field-label">${esc(t("notifications.selector_type"))}</span><ha-select id="notification-exception-type-${index}"></ha-select></div>
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
@@ -2614,11 +2635,12 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
     panel._notice = { kind: "success", text: panel._t("success.settings_saved") };
     saved = true;
   } catch (error) {
-    panel._notice = { kind: "error", text: panel._errorText(error) };
+    panel._notice = null;
+    panel._notificationProfileValidationError = panel._errorText(error);
   } finally {
     panel._busy = false;
     if (saved) panel._render();
-    else panel._refreshUiState();
+    else panel._refreshSettingsConfigurationDrawer();
   }
 }
 
@@ -2655,8 +2677,6 @@ async function handleNotificationProfileAction(action, button) {
     if (error) {
       this._notificationProfileValidationError = error;
       this._refreshSettingsConfigurationDrawer();
-      this.shadowRoot.querySelector(".configuration-drawer .side-drawer-form")
-        ?.scrollTo?.({ top: 0, behavior: "smooth" });
       return true;
     }
     this._notificationProfileValidationError = null;
@@ -5362,11 +5382,11 @@ function renderSettings(context) {
         ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
-        <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
+        <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
+      <div class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError,
@@ -5376,11 +5396,11 @@ function renderSettings(context) {
 }
 
 function renderSettingsNavigation(t) {
-  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button type="button" appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry settings-configuration-entry"><ha-button id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
 }
 
 function renderSettingsConfigurationDrawer(context) {
@@ -5405,12 +5425,12 @@ function renderSettingsConfigurationDrawer(context) {
     title = t("settings.entity_delay");
     content = `<div class="configuration-section-heading">
         <small>${esc(t("settings.delay_help"))}</small>
-        <ha-button appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
+        <ha-button type="button" appearance="plain" data-action="add-entity-delay"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
         <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
-        <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
     title = t("settings.entity_exclusions");
@@ -6310,34 +6330,60 @@ const settingsStyles = `
     flex-wrap: wrap;
   }
   .notification-profile-fields,
-  .notification-policy-grid,
   .notification-exception-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
-  .notification-policy-grid {
+  .fields.configuration-drawer-fields.notification-profile-fields {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 14px;
+  }
+  .fields.notification-profile-fields .full {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+  .notification-profile-enabled-field {
+    min-width: 136px;
+  }
+  .notification-profile-section {
+    margin-top: 20px;
+  }
+  .notification-profile-section > h3 {
+    margin: 0 0 8px;
+  }
+  .notification-policy-card {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
     align-items: stretch;
-    margin-bottom: 8px;
+    gap: 16px;
+    padding: 12px;
   }
   .notification-policy-switches {
     display: grid;
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    align-content: center;
+    gap: 4px;
+    padding-inline-end: 16px;
+    border-inline-end: 1px solid var(--divider-color, #ddd);
   }
   .notification-policy-switches .field {
     justify-content: center;
   }
   .notification-policy-reminder {
-    height: 100%;
+    justify-content: center;
+  }
+  .configuration-drawer-banner {
+    flex: none;
+    padding: 12px 16px;
+    background: var(--card-background-color, #fff);
+    border-bottom: 1px solid var(--divider-color, #ddd);
   }
   .notification-profile-error {
     display: block;
-    margin-bottom: 16px;
   }
   .notification-exceptions-header {
     align-items: flex-start;
-    margin-top: 8px;
   }
   .notification-exception {
     display: grid;
@@ -7143,10 +7189,21 @@ const responsiveStyles = `
     .notification-profile-actions ha-button {
       width: auto;
     }
-    .notification-profile-fields,
-    .notification-policy-grid,
+    .notification-policy-card,
     .notification-exception-grid {
       grid-template-columns: 1fr;
+    }
+    .fields.configuration-drawer-fields.notification-profile-fields {
+      grid-template-columns: 1fr;
+    }
+    .notification-profile-enabled-field {
+      min-width: 0;
+    }
+    .notification-policy-switches {
+      padding-inline-end: 0;
+      padding-block-end: 8px;
+      border-inline-end: 0;
+      border-block-end: 1px solid var(--divider-color, #ddd);
     }
     .notification-exception-reminder.has-custom-value
       .notification-exception-reminder-controls {

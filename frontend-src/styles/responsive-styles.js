@@ -205,10 +205,21 @@ export const responsiveStyles = `
     .notification-profile-actions ha-button {
       width: auto;
     }
-    .notification-profile-fields,
-    .notification-policy-grid,
+    .notification-policy-card,
     .notification-exception-grid {
       grid-template-columns: 1fr;
+    }
+    .fields.configuration-drawer-fields.notification-profile-fields {
+      grid-template-columns: 1fr;
+    }
+    .notification-profile-enabled-field {
+      min-width: 0;
+    }
+    .notification-policy-switches {
+      padding-inline-end: 0;
+      padding-block-end: 8px;
+      border-inline-end: 0;
+      border-block-end: 1px solid var(--divider-color, #ddd);
     }
     .notification-exception-reminder.has-custom-value
       .notification-exception-reminder-controls {
