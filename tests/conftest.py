@@ -66,6 +66,13 @@ hass_dict.HassKey = lambda value: value
 core = _module("homeassistant.core")
 
 
+class CoreState(StrEnum):
+    not_running = "NOT_RUNNING"
+    starting = "STARTING"
+    running = "RUNNING"
+    stopping = "STOPPING"
+
+
 def callback(function):
     function._hass_callback = True
     return function
@@ -102,6 +109,7 @@ class State:
 
 
 core.callback = callback
+core.CoreState = CoreState
 core.valid_entity_id = valid_entity_id
 core.Context = Context
 core.Event = Event
@@ -598,7 +606,7 @@ class FakeAuth:
 
 class FakeHass:
     def __init__(self):
-        self.is_running = True
+        self.state = CoreState.running
         self.bus = FakeBus()
         self.states = FakeStates()
         self.data = {}
@@ -616,6 +624,10 @@ class FakeHass:
         self.device_registry = Registry("device")
         self.label_registry = Registry("label")
         self.area_registry = Registry("area")
+
+    @property
+    def is_running(self):
+        return self.state in (CoreState.starting, CoreState.running)
 
     def async_create_task(self, coroutine, name=None, eager_start=True):
         return asyncio.create_task(coroutine, name=name)

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import Event
+from homeassistant.core import CoreState, Event
 
 from custom_components.alert_manager.const import (
     ALERT_MANAGER_ENTITY_IDS,
@@ -403,7 +403,7 @@ def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
 
 
 def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_now):
-    """A pre-running state must not erase a persisted pending occurrence."""
+    """Starting-state events cannot erase a persisted pending occurrence."""
     start = datetime(2026, 9, 4, 10, tzinfo=UTC)
     set_now(start)
     hass.states.set("binary_sensor.pool_filter", "on")
@@ -425,22 +425,33 @@ def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_n
         due_at = first.records[alert_id].due_at
         await first.async_unload()
 
-        hass.is_running = False
+        hass.state = CoreState.starting
         rebooted_at = start + timedelta(hours=2, minutes=36)
         set_now(rebooted_at)
-        hass.states.set("binary_sensor.pool_filter", "off")
+        previous_state = hass.states.get("binary_sensor.pool_filter")
+        transient_state = hass.states.set("binary_sensor.pool_filter", "off")
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
 
-        await restarted.async_evaluate_entity(
-            "binary_sensor.pool_filter", restoring=True
+        tasks_before = len(entry.created_task_names)
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "binary_sensor.pool_filter",
+                    "old_state": previous_state,
+                    "new_state": transient_state,
+                }
+            )
         )
+        assert len(entry.created_task_names) == tasks_before
         assert restarted.records[alert_id].detected_at == detected_at
         assert restarted.records[alert_id].due_at == due_at
 
         hass.states.set("binary_sensor.pool_filter", "on")
-        hass.is_running = True
-        await restarted.async_evaluate_all(restoring=True)
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         assert restarted.records[alert_id].detected_at == detected_at
         assert restarted.records[alert_id].due_at == due_at
 

@@ -15,7 +15,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import Event, State, callback
+from homeassistant.core import CoreState, Event, State, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
@@ -66,7 +66,7 @@ class _RuntimeMixin:
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state or entity lifecycle event."""
-        if not self.monitoring_enabled:
+        if not self.monitoring_enabled or self.hass.state is not CoreState.running:
             return
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_allowed_rule_source(entity_id):
@@ -92,10 +92,7 @@ class _RuntimeMixin:
                 affected_entities.add(dependency_key[2])
         if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
-        self._queue_entity_evaluations(
-            affected_entities,
-            restoring=not self.hass.is_running,
-        )
+        self._queue_entity_evaluations(affected_entities)
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
@@ -170,11 +167,13 @@ class _RuntimeMixin:
         return was_tracked != is_tracked
 
     @callback
-    def _queue_entity_evaluations(
-        self, entity_ids: Iterable[str], *, restoring: bool = False
-    ) -> None:
+    def _queue_entity_evaluations(self, entity_ids: Iterable[str]) -> None:
         """Coalesce state bursts into one evaluation task and one Store write."""
-        if self._unloading or not self.monitoring_enabled:
+        if (
+            self._unloading
+            or not self.monitoring_enabled
+            or self.hass.state is not CoreState.running
+        ):
             return
         self._queued_evaluation_entities.update(
             entity_id
@@ -183,7 +182,6 @@ class _RuntimeMixin:
         )
         if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
-        self._queued_evaluation_restoring |= restoring
         self._schedule_evaluation_flush()
 
     @callback
@@ -204,13 +202,10 @@ class _RuntimeMixin:
         try:
             if self._unloading or not self.monitoring_enabled:
                 self._queued_evaluation_entities.clear()
-                self._queued_evaluation_restoring = False
                 self._queued_public_refresh = False
                 return
             entity_ids = sorted(self._queued_evaluation_entities)
             self._queued_evaluation_entities.clear()
-            restoring = self._queued_evaluation_restoring
-            self._queued_evaluation_restoring = False
             public_refresh = self._queued_public_refresh
             self._queued_public_refresh = False
             tracked_count_before = self._tracked_count()
@@ -218,7 +213,6 @@ class _RuntimeMixin:
                 try:
                     await self.async_evaluate_entity(
                         entity_id,
-                        restoring=restoring,
                         save=False,
                         publish=False,
                     )
@@ -604,9 +598,9 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         missing_candidate_ids = existing_ids - candidates.keys()
-        if restoring and not self.hass.is_running:
-            # Restored entities can briefly expose a normal fallback state before
-            # their integration has finished startup. Reconcile them once HA runs.
+        if restoring and state is not None and state.state == STATE_UNAVAILABLE:
+            # Unavailable cannot prove that a restored condition recovered. Keep
+            # its occurrence while still allowing the unavailable pack alongside.
             missing_candidate_ids = set()
         for alert_id in missing_candidate_ids:
             record = self._pop_record(alert_id)

@@ -10,7 +10,7 @@ from typing import Any
 
 from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -90,7 +90,6 @@ class AlertManager(
         self._template_rate_limit_until: dict[DependencyKey, datetime] = {}
         self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
-        self._queued_evaluation_restoring = False
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
@@ -186,7 +185,7 @@ class AlertManager(
             )
         )
 
-        if self.hass.is_running:
+        if self.hass.state is CoreState.running:
             changed = await self.async_evaluate_all(restoring=True, save=False)
             if not self.recovery_active and (migrated or changed):
                 await self._async_save_state()
