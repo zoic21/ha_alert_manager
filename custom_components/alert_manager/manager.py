@@ -67,7 +67,8 @@ class AlertManager(
         self._timers: dict[str, Callable[[], None]] = {}
         self._pack_recheck_timers: dict[tuple[str, str], Callable[[], None]] = {}
         self._startup_restoring = self.hass.state is not CoreState.running
-        self._startup_restored_entity_ids: set[str] = set()
+        self._startup_restored_alert_ids: set[str] = set()
+        self._startup_reconciliation_entity_ids: set[str] = set()
         self._startup_reconciliation_timer: Callable[[], None] | None = None
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
@@ -163,7 +164,8 @@ class AlertManager(
         self._refresh_tracking()
         self._active_device_group_ids = set(self._active_device_groups())
         if self._startup_restoring:
-            self._startup_restored_entity_ids = set(self._record_ids_by_entity)
+            self._startup_restored_alert_ids = set(self.records)
+            self._startup_reconciliation_entity_ids = set(self._record_ids_by_entity)
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
 

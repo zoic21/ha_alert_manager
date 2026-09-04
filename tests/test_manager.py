@@ -614,6 +614,130 @@ def test_startup_reconciliation_removes_confirmed_recovery(hass, entry):
     run(scenario())
 
 
+def test_transient_startup_unavailable_does_not_create_pending_alert(hass, entry):
+    """A startup-only unavailable value must not create a visible occurrence."""
+
+    async def scenario():
+        hass.states.set("sensor.persisted", "unavailable")
+        hass.states.set("sensor.temperature", "31")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        assert "unavailable:sensor.persisted" in first.records
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        unavailable_state = hass.states.set("sensor.temperature", "unavailable")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        alert_id = "unavailable:sensor.temperature"
+        assert alert_id not in restarted.records
+
+        normal_state = hass.states.set("sensor.temperature", "31")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.temperature",
+                    "old_state": unavailable_state,
+                    "new_state": normal_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
+
+    run(scenario())
+
+
+def test_settled_startup_unavailable_is_detected_after_reconciliation(hass, entry):
+    """A new unavailable value is detected if it remains after startup settles."""
+
+    async def scenario():
+        hass.states.set("sensor.temperature", "31")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        hass.states.set("sensor.temperature", "unavailable")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        alert_id = "unavailable:sensor.temperature"
+        assert alert_id not in restarted.records
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].status is AlertStatus.PENDING
+
+    run(scenario())
+
+
+def test_new_startup_occurrence_is_not_protected_as_restored(hass, entry):
+    """Only occurrences loaded from storage receive startup protection."""
+
+    async def scenario():
+        hass.states.set("binary_sensor.transient", "off")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        rule = await first.async_create_rule(
+            {
+                "name": "Transient input",
+                "entity_ids": ["binary_sensor.transient"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 3600,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:binary_sensor.transient"
+        assert alert_id not in first.records
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        matching_state = hass.states.set("binary_sensor.transient", "on")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].status is AlertStatus.PENDING
+
+        normal_state = hass.states.set("binary_sensor.transient", "off")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "binary_sensor.transient",
+                    "old_state": matching_state,
+                    "new_state": normal_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
+
+    run(scenario())
+
+
 @pytest.mark.parametrize("startup_state", [None, "unknown"])
 def test_active_alert_survives_uncertain_state_during_restart(
     hass, entry, set_now, startup_state

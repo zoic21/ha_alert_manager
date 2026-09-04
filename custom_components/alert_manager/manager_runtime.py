@@ -67,17 +67,15 @@ class _RuntimeMixin:
 
     @callback
     def _schedule_startup_reconciliation(self) -> None:
-        """Recheck only restored sources after startup values have settled."""
-        if not self._startup_restored_entity_ids:
-            self._startup_restoring = False
-            return
+        """Recheck restored and deferred sources after startup values settle."""
 
         @callback
         def timer_due(_now: datetime) -> None:
             self._startup_reconciliation_timer = None
             self._startup_restoring = False
-            entity_ids = tuple(self._startup_restored_entity_ids)
-            self._startup_restored_entity_ids.clear()
+            entity_ids = tuple(self._startup_reconciliation_entity_ids)
+            self._startup_restored_alert_ids.clear()
+            self._startup_reconciliation_entity_ids.clear()
             self._queue_entity_evaluations(entity_ids)
 
         self._startup_reconciliation_timer = async_track_point_in_utc_time(
@@ -92,7 +90,8 @@ class _RuntimeMixin:
             self._startup_reconciliation_timer()
             self._startup_reconciliation_timer = None
         self._startup_restoring = False
-        self._startup_restored_entity_ids.clear()
+        self._startup_restored_alert_ids.clear()
+        self._startup_reconciliation_entity_ids.clear()
 
     @callback
     def _state_changed(self, event: Event) -> None:
@@ -574,6 +573,10 @@ class _RuntimeMixin:
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
             if record is None:
+                if self._startup_restoring:
+                    self._startup_reconciliation_entity_ids.add(entity_id)
+                    if details.type == CATEGORY_UNAVAILABLE:
+                        continue
                 detected_at = (
                     self._inactivity_detected_at(details.rule_id, state, now)
                     if details.source == "unchanged" or details.operator == "unchanged"
@@ -631,11 +634,12 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         missing_candidate_ids = existing_ids - candidates.keys()
-        if self._startup_restoring or (
-            restoring and state is not None and state.state == STATE_UNAVAILABLE
-        ):
+        if self._startup_restoring:
             # Startup values cannot prove that a restored condition recovered.
-            # A one-shot reconciliation checks only these sources after settling.
+            # New occurrences remain removable as soon as their source normalizes.
+            missing_candidate_ids.difference_update(self._startup_restored_alert_ids)
+        elif restoring and state is not None and state.state == STATE_UNAVAILABLE:
+            # Unavailable cannot prove that another restored condition recovered.
             missing_candidate_ids = set()
         for alert_id in missing_candidate_ids:
             record = self._pop_record(alert_id)
