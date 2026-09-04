@@ -32,7 +32,7 @@ export function renderAutomatic(context) {
       availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
       renderNumberField, t,
     } = context;
-    return `<section id="settings-section-automatic" class="automatic-section settings-scroll-section">
+    return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
       <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
       <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
@@ -48,7 +48,7 @@ export function renderAutomatic(context) {
             : t("buttons.configuration_named", { name: fieldName, count });
           return `<ha-button id="auto-${pack.id}-${field.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" aria-label="${esc(t("automatic.configure_aria", { name: fieldName }))}">${esc(label)}</ha-button>`;
         }).join("");
-        return `<ha-card outlined class="panel category-card">
+        return `<section class="category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
             <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
@@ -66,15 +66,14 @@ export function renderAutomatic(context) {
             </div>
             ${configurationButtons ? `<div class="configuration-entry automatic-configuration-entry${configurableFields.length > 1 ? " has-multiple-configurations" : ""}">${configurationButtons}</div>` : ""}
           </div>
-        </ha-card>`;
+        </section>`;
       }).join("")}
-      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
       ${renderAutomaticConfigurationDrawer({
         availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
         renderNumberField, t,
       })}
       </form>
-    </section>`;
+    </ha-card>`;
 }
 
 export function renderAutomaticPanel() {
@@ -217,7 +216,7 @@ export async function saveAutomatic() {
                 ),
               };
               this._refreshUiState();
-              return;
+              return false;
             }
             values[row.target_id] = Object.fromEntries(
               (field.fields ?? []).map((setting) => [setting.id, row[setting.id]]),
@@ -239,7 +238,7 @@ export async function saveAutomatic() {
                 text: this._t(`automatic.fields.${field.translation_key}.validation`),
               };
               this._refreshUiState();
-              return;
+              return false;
             }
             values[sourcePackId] = { ...settings };
           }
@@ -258,7 +257,7 @@ export async function saveAutomatic() {
               ),
             };
             this._refreshUiState();
-            return;
+            return false;
           }
           if (Object.hasOwn(values, row.target_id)) {
             this._notice = {
@@ -268,7 +267,7 @@ export async function saveAutomatic() {
               ),
             };
             this._refreshUiState();
-            return;
+            return false;
           }
           values[row.target_id] = row.value;
         }
@@ -288,10 +287,13 @@ export async function saveAutomatic() {
         "",
       );
       this._refreshUiState();
+      return true;
     }
+    return false;
 }
 
 export function resetAutomaticDraft() {
+    this._automaticDirty = false;
     this._automaticMapDraft = null;
     this._ensureAutomaticDraft();
 }
@@ -500,6 +502,7 @@ export async function handleAutomaticAction(action, button) {
         const maximum = Number(field?.maximum ?? 1000000000);
         rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
       }
+      this._markConfigurationDirty("automatic");
     }
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
@@ -508,6 +511,7 @@ export async function handleAutomaticAction(action, button) {
     captureAutomaticConfigurationValues.call(this);
     const rows = this._automaticMapDraft?.[button.dataset.packId]?.[button.dataset.fieldId];
     rows?.splice(Number(button.dataset.index), 1);
+    this._markConfigurationDirty("automatic");
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
   }

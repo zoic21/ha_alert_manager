@@ -83,6 +83,7 @@ const ACTION_ICONS = Object.freeze({
   "save-automatic": "mdi:content-save",
   "save-rule": "mdi:content-save",
   "save-settings": "mdi:content-save",
+  "save-configuration": "mdi:content-save",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
 });

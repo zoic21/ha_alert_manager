@@ -269,8 +269,9 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     t,
   });
 
-  assert.match(markup, /^<section id="settings-section-automatic"/);
+  assert.match(markup, /^<ha-card id="settings-section-automatic" outlined/);
   assert.match(markup, /<h2 class="automatic-section-title">tabs\.automatic<\/h2>/);
+  assert.match(markup, /<section class="category-card">/);
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold[^>]*>automatic\.fields\.threshold\.label:15/);
@@ -281,6 +282,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /value="15"/);
   assert.match(markup, /pack-map-heading[\s\S]*data-action="add-pack-map-row"/);
   const drawerMarkup = markup.slice(markup.indexOf("configuration-drawer-backdrop"));
+  const automaticCardMarkup = markup.slice(0, markup.indexOf("configuration-drawer-backdrop"));
+  assert.equal((automaticCardMarkup.match(/<ha-card/g) ?? []).length, 1);
   assert.doesNotMatch(drawerMarkup, /auto-battery-threshold/);
 
   const automationErrors = renderAutomatic({
@@ -454,6 +457,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     entityDelayDraft: [{ entity_id: "sensor.test", delay: 60 }],
     ignoredReferenceDraft: "sensor.new",
     configurationDrawer: { kind: "settings", id: "entity_delays" },
+    configurationDirty: true,
     busy: false,
     automaticMarkup,
     renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
@@ -478,6 +482,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
   assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
+  assert.match(markup, /slot="fab" size="l" class="dirty"[^>]*data-action="save-configuration"/);
 });
 
 test("settings quick access scrolls smoothly to automatic monitoring", async () => {

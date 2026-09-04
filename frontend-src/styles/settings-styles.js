@@ -137,9 +137,21 @@ export const settingsStyles = `
     margin-top: 0;
     max-width: 620px;
   }
-  .settings-save-actions {
+  .settings-fab-positioner {
+    display: flex;
     justify-content: flex-end;
-    margin-top: 4px;
+  }
+  .settings-fab-positioner ha-button[slot="fab"] {
+    position: fixed;
+    right: unset;
+    left: unset;
+    bottom: calc(-80px - var(--safe-area-inset-bottom, 0px));
+    z-index: 4;
+    transition: bottom 0.3s;
+    --ha-button-box-shadow: var(--ha-box-shadow-l);
+  }
+  .settings-fab-positioner ha-button[slot="fab"].dirty {
+    bottom: calc(16px + var(--safe-area-inset-bottom, 0px));
   }
   .notification-section-header,
   .notification-profile-row,
@@ -399,16 +411,15 @@ export const settingsStyles = `
   .automatic-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    width: 100%;
-    max-width: 1120px;
-    margin-inline: auto;
+    gap: 0 24px;
   }
   .automatic-section-title {
-    margin-bottom: 12px;
+    margin: 0;
   }
-  .automatic-actions {
-    grid-column: 1/-1;
+  .category-card {
+    min-width: 0;
+    padding: 18px 0;
+    border-top: 1px solid var(--divider-color, #ddd);
   }
   .category-header {
     display: grid;

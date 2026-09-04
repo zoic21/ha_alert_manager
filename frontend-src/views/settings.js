@@ -37,6 +37,7 @@ export function renderSettings(context) {
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
+      configurationDirty = false,
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
@@ -86,13 +87,13 @@ export function renderSettings(context) {
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError,
         busy, useBottomSheet, t,
       })}
       </form>
+      <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </div>`;
 }
 
@@ -167,6 +168,7 @@ export function renderSettingsPanel() {
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
+      configurationDirty: this._automaticDirty || this._settingsDirty,
       automaticMarkup: this._renderAutomatic(),
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
@@ -177,6 +179,50 @@ export function renderSettingsPanel() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+}
+
+export function updateConfigurationSaveButton() {
+    const button = this.shadowRoot?.querySelector?.('[data-action="save-configuration"]');
+    if (!button) return;
+    button.classList.toggle("dirty", Boolean(this._automaticDirty || this._settingsDirty));
+    button.disabled = Boolean(this._busy || this._configRecovery?.active);
+}
+
+export function markConfigurationDirty(kind) {
+    if (kind === "automatic") this._automaticDirty = true;
+    if (kind === "settings") this._settingsDirty = true;
+    this._updateConfigurationSaveButton();
+}
+
+export function markConfigurationControlDirty(control) {
+    if (!control?.closest || this._configurationDrawer?.kind === "notification") return;
+    if (control.closest("#automatic-form")) {
+      this._markConfigurationDirty("automatic");
+    } else if (control.closest("#settings-form")) {
+      this._markConfigurationDirty("settings");
+    }
+}
+
+export async function saveConfiguration() {
+    if (this._busy) return false;
+    const saveAutomaticChanges = Boolean(this._automaticDirty);
+    const saveSettingsChanges = Boolean(this._settingsDirty);
+    if (!saveAutomaticChanges && !saveSettingsChanges) return false;
+
+    const automaticForm = this.shadowRoot.querySelector("#automatic-form");
+    const settingsForm = this.shadowRoot.querySelector("#settings-form");
+    if (
+      saveAutomaticChanges
+      && (!automaticForm || !this._reportFormValidity(automaticForm))
+    ) return false;
+    if (
+      saveSettingsChanges
+      && (!settingsForm || !this._reportFormValidity(settingsForm))
+    ) return false;
+
+    if (saveAutomaticChanges && !await this._saveAutomatic()) return false;
+    if (saveSettingsChanges && !await this._saveSettings()) return false;
+    return true;
 }
 
 export function commitIgnoredReferenceInput() {
@@ -208,6 +254,7 @@ export function removeIgnoredReference(reference) {
         (item) => item !== reference,
       );
     this._notice = null;
+    this._markConfigurationDirty("settings");
     this._render();
 }
 
@@ -260,21 +307,21 @@ export async function saveSettings() {
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
       this._refreshUiState();
-      return;
+      return false;
     }
     this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
       this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
       this._refreshUiState();
-      return;
+      return false;
     }
     const entityDelays = {};
     for (const row of this._entityDelayDraft) {
       if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
         this._notice = { kind: "error", text: this._t("settings.delay_validation") };
         this._refreshUiState();
-        return;
+        return false;
       }
       if (row.entity_id in entityDelays) {
         this._notice = {
@@ -282,7 +329,7 @@ export async function saveSettings() {
           text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
         };
         this._refreshUiState();
-        return;
+        return false;
       }
       entityDelays[row.entity_id] = row.delay;
     }
@@ -305,6 +352,7 @@ export async function saveSettings() {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
+    let saved = false;
     try {
       const config = await this._api.call({
         type: "alert_manager/config/update",
@@ -326,15 +374,18 @@ export async function saveSettings() {
         "",
       );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
+      saved = true;
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._busy = false;
       this._refreshUiState();
     }
+    return saved;
 }
 
 export function resetSettingsDraft() {
+    this._settingsDirty = false;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
@@ -523,6 +574,10 @@ export async function handleSettingsAction(action, button) {
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
     return true;
   }
+  if (action === "save-configuration") {
+    await this._saveConfiguration();
+    return true;
+  }
   if (action === "open-settings-configuration") {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
@@ -561,6 +616,7 @@ export async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
+    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -568,6 +624,7 @@ export async function handleSettingsAction(action, button) {
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
+    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;

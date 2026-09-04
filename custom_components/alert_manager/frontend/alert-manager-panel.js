@@ -86,6 +86,7 @@ const ACTION_ICONS = Object.freeze({
   "save-automatic": "mdi:content-save",
   "save-rule": "mdi:content-save",
   "save-settings": "mdi:content-save",
+  "save-configuration": "mdi:content-save",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
 });
@@ -4839,7 +4840,7 @@ function renderAutomatic(context) {
       availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
       renderNumberField, t,
     } = context;
-    return `<section id="settings-section-automatic" class="automatic-section settings-scroll-section">
+    return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
       <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
       <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
@@ -4855,7 +4856,7 @@ function renderAutomatic(context) {
             : t("buttons.configuration_named", { name: fieldName, count });
           return `<ha-button id="auto-${pack.id}-${field.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" aria-label="${esc(t("automatic.configure_aria", { name: fieldName }))}">${esc(label)}</ha-button>`;
         }).join("");
-        return `<ha-card outlined class="panel category-card">
+        return `<section class="category-card">
           <div class="category-header">
             <h2>${esc(packName)}</h2>
             <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
@@ -4873,15 +4874,14 @@ function renderAutomatic(context) {
             </div>
             ${configurationButtons ? `<div class="configuration-entry automatic-configuration-entry${configurableFields.length > 1 ? " has-multiple-configurations" : ""}">${configurationButtons}</div>` : ""}
           </div>
-        </ha-card>`;
+        </section>`;
       }).join("")}
-      <div class="actions automatic-actions"><ha-button appearance="accent" variant="brand" data-action="save-automatic" ${busy ? "disabled" : ""}>${esc(t("automatic.save"))}</ha-button></div>
       ${renderAutomaticConfigurationDrawer({
         availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
         renderNumberField, t,
       })}
       </form>
-    </section>`;
+    </ha-card>`;
 }
 
 function renderAutomaticPanel() {
@@ -5024,7 +5024,7 @@ async function saveAutomatic() {
                 ),
               };
               this._refreshUiState();
-              return;
+              return false;
             }
             values[row.target_id] = Object.fromEntries(
               (field.fields ?? []).map((setting) => [setting.id, row[setting.id]]),
@@ -5046,7 +5046,7 @@ async function saveAutomatic() {
                 text: this._t(`automatic.fields.${field.translation_key}.validation`),
               };
               this._refreshUiState();
-              return;
+              return false;
             }
             values[sourcePackId] = { ...settings };
           }
@@ -5065,7 +5065,7 @@ async function saveAutomatic() {
               ),
             };
             this._refreshUiState();
-            return;
+            return false;
           }
           if (Object.hasOwn(values, row.target_id)) {
             this._notice = {
@@ -5075,7 +5075,7 @@ async function saveAutomatic() {
               ),
             };
             this._refreshUiState();
-            return;
+            return false;
           }
           values[row.target_id] = row.value;
         }
@@ -5095,10 +5095,13 @@ async function saveAutomatic() {
         "",
       );
       this._refreshUiState();
+      return true;
     }
+    return false;
 }
 
 function resetAutomaticDraft() {
+    this._automaticDirty = false;
     this._automaticMapDraft = null;
     this._ensureAutomaticDraft();
 }
@@ -5307,6 +5310,7 @@ async function handleAutomaticAction(action, button) {
         const maximum = Number(field?.maximum ?? 1000000000);
         rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
       }
+      this._markConfigurationDirty("automatic");
     }
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
@@ -5315,6 +5319,7 @@ async function handleAutomaticAction(action, button) {
     captureAutomaticConfigurationValues.call(this);
     const rows = this._automaticMapDraft?.[button.dataset.packId]?.[button.dataset.fieldId];
     rows?.splice(Number(button.dataset.index), 1);
+    this._markConfigurationDirty("automatic");
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
   }
@@ -5341,6 +5346,7 @@ function renderSettings(context) {
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
+      configurationDirty = false,
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
@@ -5390,13 +5396,13 @@ function renderSettings(context) {
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
       </ha-card>
-      <div class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError,
         busy, useBottomSheet, t,
       })}
       </form>
+      <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </div>`;
 }
 
@@ -5471,6 +5477,7 @@ function renderSettingsPanel() {
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
+      configurationDirty: this._automaticDirty || this._settingsDirty,
       automaticMarkup: this._renderAutomatic(),
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
@@ -5481,6 +5488,50 @@ function renderSettingsPanel() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+}
+
+function updateConfigurationSaveButton() {
+    const button = this.shadowRoot?.querySelector?.('[data-action="save-configuration"]');
+    if (!button) return;
+    button.classList.toggle("dirty", Boolean(this._automaticDirty || this._settingsDirty));
+    button.disabled = Boolean(this._busy || this._configRecovery?.active);
+}
+
+function markConfigurationDirty(kind) {
+    if (kind === "automatic") this._automaticDirty = true;
+    if (kind === "settings") this._settingsDirty = true;
+    this._updateConfigurationSaveButton();
+}
+
+function markConfigurationControlDirty(control) {
+    if (!control?.closest || this._configurationDrawer?.kind === "notification") return;
+    if (control.closest("#automatic-form")) {
+      this._markConfigurationDirty("automatic");
+    } else if (control.closest("#settings-form")) {
+      this._markConfigurationDirty("settings");
+    }
+}
+
+async function saveConfiguration() {
+    if (this._busy) return false;
+    const saveAutomaticChanges = Boolean(this._automaticDirty);
+    const saveSettingsChanges = Boolean(this._settingsDirty);
+    if (!saveAutomaticChanges && !saveSettingsChanges) return false;
+
+    const automaticForm = this.shadowRoot.querySelector("#automatic-form");
+    const settingsForm = this.shadowRoot.querySelector("#settings-form");
+    if (
+      saveAutomaticChanges
+      && (!automaticForm || !this._reportFormValidity(automaticForm))
+    ) return false;
+    if (
+      saveSettingsChanges
+      && (!settingsForm || !this._reportFormValidity(settingsForm))
+    ) return false;
+
+    if (saveAutomaticChanges && !await this._saveAutomatic()) return false;
+    if (saveSettingsChanges && !await this._saveSettings()) return false;
+    return true;
 }
 
 function commitIgnoredReferenceInput() {
@@ -5512,6 +5563,7 @@ function removeIgnoredReference(reference) {
         (item) => item !== reference,
       );
     this._notice = null;
+    this._markConfigurationDirty("settings");
     this._render();
 }
 
@@ -5564,21 +5616,21 @@ async function saveSettings() {
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
       this._refreshUiState();
-      return;
+      return false;
     }
     this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
       this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
       this._refreshUiState();
-      return;
+      return false;
     }
     const entityDelays = {};
     for (const row of this._entityDelayDraft) {
       if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
         this._notice = { kind: "error", text: this._t("settings.delay_validation") };
         this._refreshUiState();
-        return;
+        return false;
       }
       if (row.entity_id in entityDelays) {
         this._notice = {
@@ -5586,7 +5638,7 @@ async function saveSettings() {
           text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
         };
         this._refreshUiState();
-        return;
+        return false;
       }
       entityDelays[row.entity_id] = row.delay;
     }
@@ -5609,6 +5661,7 @@ async function saveSettings() {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
+    let saved = false;
     try {
       const config = await this._api.call({
         type: "alert_manager/config/update",
@@ -5630,15 +5683,18 @@ async function saveSettings() {
         "",
       );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
+      saved = true;
     } catch (error) {
       this._notice = { kind: "error", text: this._errorText(error) };
     } finally {
       this._busy = false;
       this._refreshUiState();
     }
+    return saved;
 }
 
 function resetSettingsDraft() {
+    this._settingsDirty = false;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
@@ -5827,6 +5883,10 @@ async function handleSettingsAction(action, button) {
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
     return true;
   }
+  if (action === "save-configuration") {
+    await this._saveConfiguration();
+    return true;
+  }
   if (action === "open-settings-configuration") {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
@@ -5865,6 +5925,7 @@ async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
+    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -5872,6 +5933,7 @@ async function handleSettingsAction(action, button) {
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
+    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -6298,9 +6360,21 @@ const settingsStyles = `
     margin-top: 0;
     max-width: 620px;
   }
-  .settings-save-actions {
+  .settings-fab-positioner {
+    display: flex;
     justify-content: flex-end;
-    margin-top: 4px;
+  }
+  .settings-fab-positioner ha-button[slot="fab"] {
+    position: fixed;
+    right: unset;
+    left: unset;
+    bottom: calc(-80px - var(--safe-area-inset-bottom, 0px));
+    z-index: 4;
+    transition: bottom 0.3s;
+    --ha-button-box-shadow: var(--ha-box-shadow-l);
+  }
+  .settings-fab-positioner ha-button[slot="fab"].dirty {
+    bottom: calc(16px + var(--safe-area-inset-bottom, 0px));
   }
   .notification-section-header,
   .notification-profile-row,
@@ -6560,16 +6634,15 @@ const settingsStyles = `
   .automatic-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    width: 100%;
-    max-width: 1120px;
-    margin-inline: auto;
+    gap: 0 24px;
   }
   .automatic-section-title {
-    margin-bottom: 12px;
+    margin: 0;
   }
-  .automatic-actions {
-    grid-column: 1/-1;
+  .category-card {
+    min-width: 0;
+    padding: 18px 0;
+    border-top: 1px solid var(--divider-color, #ddd);
   }
   .category-header {
     display: grid;
@@ -7332,8 +7405,9 @@ class AlertManagerPanel extends HTMLElement {
   _removeIgnoredReference = removeIgnoredReference;
   _exportConfiguration = exportConfiguration;
   _handleImportSelection = handleImportSelection;
-  _saveSettings = saveSettings;
-  _resetSettingsDraft = resetSettingsDraft;
+  _saveSettings = saveSettings; _saveConfiguration = saveConfiguration;
+  _resetSettingsDraft = resetSettingsDraft; _markConfigurationDirty = markConfigurationDirty;
+  _markConfigurationControlDirty = markConfigurationControlDirty; _updateConfigurationSaveButton = updateConfigurationSaveButton;
   _ensureSettingsDraft = ensureSettingsDraft;
   _captureEntityDelayValues = captureEntityDelayValues;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
@@ -7476,7 +7550,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleTestResult = null;
     this._ruleTestLoading = false;
     this._ruleTestSequence = 0;
-    this._ruleDirty = false;
+    this._ruleDirty = false; this._automaticDirty = false;
     this._loading = true;
     this._cachedStateNeedsRefresh = false;
     this._busy = false;
@@ -7686,7 +7760,7 @@ class AlertManagerPanel extends HTMLElement {
       "bulk-unacknowledge",
       "save-automatic",
       "save-rule",
-      "save-settings",
+      "save-settings", "save-configuration",
       "export-config",
       "choose-config-import",
       "download-config-backup",
@@ -7696,6 +7770,7 @@ class AlertManagerPanel extends HTMLElement {
     for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
       if (busyActions.has(button.dataset.action)) button.disabled = this._busy;
     }
+    this._updateConfigurationSaveButton();
     this._decorateActionIcons();
   }
 
@@ -7732,6 +7807,7 @@ class AlertManagerPanel extends HTMLElement {
         if (id.startsWith("rule-")) this._clearRuleEditorError();
         if (id.startsWith("rule-")) this._clearRuleTestResult();
         onChange(eventValue);
+        this._markConfigurationControlDirty(element);
         if (id === "rule-entity-ids") this._refreshRuleAttributeSelector();
       }
     });
@@ -7760,6 +7836,7 @@ class AlertManagerPanel extends HTMLElement {
       if (id.startsWith("rule-")) this._clearRuleEditorError();
       if (id.startsWith("rule-")) this._clearRuleTestResult();
       onChange?.(event.detail?.value);
+      this._markConfigurationControlDirty(element);
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
     this._configuredControls.add(element);
@@ -7869,11 +7946,13 @@ class AlertManagerPanel extends HTMLElement {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
     handleSettingsInput.call(this, event);
+    this._markConfigurationControlDirty(event.target);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
     handleSettingsInput.call(this, event);
+    this._markConfigurationControlDirty(event.target);
     if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();

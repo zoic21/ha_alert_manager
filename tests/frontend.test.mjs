@@ -2230,7 +2230,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
 
   assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
-  assert.match(automatic, /<ha-button appearance="accent" variant="brand" data-action="save-automatic"/);
+  assert.doesNotMatch(automatic, /data-action="save-automatic"/);
+  assert.match(automatic, /^<ha-card id="settings-section-automatic" outlined/);
+  assert.match(automatic, /<section class="category-card">/);
   assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille l’état unavailable/);
   assert.doesNotMatch(automatic, /Délai actuel/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
@@ -2273,7 +2275,9 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /class="settings-wide settings-configuration-actions">[\s\S]*settings-excluded_entities-configuration[\s\S]*settings-excluded_devices-configuration[\s\S]*<\/div>/);
   assert.match(settings, /id="settings-entity_delays-configuration"[^>]+data-action="open-settings-configuration"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
-  assert.match(settings, /class="actions settings-save-actions"><ha-button type="button" appearance="accent" variant="brand" data-action="save-settings"/);
+  assert.equal((settings.match(/data-action="save-configuration"/g) ?? []).length, 1);
+  assert.match(settings, /slot="fab" size="l" class=""[^>]*data-action="save-configuration"/);
+  assert.doesNotMatch(settings, /class="actions settings-save-actions"/);
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
   assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));
@@ -2295,7 +2299,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.delay-add-action\{justify-content:flex-start;margin-top:16px\}/);
   assert.match(styles, /\.history-settings-row\{[^}]*max-width:420px[^}]*align-items:center/);
   assert.match(styles, /\.coherence-actions,\.history-page-actions\{display:grid;flex:none/);
-  assert.match(styles, /\.settings-save-actions\{justify-content:flex-end;margin-top:4px\}/);
+  assert.match(styles, /\.settings-fab-positioner ha-button\[slot="fab"\]\{[^}]*position:fixed[^}]*bottom:calc\(-80px - var\(--safe-area-inset-bottom,0px\)\)[^}]*transition:bottom 0\.3s/);
+  assert.match(styles, /\.settings-fab-positioner ha-button\[slot="fab"\]\.dirty\{bottom:calc\(16px \+ var\(--safe-area-inset-bottom,0px\)\)\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
@@ -3752,6 +3757,56 @@ test("native save buttons call their matching form action", async () => {
   await panel._handleClick(actionEvent("save-automatic"));
 
   assert.equal(saves, 1);
+});
+
+test("settings floating save appears only after a configuration change", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const toggles = [];
+  const button = {
+    classList: { toggle: (name, active) => toggles.push([name, active]) },
+    disabled: false,
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-action="save-configuration"]' ? button : null
+  );
+  const automaticControl = {
+    closest: (selector) => selector === "#automatic-form" ? {} : null,
+  };
+
+  panel._markConfigurationControlDirty(automaticControl);
+
+  assert.equal(panel._automaticDirty, true);
+  assert.equal(panel._settingsDirty, false);
+  assert.deepEqual(toggles.at(-1), ["dirty", true]);
+});
+
+test("floating configuration save validates and saves both dirty forms", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const automaticForm = { id: "automatic-form" };
+  const settingsForm = { id: "settings-form" };
+  panel.shadowRoot.querySelector = (selector) => ({
+    "#automatic-form": automaticForm,
+    "#settings-form": settingsForm,
+  })[selector] ?? null;
+  panel._automaticDirty = true;
+  panel._settingsDirty = true;
+  const calls = [];
+  panel._reportFormValidity = (formElement) => {
+    calls.push(`validate:${formElement.id}`);
+    return true;
+  };
+  panel._saveAutomatic = async () => { calls.push("save:automatic"); return true; };
+  panel._saveSettings = async () => { calls.push("save:settings"); return true; };
+
+  assert.equal(await panel._saveConfiguration(), true);
+  assert.deepEqual(calls, [
+    "validate:automatic-form",
+    "validate:settings-form",
+    "save:automatic",
+    "save:settings",
+  ]);
 });
 
 test("clicking an existing alert source opens native more info", async () => {

@@ -58,7 +58,8 @@ import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureA
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
   handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
-  refreshSettingsConfigurationDrawer, renderSettingsPanel, resetSettingsDraft, saveSettings, setEntityDelayEntity,
+  markConfigurationControlDirty, markConfigurationDirty, refreshSettingsConfigurationDrawer, renderSettingsPanel,
+  resetSettingsDraft, saveConfiguration, saveSettings, setEntityDelayEntity, updateConfigurationSaveButton,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
   handleConfigBackupAction,
@@ -127,8 +128,9 @@ class AlertManagerPanel extends HTMLElement {
   _removeIgnoredReference = removeIgnoredReference;
   _exportConfiguration = exportConfiguration;
   _handleImportSelection = handleImportSelection;
-  _saveSettings = saveSettings;
-  _resetSettingsDraft = resetSettingsDraft;
+  _saveSettings = saveSettings; _saveConfiguration = saveConfiguration;
+  _resetSettingsDraft = resetSettingsDraft; _markConfigurationDirty = markConfigurationDirty;
+  _markConfigurationControlDirty = markConfigurationControlDirty; _updateConfigurationSaveButton = updateConfigurationSaveButton;
   _ensureSettingsDraft = ensureSettingsDraft;
   _captureEntityDelayValues = captureEntityDelayValues;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
@@ -271,7 +273,7 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleTestResult = null;
     this._ruleTestLoading = false;
     this._ruleTestSequence = 0;
-    this._ruleDirty = false;
+    this._ruleDirty = false; this._automaticDirty = false;
     this._loading = true;
     this._cachedStateNeedsRefresh = false;
     this._busy = false;
@@ -481,7 +483,7 @@ class AlertManagerPanel extends HTMLElement {
       "bulk-unacknowledge",
       "save-automatic",
       "save-rule",
-      "save-settings",
+      "save-settings", "save-configuration",
       "export-config",
       "choose-config-import",
       "download-config-backup",
@@ -491,6 +493,7 @@ class AlertManagerPanel extends HTMLElement {
     for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
       if (busyActions.has(button.dataset.action)) button.disabled = this._busy;
     }
+    this._updateConfigurationSaveButton();
     this._decorateActionIcons();
   }
 
@@ -527,6 +530,7 @@ class AlertManagerPanel extends HTMLElement {
         if (id.startsWith("rule-")) this._clearRuleEditorError();
         if (id.startsWith("rule-")) this._clearRuleTestResult();
         onChange(eventValue);
+        this._markConfigurationControlDirty(element);
         if (id === "rule-entity-ids") this._refreshRuleAttributeSelector();
       }
     });
@@ -555,6 +559,7 @@ class AlertManagerPanel extends HTMLElement {
       if (id.startsWith("rule-")) this._clearRuleEditorError();
       if (id.startsWith("rule-")) this._clearRuleTestResult();
       onChange?.(event.detail?.value);
+      this._markConfigurationControlDirty(element);
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
     this._configuredControls.add(element);
@@ -664,11 +669,13 @@ class AlertManagerPanel extends HTMLElement {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
     }
     handleSettingsInput.call(this, event);
+    this._markConfigurationControlDirty(event.target);
     this._handleRuleInput(event);
   }
 
   _handleChange(event) {
     handleSettingsInput.call(this, event);
+    this._markConfigurationControlDirty(event.target);
     if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
