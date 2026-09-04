@@ -407,6 +407,60 @@ def test_fresh_pending_restarts_while_active_state_remains_durable(
     assert started_after == started_before
 
 
+def test_persisted_pending_rule_survives_transient_startup_state(
+    hass, entry, set_now
+):
+    """A pre-running state must not erase a persisted pending occurrence."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("binary_sensor.pool_filter", "on")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        rule = await first.async_create_rule(
+            {
+                "name": "Pool filtration over 24 hours",
+                "entity_ids": ["binary_sensor.pool_filter"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 24 * 60 * 60,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:binary_sensor.pool_filter"
+        detected_at = first.records[alert_id].detected_at
+        due_at = first.records[alert_id].due_at
+        set_now(start + timedelta(minutes=6))
+        await first._async_flush_mature_pending()
+        assert alert_id in hass.stores["alert_manager"]["alerts"]
+        await first.async_unload()
+
+        hass.is_running = False
+        rebooted_at = start + timedelta(hours=2, minutes=36)
+        set_now(rebooted_at)
+        hass.states.set("binary_sensor.pool_filter", "off")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        await restarted.async_evaluate_entity(
+            "binary_sensor.pool_filter", restoring=True
+        )
+        assert restarted.records[alert_id].detected_at == detected_at
+        assert restarted.records[alert_id].due_at == due_at
+
+        hass.states.set("binary_sensor.pool_filter", "on")
+        hass.is_running = True
+        await restarted.async_evaluate_all(restoring=True)
+        assert restarted.records[alert_id].detected_at == detected_at
+        assert restarted.records[alert_id].due_at == due_at
+
+        hass.states.set("binary_sensor.pool_filter", "off")
+        await restarted.async_evaluate_entity("binary_sensor.pool_filter")
+        assert alert_id not in restarted.records
+
+    run(scenario())
+
+
 @pytest.mark.parametrize("startup_state", [None, "unknown"])
 def test_active_alert_survives_uncertain_state_during_restart(
     hass, entry, set_now, startup_state
