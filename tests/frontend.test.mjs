@@ -905,6 +905,7 @@ test("initial load defers history and coherence data until their tabs open", asy
     "alert_manager/config/recovery/get": {
       active: false, backups: [],
     },
+    "alert_manager/notifications/stats/get": { last_24h: {} },
     "config/label_registry/list": [],
   };
   panel._hass = {
@@ -926,6 +927,7 @@ test("initial load defers history and coherence data until their tabs open", asy
     "alert_manager/packs/list",
     "alert_manager/history/config/get",
     "alert_manager/config/recovery/get",
+    "alert_manager/notifications/stats/get",
     "config/label_registry/list",
     "frontend/get_translations",
     "frontend/get_translations",
@@ -978,6 +980,7 @@ test("a recreated panel renders cached state while it refreshes", async () => {
     "alert_manager/packs/list": completePacks(),
     "alert_manager/history/config/get": { retention_limit: 100, enabled: true },
     "alert_manager/config/recovery/get": { active: false, backups: [] },
+    "alert_manager/notifications/stats/get": { last_24h: {} },
     "config/label_registry/list": [],
   };
   const hass = {

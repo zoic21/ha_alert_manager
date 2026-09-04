@@ -270,6 +270,19 @@ async def websocket_notification_test(
 @websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/notifications/stats/get"}
+)
+async def websocket_notification_stats_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return recent per-profile delivery counts without configuration data."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.notification_runtime.usage_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
     {
         vol.Required("type"): "alert_manager/rules/create",
         vol.Required("rule"): dict,
@@ -540,6 +553,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_rules_list,
         websocket_rule_test,
         websocket_notification_test,
+        websocket_notification_stats_get,
         websocket_rule_create,
         websocket_rule_update,
         websocket_rule_yaml_validate,

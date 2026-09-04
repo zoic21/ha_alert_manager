@@ -267,6 +267,8 @@
       "test_success": "Notification de test envoyée.",
       "test_title": "Alert Manager — Notification de test",
       "title": "Notifications",
+      "usage_last_24h": "Utilisé {count} fois sur les dernières 24 h",
+      "usage_last_24h_one": "Utilisé 1 fois sur les dernières 24 h",
       "validation": {
         "name": "Saisissez un nom de profil.",
         "override": "Chaque exception doit modifier au moins un réglage.",

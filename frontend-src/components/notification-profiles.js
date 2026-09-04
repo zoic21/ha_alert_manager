@@ -40,26 +40,26 @@ export function cloneNotificationProfile(profile) {
   };
 }
 
-export function renderNotificationProfiles({ profiles, busy, t }) {
+export function renderNotificationProfiles({ profiles, usage = {}, busy, t }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
     <div class="notification-profile-list">
-      ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
+      ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>
   </ha-card>`;
 }
 
-function renderProfileRow(profile, busy, t) {
+function renderProfileRow(profile, usage, busy, t) {
   const policy = profile.default_policy ?? {};
   const reminder = policy.reminder_interval === null
     ? t("notifications.never")
     : t("notifications.seconds", { count: policy.reminder_interval });
   return `<div class="notification-profile-row">
     <div class="notification-profile-summary">
-      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span></div>
+      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span><span class="notification-profile-usage" data-notification-profile-usage="${esc(profile.id)}">${esc(notificationUsageText(usage[profile.id] ?? 0, t))}</span></div>
       <small>${esc(t("notifications.targets_summary", { count: profile.targets.length }))}</small>
       <small>${esc(t("notifications.policy_summary", {
         start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
@@ -74,6 +74,23 @@ function renderProfileRow(profile, busy, t) {
       <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
+}
+
+function notificationUsageText(value, t) {
+  const count = Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  const key = count === 1
+    ? "notifications.usage_last_24h_one"
+    : "notifications.usage_last_24h";
+  return t(key, { count });
+}
+
+export function updateNotificationProfileUsage(root, usage, t) {
+  root?.querySelectorAll?.("[data-notification-profile-usage]").forEach((element) => {
+    element.textContent = notificationUsageText(
+      usage[element.dataset.notificationProfileUsage] ?? 0,
+      t,
+    );
+  });
 }
 
 export function renderNotificationProfileDrawer({

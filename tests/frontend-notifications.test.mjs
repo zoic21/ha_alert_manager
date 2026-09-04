@@ -9,6 +9,7 @@ import {
   notificationProfileValidationError,
   renderNotificationProfileDrawer,
   renderNotificationProfiles,
+  updateNotificationProfileUsage,
 } from "../frontend-src/components/notification-profiles.js";
 
 const t = (key, replacements = {}) => Object.entries(replacements).reduce(
@@ -35,7 +36,9 @@ const profile = {
 };
 
 test("notification profile list exposes native edit, test and delete actions", () => {
-  const markup = renderNotificationProfiles({ profiles: [profile], busy: false, t });
+  const markup = renderNotificationProfiles({
+    profiles: [profile], usage: { owner: 12 }, busy: false, t,
+  });
 
   assert.match(markup, /<ha-card/);
   assert.match(markup, /data-action="test-notification-profile"/);
@@ -44,6 +47,22 @@ test("notification profile list exposes native edit, test and delete actions", (
   assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 3);
   assert.doesNotMatch(markup, /data-index=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
+  assert.match(markup, /data-notification-profile-usage="owner">notifications\.usage_last_24h/);
+});
+
+test("notification usage refresh updates only the matching profile text", () => {
+  const elements = [
+    { dataset: { notificationProfileUsage: "owner" }, textContent: "" },
+    { dataset: { notificationProfileUsage: "backup" }, textContent: "" },
+  ];
+  updateNotificationProfileUsage(
+    { querySelectorAll: () => elements },
+    { owner: 1, backup: 4 },
+    t,
+  );
+
+  assert.equal(elements[0].textContent, "notifications.usage_last_24h_one");
+  assert.equal(elements[1].textContent, "notifications.usage_last_24h");
 });
 
 test("notification drawer uses HA selectors and keeps advanced exceptions inline", () => {

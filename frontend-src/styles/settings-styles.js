@@ -184,7 +184,8 @@ export const settingsStyles = `
     flex-wrap: wrap;
     gap: 8px;
   }
-  .notification-profile-status {
+  .notification-profile-status,
+  .notification-profile-usage {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
   }

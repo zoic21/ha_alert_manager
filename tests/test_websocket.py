@@ -7,6 +7,8 @@ import importlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from homeassistant.util import dt as dt_util
+
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
@@ -27,6 +29,7 @@ from custom_components.alert_manager.websocket import (
     websocket_history_config_get,
     websocket_history_config_update,
     websocket_history_list,
+    websocket_notification_stats_get,
     websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
@@ -283,6 +286,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
         (websocket_packs_list, {"id": 8}),
         (websocket_rules_list, {"id": 9}),
+        (websocket_notification_stats_get, {"id": 27}),
         (
             websocket_rule_test,
             {
@@ -316,8 +320,38 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 20
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 21
     assert connection.results == []
+
+
+def test_notification_stats_websocket_is_separate_from_configuration(hass, entry):
+    """The panel reads recent usage through its dedicated admin endpoint."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    profile = {
+        "id": "profile",
+        "name": "Profile",
+        "enabled": True,
+        "targets": ["notify.phone"],
+        "label_ids": [],
+        "default_policy": {
+            "notify_on_start": True,
+            "notify_on_resolved": True,
+            "reminder_interval": None,
+        },
+        "exceptions": [],
+    }
+    asyncio.run(manager.async_update_config({"notification_profiles": [profile]}))
+    bucket = int(dt_util.now().timestamp()) // 3600
+    manager.notification_runtime._usage = {"profile": {bucket: 2}}
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+
+    asyncio.run(websocket_notification_stats_get(hass, connection, {"id": 28}))
+
+    assert connection.errors == []
+    assert connection.results == [(28, {"last_24h": {"profile": 2}})]
+    assert "usage" not in manager.get_config()
 
 
 def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypatch):

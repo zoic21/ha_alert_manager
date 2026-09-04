@@ -35,6 +35,7 @@ export function rememberPanelState() {
       packs: this._packs,
       historyConfig: this._historyConfig,
       configRecovery: this._configRecovery,
+      notificationStats: this._notificationStats,
       labels: this._labels,
       monitoringEnabled: this._monitoringEnabled,
     });
@@ -51,6 +52,7 @@ export function restorePanelState() {
     this._packs = cached.packs;
     this._historyConfig = cached.historyConfig;
     this._configRecovery = cached.configRecovery;
+    this._notificationStats = cached.notificationStats ?? { last_24h: {} };
     this._labels = cached.labels;
     this._monitoringEnabled = cached.monitoringEnabled;
     this._loading = false;
@@ -98,6 +100,8 @@ export function refreshTabData(tab) {
       void this._refreshHistory();
     } else if (tab === "coherence") {
       void this._refreshCoherence();
+    } else if (tab === "settings" && !this._loadPromise) {
+      void this._refreshNotificationStats();
     } else if (tab === "overview" && !this._loadPromise) {
       void this._refreshAlerts();
     }
@@ -112,6 +116,7 @@ export async function load() {
       this._api.call({ type: "alert_manager/packs/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
       this._api.call({ type: "alert_manager/config/recovery/get" }),
+      this._api.call({ type: "alert_manager/notifications/stats/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -126,8 +131,10 @@ export async function load() {
         this._packs,
         this._historyConfig,
         this._configRecovery,
+        this._notificationStats,
         this._labels,
       ] = await this._loadPromise;
+      this._notificationStats ??= { last_24h: {} };
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
       this._resetSettingsDraft();
       this._resetAutomaticDraft();
@@ -150,6 +157,7 @@ export async function load() {
         this._refreshRulesData();
       } else {
         this._refreshUiState();
+        if (this._activeTab === "settings") this._refreshNotificationProfileUsage();
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
@@ -189,6 +197,28 @@ export async function refreshCoherence() {
       if (this.isConnected && this._activeTab === "coherence") this._refreshCoherenceData();
     }
     return this._coherence;
+}
+
+export async function refreshNotificationStats() {
+    if (!this._hass || this._notificationStatsLoadPromise) {
+      return this._notificationStatsLoadPromise;
+    }
+    this._notificationStatsLoadPromise = this._api.call({
+      type: "alert_manager/notifications/stats/get",
+    });
+    try {
+      this._notificationStats = await this._notificationStatsLoadPromise
+        ?? { last_24h: {} };
+      this._rememberPanelState();
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._notificationStatsLoadPromise = null;
+      if (this.isConnected && this._activeTab === "settings") {
+        this._refreshNotificationProfileUsage();
+      }
+    }
+    return this._notificationStats;
 }
 
 export async function refreshAlerts() {

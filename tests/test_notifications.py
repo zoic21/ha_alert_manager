@@ -402,6 +402,27 @@ def test_test_notification_attempts_all_targets_without_creating_runtime_state(
     assert "/alert-manager" in attempted[0][2]
 
 
+def test_profile_test_does_not_increment_recent_usage(hass, entry) -> None:
+    """Successful test deliveries stay outside production profile statistics."""
+
+    async def scenario() -> None:
+        profile = _profile()
+        profile["label_ids"] = []
+        profile["exceptions"] = []
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"notification_profiles": [profile]})
+
+        await manager.async_test_notification_profile("loic")
+
+        assert manager.notification_runtime.usage_snapshot() == {
+            "last_24h": {"loic": 0}
+        }
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
 def test_mobile_app_delivery_keeps_click_target_in_transport_layer(
     hass, registry_entry
 ) -> None:

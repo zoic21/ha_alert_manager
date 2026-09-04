@@ -643,6 +643,7 @@ function rememberPanelState() {
       packs: this._packs,
       historyConfig: this._historyConfig,
       configRecovery: this._configRecovery,
+      notificationStats: this._notificationStats,
       labels: this._labels,
       monitoringEnabled: this._monitoringEnabled,
     });
@@ -659,6 +660,7 @@ function restorePanelState() {
     this._packs = cached.packs;
     this._historyConfig = cached.historyConfig;
     this._configRecovery = cached.configRecovery;
+    this._notificationStats = cached.notificationStats ?? { last_24h: {} };
     this._labels = cached.labels;
     this._monitoringEnabled = cached.monitoringEnabled;
     this._loading = false;
@@ -706,6 +708,8 @@ function refreshTabData(tab) {
       void this._refreshHistory();
     } else if (tab === "coherence") {
       void this._refreshCoherence();
+    } else if (tab === "settings" && !this._loadPromise) {
+      void this._refreshNotificationStats();
     } else if (tab === "overview" && !this._loadPromise) {
       void this._refreshAlerts();
     }
@@ -720,6 +724,7 @@ async function load() {
       this._api.call({ type: "alert_manager/packs/list" }),
       this._api.call({ type: "alert_manager/history/config/get" }),
       this._api.call({ type: "alert_manager/config/recovery/get" }),
+      this._api.call({ type: "alert_manager/notifications/stats/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -734,8 +739,10 @@ async function load() {
         this._packs,
         this._historyConfig,
         this._configRecovery,
+        this._notificationStats,
         this._labels,
       ] = await this._loadPromise;
+      this._notificationStats ??= { last_24h: {} };
       this._monitoringEnabled = this._config.monitoring_enabled !== false;
       this._resetSettingsDraft();
       this._resetAutomaticDraft();
@@ -758,6 +765,7 @@ async function load() {
         this._refreshRulesData();
       } else {
         this._refreshUiState();
+        if (this._activeTab === "settings") this._refreshNotificationProfileUsage();
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
@@ -797,6 +805,28 @@ async function refreshCoherence() {
       if (this.isConnected && this._activeTab === "coherence") this._refreshCoherenceData();
     }
     return this._coherence;
+}
+
+async function refreshNotificationStats() {
+    if (!this._hass || this._notificationStatsLoadPromise) {
+      return this._notificationStatsLoadPromise;
+    }
+    this._notificationStatsLoadPromise = this._api.call({
+      type: "alert_manager/notifications/stats/get",
+    });
+    try {
+      this._notificationStats = await this._notificationStatsLoadPromise
+        ?? { last_24h: {} };
+      this._rememberPanelState();
+    } catch (error) {
+      this._notice = { kind: "error", text: this._errorText(error) };
+    } finally {
+      this._notificationStatsLoadPromise = null;
+      if (this.isConnected && this._activeTab === "settings") {
+        this._refreshNotificationProfileUsage();
+      }
+    }
+    return this._notificationStats;
 }
 
 async function refreshAlerts() {
@@ -2368,26 +2398,26 @@ function cloneNotificationProfile(profile) {
   };
 }
 
-function renderNotificationProfiles({ profiles, busy, t }) {
+function renderNotificationProfiles({ profiles, usage = {}, busy, t }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
     <div class="notification-profile-list">
-      ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
+      ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>
   </ha-card>`;
 }
 
-function renderProfileRow(profile, busy, t) {
+function renderProfileRow(profile, usage, busy, t) {
   const policy = profile.default_policy ?? {};
   const reminder = policy.reminder_interval === null
     ? t("notifications.never")
     : t("notifications.seconds", { count: policy.reminder_interval });
   return `<div class="notification-profile-row">
     <div class="notification-profile-summary">
-      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span></div>
+      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span><span class="notification-profile-usage" data-notification-profile-usage="${esc(profile.id)}">${esc(notificationUsageText(usage[profile.id] ?? 0, t))}</span></div>
       <small>${esc(t("notifications.targets_summary", { count: profile.targets.length }))}</small>
       <small>${esc(t("notifications.policy_summary", {
         start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
@@ -2402,6 +2432,23 @@ function renderProfileRow(profile, busy, t) {
       <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
+}
+
+function notificationUsageText(value, t) {
+  const count = Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  const key = count === 1
+    ? "notifications.usage_last_24h_one"
+    : "notifications.usage_last_24h";
+  return t(key, { count });
+}
+
+function updateNotificationProfileUsage(root, usage, t) {
+  root?.querySelectorAll?.("[data-notification-profile-usage]").forEach((element) => {
+    element.textContent = notificationUsageText(
+      usage[element.dataset.notificationProfileUsage] ?? 0,
+      t,
+    );
+  });
 }
 
 function renderNotificationProfileDrawer({
@@ -5343,6 +5390,7 @@ function renderSettings(context) {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
       notificationProfileValidationError,
+      notificationUsage = {},
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
@@ -5376,6 +5424,7 @@ function renderSettings(context) {
       </div></ha-card>
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
+        usage: notificationUsage,
         busy,
         t,
       })}
@@ -5474,6 +5523,7 @@ function renderSettingsPanel() {
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
       notificationProfileValidationError: this._notificationProfileValidationError,
+      notificationUsage: this._notificationStats.last_24h,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -5488,6 +5538,14 @@ function renderSettingsPanel() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+}
+
+function refreshNotificationProfileUsage() {
+  updateNotificationProfileUsage(
+    this.shadowRoot,
+    this._notificationStats.last_24h,
+    (key, replacements) => this._t(key, replacements),
+  );
 }
 
 function updateConfigurationSaveButton() {
@@ -6407,7 +6465,8 @@ const settingsStyles = `
     flex-wrap: wrap;
     gap: 8px;
   }
-  .notification-profile-status {
+  .notification-profile-status,
+  .notification-profile-usage {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
   }
@@ -7352,7 +7411,7 @@ const ACTION_HANDLERS = [
 class AlertManagerPanel extends HTMLElement {
   _load = load;
   _refreshHistory = refreshHistory;
-  _refreshCoherence = refreshCoherence;
+  _refreshCoherence = refreshCoherence; _refreshNotificationStats = refreshNotificationStats;
   _refreshAlerts = refreshAlerts;
   _refreshTabData = refreshTabData;
   _rememberPanelState = rememberPanelState;
@@ -7409,7 +7468,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetSettingsDraft = resetSettingsDraft; _markConfigurationDirty = markConfigurationDirty;
   _markConfigurationControlDirty = markConfigurationControlDirty; _updateConfigurationSaveButton = updateConfigurationSaveButton;
   _ensureSettingsDraft = ensureSettingsDraft;
-  _captureEntityDelayValues = captureEntityDelayValues;
+  _captureEntityDelayValues = captureEntityDelayValues; _refreshNotificationProfileUsage = refreshNotificationProfileUsage;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
   _refreshSettingsConfigurationDrawer = refreshSettingsConfigurationDrawer;
   _setEntityDelayEntity = setEntityDelayEntity;
@@ -7531,6 +7590,7 @@ class AlertManagerPanel extends HTMLElement {
     this._historyConfig = { retention_limit: 100, enabled: true };
     this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
+    this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
     this._coherence = null;
     this._coherenceLoaded = false;

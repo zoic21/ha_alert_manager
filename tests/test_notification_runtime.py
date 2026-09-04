@@ -25,15 +25,21 @@ from custom_components.alert_manager.validation import validate_config
 class _DeliverySpy:
     """Capture rendered deliveries without registering a notify integration."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, success: bool = True) -> None:
         self.calls: list[dict] = []
+        self.success = success
 
     def text(self, _key: str, fallback: str) -> str:
         return fallback
 
     async def async_send(self, **kwargs) -> dict:
         self.calls.append(kwargs)
-        return {"success": True}
+        delivered = list(kwargs["targets"]) if self.success else []
+        return {
+            "success": self.success,
+            "delivered_targets": delivered,
+            "failed_targets": [],
+        }
 
 
 def _profile(*, reminder_interval: int | None = None) -> dict:
@@ -219,6 +225,80 @@ def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> N
         assert len(delivery.calls) == 1
         assert delivery.calls[0]["click_url"] == "/alert-manager"
         assert delivery.calls[0]["message"] == "• Thermostat — 2 alerts"
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 1}}
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_usage_counts_started_resolved_and_reminder_batches(
+    hass, entry, set_now
+) -> None:
+    """Every successful production batch counts once, regardless of its targets."""
+
+    async def scenario() -> None:
+        now = datetime(2026, 9, 4, 12, 30, tzinfo=UTC)
+        set_now(now)
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        config["notification_profiles"][0]["targets"] = [
+            "notify.phone",
+            "notify.tablet",
+        ]
+        record = _active_record(now)
+        runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: config,
+            lambda: {record.details.id: record},
+            _DeliverySpy(),
+        )
+        await runtime.async_setup()
+        event = _event_data(
+            record.details.id,
+            entity_id=record.details.entity_id,
+            device_id=None,
+        )
+
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_flush_batch("profile", "started")
+        runtime._runtime["profile"][record.details.id].next_reminder = now
+        await runtime._async_send_reminders()
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+        await runtime._async_flush_batch("profile", "resolved")
+
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 3}}
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_usage_ignores_failed_deliveries(hass, entry) -> None:
+    """A batch with no successful target does not count as profile usage."""
+
+    async def scenario() -> None:
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy(success=False)
+        )
+        await runtime.async_setup()
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            _event_data(
+                "unavailable:sensor.test",
+                entity_id="sensor.test",
+                device_id=None,
+            ),
+        )
+        await runtime._async_flush_batch("profile", "started")
+
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 0}}
         await runtime.async_unload()
 
     asyncio.run(scenario())
@@ -385,6 +465,47 @@ def test_runtime_load_prunes_unknown_profiles_and_alerts(hass, entry) -> None:
         assert set(
             hass.stores["alert_manager.notifications"]["profiles"]["profile"]
         ) == {record.details.id}
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_usage_restore_keeps_only_current_24_hour_buckets(hass, entry, set_now) -> None:
+    """Stored profile usage is restored, validated and strictly bounded."""
+
+    async def scenario() -> None:
+        now = datetime(2026, 9, 4, 12, 30, tzinfo=UTC)
+        set_now(now)
+        current_bucket = int(now.timestamp()) // 3600
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        hass.stores["alert_manager.notifications"] = {
+            "profiles": {},
+            "usage": {
+                "profile": {
+                    str(current_bucket): 2,
+                    str(current_bucket - 23): 3,
+                    str(current_bucket - 24): 100,
+                    str(current_bucket + 1): 100,
+                    "invalid": 100,
+                },
+                "deleted-profile": {str(current_bucket): 100},
+            },
+        }
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+
+        await runtime.async_setup()
+
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 5}}
+        assert hass.stores["alert_manager.notifications"]["usage"] == {
+            "profile": {
+                str(current_bucket - 23): 3,
+                str(current_bucket): 2,
+            }
+        }
         await runtime.async_unload()
 
     asyncio.run(scenario())

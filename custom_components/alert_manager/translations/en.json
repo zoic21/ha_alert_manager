@@ -267,6 +267,8 @@
       "test_success": "Test notification sent.",
       "test_title": "Alert Manager — Test notification",
       "title": "Notifications",
+      "usage_last_24h": "Used {count} times in the last 24 hours",
+      "usage_last_24h_one": "Used once in the last 24 hours",
       "validation": {
         "name": "Enter a profile name.",
         "override": "Each exception must override at least one setting.",

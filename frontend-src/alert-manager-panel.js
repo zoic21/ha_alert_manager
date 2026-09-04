@@ -1,6 +1,5 @@
-import {
-  AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
-  refreshTabData, rememberPanelState, restorePanelState, setHass,
+import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
+  refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass,
 } from "./api/alert-manager-api.js";
 import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
@@ -58,7 +57,7 @@ import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureA
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
   handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
-  markConfigurationControlDirty, markConfigurationDirty, refreshSettingsConfigurationDrawer, renderSettingsPanel,
+  markConfigurationControlDirty, markConfigurationDirty, refreshNotificationProfileUsage, refreshSettingsConfigurationDrawer, renderSettingsPanel,
   resetSettingsDraft, saveConfiguration, saveSettings, setEntityDelayEntity, updateConfigurationSaveButton,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
@@ -75,7 +74,7 @@ const ACTION_HANDLERS = [
 class AlertManagerPanel extends HTMLElement {
   _load = load;
   _refreshHistory = refreshHistory;
-  _refreshCoherence = refreshCoherence;
+  _refreshCoherence = refreshCoherence; _refreshNotificationStats = refreshNotificationStats;
   _refreshAlerts = refreshAlerts;
   _refreshTabData = refreshTabData;
   _rememberPanelState = rememberPanelState;
@@ -132,7 +131,7 @@ class AlertManagerPanel extends HTMLElement {
   _resetSettingsDraft = resetSettingsDraft; _markConfigurationDirty = markConfigurationDirty;
   _markConfigurationControlDirty = markConfigurationControlDirty; _updateConfigurationSaveButton = updateConfigurationSaveButton;
   _ensureSettingsDraft = ensureSettingsDraft;
-  _captureEntityDelayValues = captureEntityDelayValues;
+  _captureEntityDelayValues = captureEntityDelayValues; _refreshNotificationProfileUsage = refreshNotificationProfileUsage;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
   _refreshSettingsConfigurationDrawer = refreshSettingsConfigurationDrawer;
   _setEntityDelayEntity = setEntityDelayEntity;
@@ -254,6 +253,7 @@ class AlertManagerPanel extends HTMLElement {
     this._historyConfig = { retention_limit: 100, enabled: true };
     this._historyLoaded = false;
     this._configRecovery = { active: false, backups: [] };
+    this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
     this._coherence = null;
     this._coherenceLoaded = false;

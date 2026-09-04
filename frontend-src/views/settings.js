@@ -16,6 +16,7 @@ import {
   hydrateNotificationProfileControls,
   renderNotificationProfileDrawer,
   renderNotificationProfiles,
+  updateNotificationProfileUsage,
 } from "../components/notification-profiles.js";
 
 const SETTINGS_SECTIONS = [
@@ -34,6 +35,7 @@ export function renderSettings(context) {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
       notificationProfileValidationError,
+      notificationUsage = {},
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
@@ -67,6 +69,7 @@ export function renderSettings(context) {
       </div></ha-card>
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
+        usage: notificationUsage,
         busy,
         t,
       })}
@@ -165,6 +168,7 @@ export function renderSettingsPanel() {
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
       notificationProfileValidationError: this._notificationProfileValidationError,
+      notificationUsage: this._notificationStats.last_24h,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -179,6 +183,14 @@ export function renderSettingsPanel() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+}
+
+export function refreshNotificationProfileUsage() {
+  updateNotificationProfileUsage(
+    this.shadowRoot,
+    this._notificationStats.last_24h,
+    (key, replacements) => this._t(key, replacements),
+  );
 }
 
 export function updateConfigurationSaveButton() {
