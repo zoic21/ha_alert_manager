@@ -92,9 +92,13 @@ class _RecoveryMixin:
                 )
                 if (now - latest).total_seconds() < CONFIG_BACKUP_INTERVAL_SECONDS:
                     return None
-            candidate = validate_config(self.get_config())
+            candidate = await self.hass.async_add_executor_job(
+                validate_config, self.get_config()
+            )
             self._validate_config_rule_sources(candidate)
-            raw_yaml = dump_config_yaml(candidate)
+            raw_yaml = await self.hass.async_add_executor_job(
+                dump_config_yaml, candidate
+            )
             return await self.config_backup_storage.async_create(
                 raw_yaml, created_at=now
             )

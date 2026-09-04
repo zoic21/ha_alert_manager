@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from custom_components.alert_manager import manager_api as manager_api_module
+from custom_components.alert_manager import storage as storage_module
 from custom_components.alert_manager.const import (
     CONFIG_BACKUP_STORAGE_KEY,
     RECOVERY_NOTIFICATION_ID,
@@ -55,6 +58,68 @@ def test_valid_export_creates_daily_backup_with_manual_export_representation(
     assert downloaded["content"] == manager.export_config_yaml()
     assert parse_config_yaml(downloaded["content"])["rules"] == []
     assert backup["rules"] == 0
+
+
+def test_backup_listing_reuses_metadata_without_parsing(hass, monkeypatch):
+    """Opening the panel does not parse backup YAML on the event loop."""
+    storage = AlertManagerConfigBackupStorage(hass)
+    raw_yaml = dump_config_yaml(validate_config({}))
+    backup = run(
+        storage.async_create(
+            raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC)
+        )
+    )
+
+    def fail_parse(_raw_yaml):
+        raise AssertionError("backup listing must not parse YAML")
+
+    monkeypatch.setattr(storage_module, "parse_config_yaml", fail_parse)
+
+    assert run(storage.async_list()) == [backup]
+
+
+def test_backup_yaml_parsing_runs_in_executor(hass, monkeypatch):
+    """Creation and selected-backup validation never block the event loop."""
+    storage = AlertManagerConfigBackupStorage(hass)
+    raw_yaml = dump_config_yaml(validate_config({}))
+    event_loop_thread = threading.get_ident()
+    parser_threads = []
+    original_parser = storage_module.parse_config_yaml
+
+    def tracked_parse(candidate):
+        parser_threads.append(threading.get_ident())
+        return original_parser(candidate)
+
+    monkeypatch.setattr(storage_module, "parse_config_yaml", tracked_parse)
+    backup = run(
+        storage.async_create(
+            raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC)
+        )
+    )
+    assert run(storage.async_get(backup["id"])) is not None
+
+    assert parser_threads
+    assert all(thread_id != event_loop_thread for thread_id in parser_threads)
+
+
+def test_config_import_parsing_runs_in_executor(hass, entry, monkeypatch):
+    """A backup restore cannot reintroduce YAML parsing on the event loop."""
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    raw_yaml = manager.export_config_yaml()
+    event_loop_thread = threading.get_ident()
+    parser_threads = []
+    original_parser = manager_api_module.parse_config_yaml
+
+    def tracked_parse(candidate):
+        parser_threads.append(threading.get_ident())
+        return original_parser(candidate)
+
+    monkeypatch.setattr(manager_api_module, "parse_config_yaml", tracked_parse)
+    run(manager.async_import_config(raw_yaml))
+
+    assert parser_threads
+    assert all(thread_id != event_loop_thread for thread_id in parser_threads)
 
 
 def test_invalid_export_never_enters_rotation_or_overwrites_valid_backups(hass):
