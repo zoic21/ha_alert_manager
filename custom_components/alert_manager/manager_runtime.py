@@ -631,7 +631,11 @@ class _RuntimeMixin:
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
             if record is None:
-                if details.type == CATEGORY_UNAVAILABLE and self._startup_restoring:
+                unavailable_startup_grace = details.type == CATEGORY_UNAVAILABLE and (
+                    self._startup_restoring
+                    or self._startup_reconciliation_timer is not None
+                )
+                if unavailable_startup_grace:
                     self._startup_reconciliation_entity_ids.add(entity_id)
                     self._startup_deferred_unavailable_since.setdefault(entity_id, now)
                     continue

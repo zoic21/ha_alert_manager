@@ -77,11 +77,13 @@ class AlertManagerStorage:
             minor_version=STORAGE_MINOR_VERSION,
         )
         self.variation_baselines: dict[str, float] = {}
+        self.loaded_from_store: bool = False
 
     async def async_load(
         self,
     ) -> tuple[dict[str, Any], dict[str, AlertRecord], bool]:
         """Load stored data and reject unusable configuration without writing."""
+        self.loaded_from_store = False
         raw_snapshot = await self._async_read_store_snapshot()
         try:
             raw = await self._store.async_load()
@@ -91,6 +93,7 @@ class AlertManagerStorage:
             raise ConfigStorageError(
                 f"Unable to read or migrate stored configuration: {err}"
             ) from err
+        self.loaded_from_store = raw is not None
         if raw is None:
             if raw_snapshot is not None:
                 raise ConfigStorageError(

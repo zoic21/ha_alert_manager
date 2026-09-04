@@ -146,6 +146,11 @@ class AlertManager(
                     "Unable to load alert history; starting with an empty view"
                 )
                 history, history_migrated = [], False
+        late_startup_restore = (
+            self.hass.state is CoreState.running
+            and not self.recovery_active
+            and self.storage.loaded_from_store
+        )
         self._variation_baselines = self.storage.variation_baselines
         await self._async_load_condition_translations()
         self.records = records
@@ -164,7 +169,7 @@ class AlertManager(
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
         self._active_device_group_ids = set(self._active_device_groups())
-        if self._startup_restoring:
+        if self._startup_restoring or late_startup_restore:
             self._startup_restored_alert_ids = set(self.records)
             self._startup_reconciliation_entity_ids = set(self._record_ids_by_entity)
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
@@ -194,6 +199,8 @@ class AlertManager(
         )
 
         if self.hass.state is CoreState.running:
+            if late_startup_restore:
+                self._schedule_startup_reconciliation()
             changed = await self.async_evaluate_all(restoring=True, save=False)
             if not self.recovery_active and (migrated or changed):
                 await self._async_save_state()

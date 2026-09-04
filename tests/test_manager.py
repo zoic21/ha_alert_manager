@@ -891,6 +891,50 @@ def test_transient_startup_unavailable_does_not_create_pending_alert(hass, entry
     run(scenario())
 
 
+@pytest.mark.parametrize("unavailable_delay", [0, 15 * 60])
+def test_late_startup_unknown_never_exposes_new_unavailable(
+    hass, entry, set_now, unavailable_delay
+):
+    """A late setup rechecks a new outage even when its recovery event was missed."""
+    start = datetime(2026, 9, 4, 15, 31, 34, tzinfo=UTC)
+    set_now(start)
+    entity_id = "event.baby_intelligent_detection"
+    hass.states.set(entity_id, "idle")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config(
+            {
+                "pending_display_delay": 0,
+                "automatic": {"unavailable": {"delay": unavailable_delay}},
+            }
+        )
+        assert first.records == {}
+        await first.async_unload()
+        assert hass.stores["alert_manager"]["alerts"] == {}
+
+        hass.states.set(entity_id, "unavailable")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        alert_id = f"unavailable:{entity_id}"
+        assert alert_id not in restarted.records
+        assert restarted.public_snapshot()["pending_count"] == 0
+
+        # Reproduce an integration recovery whose state event was missed.
+        hass.states.set(entity_id, "unknown")
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert alert_id not in restarted.records
+        assert restarted.public_snapshot()["pending_count"] == 0
+        assert hass.stores["alert_manager"]["alerts"] == {}
+
+    run(scenario())
+
+
 def test_settled_startup_unavailable_is_hidden_until_activation(hass, entry, set_now):
     """A startup unavailable occurrence stays hidden until its activation."""
     start = datetime(2026, 9, 4, 14, tzinfo=UTC)
