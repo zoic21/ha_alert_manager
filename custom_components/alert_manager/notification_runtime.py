@@ -131,6 +131,7 @@ class NotificationRuntime:
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
         self._runtime_lock = asyncio.Lock()
+        self._lifecycle_lock = asyncio.Lock()
         self._runtime: dict[str, dict[str, _RuntimeEntry]] = {}
         self._usage: dict[str, dict[int, int]] = {}
         self._persisted_runtime: dict[str, Any] = {"profiles": {}, "usage": {}}
@@ -157,7 +158,7 @@ class NotificationRuntime:
     def resume_events(self) -> None:
         """Resume normal lifecycle consumption after runtime reconciliation."""
         self._events_pause_depth = max(0, self._events_pause_depth - 1)
-        self._accept_events = self._events_pause_depth == 0
+        self._accept_events = not self._unloading and self._events_pause_depth == 0
 
     @contextmanager
     def events_paused(self) -> Iterator[None]:
@@ -181,6 +182,8 @@ class NotificationRuntime:
         if not alert_ids:
             return
         async with self._runtime_lock:
+            if self._unloading:
+                return
             runtime_changed = False
             for profile_runtime in self._runtime.values():
                 for alert_id in alert_ids:
@@ -200,36 +203,62 @@ class NotificationRuntime:
 
     async def async_setup(self) -> None:
         """Restore runtime state, then subscribe after initial alert evaluation."""
-        await self._async_load_runtime()
-        self._unsubscribe.append(
-            async_dispatcher_connect(
+        async with self._lifecycle_lock:
+            if self._unloading:
+                return
+            await self._async_load_runtime()
+            if self._unloading:
+                return
+            unsubscribe = async_dispatcher_connect(
                 self.hass,
                 SIGNAL_NOTIFICATION_LIFECYCLE,
                 self._lifecycle_event_received,
             )
-        )
-        self._setup_complete = True
-        await self.async_config_updated()
+            self._unsubscribe.append(unsubscribe)
+            try:
+                await self.async_config_updated()
+            except BaseException:
+                self._unsubscribe.remove(unsubscribe)
+                unsubscribe()
+                raise
+            if self._unloading:
+                self._unsubscribe.remove(unsubscribe)
+                unsubscribe()
+                return
+            self._setup_complete = True
 
-    async def async_unload(self) -> None:
-        """Cancel owned listeners, timers and delivery tasks."""
+    @callback
+    def begin_shutdown(self) -> None:
+        """Stop accepting work before Home Assistant tears down integrations."""
         self._unloading = True
-        for unsubscribe in self._unsubscribe:
-            unsubscribe()
-        self._unsubscribe.clear()
+        self._event_generation += 1
+        self._accept_events = False
         self._cancel_reminder_timer()
         self._cancel_runtime_save()
         self.discard_batches()
-        for task in tuple(self._tasks):
-            task.cancel()
-        if self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
-        if self._setup_complete:
-            await self._async_save_runtime()
+
+    async def async_unload(self) -> None:
+        """Cancel owned listeners, timers and delivery tasks."""
+        self.begin_shutdown()
+        async with self._lifecycle_lock:
+            for unsubscribe in self._unsubscribe:
+                unsubscribe()
+            self._unsubscribe.clear()
+            for task in tuple(self._tasks):
+                task.cancel()
+            if self._tasks:
+                await asyncio.gather(*self._tasks, return_exceptions=True)
+            self._cancel_reminder_timer()
+            self._cancel_runtime_save()
+            self.discard_batches()
+            if self._setup_complete:
+                await self._async_save_runtime()
 
     async def async_config_updated(self, *, reset_reminders: bool = False) -> None:
         """Reconcile profile/reminder state without replaying active alerts."""
         async with self._runtime_lock:
+            if self._unloading:
+                return
             await self._async_config_updated_locked(reset_reminders=reset_reminders)
 
     async def _async_config_updated_locked(self, *, reset_reminders: bool) -> None:
@@ -301,9 +330,29 @@ class NotificationRuntime:
             for profile in config.get("notification_profiles", [])
         ):
             return
+        tracked_profile_ids: frozenset[str] = frozenset()
+        alert_id = data.get("id")
+        if event_type == EVENT_ALERT_RESOLVED and isinstance(alert_id, str):
+            # A registry refresh can reconcile profiles before this queued task
+            # acquires the runtime lock. Preserve the fact that a resolution was
+            # tracked when its lifecycle signal was emitted.
+            tracked_profile_ids = frozenset(
+                profile["id"]
+                for profile in config.get("notification_profiles", [])
+                if isinstance(profile.get("id"), str)
+                and (
+                    alert_id in self._runtime.get(profile["id"], {})
+                    or self._batch_contains(profile["id"], "started", alert_id)
+                )
+            )
         generation = self._event_generation
         self._create_task(
-            self._async_handle_event(event_type, dict(data), generation=generation),
+            self._async_handle_event(
+                event_type,
+                dict(data),
+                generation=generation,
+                tracked_profile_ids=tracked_profile_ids,
+            ),
             f"alert_manager notification {event_type}",
         )
 
@@ -313,15 +362,26 @@ class NotificationRuntime:
         data: Mapping[str, Any],
         *,
         generation: int | None = None,
+        tracked_profile_ids: frozenset[str] = frozenset(),
     ) -> None:
         """Route one lifecycle event into profile batches and reminder state."""
         async with self._runtime_lock:
-            if generation is not None and generation != self._event_generation:
+            if self._unloading or (
+                generation is not None and generation != self._event_generation
+            ):
                 return
-            await self._async_handle_event_locked(event_type, data)
+            await self._async_handle_event_locked(
+                event_type,
+                data,
+                tracked_profile_ids=tracked_profile_ids,
+            )
 
     async def _async_handle_event_locked(
-        self, event_type: str, data: Mapping[str, Any]
+        self,
+        event_type: str,
+        data: Mapping[str, Any],
+        *,
+        tracked_profile_ids: frozenset[str] = frozenset(),
     ) -> None:
         """Apply one lifecycle event while holding the runtime lock."""
         item = _NotificationItem.from_event(data)
@@ -336,7 +396,9 @@ class NotificationRuntime:
                 continue
             profile_id = profile["id"]
             matches_labels = profile_matches_labels(profile, labels)
-            tracks_alert = item.alert_id in self._runtime.get(profile_id, {})
+            tracks_alert = profile_id in tracked_profile_ids or (
+                item.alert_id in self._runtime.get(profile_id, {})
+            )
             if event_type == EVENT_ALERT_RESOLVED:
                 tracks_alert = tracks_alert or self._batch_contains(
                     profile_id, "started", item.alert_id
@@ -437,6 +499,8 @@ class NotificationRuntime:
 
     async def _async_flush_batch(self, profile_id: str, kind: str) -> None:
         """Render and deliver one profile batch outside alert transitions."""
+        if self._unloading:
+            return
         batch = self._batches.pop((profile_id, kind), None)
         if batch is None or not batch.items:
             return
@@ -447,6 +511,8 @@ class NotificationRuntime:
         items = list(batch.items.values())
         title, message = self._render_batch(kind, items)
         url = self._batch_url(kind, items)
+        if self._unloading:
+            return
         result = await self._delivery.async_send(
             targets=profile["targets"],
             title=title,
@@ -458,8 +524,12 @@ class NotificationRuntime:
     async def _async_send_reminders(self) -> None:
         """Send all due reminders in one grouped delivery per profile."""
         async with self._runtime_lock:
+            if self._unloading:
+                return
             deliveries = await self._async_collect_due_reminders_locked()
         for profile, title, message, url in deliveries:
+            if self._unloading:
+                return
             result = await self._delivery.async_send(
                 targets=profile["targets"],
                 title=title,
@@ -476,6 +546,8 @@ class NotificationRuntime:
         if not isinstance(delivered, list) or not delivered:
             return
         async with self._runtime_lock:
+            if self._unloading:
+                return
             configured_ids = {
                 profile["id"]
                 for profile in self._config_getter().get("notification_profiles", [])
@@ -652,6 +724,8 @@ class NotificationRuntime:
     async def _async_flush_runtime_save(self) -> None:
         """Persist the latest coalesced snapshot under the runtime lock."""
         async with self._runtime_lock:
+            if self._unloading:
+                return
             await self._async_save_runtime()
 
     @callback

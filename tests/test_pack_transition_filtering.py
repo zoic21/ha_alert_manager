@@ -5,10 +5,20 @@ from __future__ import annotations
 import asyncio
 
 from homeassistant.const import ATTR_DEVICE_CLASS
-from homeassistant.core import Event
+from homeassistant.core import CoreState, Event
 
+from custom_components.alert_manager.const import (
+    EVENT_ALERT_RESOLVED,
+    EVENT_ALERT_STARTED,
+)
 from custom_components.alert_manager.manager import AlertManager
-from custom_components.alert_manager.packs import battery, connectivity, unavailable
+from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.packs import (
+    PackNeutral,
+    battery,
+    connectivity,
+    unavailable,
+)
 
 
 def _battery_state(hass, value: str, *, entity_id: str = "sensor.battery"):
@@ -72,6 +82,107 @@ def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_ent
     assert not _should_evaluate(
         battery.PACK, hass, _battery_state(hass, "unavailable"), config
     )
+
+
+def test_battery_unavailable_is_neutral(hass):
+    """An unavailable reading cannot resolve an existing low-battery alert."""
+    state = _battery_state(hass, "unavailable")
+
+    assert isinstance(battery.PACK.evaluate(hass, state, {}), PackNeutral)
+
+
+def test_active_battery_survives_startup_unavailable_state(hass, entry):
+    """A startup availability gap cannot recreate an active battery as pending."""
+
+    async def scenario():
+        low_state = _battery_state(hass, "10")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config({"automatic": {"battery": {"delay": 0}}})
+
+        alert_id = "battery:sensor.battery"
+        original = first.records[alert_id]
+        assert original.status is AlertStatus.ACTIVE
+        detected_at = original.detected_at
+        due_at = original.due_at
+        active_since = original.active_since
+        events_before = len(
+            [
+                event
+                for event in hass.bus.fired
+                if event[0] in (EVENT_ALERT_STARTED, EVENT_ALERT_RESOLVED)
+            ]
+        )
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        unavailable_state = hass.states.set("sensor.battery", "unavailable", {})
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        restarted._state_changed(
+            _state_event("sensor.battery", low_state, unavailable_state)
+        )
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+
+        reconciliation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+        )
+        reconciliation_timer["action"](reconciliation_timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+
+        unknown_state = _battery_state(hass, "unknown")
+        restarted._state_changed(
+            _state_event("sensor.battery", unavailable_state, unknown_state)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+
+        low_again = _battery_state(hass, "9")
+        restarted._state_changed(
+            _state_event("sensor.battery", unknown_state, low_again)
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+        lifecycle_events = [
+            event
+            for event in hass.bus.fired
+            if event[0] in (EVENT_ALERT_STARTED, EVENT_ALERT_RESOLVED)
+        ]
+        assert len(lifecycle_events) == events_before
+
+    asyncio.run(scenario())
 
 
 def test_battery_threshold_follows_config_and_device_changes(hass, registry_entry):

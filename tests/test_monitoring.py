@@ -346,26 +346,47 @@ def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):
     """Persisted active and pending runtime data loads into the right sensors."""
     start = datetime(2026, 8, 26, 10, tzinfo=UTC)
     set_now(start)
-    hass.states.set("sensor.active", "unavailable")
-    hass.states.set("sensor.pending", "unavailable")
-    first = AlertManager(hass, entry)
-    run(first.async_setup())
-    run(
-        first.async_update_config(
+
+    async def scenario():
+        hass.states.set("sensor.active", "unavailable")
+        hass.states.set("sensor.pending", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config(
             {
                 "entity_delays": {"sensor.active": 0},
                 "pending_display_delay": 0,
             }
         )
-    )
-    run(first.async_unload())
+        set_now(start + timedelta(minutes=5))
+        await first._async_flush_mature_pending()
+        assert "unavailable:sensor.pending" in hass.stores["alert_manager"]["alerts"]
+        await first.async_unload()
 
-    second = AlertManager(hass, entry)
-    run(second.async_setup())
-    snapshot = second.public_snapshot()
-    assert {alert["id"] for alert in snapshot["alerts"]} == {
-        "unavailable:sensor.active"
-    }
-    assert {alert["id"] for alert in snapshot["pending"]} == {
-        "unavailable:sensor.pending"
-    }
+        second = AlertManager(hass, entry)
+        await second.async_setup()
+        snapshot = second.public_snapshot()
+        assert {alert["id"] for alert in snapshot["alerts"]} == {
+            "unavailable:sensor.active"
+        }
+        assert snapshot["pending"] == []
+
+        reconciliation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+        )
+        reconciliation_timer["action"](reconciliation_timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        snapshot = second.public_snapshot()
+        assert {alert["id"] for alert in snapshot["alerts"]} == {
+            "unavailable:sensor.active"
+        }
+        assert {alert["id"] for alert in snapshot["pending"]} == {
+            "unavailable:sensor.pending"
+        }
+
+    run(scenario())

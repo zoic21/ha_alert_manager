@@ -663,6 +663,59 @@ test("overview row changes update the native table without rebuilding the page",
   assert.deepEqual(tablePage.data.map((row) => row.id), ["unavailable:sensor.test"]);
 });
 
+test("overview refresh closes details for an alert removed by the backend", () => {
+  const panel = tablePanel();
+  const dialog = {
+    alertKind: "overview",
+    alertId: "rule:temperature:sensor.rack",
+    open: true,
+    addEventListener() {},
+    remove() {},
+  };
+  panel._alertDetailsDialog = dialog;
+  panel._alerts.alerts = [];
+  panel._alerts.active_count = 0;
+  const tablePage = { querySelector: () => null };
+  panel.shadowRoot.querySelector = (selector) =>
+    selector === '[data-alert-table-page="overview"]' ? tablePage : null;
+  panel._updateCountdowns = () => {};
+
+  panel._refreshOverviewData();
+
+  assert.equal(panel._alertDetailsDialog, null);
+  assert.equal(dialog.open, false);
+});
+
+test("overview refresh updates details while the same alert remains", () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  const dialog = {
+    alertKind: "overview",
+    alertId: row.id,
+    headerTitle: "",
+    heading: "",
+    innerHTML: "stale",
+  };
+  panel._alertDetailsDialog = dialog;
+  panel._alerts.alerts[0] = {
+    ...panel._alerts.alerts[0],
+    message: "Valeur mise à jour",
+  };
+  const tablePage = { querySelector: () => null };
+  panel.shadowRoot.querySelector = (selector) =>
+    selector === '[data-alert-table-page="overview"]' ? tablePage : null;
+  panel._updateCountdowns = () => {};
+  let hydratedDialog;
+  panel._hydrateAlertDetailTimestamps = (target) => { hydratedDialog = target; };
+
+  panel._refreshOverviewData();
+
+  assert.equal(panel._alertDetailsDialog, dialog);
+  assert.equal(dialog.headerTitle, "Température rack");
+  assert.match(dialog.innerHTML, /Valeur mise à jour/);
+  assert.equal(hydratedDialog, dialog);
+});
+
 test("history data refresh updates the native table without rebuilding the page", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -1493,6 +1546,8 @@ test("alert details header uses the entity name and reverses its acknowledgement
   panel._openAlertDetails("overview", activeRow);
 
   assert.equal(panel._alertDetailsDialog.tagName, "HA-ADAPTIVE-DIALOG");
+  assert.equal(panel._alertDetailsDialog.alertKind, "overview");
+  assert.equal(panel._alertDetailsDialog.alertId, activeRow.id);
   assert.equal(panel._alertDetailsDialog.headerTitle, "Température rack");
   assert.equal(panel._alertDetailsDialog.width, "medium");
   assert.equal(panel._alertDetailsDialog.flexContent, true);

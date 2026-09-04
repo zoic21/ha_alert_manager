@@ -15,7 +15,7 @@ from ..const import (
     MIN_THRESHOLD,
 )
 from ..models import safe_float
-from .base import AutomaticPack, PackConfigField, PackMatch
+from .base import AutomaticPack, PackConfigField, PackMatch, PackNeutral
 
 
 def _applies(_hass: HomeAssistant, state: State) -> bool:
@@ -62,8 +62,10 @@ def _should_evaluate(
 
 def _evaluate(
     hass: HomeAssistant, state: State, config: dict[str, Any]
-) -> PackMatch | None:
-    """Match battery sensors at or below their effective threshold."""
+) -> PackMatch | PackNeutral | None:
+    """Match low batteries while preserving them through unavailability."""
+    if state.state == STATE_UNAVAILABLE:
+        return PackNeutral()
     if not _applies(hass, state):
         return None
     value = safe_float(state.state)

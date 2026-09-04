@@ -5,7 +5,7 @@ export function startupStatusText(startup, t, durationText, now = Date.now()) {
     const finishesAt = Date.parse(startup.stabilization_until);
     if (!Number.isFinite(finishesAt)) return t("overview.startup_waiting");
     const seconds = Math.max(0, Math.ceil((finishesAt - now) / 1000));
-    if (seconds === 0) return null;
+    if (seconds === 0) return t("overview.startup_waiting");
     return t("overview.startup_in_progress", { duration: durationText(seconds) });
 }
 
@@ -39,6 +39,20 @@ export function refreshStartupBanner() {
 }
 
 export function refreshOverviewData() {
+    const detailsDialog = this._alertDetailsDialog;
+    if (detailsDialog?.alertKind === "overview") {
+      const updatedRow = this._tableRows("overview").find(
+        (row) => row.id === detailsDialog.alertId,
+      );
+      if (!updatedRow) {
+        this._closeAlertDetailsDialog();
+      } else {
+        detailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
+        detailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
+        detailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+        this._hydrateAlertDetailTimestamps(detailsDialog);
+      }
+    }
     const tablePage = this.shadowRoot?.querySelector('[data-alert-table-page="overview"]');
     if (!tablePage) {
       this._render();

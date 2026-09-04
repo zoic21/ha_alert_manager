@@ -7,18 +7,22 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from homeassistant.core import CoreState, Event
+
 from custom_components.alert_manager.const import (
     DEFAULT_CONFIG,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
 )
+from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import (
     AlertDetails,
     AlertRecord,
     AlertStatus,
 )
 from custom_components.alert_manager.notification_runtime import NotificationRuntime
+from custom_components.alert_manager.runtime_phase import RuntimePhase
 from custom_components.alert_manager.validation import validate_config
 
 
@@ -176,6 +180,155 @@ def test_event_queued_before_config_pause_is_discarded(hass, entry) -> None:
         assert runtime._batches == {}
         assert all(not entries for entries in runtime._runtime.values())
         await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_event_queued_before_shutdown_is_discarded(hass, entry) -> None:
+    """A lifecycle task waiting on the runtime lock cannot cross shutdown."""
+
+    async def scenario() -> None:
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        await runtime._runtime_lock.acquire()
+        hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE][0](
+            EVENT_ALERT_STARTED,
+            _event_data(
+                "unavailable:sensor.test",
+                entity_id="sensor.test",
+                device_id=None,
+            ),
+        )
+        runtime.begin_shutdown()
+        runtime.resume_events()
+        runtime._runtime_lock.release()
+
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert runtime._batches == {}
+        assert all(not entries for entries in runtime._runtime.values())
+        assert runtime._accept_events is False
+        await runtime.async_unload()
+        assert not hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE]
+        assert not [timer for timer in hass.timers if not timer["cancelled"]]
+
+    asyncio.run(scenario())
+
+
+def test_runtime_save_queued_before_shutdown_is_discarded(hass, entry) -> None:
+    """A coalesced save waiting on the runtime lock cannot cross shutdown."""
+
+    async def scenario() -> None:
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            _event_data(
+                "unavailable:sensor.test",
+                entity_id="sensor.test",
+                device_id=None,
+            ),
+        )
+        save_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_runtime_save.<locals>.timer_due"
+            in timer["action"].__qualname__
+        )
+
+        await runtime._runtime_lock.acquire()
+        save_timer["action"](save_timer["point"])
+        await asyncio.sleep(0)
+        runtime.begin_shutdown()
+        saves_at_shutdown = hass.store_save_count
+        runtime._runtime_lock.release()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert hass.store_save_count == saves_at_shutdown
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_reminder_queued_before_shutdown_is_discarded(hass, entry, set_now) -> None:
+    """A reminder waiting on the runtime lock cannot deliver after shutdown."""
+
+    async def scenario() -> None:
+        now = datetime(2026, 9, 4, 12, 30, tzinfo=UTC)
+        set_now(now)
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        record = _active_record(now - timedelta(minutes=10))
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: config,
+            lambda: {record.details.id: record},
+            delivery,
+        )
+        await runtime.async_setup()
+        runtime._runtime["profile"][record.details.id].next_reminder = now
+
+        await runtime._runtime_lock.acquire()
+        runtime._create_task(
+            runtime._async_send_reminders(),
+            "alert_manager notification reminders",
+        )
+        await asyncio.sleep(0)
+        runtime.begin_shutdown()
+        runtime._runtime_lock.release()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert delivery.calls == []
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_notification_setup_failure_removes_lifecycle_subscription(hass, entry) -> None:
+    """A failed setup leaves no listener or partially initialized runtime."""
+
+    async def scenario() -> None:
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+
+        async def fail_config_update(*, reset_reminders: bool) -> None:
+            raise RuntimeError("config update failed")
+
+        runtime._async_config_updated_locked = fail_config_update
+
+        try:
+            await runtime.async_setup()
+        except RuntimeError as err:
+            assert str(err) == "config update failed"
+        else:  # pragma: no cover - explicit failure contract
+            raise AssertionError("setup unexpectedly succeeded")
+
+        assert not hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE]
+        assert runtime._unsubscribe == []
+        assert runtime._setup_complete is False
 
     asyncio.run(scenario())
 
@@ -377,6 +530,118 @@ def test_resolution_cleans_runtime_after_matching_label_is_removed(hass, entry) 
 
         assert runtime._runtime.get("profile", {}) == {}
         await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_queued_resolution_survives_registry_runtime_refresh(hass, entry) -> None:
+    """A registry refresh cannot erase that a queued resolution was tracked."""
+
+    async def scenario() -> None:
+        profile = _profile()
+        profile["label_ids"] = ["important"]
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        registry = SimpleNamespace(labels={"important"}, device_id=None)
+        hass.entity_registry.entries["sensor.test"] = registry
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        alert_id = "unavailable:sensor.test"
+        event = _event_data(alert_id, entity_id="sensor.test", device_id=None)
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_flush_batch("profile", "started")
+
+        registry.labels.clear()
+        runtime.registry_changed()
+        await runtime._runtime_lock.acquire()
+        try:
+            hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE][0](
+                EVENT_ALERT_RESOLVED, event
+            )
+            await runtime._async_config_updated_locked(reset_reminders=False)
+            assert alert_id not in runtime._runtime["profile"]
+        finally:
+            runtime._runtime_lock.release()
+
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id in runtime._batches[("profile", "resolved")].items
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_startup_registry_refresh_keeps_tracked_resolution(
+    hass, entry, registry_entry
+) -> None:
+    """Startup reconciliation preserves resolved delivery across label refresh."""
+
+    async def scenario() -> None:
+        profile = _profile(reminder_interval=300)
+        profile["label_ids"] = ["important"]
+        registry = registry_entry(hass, "sensor.test", labels={"important"})
+        hass.states.set("sensor.test", "unavailable")
+
+        first = AlertManager(hass, entry)
+        assert await first.async_setup() is True
+        await first.async_update_config(
+            {
+                "automatic": {"unavailable": {"delay": 0}},
+                "notification_profiles": [profile],
+            }
+        )
+        alert_id = "unavailable:sensor.test"
+        assert first.records[alert_id].status is AlertStatus.ACTIVE
+        assert alert_id in first.notification_runtime._runtime["profile"]
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        hass.states.set("sensor.test", "ok")
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        assert alert_id in restarted.notification_runtime._runtime["profile"]
+
+        lifecycle_release = asyncio.Event()
+        original_handle_event = restarted.notification_runtime._async_handle_event
+
+        async def delayed_handle_event(*args, **kwargs):
+            await lifecycle_release.wait()
+            await original_handle_event(*args, **kwargs)
+
+        restarted.notification_runtime._async_handle_event = delayed_handle_event
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        registry.labels.clear()
+        restarted._registry_changed(
+            Event({"action": "update", "entity_id": "sensor.test"})
+        )
+
+        reconciliation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+        )
+        reconciliation_timer["cancelled"] = True
+        reconciliation_timer["action"](reconciliation_timer["point"])
+        for _index in range(5):
+            await asyncio.sleep(0)
+
+        assert restarted._runtime_phase is RuntimePhase.RUNNING
+        assert alert_id not in restarted.records
+        assert alert_id not in restarted.notification_runtime._runtime["profile"]
+
+        lifecycle_release.set()
+        for _index in range(3):
+            await asyncio.sleep(0)
+        assert (
+            alert_id
+            in restarted.notification_runtime._batches[("profile", "resolved")].items
+        )
+        await restarted.async_unload()
 
     asyncio.run(scenario())
 

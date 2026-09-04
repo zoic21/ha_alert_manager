@@ -25,6 +25,7 @@ from .const import (
     RECOVERY_NOTIFICATION_ID,
     SIGNAL_MONITORING_UPDATED,
 )
+from .runtime_phase import RuntimePhase
 from .validation import validate_config
 from .yaml_io import dump_config_yaml
 
@@ -79,10 +80,18 @@ class _RecoveryMixin:
 
     async def async_create_config_backup_if_due(self) -> dict[str, Any] | None:
         """Create one daily export only from the fully validated live config."""
-        if self.recovery_active or self._unloading:
+        if (
+            self.recovery_active
+            or self._unloading
+            or self._runtime_phase is RuntimePhase.STOPPING
+        ):
             return None
         async with self._config_mutation_lock:
-            if self.recovery_active or self._unloading:
+            if (
+                self.recovery_active
+                or self._unloading
+                or self._runtime_phase is RuntimePhase.STOPPING
+            ):
                 return None
             backups = await self.config_backup_storage.async_list()
             now = dt_util.now().astimezone(UTC)
@@ -102,7 +111,7 @@ class _RecoveryMixin:
     async def _async_initialize_config_backups(self) -> None:
         """Catch up after downtime, then keep one event-driven daily deadline."""
         self._cancel_config_backup_schedule()
-        if self.recovery_active:
+        if self.recovery_active or self._runtime_phase is RuntimePhase.STOPPING:
             return
         try:
             await self.async_create_config_backup_if_due()
@@ -110,7 +119,11 @@ class _RecoveryMixin:
             _LOGGER.exception("Unable to create Alert Manager configuration backup")
             self._schedule_config_backup(retry=True)
             return
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return
         backups = await self._async_list_config_backups()
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return
         delay = CONFIG_BACKUP_INTERVAL_SECONDS
         if backups:
             latest = datetime.fromisoformat(backups[0]["created_at"]).astimezone(UTC)
@@ -123,7 +136,11 @@ class _RecoveryMixin:
     ) -> None:
         """Schedule one deadline instead of polling for backup age."""
         self._cancel_config_backup_schedule()
-        if self.recovery_active or self._unloading:
+        if (
+            self.recovery_active
+            or self._unloading
+            or self._runtime_phase is RuntimePhase.STOPPING
+        ):
             return
         delay = (
             CONFIG_BACKUP_RETRY_SECONDS
@@ -135,7 +152,11 @@ class _RecoveryMixin:
         @callback
         def backup_due(_now: datetime) -> None:
             self._config_backup_schedule_unsubscribe = None
-            if self._unloading or self.recovery_active:
+            if (
+                self._unloading
+                or self.recovery_active
+                or self._runtime_phase is RuntimePhase.STOPPING
+            ):
                 return
             self.entry.async_create_task(
                 self.hass,
@@ -155,7 +176,8 @@ class _RecoveryMixin:
             _LOGGER.exception("Unable to create Alert Manager configuration backup")
             self._schedule_config_backup(retry=True)
             return
-        self._schedule_config_backup()
+        if self._runtime_phase is not RuntimePhase.STOPPING:
+            self._schedule_config_backup()
 
     def _cancel_config_backup_schedule(self) -> None:
         """Cancel the single outstanding daily backup deadline."""

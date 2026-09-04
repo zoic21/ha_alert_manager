@@ -598,6 +598,15 @@ def test_variation_reference_survives_restart_while_gate_remains_true(hass, entr
         hass.states.set("sensor.source", "16")
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
+        reconciliation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+        )
+        reconciliation_timer["action"](reconciliation_timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         alert_id = f"rule:{created['id']}:sensor.source"
         assert restarted._variation_baselines[baseline_key] == 10
         assert restarted.records[alert_id].details.value == 6
@@ -884,6 +893,35 @@ def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_no
         assert record.detected_at == detected_at
         assert record.active_since == active_since
         assert record.acknowledged_by == "Admin"
+
+    asyncio.run(scenario())
+
+
+def test_entity_rename_collision_keeps_retained_record_provenance(hass, entry, set_now):
+    """A rename collision cannot strip startup protection from the kept record."""
+
+    async def scenario():
+        start = datetime(2026, 8, 27, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.old", "on")
+        hass.states.set("sensor.new", "on")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        created = await manager.async_create_rule(
+            _rule(entity_ids=["sensor.old", "sensor.new"])
+        )
+        old_alert_id = f"rule:{created['id']}:sensor.old"
+        new_alert_id = f"rule:{created['id']}:sensor.new"
+        manager.records[old_alert_id].detected_at = start + timedelta(seconds=1)
+        manager._unverified_restored_alert_ids = {new_alert_id}
+        manager._pending_entity_renames = {"sensor.old": "sensor.new"}
+
+        assert manager._apply_pending_entity_renames() is True
+
+        assert old_alert_id not in manager.records
+        assert set(manager.records) == {new_alert_id}
+        assert manager.records[new_alert_id].detected_at == start
+        assert manager._unverified_restored_alert_ids == {new_alert_id}
 
     asyncio.run(scenario())
 

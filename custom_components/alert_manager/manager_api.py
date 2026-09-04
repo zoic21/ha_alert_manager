@@ -6,6 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC
 from functools import wraps
 from typing import Any
@@ -37,7 +38,9 @@ from .const import (
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
-from .storage import sort_history
+from .runtime_phase import RuntimePhase
+from .storage import StorageDurabilitySnapshot, sort_history
+from .transactions import async_finish_non_interruptible
 from .validation import (
     validate_config,
     validate_config_update,
@@ -59,6 +62,22 @@ _LOGGER = logging.getLogger(__name__)
 _DELETED_ENTITIES_LIMIT = 50
 
 
+@dataclass(slots=True)
+class _ConfigurationSnapshot:
+    """In-memory state required to roll back one configuration transaction."""
+
+    config: dict[str, Any]
+    records: dict[str, AlertRecord]
+    pending_history: list[AlertHistoryEntry]
+    variation_baselines: dict[str, float]
+    variation_baselines_dirty: bool
+    pack_runtime: dict[str, dict[str, Any]]
+    unverified_restored_alert_ids: set[str]
+    rule_template_render_info: dict[tuple[str, str], Any]
+    rule_message_render_info: dict[tuple[str, str], Any]
+    storage_durability: StorageDurabilitySnapshot
+
+
 def _serialize_config_mutation(
     method: Callable[..., Awaitable[Any]],
 ) -> Callable[..., Awaitable[Any]]:
@@ -66,12 +85,35 @@ def _serialize_config_mutation(
 
     @wraps(method)
     async def locked(self: Any, *args: Any, **kwargs: Any) -> Any:
-        if self.recovery_active and method.__name__ != "async_import_config":
-            raise ValueError("Configuration recovery is required before making changes")
         async with self._config_mutation_lock:
-            return await method(self, *args, **kwargs)
+            _ensure_runtime_mutable(self)
+            if self.recovery_active and method.__name__ != "async_import_config":
+                raise ValueError(
+                    "Configuration recovery is required before making changes"
+                )
+            return await async_finish_non_interruptible(method(self, *args, **kwargs))
 
     return locked
+
+
+def _serialize_runtime_mutation(
+    method: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
+    """Serialize a non-configuration runtime transaction on one manager."""
+
+    @wraps(method)
+    async def locked(self: Any, *args: Any, **kwargs: Any) -> Any:
+        async with self._config_mutation_lock:
+            _ensure_runtime_mutable(self)
+            return await async_finish_non_interruptible(method(self, *args, **kwargs))
+
+    return locked
+
+
+def _ensure_runtime_mutable(manager: Any) -> None:
+    """Reject mutations after the shutdown boundary."""
+    if manager._unloading or manager._runtime_phase is RuntimePhase.STOPPING:
+        raise RuntimeError("Alert Manager is stopping")
 
 
 def _variation_reference_signature(
@@ -99,10 +141,17 @@ class _ApiMixin:
 
     def get_config(self) -> dict[str, Any]:
         """Return a defensive copy for WebSocket clients."""
+        if self._startup_reconciliation_snapshot is not None:
+            return deepcopy(self._startup_reconciliation_snapshot.config)
         return deepcopy(self.config)
 
     def public_snapshot(self) -> dict[str, Any]:
         """Return active and pending lists without resolved history."""
+        if (
+            self._startup_reconciliation_snapshot is not None
+            and self._last_public_snapshot is not None
+        ):
+            return deepcopy(self._last_public_snapshot)
         return self._build_public_snapshot()[0]
 
     def history_snapshot(self) -> dict[str, Any]:
@@ -355,7 +404,7 @@ class _ApiMixin:
                 await self.history_storage.async_save(self.history)
                 history_saved = True
             await self._async_save_main_store()
-        except Exception:
+        except BaseException:
             self.config = previous_config
             self.history = previous_history
             self._pending_history = previous_pending
@@ -371,6 +420,7 @@ class _ApiMixin:
             async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.get_history_config()
 
+    @_serialize_runtime_mutation
     async def async_clear_history(self) -> dict[str, Any]:
         """Delete history only, preserving every current runtime record."""
         previous_history = list(self.history)
@@ -379,7 +429,7 @@ class _ApiMixin:
         self._pending_history = []
         try:
             await self.history_storage.async_save([])
-        except Exception:
+        except BaseException:
             self.history = previous_history
             self._pending_history = previous_pending
             raise
@@ -399,12 +449,7 @@ class _ApiMixin:
             return False
 
         with self.notification_runtime.events_paused():
-            previous_config = deepcopy(self.config)
-            previous_records = deepcopy(self.records)
-            previous_pending_history = list(self._pending_history)
-            previous_variation_baselines = dict(self._variation_baselines)
-            previous_variation_dirty = self._variation_baselines_dirty
-            previous_pack_runtime = deepcopy(self._pack_runtime)
+            previous = self._configuration_snapshot()
             self.config["monitoring_enabled"] = enabled
             try:
                 if enabled:
@@ -419,17 +464,8 @@ class _ApiMixin:
                     self._clear_variation_baselines()
                     self._pack_runtime.clear()
                 await self._async_save_state()
-            except Exception:
-                self.config = previous_config
-                self._replace_records(previous_records)
-                self._pending_history = previous_pending_history
-                self._variation_baselines = previous_variation_baselines
-                self.storage.variation_baselines = self._variation_baselines
-                self._variation_baselines_dirty = previous_variation_dirty
-                self._pack_runtime = previous_pack_runtime
-                self.storage.pack_runtime = self._pack_runtime
-                self._cancel_all_timers()
-                self._reschedule_record_timers()
+            except BaseException:
+                self._restore_configuration_snapshot(previous)
                 raise
 
             self.notification_runtime.discard_batches()
@@ -437,7 +473,7 @@ class _ApiMixin:
                 async_dismiss_persistent_notification(
                     self.hass, MONITORING_NOTIFICATION_ID
                 )
-                self._emit_resume_events(previous_records)
+                self._emit_resume_events(previous.records)
             else:
                 reset_pack_runtimes(self.hass)
                 self._cancel_all_pack_rechecks()
@@ -541,6 +577,7 @@ class _ApiMixin:
         """Remove acknowledgement from one active alert idempotently."""
         return bool(await self.async_set_acknowledgements([alert_id], False, actor))
 
+    @_serialize_runtime_mutation
     async def async_set_acknowledgements(
         self, alert_ids: list[str], acknowledged: bool, actor: str | None
     ) -> list[str]:
@@ -571,7 +608,7 @@ class _ApiMixin:
                 record.clear_acknowledgement()
         try:
             await self._async_save_state()
-        except Exception:
+        except BaseException:
             for record, was_acknowledged, previous_at, previous_by in previous:
                 record.acknowledged = was_acknowledged
                 record.acknowledged_at = previous_at
@@ -647,7 +684,7 @@ class _ApiMixin:
             previous = self._configuration_snapshot()
             try:
                 self.config = candidate
-                if not self.monitoring_enabled and previous[0].get(
+                if not self.monitoring_enabled and previous.config.get(
                     "monitoring_enabled", True
                 ):
                     self._clear_variation_baselines()
@@ -664,7 +701,7 @@ class _ApiMixin:
                 if "pending_display_delay" in changes:
                     self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self._async_save_state()
-            except Exception:
+            except BaseException:
                 self._restore_configuration_snapshot(previous)
                 raise
             if notification_profiles_changed:
@@ -717,7 +754,7 @@ class _ApiMixin:
                 await self._async_save_main_store()
                 self._immediate_state_save_required = False
                 self._variation_baselines_dirty = False
-            except Exception:
+            except BaseException:
                 self._recovery_active = previous_recovery_active
                 self._restore_configuration_snapshot(previous)
                 self.history = previous_history
@@ -733,7 +770,7 @@ class _ApiMixin:
             self.notification_runtime.discard_batches()
             monitoring_changed = previous_monitoring_enabled != self.monitoring_enabled
             coherence_schedule_changed = (
-                previous[0].get("coherence_schedule", "none")
+                previous.config.get("coherence_schedule", "none")
                 != self.config["coherence_schedule"]
             )
             if monitoring_changed:
@@ -741,7 +778,7 @@ class _ApiMixin:
                     async_dismiss_persistent_notification(
                         self.hass, MONITORING_NOTIFICATION_ID
                     )
-                    self._emit_resume_events(previous[1])
+                    self._emit_resume_events(previous.records)
                 else:
                     self._cancel_all_timers()
                     self._cancel_all_device_event_timers()
@@ -771,7 +808,7 @@ class _ApiMixin:
             for entity_id in rule.entity_ids:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
             await self._async_save_state()
-        except Exception:
+        except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
         self._publish_if_changed()
@@ -833,7 +870,7 @@ class _ApiMixin:
                 for entity_id in rule.entity_ids:
                     self._refresh_active_rule_message(rule, entity_id)
             await self._async_save_state()
-        except Exception:
+        except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
         alert_ids_to_discard: set[str] = set()
@@ -881,7 +918,7 @@ class _ApiMixin:
             for entity_id in rule.entity_ids:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
             await self._async_save_state()
-        except Exception:
+        except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
         await self.notification_runtime.async_discard_alerts(
@@ -889,50 +926,41 @@ class _ApiMixin:
         )
         self._publish_if_changed()
 
-    def _configuration_snapshot(
-        self,
-    ) -> tuple[
-        dict[str, Any],
-        dict[str, AlertRecord],
-        list[AlertHistoryEntry],
-        dict[str, float],
-        bool,
-        dict[str, dict[str, Any]],
-    ]:
+    def _configuration_snapshot(self) -> _ConfigurationSnapshot:
         """Copy the state needed to roll back a failed configuration write."""
-        return (
-            deepcopy(self.config),
-            deepcopy(self.records),
-            list(self._pending_history),
-            dict(self._variation_baselines),
-            self._variation_baselines_dirty,
-            deepcopy(self._pack_runtime),
+        return _ConfigurationSnapshot(
+            config=deepcopy(self.config),
+            records=deepcopy(self.records),
+            pending_history=list(self._pending_history),
+            variation_baselines=dict(self._variation_baselines),
+            variation_baselines_dirty=self._variation_baselines_dirty,
+            pack_runtime=deepcopy(self._pack_runtime),
+            unverified_restored_alert_ids=set(self._unverified_restored_alert_ids),
+            rule_template_render_info=dict(self._rule_template_render_info),
+            rule_message_render_info=dict(self._rule_message_render_info),
+            storage_durability=self.storage.durability_snapshot(),
         )
 
     def _restore_configuration_snapshot(
         self,
-        snapshot: tuple[
-            dict[str, Any],
-            dict[str, AlertRecord],
-            list[AlertHistoryEntry],
-            dict[str, float],
-            bool,
-            dict[str, dict[str, Any]],
-        ],
+        snapshot: _ConfigurationSnapshot,
     ) -> None:
         """Restore configuration, records, indexes and pending timers."""
         self._cancel_all_timers()
-        (
-            self.config,
-            records,
-            self._pending_history,
-            self._variation_baselines,
-            self._variation_baselines_dirty,
-            self._pack_runtime,
-        ) = snapshot
-        self._replace_records(records)
+        self.config = snapshot.config
+        self._pending_history = snapshot.pending_history
+        self._variation_baselines = snapshot.variation_baselines
+        self._variation_baselines_dirty = snapshot.variation_baselines_dirty
+        self._pack_runtime = snapshot.pack_runtime
+        self._unverified_restored_alert_ids = set(
+            snapshot.unverified_restored_alert_ids
+        )
+        self._rule_template_render_info = dict(snapshot.rule_template_render_info)
+        self._rule_message_render_info = dict(snapshot.rule_message_render_info)
+        self._replace_records(snapshot.records)
         self.storage.variation_baselines = self._variation_baselines
         self.storage.pack_runtime = self._pack_runtime
+        self.storage.restore_durability_snapshot(snapshot.storage_durability)
         self._rebuild_rule_index()
         self._refresh_tracking()
         self._reschedule_record_timers()
