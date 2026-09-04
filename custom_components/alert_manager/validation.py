@@ -22,6 +22,7 @@ from .const import (
     MIN_HISTORY_LIMIT,
 )
 from .models import Rule, safe_float
+from .notifications import validate_notification_profiles
 from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -41,6 +42,7 @@ _CONFIG_UPDATE_KEYS = {
     "entity_delays",
     "automatic",
     "rules",
+    "notification_profiles",
 }
 _AUTOMATIC_KEYS = {
     pack.id: {
@@ -217,6 +219,9 @@ def validate_config(config: Any) -> dict[str, Any]:
         seen.add(rule.id)
         normalized_rules.append(rule.as_dict())
     result["rules"] = normalized_rules
+    result["notification_profiles"] = validate_notification_profiles(
+        config.get("notification_profiles", [])
+    )
     return result
 
 

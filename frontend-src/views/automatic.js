@@ -1,4 +1,4 @@
-import { MDI_PLUS } from "../utils/constants.js";
+import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import {
   renderConfigurationDrawer,
@@ -54,7 +54,7 @@ export function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
             <div class="fields">
-              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
               ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
                 pack,
                 field,

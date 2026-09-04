@@ -249,6 +249,28 @@ async def websocket_rule_test(
 @websocket_api.async_response
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "alert_manager/notifications/test",
+        vol.Required("profile_id"): vol.All(str, vol.Length(min=1, max=64)),
+    }
+)
+async def websocket_notification_test(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Send a stateless test notification for one configured profile."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_test_notification_profile(msg["profile_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "alert_manager/rules/create",
         vol.Required("rule"): dict,
     }
@@ -517,6 +539,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_packs_list,
         websocket_rules_list,
         websocket_rule_test,
+        websocket_notification_test,
         websocket_rule_create,
         websocket_rule_update,
         websocket_rule_yaml_validate,

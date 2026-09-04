@@ -152,6 +152,7 @@ export async function load() {
         this._refreshUiState();
         this._hydrateSelectors();
       }
+      this._openAlertDeepLink();
     }
 }
 
@@ -202,6 +203,7 @@ export async function refreshAlerts() {
     try {
       this._alerts = await this._alertsRefreshPromise;
       this._rememberPanelState();
+      this._openAlertDeepLink();
       if (this.isConnected && this._activeTab === "overview") {
         this._refreshOverviewData();
       }

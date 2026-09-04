@@ -1,4 +1,4 @@
-import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
+import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
 import { renderSideDrawer } from "./configuration-drawer.js";
@@ -441,7 +441,7 @@ export function renderRuleVisualEditor(context) {
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, 31536000, { nameMode: "name" })}
+            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
             <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
@@ -450,7 +450,7 @@ export function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
           <div class="fields">
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
-            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
+            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
           </div>
         </section>` : ""}`;
 }

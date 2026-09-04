@@ -7,6 +7,7 @@ const filenames = [
   "components/alert-table.js",
   "components/config-backups.js",
   "components/configuration-drawer.js",
+  "components/notification-profiles.js",
   "components/rule-editor.js",
   "styles/base-styles.js",
   "styles/table-styles.js",

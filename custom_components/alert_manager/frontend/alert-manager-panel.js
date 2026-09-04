@@ -58,6 +58,12 @@ const MDI_UPLOAD = "M5,17H19V19H5M12,3L5,10H9V14H15V10H19L12,3Z";
 
 const MDI_FILTER_VARIANT_REMOVE = "M3.27,5L2,3.73L3.27,2.46L4.54,3.73L5.81,2.46L7.08,3.73L5.81,5L7.08,6.27L5.81,7.54L4.54,6.27L3.27,7.54L2,6.27L3.27,5M21,5V7H11V5H21M11,19H21V21H11V19M13,12H21V14H13V12Z";
 
+const MAX_DURATION_SECONDS = 31536000;
+
+const MIN_NOTIFICATION_REMINDER_SECONDS = 60;
+
+const DEFAULT_NOTIFICATION_REMINDER_SECONDS = 300;
+
 const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_contains"]);
 
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
@@ -759,6 +765,7 @@ async function load() {
         this._refreshUiState();
         this._hydrateSelectors();
       }
+      this._openAlertDeepLink();
     }
 }
 
@@ -809,6 +816,7 @@ async function refreshAlerts() {
     try {
       this._alerts = await this._alertsRefreshPromise;
       this._rememberPanelState();
+      this._openAlertDeepLink();
       if (this.isConnected && this._activeTab === "overview") {
         this._refreshOverviewData();
       }
@@ -1809,6 +1817,19 @@ function openAlertDetails(kind, row) {
     dialog.open = true;
 }
 
+function openAlertDeepLink() {
+    const search = globalThis.window?.location?.search ?? "";
+    const alertId = new URLSearchParams(search).get("alert");
+    if (!alertId || this._handledAlertDeepLink === alertId) return;
+    const row = this._tableRows("overview").find(
+      (candidate) => candidate.id === alertId && candidate.status !== "pending",
+    );
+    if (!row) return;
+    this._handledAlertDeepLink = alertId;
+    this._activeTab = "overview";
+    this._openAlertDetails("overview", row);
+}
+
 async function handleAlertDetailsSelection(event) {
     const path = event.composedPath?.() ?? [event.target];
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
@@ -2160,6 +2181,8 @@ const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "open-automatic-configuration",
   "open-deleted-entities",
   "open-settings-configuration",
+  "new-notification-profile",
+  "edit-notification-profile",
 ]);
 
 const isCompanionApp = () => Boolean(
@@ -2204,7 +2227,10 @@ function updateDrawerLayout(previousNarrow) {
   ) return;
   if (this._editingRule !== null) this._captureRuleDraft();
   if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
-  if (this._activeTab === "settings") this._captureEntityDelayValues();
+  if (this._activeTab === "settings") {
+    this._captureEntityDelayValues();
+    this._captureNotificationProfileDraft();
+  }
   if (!this._narrow) {
     this._render();
     return;
@@ -2288,6 +2314,421 @@ function replaceConfigurationDrawer(root, markup) {
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
   if (root && markup) root.insertAdjacentHTML("beforeend", markup);
+}
+
+// Source: frontend-src/components/notification-profiles.js
+const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
+const SELECTOR_TYPES = ["pack", "label", "rule"];
+
+function newNotificationProfileDraft() {
+  const generatedId = globalThis.crypto?.randomUUID?.()
+    ?? `profile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    id: generatedId,
+    name: "",
+    enabled: true,
+    primary_targets: [],
+    fallback_targets: [],
+    label_ids: [],
+    default_policy: {
+      notify_on_start: true,
+      notify_on_resolved: true,
+      reminder_interval: null,
+    },
+    exceptions: [],
+  };
+}
+
+function cloneNotificationProfile(profile) {
+  return {
+    ...profile,
+    primary_targets: [...(profile.primary_targets ?? [])],
+    fallback_targets: [...(profile.fallback_targets ?? [])],
+    label_ids: [...(profile.label_ids ?? [])],
+    default_policy: { ...(profile.default_policy ?? {}) },
+    exceptions: (profile.exceptions ?? []).map((exception) => ({ ...exception })),
+  };
+}
+
+function renderNotificationProfiles({ profiles, busy, t }) {
+  return `<ha-card outlined class="panel settings-card notification-profiles-card">
+    <div class="notification-section-header">
+      <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
+      <ha-button appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
+    </div>
+    <div class="notification-profile-list">
+      ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
+    </div>
+  </ha-card>`;
+}
+
+function renderProfileRow(profile, busy, t) {
+  const policy = profile.default_policy ?? {};
+  const reminder = policy.reminder_interval === null
+    ? t("notifications.never")
+    : t("notifications.seconds", { count: policy.reminder_interval });
+  return `<div class="notification-profile-row">
+    <div class="notification-profile-summary">
+      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span></div>
+      <small>${esc(t("notifications.targets_summary", { count: profile.primary_targets.length, fallback: profile.fallback_targets.length }))}</small>
+      <small>${esc(t("notifications.policy_summary", {
+        start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
+        resolved: policy.notify_on_resolved ? t("notifications.yes") : t("notifications.no"),
+        reminder,
+        exceptions: profile.exceptions.length,
+      }))}</small>
+    </div>
+    <div class="actions notification-profile-actions">
+      <ha-button appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
+      <ha-button appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
+      <ha-button appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
+    </div>
+  </div>`;
+}
+
+function renderNotificationProfileDrawer({
+  draft, busy, useBottomSheet, t,
+}) {
+  if (!draft) return "";
+  const policy = draft.default_policy;
+  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+    <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
+    <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.primary_targets"))}</span><ha-selector id="notification-primary-targets"></ha-selector><small>${esc(t("notifications.primary_targets_help"))}</small></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.fallback_targets"))}</span><ha-selector id="notification-fallback-targets"></ha-selector><small>${esc(t("notifications.fallback_help"))}</small></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
+  </div>
+  <h3>${esc(t("notifications.defaults"))}</h3>
+  <div class="notification-policy-grid">
+    ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
+    ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
+    <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+  </div>
+  <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+  <div class="notification-exception-list">${draft.exceptions.length
+    ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
+    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>`;
+  return renderConfigurationDrawer({
+    title: draft.name || t("notifications.new"),
+    ariaLabel: t("notifications.close_aria"),
+    content,
+    saveAction: "save-notification-profile",
+    saveLabel: t("buttons.save"),
+    busy,
+    useBottomSheet,
+  });
+}
+
+function renderPolicySwitch(id, label, checked) {
+  return `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
+}
+
+function renderException(exception, index, t) {
+  const type = exception.selector_type ?? "pack";
+  const reminderMode = Object.hasOwn(exception, "reminder_interval")
+    ? (exception.reminder_interval === null ? "never" : "custom")
+    : "inherit";
+  return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
+    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
+    <div class="notification-exception-grid">
+      <div class="field"><span class="field-label">${esc(t("notifications.selector_type"))}</span><ha-select id="notification-exception-type-${index}"></ha-select></div>
+      <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
+      ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
+      ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
+      <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div>
+    </div>
+  </ha-card>`;
+}
+
+function renderSelectorControl(type, index) {
+  if (type === "label") {
+    return `<ha-selector id="notification-exception-selector-${index}"></ha-selector>`;
+  }
+  return `<ha-select id="notification-exception-selector-${index}"></ha-select>`;
+}
+
+function renderOverrideSelect(id, label, value) {
+  return `<div class="field"><span class="field-label">${esc(label)}</span><ha-select id="${id}" data-value="${esc(value)}"></ha-select></div>`;
+}
+
+function booleanOverrideValue(exception, key) {
+  return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
+}
+
+function hydrateNotificationProfileControls(panel, { packs, rules }) {
+  const draft = panel._notificationProfileDraft;
+  if (!draft) return;
+  const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
+  panel._configureSelector(
+    "notification-primary-targets",
+    notifySelector,
+    draft.primary_targets,
+    (value) => { draft.primary_targets = panel._multipleSelectorValue(value, draft.primary_targets); },
+  );
+  panel._configureSelector(
+    "notification-fallback-targets",
+    notifySelector,
+    draft.fallback_targets,
+    (value) => { draft.fallback_targets = panel._multipleSelectorValue(value, draft.fallback_targets); },
+  );
+  panel._configureSelector(
+    "notification-labels",
+    { label: { multiple: true } },
+    draft.label_ids,
+    (value) => { draft.label_ids = panel._multipleSelectorValue(value, draft.label_ids); },
+  );
+  draft.exceptions.forEach((exception, index) => {
+    panel._configureSelect(
+      `notification-exception-type-${index}`,
+      SELECTOR_TYPES.map((value) => ({
+        value,
+        label: panel._t(`notifications.selector_types.${value}`),
+      })),
+      exception.selector_type,
+      (value) => {
+        captureNotificationProfileDraft(panel);
+        exception.selector_type = value;
+        exception.selector_id = "";
+        panel._refreshSettingsConfigurationDrawer();
+      },
+    );
+    if (exception.selector_type === "label") {
+      panel._configureSelector(
+        `notification-exception-selector-${index}`,
+        { label: {} },
+        exception.selector_id,
+        (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
+      );
+    } else {
+      const options = exception.selector_type === "rule"
+        ? rules.map((rule) => ({ value: rule.id, label: rule.name }))
+        : packs.map((pack) => ({
+          value: pack.id,
+          label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
+        }));
+      panel._configureSelect(
+        `notification-exception-selector-${index}`,
+        options,
+        exception.selector_id,
+        (value) => { exception.selector_id = value ?? ""; },
+      );
+    }
+    for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
+      panel._configureSelect(
+        `notification-exception-${suffix}-${index}`,
+        POLICY_BOOLEAN_OPTIONS.map((value) => ({
+          value,
+          label: panel._t(`notifications.override.${value}`),
+        })),
+        booleanOverrideValue(exception, key),
+        (value) => setBooleanOverride(exception, key, value),
+      );
+    }
+    const reminderMode = Object.hasOwn(exception, "reminder_interval")
+      ? (exception.reminder_interval === null ? "never" : "custom")
+      : "inherit";
+    panel._configureSelect(
+      `notification-exception-reminder-mode-${index}`,
+      ["inherit", "never", "custom"].map((value) => ({
+        value,
+        label: panel._t(`notifications.reminder_modes.${value}`),
+      })),
+      reminderMode,
+      (value) => {
+        captureNotificationProfileDraft(panel);
+        if (value === "inherit") delete exception.reminder_interval;
+        else if (value === "never") exception.reminder_interval = null;
+        else exception.reminder_interval = DEFAULT_NOTIFICATION_REMINDER_SECONDS;
+        panel._refreshSettingsConfigurationDrawer();
+      },
+    );
+  });
+}
+
+function setBooleanOverride(exception, key, value) {
+  if (value === "inherit") delete exception[key];
+  else exception[key] = value === "true";
+}
+
+function captureNotificationProfileDraft(panel) {
+  const draft = panel._notificationProfileDraft;
+  if (!draft) return;
+  draft.name = String(panel.shadowRoot.querySelector("#notification-profile-name")?.value ?? draft.name).trim();
+  draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
+  draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
+  draft.default_policy.notify_on_resolved = Boolean(panel.shadowRoot.querySelector("#notification-resolved")?.checked);
+  const reminder = String(panel.shadowRoot.querySelector("#notification-reminder")?.value ?? "").trim();
+  draft.default_policy.reminder_interval = reminder === "" ? null : Number(reminder);
+  draft.exceptions.forEach((exception, index) => {
+    if (!Object.hasOwn(exception, "reminder_interval") || exception.reminder_interval === null) return;
+    const value = panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`)?.value;
+    if (value !== undefined) exception.reminder_interval = Number(value);
+  });
+}
+
+function notificationProfileValidationError(draft, t) {
+  if (!draft.name) return t("notifications.validation.name");
+  if (!draft.primary_targets.length) return t("notifications.validation.primary");
+  const targets = new Set(draft.primary_targets);
+  if (draft.fallback_targets.some((target) => targets.has(target))) {
+    return t("notifications.validation.duplicate_target");
+  }
+  const reminder = draft.default_policy.reminder_interval;
+  if (invalidReminder(reminder)) {
+    return t("notifications.validation.reminder");
+  }
+  for (const exception of draft.exceptions) {
+    if (!exception.selector_id) return t("notifications.validation.selector");
+    const fields = ["notify_on_start", "notify_on_resolved", "reminder_interval"];
+    if (!fields.some((field) => Object.hasOwn(exception, field))) {
+      return t("notifications.validation.override");
+    }
+    if (Object.hasOwn(exception, "reminder_interval")
+      && invalidReminder(exception.reminder_interval)) {
+      return t("notifications.validation.reminder");
+    }
+  }
+  return null;
+}
+
+function invalidReminder(value) {
+  return value !== null && (
+    !Number.isInteger(value) || value < MIN_NOTIFICATION_REMINDER_SECONDS
+  );
+}
+
+async function saveNotificationProfiles(panel, candidateProfiles) {
+  const profiles = candidateProfiles.map(cloneNotificationProfile);
+  panel._busy = true;
+  panel._notice = null;
+  panel._refreshUiState();
+  let saved = false;
+  try {
+    panel._config = await panel._api.call({
+      type: "alert_manager/config/update",
+      config: { notification_profiles: profiles },
+    });
+    panel._settingsDraft.notification_profiles = (
+      panel._config.notification_profiles ?? []
+    ).map(cloneNotificationProfile);
+    panel._notificationProfileDraft = null;
+    panel._notificationProfileId = null;
+    panel._configurationDrawer = null;
+    panel._notice = { kind: "success", text: panel._t("success.settings_saved") };
+    saved = true;
+  } catch (error) {
+    panel._notice = { kind: "error", text: panel._errorText(error) };
+  } finally {
+    panel._busy = false;
+    if (saved) panel._render();
+    else panel._refreshUiState();
+  }
+}
+
+function openNotificationProfile(panel, profile = null) {
+  panel._notificationProfileDraft = profile
+    ? cloneNotificationProfile(profile)
+    : newNotificationProfileDraft();
+  panel._notificationProfileId = profile?.id ?? null;
+  panel._configurationDrawer = { kind: "notification" };
+  panel._refreshSettingsConfigurationDrawer();
+}
+
+async function handleNotificationProfileAction(action, button) {
+  if (action === "new-notification-profile") {
+    this._ensureSettingsDraft();
+    openNotificationProfile(this);
+    return true;
+  }
+  if (action === "edit-notification-profile") {
+    this._ensureSettingsDraft();
+    const profile = this._settingsDraft.notification_profiles.find(
+      (item) => item.id === button.dataset.profileId,
+    );
+    if (profile) openNotificationProfile(this, profile);
+    return true;
+  }
+  if (action === "save-notification-profile") {
+    captureNotificationProfileDraft(this);
+    const error = notificationProfileValidationError(
+      this._notificationProfileDraft,
+      (key) => this._t(key),
+    );
+    if (error) {
+      this._notice = { kind: "error", text: error };
+      this._refreshUiState();
+      return true;
+    }
+    const profile = cloneNotificationProfile(this._notificationProfileDraft);
+    const profiles = (this._settingsDraft.notification_profiles ?? []).map(
+      cloneNotificationProfile,
+    );
+    const index = profiles.findIndex((item) => item.id === this._notificationProfileId);
+    if (index < 0) profiles.push(profile);
+    else profiles[index] = profile;
+    await saveNotificationProfiles(this, profiles);
+    return true;
+  }
+  if (action === "delete-notification-profile") {
+    this._ensureSettingsDraft();
+    const profile = this._settingsDraft.notification_profiles.find(
+      (item) => item.id === button.dataset.profileId,
+    );
+    if (!profile || !window.confirm(
+      this._t("notifications.delete_confirm", { name: profile.name }),
+    )) return true;
+    await saveNotificationProfiles(
+      this,
+      this._settingsDraft.notification_profiles.filter(
+        (item) => item.id !== profile.id,
+      ),
+    );
+    return true;
+  }
+  if (action === "test-notification-profile") {
+    const result = await this._call({
+      type: "alert_manager/notifications/test",
+      profile_id: button.dataset.profileId,
+    }, "");
+    if (!result) return true;
+    const failed = (result.failed_targets ?? []).map(
+      (item) => item.entity_id,
+    ).join(", ");
+    this._notice = result.success
+      ? { kind: "success", text: this._t("notifications.test_success") }
+      : {
+        kind: "error",
+        text: this._t("notifications.test_failed", { targets: failed }),
+      };
+    this._refreshUiState();
+    return true;
+  }
+  if (action === "add-notification-exception") {
+    captureNotificationProfileDraft(this);
+    this._notificationProfileDraft.exceptions.push({
+      selector_type: "pack",
+      selector_id: "",
+    });
+    this._refreshSettingsConfigurationDrawer();
+    return true;
+  }
+  if (action === "remove-notification-exception") {
+    captureNotificationProfileDraft(this);
+    this._notificationProfileDraft.exceptions.splice(Number(button.dataset.index), 1);
+    this._refreshSettingsConfigurationDrawer();
+    return true;
+  }
+  if (
+    action === "close-configuration-drawer"
+    && this._configurationDrawer?.kind === "notification"
+  ) {
+    this._configurationDrawer = null;
+    this._notificationProfileDraft = null;
+    this._notificationProfileId = null;
+    this._refreshSettingsConfigurationDrawer();
+    return true;
+  }
+  return false;
 }
 
 // Source: frontend-src/components/rule-editor.js
@@ -2729,7 +3170,7 @@ function renderRuleVisualEditor(context) {
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, 31536000, { nameMode: "name" })}
+            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
             <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
@@ -2738,7 +3179,7 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
           <div class="fields">
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
-            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, 31536000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
+            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
           </div>
         </section>` : ""}`;
 }
@@ -4401,7 +4842,7 @@ function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
             <div class="fields">
-              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, 31536000, { required: false, help: t("automatic.empty_delay_help") })}
+              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
               ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
                 pack,
                 field,
@@ -4862,15 +5303,16 @@ async function handleAutomaticAction(action, button) {
 function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
-      ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
+      ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
+      busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -4888,6 +5330,11 @@ function renderSettings(context) {
           ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
         </div>
       </div></ha-card>
+      ${renderNotificationProfiles({
+        profiles: settingsDraft.notification_profiles ?? [],
+        busy,
+        t,
+      })}
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
@@ -4907,7 +5354,8 @@ function renderSettings(context) {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
-        settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+        settingsDraft, entityDelayDraft, configurationDrawer,
+        notificationProfileDraft, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -4918,8 +5366,17 @@ function renderSettingsConfigurationEntry(id, label, count, t) {
 
 function renderSettingsConfigurationDrawer(context) {
   const {
-    settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+    settingsDraft, entityDelayDraft, configurationDrawer,
+    notificationProfileDraft, busy, useBottomSheet, t,
   } = context;
+  if (configurationDrawer?.kind === "notification") {
+    return renderNotificationProfileDrawer({
+      draft: notificationProfileDraft,
+      busy,
+      useBottomSheet,
+      t,
+    });
+  }
   if (configurationDrawer?.kind !== "settings") return "";
   const id = configurationDrawer.id;
   let title;
@@ -4932,7 +5389,7 @@ function renderSettingsConfigurationDrawer(context) {
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
-        <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
         <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
@@ -4964,6 +5421,7 @@ function renderSettingsPanel() {
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
+      notificationProfileDraft: this._notificationProfileDraft,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -5137,6 +5595,8 @@ function resetSettingsDraft() {
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
+    this._notificationProfileDraft = null;
+    this._notificationProfileId = null;
 }
 
 function ensureSettingsDraft() {
@@ -5153,6 +5613,9 @@ function ensureSettingsDraft() {
       excluded_labels: [...(this._config.excluded_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
+      notification_profiles: (this._config.notification_profiles ?? []).map(
+        cloneNotificationProfile,
+      ),
     };
     this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
       ([entity_id, delay]) => ({ entity_id, delay }),
@@ -5264,6 +5727,10 @@ function hydrateSettingsControls() {
       (value) => this._setEntityDelayEntity(index, value),
     );
   });
+  hydrateNotificationProfileControls(this, {
+    packs: this._packs.filter((pack) => pack.available),
+    rules: this._config.rules ?? [],
+  });
 }
 
 function refreshSettingsConfigurationDrawer() {
@@ -5276,6 +5743,7 @@ function refreshSettingsConfigurationDrawer() {
     settingsDraft: this._settingsDraft,
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
+    notificationProfileDraft: this._notificationProfileDraft,
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
@@ -5756,6 +6224,72 @@ const settingsStyles = `
   .settings-save-actions {
     justify-content: flex-end;
     margin-top: 4px;
+  }
+  .notification-section-header,
+  .notification-profile-row,
+  .notification-exception-heading,
+  .notification-exceptions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .notification-section-header > div,
+  .notification-profile-summary,
+  .notification-exceptions-header > div {
+    min-width: 0;
+  }
+  .notification-profile-list,
+  .notification-profile-summary,
+  .notification-exception-list {
+    display: grid;
+    gap: 8px;
+  }
+  .notification-profile-row {
+    min-height: 64px;
+    padding: 10px 0;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .notification-profile-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .notification-profile-status {
+    color: var(--secondary-text-color, #727272);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .notification-profile-summary small {
+    margin: 0;
+  }
+  .notification-profile-actions {
+    flex: none;
+    flex-wrap: wrap;
+  }
+  .notification-profile-fields,
+  .notification-policy-grid,
+  .notification-exception-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .notification-policy-grid {
+    margin-bottom: 8px;
+  }
+  .notification-exceptions-header {
+    align-items: flex-start;
+    margin-top: 8px;
+  }
+  .notification-exception {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+  .notification-exception h3,
+  .notification-exceptions-header h3,
+  .side-drawer-section > h3 {
+    margin: 0;
   }
   .config-backups {
     display: grid;
@@ -6526,6 +7060,23 @@ const responsiveStyles = `
     .configuration-section-heading {
       align-items: center;
     }
+    .notification-section-header,
+    .notification-profile-row,
+    .notification-exceptions-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .notification-profile-actions {
+      justify-content: flex-start;
+    }
+    .notification-profile-actions ha-button {
+      width: auto;
+    }
+    .notification-profile-fields,
+    .notification-policy-grid,
+    .notification-exception-grid {
+      grid-template-columns: 1fr;
+    }
     .rule-value-row {
       grid-template-columns: 1fr;
     }
@@ -6559,6 +7110,7 @@ const ACTION_HANDLERS = [
   handleHistoryAction,
   handleCoherenceAction,
   handleAutomaticAction,
+  handleNotificationProfileAction,
   handleSettingsAction,
   handleRulesAction,
 ];
@@ -6622,6 +7174,8 @@ class AlertManagerPanel extends HTMLElement {
   _resetSettingsDraft = resetSettingsDraft;
   _ensureSettingsDraft = ensureSettingsDraft;
   _captureEntityDelayValues = captureEntityDelayValues;
+  _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
+  _refreshSettingsConfigurationDrawer = refreshSettingsConfigurationDrawer;
   _setEntityDelayEntity = setEntityDelayEntity;
   _refreshAlertTableData = refreshAlertTableData;
   _loadNativeDateRangePicker = loadNativeDateRangePicker;
@@ -6662,6 +7216,7 @@ class AlertManagerPanel extends HTMLElement {
   _alertDetailsItems = alertDetailsItems;
   _renderAlertDetails = renderAlertDetailsPanel;
   _openAlertDetails = openAlertDetails;
+  _openAlertDeepLink = openAlertDeepLink;
   _closeAlertDetailsDialog = closeAlertDetailsDialog;
   _openMoreInfo = openMoreInfo;
   _overviewContentScroller = overviewContentScroller;
@@ -6773,15 +7328,14 @@ class AlertManagerPanel extends HTMLElement {
     this._filterPaneKind = "";
     this._selectionMode = false;
     this._selectedAlertIds = new Set();
-    this._settingsDraft = null;
-    this._entityDelayDraft = null;
-    this._ignoredReferenceDraft = "";
+    resetSettingsDraft.call(this);
     this._automaticMapDraft = null;
     this._configurationDrawer = null;
     this._ruleEditorWidth = 560;
     this._ruleEditorResize = null;
     this._moreInfoScrollRestore = null;
     this._alertDetailsDialog = null;
+    this._handledAlertDeepLink = null;
     this._nativeBottomSheetLoadPromise = null;
     this._configuredControls = new WeakSet();
     this.shadowRoot.addEventListener("click", (event) => this._handleClick(event));
@@ -6798,19 +7352,16 @@ class AlertManagerPanel extends HTMLElement {
     this._ruleEditorResizeMove = (event) => this._resizeRuleEditor(event);
     this._ruleEditorResizeEnd = () => this._stopRuleEditorResize();
   }
-
   set hass(value) {
     setHass.call(this, value);
   }
   get hass() {
     return this._hass;
   }
-
   async _handleMenuSelected(event) {
     if (await this._handleAlertDetailsSelection(event)) return;
     await this._handleSelected(event);
   }
-
   set panel(value) {
     this._panel = value;
   }
@@ -7201,7 +7752,6 @@ class AlertManagerPanel extends HTMLElement {
       void this._handleClick({ target: summary });
     }
   }
-
   async _handleSubmit(event) {
     event.preventDefault();
     if (this._busy) return;

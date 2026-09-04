@@ -20,6 +20,7 @@ from custom_components.alert_manager.const import (
     EVENT_DEVICE_ALERT_STARTED,
     MAX_RULES,
     SIGNAL_ALERTS_UPDATED,
+    SIGNAL_NOTIFICATION_LIFECYCLE,
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus, Rule
@@ -2428,10 +2429,13 @@ def test_unload_reload_cleans_listeners_and_timers(hass, entry):
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
     assert any(hass.bus.listeners.values())
+    assert len(hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE]) == 1
     assert any(not timer["cancelled"] for timer in hass.timers)
     run(manager.async_unload())
     assert all(not listeners for listeners in hass.bus.listeners.values())
+    assert hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE] == []
     assert all(timer["cancelled"] for timer in hass.timers)
     reloaded = make_manager(hass, entry)
     assert reloaded.records
     assert sum(len(items) for items in hass.bus.listeners.values()) == 5
+    assert len(hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE]) == 1

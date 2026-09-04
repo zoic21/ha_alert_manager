@@ -969,6 +969,19 @@ export function openAlertDetails(kind, row) {
     dialog.open = true;
 }
 
+export function openAlertDeepLink() {
+    const search = globalThis.window?.location?.search ?? "";
+    const alertId = new URLSearchParams(search).get("alert");
+    if (!alertId || this._handledAlertDeepLink === alertId) return;
+    const row = this._tableRows("overview").find(
+      (candidate) => candidate.id === alertId && candidate.status !== "pending",
+    );
+    if (!row) return;
+    this._handledAlertDeepLink = alertId;
+    this._activeTab = "overview";
+    this._openAlertDetails("overview", row);
+}
+
 export async function handleAlertDetailsSelection(event) {
     const path = event.composedPath?.() ?? [event.target];
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);

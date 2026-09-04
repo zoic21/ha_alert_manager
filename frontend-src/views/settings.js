@@ -1,23 +1,36 @@
-import { ALERT_MANAGER_ENTITY_IDS, MDI_DOWNLOAD, MDI_PLUS, MDI_UPLOAD } from "../utils/constants.js";
+import {
+  ALERT_MANAGER_ENTITY_IDS,
+  MAX_DURATION_SECONDS,
+  MDI_DOWNLOAD,
+  MDI_PLUS,
+  MDI_UPLOAD,
+} from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import {
   renderConfigurationDrawer,
   replaceConfigurationDrawer,
 } from "../components/configuration-drawer.js";
+import {
+  cloneNotificationProfile,
+  hydrateNotificationProfileControls,
+  renderNotificationProfileDrawer,
+  renderNotificationProfiles,
+} from "../components/notification-profiles.js";
 
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
-      ignoredReferenceDraft, configurationDrawer, busy, useBottomSheet,
+      ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
+      busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, 31536000, { help: t("settings.global_delay_help") })}
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, 31536000, { help: t("settings.pending_display_delay_help") })}
+        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
@@ -35,6 +48,11 @@ export function renderSettings(context) {
           ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
         </div>
       </div></ha-card>
+      ${renderNotificationProfiles({
+        profiles: settingsDraft.notification_profiles ?? [],
+        busy,
+        t,
+      })}
       <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
@@ -54,7 +72,8 @@ export function renderSettings(context) {
       </ha-card>
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
-        settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+        settingsDraft, entityDelayDraft, configurationDrawer,
+        notificationProfileDraft, busy, useBottomSheet, t,
       })}
     </form>`;
 }
@@ -65,8 +84,17 @@ export function renderSettingsConfigurationEntry(id, label, count, t) {
 
 export function renderSettingsConfigurationDrawer(context) {
   const {
-    settingsDraft, entityDelayDraft, configurationDrawer, busy, useBottomSheet, t,
+    settingsDraft, entityDelayDraft, configurationDrawer,
+    notificationProfileDraft, busy, useBottomSheet, t,
   } = context;
+  if (configurationDrawer?.kind === "notification") {
+    return renderNotificationProfileDrawer({
+      draft: notificationProfileDraft,
+      busy,
+      useBottomSheet,
+      t,
+    });
+  }
   if (configurationDrawer?.kind !== "settings") return "";
   const id = configurationDrawer.id;
   let title;
@@ -79,7 +107,7 @@ export function renderSettingsConfigurationDrawer(context) {
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
-        <ha-input data-delay-index="${index}" type="number" min="0" max="31536000" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
         <ha-button appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
@@ -111,6 +139,7 @@ export function renderSettingsPanel() {
       entityDelayDraft: this._entityDelayDraft,
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
+      notificationProfileDraft: this._notificationProfileDraft,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -284,6 +313,8 @@ export function resetSettingsDraft() {
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
+    this._notificationProfileDraft = null;
+    this._notificationProfileId = null;
 }
 
 export function ensureSettingsDraft() {
@@ -300,6 +331,9 @@ export function ensureSettingsDraft() {
       excluded_labels: [...(this._config.excluded_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
+      notification_profiles: (this._config.notification_profiles ?? []).map(
+        cloneNotificationProfile,
+      ),
     };
     this._entityDelayDraft = Object.entries(this._config.entity_delays ?? {}).map(
       ([entity_id, delay]) => ({ entity_id, delay }),
@@ -411,6 +445,10 @@ export function hydrateSettingsControls() {
       (value) => this._setEntityDelayEntity(index, value),
     );
   });
+  hydrateNotificationProfileControls(this, {
+    packs: this._packs.filter((pack) => pack.available),
+    rules: this._config.rules ?? [],
+  });
 }
 
 export function refreshSettingsConfigurationDrawer() {
@@ -423,6 +461,7 @@ export function refreshSettingsConfigurationDrawer() {
     settingsDraft: this._settingsDraft,
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
+    notificationProfileDraft: this._notificationProfileDraft,
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),

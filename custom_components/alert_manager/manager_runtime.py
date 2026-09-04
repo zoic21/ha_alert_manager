@@ -300,6 +300,7 @@ class _RuntimeMixin:
         """Coalesce registry changes and preserve references across entity renames."""
         if self._unloading:
             return
+        self.notification_runtime.registry_changed()
         old_entity_id = event.data.get("old_entity_id")
         new_entity_id = event.data.get("entity_id")
         is_rename = (
@@ -428,6 +429,7 @@ class _RuntimeMixin:
                         await self._async_save_state()
                     if self.monitoring_enabled:
                         self._publish_if_changed()
+                await self._async_refresh_notification_runtime()
             finally:
                 self._registry_evaluation_scheduled = False
                 if self._registry_evaluation_dirty and not self._unloading:

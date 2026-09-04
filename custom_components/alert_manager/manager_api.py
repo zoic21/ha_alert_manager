@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from copy import deepcopy
 from datetime import UTC
 from functools import wraps
@@ -112,6 +113,21 @@ class _ApiMixin:
             "retention_limit": self.config["history_limit"],
             "enabled": self.config["history_limit"] > 0,
         }
+
+    async def async_test_notification_profile(self, profile_id: str) -> dict[str, Any]:
+        """Send a test without creating or changing any alert state."""
+        return await self.notifications.async_test_profile(profile_id)
+
+    async def _async_refresh_notification_runtime(
+        self, *, reset_reminders: bool = False
+    ) -> None:
+        """Apply config changes without coupling them to alert persistence."""
+        try:
+            await self.notification_runtime.async_config_updated(
+                reset_reminders=reset_reminders
+            )
+        except Exception:
+            _LOGGER.exception("Unable to refresh Alert Manager notification runtime")
 
     async def async_test_rule(
         self, data: dict[str, Any], *, rule_id: str | None = None
@@ -382,48 +398,53 @@ class _ApiMixin:
                 )
             return False
 
-        previous_config = deepcopy(self.config)
-        previous_records = deepcopy(self.records)
-        previous_pending_history = list(self._pending_history)
-        previous_variation_baselines = dict(self._variation_baselines)
-        previous_variation_dirty = self._variation_baselines_dirty
-        previous_pack_runtime = deepcopy(self._pack_runtime)
-        self.config["monitoring_enabled"] = enabled
-        try:
-            if enabled:
-                self._resume_pending_alerts(dt_util.now())
-                await self.async_evaluate_all(
-                    save=False,
-                    publish=False,
-                    emit_events=False,
-                )
-            else:
-                self._freeze_pending_alerts(dt_util.now())
-                self._clear_variation_baselines()
-                self._pack_runtime.clear()
-            await self._async_save_state()
-        except Exception:
-            self.config = previous_config
-            self._replace_records(previous_records)
-            self._pending_history = previous_pending_history
-            self._variation_baselines = previous_variation_baselines
-            self.storage.variation_baselines = self._variation_baselines
-            self._variation_baselines_dirty = previous_variation_dirty
-            self._pack_runtime = previous_pack_runtime
-            self.storage.pack_runtime = self._pack_runtime
-            self._cancel_all_timers()
-            self._reschedule_record_timers()
-            raise
+        with self.notification_runtime.events_paused():
+            previous_config = deepcopy(self.config)
+            previous_records = deepcopy(self.records)
+            previous_pending_history = list(self._pending_history)
+            previous_variation_baselines = dict(self._variation_baselines)
+            previous_variation_dirty = self._variation_baselines_dirty
+            previous_pack_runtime = deepcopy(self._pack_runtime)
+            self.config["monitoring_enabled"] = enabled
+            try:
+                if enabled:
+                    self._resume_pending_alerts(dt_util.now())
+                    await self.async_evaluate_all(
+                        save=False,
+                        publish=False,
+                        emit_events=False,
+                    )
+                else:
+                    self._freeze_pending_alerts(dt_util.now())
+                    self._clear_variation_baselines()
+                    self._pack_runtime.clear()
+                await self._async_save_state()
+            except Exception:
+                self.config = previous_config
+                self._replace_records(previous_records)
+                self._pending_history = previous_pending_history
+                self._variation_baselines = previous_variation_baselines
+                self.storage.variation_baselines = self._variation_baselines
+                self._variation_baselines_dirty = previous_variation_dirty
+                self._pack_runtime = previous_pack_runtime
+                self.storage.pack_runtime = self._pack_runtime
+                self._cancel_all_timers()
+                self._reschedule_record_timers()
+                raise
 
-        if enabled:
-            async_dismiss_persistent_notification(self.hass, MONITORING_NOTIFICATION_ID)
-            self._emit_resume_events(previous_records)
-        else:
-            reset_pack_runtimes(self.hass)
-            self._cancel_all_pack_rechecks()
-            self._cancel_all_timers()
-            self._cancel_all_device_event_timers()
-        self._refresh_tracking()
+            self.notification_runtime.discard_batches()
+            if enabled:
+                async_dismiss_persistent_notification(
+                    self.hass, MONITORING_NOTIFICATION_ID
+                )
+                self._emit_resume_events(previous_records)
+            else:
+                reset_pack_runtimes(self.hass)
+                self._cancel_all_pack_rechecks()
+                self._cancel_all_timers()
+                self._cancel_all_device_event_timers()
+            self._refresh_tracking()
+            await self._async_refresh_notification_runtime(reset_reminders=True)
         self._publish_if_changed(force=True)
         async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         return True
@@ -595,6 +616,8 @@ class _ApiMixin:
                     )
         candidate["rules"] = self.config["rules"]
         candidate = validate_config(candidate)
+        if candidate == self.config:
+            return self.get_config()
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
@@ -608,28 +631,47 @@ class _ApiMixin:
             if self.config["automatic"][pack.id]["enabled"]
             and not candidate["automatic"][pack.id]["enabled"]
         }
-        previous = self._configuration_snapshot()
-        try:
-            self.config = candidate
-            if not self.monitoring_enabled and previous[0].get(
-                "monitoring_enabled", True
-            ):
-                self._clear_variation_baselines()
-            self._rebuild_rule_index()
-            for pack_id in disabled_pack_ids:
-                self._pack_runtime.pop(pack_id, None)
-            if reset_all_pack_runtimes:
-                reset_pack_runtimes(self.hass)
-                self._pack_runtime.clear()
-            elif disabled_pack_ids:
-                reset_pack_runtimes(self.hass, disabled_pack_ids)
-            await self.async_evaluate_all(save=False, publish=False)
-            if "pending_display_delay" in changes:
-                self._reschedule_hidden_pending_visibility(dt_util.now())
-            await self._async_save_state()
-        except Exception:
-            self._restore_configuration_snapshot(previous)
-            raise
+        notification_profiles_changed = candidate[
+            "notification_profiles"
+        ] != self.config.get("notification_profiles", [])
+        notification_events_paused = (
+            candidate["monitoring_enabled"] != self.monitoring_enabled
+            or notification_profiles_changed
+        )
+        event_pause = (
+            self.notification_runtime.events_paused()
+            if notification_events_paused
+            else nullcontext()
+        )
+        with event_pause:
+            previous = self._configuration_snapshot()
+            try:
+                self.config = candidate
+                if not self.monitoring_enabled and previous[0].get(
+                    "monitoring_enabled", True
+                ):
+                    self._clear_variation_baselines()
+                self._rebuild_rule_index()
+                for pack_id in disabled_pack_ids:
+                    self._pack_runtime.pop(pack_id, None)
+                if reset_all_pack_runtimes:
+                    reset_pack_runtimes(self.hass)
+                    self._pack_runtime.clear()
+                elif disabled_pack_ids:
+                    reset_pack_runtimes(self.hass, disabled_pack_ids)
+                if set(changes) != {"notification_profiles"}:
+                    await self.async_evaluate_all(save=False, publish=False)
+                if "pending_display_delay" in changes:
+                    self._reschedule_hidden_pending_visibility(dt_util.now())
+                await self._async_save_state()
+            except Exception:
+                self._restore_configuration_snapshot(previous)
+                raise
+            if notification_profiles_changed:
+                self.notification_runtime.discard_batches()
+            await self._async_refresh_notification_runtime(
+                reset_reminders=notification_events_paused
+            )
         if coherence_schedule_changed:
             self._refresh_coherence_schedule()
         self._publish_if_changed()
@@ -648,60 +690,63 @@ class _ApiMixin:
         previous_monitoring_enabled = self.monitoring_enabled
         history_cleared = False
 
-        self._cancel_all_timers()
-        self._cancel_all_device_event_timers()
-        reset_pack_runtimes(self.hass)
-        try:
-            self._recovery_active = False
-            self.config = candidate
-            self._replace_records({})
-            self.history = []
-            self._pending_history = []
-            self._clear_variation_baselines()
-            self._pack_runtime = {}
-            self.storage.pack_runtime = self._pack_runtime
-            self._rebuild_rule_index()
-            self._refresh_pack_entry_listeners()
-            self._pack_availability = self._current_pack_availability()
-            await self.async_evaluate_all(
-                save=False,
-                publish=False,
-                emit_events=False,
-            )
-            self._reschedule_hidden_pending_visibility(dt_util.now())
-            await self.history_storage.async_save([])
-            history_cleared = True
-            await self.storage.async_save(self.config, self.records)
-            self._immediate_state_save_required = False
-            self._variation_baselines_dirty = False
-        except Exception:
-            self._recovery_active = previous_recovery_active
-            self._restore_configuration_snapshot(previous)
-            self.history = previous_history
-            if history_cleared:
-                try:
-                    await self.history_storage.async_save(previous_history)
-                except Exception:
-                    _LOGGER.exception(
-                        "Unable to restore alert history after failed config import"
-                    )
-            raise
-
-        monitoring_changed = previous_monitoring_enabled != self.monitoring_enabled
-        coherence_schedule_changed = (
-            previous[0].get("coherence_schedule", "none")
-            != self.config["coherence_schedule"]
-        )
-        if monitoring_changed:
-            if self.monitoring_enabled:
-                async_dismiss_persistent_notification(
-                    self.hass, MONITORING_NOTIFICATION_ID
+        with self.notification_runtime.events_paused():
+            self._cancel_all_timers()
+            self._cancel_all_device_event_timers()
+            reset_pack_runtimes(self.hass)
+            try:
+                self._recovery_active = False
+                self.config = candidate
+                self._replace_records({})
+                self.history = []
+                self._pending_history = []
+                self._clear_variation_baselines()
+                self._pack_runtime = {}
+                self.storage.pack_runtime = self._pack_runtime
+                self._rebuild_rule_index()
+                self._refresh_pack_entry_listeners()
+                self._pack_availability = self._current_pack_availability()
+                await self.async_evaluate_all(
+                    save=False,
+                    publish=False,
+                    emit_events=False,
                 )
-                self._emit_resume_events(previous[1])
-            else:
-                self._cancel_all_timers()
-                self._cancel_all_device_event_timers()
-            async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
+                self._reschedule_hidden_pending_visibility(dt_util.now())
+                await self.history_storage.async_save([])
+                history_cleared = True
+                await self.storage.async_save(self.config, self.records)
+                self._immediate_state_save_required = False
+                self._variation_baselines_dirty = False
+            except Exception:
+                self._recovery_active = previous_recovery_active
+                self._restore_configuration_snapshot(previous)
+                self.history = previous_history
+                if history_cleared:
+                    try:
+                        await self.history_storage.async_save(previous_history)
+                    except Exception:
+                        _LOGGER.exception(
+                            "Unable to restore alert history after failed config import"
+                        )
+                raise
+
+            self.notification_runtime.discard_batches()
+            monitoring_changed = previous_monitoring_enabled != self.monitoring_enabled
+            coherence_schedule_changed = (
+                previous[0].get("coherence_schedule", "none")
+                != self.config["coherence_schedule"]
+            )
+            if monitoring_changed:
+                if self.monitoring_enabled:
+                    async_dismiss_persistent_notification(
+                        self.hass, MONITORING_NOTIFICATION_ID
+                    )
+                    self._emit_resume_events(previous[1])
+                else:
+                    self._cancel_all_timers()
+                    self._cancel_all_device_event_timers()
+                async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
+            await self._async_refresh_notification_runtime(reset_reminders=True)
         if coherence_schedule_changed or previous_recovery_active:
             self._refresh_coherence_schedule()
         self._refresh_tracking()
@@ -791,6 +836,20 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        alert_ids_to_discard: set[str] = set()
+        for entity_id in removed_entities:
+            alert_id = f"rule:{rule_id}:{entity_id}"
+            current = self.records.get(alert_id)
+            if (
+                self.monitoring_enabled
+                and rule.enabled
+                and entity_id in rule.entity_ids
+                and current is not None
+                and current.status is AlertStatus.ACTIVE
+            ):
+                continue
+            alert_ids_to_discard.add(alert_id)
+        await self.notification_runtime.async_discard_alerts(alert_ids_to_discard)
         self._publish_if_changed()
         return rule.as_dict()
 
@@ -809,6 +868,13 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             del self.config["rules"][index]
+            for profile in self.config.get("notification_profiles", []):
+                profile["exceptions"] = [
+                    exception
+                    for exception in profile["exceptions"]
+                    if exception["selector_type"] != "rule"
+                    or exception["selector_id"] != rule_id
+                ]
             self._rebuild_rule_index()
             if self.monitoring_enabled:
                 self._remove_rule_instances(rule_id, set(rule.entity_ids))
@@ -818,6 +884,9 @@ class _ApiMixin:
         except Exception:
             self._restore_configuration_snapshot(previous)
             raise
+        await self.notification_runtime.async_discard_alerts(
+            {f"rule:{rule_id}:{entity_id}" for entity_id in rule.entity_ids}
+        )
         self._publish_if_changed()
 
     def _configuration_snapshot(

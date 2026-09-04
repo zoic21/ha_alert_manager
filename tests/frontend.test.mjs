@@ -1010,6 +1010,48 @@ test("a recreated panel renders cached state while it refreshes", async () => {
   assert.equal(loadingStates.includes(true), false);
 });
 
+test("an alert deep link waits for a refreshed row before being consumed", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._alerts = { alerts: [], pending: [], acknowledge: [] };
+  panel._activeTab = "overview";
+  panel._render = () => {};
+  const previousLocation = window.location;
+  window.location = { search: "?alert=unavailable%3Asensor.test" };
+  const opened = [];
+  panel._openAlertDetails = (_kind, row) => opened.push(row.id);
+  panel._hass = {
+    callWS: async () => ({
+      active_count: 1,
+      pending_count: 0,
+      acknowledge_count: 0,
+      tracked_count: 1,
+      alerts: [{
+        id: "unavailable:sensor.test",
+        entity_id: "sensor.test",
+        name: "Test",
+        status: "active",
+      }],
+      pending: [],
+      acknowledge: [],
+    }),
+  };
+
+  try {
+    panel._openAlertDeepLink();
+    assert.equal(panel._handledAlertDeepLink, null);
+
+    await panel._refreshAlerts();
+    panel._openAlertDeepLink();
+
+    assert.deepEqual(opened, ["unavailable:sensor.test"]);
+    assert.equal(panel._handledAlertDeepLink, "unavailable:sensor.test");
+  } finally {
+    window.location = previousLocation;
+  }
+});
+
 test("backup restore is sent only after the native confirmation action", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -3031,6 +3073,52 @@ test("settings action serializes exclusions and entity delays", async () => {
     retention_limit: 250,
   }]);
   assert.deepEqual(panel._historyConfig, { retention_limit: 250, enabled: true });
+});
+
+test("deleting a notification profile saves only profiles", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const profile = {
+    id: "phone",
+    name: "Phone",
+    enabled: true,
+    primary_targets: ["notify.phone"],
+    fallback_targets: [],
+    label_ids: [],
+    default_policy: {
+      notify_on_start: true,
+      notify_on_resolved: true,
+      reminder_interval: null,
+    },
+    exceptions: [],
+  };
+  const otherProfile = { ...profile, id: "tablet", name: "Tablet" };
+  panel._config = {
+    ...completeConfig(),
+    notification_profiles: [otherProfile, profile],
+  };
+  panel._historyConfig = { retention_limit: 100, enabled: true };
+  panel._ensureSettingsDraft();
+  panel._settingsDraft.global_delay = "321";
+  panel._render = () => {};
+  const requests = [];
+  panel._hass = {
+    callWS: async (message) => {
+      requests.push(message);
+      return { ...panel._config, ...message.config };
+    },
+  };
+
+  await panel._handleClick(
+    actionEvent("delete-notification-profile", null, { profileId: "phone" }),
+  );
+
+  assert.deepEqual(requests, [{
+    type: "alert_manager/config/update",
+    config: { notification_profiles: [otherProfile] },
+  }]);
+  assert.equal(panel._settingsDraft.global_delay, "321");
+  assert.deepEqual(panel._settingsDraft.notification_profiles, [otherProfile]);
 });
 
 test("native Home Assistant selectors are configured for multiple values", () => {

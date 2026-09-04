@@ -121,6 +121,72 @@ export const settingsStyles = `
     justify-content: flex-end;
     margin-top: 4px;
   }
+  .notification-section-header,
+  .notification-profile-row,
+  .notification-exception-heading,
+  .notification-exceptions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .notification-section-header > div,
+  .notification-profile-summary,
+  .notification-exceptions-header > div {
+    min-width: 0;
+  }
+  .notification-profile-list,
+  .notification-profile-summary,
+  .notification-exception-list {
+    display: grid;
+    gap: 8px;
+  }
+  .notification-profile-row {
+    min-height: 64px;
+    padding: 10px 0;
+    border-top: 1px solid var(--divider-color, #ddd);
+  }
+  .notification-profile-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .notification-profile-status {
+    color: var(--secondary-text-color, #727272);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .notification-profile-summary small {
+    margin: 0;
+  }
+  .notification-profile-actions {
+    flex: none;
+    flex-wrap: wrap;
+  }
+  .notification-profile-fields,
+  .notification-policy-grid,
+  .notification-exception-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .notification-policy-grid {
+    margin-bottom: 8px;
+  }
+  .notification-exceptions-header {
+    align-items: flex-start;
+    margin-top: 8px;
+  }
+  .notification-exception {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+  }
+  .notification-exception h3,
+  .notification-exceptions-header h3,
+  .side-drawer-section > h3 {
+    margin: 0;
+  }
   .config-backups {
     display: grid;
     gap: 12px;

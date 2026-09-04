@@ -6,6 +6,8 @@ export const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "open-automatic-configuration",
   "open-deleted-entities",
   "open-settings-configuration",
+  "new-notification-profile",
+  "edit-notification-profile",
 ]);
 
 export const isCompanionApp = () => Boolean(
@@ -50,7 +52,10 @@ export function updateDrawerLayout(previousNarrow) {
   ) return;
   if (this._editingRule !== null) this._captureRuleDraft();
   if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
-  if (this._activeTab === "settings") this._captureEntityDelayValues();
+  if (this._activeTab === "settings") {
+    this._captureEntityDelayValues();
+    this._captureNotificationProfileDraft();
+  }
   if (!this._narrow) {
     this._render();
     return;
