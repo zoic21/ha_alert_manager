@@ -402,9 +402,7 @@ def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
     assert started_after == started_before
 
 
-def test_pending_custom_rule_survives_transient_startup_state(
-    hass, entry, set_now
-):
+def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_now):
     """A pre-running state must not erase a persisted pending occurrence."""
     start = datetime(2026, 9, 4, 10, tzinfo=UTC)
     set_now(start)
