@@ -14,7 +14,9 @@ import {
   renderCoherence, renderDeletedEntitiesDrawer,
 } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
-import { renderOverview } from "../frontend-src/views/overview.js";
+import {
+  renderOverview, startupBannerMarkup, startupStatusText,
+} from "../frontend-src/views/overview.js";
 import {
   handleSettingsAction,
   renderSettings,
@@ -33,6 +35,7 @@ test("overview rendering uses only its explicit view context", () => {
     },
     selectedStatuses: ["active"],
     pageMessages: "<ha-alert>notice</ha-alert>",
+    durationText: (seconds) => `${seconds} s`,
     rows: [{ id: "alert-1" }],
     renderAlertTable: (...args) => {
       tableCall = args;
@@ -46,6 +49,31 @@ test("overview rendering uses only its explicit view context", () => {
   assert.match(markup, /data-summary="active"[^>]*aria-pressed="true"/);
   assert.match(markup, /<strong class="danger">2<\/strong>/);
   assert.match(markup, /<strong>20<\/strong>/);
+});
+
+test("overview startup banner shows the remaining stabilization delay", () => {
+  const startup = {
+    in_progress: true,
+    stabilization_until: "2026-09-04T10:02:00+00:00",
+  };
+  const now = Date.parse("2026-09-04T10:00:01+00:00");
+  const translate = (key, replacements = {}) => (
+    `${key}:${replacements.duration ?? ""}`
+  );
+
+  assert.equal(
+    startupStatusText(startup, translate, (seconds) => `${seconds} s`, now),
+    "overview.startup_in_progress:119 s",
+  );
+  assert.match(
+    startupBannerMarkup(startup, translate, (seconds) => `${seconds} s`, now),
+    /<ha-alert[^>]*alert-type="info"[^>]*role="status"/,
+  );
+  assert.equal(startupBannerMarkup({ in_progress: false }, translate, String, now), "");
+  assert.equal(
+    startupBannerMarkup(startup, translate, String, Date.parse(startup.stabilization_until)),
+    "",
+  );
 });
 
 test("history rendering handles enabled and disabled states without panel state", () => {

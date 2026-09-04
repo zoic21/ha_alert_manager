@@ -487,6 +487,11 @@ def test_core_startup_keeps_only_latest_event_until_stable(hass, entry, set_now)
         manager = AlertManager(hass, entry)
         await manager.async_setup()
 
+        assert manager.public_snapshot()["startup"] == {
+            "in_progress": True,
+            "stabilization_until": None,
+        }
+
         unavailable = State("sensor.booting", "unavailable")
         normal = State("sensor.booting", "20")
         hass.states.data["sensor.booting"] = unavailable
@@ -526,6 +531,10 @@ def test_core_startup_keeps_only_latest_event_until_stable(hass, entry, set_now)
         assert timer["point"] == start + timedelta(
             seconds=STARTUP_STABILIZATION_SECONDS
         )
+        assert manager.public_snapshot()["startup"] == {
+            "in_progress": True,
+            "stabilization_until": timer["point"].isoformat(),
+        }
 
         final = State("sensor.booting", "unavailable")
         hass.states.data["sensor.booting"] = final
@@ -549,6 +558,10 @@ def test_core_startup_keeps_only_latest_event_until_stable(hass, entry, set_now)
         await asyncio.sleep(0)
 
         assert manager._startup_buffering is False
+        assert manager.public_snapshot()["startup"] == {
+            "in_progress": False,
+            "stabilization_until": None,
+        }
         assert manager._startup_state_events == {}
         assert set(manager.records) == {"unavailable:sensor.booting"}
         assert set(manager._timers) == {"unavailable:sensor.booting"}

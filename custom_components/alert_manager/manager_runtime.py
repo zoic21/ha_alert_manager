@@ -71,6 +71,9 @@ class _RuntimeMixin:
         if self._unloading or not self._startup_buffering:
             return
         self._cancel_startup_grace_timer()
+        self._startup_stabilization_until = (
+            dt_util.now() + timedelta(seconds=STARTUP_STABILIZATION_SECONDS)
+        ).astimezone(UTC)
 
         @callback
         def stabilization_finished(_now: datetime) -> None:
@@ -84,10 +87,9 @@ class _RuntimeMixin:
         self._startup_grace_timer = async_track_point_in_utc_time(
             self.hass,
             stabilization_finished,
-            (
-                dt_util.now() + timedelta(seconds=STARTUP_STABILIZATION_SECONDS)
-            ).astimezone(UTC),
+            self._startup_stabilization_until,
         )
+        self._publish_if_changed()
 
     async def _async_finish_startup(self) -> None:
         """Evaluate stable states, then resume the coalesced live event pipeline."""
@@ -103,6 +105,7 @@ class _RuntimeMixin:
             buffered_events.update(self._startup_state_events)
             self._startup_state_events.clear()
             self._startup_buffering = False
+            self._startup_stabilization_until = None
             if not self._unloading:
                 self._reschedule_record_timers()
                 for event in buffered_events.values():
@@ -111,6 +114,7 @@ class _RuntimeMixin:
                         restoring=True,
                         collect_occurrences=False,
                     )
+                self._publish_if_changed()
 
     @callback
     def _cancel_startup_grace_timer(self) -> None:
@@ -125,6 +129,7 @@ class _RuntimeMixin:
         self._cancel_startup_grace_timer()
         self._startup_state_events.clear()
         self._startup_buffering = False
+        self._startup_stabilization_until = None
 
     @callback
     def _state_changed(self, event: Event) -> None:
