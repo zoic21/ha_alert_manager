@@ -2067,8 +2067,10 @@ function renderBackupRestoreDialog(context) {
       date: date(backup.created_at),
       rules: backup.rules,
     }))}</div>
-    <ha-button type="button" slot="secondaryAction" appearance="plain" data-action="cancel-config-backup-restore" ${busy ? "disabled" : ""}>${esc(t("buttons.cancel"))}</ha-button>
-    <ha-button type="button" slot="primaryAction" appearance="accent" variant="danger" data-action="confirm-config-backup-restore" data-backup-id="${esc(backup.id)}" ${busy ? "disabled" : ""}>${esc(t("recovery.restore"))}</ha-button>
+    <ha-dialog-footer slot="footer">
+      <ha-button type="button" slot="secondaryAction" appearance="plain" data-action="cancel-config-backup-restore" ${busy ? "disabled" : ""}>${esc(t("buttons.cancel"))}</ha-button>
+      <ha-button type="button" slot="primaryAction" appearance="accent" variant="danger" data-action="confirm-config-backup-restore" data-backup-id="${esc(backup.id)}" ${busy ? "disabled" : ""}>${esc(t("recovery.restore"))}</ha-button>
+    </ha-dialog-footer>
   </ha-dialog>`;
 }
 
