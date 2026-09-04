@@ -65,9 +65,7 @@ def test_backup_listing_reuses_metadata_without_parsing(hass, monkeypatch):
     storage = AlertManagerConfigBackupStorage(hass)
     raw_yaml = dump_config_yaml(validate_config({}))
     backup = run(
-        storage.async_create(
-            raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC)
-        )
+        storage.async_create(raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC))
     )
 
     def fail_parse(_raw_yaml):
@@ -92,9 +90,7 @@ def test_backup_yaml_parsing_runs_in_executor(hass, monkeypatch):
 
     monkeypatch.setattr(storage_module, "parse_config_yaml", tracked_parse)
     backup = run(
-        storage.async_create(
-            raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC)
-        )
+        storage.async_create(raw_yaml, created_at=datetime(2026, 8, 28, 3, tzinfo=UTC))
     )
     assert run(storage.async_get(backup["id"])) is not None
 

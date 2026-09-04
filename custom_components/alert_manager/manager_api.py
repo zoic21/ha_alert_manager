@@ -680,9 +680,7 @@ class _ApiMixin:
     @_serialize_config_mutation
     async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
         """Replace configuration through one validated, recoverable transaction."""
-        candidate = await self.hass.async_add_executor_job(
-            parse_config_yaml, raw_yaml
-        )
+        candidate = await self.hass.async_add_executor_job(parse_config_yaml, raw_yaml)
         candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
