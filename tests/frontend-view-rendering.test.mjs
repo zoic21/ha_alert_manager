@@ -384,7 +384,8 @@ test("backup restoration uses a native confirmation dialog", () => {
 
   assert.match(markup, /^<ha-dialog/);
   assert.match(markup, /<ha-dialog-header>/);
-  assert.match(markup, /data-action="cancel-config-backup-restore"/);
-  assert.match(markup, /data-action="confirm-config-backup-restore"/);
+  assert.match(markup, /<ha-dialog-footer slot="footer">/);
+  assert.match(markup, /slot="secondaryAction"[^>]+data-action="cancel-config-backup-restore"/);
+  assert.match(markup, /slot="primaryAction"[^>]+data-action="confirm-config-backup-restore"/);
   assert.match(markup, /data-backup-id="backup-1"/);
 });
