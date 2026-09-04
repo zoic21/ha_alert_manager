@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-dev14 — 4 septembre 2026
+
+### Modifié
+
+- La page Configuration utilise désormais un seul bouton d’enregistrement
+  flottant, masqué tant qu’aucun réglage général ou automatique n’a été modifié,
+  sur le modèle de l’éditeur d’automatisations de Home Assistant.
+- La surveillance automatique est regroupée dans une carte unique, alignée sur
+  les autres sections de Configuration. Les packs sont présentés comme des
+  sections internes séparées, sans cartes imbriquées.
+
+### Tests
+
+- Ajout de tests frontend couvrant l’état modifié, la sauvegarde commune des
+  deux formulaires et la structure sans cartes imbriquées.
+
 ## 2.2.0-dev13 — 4 septembre 2026
 
 ### Modifié
