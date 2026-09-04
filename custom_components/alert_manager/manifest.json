@@ -17,5 +17,5 @@
   "issue_tracker": "https://github.com/zoic21/ha_alert_manager/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "2.1.6-beta.11"
+  "version": "2.1.6"
 }
