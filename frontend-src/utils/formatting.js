@@ -135,6 +135,7 @@ export function conditionText(alert) {
 }
 
 export function updateCountdowns() {
+    this._refreshStartupBanner();
     if (!this._monitoringEnabled) return;
     const roots = [this.shadowRoot];
     this.shadowRoot?.querySelectorAll("ha-data-table").forEach((table) => {

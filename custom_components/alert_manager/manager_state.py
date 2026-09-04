@@ -120,6 +120,14 @@ class _StateMixin:
                 "pending": pending,
                 "device_active_count": len(active_devices),
                 "active_devices": active_devices,
+                "startup": {
+                    "in_progress": self._startup_buffering,
+                    "stabilization_until": (
+                        self._startup_stabilization_until.isoformat()
+                        if self._startup_stabilization_until is not None
+                        else None
+                    ),
+                },
             },
             device_groups,
         )

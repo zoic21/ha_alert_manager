@@ -479,6 +479,7 @@ function conditionText(alert) {
 }
 
 function updateCountdowns() {
+    this._refreshStartupBanner();
     if (!this._monitoringEnabled) return;
     const roots = [this.shadowRoot];
     this.shadowRoot?.querySelectorAll("ha-data-table").forEach((table) => {
@@ -2932,6 +2933,44 @@ function hydrateRuleEditorControls() {
 }
 
 // Source: frontend-src/views/overview.js
+function startupStatusText(startup, t, durationText, now = Date.now()) {
+    if (!startup?.in_progress) return null;
+    const finishesAt = Date.parse(startup.stabilization_until);
+    if (!Number.isFinite(finishesAt)) return t("overview.startup_waiting");
+    const seconds = Math.max(0, Math.ceil((finishesAt - now) / 1000));
+    if (seconds === 0) return null;
+    return t("overview.startup_in_progress", { duration: durationText(seconds) });
+}
+
+function startupBannerMarkup(startup, t, durationText, now = Date.now()) {
+    const text = startupStatusText(startup, t, durationText, now);
+    return text
+      ? `<ha-alert class="page-alert startup-alert" alert-type="info" role="status"><span data-startup-countdown>${esc(text)}</span></ha-alert>`
+      : "";
+}
+
+function refreshStartupBanner() {
+    const container = this.shadowRoot?.querySelector?.("[data-startup-banner]");
+    if (!container) return;
+    const text = startupStatusText(
+      this._alerts.startup,
+      (key, replacements) => this._t(key, replacements),
+      (seconds) => this._durationText(seconds),
+    );
+    const countdown = container.querySelector?.("[data-startup-countdown]");
+    if (countdown && text) {
+      countdown.textContent = text;
+      return;
+    }
+    container.innerHTML = text
+      ? startupBannerMarkup(
+        this._alerts.startup,
+        (key, replacements) => this._t(key, replacements),
+        (seconds) => this._durationText(seconds),
+      )
+      : "";
+}
+
 function refreshOverviewData() {
     const tablePage = this.shadowRoot?.querySelector('[data-alert-table-page="overview"]');
     if (!tablePage) {
@@ -2955,10 +2994,12 @@ function refreshOverviewData() {
 function renderOverview(context) {
     const {
       alerts, selectedStatuses, pageMessages, rows,
-      renderAlertTable, t,
+      durationText, renderAlertTable, t,
     } = context;
     const selected = (status) => selectedStatuses.length === 1 && selectedStatuses[0] === status;
-    const summary = `${pageMessages}
+    const summary = `<div data-startup-banner>${startupBannerMarkup(
+      alerts.startup, t, durationText,
+    )}</div>${pageMessages}
       <section class="summary">
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
@@ -2973,6 +3014,7 @@ function renderOverviewPanel() {
       alerts: this._alerts,
       selectedStatuses: this._filterValues(this._tableState.overview.filters.status),
       pageMessages: this._renderPageMessages(),
+      durationText: (seconds) => this._durationText(seconds),
       rows: this._tableRows("overview"),
       renderAlertTable: (...args) => this._renderAlertTable(...args),
       t: (key, replacements) => this._t(key, replacements),
@@ -6018,7 +6060,7 @@ class AlertManagerPanel extends HTMLElement {
   _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
-  _refreshOverviewData = refreshOverviewData;
+  _refreshOverviewData = refreshOverviewData; _refreshStartupBanner = refreshStartupBanner;
   _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;

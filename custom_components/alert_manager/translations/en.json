@@ -238,6 +238,8 @@
       "status_active_count": "Active: {count}",
       "status_pending": "Upcoming",
       "status_pending_count": "Upcoming: {count}",
+      "startup_in_progress": "Alert Manager is starting. Stabilization ends in {duration}.",
+      "startup_waiting": "Alert Manager is waiting for Home Assistant to finish starting.",
       "summary_acknowledged": "Acknowledged alerts",
       "summary_active": "Active alerts",
       "summary_pending": "Upcoming alerts",

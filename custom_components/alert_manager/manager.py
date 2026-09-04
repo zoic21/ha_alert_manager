@@ -102,6 +102,7 @@ class AlertManager(
         self._startup_buffering = not hass.is_running
         self._startup_state_events: dict[str, Event] = {}
         self._startup_grace_timer: Callable[[], None] | None = None
+        self._startup_stabilization_until: datetime | None = None
         self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
