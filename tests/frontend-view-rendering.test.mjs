@@ -76,6 +76,27 @@ test("overview startup banner shows the remaining stabilization delay", () => {
   );
 });
 
+test("overview hides the provisional tracked total during startup", () => {
+  const markup = renderOverview({
+    alerts: {
+      active_count: 0,
+      pending_count: 0,
+      acknowledge_count: 0,
+      tracked_count: 3,
+      startup: { in_progress: true, stabilization_until: null },
+    },
+    selectedStatuses: [],
+    pageMessages: "",
+    durationText: String,
+    rows: [],
+    renderAlertTable: (_kind, _rows, header) => header,
+    t,
+  });
+
+  assert.match(markup, /data-summary="tracked"[\s\S]*overview\.summary_tracked_calculating/);
+  assert.doesNotMatch(markup, /data-summary="tracked"[\s\S]*<strong>3<\/strong>/);
+});
+
 test("history rendering handles enabled and disabled states without panel state", () => {
   const disabled = renderHistory({
     limit: 0,

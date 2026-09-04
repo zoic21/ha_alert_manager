@@ -335,6 +335,7 @@
       "summary_active": "Active alerts",
       "summary_pending": "Upcoming alerts",
       "summary_tracked": "Total monitored",
+      "summary_tracked_calculating": "Calculating…",
       "unacknowledge": "Remove acknowledgement"
     },
     "packs": {

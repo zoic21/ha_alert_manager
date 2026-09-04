@@ -508,6 +508,17 @@ function updateCountdowns() {
     }
 }
 
+function syncRuntimeMetadata(states) {
+    const runtime = states["sensor.alert_manager_main_active"]?.attributes?.runtime;
+    if (!runtime || typeof runtime !== "object") return;
+    if (runtime.startup && typeof runtime.startup === "object") {
+      this._alerts.startup = runtime.startup;
+    }
+    if (Number.isFinite(Number(runtime.tracked_count))) {
+      this._alerts.tracked_count = Number(runtime.tracked_count);
+    }
+}
+
 // Source: frontend-src/utils/translations.js
 const VALIDATION_ERROR_KEYS = new Map([
   ["Rule name is required", "rule_name_required"],
@@ -1712,7 +1723,12 @@ function alertDetailsItems(kind, row) {
         label: this._t("alert_details.trigger_value"),
         value: row.value,
       },
-      { key: "detected", label: this._t("table.columns.detected"), value: this._date(row.detected) },
+      {
+        key: "detected",
+        label: this._t("table.columns.detected"),
+        value: this._date(row.detected),
+        datetime: row.detected,
+      },
     ];
     if (kind === "history") {
       items.push(
@@ -1720,11 +1736,13 @@ function alertDetailsItems(kind, row) {
           key: "activated",
           label: this._t("overview.active_since"),
           value: this._date(row.activated),
+          datetime: row.activated,
         },
         {
           key: "resolved",
           label: this._t("table.columns.resolved"),
           value: this._date(row.resolved),
+          datetime: row.resolved,
         },
         {
           key: "duration",
@@ -1739,25 +1757,28 @@ function alertDetailsItems(kind, row) {
         value: this._monitoringEnabled
           ? this._remaining(row.due)
           : this._t("table.monitoring_suspended"),
+        due: this._monitoringEnabled ? row.due : null,
       });
     } else {
       items.push({
         key: "activated",
         label: this._t("overview.active_since"),
         value: this._date(row.activated),
+        datetime: row.activated,
       });
     }
     if (row.acknowledged) {
-      const acknowledgement = row.acknowledgedAt
-        ? this._t("overview.acknowledged_details", {
-          date: this._date(row.acknowledgedAt),
-          author: row.acknowledgedBy || this._t("overview.acknowledged_system"),
-        })
-        : this._t("overview.acknowledged");
+      const author = row.acknowledgedBy || this._t("overview.acknowledged_system");
       items.push({
         key: "acknowledged",
         label: this._t("overview.acknowledged"),
-        value: acknowledgement,
+        value: row.acknowledgedAt
+          ? this._date(row.acknowledgedAt)
+          : this._t("overview.acknowledged"),
+        datetime: row.acknowledgedAt,
+        suffix: row.acknowledgedAt
+          ? this._t("overview.acknowledged_details", { date: "", author }).trim()
+          : "",
       });
     }
     items.push({
@@ -1785,12 +1806,35 @@ function renderAlertDetails(context) {
       <dl class="alert-details-list">
         ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
-          <dd>${item.action
+          <dd>${item.datetime
+            ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
+            : item.due
+            ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
+            : item.action
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}
       </dl>
     </ha-card>`;
+}
+
+function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
+    if (!globalThis.document?.createElement || !root) return;
+    const targets = [
+      ...(root.matches?.("[data-timestamp]") ? [root] : []),
+      ...(root.querySelectorAll?.("[data-timestamp]") ?? []),
+    ];
+    for (const target of targets) {
+      const datetime = target.dataset?.timestamp;
+      if (!datetime) continue;
+      const component = document.createElement(
+        target.dataset.timestampMode === "relative"
+          ? "ha-relative-time"
+          : "ha-absolute-time",
+      );
+      component.datetime = datetime;
+      target.replaceChildren?.(component);
+    }
 }
 
 function renderAlertDetailsPanel(kind, row) {
@@ -1840,6 +1884,7 @@ function openAlertDetails(kind, row) {
     });
     this._alertDetailsDialog = dialog;
     this.shadowRoot.append(dialog);
+    this._hydrateAlertDetailTimestamps(dialog);
     dialog.open = true;
 }
 
@@ -2014,6 +2059,15 @@ function syncNarrowTableHeaderBackgrounds() {
 }
 
 async function handleAlertTableAction(action, button, event) {
+  if (action === "toggle-alert-timestamp") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    button.dataset.timestampMode = button.dataset.timestampMode === "relative"
+      ? "absolute"
+      : "relative";
+    this._hydrateAlertDetailTimestamps(button);
+    return true;
+  }
   if (action === "clear-filter-section") {
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -3748,7 +3802,9 @@ function refreshOverviewData() {
       active: this._alerts.active_count,
       pending: this._alerts.pending_count,
       acknowledged: this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0,
-      tracked: this._alerts.tracked_count ?? 0,
+      tracked: this._alerts.startup?.in_progress
+        ? this._t("overview.summary_tracked_calculating")
+        : this._alerts.tracked_count ?? 0,
     };
     for (const [key, count] of Object.entries(counts)) {
       const value = tablePage.querySelector?.(`[data-summary="${key}"] strong`);
@@ -3771,7 +3827,7 @@ function renderOverview(context) {
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
         <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${alerts.acknowledge_count ?? alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${alerts.tracked_count ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${esc(alerts.startup?.in_progress ? t("overview.summary_tracked_calculating") : alerts.tracked_count ?? 0)}</strong></ha-card>
       </section>`;
     return renderAlertTable("overview", rows, summary);
 }
@@ -3865,6 +3921,7 @@ async function updateAlertAcknowledgement(service, alertId) {
         this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+        this._hydrateAlertDetailTimestamps(this._alertDetailsDialog);
       }
       this._notice = {
         kind: "success",
@@ -6308,6 +6365,16 @@ const tableStyles = `
   .alert-details-action {
     font-weight: var(--ha-font-weight-medium, 500);
   }
+  .alert-details-timestamp {
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+  .alert-details-timestamp:focus-visible {
+    border-radius: var(--ha-border-radius-sm, 4px);
+    outline: 2px solid var(--primary-color, #03a9f4);
+    outline-offset: 2px;
+  }
 `;
 
 // Source: frontend-src/styles/settings-styles.js
@@ -7462,7 +7529,7 @@ class AlertManagerPanel extends HTMLElement {
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _updateAlertAcknowledgement = updateAlertAcknowledgement;
-  _handleAlertDetailsSelection = handleAlertDetailsSelection;
+  _handleAlertDetailsSelection = handleAlertDetailsSelection; _hydrateAlertDetailTimestamps = hydrateAlertDetailTimestamps;
   _refreshHistoryData = refreshHistoryData;
   _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
@@ -7614,7 +7681,7 @@ class AlertManagerPanel extends HTMLElement {
       active_count: 0,
       acknowledge_count: 0,
       pending_count: 0,
-      tracked_count: 0,
+      tracked_count: 0, startup: { in_progress: false, stabilization_until: null },
       alerts: [],
       pending: [],
       acknowledge: [],
@@ -7784,6 +7851,7 @@ class AlertManagerPanel extends HTMLElement {
     if (monitoringState === "on" || monitoringState === "off") {
       this._monitoringEnabled = monitoringState === "on";
     }
+    syncRuntimeMetadata.call(this, states);
     // Sensor attributes are intentionally compact and can be truncated to stay
     // below Recorder's limit. Counts remain immediate; complete rows come from
     // the coalesced WebSocket refresh triggered by this state change.
@@ -7801,7 +7869,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     return true;
   }
-
   _render() {
     if (!this.shadowRoot) return;
     this._closeAlertDetailsDialog();
@@ -8033,7 +8100,6 @@ class AlertManagerPanel extends HTMLElement {
       if (await handler.call(this, action, button, event)) return;
     }
   }
-
   _handleInput(event) {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
@@ -8073,6 +8139,7 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
+    const timestamp = event.target.closest?.('[data-action="toggle-alert-timestamp"]'); if (timestamp) { event.preventDefault(); void this._handleClick({ target: timestamp }); return; }
     const summary = event.target.closest?.('.summary [data-action="filter-summary-status"]');
     if (summary) {
       event.preventDefault();

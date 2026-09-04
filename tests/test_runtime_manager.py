@@ -246,6 +246,9 @@ def test_sensors_reuse_last_published_snapshot(hass, entry, monkeypatch):
         manager.monitoring_enabled,
         snapshot["active_count"],
         snapshot["alerts"],
+        snapshot["tracked_count"],
+        snapshot["startup"]["in_progress"],
+        snapshot["startup"]["stabilization_until"],
     )
     sensor._async_manager_updated()
 

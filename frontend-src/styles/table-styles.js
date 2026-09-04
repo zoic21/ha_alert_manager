@@ -202,4 +202,14 @@ export const tableStyles = `
   .alert-details-action {
     font-weight: var(--ha-font-weight-medium, 500);
   }
+  .alert-details-timestamp {
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+  .alert-details-timestamp:focus-visible {
+    border-radius: var(--ha-border-radius-sm, 4px);
+    outline: 2px solid var(--primary-color, #03a9f4);
+    outline-offset: 2px;
+  }
 `;

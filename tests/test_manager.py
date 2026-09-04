@@ -135,7 +135,16 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     assert {
         entity.entity_id: entity.extra_state_attributes for entity in partition_sensors
     } == {
-        "sensor.alert_manager_main_active": {"alerts": []},
+        "sensor.alert_manager_main_active": {
+            "alerts": [],
+            "runtime": {
+                "tracked_count": 0,
+                "startup": {
+                    "in_progress": False,
+                    "stabilization_until": None,
+                },
+            },
+        },
         "sensor.alert_manager_main_pending": {"alerts": []},
         "sensor.alert_manager_main_acknowledge": {"alerts": []},
         "sensor.alert_manager_device_main_active": {"devices": []},
@@ -2098,6 +2107,8 @@ def test_sensor_skips_writes_when_its_partition_did_not_change():
         "alerts": [{"id": "active", "entity_id": "sensor.active"}],
         "pending_count": 0,
         "pending": [],
+        "tracked_count": 2,
+        "startup": {"in_progress": False, "stabilization_until": None},
     }
     manager = SimpleNamespace(
         monitoring_enabled=True,
@@ -2121,6 +2132,18 @@ def test_sensor_skips_writes_when_its_partition_did_not_change():
     sensor._async_manager_updated()
 
     assert len(writes) == 1
+
+    snapshot["startup"] = {
+        "in_progress": True,
+        "stabilization_until": "2026-09-04T10:02:00+00:00",
+    }
+    sensor._async_manager_updated()
+
+    assert len(writes) == 2
+    assert sensor.extra_state_attributes["runtime"] == {
+        "tracked_count": 2,
+        "startup": snapshot["startup"],
+    }
 
 
 def test_tracked_count_combines_custom_instances_and_automatic_entities(

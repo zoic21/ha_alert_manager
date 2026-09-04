@@ -302,7 +302,12 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         sensor = by_id[entity_id]
         alerts = sensor.extra_state_attributes["alerts"]
         assert sensor.native_value == len(ids)
-        assert set(sensor.extra_state_attributes) == {"alerts"}
+        expected_attributes = (
+            {"alerts", "runtime"}
+            if entity_id == "sensor.alert_manager_main_active"
+            else {"alerts"}
+        )
+        assert set(sensor.extra_state_attributes) == expected_attributes
         assert {alert["id"] for alert in alerts} == ids
         all_ids.extend(alert["id"] for alert in alerts)
     assert len(all_ids) == len(set(all_ids))
@@ -325,6 +330,14 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         assert sensor.native_value == 0
         if sensor is device_sensor:
             assert sensor.extra_state_attributes == {"devices": []}
+        elif sensor.entity_id == "sensor.alert_manager_main_active":
+            assert sensor.extra_state_attributes == {
+                "alerts": [],
+                "runtime": {
+                    "tracked_count": manager.public_snapshot()["tracked_count"],
+                    "startup": manager.public_snapshot()["startup"],
+                },
+            }
         else:
             assert sensor.extra_state_attributes == {"alerts": []}
 

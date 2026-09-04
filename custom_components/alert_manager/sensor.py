@@ -112,6 +112,7 @@ class AlertManagerSensor(SensorEntity):
         self._attr_translation_key = translation_key
         self._attr_unique_id = unique_id
         self.entity_id = f"sensor.{unique_id}"
+        self._publishes_runtime = count_key == "active_count"
         snapshot = getattr(manager, "_last_public_snapshot", None)
         self._snapshot: dict[str, Any] = (
             snapshot if snapshot is not None else manager.public_snapshot()
@@ -138,6 +139,12 @@ class AlertManagerSensor(SensorEntity):
             snapshot[self._count_key],
             snapshot[self._items_key],
         )
+        if self._publishes_runtime:
+            partition += (
+                snapshot["tracked_count"],
+                snapshot["startup"]["in_progress"],
+                snapshot["startup"]["stabilization_until"],
+            )
         if partition == self._last_written_partition:
             return
         self._snapshot = snapshot
@@ -156,13 +163,21 @@ class AlertManagerSensor(SensorEntity):
         """Return compact, Recorder-safe data for this lifecycle partition."""
         if not self.manager.monitoring_enabled:
             if self._attribute_key == "devices":
-                return {"devices": []}
-            return {self._attribute_key: []}
-        items = self._snapshot[self._items_key]
-        compactor = (
-            _compact_device if self._attribute_key == "devices" else _compact_alert
-        )
-        return _bounded_attributes(self._attribute_key, items, compactor)
+                attributes = {"devices": []}
+            else:
+                attributes = {self._attribute_key: []}
+        else:
+            items = self._snapshot[self._items_key]
+            compactor = (
+                _compact_device if self._attribute_key == "devices" else _compact_alert
+            )
+            attributes = _bounded_attributes(self._attribute_key, items, compactor)
+        if self._publishes_runtime:
+            attributes["runtime"] = {
+                "tracked_count": self._snapshot["tracked_count"],
+                "startup": self._snapshot["startup"],
+            }
+        return attributes
 
 
 class AlertManagerCoherenceIssueSensor(SensorEntity):

@@ -163,4 +163,15 @@ export function updateCountdowns() {
     }
 }
 
+export function syncRuntimeMetadata(states) {
+    const runtime = states["sensor.alert_manager_main_active"]?.attributes?.runtime;
+    if (!runtime || typeof runtime !== "object") return;
+    if (runtime.startup && typeof runtime.startup === "object") {
+      this._alerts.startup = runtime.startup;
+    }
+    if (Number.isFinite(Number(runtime.tracked_count))) {
+      this._alerts.tracked_count = Number(runtime.tracked_count);
+    }
+}
+
 export { lines, newRuleDefaults, ruleToYaml };

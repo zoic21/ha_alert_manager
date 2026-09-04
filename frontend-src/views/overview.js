@@ -48,7 +48,9 @@ export function refreshOverviewData() {
       active: this._alerts.active_count,
       pending: this._alerts.pending_count,
       acknowledged: this._alerts.acknowledge_count ?? this._alerts.acknowledge?.length ?? 0,
-      tracked: this._alerts.tracked_count ?? 0,
+      tracked: this._alerts.startup?.in_progress
+        ? this._t("overview.summary_tracked_calculating")
+        : this._alerts.tracked_count ?? 0,
     };
     for (const [key, count] of Object.entries(counts)) {
       const value = tablePage.querySelector?.(`[data-summary="${key}"] strong`);
@@ -71,7 +73,7 @@ export function renderOverview(context) {
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
         <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${alerts.acknowledge_count ?? alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${alerts.tracked_count ?? 0}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${esc(alerts.startup?.in_progress ? t("overview.summary_tracked_calculating") : alerts.tracked_count ?? 0)}</strong></ha-card>
       </section>`;
     return renderAlertTable("overview", rows, summary);
 }
@@ -165,6 +167,7 @@ export async function updateAlertAcknowledgement(service, alertId) {
         this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+        this._hydrateAlertDetailTimestamps(this._alertDetailsDialog);
       }
       this._notice = {
         kind: "success",

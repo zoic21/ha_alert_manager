@@ -838,7 +838,12 @@ export function alertDetailsItems(kind, row) {
         label: this._t("alert_details.trigger_value"),
         value: row.value,
       },
-      { key: "detected", label: this._t("table.columns.detected"), value: this._date(row.detected) },
+      {
+        key: "detected",
+        label: this._t("table.columns.detected"),
+        value: this._date(row.detected),
+        datetime: row.detected,
+      },
     ];
     if (kind === "history") {
       items.push(
@@ -846,11 +851,13 @@ export function alertDetailsItems(kind, row) {
           key: "activated",
           label: this._t("overview.active_since"),
           value: this._date(row.activated),
+          datetime: row.activated,
         },
         {
           key: "resolved",
           label: this._t("table.columns.resolved"),
           value: this._date(row.resolved),
+          datetime: row.resolved,
         },
         {
           key: "duration",
@@ -865,25 +872,28 @@ export function alertDetailsItems(kind, row) {
         value: this._monitoringEnabled
           ? this._remaining(row.due)
           : this._t("table.monitoring_suspended"),
+        due: this._monitoringEnabled ? row.due : null,
       });
     } else {
       items.push({
         key: "activated",
         label: this._t("overview.active_since"),
         value: this._date(row.activated),
+        datetime: row.activated,
       });
     }
     if (row.acknowledged) {
-      const acknowledgement = row.acknowledgedAt
-        ? this._t("overview.acknowledged_details", {
-          date: this._date(row.acknowledgedAt),
-          author: row.acknowledgedBy || this._t("overview.acknowledged_system"),
-        })
-        : this._t("overview.acknowledged");
+      const author = row.acknowledgedBy || this._t("overview.acknowledged_system");
       items.push({
         key: "acknowledged",
         label: this._t("overview.acknowledged"),
-        value: acknowledgement,
+        value: row.acknowledgedAt
+          ? this._date(row.acknowledgedAt)
+          : this._t("overview.acknowledged"),
+        datetime: row.acknowledgedAt,
+        suffix: row.acknowledgedAt
+          ? this._t("overview.acknowledged_details", { date: "", author }).trim()
+          : "",
       });
     }
     items.push({
@@ -911,12 +921,35 @@ export function renderAlertDetails(context) {
       <dl class="alert-details-list">
         ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
-          <dd>${item.action
+          <dd>${item.datetime
+            ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
+            : item.due
+            ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
+            : item.action
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}
       </dl>
     </ha-card>`;
+}
+
+export function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
+    if (!globalThis.document?.createElement || !root) return;
+    const targets = [
+      ...(root.matches?.("[data-timestamp]") ? [root] : []),
+      ...(root.querySelectorAll?.("[data-timestamp]") ?? []),
+    ];
+    for (const target of targets) {
+      const datetime = target.dataset?.timestamp;
+      if (!datetime) continue;
+      const component = document.createElement(
+        target.dataset.timestampMode === "relative"
+          ? "ha-relative-time"
+          : "ha-absolute-time",
+      );
+      component.datetime = datetime;
+      target.replaceChildren?.(component);
+    }
 }
 
 export function renderAlertDetailsPanel(kind, row) {
@@ -966,6 +999,7 @@ export function openAlertDetails(kind, row) {
     });
     this._alertDetailsDialog = dialog;
     this.shadowRoot.append(dialog);
+    this._hydrateAlertDetailTimestamps(dialog);
     dialog.open = true;
 }
 
@@ -1140,6 +1174,15 @@ export function syncNarrowTableHeaderBackgrounds() {
 }
 
 export async function handleAlertTableAction(action, button, event) {
+  if (action === "toggle-alert-timestamp") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    button.dataset.timestampMode = button.dataset.timestampMode === "relative"
+      ? "absolute"
+      : "relative";
+    this._hydrateAlertDetailTimestamps(button);
+    return true;
+  }
   if (action === "clear-filter-section") {
     event.preventDefault?.();
     event.stopPropagation?.();

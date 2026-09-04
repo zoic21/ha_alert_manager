@@ -5,7 +5,7 @@ import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
   compareTableRows, configureDateRangePicker, dateMatches, dateRangeDefaults, dialogEventTarget,
   displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
-  handleAlertDetailsSelection, handleAlertTableAction, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
+  handleAlertDetailsSelection, handleAlertTableAction, hydrateAlertDetailTimestamps, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
   nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
   nativeRuleCell, nativeSortColumn, nativeStatusCell, nativeTableCell, nativeTableColumns,
   nativeTableData, nativeTimelineCell, navigate, openAlertDeepLink, openAlertDetails, openMoreInfo,
@@ -31,7 +31,7 @@ import {
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
 import { esc } from "./utils/escaping.js";
-import { conditionText, date, durationText, historyDurationText, lines, newRuleDefaults, remaining, updateCountdowns } from "./utils/formatting.js";
+import { conditionText, date, durationText, historyDurationText, lines, newRuleDefaults, remaining, syncRuntimeMetadata, updateCountdowns } from "./utils/formatting.js";
 import {
   ensureCoherenceTableState, ensureRulesTableState, loadTablePreferences, makeTableState,
   saveCoherenceTableState, saveRulesTableState, saveTablePreferences,
@@ -91,7 +91,7 @@ class AlertManagerPanel extends HTMLElement {
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _updateAlertAcknowledgement = updateAlertAcknowledgement;
-  _handleAlertDetailsSelection = handleAlertDetailsSelection;
+  _handleAlertDetailsSelection = handleAlertDetailsSelection; _hydrateAlertDetailTimestamps = hydrateAlertDetailTimestamps;
   _refreshHistoryData = refreshHistoryData;
   _renderHistory = renderHistoryPanel;
   _historyRuleName = historyRuleName;
@@ -243,7 +243,7 @@ class AlertManagerPanel extends HTMLElement {
       active_count: 0,
       acknowledge_count: 0,
       pending_count: 0,
-      tracked_count: 0,
+      tracked_count: 0, startup: { in_progress: false, stabilization_until: null },
       alerts: [],
       pending: [],
       acknowledge: [],
@@ -413,6 +413,7 @@ class AlertManagerPanel extends HTMLElement {
     if (monitoringState === "on" || monitoringState === "off") {
       this._monitoringEnabled = monitoringState === "on";
     }
+    syncRuntimeMetadata.call(this, states);
     // Sensor attributes are intentionally compact and can be truncated to stay
     // below Recorder's limit. Counts remain immediate; complete rows come from
     // the coalesced WebSocket refresh triggered by this state change.
@@ -430,7 +431,6 @@ class AlertManagerPanel extends HTMLElement {
     }
     return true;
   }
-
   _render() {
     if (!this.shadowRoot) return;
     this._closeAlertDetailsDialog();
@@ -662,7 +662,6 @@ class AlertManagerPanel extends HTMLElement {
       if (await handler.call(this, action, button, event)) return;
     }
   }
-
   _handleInput(event) {
     if (event.target?.id === "ignored-reference-input") {
       this._ignoredReferenceDraft = String(event.target.value ?? "");
@@ -702,6 +701,7 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
+    const timestamp = event.target.closest?.('[data-action="toggle-alert-timestamp"]'); if (timestamp) { event.preventDefault(); void this._handleClick({ target: timestamp }); return; }
     const summary = event.target.closest?.('.summary [data-action="filter-summary-status"]');
     if (summary) {
       event.preventDefault();

@@ -557,7 +557,16 @@ test("partitioned entities update counts without replacing full websocket rows",
     states: {
       "sensor.alert_manager_main_active": {
         state: "1",
-        attributes: { alerts: [{ id: "active" }] },
+        attributes: {
+          alerts: [{ id: "active" }],
+          runtime: {
+            tracked_count: 47,
+            startup: {
+              in_progress: true,
+              stabilization_until: "2026-09-04T10:02:00+00:00",
+            },
+          },
+        },
       },
       "sensor.alert_manager_main_pending": {
         state: "2",
@@ -573,6 +582,11 @@ test("partitioned entities update counts without replacing full websocket rows",
   assert.equal(panel._alerts.active_count, 1);
   assert.equal(panel._alerts.pending_count, 2);
   assert.equal(panel._alerts.acknowledge_count, 1);
+  assert.equal(panel._alerts.tracked_count, 47);
+  assert.deepEqual(panel._alerts.startup, {
+    in_progress: true,
+    stabilization_until: "2026-09-04T10:02:00+00:00",
+  });
   assert.deepEqual(panel._alerts.alerts, []);
   assert.deepEqual(panel._alerts.pending, []);
   assert.deepEqual(panel._alerts.acknowledge, []);
@@ -1380,12 +1394,47 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /data-detail-key="current-value"[\s\S]*Valeur actuelle[\s\S]*35 °C/);
   assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
+  assert.match(html, /data-detail-key="detected"[\s\S]*data-action="toggle-alert-timestamp"/);
+  assert.match(html, /data-detail-key="activated"[\s\S]*data-timestamp-mode="absolute"/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /<ha-card outlined class="alert-details-card">/);
   assert.match(html, /slot="headerActionItems"[\s\S]*data-alert-id="rule:temperature:sensor\.rack"/);
   assert.match(html, /ha-dropdown-item value="acknowledge"[\s\S]*Acquitter/);
   assert.doesNotMatch(html, /mdi:chevron-right/);
   assert.doesNotMatch(html, /data-action="close-alert-details"/);
+});
+
+test("pending alert details keep their remaining time live", () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview").find((item) => item.status === "pending");
+  const html = panel._renderAlertDetails("overview", row);
+
+  assert.match(html, /data-detail-key="remaining"[\s\S]*data-due="2099-08-26T12:15:00Z"/);
+});
+
+test("alert detail timestamps reuse Home Assistant absolute and relative time", async () => {
+  const panel = tablePanel();
+  const target = {
+    dataset: {
+      action: "toggle-alert-timestamp",
+      timestamp: "2026-08-26T12:00:00Z",
+      timestampMode: "absolute",
+    },
+    matches: () => true,
+    querySelectorAll: () => [],
+    replaceChildren(component) { this.component = component; },
+  };
+  panel._hydrateAlertDetailTimestamps(target);
+  assert.equal(target.component.tagName, "HA-ABSOLUTE-TIME");
+  assert.equal(target.component.datetime, "2026-08-26T12:00:00Z");
+
+  await panel._handleClick({
+    target: { closest: () => target },
+    preventDefault() {},
+    stopPropagation() {},
+  });
+  assert.equal(target.dataset.timestampMode, "relative");
+  assert.equal(target.component.tagName, "HA-RELATIVE-TIME");
 });
 
 test("alert details read the current value from a configured attribute path", () => {

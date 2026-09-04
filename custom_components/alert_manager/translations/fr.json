@@ -335,6 +335,7 @@
       "summary_active": "Alertes actives",
       "summary_pending": "Alertes à venir",
       "summary_tracked": "Total suivi",
+      "summary_tracked_calculating": "Calcul en cours…",
       "unacknowledge": "Retirer l’acquittement"
     },
     "packs": {
