@@ -603,7 +603,12 @@ class _RuntimeMixin:
             elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
                 self._schedule_timer(record)
 
-        for alert_id in existing_ids - candidates.keys():
+        missing_candidate_ids = existing_ids - candidates.keys()
+        if restoring and not self.hass.is_running:
+            # Restored entities can briefly expose a normal fallback state before
+            # their integration has finished startup. Reconcile them once HA runs.
+            missing_candidate_ids = set()
+        for alert_id in missing_candidate_ids:
             record = self._pop_record(alert_id)
             if record is None:
                 continue
