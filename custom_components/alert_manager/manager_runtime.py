@@ -1398,10 +1398,10 @@ class _RuntimeMixin:
             restored_ids = (
                 existing_ids & transaction.live_alert_ids_for_entity(entity_id)
             ) - set(confirmed_candidate_ids)
-            if state is not None and state.state not in (
-                STATE_UNAVAILABLE,
-                STATE_UNKNOWN,
-            ):
+            if state is None or state.state == STATE_UNKNOWN:
+                # The reconciliation deadline bounds startup-only protection.
+                preserved_ids = set()
+            elif state.state != STATE_UNAVAILABLE:
                 preserved_ids = restored_ids & indeterminate_candidate_ids
             else:
                 preserved_ids = {
