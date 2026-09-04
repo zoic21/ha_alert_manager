@@ -104,10 +104,29 @@ class _RuntimeMixin:
         ):
             self._startup_deferred_unavailable_since.pop(entity_id, None)
 
+    def _remove_recovered_pending_unavailable(
+        self, entity_id: str, state: State
+    ) -> bool:
+        """Remove a pending outage as soon as its source becomes usable."""
+        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return False
+        alert_id = f"{CATEGORY_UNAVAILABLE}:{entity_id}"
+        record = self.records.get(alert_id)
+        if (
+            record is None
+            or record.details.type != CATEGORY_UNAVAILABLE
+            or record.status is not AlertStatus.PENDING
+        ):
+            return False
+        self._pop_record(alert_id)
+        self._cancel_timer(alert_id)
+        self._startup_restored_alert_ids.discard(alert_id)
+        return True
+
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state or entity lifecycle event."""
-        if not self.monitoring_enabled or self.hass.state is not CoreState.running:
+        if not self.monitoring_enabled:
             return
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_allowed_rule_source(entity_id):
@@ -115,6 +134,12 @@ class _RuntimeMixin:
         new_state = event.data.get("new_state")
         if isinstance(new_state, State):
             self._observe_startup_availability(entity_id, new_state)
+            if self._remove_recovered_pending_unavailable(entity_id, new_state):
+                self._immediate_state_save_required = True
+                if self.hass.state is CoreState.running:
+                    self._queued_public_refresh = True
+        if self.hass.state is not CoreState.running:
+            return
 
         if self._update_tracking_for_state_event(entity_id, event):
             self._queued_public_refresh = True
@@ -557,8 +582,12 @@ class _RuntimeMixin:
             return False
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
+        recovered_pending_changed = False
         if state is not None:
             self._observe_startup_availability(entity_id, state)
+            recovered_pending_changed = self._remove_recovered_pending_unavailable(
+                entity_id, state
+            )
         deferred_unavailable_at = (
             None
             if self._startup_restoring
@@ -577,15 +606,16 @@ class _RuntimeMixin:
                 self._publish_if_changed()
             return False
 
-        persisted_changed = False
-        immediate_changed = False
+        persisted_changed = recovered_pending_changed
+        immediate_changed = recovered_pending_changed
         if state is not None:
-            persisted_changed = self._reset_inactivity_records_after_update(
+            inactivity_changed = self._reset_inactivity_records_after_update(
                 state,
                 now,
                 emit_events=emit_events,
             )
-            immediate_changed = persisted_changed
+            persisted_changed |= inactivity_changed
+            immediate_changed |= inactivity_changed
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         candidates = self._build_candidates(state) if state is not None else {}
         persisted_changed |= self._variation_baselines_dirty

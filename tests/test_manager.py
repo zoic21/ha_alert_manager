@@ -501,6 +501,78 @@ def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_n
     run(scenario())
 
 
+def test_pending_unavailable_clears_on_startup_recovery_event(hass, entry):
+    """A usable startup event immediately removes only a pending outage."""
+
+    async def scenario():
+        hass.states.set("select.camera_mode", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        alert_id = "unavailable:select.camera_mode"
+        assert first.records[alert_id].status is AlertStatus.PENDING
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        unavailable_state = hass.states.set("select.camera_mode", "unavailable")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        assert restarted.records[alert_id].status is AlertStatus.PENDING
+
+        usable_state = hass.states.set("select.camera_mode", "auto")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "select.camera_mode",
+                    "old_state": unavailable_state,
+                    "new_state": usable_state,
+                }
+            )
+        )
+
+        assert alert_id not in restarted.records
+        assert restarted.public_snapshot()["pending_count"] == 0
+        assert not [
+            event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+        ]
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert hass.stores["alert_manager"]["alerts"] == {}
+
+    run(scenario())
+
+
+def test_pending_unavailable_clears_from_current_startup_state(hass, entry):
+    """Initial evaluation clears a pending outage whose event was missed."""
+
+    async def scenario():
+        hass.states.set("select.camera_mode", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        alert_id = "unavailable:select.camera_mode"
+        assert first.records[alert_id].status is AlertStatus.PENDING
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        hass.states.set("select.camera_mode", "auto")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        assert restarted.records[alert_id].status is AlertStatus.PENDING
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert alert_id not in restarted.records
+        assert restarted.public_snapshot()["pending_count"] == 0
+        assert hass.stores["alert_manager"]["alerts"] == {}
+
+    run(scenario())
+
+
 def test_active_unavailable_alert_survives_transient_normal_startup_state(hass, entry):
     """A normal startup placeholder cannot recreate an unavailable alert."""
 
@@ -519,9 +591,21 @@ def test_active_unavailable_alert_survives_transient_normal_startup_state(hass, 
         await first.async_unload()
 
         hass.state = CoreState.starting
+        unavailable_before_restart = hass.states.get("sensor.offline")
         transient_state = hass.states.set("sensor.offline", "ok")
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
+
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.offline",
+                    "old_state": unavailable_before_restart,
+                    "new_state": transient_state,
+                }
+            )
+        )
+        assert restarted.records[alert_id].status is AlertStatus.ACTIVE
 
         hass.state = CoreState.running
         restarted._home_assistant_started(Event())
