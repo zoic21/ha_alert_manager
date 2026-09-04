@@ -91,6 +91,17 @@ def fire_device_event_timers(hass):
         timer["action"](timer["point"])
 
 
+def fire_startup_reconciliation(hass):
+    """Run the one-shot reconciliation after startup values settle."""
+    timer = next(
+        timer
+        for timer in hass.timers
+        if not timer["cancelled"]
+        and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+    )
+    timer["action"](timer["point"])
+
+
 def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     """The sensor platform exposes alert partitions and coherence issues."""
     registry_entry(
@@ -447,7 +458,6 @@ def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_n
         assert restarted.records[alert_id].detected_at == detected_at
         assert restarted.records[alert_id].due_at == due_at
 
-        hass.states.set("binary_sensor.pool_filter", "on")
         hass.state = CoreState.running
         restarted._home_assistant_started(Event())
         await asyncio.sleep(0)
@@ -455,9 +465,151 @@ def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_n
         assert restarted.records[alert_id].detected_at == detected_at
         assert restarted.records[alert_id].due_at == due_at
 
-        hass.states.set("binary_sensor.pool_filter", "off")
-        await restarted.async_evaluate_entity("binary_sensor.pool_filter")
+        matching_state = hass.states.set("binary_sensor.pool_filter", "on")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "binary_sensor.pool_filter",
+                    "old_state": transient_state,
+                    "new_state": matching_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].detected_at == detected_at
+        assert restarted.records[alert_id].due_at == due_at
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        normal_state = hass.states.set("binary_sensor.pool_filter", "off")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "binary_sensor.pool_filter",
+                    "old_state": matching_state,
+                    "new_state": normal_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         assert alert_id not in restarted.records
+
+    run(scenario())
+
+
+def test_active_unavailable_alert_survives_transient_normal_startup_state(hass, entry):
+    """A normal startup placeholder cannot recreate an unavailable alert."""
+
+    async def scenario():
+        hass.states.set("sensor.offline", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config({"automatic": {"unavailable": {"delay": 0}}})
+
+        alert_id = "unavailable:sensor.offline"
+        original = first.records[alert_id]
+        assert original.status is AlertStatus.ACTIVE
+        detected_at = original.detected_at
+        due_at = original.due_at
+        active_since = original.active_since
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        transient_state = hass.states.set("sensor.offline", "ok")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+
+        unavailable_again = hass.states.set("sensor.offline", "unavailable")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.offline",
+                    "old_state": transient_state,
+                    "new_state": unavailable_again,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+        assert restored.active_since == active_since
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        normal_state = hass.states.set("sensor.offline", "ok")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.offline",
+                    "old_state": unavailable_again,
+                    "new_state": normal_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
+
+    run(scenario())
+
+
+def test_startup_reconciliation_removes_confirmed_recovery(hass, entry):
+    """A restored alert is resolved once its settled source is normal."""
+
+    async def scenario():
+        hass.states.set("sensor.recovered", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config({"automatic": {"unavailable": {"delay": 0}}})
+
+        alert_id = "unavailable:sensor.recovered"
+        assert first.records[alert_id].status is AlertStatus.ACTIVE
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        hass.states.set("sensor.recovered", "ok")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].status is AlertStatus.ACTIVE
+
+        resolved_before = len(
+            [event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED]
+        )
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert alert_id not in restarted.records
+        resolved_after = len(
+            [event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED]
+        )
+        assert resolved_after == resolved_before + 1
 
     run(scenario())
 

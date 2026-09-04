@@ -66,6 +66,9 @@ class AlertManager(
         self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
         self._pack_recheck_timers: dict[tuple[str, str], Callable[[], None]] = {}
+        self._startup_restoring = self.hass.state is not CoreState.running
+        self._startup_restored_entity_ids: set[str] = set()
+        self._startup_reconciliation_timer: Callable[[], None] | None = None
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
@@ -159,6 +162,8 @@ class AlertManager(
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
         self._active_device_group_ids = set(self._active_device_groups())
+        if self._startup_restoring:
+            self._startup_restored_entity_ids = set(self._record_ids_by_entity)
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
 
@@ -221,6 +226,7 @@ class AlertManager(
         """Remove listeners and timers, persisting a final snapshot."""
         self._cancel_template_dependency_timers()
         self._cancel_all_pack_rechecks()
+        self._cancel_startup_reconciliation()
         self._unloading = True
         self._cancel_config_backup_schedule()
         if self._coherence_schedule_unsubscribe is not None:

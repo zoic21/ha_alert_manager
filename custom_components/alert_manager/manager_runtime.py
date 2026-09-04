@@ -24,6 +24,7 @@ from .const import (
     ATTRIBUTE_SOURCES,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
+    STARTUP_RECONCILIATION_DELAY_SECONDS,
     VARIATION_SOURCES,
 )
 from .models import (
@@ -57,11 +58,41 @@ class _RuntimeMixin:
     @callback
     def _home_assistant_started(self, _event: Event) -> None:
         """Evaluate only after all startup states have had a chance to load."""
+        self._schedule_startup_reconciliation()
         self.entry.async_create_task(
             self.hass,
             self.async_evaluate_all(restoring=True),
             name=f"{DOMAIN} startup evaluation",
         )
+
+    @callback
+    def _schedule_startup_reconciliation(self) -> None:
+        """Recheck only restored sources after startup values have settled."""
+        if not self._startup_restored_entity_ids:
+            self._startup_restoring = False
+            return
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._startup_reconciliation_timer = None
+            self._startup_restoring = False
+            entity_ids = tuple(self._startup_restored_entity_ids)
+            self._startup_restored_entity_ids.clear()
+            self._queue_entity_evaluations(entity_ids)
+
+        self._startup_reconciliation_timer = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            dt_util.now() + timedelta(seconds=STARTUP_RECONCILIATION_DELAY_SECONDS),
+        )
+
+    def _cancel_startup_reconciliation(self) -> None:
+        """Cancel the one-shot post-start reconciliation."""
+        if self._startup_reconciliation_timer is not None:
+            self._startup_reconciliation_timer()
+            self._startup_reconciliation_timer = None
+        self._startup_restoring = False
+        self._startup_restored_entity_ids.clear()
 
     @callback
     def _state_changed(self, event: Event) -> None:
@@ -515,7 +546,9 @@ class _RuntimeMixin:
         state = self.hass.states.get(entity_id)
         self._update_automatic_tracking_for_entity(entity_id, state)
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
-        if restoring and (state is None or state.state == STATE_UNKNOWN):
+        if (restoring or self._startup_restoring) and (
+            state is None or state.state == STATE_UNKNOWN
+        ):
             for alert_id in existing_ids:
                 record = self.records[alert_id]
                 if record.status is AlertStatus.PENDING:
@@ -598,9 +631,11 @@ class _RuntimeMixin:
                 self._schedule_timer(record)
 
         missing_candidate_ids = existing_ids - candidates.keys()
-        if restoring and state is not None and state.state == STATE_UNAVAILABLE:
-            # Unavailable cannot prove that a restored condition recovered. Keep
-            # its occurrence while still allowing the unavailable pack alongside.
+        if self._startup_restoring or (
+            restoring and state is not None and state.state == STATE_UNAVAILABLE
+        ):
+            # Startup values cannot prove that a restored condition recovered.
+            # A one-shot reconciliation checks only these sources after settling.
             missing_candidate_ids = set()
         for alert_id in missing_candidate_ids:
             record = self._pop_record(alert_id)
