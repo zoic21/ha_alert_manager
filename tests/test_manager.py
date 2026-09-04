@@ -433,12 +433,9 @@ def test_core_restart_discards_only_recent_restored_pending(hass, entry, set_now
         }
         assert restarted.records["unavailable:sensor.old"].status is AlertStatus.PENDING
         assert (
-            restarted.records["unavailable:sensor.active"].status
-            is AlertStatus.ACTIVE
+            restarted.records["unavailable:sensor.active"].status is AlertStatus.ACTIVE
         )
-        assert "unavailable:sensor.recent" not in hass.stores["alert_manager"][
-            "alerts"
-        ]
+        assert "unavailable:sensor.recent" not in hass.stores["alert_manager"]["alerts"]
         await restarted.async_unload()
 
     run(scenario())
@@ -529,9 +526,9 @@ def test_core_startup_keeps_only_latest_event_until_stable(hass, entry, set_now)
             )
         )
         assert manager.records == {}
-        assert manager._startup_state_events["sensor.booting"].data[
-            "new_state"
-        ] is final
+        assert (
+            manager._startup_state_events["sensor.booting"].data["new_state"] is final
+        )
 
         set_now(timer["point"])
         timer["action"](timer["point"])
