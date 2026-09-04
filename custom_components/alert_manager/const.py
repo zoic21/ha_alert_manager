@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "2.1.6-beta.2"
+INTEGRATION_VERSION: Final = "2.1.6-beta.3"
 FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.12"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
