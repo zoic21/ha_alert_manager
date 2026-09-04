@@ -955,6 +955,8 @@ export function openAlertDetails(kind, row) {
     const dialog = document.createElement("ha-adaptive-dialog");
     dialog.className = "alert-details-dialog";
     dialog.hass = this._hass;
+    dialog.alertKind = kind;
+    dialog.alertId = row.id;
     dialog.headerTitle = row.entityName || row.entityId;
     dialog.heading = row.entityName || row.entityId;
     dialog.width = "medium";

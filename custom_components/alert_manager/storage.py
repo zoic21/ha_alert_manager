@@ -77,11 +77,13 @@ class AlertManagerStorage:
             minor_version=STORAGE_MINOR_VERSION,
         )
         self.variation_baselines: dict[str, float] = {}
+        self.has_stored_snapshot = False
 
     async def async_load(
         self,
     ) -> tuple[dict[str, Any], dict[str, AlertRecord], bool]:
         """Load stored data and reject unusable configuration without writing."""
+        self.has_stored_snapshot = False
         raw_snapshot = await self._async_read_store_snapshot()
         try:
             raw = await self._store.async_load()
@@ -100,6 +102,7 @@ class AlertManagerStorage:
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
+        self.has_stored_snapshot = True
         if not isinstance(raw, dict):
             raise ConfigStorageError("Stored Alert Manager data must be an object")
         stored_config = raw.get("config")

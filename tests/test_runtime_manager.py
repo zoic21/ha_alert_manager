@@ -556,6 +556,15 @@ def test_variation_reference_survives_restart_while_gate_remains_true(hass, entr
         hass.states.set("sensor.source", "16")
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
+        reconciliation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"]
+            and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+        )
+        reconciliation_timer["action"](reconciliation_timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
         alert_id = f"rule:{created['id']}:sensor.source"
         assert restarted._variation_baselines[baseline_key] == 10
         assert restarted.records[alert_id].details.value == 6
@@ -712,8 +721,8 @@ def test_jinja_time_dependency_refreshes_at_next_minute(hass, entry, set_now):
     timer = hass.timers[-1]
     assert timer["point"] == datetime(2026, 8, 27, 12, 35, tzinfo=UTC)
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
     timer["action"](timer["point"])
     assert queued == ["sensor.source"]
@@ -740,8 +749,8 @@ def test_jinja_lifecycle_uses_the_lifecycle_filter_only(hass, entry):
         ),
     )
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
 
     manager._state_changed(_state_event("sensor.new", None, State("sensor.new", "on")))
@@ -763,8 +772,8 @@ def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_n
     dependency_key = ("condition", "rule-id", "sensor.source")
     manager._index_render_info("condition", ("rule-id", "sensor.source"), info)
     queued = []
-    manager._queue_entity_evaluations = (
-        lambda entity_ids, restoring=False: queued.extend(entity_ids)
+    manager._queue_entity_evaluations = lambda entity_ids, **_kwargs: queued.extend(
+        entity_ids
     )
 
     assert not manager._dynamic_dependency_matches(

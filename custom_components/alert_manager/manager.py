@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import CoreState, HassJob, HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -20,22 +20,30 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
-from .const import RECENT_RESTORED_PENDING_SECONDS
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
+from .models import AlertHistoryEntry, AlertRecord, Rule
 from .packs import reset_pack_runtimes
+from .runtime_phase import RuntimePhase
 from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
     AlertManagerStorage,
 )
+from .transactions import (
+    StartupReconciliationTransaction,
+    async_finish_non_interruptible,
+)
 from .validation import validate_config
 
 _LOGGER = logging.getLogger(__name__)
+
+_STOPPING_CORE_STATES = frozenset(
+    (CoreState.stopping, CoreState.final_write, CoreState.stopped)
+)
 
 
 class AlertManager(
@@ -67,6 +75,19 @@ class AlertManager(
         self._pack_entry_unsubscribers: dict[str, Callable[[], None]] = {}
         self._timers: dict[str, Callable[[], None]] = {}
         self._pack_recheck_timers: dict[tuple[str, str], Callable[[], None]] = {}
+        if self.hass.state is CoreState.running:
+            self._runtime_phase = RuntimePhase.RUNNING
+        elif self.hass.state in _STOPPING_CORE_STATES:
+            self._runtime_phase = RuntimePhase.STOPPING
+        else:
+            self._runtime_phase = RuntimePhase.STARTING
+        self._startup_reconciliation_timer: Callable[[], None] | None = None
+        self._startup_reconciliation_deadline: datetime | None = None
+        self._startup_reconciliation_scheduled = False
+        self._startup_reconciliation_snapshot = None
+        self._startup_reconciliation_transaction: (
+            StartupReconciliationTransaction | None
+        ) = None
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
@@ -91,7 +112,6 @@ class AlertManager(
         self._template_rate_limit_until: dict[DependencyKey, datetime] = {}
         self._template_rate_limit_timers: dict[DependencyKey, Callable[[], None]] = {}
         self._queued_evaluation_entities: set[str] = set()
-        self._queued_evaluation_restoring = False
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
@@ -99,16 +119,14 @@ class AlertManager(
         self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
-        self._startup_buffering = not hass.is_running
-        self._startup_state_events: dict[str, Event] = {}
-        self._startup_grace_timer: Callable[[], None] | None = None
-        self._startup_stabilization_until: datetime | None = None
         self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
         self._immediate_state_save_required = False
         self._recovery_active = False
         self._config_backup_schedule_unsubscribe: Callable[[], None] | None = None
+        self._unverified_restored_alert_ids: set[str] = set()
+        self._persistence_ready = False
 
     @property
     def monitoring_enabled(self) -> bool:
@@ -120,8 +138,10 @@ class AlertManager(
         """Return validated rule objects."""
         return list(self._rules)
 
-    async def async_setup(self) -> None:
+    async def async_setup(self) -> bool:
         """Load persisted state and start event-driven evaluation."""
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return False
         loaded_config: dict[str, Any] | None = None
         try:
             loaded_config, records, migrated = await self.storage.async_load()
@@ -149,27 +169,8 @@ class AlertManager(
                 history, history_migrated = [], False
         self._variation_baselines = self.storage.variation_baselines
         await self._async_load_condition_translations()
-        cutoff = dt_util.now().astimezone(UTC) - timedelta(
-            seconds=RECENT_RESTORED_PENDING_SECONDS
-        )
-        recent_pending_ids = (
-            {
-                alert_id
-                for alert_id, record in records.items()
-                if record.status is AlertStatus.PENDING
-                and record.detected_at.astimezone(UTC) > cutoff
-            }
-            if self._startup_buffering
-            else set()
-        )
-        if recent_pending_ids:
-            records = {
-                alert_id: record
-                for alert_id, record in records.items()
-                if alert_id not in recent_pending_ids
-            }
-            migrated = True
         self.records = records
+        self._unverified_restored_alert_ids = set(records)
         self._rebuild_record_index()
         self.history = history
         if self._trim_history():
@@ -181,12 +182,29 @@ class AlertManager(
         self._rebuild_rule_index()
         if self._enrich_rule_metadata():
             migrated = True
+        # From this point, config and records form a validated snapshot that can
+        # safely compensate an in-flight startup write even if later setup work
+        # is cancelled or fails.
+        self._persistence_ready = not self.recovery_active
+        if (
+            self._runtime_phase is RuntimePhase.STOPPING
+            or self.hass.state in _STOPPING_CORE_STATES
+        ):
+            self._begin_shutdown()
+            return False
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
         self._active_device_group_ids = set(self._active_device_groups())
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
+        if self.hass.state is CoreState.running and (
+            self._runtime_phase.is_startup
+            or (self.storage.has_stored_snapshot and not self.recovery_active)
+        ):
+            # Establish the grace boundary before event listeners can schedule
+            # registry or pack workers against a restored snapshot.
+            self._runtime_phase = RuntimePhase.STARTUP_GRACE
 
         self._unsubscribers.extend(
             (
@@ -208,64 +226,108 @@ class AlertManager(
                     SIGNAL_CONFIG_ENTRY_CHANGED,
                     self._config_entry_changed,
                 ),
+                self.hass.async_add_shutdown_job(
+                    HassJob(self._begin_shutdown, "alert_manager shutdown")
+                ),
             )
         )
-
-        if not self._startup_buffering:
-            changed = await self.async_evaluate_all(restoring=True, save=False)
-            if not self.recovery_active and (migrated or changed):
-                await self._async_save_state()
-        else:
-            if migrated and not self.recovery_active:
-                await self._async_save_state()
-            if self.hass.is_running:
-                self._home_assistant_started(None)
-            else:
-                self._unsubscribers.append(
-                    self.hass.bus.async_listen_once(
-                        EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
-                    )
+        if self.hass.state is not CoreState.running:
+            self._unsubscribers.append(
+                self.hass.bus.async_listen_once(
+                    EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
                 )
-            self._publish_if_changed(force=True)
+            )
+
+        async with self._config_mutation_lock:
+            if (
+                self._runtime_phase is RuntimePhase.STOPPING
+                or self.hass.state in _STOPPING_CORE_STATES
+            ):
+                self._begin_shutdown()
+            elif self.hass.state is CoreState.running:
+                if self._runtime_phase.is_startup or (
+                    self.storage.has_stored_snapshot and not self.recovery_active
+                ):
+                    self._begin_startup_grace()
+                    if migrated and not self.recovery_active:
+                        await self._async_save_state()
+                    self._publish_if_changed(force=True)
+                else:
+                    changed = await self.async_evaluate_all(save=False)
+                    if not self.recovery_active and (migrated or changed):
+                        await self._async_save_state()
+            else:
+                if migrated and not self.recovery_active:
+                    await self._async_save_state()
+                if self.hass.state is CoreState.running:
+                    self._begin_startup_grace()
+                elif self.hass.state in _STOPPING_CORE_STATES:
+                    self._begin_shutdown()
+                self._publish_if_changed(force=True)
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return False
         if history_migrated and not self.recovery_active:
             try:
                 await self.history_storage.async_save(self.history)
             except Exception:
                 _LOGGER.exception("Unable to persist migrated alert history")
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return False
         await self._async_sync_recovery_notification()
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return False
         await self._async_sync_monitoring_notification()
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return False
         self._refresh_coherence_schedule()
         await self._async_initialize_config_backups()
+        return self._runtime_phase is not RuntimePhase.STOPPING
 
     def _refresh_coherence_schedule(self) -> None:
         """Replace the optional low-frequency coherence scan listener."""
         if self._coherence_schedule_unsubscribe is not None:
             self._coherence_schedule_unsubscribe()
             self._coherence_schedule_unsubscribe = None
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return
         self._coherence_schedule_unsubscribe = schedule_coherence_scans(
             self.hass, self.config["coherence_schedule"]
         )
 
     async def async_unload(self) -> None:
         """Remove listeners and timers, persisting a final snapshot."""
-        self._cancel_template_dependency_timers()
-        self._cancel_all_pack_rechecks()
+        self._begin_shutdown()
         self._unloading = True
-        self._cancel_startup_stabilization()
-        self._cancel_config_backup_schedule()
-        if self._coherence_schedule_unsubscribe is not None:
-            self._coherence_schedule_unsubscribe()
-            self._coherence_schedule_unsubscribe = None
-        for unsubscribe in self._unsubscribers:
-            unsubscribe()
-        self._unsubscribers.clear()
-        for unsubscribe in self._pack_entry_unsubscribers.values():
-            unsubscribe()
-        self._pack_entry_unsubscribers.clear()
-        for cancel in self._timers.values():
-            cancel()
-        self._timers.clear()
-        self._cancel_all_device_event_timers()
-        reset_pack_runtimes(self.hass)
-        if not self.recovery_active:
-            await self._async_save_state()
+
+        async def persist_final_snapshot() -> None:
+            """Drain any in-flight mutation and persist its rolled-back result."""
+            async with self._config_mutation_lock:
+                if self._persistence_ready and not self.recovery_active:
+                    await self._async_save_state()
+
+        try:
+            try:
+                # Always drain an in-flight mutation before tearing listeners
+                # down. A reconciliation may already own the lock even though
+                # the final setup side effects have not completed yet.
+                await async_finish_non_interruptible(persist_final_snapshot())
+            except Exception:
+                _LOGGER.exception("Unable to persist Alert Manager during unload")
+        finally:
+            self._cancel_template_dependency_timers()
+            self._cancel_all_pack_rechecks()
+            self._cancel_config_backup_schedule()
+            if self._coherence_schedule_unsubscribe is not None:
+                self._coherence_schedule_unsubscribe()
+                self._coherence_schedule_unsubscribe = None
+            for unsubscribe in self._unsubscribers:
+                unsubscribe()
+            self._unsubscribers.clear()
+            for unsubscribe in self._pack_entry_unsubscribers.values():
+                unsubscribe()
+            self._pack_entry_unsubscribers.clear()
+            for cancel in self._timers.values():
+                cancel()
+            self._timers.clear()
+            self._cancel_all_device_event_timers()
+            reset_pack_runtimes(self.hass)

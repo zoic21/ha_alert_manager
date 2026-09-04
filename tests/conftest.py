@@ -35,6 +35,23 @@ components = _module("homeassistant.components", package=True)
 helpers = _module("homeassistant.helpers", package=True)
 util = _module("homeassistant.util", package=True)
 
+frontend_component = _module("homeassistant.components.frontend")
+frontend_component.async_remove_panel = lambda *_args, **_kwargs: None
+panel_custom_component = _module("homeassistant.components.panel_custom")
+
+
+async def _async_register_panel(*_args, **_kwargs):
+    return None
+
+
+panel_custom_component.async_register_panel = _async_register_panel
+components.frontend = frontend_component
+components.panel_custom = panel_custom_component
+http_component = _module("homeassistant.components.http")
+http_component.StaticPathConfig = lambda *args, **kwargs: (args, kwargs)
+typing_helper = _module("homeassistant.helpers.typing")
+typing_helper.ConfigType = dict
+
 automation_component = _module("homeassistant.components.automation")
 automation_component.DATA_COMPONENT = "automation_component"
 trace_component = _module("homeassistant.components.trace", package=True)
@@ -66,6 +83,15 @@ hass_dict.HassKey = lambda value: value
 core = _module("homeassistant.core")
 
 
+class CoreState(StrEnum):
+    not_running = "NOT_RUNNING"
+    starting = "STARTING"
+    running = "RUNNING"
+    stopping = "STOPPING"
+    final_write = "FINAL_WRITE"
+    stopped = "STOPPED"
+
+
 def callback(function):
     function._hass_callback = True
     return function
@@ -91,6 +117,12 @@ class ServiceCall:
         self.context = context or Context()
 
 
+class HassJob:
+    def __init__(self, job, name=None):
+        self.job = job
+        self.name = name
+
+
 class State:
     def __init__(
         self, entity_id: str, state: str, attributes=None, *, last_updated=None
@@ -102,9 +134,11 @@ class State:
 
 
 core.callback = callback
+core.CoreState = CoreState
 core.valid_entity_id = valid_entity_id
 core.Context = Context
 core.Event = Event
+core.HassJob = HassJob
 core.HomeAssistant = object
 core.ServiceCall = ServiceCall
 core.State = State
@@ -440,7 +474,12 @@ dt_module.now = lambda: _clock["now"]
 util.dt = dt_module
 
 async_module = _module("homeassistant.util.async_")
-async_module.create_eager_task = lambda coro, **kwargs: asyncio.create_task(coro)
+async_module.create_eager_task = lambda coro, **kwargs: asyncio.Task(
+    coro,
+    loop=asyncio.get_running_loop(),
+    eager_start=True,
+    **kwargs,
+)
 
 sensor_module = _module("homeassistant.components.sensor")
 
@@ -598,7 +637,7 @@ class FakeAuth:
 
 class FakeHass:
     def __init__(self):
-        self.is_running = True
+        self.state = CoreState.running
         self.bus = FakeBus()
         self.states = FakeStates()
         self.data = {}
@@ -608,6 +647,7 @@ class FakeHass:
         self.dispatchers = defaultdict(list)
         self.commands = []
         self.notifications = {}
+        self.shutdown_jobs = []
         self.config = SimpleNamespace(language="fr")
         self.services = FakeServices()
         self.auth = FakeAuth()
@@ -617,8 +657,22 @@ class FakeHass:
         self.label_registry = Registry("label")
         self.area_registry = Registry("area")
 
+    @property
+    def is_running(self):
+        return self.state in (CoreState.starting, CoreState.running)
+
     def async_create_task(self, coroutine, name=None, eager_start=True):
         return asyncio.create_task(coroutine, name=name)
+
+    def async_add_shutdown_job(self, hassjob, *args):
+        item = (hassjob, args)
+        self.shutdown_jobs.append(item)
+
+        def remove():
+            if item in self.shutdown_jobs:
+                self.shutdown_jobs.remove(item)
+
+        return remove
 
 
 class FakeConfigEntries:

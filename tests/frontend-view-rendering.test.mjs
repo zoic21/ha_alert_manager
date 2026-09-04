@@ -32,7 +32,6 @@ test("overview rendering uses only its explicit view context", () => {
     },
     selectedStatuses: ["active"],
     pageMessages: "<ha-alert>notice</ha-alert>",
-    durationText: (seconds) => `${seconds} s`,
     rows: [{ id: "alert-1" }],
     renderAlertTable: (...args) => {
       tableCall = args;
@@ -48,7 +47,7 @@ test("overview rendering uses only its explicit view context", () => {
   assert.match(markup, /<strong>20<\/strong>/);
 });
 
-test("overview startup banner shows the remaining stabilization delay", () => {
+test("overview startup banner follows the transactional runtime phase", () => {
   const startup = {
     in_progress: true,
     stabilization_until: "2026-09-04T10:02:00+00:00",
@@ -66,11 +65,11 @@ test("overview startup banner shows the remaining stabilization delay", () => {
     startupBannerMarkup(startup, translate, (seconds) => `${seconds} s`, now),
     /<ha-alert[^>]*alert-type="info"[^>]*role="status"/,
   );
-  assert.equal(startupBannerMarkup({ in_progress: false }, translate, String, now), "");
   assert.equal(
-    startupBannerMarkup(startup, translate, String, Date.parse(startup.stabilization_until)),
-    "",
+    startupStatusText(startup, translate, String, Date.parse(startup.stabilization_until)),
+    "overview.startup_waiting:",
   );
+  assert.equal(startupBannerMarkup({ in_progress: false }, translate, String, now), "");
 });
 
 test("history rendering handles enabled and disabled states without panel state", () => {

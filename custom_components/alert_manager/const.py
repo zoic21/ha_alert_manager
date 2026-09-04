@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.1.6"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.12"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.13"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -21,8 +21,7 @@ EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
 EVENT_DEVICE_ALERT_STARTED: Final = "alert_manager_device_alert_started"
 DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
 LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS: Final = 30
-STARTUP_STABILIZATION_SECONDS: Final = 2 * 60
-RECENT_RESTORED_PENDING_SECONDS: Final = 5 * 60
+STARTUP_RECONCILIATION_DELAY_SECONDS: Final = 60
 SIGNAL_ALERTS_UPDATED: Final = "alert_manager_alerts_updated"
 SIGNAL_MONITORING_UPDATED: Final = "alert_manager_monitoring_updated"
 SIGNAL_HISTORY_UPDATED: Final = "alert_manager_history_updated"

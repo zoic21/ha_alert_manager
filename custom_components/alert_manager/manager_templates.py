@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT
-from homeassistant.core import State, callback
+from homeassistant.core import CoreState, State, callback
 from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.template import Template
@@ -23,6 +23,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .models import AlertStatus, Rule, extract_attribute_value
+from .runtime_phase import RuntimePhase
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -251,6 +252,10 @@ class _TemplatesMixin:
         if (
             self._template_time_timer is not None
             or not self._template_time_dependencies
+            or not self.monitoring_enabled
+            or self._unloading
+            or not self._runtime_phase.can_evaluate
+            or self.hass.state is not CoreState.running
         ):
             return
         now = dt_util.now().astimezone(UTC)
@@ -259,6 +264,13 @@ class _TemplatesMixin:
         @callback
         def timer_due(_now: datetime) -> None:
             self._template_time_timer = None
+            if (
+                not self.monitoring_enabled
+                or self._unloading
+                or not self._runtime_phase.can_evaluate
+                or self.hass.state is not CoreState.running
+            ):
+                return
             self._queue_entity_evaluations(
                 {key[2] for key in self._template_time_dependencies}
             )
@@ -273,13 +285,25 @@ class _TemplatesMixin:
         self, dependency_key: DependencyKey, when: datetime
     ) -> None:
         """Queue one trailing render when a broad Jinja rate limit expires."""
-        if dependency_key in self._template_rate_limit_timers:
+        if (
+            dependency_key in self._template_rate_limit_timers
+            or not self.monitoring_enabled
+            or self._unloading
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
             return
 
         @callback
         def timer_due(_now: datetime) -> None:
             self._template_rate_limit_timers.pop(dependency_key, None)
-            if dependency_key in self._template_dynamic_infos:
+            if (
+                dependency_key in self._template_dynamic_infos
+                and self.monitoring_enabled
+                and not self._unloading
+                and self._runtime_phase is RuntimePhase.RUNNING
+                and self.hass.state is CoreState.running
+            ):
                 self._queue_entity_evaluations((dependency_key[2],))
 
         self._template_rate_limit_timers[dependency_key] = (
@@ -308,6 +332,11 @@ class _TemplatesMixin:
             return False
 
         if entity_id in self._template_entities_by_key.get(dependency_key, ()):
+            return True
+        if self._runtime_phase is RuntimePhase.RECONCILING:
+            # The startup queue already coalesces dependency bursts. Deferring a
+            # dynamic match to a runtime timer here could lose the only change
+            # observed between the authoritative scan and its final Store write.
             return True
         rate_limit = getattr(render_info, "rate_limit", None)
         if not isinstance(rate_limit, int | float) or rate_limit <= 0:

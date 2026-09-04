@@ -6,12 +6,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from homeassistant.core import callback
+from homeassistant.core import CoreState, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CATEGORY_UNAVAILABLE,
     DEVICE_EVENT_DEBOUNCE_SECONDS,
     EVENT_ALERT_ACKNOWLEDGED,
     EVENT_ALERT_RESOLVED,
@@ -23,6 +24,7 @@ from .const import (
     SIGNAL_HISTORY_UPDATED,
 )
 from .models import AlertRecord, AlertStatus, calculate_due_at
+from .runtime_phase import RuntimePhase
 from .storage import sort_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,12 +58,16 @@ class _StateMixin:
         """Remove one authoritative record and its entity lookup entry."""
         record = self.records.pop(alert_id, None)
         if record is not None:
+            if self._startup_reconciliation_transaction is not None:
+                self._startup_reconciliation_transaction.record_removed(alert_id)
+            self._unverified_restored_alert_ids.discard(alert_id)
             self._remove_record_from_index(alert_id, record.details.entity_id)
         return record
 
     def _replace_records(self, records: dict[str, AlertRecord]) -> None:
         """Replace authoritative records and rebuild the derived lookup cache."""
         self.records = records
+        self._unverified_restored_alert_ids.intersection_update(records)
         self._rebuild_record_index()
 
     def _remove_record_from_index(self, alert_id: str, entity_id: str) -> None:
@@ -92,6 +98,10 @@ class _StateMixin:
                 for record in self.records.values()
                 if record.status is AlertStatus.PENDING
                 and self._pending_is_visible(record, now)
+                and not (
+                    self._runtime_phase.is_startup
+                    and record.details.type == CATEGORY_UNAVAILABLE
+                )
             ),
             key=lambda record: record.due_at.astimezone(UTC),
         )
@@ -121,10 +131,10 @@ class _StateMixin:
                 "device_active_count": len(active_devices),
                 "active_devices": active_devices,
                 "startup": {
-                    "in_progress": self._startup_buffering,
+                    "in_progress": self._runtime_phase.is_startup,
                     "stabilization_until": (
-                        self._startup_stabilization_until.isoformat()
-                        if self._startup_stabilization_until is not None
+                        self._startup_reconciliation_deadline.isoformat()
+                        if self._startup_reconciliation_deadline is not None
                         else None
                     ),
                 },
@@ -237,18 +247,40 @@ class _StateMixin:
 
     async def _async_save_state(self) -> None:
         """Persist runtime first, then archive without coupling business success."""
+        live_message_flush_pending = self._live_message_flush_pending
         self._cancel_live_message_flush()
         if self.recovery_active:
             self._immediate_state_save_required = False
             self._variation_baselines_dirty = False
             return
-        await self.storage.async_save(self.config, self.records)
+        immediate_save_required = self._immediate_state_save_required
+        variation_baselines_dirty = self._variation_baselines_dirty
         self._immediate_state_save_required = False
         self._variation_baselines_dirty = False
+        saved = False
+        try:
+            await self.storage.async_save(self.config, self.records)
+            saved = True
+        finally:
+            if not saved:
+                self._immediate_state_save_required |= immediate_save_required
+                self._variation_baselines_dirty |= variation_baselines_dirty
+                if (
+                    live_message_flush_pending
+                    and not self._unloading
+                    and self._runtime_phase is not RuntimePhase.STOPPING
+                ):
+                    self._schedule_live_message_flush()
         await self._async_flush_history()
 
     def _schedule_live_message_flush(self) -> None:
         """Persist and publish the latest live messages at a bounded frequency."""
+        if (
+            self._unloading
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            return
         self._live_message_flush_pending = True
         if self._live_message_flush_timer is not None:
             return
@@ -256,7 +288,12 @@ class _StateMixin:
         @callback
         def timer_due(_now: datetime) -> None:
             self._live_message_flush_timer = None
-            if self._unloading or not self._live_message_flush_pending:
+            if (
+                self._unloading
+                or not self._live_message_flush_pending
+                or self._runtime_phase is not RuntimePhase.RUNNING
+                or self.hass.state is not CoreState.running
+            ):
                 return
             self.entry.async_create_task(
                 self.hass,
@@ -274,10 +311,16 @@ class _StateMixin:
 
     async def _async_flush_live_messages(self) -> None:
         """Write and publish the most recent values for every live message."""
-        if self._unloading or not self._live_message_flush_pending:
-            return
-        await self._async_save_state()
-        self._publish_if_changed()
+        async with self._config_mutation_lock:
+            if (
+                self._unloading
+                or self._runtime_phase is not RuntimePhase.RUNNING
+                or self.hass.state is not CoreState.running
+                or not self._live_message_flush_pending
+            ):
+                return
+            await self._async_save_state()
+            self._publish_if_changed()
 
     def _cancel_live_message_flush(self) -> None:
         """Cancel a redundant delayed flush after an immediate durable write."""
@@ -344,7 +387,11 @@ class _StateMixin:
 
     def _reschedule_record_timers(self) -> None:
         """Restore pending transition and presentation timers."""
-        if not self.monitoring_enabled:
+        if (
+            not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
             return
         for record in self.records.values():
             if record.status is AlertStatus.PENDING:
@@ -361,7 +408,11 @@ class _StateMixin:
 
     def _schedule_timer(self, record: AlertRecord) -> None:
         """Schedule exactly one lifecycle or presentation timer for an alert."""
-        if not self.monitoring_enabled or self._startup_buffering:
+        if (
+            not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
@@ -385,7 +436,11 @@ class _StateMixin:
     def _timer_due(self, alert_id: str) -> None:
         """Fold due timers into the same batched evaluation path."""
         self._timers.pop(alert_id, None)
-        if not self.monitoring_enabled:
+        if (
+            not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
             return
         record = self.records.get(alert_id)
         if record is None:
@@ -451,6 +506,8 @@ class _StateMixin:
         self, group_id: str, alert_ids: frozenset[str]
     ) -> None:
         """Restart one per-device quiet-period timer."""
+        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
+            return
         self._cancel_device_event_timer(group_id)
         self._device_event_alert_ids[group_id] = alert_ids
 
@@ -458,7 +515,11 @@ class _StateMixin:
         def timer_due(_now: datetime) -> None:
             self._device_event_timers.pop(group_id, None)
             self._device_event_alert_ids.pop(group_id, None)
-            if self._unloading or not self.monitoring_enabled:
+            if (
+                self._unloading
+                or not self.monitoring_enabled
+                or self._runtime_phase is RuntimePhase.STOPPING
+            ):
                 return
             device = self._active_device_groups().get(group_id)
             if device is not None:
@@ -499,6 +560,8 @@ class _StateMixin:
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
+        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
+            return
         live_message_pairs = {
             (rule.id, entity_id)
             for rule in self._rules

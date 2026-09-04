@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryChange
 from homeassistant.const import (
@@ -15,7 +16,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import Event, State, callback
+from homeassistant.core import CoreState, Event, State, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
@@ -24,7 +25,7 @@ from .const import (
     ATTRIBUTE_SOURCES,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
-    STARTUP_STABILIZATION_SECONDS,
+    STARTUP_RECONCILIATION_DELAY_SECONDS,
     VARIATION_SOURCES,
 )
 from .models import (
@@ -39,6 +40,15 @@ from .models import (
     safe_float,
 )
 from .packs import PACKS, PACKS_BY_ID, PackNeutral, PackRecheck
+from .runtime_phase import RuntimePhase
+from .transactions import (
+    StartupReconciliationTransaction,
+    async_finish_non_interruptible,
+    select_alert_collision,
+)
+
+if TYPE_CHECKING:
+    from .manager_api import _ConfigurationSnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,99 +62,464 @@ _PACK_CONDITION_FALLBACKS = {
 }
 
 
+@dataclass(slots=True)
+class _StartupReconciliationAttempt:
+    """Own the mutable bookkeeping for one startup transaction attempt."""
+
+    snapshot: _ConfigurationSnapshot
+    transaction: StartupReconciliationTransaction
+    initial_immediate_save_required: bool
+    initial_pack_availability: dict[str, bool]
+    consumed_registry_dirty: bool = False
+    consumed_pack_dirty: bool = False
+    consumed_entity_renames: dict[str, str] = field(default_factory=dict)
+    store_write_attempted: bool = False
+    committed: bool = False
+
+
 class _RuntimeMixin:
     """Handle Home Assistant events and turn current states into alerts."""
 
     @callback
-    def _home_assistant_started(self, _event: Event | None) -> None:
-        """Wait for startup states to stabilize before evaluating them."""
-        if self._unloading or not self._startup_buffering:
+    def _home_assistant_started(self, _event: Event) -> None:
+        """Start one bounded grace period after Home Assistant startup."""
+        self._begin_startup_grace()
+
+    @callback
+    def _begin_startup_grace(self) -> None:
+        """Freeze restored state until integrations have published stable values."""
+        if self._runtime_phase is RuntimePhase.STOPPING:
             return
-        self._cancel_startup_grace_timer()
-        self._startup_stabilization_until = (
-            dt_util.now() + timedelta(seconds=STARTUP_STABILIZATION_SECONDS)
-        ).astimezone(UTC)
+        if self._runtime_phase is RuntimePhase.RECONCILING:
+            return
+        if self._runtime_phase is not RuntimePhase.STARTUP_GRACE:
+            self._runtime_phase = RuntimePhase.STARTUP_GRACE
+        if (
+            self._startup_reconciliation_timer is None
+            and not self._startup_reconciliation_scheduled
+        ):
+            self._schedule_startup_reconciliation()
+
+    @callback
+    def _schedule_startup_reconciliation(self) -> None:
+        """Schedule one authoritative scan at the end of startup grace."""
+        self._cancel_startup_reconciliation()
 
         @callback
-        def stabilization_finished(_now: datetime) -> None:
-            self._startup_grace_timer = None
+        def timer_due(_now: datetime) -> None:
+            self._startup_reconciliation_timer = None
+            self._startup_reconciliation_deadline = None
+            if (
+                self._runtime_phase is not RuntimePhase.STARTUP_GRACE
+                or self._startup_reconciliation_scheduled
+            ):
+                return
+            self._startup_reconciliation_scheduled = True
             self.entry.async_create_task(
                 self.hass,
-                self._async_finish_startup(),
-                name=f"{DOMAIN} startup evaluation",
+                self._async_finish_startup_reconciliation(),
+                name=f"{DOMAIN} startup reconciliation",
+                eager_start=False,
             )
-
-        self._startup_grace_timer = async_track_point_in_utc_time(
-            self.hass,
-            stabilization_finished,
-            self._startup_stabilization_until,
-        )
-        self._publish_if_changed()
-
-    async def _async_finish_startup(self) -> None:
-        """Evaluate stable states, then resume the coalesced live event pipeline."""
-        if self._unloading:
-            self._startup_state_events.clear()
-            return
-
-        buffered_events = dict(self._startup_state_events)
-        self._startup_state_events.clear()
-        try:
-            await self.async_evaluate_all(restoring=True, _startup_flush=True)
-        finally:
-            buffered_events.update(self._startup_state_events)
-            self._startup_state_events.clear()
-            self._startup_buffering = False
-            self._startup_stabilization_until = None
-            if not self._unloading:
-                self._reschedule_record_timers()
-                for event in buffered_events.values():
-                    self._route_state_changed(event, restoring=True)
+            if self._last_public_snapshot is not None:
                 self._publish_if_changed()
 
-    @callback
-    def _cancel_startup_grace_timer(self) -> None:
-        """Cancel the one-shot post-start stabilization deadline."""
-        if self._startup_grace_timer is not None:
-            self._startup_grace_timer()
-            self._startup_grace_timer = None
+        self._startup_reconciliation_deadline = dt_util.now() + timedelta(
+            seconds=STARTUP_RECONCILIATION_DELAY_SECONDS
+        )
+        self._startup_reconciliation_timer = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            self._startup_reconciliation_deadline,
+        )
+        if self._last_public_snapshot is not None:
+            self._publish_if_changed()
+
+    def _cancel_startup_reconciliation(self) -> None:
+        """Cancel the one-shot post-start reconciliation timer."""
+        if self._startup_reconciliation_timer is not None:
+            self._startup_reconciliation_timer()
+            self._startup_reconciliation_timer = None
+        self._startup_reconciliation_deadline = None
+
+    async def _async_finish_startup_reconciliation(self) -> None:
+        """Admit one startup reconciliation transaction under the mutation lock."""
+        try:
+            async with self._config_mutation_lock:
+                if (
+                    self._runtime_phase is not RuntimePhase.STARTUP_GRACE
+                    or self.hass.state is not CoreState.running
+                ):
+                    return
+                await async_finish_non_interruptible(
+                    self._async_run_startup_reconciliation()
+                )
+        finally:
+            self._startup_reconciliation_scheduled = False
+            if (
+                not self._unloading
+                and self._runtime_phase is RuntimePhase.STARTUP_GRACE
+                and self.hass.state is CoreState.running
+            ):
+                self._schedule_startup_reconciliation()
+
+    async def _async_run_startup_reconciliation(self) -> None:
+        """Run one admitted startup transaction through its explicit phases."""
+        attempt: _StartupReconciliationAttempt | None = None
+        try:
+            attempt = self._begin_startup_reconciliation_attempt()
+            if not await self._async_reconcile_startup_until_stable(attempt):
+                return
+            previous_records = self._commit_startup_reconciliation(attempt)
+            if previous_records is None:
+                return
+            await self._async_postcommit_startup_reconciliation(previous_records)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - defensive lifecycle boundary
+            _LOGGER.exception("Unable to reconcile Alert Manager startup state")
+        finally:
+            if attempt is not None and not attempt.committed:
+                try:
+                    await self._async_rollback_startup_reconciliation(attempt)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # pragma: no cover - cleanup guard
+                    _LOGGER.exception("Unable to roll back startup reconciliation")
+
+    def _begin_startup_reconciliation_attempt(
+        self,
+    ) -> _StartupReconciliationAttempt:
+        """Capture rollback state and enter the speculative runtime phase."""
+        snapshot = self._configuration_snapshot()
+        transaction = StartupReconciliationTransaction.capture(
+            self.records,
+            self._unverified_restored_alert_ids,
+        )
+        attempt = _StartupReconciliationAttempt(
+            snapshot=snapshot,
+            transaction=transaction,
+            initial_immediate_save_required=self._immediate_state_save_required,
+            initial_pack_availability=dict(self._pack_availability),
+        )
+        self._startup_reconciliation_snapshot = snapshot
+        self._startup_reconciliation_transaction = transaction
+        self._runtime_phase = RuntimePhase.RECONCILING
+        return attempt
+
+    async def _async_reconcile_startup_until_stable(
+        self, attempt: _StartupReconciliationAttempt
+    ) -> bool:
+        """Repeat scans and Store writes until no awaited work can stale them."""
+        changed = False
+        full_scan_required = True
+        while self._startup_reconciliation_can_continue():
+            observed_at = dt_util.now()
+            changed |= await self._async_reconcile_startup_pass(
+                attempt, full_scan_required
+            )
+            full_scan_required = False
+            if not self._startup_reconciliation_can_continue():
+                return False
+            if self._startup_reconciliation_has_pending_work():
+                continue
+            boundary = self._next_reconciliation_time_boundary(observed_at)
+            if self._reconciliation_time_boundary_reached(boundary):
+                full_scan_required = True
+                continue
+            if not changed and not self._immediate_state_save_required:
+                return True
+            attempt.store_write_attempted = True
+            await self._async_save_state()
+            changed = False
+            if not self._startup_reconciliation_can_continue():
+                return False
+            if self._startup_reconciliation_has_pending_work():
+                continue
+            if self._reconciliation_time_boundary_reached(boundary):
+                full_scan_required = True
+                continue
+            return True
+        return False
+
+    async def _async_reconcile_startup_pass(
+        self,
+        attempt: _StartupReconciliationAttempt,
+        full_scan_required: bool,
+    ) -> bool:
+        """Consume one coherent batch of registry, pack and state work."""
+        registry_dirty = self._registry_evaluation_dirty
+        attempt.consumed_registry_dirty |= registry_dirty
+        self._registry_evaluation_dirty = False
+        attempt.consumed_entity_renames.update(self._pending_entity_renames)
+        renamed = self._apply_pending_entity_renames()
+        pack_dirty = self._pack_refresh_dirty
+        attempt.consumed_pack_dirty |= pack_dirty
+        self._pack_refresh_dirty = False
+        if pack_dirty:
+            self._replace_pack_availability_snapshot()
+        changed = renamed
+        if full_scan_required or registry_dirty or pack_dirty or renamed:
+            changed |= await self.async_evaluate_all(
+                save=False,
+                publish=False,
+                emit_events=False,
+                archive_resolutions=False,
+            )
+        changed |= await self._async_drain_startup_state_events()
+        return changed
+
+    def _startup_reconciliation_can_continue(self) -> bool:
+        """Return whether an admitted attempt may keep mutating state."""
+        return (
+            self._runtime_phase is RuntimePhase.RECONCILING
+            and self.hass.state is CoreState.running
+        )
+
+    def _startup_reconciliation_has_pending_work(self) -> bool:
+        """Return whether events queued during an await need another pass."""
+        return bool(
+            self._queued_evaluation_entities
+            or self._registry_evaluation_dirty
+            or self._pack_refresh_dirty
+        )
+
+    def _commit_startup_reconciliation(
+        self, attempt: _StartupReconciliationAttempt
+    ) -> dict[str, AlertRecord] | None:
+        """Make the stable occurrence set authoritative before side effects."""
+        self._queued_public_refresh = False
+        self._unverified_restored_alert_ids = (
+            attempt.transaction.committed_unverified_alert_ids(self.records)
+        )
+        self._startup_reconciliation_transaction = None
+        self._runtime_phase = RuntimePhase.RUNNING
+        self._reschedule_record_timers()
+        if (
+            self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            return None
+        attempt.committed = True
+        self._startup_reconciliation_snapshot = None
+        return attempt.transaction.reconciled_original_records()
+
+    async def _async_postcommit_startup_reconciliation(
+        self, previous_records: dict[str, AlertRecord]
+    ) -> None:
+        """Publish lifecycle effects only after the transaction is committed."""
+        self._commit_reconciliation_lifecycle(previous_records)
+        self._publish_if_changed(force=True)
+        self._schedule_deferred_runtime_work()
+        await self._async_flush_history()
+
+    async def _async_rollback_startup_reconciliation(
+        self, attempt: _StartupReconciliationAttempt
+    ) -> None:
+        """Restore one failed attempt and compensate any speculative Store write."""
+        pending_renames = dict(attempt.consumed_entity_renames)
+        pending_renames.update(self._pending_entity_renames)
+        registry_dirty = (
+            attempt.consumed_registry_dirty
+            or self._registry_evaluation_dirty
+            or bool(pending_renames)
+        )
+        pack_dirty = attempt.consumed_pack_dirty or self._pack_refresh_dirty
+        stopping = (
+            self._runtime_phase is RuntimePhase.STOPPING
+            or self.hass.state is not CoreState.running
+        )
+        if not stopping:
+            self._runtime_phase = RuntimePhase.STARTUP_GRACE
+        try:
+            restored = False
+            try:
+                restored = self._restore_startup_reconciliation_snapshot(attempt)
+            finally:
+                self._restore_startup_side_work(
+                    stopping, pending_renames, registry_dirty, pack_dirty
+                )
+            if self._startup_store_needs_compensation(attempt, restored):
+                await self._async_compensate_startup_store()
+        finally:
+            self._startup_reconciliation_snapshot = None
+            self._startup_reconciliation_transaction = None
+
+    def _restore_startup_reconciliation_snapshot(
+        self, attempt: _StartupReconciliationAttempt
+    ) -> bool:
+        """Restore the pre-attempt memory snapshot, logging defensive failures."""
+        self._immediate_state_save_required = attempt.initial_immediate_save_required
+        self._pack_availability = attempt.initial_pack_availability
+        try:
+            self._restore_configuration_snapshot(attempt.snapshot)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - defensive rollback
+            _LOGGER.exception("Unable to restore failed startup reconciliation")
+            return False
+        return True
+
+    def _restore_startup_side_work(
+        self,
+        stopping: bool,
+        pending_renames: dict[str, str],
+        registry_dirty: bool,
+        pack_dirty: bool,
+    ) -> None:
+        """Restore deferred work without leaving speculative timers alive."""
+        if stopping:
+            self._begin_shutdown()
+            return
+        self._cancel_all_pack_rechecks()
+        self._cancel_template_dependency_timers()
+        self._cancel_live_message_flush()
+        self._pending_entity_renames = pending_renames
+        self._registry_evaluation_dirty = registry_dirty
+        self._pack_refresh_dirty = pack_dirty
+        self._clear_queued_evaluations()
+
+    def _startup_store_needs_compensation(
+        self, attempt: _StartupReconciliationAttempt, restored: bool
+    ) -> bool:
+        """Return whether Store may contain state from a failed attempt."""
+        return (
+            attempt.store_write_attempted
+            and restored
+            and self._persistence_ready
+            and not self.recovery_active
+        )
+
+    async def _async_compensate_startup_store(self) -> None:
+        """Rewrite the restored snapshot after a failed speculative write."""
+        try:
+            await self._async_save_state()
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - storage retry boundary
+            _LOGGER.exception("Unable to compensate failed startup reconciliation")
+
+    def _next_reconciliation_time_boundary(
+        self, observed_at: datetime
+    ) -> datetime | None:
+        """Return the first clock edge that can invalidate this observation."""
+        if not self.monitoring_enabled:
+            return None
+        boundaries = [
+            record.due_at.astimezone(UTC)
+            for record in self.records.values()
+            if record.status is AlertStatus.PENDING and record.paused_at is None
+        ]
+        if self._template_time_dependencies:
+            observed_utc = observed_at.astimezone(UTC)
+            boundaries.append(
+                observed_utc.replace(second=0, microsecond=0) + timedelta(minutes=1)
+            )
+        return min(boundaries) if boundaries else None
+
+    @staticmethod
+    def _reconciliation_time_boundary_reached(boundary: datetime | None) -> bool:
+        """Return whether a scan became stale while reconciliation yielded."""
+        return boundary is not None and dt_util.now().astimezone(UTC) >= boundary
 
     @callback
-    def _cancel_startup_stabilization(self) -> None:
-        """Discard buffered startup work during unload."""
-        self._cancel_startup_grace_timer()
-        self._startup_state_events.clear()
-        self._startup_buffering = False
-        self._startup_stabilization_until = None
+    def _schedule_deferred_runtime_work(self) -> None:
+        """Resume side work that arrived during the committed Store write."""
+        if (
+            self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            return
+        if self._queued_evaluation_entities or self._queued_public_refresh:
+            self._schedule_evaluation_flush()
+        self._schedule_registry_evaluation()
+        if self._pack_refresh_dirty:
+            self._schedule_pack_availability_refresh()
+        if self.monitoring_enabled:
+            self._schedule_template_time_tick()
+
+    def _commit_reconciliation_lifecycle(
+        self,
+        previous_records: dict[str, AlertRecord],
+    ) -> None:
+        """Emit and archive only lifecycle changes in the committed snapshot."""
+        now = dt_util.now()
+        for alert_id, previous in previous_records.items():
+            current = self.records.get(alert_id)
+            if current is None:
+                if previous.status is not AlertStatus.ACTIVE:
+                    continue
+                self._pending_history.append(AlertHistoryEntry.resolved(previous, now))
+                self._fire_resolved(previous, now)
+            elif (
+                previous.status is AlertStatus.PENDING
+                and current.status is AlertStatus.ACTIVE
+            ):
+                self._fire_started(current)
+        for alert_id, current in self.records.items():
+            if (
+                alert_id not in previous_records
+                and current.status is AlertStatus.ACTIVE
+            ):
+                self._fire_started(current)
+
+    async def _async_drain_startup_state_events(self) -> bool:
+        """Re-evaluate state changes that landed while the startup scan awaited."""
+        changed = False
+        while self._queued_evaluation_entities:
+            entity_ids = sorted(self._queued_evaluation_entities)
+            self._queued_evaluation_entities.clear()
+            self._queued_public_refresh = False
+            for entity_id in entity_ids:
+                changed |= await self.async_evaluate_entity(
+                    entity_id,
+                    save=False,
+                    publish=False,
+                    emit_events=False,
+                    archive_resolutions=False,
+                )
+                if self._runtime_phase is not RuntimePhase.RECONCILING:
+                    return changed
+        self._queued_public_refresh = False
+        return changed
+
+    @callback
+    def _clear_queued_evaluations(self) -> None:
+        """Discard every deferred runtime mutation at a lifecycle boundary."""
+        self._queued_evaluation_entities.clear()
+        self._queued_public_refresh = False
+
+    @callback
+    def _begin_shutdown(self) -> None:
+        """Make the runtime read-only before integrations unload their entities."""
+        self._runtime_phase = RuntimePhase.STOPPING
+        self._cancel_startup_reconciliation()
+        self._cancel_all_timers()
+        self._cancel_all_pack_rechecks()
+        self._cancel_all_device_event_timers()
+        self._cancel_template_dependency_timers()
+        self._cancel_live_message_flush()
+        self._cancel_config_backup_schedule()
+        if self._coherence_schedule_unsubscribe is not None:
+            self._coherence_schedule_unsubscribe()
+            self._coherence_schedule_unsubscribe = None
+        self._clear_queued_evaluations()
+        self._registry_evaluation_dirty = False
+        self._pending_entity_renames.clear()
+        self._pack_refresh_dirty = False
 
     @callback
     def _state_changed(self, event: Event) -> None:
         """Queue only sources affected by a state or entity lifecycle event."""
-        if not self.monitoring_enabled:
+        if (
+            not self.monitoring_enabled
+            or not self._runtime_phase.can_evaluate
+            or self.hass.state is not CoreState.running
+        ):
             return
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_allowed_rule_source(entity_id):
             return
-
-        if self._startup_buffering:
-            self._startup_state_events[entity_id] = event
-            return
-
-        self._route_state_changed(
-            event,
-            restoring=not self.hass.is_running,
-        )
-
-    @callback
-    def _route_state_changed(
-        self,
-        event: Event,
-        *,
-        restoring: bool,
-    ) -> None:
-        """Route one latest state event into the dependency-aware batch."""
-        entity_id = event.data["entity_id"]
-
         if self._update_tracking_for_state_event(entity_id, event):
             self._queued_public_refresh = True
 
@@ -165,10 +540,7 @@ class _RuntimeMixin:
                 affected_entities.add(dependency_key[2])
         if self._state_event_affects_source(event, entity_id):
             affected_entities.add(entity_id)
-        self._queue_entity_evaluations(
-            affected_entities,
-            restoring=restoring,
-        )
+        self._queue_entity_evaluations(affected_entities)
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
         """Return whether this state transition can change source-owned output."""
@@ -243,11 +615,14 @@ class _RuntimeMixin:
         return was_tracked != is_tracked
 
     @callback
-    def _queue_entity_evaluations(
-        self, entity_ids: Iterable[str], *, restoring: bool = False
-    ) -> None:
+    def _queue_entity_evaluations(self, entity_ids: Iterable[str]) -> None:
         """Coalesce state bursts into one evaluation task and one Store write."""
-        if self._unloading or not self.monitoring_enabled:
+        if (
+            self._unloading
+            or not self.monitoring_enabled
+            or not self._runtime_phase.can_evaluate
+            or self.hass.state is not CoreState.running
+        ):
             return
         self._queued_evaluation_entities.update(
             entity_id
@@ -256,13 +631,18 @@ class _RuntimeMixin:
         )
         if not self._queued_evaluation_entities and not self._queued_public_refresh:
             return
-        self._queued_evaluation_restoring |= restoring
+        if self._runtime_phase is RuntimePhase.RECONCILING:
+            return
         self._schedule_evaluation_flush()
 
     @callback
     def _schedule_evaluation_flush(self) -> None:
         """Schedule exactly one worker for the current state-change burst."""
-        if self._evaluation_flush_scheduled or self._unloading:
+        if (
+            self._evaluation_flush_scheduled
+            or self._unloading
+            or self._runtime_phase is not RuntimePhase.RUNNING
+        ):
             return
         self._evaluation_flush_scheduled = True
         self.entry.async_create_task(
@@ -275,50 +655,57 @@ class _RuntimeMixin:
     async def _async_flush_queued_evaluations(self) -> None:
         """Evaluate the latest states and persist/publish the whole batch once."""
         try:
-            if self._unloading or not self.monitoring_enabled:
-                self._queued_evaluation_entities.clear()
-                self._queued_evaluation_restoring = False
-                self._queued_public_refresh = False
-                return
-            entity_ids = sorted(self._queued_evaluation_entities)
-            self._queued_evaluation_entities.clear()
-            restoring = self._queued_evaluation_restoring
-            self._queued_evaluation_restoring = False
-            public_refresh = self._queued_public_refresh
-            self._queued_public_refresh = False
-            tracked_count_before = self._tracked_count()
-            for entity_id in entity_ids:
-                try:
-                    await self.async_evaluate_entity(
-                        entity_id,
-                        restoring=restoring,
-                        save=False,
-                        publish=False,
-                    )
-                except Exception:  # pragma: no cover - isolate one bad source
-                    _LOGGER.exception("Unable to evaluate %s", entity_id)
-            immediate_save_required = self._immediate_state_save_required
-            if immediate_save_required:
-                await self._async_save_state()
-            if (
-                immediate_save_required
-                or public_refresh
-                or self._tracked_count() != tracked_count_before
-            ):
-                self._publish_if_changed()
+            async with self._config_mutation_lock:
+                await self._async_process_queued_evaluations()
         finally:
             self._evaluation_flush_scheduled = False
             if (
                 (self._queued_evaluation_entities or self._queued_public_refresh)
                 and not self._unloading
                 and self.monitoring_enabled
+                and self._runtime_phase is RuntimePhase.RUNNING
+                and self.hass.state is CoreState.running
             ):
                 self._schedule_evaluation_flush()
+
+    async def _async_process_queued_evaluations(self) -> None:
+        """Apply one queued batch while holding the mutation lock."""
+        if (
+            self._unloading
+            or not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            self._clear_queued_evaluations()
+            return
+        entity_ids = sorted(self._queued_evaluation_entities)
+        self._queued_evaluation_entities.clear()
+        public_refresh = self._queued_public_refresh
+        self._queued_public_refresh = False
+        tracked_count_before = self._tracked_count()
+        for entity_id in entity_ids:
+            try:
+                await self.async_evaluate_entity(
+                    entity_id,
+                    save=False,
+                    publish=False,
+                )
+            except Exception:  # pragma: no cover - isolate one bad source
+                _LOGGER.exception("Unable to evaluate %s", entity_id)
+        immediate_save_required = self._immediate_state_save_required
+        if immediate_save_required:
+            await self._async_save_state()
+        if (
+            immediate_save_required
+            or public_refresh
+            or self._tracked_count() != tracked_count_before
+        ):
+            self._publish_if_changed()
 
     @callback
     def _registry_changed(self, event: Event) -> None:
         """Coalesce registry changes and preserve references across entity renames."""
-        if self._unloading:
+        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
             return
         old_entity_id = event.data.get("old_entity_id")
         new_entity_id = event.data.get("entity_id")
@@ -333,6 +720,18 @@ class _RuntimeMixin:
         elif not self.monitoring_enabled:
             return
         self._registry_evaluation_dirty = True
+        self._schedule_registry_evaluation()
+
+    @callback
+    def _schedule_registry_evaluation(self) -> None:
+        """Schedule the registry worker once the runtime is authoritative."""
+        if (
+            not self._registry_evaluation_dirty
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+            or self._unloading
+        ):
+            return
         if self._registry_evaluation_scheduled:
             return
         self._registry_evaluation_scheduled = True
@@ -348,6 +747,7 @@ class _RuntimeMixin:
             return False
         renames = dict(self._pending_entity_renames)
         self._pending_entity_renames.clear()
+        reconciliation_transaction = self._startup_reconciliation_transaction
 
         def final_target(entity_id: str) -> str:
             seen: set[str] = set()
@@ -391,6 +791,14 @@ class _RuntimeMixin:
                 changed = True
 
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
+                original_origin = (
+                    reconciliation_transaction.live_origin(alert_id)
+                    if reconciliation_transaction is not None
+                    else None
+                )
+                original_was_unverified = (
+                    alert_id in self._unverified_restored_alert_ids
+                )
                 original_record = self._pop_record(alert_id)
                 if original_record is None:
                     continue
@@ -404,20 +812,51 @@ class _RuntimeMixin:
                     )
                 else:
                     new_alert_id = f"{original_record.details.type}:{new_entity_id}"
+                existing_origin = (
+                    reconciliation_transaction.live_origin(new_alert_id)
+                    if reconciliation_transaction is not None
+                    else None
+                )
+                existing_was_unverified = (
+                    new_alert_id in self._unverified_restored_alert_ids
+                )
                 existing_record = self._pop_record(new_alert_id)
                 if existing_record is not None:
                     self._cancel_timer(new_alert_id)
-                record = (
-                    min(
-                        (original_record, existing_record),
-                        key=lambda item: item.detected_at,
+                if existing_record is None:
+                    record, retained_origin = original_record, original_origin
+                elif reconciliation_transaction is not None:
+                    record, retained_origin = (
+                        reconciliation_transaction.preferred_collision_record(
+                            (
+                                (original_record, original_origin),
+                                (existing_record, existing_origin),
+                            )
+                        )
                     )
-                    if existing_record is not None
-                    else original_record
-                )
+                else:
+                    record, _retained_id = select_alert_collision(
+                        (
+                            (original_record, alert_id),
+                            (existing_record, new_alert_id),
+                        )
+                    )
+                    retained_origin = None
                 record.details.entity_id = new_entity_id
                 record.details.id = new_alert_id
                 self._set_record(record)
+                if reconciliation_transaction is not None:
+                    reconciliation_transaction.record_stored(
+                        new_alert_id,
+                        retained_origin,
+                    )
+                retained_was_unverified = (
+                    original_was_unverified
+                    if record is original_record
+                    else existing_was_unverified
+                )
+                if retained_was_unverified:
+                    self._unverified_restored_alert_ids.add(new_alert_id)
                 changed = True
 
             if old_entity_id in self._queued_evaluation_entities:
@@ -429,13 +868,20 @@ class _RuntimeMixin:
             self._refresh_tracking()
             self._cancel_all_timers()
             self._reschedule_record_timers()
+        if reconciliation_transaction is not None:
+            reconciliation_transaction.record_entity_renames(renames)
         return changed
 
     async def _async_flush_registry_evaluation(self) -> None:
         """Apply renames and run one durable scan for each registry burst."""
         async with self._config_mutation_lock:
             try:
-                while self._registry_evaluation_dirty and not self._unloading:
+                while (
+                    self._registry_evaluation_dirty
+                    and not self._unloading
+                    and self._runtime_phase is RuntimePhase.RUNNING
+                    and self.hass.state is CoreState.running
+                ):
                     self._registry_evaluation_dirty = False
                     renamed = self._apply_pending_entity_renames()
                     evaluated = False
@@ -446,23 +892,28 @@ class _RuntimeMixin:
                         )
                     if renamed or evaluated:
                         await self._async_save_state()
-                    if self.monitoring_enabled:
+                    if (
+                        self.monitoring_enabled
+                        and self._runtime_phase is RuntimePhase.RUNNING
+                    ):
                         self._publish_if_changed()
             finally:
                 self._registry_evaluation_scheduled = False
-                if self._registry_evaluation_dirty and not self._unloading:
-                    self._registry_evaluation_scheduled = True
-                    self.entry.async_create_task(
-                        self.hass,
-                        self._async_flush_registry_evaluation(),
-                        name=f"{DOMAIN} registry batch",
-                    )
+                if (
+                    self._registry_evaluation_dirty
+                    and not self._unloading
+                    and self._runtime_phase is RuntimePhase.RUNNING
+                    and self.hass.state is CoreState.running
+                ):
+                    self._schedule_registry_evaluation()
 
     @callback
     def _config_entry_changed(
         self, _change: ConfigEntryChange, changed_entry: ConfigEntry
     ) -> None:
         """Track added, removed and updated prerequisite integration entries."""
+        if self._runtime_phase is RuntimePhase.STOPPING:
+            return
         if changed_entry.domain not in self._pack_prerequisite_domains():
             return
         self._refresh_pack_entry_listeners()
@@ -476,9 +927,14 @@ class _RuntimeMixin:
     @callback
     def _schedule_pack_availability_refresh(self) -> None:
         """Coalesce repeated config-entry state transitions."""
-        if self._unloading:
+        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
             return
         self._pack_refresh_dirty = True
+        if (
+            self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            return
         if self._pack_refresh_scheduled:
             return
         self._pack_refresh_scheduled = True
@@ -491,25 +947,46 @@ class _RuntimeMixin:
     async def _async_flush_pack_availability_refresh(self) -> None:
         """Refresh pack availability once per config-entry burst."""
         try:
-            while self._pack_refresh_dirty and not self._unloading:
+            while (
+                self._pack_refresh_dirty
+                and not self._unloading
+                and self._runtime_phase is RuntimePhase.RUNNING
+                and self.hass.state is CoreState.running
+            ):
                 self._pack_refresh_dirty = False
                 await self.async_refresh_pack_availability()
         finally:
             self._pack_refresh_scheduled = False
-            if self._pack_refresh_dirty and not self._unloading:
+            if (
+                self._pack_refresh_dirty
+                and not self._unloading
+                and self._runtime_phase is RuntimePhase.RUNNING
+                and self.hass.state is CoreState.running
+            ):
                 self._schedule_pack_availability_refresh()
 
     async def async_refresh_pack_availability(self) -> bool:
         """Apply a changed availability snapshot and clean affected records."""
-        if self._unloading:
-            return False
+        async with self._config_mutation_lock:
+            if (
+                self._unloading
+                or self._runtime_phase is not RuntimePhase.RUNNING
+                or self.hass.state is not CoreState.running
+            ):
+                return False
+            if not self._replace_pack_availability_snapshot():
+                return False
+            if self.monitoring_enabled:
+                await self.async_evaluate_all()
+            return True
+
+    def _replace_pack_availability_snapshot(self) -> bool:
+        """Refresh prerequisite listeners and replace a changed pack snapshot."""
         self._refresh_pack_entry_listeners()
         availability = self._current_pack_availability()
         if availability == self._pack_availability:
             return False
         self._pack_availability = availability
-        if self.monitoring_enabled:
-            await self.async_evaluate_all()
         return True
 
     def _pack_prerequisite_domains(self) -> set[str]:
@@ -542,17 +1019,17 @@ class _RuntimeMixin:
     async def async_evaluate_all(
         self,
         *,
-        restoring: bool = False,
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
-        _startup_flush: bool = False,
+        archive_resolutions: bool = True,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
         if (
             self._unloading
             or not self.monitoring_enabled
-            or (self._startup_buffering and not _startup_flush)
+            or not self._runtime_phase.can_evaluate
+            or self.hass.state is not CoreState.running
         ):
             return False
         self._refresh_tracking()
@@ -565,66 +1042,70 @@ class _RuntimeMixin:
         entity_ids.update(
             entity_id for rule in self.rules for entity_id in rule.entity_ids
         )
+        if self._startup_reconciliation_transaction is not None:
+            entity_ids.update(self._startup_reconciliation_transaction.entity_ids)
         persisted_changed = False
         for entity_id in entity_ids:
             persisted_changed |= await self.async_evaluate_entity(
                 entity_id,
-                restoring=restoring,
                 save=False,
                 publish=False,
                 emit_events=emit_events,
-                _startup_flush=_startup_flush,
+                archive_resolutions=archive_resolutions,
             )
         immediate_save_required = self._immediate_state_save_required
         if save and immediate_save_required:
             await self._async_save_state()
         if publish and (not persisted_changed or immediate_save_required):
-            self._publish_if_changed(
-                force=restoring and self._last_public_snapshot is None
-            )
+            self._publish_if_changed()
         return persisted_changed
 
     async def async_evaluate_entity(
         self,
         entity_id: str,
         *,
-        restoring: bool = False,
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
-        _startup_flush: bool = False,
+        archive_resolutions: bool = True,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if (
             self._unloading
             or not self.monitoring_enabled
-            or (self._startup_buffering and not _startup_flush)
+            or not self._runtime_phase.can_evaluate
+            or self.hass.state is not CoreState.running
         ):
             return False
+        restored_injected = self._inject_restored_entity_for_reconciliation(entity_id)
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
         self._update_automatic_tracking_for_entity(entity_id, state)
-        existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
-        if restoring and (state is None or state.state == STATE_UNKNOWN):
-            for alert_id in existing_ids:
-                record = self.records[alert_id]
-                if record.status is AlertStatus.PENDING:
-                    self._schedule_timer(record)
-            if publish:
-                self._publish_if_changed()
-            return False
-
-        persisted_changed = False
-        immediate_changed = False
-        if state is not None:
-            persisted_changed = self._reset_inactivity_records_after_update(
+        persisted_changed = restored_injected
+        immediate_changed = restored_injected
+        if state is not None and state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            inactivity_changed = self._reset_inactivity_records_after_update(
                 state,
                 now,
                 emit_events=emit_events,
+                archive_resolutions=archive_resolutions,
             )
-            immediate_changed = persisted_changed
+            persisted_changed |= inactivity_changed
+            immediate_changed |= inactivity_changed
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
-        candidates = self._build_candidates(state) if state is not None else {}
+        candidates, indeterminate_candidate_ids = (
+            self._build_candidates(state) if state is not None else ({}, set())
+        )
+        preserved_ids = self._preserved_record_ids_for_observation(
+            entity_id,
+            state,
+            existing_ids,
+            candidates.keys() - indeterminate_candidate_ids,
+            indeterminate_candidate_ids,
+        )
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
 
@@ -687,11 +1168,20 @@ class _RuntimeMixin:
             elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
                 self._schedule_timer(record)
 
-        missing_candidate_ids = existing_ids - candidates.keys()
-        if restoring and not self.hass.is_running:
-            # Restored entities can briefly expose a normal fallback state before
-            # their integration has finished startup. Reconcile them once HA runs.
-            missing_candidate_ids = set()
+        for alert_id in preserved_ids - candidates.keys():
+            record = self.records.get(alert_id)
+            if record is None:
+                continue
+            if advance_record(record, now):
+                persisted_changed = True
+                immediate_changed = True
+                self._cancel_timer(alert_id)
+                if emit_events:
+                    self._fire_started(record)
+            elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
+                self._schedule_timer(record)
+
+        missing_candidate_ids = existing_ids - candidates.keys() - preserved_ids
         for alert_id in missing_candidate_ids:
             record = self._pop_record(alert_id)
             if record is None:
@@ -700,7 +1190,10 @@ class _RuntimeMixin:
             persisted_changed = True
             immediate_changed = True
             if record.status is AlertStatus.ACTIVE:
-                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                if archive_resolutions:
+                    self._pending_history.append(
+                        AlertHistoryEntry.resolved(record, now)
+                    )
                 if emit_events:
                     self._fire_resolved(record, now)
         if immediate_changed:
@@ -713,6 +1206,80 @@ class _RuntimeMixin:
         ):
             self._publish_if_changed()
         return persisted_changed
+
+    def _inject_restored_entity_for_reconciliation(self, entity_id: str) -> bool:
+        """Revive missing restored identities without replacing live records."""
+        transaction = self._startup_reconciliation_transaction
+        if self._runtime_phase is not RuntimePhase.RECONCILING or transaction is None:
+            return False
+        injected = False
+        for alert_id, (original_id, record) in transaction.records_for_entity(
+            entity_id
+        ).items():
+            existing = self.records.get(alert_id)
+            existing_origin = transaction.live_origin(alert_id)
+            if existing is not None and existing_origin is None:
+                # A genuinely new occurrence owns this stable id now.
+                continue
+            if (
+                existing is not None
+                and existing_origin == original_id
+                and existing == record
+            ):
+                continue
+            if existing is not None:
+                self._pop_record(alert_id)
+                self._cancel_timer(alert_id)
+            self._set_record(record)
+            transaction.record_stored(alert_id, original_id)
+            injected = True
+        return injected
+
+    def _preserved_record_ids_for_observation(
+        self,
+        entity_id: str,
+        state: State | None,
+        existing_ids: set[str],
+        confirmed_candidate_ids: Iterable[str],
+        indeterminate_candidate_ids: set[str],
+    ) -> set[str]:
+        """Protect restored alerts until their source becomes authoritative."""
+        transaction = self._startup_reconciliation_transaction
+        if transaction is not None:
+            restored_ids = (
+                existing_ids & transaction.live_alert_ids_for_entity(entity_id)
+            ) - set(confirmed_candidate_ids)
+            if state is not None and state.state not in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+            ):
+                preserved_ids = restored_ids & indeterminate_candidate_ids
+            else:
+                preserved_ids = {
+                    alert_id
+                    for alert_id in restored_ids
+                    if transaction.original_was_active(alert_id)
+                    or self.records[alert_id].details.type != CATEGORY_UNAVAILABLE
+                }
+            transaction.stage_unverified(entity_id, preserved_ids)
+            return preserved_ids
+        self._unverified_restored_alert_ids.difference_update(confirmed_candidate_ids)
+        restored_ids = existing_ids & self._unverified_restored_alert_ids
+        if state is not None and state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            preserved_ids = restored_ids & indeterminate_candidate_ids
+            self._unverified_restored_alert_ids.difference_update(
+                restored_ids - preserved_ids
+            )
+            return preserved_ids
+        return {
+            alert_id
+            for alert_id in restored_ids
+            if self.records[alert_id].status is AlertStatus.ACTIVE
+            or self.records[alert_id].details.type != CATEGORY_UNAVAILABLE
+        }
 
     def _is_live_message_only_change(
         self, record: AlertRecord, details: AlertDetails
@@ -744,6 +1311,7 @@ class _RuntimeMixin:
         now: datetime,
         *,
         emit_events: bool,
+        archive_resolutions: bool,
     ) -> bool:
         """Restart whole-state or selected-value inactivity windows."""
         updated_at = state.last_updated.astimezone(UTC)
@@ -768,7 +1336,10 @@ class _RuntimeMixin:
             self._cancel_timer(alert_id)
             changed = True
             if record.status is AlertStatus.ACTIVE:
-                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                if archive_resolutions:
+                    self._pending_history.append(
+                        AlertHistoryEntry.resolved(record, now)
+                    )
                 if emit_events:
                     self._fire_resolved(record, now)
         return changed
@@ -840,28 +1411,34 @@ class _RuntimeMixin:
         variation = current - baseline
         return True, 0.0 if variation == 0 else variation
 
-    def _build_candidates(self, state: State) -> dict[str, tuple[AlertDetails, int]]:
-        """Build the deduplicated current alert candidates for one state."""
+    def _build_candidates(
+        self, state: State
+    ) -> tuple[dict[str, tuple[AlertDetails, int]], set[str]]:
+        """Build current candidates and identify pack-neutral observations."""
         if not self._is_base_eligible(state.entity_id):
-            return {}
+            return {}, set()
 
         result: dict[str, tuple[AlertDetails, int]] = {}
+        indeterminate_ids: set[str] = set()
         entity_id = state.entity_id
         automatic_eligible = self._is_automatic_eligible(entity_id)
 
         if state.state == STATE_UNAVAILABLE:
             if automatic_eligible:
                 for pack in PACKS:
-                    self._add_pack_candidate(result, state, pack.id)
-            return result
+                    if self._add_pack_candidate(result, state, pack.id):
+                        indeterminate_ids.add(f"{pack.id}:{entity_id}")
+            return result, indeterminate_ids
 
         if state.state == STATE_UNKNOWN:
-            return result
+            return result, indeterminate_ids
 
         if automatic_eligible:
             for pack in PACKS:
-                if pack.id != CATEGORY_UNAVAILABLE:
-                    self._add_pack_candidate(result, state, pack.id)
+                if pack.id != CATEGORY_UNAVAILABLE and self._add_pack_candidate(
+                    result, state, pack.id
+                ):
+                    indeterminate_ids.add(f"{pack.id}:{entity_id}")
 
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled:
@@ -926,20 +1503,20 @@ class _RuntimeMixin:
                 ),
                 rule.duration,
             )
-        return result
+        return result, indeterminate_ids
 
     def _add_pack_candidate(
         self,
         result: dict[str, tuple[AlertDetails, int]],
         state: State,
         pack_id: str,
-    ) -> None:
-        """Apply one pack's Match, Neutral or None evaluation result."""
+    ) -> bool:
+        """Apply one pack result and report a non-authoritative observation."""
         config = self.config["automatic"][pack_id]
         pack = PACKS_BY_ID[pack_id]
         if not config["enabled"] or not self._pack_is_available(pack_id):
             self._cancel_pack_recheck(pack_id, state.entity_id)
-            return
+            return False
 
         evaluation = pack.evaluate(self.hass, state, config)
         alert_id = f"{pack_id}:{state.entity_id}"
@@ -951,9 +1528,9 @@ class _RuntimeMixin:
             record = self.records.get(alert_id)
             if record is not None:
                 result[alert_id] = (record.details, record.delay)
-            return
+            return True
         if evaluation is None:
-            return
+            return False
 
         condition = self._localized_pack_condition(
             evaluation.condition_key, evaluation.condition_params
@@ -971,11 +1548,14 @@ class _RuntimeMixin:
             ),
             self._delay_for(state, pack_id),
         )
+        return False
 
     def _schedule_pack_recheck(
         self, pack_id: str, entity_id: str, delay: float
     ) -> None:
         """Schedule one deduplicated pack-requested entity evaluation."""
+        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
+            return
         key = (pack_id, entity_id)
         if key in self._pack_recheck_timers:
             return

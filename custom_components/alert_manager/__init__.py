@@ -42,7 +42,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = AlertManager(hass, entry)
     panel_registered = False
     try:
-        await manager.async_setup()
+        if not await manager.async_setup():
+            await manager.async_unload()
+            return False
         hass.data[DATA_MANAGER] = manager
         await async_load_coherence_result(hass)
 
@@ -71,7 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         panel_registered = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    except Exception:
+    except BaseException:
         if panel_registered:
             frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
         if hass.data.get(DATA_MANAGER) is manager:
