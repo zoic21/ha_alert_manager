@@ -57,6 +57,9 @@ export const responsiveStyles = `
     .summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .settings-navigation-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
     }
@@ -71,6 +74,12 @@ export const responsiveStyles = `
 
   /* Small screens */
   @media (max-width: 700px) {
+    .settings-navigation-actions {
+      grid-template-columns: 1fr;
+    }
+    .settings-navigation-actions [data-section-id="transfer"] {
+      grid-column: auto;
+    }
     main {
       padding: 12px;
     }

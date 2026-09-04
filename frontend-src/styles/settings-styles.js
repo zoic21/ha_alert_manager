@@ -20,11 +20,21 @@ export const settingsStyles = `
   }
   .settings-navigation {
     display: grid;
-    gap: 10px;
+    gap: 12px;
+  }
+  .settings-navigation h2 {
+    margin: 0;
   }
   .settings-navigation-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .settings-navigation-actions ha-button {
+    width: 100%;
+  }
+  .settings-navigation-actions [data-section-id="transfer"] {
+    grid-column: span 2;
   }
   .settings-scroll-section {
     scroll-margin-block-start: 16px;

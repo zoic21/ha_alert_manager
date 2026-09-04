@@ -19,13 +19,13 @@ import {
 } from "../components/notification-profiles.js";
 
 const SETTINGS_SECTIONS = [
-  ["alert-display", "settings.alert_display"],
-  ["coherence", "settings.coherence_settings"],
-  ["exclusions", "settings.exclusions"],
-  ["notifications", "notifications.title"],
-  ["history", "settings.history_settings"],
-  ["entity-delay", "settings.entity_delay"],
-  ["transfer", "settings.transfer_title"],
+  ["alert-display", "settings.alert_display", "mdi:alert-outline"],
+  ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
+  ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
+  ["notifications", "notifications.title", "mdi:bell-outline"],
+  ["history", "settings.history_settings", "mdi:history"],
+  ["entity-delay", "settings.entity_delay", "mdi:timer-cog-outline"],
+  ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
 ];
 
 export function renderSettings(context) {
@@ -92,7 +92,7 @@ export function renderSettings(context) {
 }
 
 export function renderSettingsNavigation(t) {
-  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button type="button" appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key, icon]) => `<ha-button type="button" appearance="outlined" data-action="scroll-settings-section" data-section-id="${id}"><ha-icon slot="start" icon="${icon}"></ha-icon>${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 export function renderSettingsConfigurationEntry(id, label, count, t) {

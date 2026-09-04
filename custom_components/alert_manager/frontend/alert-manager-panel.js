@@ -5326,13 +5326,13 @@ async function handleAutomaticAction(action, button) {
 
 // Source: frontend-src/views/settings.js
 const SETTINGS_SECTIONS = [
-  ["alert-display", "settings.alert_display"],
-  ["coherence", "settings.coherence_settings"],
-  ["exclusions", "settings.exclusions"],
-  ["notifications", "notifications.title"],
-  ["history", "settings.history_settings"],
-  ["entity-delay", "settings.entity_delay"],
-  ["transfer", "settings.transfer_title"],
+  ["alert-display", "settings.alert_display", "mdi:alert-outline"],
+  ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
+  ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
+  ["notifications", "notifications.title", "mdi:bell-outline"],
+  ["history", "settings.history_settings", "mdi:history"],
+  ["entity-delay", "settings.entity_delay", "mdi:timer-cog-outline"],
+  ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
 ];
 
 function renderSettings(context) {
@@ -5399,7 +5399,7 @@ function renderSettings(context) {
 }
 
 function renderSettingsNavigation(t) {
-  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button type="button" appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key, icon]) => `<ha-button type="button" appearance="outlined" data-action="scroll-settings-section" data-section-id="${id}"><ha-icon slot="start" icon="${icon}"></ha-icon>${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 function renderSettingsConfigurationEntry(id, label, count, t) {
@@ -6178,11 +6178,21 @@ const settingsStyles = `
   }
   .settings-navigation {
     display: grid;
-    gap: 10px;
+    gap: 12px;
+  }
+  .settings-navigation h2 {
+    margin: 0;
   }
   .settings-navigation-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .settings-navigation-actions ha-button {
+    width: 100%;
+  }
+  .settings-navigation-actions [data-section-id="transfer"] {
+    grid-column: span 2;
   }
   .settings-scroll-section {
     scroll-margin-block-start: 16px;
@@ -7047,6 +7057,9 @@ const responsiveStyles = `
     .summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .settings-navigation-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
     }
@@ -7061,6 +7074,12 @@ const responsiveStyles = `
 
   /* Small screens */
   @media (max-width: 700px) {
+    .settings-navigation-actions {
+      grid-template-columns: 1fr;
+    }
+    .settings-navigation-actions [data-section-id="transfer"] {
+      grid-column: auto;
+    }
     main {
       padding: 12px;
     }
