@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-dev15 — 4 septembre 2026
+
+### Ajouté
+
+- Chaque profil de notification affiche dans Configuration son nombre
+  d’utilisations sur les dernières 24 heures.
+- Les utilisations réussies sont conservées après redémarrage dans 24 compteurs
+  horaires bornés par profil, sans polling ni nouvelle entité Home Assistant.
+
+### Tests
+
+- Ajout de tests couvrant les nouvelles alertes, résolutions, rappels, échecs,
+  notifications de test, restauration du stockage et affichage frontend.
+
 ## 2.2.0-dev14 — 4 septembre 2026
 
 ### Modifié
