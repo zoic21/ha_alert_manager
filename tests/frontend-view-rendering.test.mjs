@@ -269,6 +269,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     t,
   });
 
+  assert.match(markup, /^<section id="settings-section-automatic"/);
+  assert.match(markup, /<h2 class="automatic-section-title">tabs\.automatic<\/h2>/);
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold[^>]*>automatic\.fields\.threshold\.label:15/);
@@ -437,6 +439,7 @@ test("flapping renders source packs and device overrides in separate drawers", (
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {
+  const automaticMarkup = "<section id=\"settings-section-automatic\">automatic</section>";
   const markup = renderSettings({
     config: { global_delay: 900, pending_display_delay: 10 },
     settingsDraft: {
@@ -452,16 +455,20 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     ignoredReferenceDraft: "sensor.new",
     configurationDrawer: { kind: "settings", id: "entity_delays" },
     busy: false,
+    automaticMarkup,
     renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
     t,
   });
 
   assert.match(markup, /id="global-delay"/);
   assert.match(markup, /class="panel settings-navigation"/);
-  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 7);
-  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 7);
-  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 7);
+  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 8);
+  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 8);
+  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 8);
+  assert.match(markup, /data-section-id="automatic"><ha-icon slot="start" icon="mdi:radar"/);
   assert.match(markup, /data-section-id="transfer"><ha-icon slot="start" icon="mdi:file-swap-outline"/);
+  assert.ok(markup.includes(automaticMarkup));
+  assert.ok(markup.indexOf(automaticMarkup) < markup.indexOf("settings-section-alert-display"));
   assert.match(markup, /id="settings-section-notifications"/);
   assert.match(markup, /coherence-scan-esphome[^>]*checked/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
@@ -473,7 +480,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
 });
 
-test("settings quick access scrolls smoothly to a known section", async () => {
+test("settings quick access scrolls smoothly to automatic monitoring", async () => {
   let scrollOptions;
   const section = {
     scrollIntoView: (options) => { scrollOptions = options; },
@@ -481,7 +488,7 @@ test("settings quick access scrolls smoothly to a known section", async () => {
   const panel = {
     shadowRoot: {
       querySelector: (selector) => (
-        selector === "#settings-section-notifications" ? section : null
+        selector === "#settings-section-automatic" ? section : null
       ),
     },
   };
@@ -489,7 +496,7 @@ test("settings quick access scrolls smoothly to a known section", async () => {
   const handled = await handleSettingsAction.call(
     panel,
     "scroll-settings-section",
-    { dataset: { sectionId: "notifications" } },
+    { dataset: { sectionId: "automatic" } },
   );
 
   assert.equal(handled, true);

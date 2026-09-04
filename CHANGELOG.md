@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-dev13 — 4 septembre 2026
+
+### Modifié
+
+- La surveillance automatique est maintenant intégrée à la page Configuration
+  et n’occupe plus un onglet distinct.
+- Les accès rapides de Configuration permettent d’atteindre directement la
+  surveillance automatique et sont réorganisés en deux rangées équilibrées.
+- L’ancienne URL de l’onglet Surveillance automatique ouvre désormais la page
+  Configuration afin de préserver les favoris existants.
+
+### Tests
+
+- Mise à jour des tests frontend couvrant les onglets, la composition de la page
+  Configuration, ses accès rapides et la compatibilité de l’ancienne URL.
+
 ## 2.0.0-dev13 — 28 août 2026
 
 ### Modifié

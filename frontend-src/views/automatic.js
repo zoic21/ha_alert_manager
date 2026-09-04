@@ -32,7 +32,9 @@ export function renderAutomatic(context) {
       availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
       renderNumberField, t,
     } = context;
-    return `<form id="automatic-form" class="automatic-grid">
+    return `<section id="settings-section-automatic" class="automatic-section settings-scroll-section">
+      <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
+      <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
         const packConfig = config.automatic[pack.id];
         const packKey = pack.translation_key || pack.id;
@@ -71,7 +73,8 @@ export function renderAutomatic(context) {
         availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
         renderNumberField, t,
       })}
-    </form>`;
+      </form>
+    </section>`;
 }
 
 export function renderAutomaticPanel() {

@@ -9,7 +9,9 @@ export const settingsStyles = `
   .history-empty .empty ha-button {
     margin-top: 16px;
   }
-  .settings-form {
+  .settings-page,
+  .settings-form,
+  .automatic-section {
     width: 100%;
     max-width: 1120px;
     margin-inline: auto;
@@ -32,9 +34,6 @@ export const settingsStyles = `
   }
   .settings-navigation-actions ha-button {
     width: 100%;
-  }
-  .settings-navigation-actions [data-section-id="transfer"] {
-    grid-column: span 2;
   }
   .settings-scroll-section {
     scroll-margin-block-start: 16px;
@@ -404,6 +403,9 @@ export const settingsStyles = `
     width: 100%;
     max-width: 1120px;
     margin-inline: auto;
+  }
+  .automatic-section-title {
+    margin-bottom: 12px;
   }
   .automatic-actions {
     grid-column: 1/-1;

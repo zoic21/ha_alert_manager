@@ -387,17 +387,11 @@ class AlertManagerPanel extends HTMLElement {
     this._closeAlertDetailsDialog();
   }
   _tabs() {
-    const tabs = TABS.map(({ path, translationKey, iconPath }) => ({
+    return TABS.map(({ path, translationKey, iconPath }) => ({
       path,
       name: this._t(translationKey),
       iconPath,
     }));
-    const automaticIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/automatic");
-    const rulesIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/rules");
-    if (automaticIndex < 0 || rulesIndex < 0 || rulesIndex < automaticIndex) return tabs;
-    const [rulesTab] = tabs.splice(rulesIndex, 1);
-    tabs.splice(automaticIndex, 0, rulesTab);
-    return tabs;
   }
 
   _syncSensor() {
@@ -585,11 +579,10 @@ class AlertManagerPanel extends HTMLElement {
       this._hydrateRuleEditorControls();
       if (this._ruleEditorMode !== "visual") return;
     }
-    if (this._activeTab === "automatic") {
+    if (this._activeTab === "settings") {
       this._hydrateAutomaticControls();
-      return;
+      this._hydrateSettingsControls();
     }
-    if (this._activeTab === "settings") this._hydrateSettingsControls();
   }
 
   _hydrateYamlEditor() {
@@ -616,7 +609,6 @@ class AlertManagerPanel extends HTMLElement {
     if (this._activeTab === "coherence" && !this._coherenceLoaded) {
       return `<div class="loading">${esc(this._t("loading"))}</div>`;
     }
-    if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
     if (this._activeTab === "rules") return this._renderRules();
@@ -626,6 +618,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _tabFromRoute(route) {
     const path = `${route?.prefix ?? ""}${route?.path ?? ""}`.replace(/\/$/, "");
+    if (path.endsWith("/automatic")) return "settings";
     return TABS.find((tab) => path.endsWith(`/${tab.id}`))?.id ?? "overview";
   }
 

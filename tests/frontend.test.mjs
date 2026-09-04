@@ -2173,7 +2173,6 @@ test("table navigation delegates tabs and controls to hass-tabs-subpage-data-tab
     { path: "/alert-manager/history", name: "Historique" },
     { path: "/alert-manager/coherence", name: "Cohérence" },
     { path: "/alert-manager/rules", name: "Règles personnalisées" },
-    { path: "/alert-manager/automatic", name: "Surveillance automatique" },
     { path: "/alert-manager/settings", name: "Configuration" },
   ]);
   assert.ok(shell.tabs.every((tab) => typeof tab.iconPath === "string" && tab.iconPath.startsWith("M")));
@@ -2249,6 +2248,8 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(batteryThreshold < batteryConfiguration);
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /id="settings-section-automatic"/);
+  assert.match(settings, /<h2 class="automatic-section-title">Surveillance automatique<\/h2>/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
   assert.match(settings, /<form id="settings-form" class="stack settings-form"/);
@@ -2283,7 +2284,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
   assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
-  assert.match(styles, /\.settings-form\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
+  assert.match(styles, /\.settings-page,\.settings-form,\.automatic-section\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
   assert.match(styles, /\.settings-configuration-actions\{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px\}/);
   assert.match(styles, /\.fields\.configuration-drawer-fields\{grid-template-columns:1fr;width:100%;margin:0\}/);
@@ -3799,9 +3800,18 @@ test("panel renders French and English from backend translation resources", () =
     "History",
     "Coherence",
     "Custom rules",
-    "Automatic monitoring",
     "Configuration",
   ]);
+});
+
+test("legacy automatic monitoring route opens configuration", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+
+  assert.equal(
+    panel._tabFromRoute({ prefix: "", path: "/alert-manager/automatic" }),
+    "settings",
+  );
 });
 
 const historyEvent = (changes = {}) => ({

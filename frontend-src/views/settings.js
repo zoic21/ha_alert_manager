@@ -19,6 +19,7 @@ import {
 } from "../components/notification-profiles.js";
 
 const SETTINGS_SECTIONS = [
+  ["automatic", "tabs.automatic", "mdi:radar"],
   ["alert-display", "settings.alert_display", "mdi:alert-outline"],
   ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
   ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
@@ -35,11 +36,14 @@ export function renderSettings(context) {
       notificationProfileValidationError,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
+      automaticMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
-    return `<form id="settings-form" class="stack settings-form">
+    return `<div class="stack settings-page">
       ${renderSettingsNavigation(t)}
+      ${automaticMarkup}
+      <form id="settings-form" class="stack settings-form">
       <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
         ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
@@ -88,7 +92,8 @@ export function renderSettings(context) {
         notificationProfileDraft, notificationProfileValidationError,
         busy, useBottomSheet, t,
       })}
-    </form>`;
+      </form>
+    </div>`;
 }
 
 export function renderSettingsNavigation(t) {
@@ -162,6 +167,7 @@ export function renderSettingsPanel() {
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
+      automaticMarkup: this._renderAutomatic(),
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
         busy: this._busy,

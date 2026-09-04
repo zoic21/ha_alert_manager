@@ -77,9 +77,6 @@ export const responsiveStyles = `
     .settings-navigation-actions {
       grid-template-columns: 1fr;
     }
-    .settings-navigation-actions [data-section-id="transfer"] {
-      grid-column: auto;
-    }
     main {
       padding: 12px;
     }

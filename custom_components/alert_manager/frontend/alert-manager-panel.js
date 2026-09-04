@@ -21,12 +21,6 @@ const TABS = [
     iconPath: "M9.8,17.7L4.1,12L5.5,10.6L9.8,14.9L18.5,6.2L19.9,7.6L9.8,17.7M12,2C6.5,2 2,6.5 2,12C2,17.5 6.5,22 12,22C17.5,22 22,17.5 22,12C22,6.5 17.5,2 12,2Z",
   },
   {
-    id: "automatic",
-    path: "/alert-manager/automatic",
-    translationKey: "tabs.automatic",
-    iconPath: "M19.07,4.93L17.66,6.34C19.1,7.79 20,9.79 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12C4,7.92 7.05,4.56 11,4.07V6.09C8.16,6.57 6,9.03 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12C18,10.34 17.33,8.84 16.24,7.76L14.83,9.17C15.55,9.9 16,10.9 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12C8,10.14 9.28,8.59 11,8.14V10.28C10.4,10.63 10,11.26 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12C14,11.26 13.6,10.62 13,10.28V2H12A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,9.24 20.88,6.74 19.07,4.93Z",
-  },
-  {
     id: "rules",
     path: "/alert-manager/rules",
     translationKey: "tabs.rules",
@@ -4845,7 +4839,9 @@ function renderAutomatic(context) {
       availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
       renderNumberField, t,
     } = context;
-    return `<form id="automatic-form" class="automatic-grid">
+    return `<section id="settings-section-automatic" class="automatic-section settings-scroll-section">
+      <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
+      <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
         const packConfig = config.automatic[pack.id];
         const packKey = pack.translation_key || pack.id;
@@ -4884,7 +4880,8 @@ function renderAutomatic(context) {
         availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
         renderNumberField, t,
       })}
-    </form>`;
+      </form>
+    </section>`;
 }
 
 function renderAutomaticPanel() {
@@ -5326,6 +5323,7 @@ async function handleAutomaticAction(action, button) {
 
 // Source: frontend-src/views/settings.js
 const SETTINGS_SECTIONS = [
+  ["automatic", "tabs.automatic", "mdi:radar"],
   ["alert-display", "settings.alert_display", "mdi:alert-outline"],
   ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
   ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
@@ -5342,11 +5340,14 @@ function renderSettings(context) {
       notificationProfileValidationError,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
+      automaticMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
-    return `<form id="settings-form" class="stack settings-form">
+    return `<div class="stack settings-page">
       ${renderSettingsNavigation(t)}
+      ${automaticMarkup}
+      <form id="settings-form" class="stack settings-form">
       <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
         ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
@@ -5395,7 +5396,8 @@ function renderSettings(context) {
         notificationProfileDraft, notificationProfileValidationError,
         busy, useBottomSheet, t,
       })}
-    </form>`;
+      </form>
+    </div>`;
 }
 
 function renderSettingsNavigation(t) {
@@ -5469,6 +5471,7 @@ function renderSettingsPanel() {
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
+      automaticMarkup: this._renderAutomatic(),
       configBackupsMarkup: this._renderConfigBackups({
         backups: this._configRecovery?.backups ?? [],
         busy: this._busy,
@@ -6167,7 +6170,9 @@ const settingsStyles = `
   .history-empty .empty ha-button {
     margin-top: 16px;
   }
-  .settings-form {
+  .settings-page,
+  .settings-form,
+  .automatic-section {
     width: 100%;
     max-width: 1120px;
     margin-inline: auto;
@@ -6190,9 +6195,6 @@ const settingsStyles = `
   }
   .settings-navigation-actions ha-button {
     width: 100%;
-  }
-  .settings-navigation-actions [data-section-id="transfer"] {
-    grid-column: span 2;
   }
   .settings-scroll-section {
     scroll-margin-block-start: 16px;
@@ -6562,6 +6564,9 @@ const settingsStyles = `
     width: 100%;
     max-width: 1120px;
     margin-inline: auto;
+  }
+  .automatic-section-title {
+    margin-bottom: 12px;
   }
   .automatic-actions {
     grid-column: 1/-1;
@@ -7077,9 +7082,6 @@ const responsiveStyles = `
     .settings-navigation-actions {
       grid-template-columns: 1fr;
     }
-    .settings-navigation-actions [data-section-id="transfer"] {
-      grid-column: auto;
-    }
     main {
       padding: 12px;
     }
@@ -7590,17 +7592,11 @@ class AlertManagerPanel extends HTMLElement {
     this._closeAlertDetailsDialog();
   }
   _tabs() {
-    const tabs = TABS.map(({ path, translationKey, iconPath }) => ({
+    return TABS.map(({ path, translationKey, iconPath }) => ({
       path,
       name: this._t(translationKey),
       iconPath,
     }));
-    const automaticIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/automatic");
-    const rulesIndex = tabs.findIndex((tab) => tab.path === "/alert-manager/rules");
-    if (automaticIndex < 0 || rulesIndex < 0 || rulesIndex < automaticIndex) return tabs;
-    const [rulesTab] = tabs.splice(rulesIndex, 1);
-    tabs.splice(automaticIndex, 0, rulesTab);
-    return tabs;
   }
 
   _syncSensor() {
@@ -7788,11 +7784,10 @@ class AlertManagerPanel extends HTMLElement {
       this._hydrateRuleEditorControls();
       if (this._ruleEditorMode !== "visual") return;
     }
-    if (this._activeTab === "automatic") {
+    if (this._activeTab === "settings") {
       this._hydrateAutomaticControls();
-      return;
+      this._hydrateSettingsControls();
     }
-    if (this._activeTab === "settings") this._hydrateSettingsControls();
   }
 
   _hydrateYamlEditor() {
@@ -7819,7 +7814,6 @@ class AlertManagerPanel extends HTMLElement {
     if (this._activeTab === "coherence" && !this._coherenceLoaded) {
       return `<div class="loading">${esc(this._t("loading"))}</div>`;
     }
-    if (this._activeTab === "automatic") return this._renderAutomatic();
     if (this._activeTab === "coherence") return this._renderCoherence();
     if (this._activeTab === "history") return this._renderHistory();
     if (this._activeTab === "rules") return this._renderRules();
@@ -7829,6 +7823,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _tabFromRoute(route) {
     const path = `${route?.prefix ?? ""}${route?.path ?? ""}`.replace(/\/$/, "");
+    if (path.endsWith("/automatic")) return "settings";
     return TABS.find((tab) => path.endsWith(`/${tab.id}`))?.id ?? "overview";
   }
 
