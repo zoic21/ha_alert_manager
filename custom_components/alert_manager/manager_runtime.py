@@ -73,9 +73,12 @@ class _RuntimeMixin:
         def timer_due(_now: datetime) -> None:
             self._startup_reconciliation_timer = None
             self._startup_restoring = False
+            self._startup_available_entity_ids.clear()
             entity_ids = tuple(self._startup_reconciliation_entity_ids)
             self._startup_restored_alert_ids.clear()
             self._startup_reconciliation_entity_ids.clear()
+            if not self.monitoring_enabled:
+                self._startup_deferred_unavailable_since.clear()
             self._queue_entity_evaluations(entity_ids)
 
         self._startup_reconciliation_timer = async_track_point_in_utc_time(
@@ -92,6 +95,17 @@ class _RuntimeMixin:
         self._startup_restoring = False
         self._startup_restored_alert_ids.clear()
         self._startup_reconciliation_entity_ids.clear()
+        self._startup_available_entity_ids.clear()
+        self._startup_deferred_unavailable_since.clear()
+
+    def _observe_startup_availability(self, entity_id: str, state: State) -> None:
+        """Remember that an entity produced a usable post-start state."""
+        if self._startup_restoring and state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            self._startup_available_entity_ids.add(entity_id)
+            self._startup_deferred_unavailable_since.pop(entity_id, None)
 
     @callback
     def _state_changed(self, event: Event) -> None:
@@ -101,6 +115,9 @@ class _RuntimeMixin:
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_allowed_rule_source(entity_id):
             return
+        new_state = event.data.get("new_state")
+        if isinstance(new_state, State):
+            self._observe_startup_availability(entity_id, new_state)
 
         if self._update_tracking_for_state_event(entity_id, event):
             self._queued_public_refresh = True
@@ -543,6 +560,13 @@ class _RuntimeMixin:
             return False
         now = dt_util.now()
         state = self.hass.states.get(entity_id)
+        if state is not None:
+            self._observe_startup_availability(entity_id, state)
+        deferred_unavailable_at = (
+            None
+            if self._startup_restoring
+            else self._startup_deferred_unavailable_since.pop(entity_id, None)
+        )
         self._update_automatic_tracking_for_entity(entity_id, state)
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         if (restoring or self._startup_restoring) and (
@@ -573,19 +597,38 @@ class _RuntimeMixin:
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
             if record is None:
+                if (
+                    details.type == CATEGORY_UNAVAILABLE
+                    and self._startup_restoring
+                    and entity_id not in self._startup_available_entity_ids
+                ):
+                    self._startup_reconciliation_entity_ids.add(entity_id)
+                    self._startup_deferred_unavailable_since.setdefault(entity_id, now)
+                    continue
                 if self._startup_restoring:
                     self._startup_reconciliation_entity_ids.add(entity_id)
-                    if details.type == CATEGORY_UNAVAILABLE:
-                        continue
-                detected_at = (
-                    self._inactivity_detected_at(details.rule_id, state, now)
-                    if details.source == "unchanged" or details.operator == "unchanged"
-                    else now
+                startup_detected_at = (
+                    deferred_unavailable_at
+                    if details.type == CATEGORY_UNAVAILABLE
+                    else None
                 )
+                if startup_detected_at is not None:
+                    detected_at = startup_detected_at
+                else:
+                    detected_at = (
+                        self._inactivity_detected_at(details.rule_id, state, now)
+                        if details.source == "unchanged"
+                        or details.operator == "unchanged"
+                        else now
+                    )
                 record = AlertRecord.pending(details, delay, detected_at)
-                record.visible_at = calculate_due_at(
-                    detected_at,
-                    min(self.config["pending_display_delay"], delay),
+                record.visible_at = (
+                    record.due_at
+                    if startup_detected_at is not None
+                    else calculate_due_at(
+                        detected_at,
+                        min(self.config["pending_display_delay"], delay),
+                    )
                 )
                 self._set_record(record)
                 persisted_changed = True

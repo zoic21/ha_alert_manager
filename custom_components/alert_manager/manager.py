@@ -70,6 +70,8 @@ class AlertManager(
         self._startup_restored_alert_ids: set[str] = set()
         self._startup_reconciliation_entity_ids: set[str] = set()
         self._startup_reconciliation_timer: Callable[[], None] | None = None
+        self._startup_available_entity_ids: set[str] = set()
+        self._startup_deferred_unavailable_since: dict[str, datetime] = {}
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False

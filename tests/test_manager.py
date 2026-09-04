@@ -638,6 +638,16 @@ def test_transient_startup_unavailable_does_not_create_pending_alert(hass, entry
         alert_id = "unavailable:sensor.temperature"
         assert alert_id not in restarted.records
 
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        deferred = restarted.records[alert_id]
+        assert deferred.status is AlertStatus.PENDING
+        assert deferred.visible_at == deferred.due_at
+        snapshot, _device_groups = restarted._build_public_snapshot()
+        assert snapshot["pending_count"] == 0
+        assert alert_id not in {item["id"] for item in snapshot["pending"]}
+
         normal_state = hass.states.set("sensor.temperature", "31")
         restarted._state_changed(
             Event(
@@ -652,16 +662,13 @@ def test_transient_startup_unavailable_does_not_create_pending_alert(hass, entry
         await asyncio.sleep(0)
         assert alert_id not in restarted.records
 
-        fire_startup_reconciliation(hass)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        assert alert_id not in restarted.records
-
     run(scenario())
 
 
-def test_settled_startup_unavailable_is_detected_after_reconciliation(hass, entry):
-    """A new unavailable value is detected if it remains after startup settles."""
+def test_settled_startup_unavailable_is_hidden_until_activation(hass, entry, set_now):
+    """A startup unavailable occurrence stays hidden until its activation."""
+    start = datetime(2026, 9, 4, 14, tzinfo=UTC)
+    set_now(start)
 
     async def scenario():
         hass.states.set("sensor.temperature", "31")
@@ -685,7 +692,24 @@ def test_settled_startup_unavailable_is_detected_after_reconciliation(hass, entr
         fire_startup_reconciliation(hass)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert restarted.records[alert_id].status is AlertStatus.PENDING
+        deferred = restarted.records[alert_id]
+        assert deferred.status is AlertStatus.PENDING
+        assert deferred.detected_at == start
+        assert deferred.visible_at == deferred.due_at
+        snapshot, _device_groups = restarted._build_public_snapshot()
+        assert snapshot["pending_count"] == 0
+        assert alert_id not in {item["id"] for item in snapshot["pending"]}
+
+        activation_timer = next(
+            timer
+            for timer in hass.timers
+            if not timer["cancelled"] and timer["point"] == deferred.due_at
+        )
+        set_now(deferred.due_at)
+        activation_timer["action"](deferred.due_at)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].status is AlertStatus.ACTIVE
 
     run(scenario())
 
@@ -734,6 +758,40 @@ def test_new_startup_occurrence_is_not_protected_as_restored(hass, entry):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         assert alert_id not in restarted.records
+
+    run(scenario())
+
+
+def test_available_entity_outage_is_not_deferred_during_startup(hass, entry):
+    """A real outage after the first usable state is not deferred."""
+
+    async def scenario():
+        hass.state = CoreState.starting
+        normal_state = hass.states.set("sensor.online", "ok")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        hass.state = CoreState.running
+        manager._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        unavailable_state = hass.states.set("sensor.online", "unavailable")
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.online",
+                    "old_state": normal_state,
+                    "new_state": unavailable_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert (
+            manager.records["unavailable:sensor.online"].status is AlertStatus.PENDING
+        )
 
     run(scenario())
 
