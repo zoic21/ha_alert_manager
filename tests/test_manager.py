@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import Event
+from homeassistant.core import Event, State
 
 from custom_components.alert_manager.const import (
     ALERT_MANAGER_ENTITY_IDS,
@@ -19,8 +19,10 @@ from custom_components.alert_manager.const import (
     EVENT_ALERT_STARTED,
     EVENT_DEVICE_ALERT_STARTED,
     MAX_RULES,
+    RECENT_RESTORED_PENDING_SECONDS,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
+    STARTUP_STABILIZATION_SECONDS,
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus, Rule
@@ -405,6 +407,220 @@ def test_fresh_pending_restarts_while_active_state_remains_durable(
         [item for item in hass.bus.fired if item[0] == EVENT_ALERT_STARTED]
     )
     assert started_after == started_before
+
+
+def test_core_restart_discards_only_recent_restored_pending(hass, entry, set_now):
+    """Boot cleanup drops fresh stored pending while retaining older and active."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    for entity_id in ("sensor.recent", "sensor.old", "sensor.active"):
+        hass.states.set(entity_id, "unavailable")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        old = first.records["unavailable:sensor.old"]
+        old.detected_at = start - timedelta(minutes=10)
+        old.due_at = old.detected_at + timedelta(seconds=old.delay)
+        active = first.records["unavailable:sensor.active"]
+        active.status = AlertStatus.ACTIVE
+        active.active_since = start
+        recent = first.records["unavailable:sensor.recent"].as_storage_dict()
+        await first.async_unload()
+        # Simulate a pending written by 2.1 before the bounded-persistence policy.
+        hass.stores["alert_manager"]["alerts"][
+            "unavailable:sensor.recent"
+        ] = recent
+
+        hass.is_running = False
+        set_now(start + timedelta(seconds=RECENT_RESTORED_PENDING_SECONDS - 1))
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        assert set(restarted.records) == {
+            "unavailable:sensor.old",
+            "unavailable:sensor.active",
+        }
+        assert restarted.records["unavailable:sensor.old"].status is AlertStatus.PENDING
+        assert (
+            restarted.records["unavailable:sensor.active"].status
+            is AlertStatus.ACTIVE
+        )
+        assert "unavailable:sensor.recent" not in hass.stores["alert_manager"][
+            "alerts"
+        ]
+        await restarted.async_unload()
+
+    run(scenario())
+
+
+def test_integration_reload_keeps_recent_pending(hass, entry, set_now):
+    """The five-minute cleanup applies to a core boot, not an entry reload."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.recent", "unavailable")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        pending = first.records["unavailable:sensor.recent"]
+        detected_at = pending.detected_at
+        stored_pending = pending.as_storage_dict()
+        await first.async_unload()
+        hass.stores["alert_manager"]["alerts"][
+            "unavailable:sensor.recent"
+        ] = stored_pending
+
+        set_now(start + timedelta(minutes=1))
+        reloaded = AlertManager(hass, entry)
+        await reloaded.async_setup()
+
+        record = reloaded.records["unavailable:sensor.recent"]
+        assert record.detected_at == detected_at
+        await reloaded.async_unload()
+
+    run(scenario())
+
+
+def test_core_startup_keeps_only_latest_event_until_stable(hass, entry, set_now):
+    """State bursts stay inert for two minutes and collapse per entity."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    hass.is_running = False
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+
+        unavailable = State("sensor.booting", "unavailable")
+        normal = State("sensor.booting", "20")
+        hass.states.data["sensor.booting"] = unavailable
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.booting",
+                    "old_state": None,
+                    "new_state": unavailable,
+                }
+            )
+        )
+        hass.states.data["sensor.booting"] = normal
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.booting",
+                    "old_state": unavailable,
+                    "new_state": normal,
+                }
+            )
+        )
+
+        assert manager.records == {}
+        assert len(manager._startup_state_events) == 1
+        buffered = manager._startup_state_events["sensor.booting"]
+        assert buffered.data["new_state"] is normal
+
+        hass.is_running = True
+        manager._home_assistant_started(Event())
+        timer = next(
+            item
+            for item in hass.timers
+            if not item["cancelled"]
+            and "stabilization_finished" in item["action"].__qualname__
+        )
+        assert timer["point"] == start + timedelta(
+            seconds=STARTUP_STABILIZATION_SECONDS
+        )
+
+        final = State("sensor.booting", "unavailable")
+        hass.states.data["sensor.booting"] = final
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.booting",
+                    "old_state": normal,
+                    "new_state": final,
+                }
+            )
+        )
+        assert manager.records == {}
+        assert manager._startup_state_events["sensor.booting"].data[
+            "new_state"
+        ] is final
+
+        set_now(timer["point"])
+        timer["action"](timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert manager._startup_buffering is False
+        assert manager._startup_state_events == {}
+        assert set(manager.records) == {"unavailable:sensor.booting"}
+        assert set(manager._timers) == {"unavailable:sensor.booting"}
+        await manager.async_unload()
+
+    run(scenario())
+
+
+def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_now):
+    """A pre-running state must not erase a persisted pending occurrence."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("binary_sensor.pool_filter", "on")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        rule = await first.async_create_rule(
+            {
+                "name": "Pool filtration over 24 hours",
+                "entity_ids": ["binary_sensor.pool_filter"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 24 * 60 * 60,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:binary_sensor.pool_filter"
+        detected_at = first.records[alert_id].detected_at
+        due_at = first.records[alert_id].due_at
+        stored_pending = first.records[alert_id].as_storage_dict()
+        await first.async_unload()
+        hass.stores["alert_manager"]["alerts"][alert_id] = stored_pending
+
+        hass.is_running = False
+        rebooted_at = start + timedelta(hours=2, minutes=36)
+        set_now(rebooted_at)
+        hass.states.set("binary_sensor.pool_filter", "off")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        await restarted.async_evaluate_entity(
+            "binary_sensor.pool_filter", restoring=True
+        )
+        assert restarted.records[alert_id].detected_at == detected_at
+        assert restarted.records[alert_id].due_at == due_at
+
+        hass.states.set("binary_sensor.pool_filter", "on")
+        hass.is_running = True
+        restarted._home_assistant_started(Event())
+        timer = next(
+            item
+            for item in hass.timers
+            if not item["cancelled"]
+            and "stabilization_finished" in item["action"].__qualname__
+        )
+        set_now(timer["point"])
+        timer["action"](timer["point"])
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[alert_id].detected_at == detected_at
+        assert restarted.records[alert_id].due_at == due_at
+
+        hass.states.set("binary_sensor.pool_filter", "off")
+        await restarted.async_evaluate_entity("binary_sensor.pool_filter")
+        assert alert_id not in restarted.records
+
+    run(scenario())
 
 
 @pytest.mark.parametrize("startup_state", [None, "unknown"])

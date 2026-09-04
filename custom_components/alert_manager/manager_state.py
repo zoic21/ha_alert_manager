@@ -501,7 +501,7 @@ class _StateMixin:
 
     def _schedule_timer(self, record: AlertRecord) -> None:
         """Schedule exactly one lifecycle or presentation timer for an alert."""
-        if not self.monitoring_enabled:
+        if not self.monitoring_enabled or self._startup_buffering:
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)

@@ -23,6 +23,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CATEGORY_UNAVAILABLE,
     DOMAIN,
+    STARTUP_STABILIZATION_SECONDS,
     VARIATION_SOURCES,
 )
 from .models import (
@@ -65,13 +66,65 @@ class _RuntimeMixin:
     """Handle Home Assistant events and turn current states into alerts."""
 
     @callback
-    def _home_assistant_started(self, _event: Event) -> None:
-        """Evaluate only after all startup states have had a chance to load."""
-        self.entry.async_create_task(
+    def _home_assistant_started(self, _event: Event | None) -> None:
+        """Wait for startup states to stabilize before evaluating them."""
+        if self._unloading or not self._startup_buffering:
+            return
+        self._cancel_startup_grace_timer()
+
+        @callback
+        def stabilization_finished(_now: datetime) -> None:
+            self._startup_grace_timer = None
+            self.entry.async_create_task(
+                self.hass,
+                self._async_finish_startup(),
+                name=f"{DOMAIN} startup evaluation",
+            )
+
+        self._startup_grace_timer = async_track_point_in_utc_time(
             self.hass,
-            self.async_evaluate_all(restoring=True),
-            name=f"{DOMAIN} startup evaluation",
+            stabilization_finished,
+            (
+                dt_util.now() + timedelta(seconds=STARTUP_STABILIZATION_SECONDS)
+            ).astimezone(UTC),
         )
+
+    async def _async_finish_startup(self) -> None:
+        """Evaluate stable states, then resume the coalesced live event pipeline."""
+        if self._unloading:
+            self._startup_state_events.clear()
+            return
+
+        buffered_events = dict(self._startup_state_events)
+        self._startup_state_events.clear()
+        try:
+            await self.async_evaluate_all(restoring=True, _startup_flush=True)
+        finally:
+            buffered_events.update(self._startup_state_events)
+            self._startup_state_events.clear()
+            self._startup_buffering = False
+            if not self._unloading:
+                self._reschedule_record_timers()
+                for event in buffered_events.values():
+                    self._route_state_changed(
+                        event,
+                        restoring=True,
+                        collect_occurrences=False,
+                    )
+
+    @callback
+    def _cancel_startup_grace_timer(self) -> None:
+        """Cancel the one-shot post-start stabilization deadline."""
+        if self._startup_grace_timer is not None:
+            self._startup_grace_timer()
+            self._startup_grace_timer = None
+
+    @callback
+    def _cancel_startup_stabilization(self) -> None:
+        """Discard buffered startup work during unload."""
+        self._cancel_startup_grace_timer()
+        self._startup_state_events.clear()
+        self._startup_buffering = False
 
     @callback
     def _state_changed(self, event: Event) -> None:
@@ -81,6 +134,27 @@ class _RuntimeMixin:
         entity_id = event.data.get("entity_id")
         if not entity_id or not self._is_allowed_rule_source(entity_id):
             return
+
+        if self._startup_buffering:
+            self._startup_state_events[entity_id] = event
+            return
+
+        self._route_state_changed(
+            event,
+            restoring=not self.hass.is_running,
+            collect_occurrences=self.hass.is_running,
+        )
+
+    @callback
+    def _route_state_changed(
+        self,
+        event: Event,
+        *,
+        restoring: bool,
+        collect_occurrences: bool,
+    ) -> None:
+        """Route one latest state event into the dependency-aware batch."""
+        entity_id = event.data["entity_id"]
 
         if self._update_tracking_for_state_event(entity_id, event):
             self._queued_public_refresh = True
@@ -104,8 +178,8 @@ class _RuntimeMixin:
             affected_entities.add(entity_id)
         self._queue_entity_evaluations(
             affected_entities,
-            restoring=not self.hass.is_running,
-            collect_occurrences=self.hass.is_running,
+            restoring=restoring,
+            collect_occurrences=collect_occurrences,
         )
 
     def _state_event_affects_source(self, event: Event, entity_id: str) -> bool:
@@ -528,9 +602,14 @@ class _RuntimeMixin:
         save: bool = True,
         publish: bool = True,
         emit_events: bool = True,
+        _startup_flush: bool = False,
     ) -> bool:
         """Evaluate all current and persisted relevant entities."""
-        if self._unloading or not self.monitoring_enabled:
+        if (
+            self._unloading
+            or not self.monitoring_enabled
+            or (self._startup_buffering and not _startup_flush)
+        ):
             return False
         self._refresh_tracking()
         entity_ids = {
@@ -550,6 +629,7 @@ class _RuntimeMixin:
                 save=False,
                 publish=False,
                 emit_events=emit_events,
+                _startup_flush=_startup_flush,
             )
         for record in self.records.values():
             if record.expires_at is not None and record.details.id not in self._timers:
@@ -572,9 +652,14 @@ class _RuntimeMixin:
         publish: bool = True,
         emit_events: bool = True,
         _new_occurrences: list[PackOccurrence] | None = None,
+        _startup_flush: bool = False,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
-        if self._unloading or not self.monitoring_enabled:
+        if (
+            self._unloading
+            or not self.monitoring_enabled
+            or (self._startup_buffering and not _startup_flush)
+        ):
             return False
         now = dt_util.now()
         state = self.hass.states.get(entity_id)

@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -20,12 +20,13 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
+from .const import RECENT_RESTORED_PENDING_SECONDS
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
-from .models import AlertHistoryEntry, AlertRecord, Rule
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .notification_runtime import NotificationRuntime
 from .notifications import NotificationManager
 from .packs import OCCURRENCE_PACKS, reset_pack_runtimes
@@ -113,6 +114,9 @@ class AlertManager(
         self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False
         self._pack_refresh_dirty = False
+        self._startup_buffering = not hass.is_running
+        self._startup_state_events: dict[str, Event] = {}
+        self._startup_grace_timer: Callable[[], None] | None = None
         self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
@@ -177,6 +181,26 @@ class AlertManager(
             migrated = True
         await self._async_load_condition_translations()
         self.notifications.set_translations(self._condition_translations)
+        cutoff = dt_util.now().astimezone(UTC) - timedelta(
+            seconds=RECENT_RESTORED_PENDING_SECONDS
+        )
+        recent_pending_ids = (
+            {
+                alert_id
+                for alert_id, record in records.items()
+                if record.status is AlertStatus.PENDING
+                and record.detected_at.astimezone(UTC) > cutoff
+            }
+            if self._startup_buffering
+            else set()
+        )
+        if recent_pending_ids:
+            records = {
+                alert_id: record
+                for alert_id, record in records.items()
+                if alert_id not in recent_pending_ids
+            }
+            migrated = True
         self.records = records
         self._rebuild_record_index()
         self.history = history
@@ -219,18 +243,21 @@ class AlertManager(
             )
         )
 
-        if self.hass.is_running:
+        if not self._startup_buffering:
             changed = await self.async_evaluate_all(restoring=True, save=False)
             if not self.recovery_active and (migrated or changed):
                 await self._async_save_state()
         else:
             if migrated and not self.recovery_active:
                 await self._async_save_state()
-            self._unsubscribers.append(
-                self.hass.bus.async_listen_once(
-                    EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
+            if self.hass.is_running:
+                self._home_assistant_started(None)
+            else:
+                self._unsubscribers.append(
+                    self.hass.bus.async_listen_once(
+                        EVENT_HOMEASSISTANT_STARTED, self._home_assistant_started
+                    )
                 )
-            )
             self._publish_if_changed(force=True)
         if history_migrated and not self.recovery_active:
             try:
@@ -259,6 +286,7 @@ class AlertManager(
         self._cancel_all_pack_rechecks()
         self._unloading = True
         self._cancel_pending_persistence_timer()
+        self._cancel_startup_stabilization()
         self._cancel_config_backup_schedule()
         if self._coherence_schedule_unsubscribe is not None:
             self._coherence_schedule_unsubscribe()
