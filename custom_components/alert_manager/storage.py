@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from copy import deepcopy
@@ -29,7 +30,7 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
-from .models import AlertHistoryEntry, AlertRecord
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,7 +76,11 @@ class AlertManagerStorage:
             STORAGE_KEY,
             atomic_writes=True,
             minor_version=STORAGE_MINOR_VERSION,
+            serialize_in_event_loop=False,
         )
+        self._save_lock = asyncio.Lock()
+        self._persisted_payload: dict[str, Any] | None = None
+        self.persisted_alert_ids: set[str] = set()
         self.variation_baselines: dict[str, float] = {}
         self.pack_runtime: dict[str, dict[str, Any]] = {}
 
@@ -99,6 +104,8 @@ class AlertManagerStorage:
                 )
             self.variation_baselines = {}
             self.pack_runtime = {}
+            self._persisted_payload = None
+            self.persisted_alert_ids = set()
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
@@ -107,6 +114,7 @@ class AlertManagerStorage:
         stored_config = raw.get("config")
         if not isinstance(stored_config, dict):
             raise ConfigStorageError("Stored configuration must be an object")
+        loaded_payload = deepcopy(raw)
 
         migrated_config, migrated = self._migrate_config(stored_config)
         self.variation_baselines, baselines_migrated = _load_variation_baselines(
@@ -129,6 +137,7 @@ class AlertManagerStorage:
         raw_alerts = raw.get("alerts", {})
         if not isinstance(raw_alerts, dict):
             _LOGGER.warning("Ignoring invalid persisted alerts collection")
+            self._remember_loaded_snapshot(loaded_payload, records)
             return config, records, True
         if _migrate_alert_value_sources(raw_alerts):
             migrated = True
@@ -158,7 +167,15 @@ class AlertManagerStorage:
                 record.details.id = alert_id
                 migrated = True
             records[alert_id] = record
+        self._remember_loaded_snapshot(loaded_payload, records)
         return config, records, migrated
+
+    def _remember_loaded_snapshot(
+        self, payload: dict[str, Any], records: dict[str, AlertRecord]
+    ) -> None:
+        """Remember the exact loaded payload and its valid persisted record ids."""
+        self._persisted_payload = payload
+        self.persisted_alert_ids = set(records)
 
     async def _async_read_store_snapshot(self) -> str | None:
         """Capture an existing store before Home Assistant may rename corruption."""
@@ -186,20 +203,49 @@ class AlertManagerStorage:
         return config, changed
 
     async def async_save(
-        self, config: dict[str, Any], records: dict[str, AlertRecord]
+        self,
+        config: dict[str, Any],
+        records: dict[str, AlertRecord],
+        *,
+        pending_before: datetime | None = None,
+        include_all_pending: bool = False,
     ) -> None:
-        """Atomically save a complete snapshot."""
-        await self._store.async_save(
-            {
-                "config": config,
-                "alerts": {
-                    alert_id: record.as_storage_dict()
-                    for alert_id, record in records.items()
-                },
-                "variation_baselines": dict(self.variation_baselines),
-                "pack_runtime": deepcopy(self.pack_runtime),
+        """Atomically save a detached snapshot, omitting fresh pending records."""
+        config_snapshot = deepcopy(config)
+        record_snapshots = {
+            alert_id: (
+                record.status,
+                record.detected_at.astimezone(UTC),
+                record.as_storage_dict(),
+            )
+            for alert_id, record in records.items()
+        }
+        baselines_snapshot = dict(self.variation_baselines)
+        pack_runtime_snapshot = deepcopy(self.pack_runtime)
+        cutoff = pending_before.astimezone(UTC) if pending_before is not None else None
+
+        async with self._save_lock:
+            alerts = {
+                alert_id: data
+                for alert_id, (status, detected_at, data) in sorted(
+                    record_snapshots.items()
+                )
+                if status is not AlertStatus.PENDING
+                or include_all_pending
+                or alert_id in self.persisted_alert_ids
+                or (cutoff is not None and detected_at <= cutoff)
             }
-        )
+            payload = {
+                "config": config_snapshot,
+                "alerts": alerts,
+                "variation_baselines": baselines_snapshot,
+                "pack_runtime": pack_runtime_snapshot,
+            }
+            if payload == self._persisted_payload:
+                return
+            await self._store.async_save(payload)
+            self._persisted_payload = payload
+            self.persisted_alert_ids = set(alerts)
 
 
 class AlertManagerConfigBackupStorage:
@@ -212,6 +258,7 @@ class AlertManagerConfigBackupStorage:
             CONFIG_BACKUP_STORAGE_VERSION,
             CONFIG_BACKUP_STORAGE_KEY,
             atomic_writes=True,
+            serialize_in_event_loop=False,
         )
 
     async def _async_load_valid(self) -> list[dict[str, Any]]:
@@ -334,6 +381,7 @@ class AlertManagerHistoryStorage:
             HISTORY_STORAGE_VERSION,
             HISTORY_STORAGE_KEY,
             atomic_writes=True,
+            serialize_in_event_loop=False,
         )
 
     async def async_load(self) -> tuple[list[AlertHistoryEntry], bool]:

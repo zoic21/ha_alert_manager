@@ -375,27 +375,31 @@ def test_active_resolution_and_events(hass, entry, set_now):
     assert "resolved_at" in resolved[0]
 
 
-def test_persistence_and_resume_without_duplicate_started(hass, entry, set_now):
-    """Pending/active state survives reload and an active alert is not re-announced."""
+def test_fresh_pending_restarts_while_active_state_remains_durable(
+    hass, entry, set_now
+):
+    """A fresh pending restarts its delay while active state remains durable."""
     start = datetime(2026, 8, 24, 12, tzinfo=UTC)
     set_now(start)
     hass.states.set("sensor.test", "unavailable")
     first = make_manager(hass, entry)
-    due = first.records["unavailable:sensor.test"].due_at
+    alert_id = "unavailable:sensor.test"
+    due = first.records[alert_id].due_at
+    assert alert_id not in hass.stores["alert_manager"]["alerts"]
     run(first.async_unload())
 
     set_now(start + timedelta(seconds=300))
     second = make_manager(hass, entry)
-    assert second.records["unavailable:sensor.test"].due_at == due
+    assert second.records[alert_id].due_at == due + timedelta(seconds=300)
     assert_record_index(second)
-    set_now(start + timedelta(seconds=901))
+    set_now(second.records[alert_id].due_at + timedelta(seconds=1))
     run(second.async_evaluate_entity("sensor.test"))
     started_before = len(
         [item for item in hass.bus.fired if item[0] == EVENT_ALERT_STARTED]
     )
     run(second.async_unload())
     third = make_manager(hass, entry)
-    assert third.records["unavailable:sensor.test"].status is AlertStatus.ACTIVE
+    assert third.records[alert_id].status is AlertStatus.ACTIVE
     assert_record_index(third)
     started_after = len(
         [item for item in hass.bus.fired if item[0] == EVENT_ALERT_STARTED]
@@ -1482,7 +1486,7 @@ def test_configuration_write_failure_restores_runtime_state(hass, entry):
     before_config = manager.get_config()
     before_records = deepcopy(manager.records)
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("storage unavailable")
 
     manager.storage.async_save = fail_save
@@ -1508,7 +1512,7 @@ def test_runtime_write_failure_is_retried_without_another_state_change(
 
     original_save = manager.storage.async_save
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("storage unavailable")
 
     manager.storage.async_save = fail_save
@@ -1547,7 +1551,7 @@ def test_rule_write_failures_restore_create_update_and_delete(hass, entry):
     }
     original_save = manager.storage.async_save
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("storage unavailable")
 
     manager.storage.async_save = fail_save

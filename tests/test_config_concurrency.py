@@ -23,7 +23,7 @@ def test_failed_config_mutation_cannot_rollback_concurrent_rule_create(
         release_first_save = asyncio.Event()
         save_count = 0
 
-        async def controlled_save(_config, _records) -> None:
+        async def controlled_save(_config, _records, **_kwargs) -> None:
             nonlocal save_count
             save_count += 1
             if save_count == 1:

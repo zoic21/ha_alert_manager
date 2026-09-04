@@ -14,6 +14,7 @@ import os
 import re
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -745,8 +746,11 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     )
     result["scanned_at"] = dt_util.now().isoformat()
     await Store[dict[str, Any]](
-        hass, COHERENCE_STORAGE_VERSION, COHERENCE_STORAGE_KEY
-    ).async_save(result)
+        hass,
+        COHERENCE_STORAGE_VERSION,
+        COHERENCE_STORAGE_KEY,
+        serialize_in_event_loop=False,
+    ).async_save(deepcopy(result))
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
     return result
@@ -773,7 +777,10 @@ async def async_load_coherence_result(
 ) -> dict[str, Any] | None:
     """Restore the latest valid coherence report from Home Assistant storage."""
     result = await Store[dict[str, Any]](
-        hass, COHERENCE_STORAGE_VERSION, COHERENCE_STORAGE_KEY
+        hass,
+        COHERENCE_STORAGE_VERSION,
+        COHERENCE_STORAGE_KEY,
+        serialize_in_event_loop=False,
     ).async_load()
     if (
         not isinstance(result, dict)

@@ -20,6 +20,8 @@ from .const import (
     EVENT_ALERT_UNACKNOWLEDGED,
     EVENT_DEVICE_ALERT_STARTED,
     LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS,
+    PENDING_PERSISTENCE_DELAY_SECONDS,
+    PENDING_PERSISTENCE_RETRY_SECONDS,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
@@ -234,14 +236,100 @@ class _StateMixin:
         """Persist runtime first, then archive without coupling business success."""
         self._cancel_live_message_flush()
         if self.recovery_active:
+            self._cancel_pending_persistence_timer()
             self._immediate_state_save_required = False
             self._variation_baselines_dirty = False
             return
-        self.storage.pack_runtime = self._pack_runtime
-        await self.storage.async_save(self.config, self.records)
+        await self._async_save_main_store()
         self._immediate_state_save_required = False
         self._variation_baselines_dirty = False
         await self._async_flush_history()
+
+    async def _async_save_main_store(self) -> None:
+        """Persist one main-store snapshot with the shared pending policy."""
+        self.storage.pack_runtime = self._pack_runtime
+        await self.storage.async_save(
+            self.config,
+            self.records,
+            pending_before=dt_util.now()
+            - timedelta(seconds=PENDING_PERSISTENCE_DELAY_SECONDS),
+            include_all_pending=not self.monitoring_enabled,
+        )
+        self._refresh_pending_persistence_timer()
+
+    def _refresh_pending_persistence_timer(self) -> None:
+        """Schedule one write for the earliest fresh, long-lived pending record."""
+        if self._unloading or self.recovery_active or not self.monitoring_enabled:
+            self._cancel_pending_persistence_timer()
+            return
+        persisted_ids = self.storage.persisted_alert_ids
+        deadline: datetime | None = None
+        for record in self.records.values():
+            if (
+                record.status is not AlertStatus.PENDING
+                or record.details.id in persisted_ids
+            ):
+                continue
+            persist_at = record.detected_at.astimezone(UTC) + timedelta(
+                seconds=PENDING_PERSISTENCE_DELAY_SECONDS
+            )
+            if record.due_at.astimezone(UTC) <= persist_at:
+                continue
+            deadline = persist_at if deadline is None else min(deadline, persist_at)
+        if deadline is None:
+            self._cancel_pending_persistence_timer()
+            return
+        if (
+            self._pending_persistence_timer is not None
+            and self._pending_persistence_deadline == deadline
+        ):
+            return
+        self._schedule_pending_persistence_timer(deadline)
+
+    def _schedule_pending_persistence_timer(self, deadline: datetime) -> None:
+        """Replace the pending persistence timer with one bounded deadline."""
+        self._cancel_pending_persistence_timer()
+
+        @callback
+        def timer_due(_now: datetime) -> None:
+            self._pending_persistence_timer = None
+            self._pending_persistence_deadline = None
+            if self._unloading or self.recovery_active:
+                return
+            self.entry.async_create_task(
+                self.hass,
+                self._async_flush_mature_pending(),
+                name="alert_manager pending persistence",
+            )
+
+        self._pending_persistence_deadline = deadline.astimezone(UTC)
+        self._pending_persistence_timer = async_track_point_in_utc_time(
+            self.hass,
+            timer_due,
+            self._pending_persistence_deadline,
+        )
+
+    async def _async_flush_mature_pending(self) -> None:
+        """Persist still-pending long occurrences and retry transient failures."""
+        try:
+            async with self._config_mutation_lock:
+                if self._unloading or self.recovery_active:
+                    return
+                await self._async_save_state()
+        except Exception:
+            _LOGGER.exception("Unable to persist long-lived pending alerts")
+            if not self._unloading and not self.recovery_active:
+                self._schedule_pending_persistence_timer(
+                    dt_util.now().astimezone(UTC)
+                    + timedelta(seconds=PENDING_PERSISTENCE_RETRY_SECONDS)
+                )
+
+    def _cancel_pending_persistence_timer(self) -> None:
+        """Cancel the shared fresh-pending persistence deadline."""
+        if self._pending_persistence_timer is not None:
+            self._pending_persistence_timer()
+            self._pending_persistence_timer = None
+        self._pending_persistence_deadline = None
 
     def _schedule_live_message_flush(self) -> None:
         """Persist and publish the latest live messages at a bounded frequency."""

@@ -439,7 +439,7 @@ def test_pending_visibility_timer_still_publishes_without_store_change(hass, ent
 
 
 def test_jinja_dependencies_are_reverse_indexed_and_batched(hass, entry):
-    """One dependency event evaluates all sources with a single Store write."""
+    """One dependency event evaluates all sources without storing fresh pending."""
 
     async def scenario():
         hass.states.set("sensor.one", "on")
@@ -470,7 +470,7 @@ def test_jinja_dependencies_are_reverse_indexed_and_batched(hass, entry):
         rule_id = manager.config["rules"][0]["id"]
         assert f"rule:{rule_id}:sensor.one" in manager.records
         assert f"rule:{rule_id}:sensor.two" in manager.records
-        assert hass.store_save_count == before_saves + 1
+        assert hass.store_save_count == before_saves
         assert entry.created_task_names[-1] == "alert_manager state-change batch"
         assert entry.created_task_eager_starts[-1] is False
 
