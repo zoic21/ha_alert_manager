@@ -397,6 +397,8 @@ class Store:
     def __init__(self, hass, version, key, **kwargs):
         self.hass = hass
         self.key = key
+        self.options = kwargs
+        self.hass.store_options[key] = kwargs
 
     async def async_load(self):
         return self.hass.stores.get(self.key)
@@ -636,6 +638,7 @@ class FakeHass:
         self.states = FakeStates()
         self.data = {}
         self.stores = {}
+        self.store_options = {}
         self.store_save_count = 0
         self.timers = []
         self.dispatchers = defaultdict(list)

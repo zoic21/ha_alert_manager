@@ -116,6 +116,8 @@ class AlertManager(
         self._coherence_schedule_unsubscribe: Callable[[], None] | None = None
         self._live_message_flush_timer: Callable[[], None] | None = None
         self._live_message_flush_pending = False
+        self._pending_persistence_timer: Callable[[], None] | None = None
+        self._pending_persistence_deadline: datetime | None = None
         self._immediate_state_save_required = False
         self._recovery_active = False
         self._config_backup_schedule_unsubscribe: Callable[[], None] | None = None
@@ -256,6 +258,7 @@ class AlertManager(
         self._cancel_template_dependency_timers()
         self._cancel_all_pack_rechecks()
         self._unloading = True
+        self._cancel_pending_persistence_timer()
         self._cancel_config_backup_schedule()
         if self._coherence_schedule_unsubscribe is not None:
             self._coherence_schedule_unsubscribe()

@@ -126,6 +126,7 @@ class NotificationRuntime:
             NOTIFICATION_STORAGE_VERSION,
             NOTIFICATION_STORAGE_KEY,
             atomic_writes=True,
+            serialize_in_event_loop=False,
         )
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)

@@ -128,7 +128,7 @@ def test_monitoring_persistence_failure_restores_state_and_timer(hass, entry):
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("storage unavailable")
 
     manager.storage.async_save = fail_save

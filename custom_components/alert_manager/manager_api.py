@@ -354,7 +354,7 @@ class _ApiMixin:
             if history_changed:
                 await self.history_storage.async_save(self.history)
                 history_saved = True
-            await self.storage.async_save(self.config, self.records)
+            await self._async_save_main_store()
         except Exception:
             self.config = previous_config
             self.history = previous_history
@@ -714,7 +714,7 @@ class _ApiMixin:
                 self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self.history_storage.async_save([])
                 history_cleared = True
-                await self.storage.async_save(self.config, self.records)
+                await self._async_save_main_store()
                 self._immediate_state_save_required = False
                 self._variation_baselines_dirty = False
             except Exception:

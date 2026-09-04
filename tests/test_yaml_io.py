@@ -494,7 +494,7 @@ def test_import_write_failure_rolls_back_configuration_and_runtime(hass, entry):
     before_config = manager.get_config()
     before_records = deepcopy(manager.records)
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("storage unavailable")
 
     manager.storage.async_save = fail_save

@@ -174,7 +174,9 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     assert result is expected
     assert result["scanned_at"] == "2026-08-24T12:00:00+00:00"
     assert hass.data[DATA_COHERENCE_RESULT] is expected
-    assert hass.stores[COHERENCE_STORAGE_KEY] is expected
+    assert hass.stores[COHERENCE_STORAGE_KEY] == expected
+    assert hass.stores[COHERENCE_STORAGE_KEY] is not expected
+    assert hass.store_options[COHERENCE_STORAGE_KEY]["serialize_in_event_loop"] is False
     assert hass.store_save_count == 1
     assert sensor.native_value == 2
     assert sensor.writes == 1

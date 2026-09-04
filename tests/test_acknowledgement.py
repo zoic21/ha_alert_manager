@@ -362,7 +362,7 @@ def test_failed_persistence_rolls_back_acknowledgement(hass, entry, set_now):
     manager, alert_id = active_manager(hass, entry, set_now)
     original_save = manager.storage.async_save
 
-    async def fail_save(_config, _records):
+    async def fail_save(_config, _records, **_kwargs):
         raise OSError("disk full")
 
     manager.storage.async_save = fail_save
