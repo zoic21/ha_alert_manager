@@ -17,8 +17,7 @@ export function newNotificationProfileDraft() {
     id: generatedId,
     name: "",
     enabled: true,
-    primary_targets: [],
-    fallback_targets: [],
+    targets: [],
     label_ids: [],
     default_policy: {
       notify_on_start: true,
@@ -32,8 +31,7 @@ export function newNotificationProfileDraft() {
 export function cloneNotificationProfile(profile) {
   return {
     ...profile,
-    primary_targets: [...(profile.primary_targets ?? [])],
-    fallback_targets: [...(profile.fallback_targets ?? [])],
+    targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
     exceptions: (profile.exceptions ?? []).map((exception) => ({ ...exception })),
@@ -41,7 +39,7 @@ export function cloneNotificationProfile(profile) {
 }
 
 export function renderNotificationProfiles({ profiles, busy, t }) {
-  return `<ha-card outlined class="panel settings-card notification-profiles-card">
+  return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
@@ -60,7 +58,7 @@ function renderProfileRow(profile, busy, t) {
   return `<div class="notification-profile-row">
     <div class="notification-profile-summary">
       <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span></div>
-      <small>${esc(t("notifications.targets_summary", { count: profile.primary_targets.length, fallback: profile.fallback_targets.length }))}</small>
+      <small>${esc(t("notifications.targets_summary", { count: profile.targets.length }))}</small>
       <small>${esc(t("notifications.policy_summary", {
         start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
         resolved: policy.notify_on_resolved ? t("notifications.yes") : t("notifications.no"),
@@ -77,22 +75,23 @@ function renderProfileRow(profile, busy, t) {
 }
 
 export function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, t,
+  draft, busy, useBottomSheet, validationError = null, t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
-  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+  const content = `${validationError ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>` : ""}<div class="fields configuration-drawer-fields notification-profile-fields">
     <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
     <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
-    <div class="field full"><span class="field-label">${esc(t("notifications.primary_targets"))}</span><ha-selector id="notification-primary-targets"></ha-selector><small>${esc(t("notifications.primary_targets_help"))}</small></div>
-    <div class="field full"><span class="field-label">${esc(t("notifications.fallback_targets"))}</span><ha-selector id="notification-fallback-targets"></ha-selector><small>${esc(t("notifications.fallback_help"))}</small></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
   <h3>${esc(t("notifications.defaults"))}</h3>
   <div class="notification-policy-grid">
-    ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
-    ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
-    <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+    <div class="notification-policy-switches">
+      ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
+      ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
+    </div>
+    <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
   </div>
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <div class="notification-exception-list">${draft.exceptions.length
@@ -125,7 +124,7 @@ function renderException(exception, index, t) {
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div>
+      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div></div>
     </div>
   </ha-card>`;
 }
@@ -150,16 +149,10 @@ export function hydrateNotificationProfileControls(panel, { packs, rules }) {
   if (!draft) return;
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
   panel._configureSelector(
-    "notification-primary-targets",
+    "notification-targets",
     notifySelector,
-    draft.primary_targets,
-    (value) => { draft.primary_targets = panel._multipleSelectorValue(value, draft.primary_targets); },
-  );
-  panel._configureSelector(
-    "notification-fallback-targets",
-    notifySelector,
-    draft.fallback_targets,
-    (value) => { draft.fallback_targets = panel._multipleSelectorValue(value, draft.fallback_targets); },
+    draft.targets,
+    (value) => { draft.targets = panel._multipleSelectorValue(value, draft.targets); },
   );
   panel._configureSelector(
     "notification-labels",
@@ -258,11 +251,7 @@ export function captureNotificationProfileDraft(panel) {
 
 export function notificationProfileValidationError(draft, t) {
   if (!draft.name) return t("notifications.validation.name");
-  if (!draft.primary_targets.length) return t("notifications.validation.primary");
-  const targets = new Set(draft.primary_targets);
-  if (draft.fallback_targets.some((target) => targets.has(target))) {
-    return t("notifications.validation.duplicate_target");
-  }
+  if (!draft.targets.length) return t("notifications.validation.targets");
   const reminder = draft.default_policy.reminder_interval;
   if (invalidReminder(reminder)) {
     return t("notifications.validation.reminder");
@@ -320,6 +309,7 @@ function openNotificationProfile(panel, profile = null) {
     ? cloneNotificationProfile(profile)
     : newNotificationProfileDraft();
   panel._notificationProfileId = profile?.id ?? null;
+  panel._notificationProfileValidationError = null;
   panel._configurationDrawer = { kind: "notification" };
   panel._refreshSettingsConfigurationDrawer();
 }
@@ -345,10 +335,13 @@ export async function handleNotificationProfileAction(action, button) {
       (key) => this._t(key),
     );
     if (error) {
-      this._notice = { kind: "error", text: error };
-      this._refreshUiState();
+      this._notificationProfileValidationError = error;
+      this._refreshSettingsConfigurationDrawer();
+      this.shadowRoot.querySelector(".configuration-drawer .side-drawer-form")
+        ?.scrollTo?.({ top: 0, behavior: "smooth" });
       return true;
     }
+    this._notificationProfileValidationError = null;
     const profile = cloneNotificationProfile(this._notificationProfileDraft);
     const profiles = (this._settingsDraft.notification_profiles ?? []).map(
       cloneNotificationProfile,
@@ -415,6 +408,7 @@ export async function handleNotificationProfileAction(action, button) {
     this._configurationDrawer = null;
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
+    this._notificationProfileValidationError = null;
     this._refreshSettingsConfigurationDrawer();
     return true;
   }

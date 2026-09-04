@@ -37,8 +37,7 @@ _PROFILE_KEYS = {
     "id",
     "name",
     "enabled",
-    "primary_targets",
-    "fallback_targets",
+    "targets",
     "label_ids",
     "default_policy",
     "exceptions",
@@ -97,8 +96,7 @@ class NotificationManager:
         if profile is None:
             raise ValueError(f"Unknown notification profile id: {profile_id}")
         return await self.async_send(
-            primary_targets=profile["primary_targets"],
-            fallback_targets=profile["fallback_targets"],
+            targets=profile["targets"],
             title=self.text("test_title", _TEST_TITLE),
             message=self.text("test_message", _TEST_MESSAGE),
             click_url="/alert-manager",
@@ -107,32 +105,20 @@ class NotificationManager:
     async def async_send(
         self,
         *,
-        primary_targets: list[str],
-        fallback_targets: list[str],
+        targets: list[str],
         title: str,
         message: str,
         click_url: str | None = None,
     ) -> dict[str, Any]:
-        """Send to primaries, using fallbacks only when every primary fails."""
+        """Send independently to every configured notification entity."""
         delivered, failed = await self._async_send_targets(
-            primary_targets,
+            targets,
             title=title,
             message=message,
             click_url=click_url,
         )
-        used_fallback = not delivered and bool(fallback_targets)
-        if used_fallback:
-            fallback_delivered, fallback_failed = await self._async_send_targets(
-                fallback_targets,
-                title=title,
-                message=message,
-                click_url=click_url,
-            )
-            delivered.extend(fallback_delivered)
-            failed.extend(fallback_failed)
         return {
             "success": bool(delivered),
-            "used_fallback": used_fallback,
             "delivered_targets": delivered,
             "failed_targets": failed,
         }
@@ -145,7 +131,7 @@ class NotificationManager:
         message: str,
         click_url: str | None,
     ) -> tuple[list[str], list[dict[str, str]]]:
-        """Deliver one stage concurrently and isolate known HA service failures."""
+        """Deliver one batch concurrently and isolate known HA service failures."""
         results = await asyncio.gather(
             *(
                 self._async_send_target(
@@ -314,19 +300,7 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(enabled, bool):
         raise ValueError(f"{path}.enabled must be a boolean")
 
-    primary_targets = _validate_notify_targets(
-        value.get("primary_targets"), f"{path}.primary_targets", required=True
-    )
-    fallback_targets = _validate_notify_targets(
-        value.get("fallback_targets", []),
-        f"{path}.fallback_targets",
-        required=False,
-    )
-    overlap = set(primary_targets) & set(fallback_targets)
-    if overlap:
-        raise ValueError(
-            f"{path}.fallback_targets duplicates primary target: {sorted(overlap)[0]}"
-        )
+    targets = _validate_notify_targets(value.get("targets"), f"{path}.targets")
 
     label_ids = _validate_string_list(
         value.get("label_ids", []),
@@ -362,8 +336,7 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
         "id": profile_id,
         "name": name,
         "enabled": enabled,
-        "primary_targets": primary_targets,
-        "fallback_targets": fallback_targets,
+        "targets": targets,
         "label_ids": label_ids,
         "default_policy": default_policy,
         "exceptions": exceptions,
@@ -424,10 +397,10 @@ def _validate_policy(value: Any, path: str, *, partial: bool) -> dict[str, Any]:
     return result
 
 
-def _validate_notify_targets(value: Any, path: str, *, required: bool) -> list[str]:
+def _validate_notify_targets(value: Any, path: str) -> list[str]:
     """Validate a bounded ordered list of native notify entity ids."""
     targets = _validate_string_list(value, path, maximum=MAX_NOTIFICATION_TARGETS)
-    if required and not targets:
+    if not targets:
         raise ValueError(f"{path} must contain at least one notify entity")
     for entity_id in targets:
         if not valid_entity_id(entity_id) or not entity_id.startswith("notify."):

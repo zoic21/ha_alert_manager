@@ -223,8 +223,6 @@
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
       "exceptions_help": "Les surcharges sont appliquées dans cet ordre : pack, première étiquette correspondante, puis règle.",
-      "fallback_help": "Utilisées uniquement si toutes les destinations principales signalent une erreur d’envoi.",
-      "fallback_targets": "Destinations de secours",
       "grouped_alerts": "{count} alertes",
       "help": "Route les alertes groupées vers les entités de notification natives de Home Assistant.",
       "labels": "Étiquettes du profil",
@@ -242,8 +240,6 @@
         "true": "Oui"
       },
       "policy_summary": "Nouvelle : {start} · Résolue : {resolved} · Rappel : {reminder} · Exceptions : {exceptions}",
-      "primary_targets": "Destinations principales",
-      "primary_targets_help": "Chaque destination principale est essayée indépendamment.",
       "reminder": "Intervalle de rappel",
       "reminder_help": "Laissez vide pour désactiver les rappels.",
       "reminder_modes": {
@@ -262,7 +258,9 @@
         "rule": "Règle personnalisée"
       },
       "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
-      "targets_summary": "{count} destination(s) principale(s) · {fallback} secours",
+      "targets": "Entités de notification",
+      "targets_help": "Chaque entité sélectionnée reçoit la notification indépendamment.",
+      "targets_summary": "Entités de notification : {count}",
       "test": "Tester",
       "test_failed": "Échec du test pour : {targets}",
       "test_message": "Ce message confirme que le profil de notification fonctionne.",
@@ -270,10 +268,9 @@
       "test_title": "Alert Manager — Notification de test",
       "title": "Notifications",
       "validation": {
-        "duplicate_target": "Une destination de secours ne peut pas être aussi une destination principale.",
         "name": "Saisissez un nom de profil.",
         "override": "Chaque exception doit modifier au moins un réglage.",
-        "primary": "Sélectionnez au moins une entité de notification principale.",
+        "targets": "Sélectionnez au moins une entité de notification.",
         "reminder": "Les intervalles de rappel doivent être des nombres entiers d’au moins 60 secondes.",
         "selector": "Sélectionnez une cible pour chaque exception."
       },
@@ -531,6 +528,7 @@
       "label_exclusions": "Labels exclus des surveillances automatiques",
       "labels_help": "Une règle personnalisée ignore ces labels.",
       "no_delay": "Aucun délai particulier.",
+      "quick_access": "Accès rapide",
       "save": "Enregistrer les paramètres",
       "transfer_help": "L’export ne contient que la configuration persistante. L’import remplace entièrement la configuration actuelle.",
       "transfer_title": "Export et import de configuration",

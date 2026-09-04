@@ -29,8 +29,7 @@ def _profile() -> dict:
         "id": "loic",
         "name": "Loïc",
         "enabled": True,
-        "primary_targets": ["notify.mobile_app_phone"],
-        "fallback_targets": ["notify.mobile_app_tablet"],
+        "targets": ["notify.mobile_app_phone", "notify.mobile_app_tablet"],
         "label_ids": ["important"],
         "default_policy": {
             "notify_on_start": True,
@@ -201,11 +200,9 @@ def test_profile_update_failure_always_resumes_notification_events(hass, entry) 
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ({"primary_targets": ["sensor.invalid"]}, "invalid notify entity"),
-        (
-            {"fallback_targets": ["notify.mobile_app_phone"]},
-            "duplicates primary target",
-        ),
+        ({"targets": ["sensor.invalid"]}, "invalid notify entity"),
+        ({"primary_targets": ["notify.legacy"]}, "Unknown .*primary_targets"),
+        ({"fallback_targets": ["notify.legacy"]}, "Unknown .*fallback_targets"),
         (
             {
                 "exceptions": [
@@ -237,7 +234,7 @@ def test_invalid_profiles_are_rejected(change: dict, message: str) -> None:
     ("field", "value", "maximum"),
     [
         (
-            "primary_targets",
+            "targets",
             "notify.mobile_app_phone",
             MAX_NOTIFICATION_TARGETS,
         ),
@@ -351,37 +348,35 @@ def test_yaml_round_trip_rebinds_rule_exceptions_to_new_rule_ids() -> None:
     assert rule_exception["selector_id"] == imported_rule_id
 
 
-def test_delivery_does_not_use_fallback_when_any_primary_succeeds(hass) -> None:
-    """Fallback is a technical last resort, not a second recipient group."""
+def test_delivery_attempts_every_target_when_one_fails(hass) -> None:
+    """One broken notification entity does not block the other recipients."""
     attempted: list[str] = []
 
     async def send(_domain, _service, _data, **kwargs):
         target = kwargs["target"]["entity_id"]
         attempted.append(target)
-        if target == "notify.primary_failed":
-            raise HomeAssistantError("primary unavailable")
+        if target == "notify.failed":
+            raise HomeAssistantError("destination unavailable")
 
     hass.services.async_call = send
     manager = NotificationManager(hass, lambda: [])
     result = asyncio.run(
         manager.async_send(
-            primary_targets=["notify.primary_failed", "notify.primary_ok"],
-            fallback_targets=["notify.fallback"],
+            targets=["notify.failed", "notify.ok"],
             title="Title",
             message="Message",
         )
     )
 
     assert result["success"] is True
-    assert result["used_fallback"] is False
-    assert result["delivered_targets"] == ["notify.primary_ok"]
-    assert attempted == ["notify.primary_failed", "notify.primary_ok"]
+    assert result["delivered_targets"] == ["notify.ok"]
+    assert attempted == ["notify.failed", "notify.ok"]
 
 
-def test_test_notification_uses_fallback_without_creating_runtime_state(
+def test_test_notification_attempts_all_targets_without_creating_runtime_state(
     hass,
 ) -> None:
-    """The V1 test follows real fallback behavior and remains stateless."""
+    """The profile test follows real delivery behavior and remains stateless."""
     profile = validate_config(
         {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
     )["notification_profiles"][0]
@@ -398,7 +393,6 @@ def test_test_notification_uses_fallback_without_creating_runtime_state(
     result = asyncio.run(manager.async_test_profile("loic"))
 
     assert result["success"] is True
-    assert result["used_fallback"] is True
     assert result["delivered_targets"] == ["notify.mobile_app_tablet"]
     assert [item[0] for item in attempted] == [
         "notify.mobile_app_phone",
@@ -423,8 +417,7 @@ def test_mobile_app_delivery_keeps_click_target_in_transport_layer(
 
     result = asyncio.run(
         manager.async_send(
-            primary_targets=["notify.phone"],
-            fallback_targets=[],
+            targets=["notify.phone"],
             title="Title",
             message="Message",
             click_url="/alert-manager?alert=battery%3Asensor.test",
@@ -439,11 +432,11 @@ def test_mobile_app_delivery_keeps_click_target_in_transport_layer(
     }
 
 
-def test_unexpected_primary_failure_is_isolated_and_uses_fallback(hass) -> None:
+def test_unexpected_target_failure_is_isolated(hass) -> None:
     """A broken notify integration cannot leak into alert lifecycle tasks."""
 
     async def send(_domain, _service, _data, **kwargs):
-        if kwargs["target"]["entity_id"] == "notify.primary":
+        if kwargs["target"]["entity_id"] == "notify.broken":
             raise RuntimeError("broken integration")
 
     hass.services.async_call = send
@@ -451,13 +444,11 @@ def test_unexpected_primary_failure_is_isolated_and_uses_fallback(hass) -> None:
 
     result = asyncio.run(
         manager.async_send(
-            primary_targets=["notify.primary"],
-            fallback_targets=["notify.fallback"],
+            targets=["notify.broken", "notify.working"],
             title="Title",
             message="Message",
         )
     )
 
     assert result["success"] is True
-    assert result["used_fallback"] is True
-    assert result["delivered_targets"] == ["notify.fallback"]
+    assert result["delivered_targets"] == ["notify.working"]

@@ -41,8 +41,7 @@ def _profile(*, reminder_interval: int | None = None) -> dict:
         "id": "profile",
         "name": "Profile",
         "enabled": True,
-        "primary_targets": ["notify.phone"],
-        "fallback_targets": [],
+        "targets": ["notify.phone"],
         "label_ids": [],
         "default_policy": {
             "notify_on_start": True,

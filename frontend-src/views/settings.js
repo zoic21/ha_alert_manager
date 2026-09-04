@@ -18,21 +18,33 @@ import {
   renderNotificationProfiles,
 } from "../components/notification-profiles.js";
 
+const SETTINGS_SECTIONS = [
+  ["alert-display", "settings.alert_display"],
+  ["coherence", "settings.coherence_settings"],
+  ["exclusions", "settings.exclusions"],
+  ["notifications", "notifications.title"],
+  ["history", "settings.history_settings"],
+  ["entity-delay", "settings.entity_delay"],
+  ["transfer", "settings.transfer_title"],
+];
+
 export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
+      notificationProfileValidationError,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
+      ${renderSettingsNavigation(t)}
+      <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
         ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
+      <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
         <div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div>
         <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
@@ -41,7 +53,7 @@ export function renderSettings(context) {
           <small>${esc(t("settings.coherence_ignored_entity_references_help"))}</small>
         </div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
+      <ha-card id="settings-section-exclusions" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
         <div class="settings-wide settings-configuration-actions">
           ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
@@ -53,7 +65,7 @@ export function renderSettings(context) {
         busy,
         t,
       })}
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
+      <ha-card id="settings-section-history" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
@@ -62,10 +74,10 @@ export function renderSettings(context) {
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel settings-card"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+      <ha-card id="settings-section-entity-delay" outlined class="panel settings-card settings-scroll-section"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
         ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
-      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
+      <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
@@ -73,9 +85,14 @@ export function renderSettings(context) {
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
-        notificationProfileDraft, busy, useBottomSheet, t,
+        notificationProfileDraft, notificationProfileValidationError,
+        busy, useBottomSheet, t,
       })}
     </form>`;
+}
+
+export function renderSettingsNavigation(t) {
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 export function renderSettingsConfigurationEntry(id, label, count, t) {
@@ -92,6 +109,7 @@ export function renderSettingsConfigurationDrawer(context) {
       draft: notificationProfileDraft,
       busy,
       useBottomSheet,
+      validationError: context.notificationProfileValidationError,
       t,
     });
   }
@@ -140,6 +158,7 @@ export function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
+      notificationProfileValidationError: this._notificationProfileValidationError,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -315,6 +334,7 @@ export function resetSettingsDraft() {
     this._ignoredReferenceDraft = "";
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
+    this._notificationProfileValidationError = null;
 }
 
 export function ensureSettingsDraft() {
@@ -462,6 +482,7 @@ export function refreshSettingsConfigurationDrawer() {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     notificationProfileDraft: this._notificationProfileDraft,
+    notificationProfileValidationError: this._notificationProfileValidationError,
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
@@ -483,6 +504,14 @@ export function updateSettingsConfigurationCount(id) {
 }
 
 export async function handleSettingsAction(action, button) {
+  if (action === "scroll-settings-section") {
+    const sectionId = button.dataset.sectionId;
+    if (SETTINGS_SECTIONS.some(([id]) => id === sectionId)) {
+      this.shadowRoot.querySelector(`#settings-section-${sectionId}`)
+        ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+    return true;
+  }
   if (action === "save-settings") {
     const form = this.shadowRoot.querySelector("#settings-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();

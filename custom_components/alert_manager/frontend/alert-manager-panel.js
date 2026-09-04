@@ -2293,27 +2293,35 @@ function renderConfigurationDrawer({
 
 function replaceConfigurationDrawer(root, markup) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
+  const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
+    ?? root?.querySelector?.(".configuration-drawer");
+  const scrollTop = currentDrawer?.querySelector?.(".side-drawer-form")?.scrollTop ?? 0;
   if (currentBottomSheet && markup) {
     const template = document.createElement("template");
     template.innerHTML = markup.trim();
     const nextBottomSheet = template.content.querySelector(
       ".side-drawer-bottom-sheet",
     );
-    const currentDrawer = currentBottomSheet.querySelector(
-      ".configuration-drawer",
-    );
     const nextDrawer = nextBottomSheet?.querySelector(
       ".configuration-drawer",
     );
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
+      const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
+      if (nextScroller) nextScroller.scrollTop = scrollTop;
       return;
     }
   }
   currentBottomSheet?.remove?.();
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
-  if (root && markup) root.insertAdjacentHTML("beforeend", markup);
+  if (root && markup) {
+    root.insertAdjacentHTML("beforeend", markup);
+    const nextScroller = root.querySelector?.(
+      ".configuration-drawer .side-drawer-form",
+    );
+    if (nextScroller) nextScroller.scrollTop = scrollTop;
+  }
 }
 
 // Source: frontend-src/components/notification-profiles.js
@@ -2327,8 +2335,7 @@ function newNotificationProfileDraft() {
     id: generatedId,
     name: "",
     enabled: true,
-    primary_targets: [],
-    fallback_targets: [],
+    targets: [],
     label_ids: [],
     default_policy: {
       notify_on_start: true,
@@ -2342,8 +2349,7 @@ function newNotificationProfileDraft() {
 function cloneNotificationProfile(profile) {
   return {
     ...profile,
-    primary_targets: [...(profile.primary_targets ?? [])],
-    fallback_targets: [...(profile.fallback_targets ?? [])],
+    targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
     exceptions: (profile.exceptions ?? []).map((exception) => ({ ...exception })),
@@ -2351,7 +2357,7 @@ function cloneNotificationProfile(profile) {
 }
 
 function renderNotificationProfiles({ profiles, busy, t }) {
-  return `<ha-card outlined class="panel settings-card notification-profiles-card">
+  return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
@@ -2370,7 +2376,7 @@ function renderProfileRow(profile, busy, t) {
   return `<div class="notification-profile-row">
     <div class="notification-profile-summary">
       <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span></div>
-      <small>${esc(t("notifications.targets_summary", { count: profile.primary_targets.length, fallback: profile.fallback_targets.length }))}</small>
+      <small>${esc(t("notifications.targets_summary", { count: profile.targets.length }))}</small>
       <small>${esc(t("notifications.policy_summary", {
         start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
         resolved: policy.notify_on_resolved ? t("notifications.yes") : t("notifications.no"),
@@ -2387,22 +2393,23 @@ function renderProfileRow(profile, busy, t) {
 }
 
 function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, t,
+  draft, busy, useBottomSheet, validationError = null, t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
-  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+  const content = `${validationError ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>` : ""}<div class="fields configuration-drawer-fields notification-profile-fields">
     <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
     <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
-    <div class="field full"><span class="field-label">${esc(t("notifications.primary_targets"))}</span><ha-selector id="notification-primary-targets"></ha-selector><small>${esc(t("notifications.primary_targets_help"))}</small></div>
-    <div class="field full"><span class="field-label">${esc(t("notifications.fallback_targets"))}</span><ha-selector id="notification-fallback-targets"></ha-selector><small>${esc(t("notifications.fallback_help"))}</small></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
   <h3>${esc(t("notifications.defaults"))}</h3>
   <div class="notification-policy-grid">
-    ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
-    ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
-    <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+    <div class="notification-policy-switches">
+      ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
+      ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
+    </div>
+    <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
   </div>
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <div class="notification-exception-list">${draft.exceptions.length
@@ -2435,7 +2442,7 @@ function renderException(exception, index, t) {
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div>
+      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div></div>
     </div>
   </ha-card>`;
 }
@@ -2460,16 +2467,10 @@ function hydrateNotificationProfileControls(panel, { packs, rules }) {
   if (!draft) return;
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
   panel._configureSelector(
-    "notification-primary-targets",
+    "notification-targets",
     notifySelector,
-    draft.primary_targets,
-    (value) => { draft.primary_targets = panel._multipleSelectorValue(value, draft.primary_targets); },
-  );
-  panel._configureSelector(
-    "notification-fallback-targets",
-    notifySelector,
-    draft.fallback_targets,
-    (value) => { draft.fallback_targets = panel._multipleSelectorValue(value, draft.fallback_targets); },
+    draft.targets,
+    (value) => { draft.targets = panel._multipleSelectorValue(value, draft.targets); },
   );
   panel._configureSelector(
     "notification-labels",
@@ -2568,11 +2569,7 @@ function captureNotificationProfileDraft(panel) {
 
 function notificationProfileValidationError(draft, t) {
   if (!draft.name) return t("notifications.validation.name");
-  if (!draft.primary_targets.length) return t("notifications.validation.primary");
-  const targets = new Set(draft.primary_targets);
-  if (draft.fallback_targets.some((target) => targets.has(target))) {
-    return t("notifications.validation.duplicate_target");
-  }
+  if (!draft.targets.length) return t("notifications.validation.targets");
   const reminder = draft.default_policy.reminder_interval;
   if (invalidReminder(reminder)) {
     return t("notifications.validation.reminder");
@@ -2630,6 +2627,7 @@ function openNotificationProfile(panel, profile = null) {
     ? cloneNotificationProfile(profile)
     : newNotificationProfileDraft();
   panel._notificationProfileId = profile?.id ?? null;
+  panel._notificationProfileValidationError = null;
   panel._configurationDrawer = { kind: "notification" };
   panel._refreshSettingsConfigurationDrawer();
 }
@@ -2655,10 +2653,13 @@ async function handleNotificationProfileAction(action, button) {
       (key) => this._t(key),
     );
     if (error) {
-      this._notice = { kind: "error", text: error };
-      this._refreshUiState();
+      this._notificationProfileValidationError = error;
+      this._refreshSettingsConfigurationDrawer();
+      this.shadowRoot.querySelector(".configuration-drawer .side-drawer-form")
+        ?.scrollTo?.({ top: 0, behavior: "smooth" });
       return true;
     }
+    this._notificationProfileValidationError = null;
     const profile = cloneNotificationProfile(this._notificationProfileDraft);
     const profiles = (this._settingsDraft.notification_profiles ?? []).map(
       cloneNotificationProfile,
@@ -2725,6 +2726,7 @@ async function handleNotificationProfileAction(action, button) {
     this._configurationDrawer = null;
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
+    this._notificationProfileValidationError = null;
     this._refreshSettingsConfigurationDrawer();
     return true;
   }
@@ -5300,21 +5302,33 @@ async function handleAutomaticAction(action, button) {
 }
 
 // Source: frontend-src/views/settings.js
+const SETTINGS_SECTIONS = [
+  ["alert-display", "settings.alert_display"],
+  ["coherence", "settings.coherence_settings"],
+  ["exclusions", "settings.exclusions"],
+  ["notifications", "notifications.title"],
+  ["history", "settings.history_settings"],
+  ["entity-delay", "settings.entity_delay"],
+  ["transfer", "settings.transfer_title"],
+];
+
 function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
+      notificationProfileValidationError,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<form id="settings-form" class="stack settings-form">
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
+      ${renderSettingsNavigation(t)}
+      <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
         ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
+      <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
         <div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div>
         <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
@@ -5323,7 +5337,7 @@ function renderSettings(context) {
           <small>${esc(t("settings.coherence_ignored_entity_references_help"))}</small>
         </div>
       </div></ha-card>
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
+      <ha-card id="settings-section-exclusions" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
         <div class="settings-wide settings-configuration-actions">
           ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
@@ -5335,7 +5349,7 @@ function renderSettings(context) {
         busy,
         t,
       })}
-      <ha-card outlined class="panel settings-card"><h2>${esc(t("settings.history_settings"))}</h2>
+      <ha-card id="settings-section-history" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.history_settings"))}</h2>
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
@@ -5344,10 +5358,10 @@ function renderSettings(context) {
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
       </ha-card>
-      <ha-card outlined class="panel settings-card"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
+      <ha-card id="settings-section-entity-delay" outlined class="panel settings-card settings-scroll-section"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
         ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
-      <ha-card outlined class="panel configuration-transfer"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
+      <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
@@ -5355,9 +5369,14 @@ function renderSettings(context) {
       <div class="actions settings-save-actions"><ha-button appearance="accent" variant="brand" data-action="save-settings" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
-        notificationProfileDraft, busy, useBottomSheet, t,
+        notificationProfileDraft, notificationProfileValidationError,
+        busy, useBottomSheet, t,
       })}
     </form>`;
+}
+
+function renderSettingsNavigation(t) {
+  return `<ha-card outlined class="panel settings-navigation"><h2>${esc(t("settings.quick_access"))}</h2><div class="actions settings-navigation-actions">${SETTINGS_SECTIONS.map(([id, key]) => `<ha-button appearance="plain" data-action="scroll-settings-section" data-section-id="${id}">${esc(t(key))}</ha-button>`).join("")}</div></ha-card>`;
 }
 
 function renderSettingsConfigurationEntry(id, label, count, t) {
@@ -5374,6 +5393,7 @@ function renderSettingsConfigurationDrawer(context) {
       draft: notificationProfileDraft,
       busy,
       useBottomSheet,
+      validationError: context.notificationProfileValidationError,
       t,
     });
   }
@@ -5422,6 +5442,7 @@ function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
+      notificationProfileValidationError: this._notificationProfileValidationError,
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -5597,6 +5618,7 @@ function resetSettingsDraft() {
     this._ignoredReferenceDraft = "";
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
+    this._notificationProfileValidationError = null;
 }
 
 function ensureSettingsDraft() {
@@ -5744,6 +5766,7 @@ function refreshSettingsConfigurationDrawer() {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     notificationProfileDraft: this._notificationProfileDraft,
+    notificationProfileValidationError: this._notificationProfileValidationError,
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
@@ -5765,6 +5788,14 @@ function updateSettingsConfigurationCount(id) {
 }
 
 async function handleSettingsAction(action, button) {
+  if (action === "scroll-settings-section") {
+    const sectionId = button.dataset.sectionId;
+    if (SETTINGS_SECTIONS.some(([id]) => id === sectionId)) {
+      this.shadowRoot.querySelector(`#settings-section-${sectionId}`)
+        ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+    return true;
+  }
   if (action === "save-settings") {
     const form = this.shadowRoot.querySelector("#settings-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveSettings();
@@ -6122,6 +6153,17 @@ const settingsStyles = `
     display: grid;
     gap: 18px;
   }
+  .settings-navigation {
+    display: grid;
+    gap: 10px;
+  }
+  .settings-navigation-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .settings-scroll-section {
+    scroll-margin-block-start: 16px;
+  }
   .settings-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6275,7 +6317,23 @@ const settingsStyles = `
     gap: 16px;
   }
   .notification-policy-grid {
+    align-items: stretch;
     margin-bottom: 8px;
+  }
+  .notification-policy-switches {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .notification-policy-switches .field {
+    justify-content: center;
+  }
+  .notification-policy-reminder {
+    height: 100%;
+  }
+  .notification-profile-error {
+    display: block;
+    margin-bottom: 16px;
   }
   .notification-exceptions-header {
     align-items: flex-start;
@@ -6285,6 +6343,19 @@ const settingsStyles = `
     display: grid;
     gap: 12px;
     padding: 12px;
+  }
+  .notification-exception-reminder.has-custom-value {
+    grid-column: 1 / -1;
+  }
+  .notification-exception-reminder-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+  }
+  .notification-exception-reminder.has-custom-value
+    .notification-exception-reminder-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .notification-exception h3,
   .notification-exceptions-header h3,
@@ -7075,6 +7146,10 @@ const responsiveStyles = `
     .notification-profile-fields,
     .notification-policy-grid,
     .notification-exception-grid {
+      grid-template-columns: 1fr;
+    }
+    .notification-exception-reminder.has-custom-value
+      .notification-exception-reminder-controls {
       grid-template-columns: 1fr;
     }
     .rule-value-row {

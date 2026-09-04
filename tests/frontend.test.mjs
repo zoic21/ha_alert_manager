@@ -3082,8 +3082,7 @@ test("deleting a notification profile saves only profiles", async () => {
     id: "phone",
     name: "Phone",
     enabled: true,
-    primary_targets: ["notify.phone"],
-    fallback_targets: [],
+    targets: ["notify.phone"],
     label_ids: [],
     default_policy: {
       notify_on_start: true,

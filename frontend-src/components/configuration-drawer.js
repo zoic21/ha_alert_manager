@@ -118,25 +118,33 @@ export function renderConfigurationDrawer({
 
 export function replaceConfigurationDrawer(root, markup) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
+  const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
+    ?? root?.querySelector?.(".configuration-drawer");
+  const scrollTop = currentDrawer?.querySelector?.(".side-drawer-form")?.scrollTop ?? 0;
   if (currentBottomSheet && markup) {
     const template = document.createElement("template");
     template.innerHTML = markup.trim();
     const nextBottomSheet = template.content.querySelector(
       ".side-drawer-bottom-sheet",
     );
-    const currentDrawer = currentBottomSheet.querySelector(
-      ".configuration-drawer",
-    );
     const nextDrawer = nextBottomSheet?.querySelector(
       ".configuration-drawer",
     );
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
+      const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
+      if (nextScroller) nextScroller.scrollTop = scrollTop;
       return;
     }
   }
   currentBottomSheet?.remove?.();
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
-  if (root && markup) root.insertAdjacentHTML("beforeend", markup);
+  if (root && markup) {
+    root.insertAdjacentHTML("beforeend", markup);
+    const nextScroller = root.querySelector?.(
+      ".configuration-drawer .side-drawer-form",
+    );
+    if (nextScroller) nextScroller.scrollTop = scrollTop;
+  }
 }

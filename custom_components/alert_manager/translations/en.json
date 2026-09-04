@@ -223,8 +223,6 @@
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
       "exceptions_help": "Overrides are applied in this order: pack, first matching label, then rule.",
-      "fallback_help": "Used only when every primary destination reports a delivery error.",
-      "fallback_targets": "Fallback destinations",
       "grouped_alerts": "{count} alerts",
       "help": "Route grouped alerts to native Home Assistant notify entities.",
       "labels": "Profile labels",
@@ -242,8 +240,6 @@
         "true": "Yes"
       },
       "policy_summary": "New: {start} · Resolved: {resolved} · Reminder: {reminder} · Exceptions: {exceptions}",
-      "primary_targets": "Primary destinations",
-      "primary_targets_help": "Every primary destination is attempted independently.",
       "reminder": "Reminder interval",
       "reminder_help": "Leave empty to disable reminders.",
       "reminder_modes": {
@@ -262,7 +258,9 @@
         "rule": "Custom rule"
       },
       "started_title": "Alert Manager — {count} new alert(s)",
-      "targets_summary": "{count} primary destination(s) · {fallback} fallback(s)",
+      "targets": "Notification entities",
+      "targets_help": "Every selected entity receives the notification independently.",
+      "targets_summary": "Notification entities: {count}",
       "test": "Test",
       "test_failed": "Test failed for: {targets}",
       "test_message": "This confirms that the notification profile works.",
@@ -270,10 +268,9 @@
       "test_title": "Alert Manager — Test notification",
       "title": "Notifications",
       "validation": {
-        "duplicate_target": "A fallback destination cannot also be a primary destination.",
         "name": "Enter a profile name.",
         "override": "Each exception must override at least one setting.",
-        "primary": "Select at least one primary notify entity.",
+        "targets": "Select at least one notification entity.",
         "reminder": "Reminder intervals must be whole numbers of at least 60 seconds.",
         "selector": "Select a target for every exception."
       },
@@ -531,6 +528,7 @@
       "label_exclusions": "Labels excluded from automatic monitoring",
       "labels_help": "Custom rules ignore these labels.",
       "no_delay": "No entity-specific delays.",
+      "quick_access": "Quick access",
       "save": "Save settings",
       "transfer_help": "Export contains only persistent configuration. Import replaces the complete current configuration.",
       "transfer_title": "Configuration export and import",

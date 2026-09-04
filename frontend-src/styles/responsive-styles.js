@@ -210,6 +210,10 @@ export const responsiveStyles = `
     .notification-exception-grid {
       grid-template-columns: 1fr;
     }
+    .notification-exception-reminder.has-custom-value
+      .notification-exception-reminder-controls {
+      grid-template-columns: 1fr;
+    }
     .rule-value-row {
       grid-template-columns: 1fr;
     }

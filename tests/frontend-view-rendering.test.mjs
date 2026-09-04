@@ -15,7 +15,10 @@ import {
 } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import { renderOverview } from "../frontend-src/views/overview.js";
-import { renderSettings } from "../frontend-src/views/settings.js";
+import {
+  handleSettingsAction,
+  renderSettings,
+} from "../frontend-src/views/settings.js";
 
 const t = (key) => key;
 
@@ -145,7 +148,12 @@ test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
 });
 
 test("updating a mobile configuration drawer preserves its native bottom sheet", () => {
-  const nextDrawer = {};
+  const nextScroller = { scrollTop: 0 };
+  const nextDrawer = {
+    querySelector: (selector) => (
+      selector === ".side-drawer-form" ? nextScroller : null
+    ),
+  };
   const nextBottomSheet = {
     querySelector: (selector) => (
       selector === ".configuration-drawer" ? nextDrawer : null
@@ -169,7 +177,11 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
   let replacement;
   let bottomSheetRemoved = false;
   let fallbackInserted = false;
+  const currentScroller = { scrollTop: 246 };
   const currentDrawer = {
+    querySelector: (selector) => (
+      selector === ".side-drawer-form" ? currentScroller : null
+    ),
     replaceWith: (node) => { replacement = node; },
   };
   const currentBottomSheet = {
@@ -197,6 +209,7 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
   assert.equal(replacement, nextDrawer);
   assert.equal(bottomSheetRemoved, false);
   assert.equal(fallbackInserted, false);
+  assert.equal(nextScroller.scrollTop, 246);
   assert.match(template.markup, /^<ha-resizable-bottom-sheet/);
 });
 
@@ -433,6 +446,9 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   });
 
   assert.match(markup, /id="global-delay"/);
+  assert.match(markup, /class="panel settings-navigation"/);
+  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 7);
+  assert.match(markup, /id="settings-section-notifications"/);
   assert.match(markup, /coherence-scan-esphome[^>]*checked/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
@@ -441,6 +457,29 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
   assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
   assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
+});
+
+test("settings quick access scrolls smoothly to a known section", async () => {
+  let scrollOptions;
+  const section = {
+    scrollIntoView: (options) => { scrollOptions = options; },
+  };
+  const panel = {
+    shadowRoot: {
+      querySelector: (selector) => (
+        selector === "#settings-section-notifications" ? section : null
+      ),
+    },
+  };
+
+  const handled = await handleSettingsAction.call(
+    panel,
+    "scroll-settings-section",
+    { dataset: { sectionId: "notifications" } },
+  );
+
+  assert.equal(handled, true);
+  assert.deepEqual(scrollOptions, { behavior: "smooth", block: "start" });
 });
 
 test("automatic backups stay in settings without a recovery banner", () => {

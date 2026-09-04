@@ -20,8 +20,7 @@ const profile = {
   id: "owner",
   name: "Owner",
   enabled: true,
-  primary_targets: ["notify.phone"],
-  fallback_targets: ["notify.tablet"],
+  targets: ["notify.phone", "notify.tablet"],
   label_ids: [],
   default_policy: {
     notify_on_start: true,
@@ -57,11 +56,69 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
     t,
   });
 
-  assert.match(markup, /id="notification-primary-targets"/);
+  assert.match(markup, /id="notification-targets"/);
   assert.match(markup, /data-notification-exception="0"/);
+  assert.match(markup, /notification-policy-switches[\s\S]*notification-policy-reminder/);
   assert.match(markup, /data-action="save-notification-profile"/);
   assert.doesNotMatch(markup, /data-options=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
+});
+
+test("custom exception reminders align their mode and value side by side", () => {
+  const draft = structuredClone(profile);
+  draft.exceptions[0].reminder_interval = 300;
+
+  const markup = renderNotificationProfileDrawer({
+    draft,
+    busy: false,
+    useBottomSheet: false,
+    t,
+  });
+
+  assert.match(markup, /notification-exception-reminder has-custom-value/);
+  assert.match(markup, /notification-exception-reminder-controls[\s\S]*notification-exception-reminder-mode-0[\s\S]*notification-exception-reminder-0/);
+});
+
+test("notification validation is rendered inside the open drawer", () => {
+  const markup = renderNotificationProfileDrawer({
+    draft: newNotificationProfileDraft(),
+    busy: false,
+    useBottomSheet: false,
+    validationError: "Select one entity",
+    t,
+  });
+
+  assert.match(markup, /<ha-alert class="notification-profile-error" alert-type="error">Select one entity<\/ha-alert>/);
+});
+
+test("saving without an entity refreshes the drawer and reveals the error", async () => {
+  const draft = newNotificationProfileDraft();
+  draft.name = "Owner";
+  let refreshes = 0;
+  let scrollOptions;
+  const panel = {
+    _notificationProfileDraft: draft,
+    _notificationProfileId: null,
+    _t: t,
+    _refreshSettingsConfigurationDrawer: () => { refreshes += 1; },
+    shadowRoot: {
+      querySelector: (selector) => (
+        selector === ".configuration-drawer .side-drawer-form"
+          ? { scrollTo: (options) => { scrollOptions = options; } }
+          : null
+      ),
+    },
+  };
+
+  await handleNotificationProfileAction.call(
+    panel,
+    "save-notification-profile",
+    { dataset: {} },
+  );
+
+  assert.equal(panel._notificationProfileValidationError, "notifications.validation.targets");
+  assert.equal(refreshes, 1);
+  assert.deepEqual(scrollOptions, { top: 0, behavior: "smooth" });
 });
 
 test("notification exception changes refresh only the settings drawer", async () => {
@@ -104,14 +161,14 @@ test("notification selector options are hydrated directly from view data", () =>
   }]);
 });
 
-test("new profiles default to a small valid policy but require a destination", () => {
+test("new profiles default to a small valid policy but require an entity", () => {
   const draft = newNotificationProfileDraft();
   draft.name = "Owner";
   assert.equal(
     notificationProfileValidationError(draft, t),
-    "notifications.validation.primary",
+    "notifications.validation.targets",
   );
-  draft.primary_targets = ["notify.phone"];
+  draft.targets = ["notify.phone"];
   assert.equal(notificationProfileValidationError(draft, t), null);
 });
 

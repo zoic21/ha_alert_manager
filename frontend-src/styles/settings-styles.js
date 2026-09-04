@@ -18,6 +18,17 @@ export const settingsStyles = `
     display: grid;
     gap: 18px;
   }
+  .settings-navigation {
+    display: grid;
+    gap: 10px;
+  }
+  .settings-navigation-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .settings-scroll-section {
+    scroll-margin-block-start: 16px;
+  }
   .settings-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -171,7 +182,23 @@ export const settingsStyles = `
     gap: 16px;
   }
   .notification-policy-grid {
+    align-items: stretch;
     margin-bottom: 8px;
+  }
+  .notification-policy-switches {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .notification-policy-switches .field {
+    justify-content: center;
+  }
+  .notification-policy-reminder {
+    height: 100%;
+  }
+  .notification-profile-error {
+    display: block;
+    margin-bottom: 16px;
   }
   .notification-exceptions-header {
     align-items: flex-start;
@@ -181,6 +208,19 @@ export const settingsStyles = `
     display: grid;
     gap: 12px;
     padding: 12px;
+  }
+  .notification-exception-reminder.has-custom-value {
+    grid-column: 1 / -1;
+  }
+  .notification-exception-reminder-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+  }
+  .notification-exception-reminder.has-custom-value
+    .notification-exception-reminder-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .notification-exception h3,
   .notification-exceptions-header h3,

@@ -444,8 +444,7 @@ class NotificationRuntime:
         title, message = self._render_batch(kind, items)
         url = self._batch_url(kind, items)
         await self._delivery.async_send(
-            primary_targets=profile["primary_targets"],
-            fallback_targets=profile["fallback_targets"],
+            targets=profile["targets"],
             title=title,
             message=message,
             click_url=url,
@@ -457,8 +456,7 @@ class NotificationRuntime:
             deliveries = await self._async_collect_due_reminders_locked()
         for profile, title, message, url in deliveries:
             await self._delivery.async_send(
-                primary_targets=profile["primary_targets"],
-                fallback_targets=profile["fallback_targets"],
+                targets=profile["targets"],
                 title=title,
                 message=message,
                 click_url=url,
