@@ -179,18 +179,19 @@ export const settingsStyles = `
     border-top: 1px solid var(--divider-color, #ddd);
   }
   .notification-profile-name {
+    line-height: 1.4;
+  }
+  .notification-profile-meta {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-  }
-  .notification-profile-status,
-  .notification-profile-usage {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
   }
-  .notification-profile-summary small {
-    margin: 0;
+  .notification-profile-status,
+  .notification-profile-usage {
+    line-height: 1.4;
   }
   .notification-profile-actions {
     flex: none;

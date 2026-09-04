@@ -47,7 +47,9 @@ test("notification profile list exposes native edit, test and delete actions", (
   assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 3);
   assert.doesNotMatch(markup, /data-index=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
+  assert.match(markup, /notification-profile-name"><strong>Owner<\/strong><\/div>\s*<div class="notification-profile-meta">/);
   assert.match(markup, /data-notification-profile-usage="owner">notifications\.usage_last_24h/);
+  assert.doesNotMatch(markup, /notifications\.(targets_summary|policy_summary)/);
 });
 
 test("notification usage refresh updates only the matching profile text", () => {

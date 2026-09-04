@@ -2411,20 +2411,10 @@ function renderNotificationProfiles({ profiles, usage = {}, busy, t }) {
 }
 
 function renderProfileRow(profile, usage, busy, t) {
-  const policy = profile.default_policy ?? {};
-  const reminder = policy.reminder_interval === null
-    ? t("notifications.never")
-    : t("notifications.seconds", { count: policy.reminder_interval });
   return `<div class="notification-profile-row">
     <div class="notification-profile-summary">
-      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span><span class="notification-profile-usage" data-notification-profile-usage="${esc(profile.id)}">${esc(notificationUsageText(usage[profile.id] ?? 0, t))}</span></div>
-      <small>${esc(t("notifications.targets_summary", { count: profile.targets.length }))}</small>
-      <small>${esc(t("notifications.policy_summary", {
-        start: policy.notify_on_start ? t("notifications.yes") : t("notifications.no"),
-        resolved: policy.notify_on_resolved ? t("notifications.yes") : t("notifications.no"),
-        reminder,
-        exceptions: profile.exceptions.length,
-      }))}</small>
+      <div class="notification-profile-name"><strong>${esc(profile.name)}</strong></div>
+      <div class="notification-profile-meta"><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span><span aria-hidden="true">·</span><span class="notification-profile-usage" data-notification-profile-usage="${esc(profile.id)}">${esc(notificationUsageText(usage[profile.id] ?? 0, t))}</span></div>
     </div>
     <div class="actions notification-profile-actions">
       <ha-button type="button" appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
@@ -6460,18 +6450,19 @@ const settingsStyles = `
     border-top: 1px solid var(--divider-color, #ddd);
   }
   .notification-profile-name {
+    line-height: 1.4;
+  }
+  .notification-profile-meta {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-  }
-  .notification-profile-status,
-  .notification-profile-usage {
     color: var(--secondary-text-color, #727272);
     font-size: var(--ha-font-size-s, 12px);
   }
-  .notification-profile-summary small {
-    margin: 0;
+  .notification-profile-status,
+  .notification-profile-usage {
+    line-height: 1.4;
   }
   .notification-profile-actions {
     flex: none;

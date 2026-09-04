@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-dev16 — 4 septembre 2026
+
+### Modifié
+
+- Les profils de notification affichent désormais leur nom sur une première ligne,
+  puis leur état et leur utilisation sur les dernières 24 heures sur une seconde
+  ligne compacte. Les détails techniques redondants ont été retirés de la liste.
+- La persistance du runtime évite les écritures de snapshots inchangés, sérialise
+  les données hors de la boucle d’événements et diffère la sauvegarde des alertes
+  en attente récentes.
+
+### Tests
+
+- Ajout et mise à jour des tests couvrant la présentation compacte des profils et
+  l’optimisation des écritures de stockage.
+
 ## 2.2.0-dev15 — 4 septembre 2026
 
 ### Ajouté
