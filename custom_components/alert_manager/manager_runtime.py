@@ -107,8 +107,10 @@ class _RuntimeMixin:
     def _remove_recovered_pending_unavailable(
         self, entity_id: str, state: State
     ) -> bool:
-        """Remove a pending outage as soon as its source becomes usable."""
-        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        """Remove a pending outage once its source is no longer unavailable."""
+        if state.state == STATE_UNAVAILABLE or (
+            self._startup_restoring and state.state == STATE_UNKNOWN
+        ):
             return False
         alert_id = f"{CATEGORY_UNAVAILABLE}:{entity_id}"
         record = self.records.get(alert_id)
@@ -602,9 +604,14 @@ class _RuntimeMixin:
                 record = self.records[alert_id]
                 if record.status is AlertStatus.PENDING:
                     self._schedule_timer(record)
+            if recovered_pending_changed:
+                self._immediate_state_save_required = True
+            state_save_required = self._immediate_state_save_required
+            if save and state_save_required:
+                await self._async_save_state()
             if publish:
                 self._publish_if_changed()
-            return False
+            return recovered_pending_changed
 
         persisted_changed = recovered_pending_changed
         immediate_changed = recovered_pending_changed

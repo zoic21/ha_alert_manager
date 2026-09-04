@@ -501,8 +501,59 @@ def test_pending_custom_rule_survives_transient_startup_state(hass, entry, set_n
     run(scenario())
 
 
-def test_pending_unavailable_clears_on_startup_recovery_event(hass, entry):
-    """A usable startup event immediately removes only a pending outage."""
+def test_pending_custom_rule_keeps_timer_while_state_is_unknown(hass, entry, set_now):
+    """Unknown cannot reset a persisted custom-rule timer after startup."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("binary_sensor.pool_filter", "on")
+
+    async def scenario():
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        rule = await first.async_create_rule(
+            {
+                "name": "Pool filtration over 24 hours",
+                "entity_ids": ["binary_sensor.pool_filter"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 24 * 60 * 60,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:binary_sensor.pool_filter"
+        original = first.records[alert_id]
+        detected_at = original.detected_at
+        due_at = original.due_at
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        set_now(start + timedelta(hours=2, minutes=36))
+        hass.states.set("binary_sensor.pool_filter", "unknown")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.PENDING
+        assert restored.detected_at == detected_at
+        assert restored.due_at == due_at
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("recovered_state", ["auto", "unknown"])
+def test_pending_unavailable_clears_on_startup_recovery_event(
+    hass, entry, recovered_state
+):
+    """A startup recovery clears a pending outage after any unknown grace."""
 
     async def scenario():
         hass.states.set("select.camera_mode", "unavailable")
@@ -518,7 +569,7 @@ def test_pending_unavailable_clears_on_startup_recovery_event(hass, entry):
         await restarted.async_setup()
         assert restarted.records[alert_id].status is AlertStatus.PENDING
 
-        usable_state = hass.states.set("select.camera_mode", "auto")
+        usable_state = hass.states.set("select.camera_mode", recovered_state)
         restarted._state_changed(
             Event(
                 {
@@ -529,22 +580,35 @@ def test_pending_unavailable_clears_on_startup_recovery_event(hass, entry):
             )
         )
 
-        assert alert_id not in restarted.records
-        assert restarted.public_snapshot()["pending_count"] == 0
-        assert not [
-            event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
-        ]
+        if recovered_state == "unknown":
+            assert restarted.records[alert_id].status is AlertStatus.PENDING
+        else:
+            assert alert_id not in restarted.records
 
         hass.state = CoreState.running
         restarted._home_assistant_started(Event())
         await asyncio.sleep(0)
         await asyncio.sleep(0)
+        if recovered_state == "unknown":
+            assert restarted.records[alert_id].status is AlertStatus.PENDING
+            fire_startup_reconciliation(hass)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        assert alert_id not in restarted.records
+        assert restarted.public_snapshot()["pending_count"] == 0
+        assert not [
+            event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
+        ]
         assert hass.stores["alert_manager"]["alerts"] == {}
 
     run(scenario())
 
 
-def test_pending_unavailable_clears_from_current_startup_state(hass, entry):
+@pytest.mark.parametrize("recovered_state", ["auto", "unknown"])
+def test_pending_unavailable_clears_from_current_startup_state(
+    hass, entry, recovered_state
+):
     """Initial evaluation clears a pending outage whose event was missed."""
 
     async def scenario():
@@ -556,7 +620,7 @@ def test_pending_unavailable_clears_from_current_startup_state(hass, entry):
         await first.async_unload()
 
         hass.state = CoreState.starting
-        hass.states.set("select.camera_mode", "auto")
+        hass.states.set("select.camera_mode", recovered_state)
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
         assert restarted.records[alert_id].status is AlertStatus.PENDING
@@ -565,10 +629,88 @@ def test_pending_unavailable_clears_from_current_startup_state(hass, entry):
         restarted._home_assistant_started(Event())
         await asyncio.sleep(0)
         await asyncio.sleep(0)
+        if recovered_state == "unknown":
+            assert restarted.records[alert_id].status is AlertStatus.PENDING
+            fire_startup_reconciliation(hass)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
 
         assert alert_id not in restarted.records
         assert restarted.public_snapshot()["pending_count"] == 0
         assert hass.stores["alert_manager"]["alerts"] == {}
+
+    run(scenario())
+
+
+def test_pending_unavailable_clears_on_unknown_state(hass, entry):
+    """Unknown never keeps an unavailable occurrence pending at runtime."""
+
+    async def scenario():
+        unavailable_state = hass.states.set("event.camera_sound", "unavailable")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        alert_id = "unavailable:event.camera_sound"
+        assert manager.records[alert_id].status is AlertStatus.PENDING
+
+        unknown_state = hass.states.set("event.camera_sound", "unknown")
+        manager._state_changed(
+            Event(
+                {
+                    "entity_id": "event.camera_sound",
+                    "old_state": unavailable_state,
+                    "new_state": unknown_state,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        assert alert_id not in manager.records
+        assert manager.public_snapshot()["pending_count"] == 0
+        assert hass.stores["alert_manager"]["alerts"] == {}
+
+    run(scenario())
+
+
+def test_active_unavailable_is_protected_during_unknown_startup_grace(
+    hass, entry, set_now
+):
+    """A restored active outage survives unknown only during startup grace."""
+    start = datetime(2026, 9, 4, 12, tzinfo=UTC)
+    set_now(start)
+
+    async def scenario():
+        hass.states.set("sensor.offline", "unavailable")
+        first = AlertManager(hass, entry)
+        await first.async_setup()
+        await first.async_update_config({"automatic": {"unavailable": {"delay": 0}}})
+
+        alert_id = "unavailable:sensor.offline"
+        original = first.records[alert_id]
+        assert original.status is AlertStatus.ACTIVE
+        detected_at = original.detected_at
+        active_since = original.active_since
+        await first.async_unload()
+
+        hass.state = CoreState.starting
+        hass.states.set("sensor.offline", "unknown")
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        restored = restarted.records[alert_id]
+        assert restored.status is AlertStatus.ACTIVE
+        assert restored.detected_at == detected_at
+        assert restored.active_since == active_since
+
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert alert_id not in restarted.records
 
     run(scenario())
 
