@@ -212,9 +212,6 @@ export const responsiveStyles = `
     .fields.configuration-drawer-fields.notification-profile-fields {
       grid-template-columns: 1fr;
     }
-    .notification-profile-enabled-field {
-      min-width: 0;
-    }
     .notification-policy-switches {
       padding-inline-end: 0;
       padding-block-end: 8px;
@@ -235,6 +232,12 @@ export const responsiveStyles = `
       flex-wrap: wrap;
     }
     .side-drawer-actions .action-spacer {
+      display: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .notification-profile-header-toggle span {
       display: none;
     }
   }

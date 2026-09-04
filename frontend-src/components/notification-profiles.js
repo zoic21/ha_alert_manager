@@ -82,8 +82,7 @@ export function renderNotificationProfileDrawer({
   if (!draft) return "";
   const policy = draft.default_policy;
   const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
-    <div class="field notification-profile-name-field"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
-    <div class="field notification-profile-enabled-field"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
@@ -106,6 +105,7 @@ export function renderNotificationProfileDrawer({
   return renderConfigurationDrawer({
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><span>${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",

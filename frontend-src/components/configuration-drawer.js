@@ -92,6 +92,7 @@ export function renderSideDrawer({
 export function renderConfigurationDrawer({
   title,
   ariaLabel,
+  headerAction = "",
   banner = "",
   content,
   saveAction,
@@ -103,6 +104,7 @@ export function renderConfigurationDrawer({
       <ha-dialog-header show-border>
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
+        ${headerAction}
       </ha-dialog-header>
       ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">

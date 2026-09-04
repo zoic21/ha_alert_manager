@@ -181,16 +181,21 @@ export const settingsStyles = `
     gap: 16px;
   }
   .fields.configuration-drawer-fields.notification-profile-fields {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
+    grid-template-columns: 1fr;
     gap: 14px;
   }
   .fields.notification-profile-fields .full {
     grid-column: 1 / -1;
     margin-top: 0;
   }
-  .notification-profile-enabled-field {
-    min-width: 136px;
+  .notification-profile-header-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-inline-end: 8px;
+    color: var(--primary-text-color);
+    font-size: var(--ha-font-size-m, 14px);
+    white-space: nowrap;
   }
   .notification-profile-section {
     margin-top: 20px;

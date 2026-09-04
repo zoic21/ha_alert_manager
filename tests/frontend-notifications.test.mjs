@@ -57,6 +57,11 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
   });
 
   assert.match(markup, /id="notification-targets"/);
+  const header = markup.match(/<ha-dialog-header[\s\S]*?<\/ha-dialog-header>/)?.[0] ?? "";
+  assert.match(header, /slot="actionItems" class="notification-profile-header-toggle"/);
+  assert.match(header, /id="notification-profile-enabled"/);
+  assert.equal(markup.match(/id="notification-profile-enabled"/g)?.length, 1);
+  assert.doesNotMatch(markup, /notification-profile-enabled-field/);
   assert.match(markup, /data-notification-exception="0"/);
   assert.match(markup, /notification-policy-card[\s\S]*notification-policy-switches[\s\S]*notification-policy-reminder/);
   assert.match(markup, /data-action="save-notification-profile"/);

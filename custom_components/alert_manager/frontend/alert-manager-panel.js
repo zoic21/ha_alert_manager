@@ -2268,6 +2268,7 @@ function renderSideDrawer({
 function renderConfigurationDrawer({
   title,
   ariaLabel,
+  headerAction = "",
   banner = "",
   content,
   saveAction,
@@ -2279,6 +2280,7 @@ function renderConfigurationDrawer({
       <ha-dialog-header show-border>
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
+        ${headerAction}
       </ha-dialog-header>
       ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
@@ -2413,8 +2415,7 @@ function renderNotificationProfileDrawer({
   if (!draft) return "";
   const policy = draft.default_policy;
   const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
-    <div class="field notification-profile-name-field"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
-    <div class="field notification-profile-enabled-field"><div class="switch-field-row"><span class="field-label">${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div></div>
+    <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
   </div>
@@ -2437,6 +2438,7 @@ function renderNotificationProfileDrawer({
   return renderConfigurationDrawer({
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><span>${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",
@@ -6337,16 +6339,21 @@ const settingsStyles = `
     gap: 16px;
   }
   .fields.configuration-drawer-fields.notification-profile-fields {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
+    grid-template-columns: 1fr;
     gap: 14px;
   }
   .fields.notification-profile-fields .full {
     grid-column: 1 / -1;
     margin-top: 0;
   }
-  .notification-profile-enabled-field {
-    min-width: 136px;
+  .notification-profile-header-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-inline-end: 8px;
+    color: var(--primary-text-color);
+    font-size: var(--ha-font-size-m, 14px);
+    white-space: nowrap;
   }
   .notification-profile-section {
     margin-top: 20px;
@@ -7195,9 +7202,6 @@ const responsiveStyles = `
     .fields.configuration-drawer-fields.notification-profile-fields {
       grid-template-columns: 1fr;
     }
-    .notification-profile-enabled-field {
-      min-width: 0;
-    }
     .notification-policy-switches {
       padding-inline-end: 0;
       padding-block-end: 8px;
@@ -7218,6 +7222,12 @@ const responsiveStyles = `
       flex-wrap: wrap;
     }
     .side-drawer-actions .action-spacer {
+      display: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .notification-profile-header-toggle span {
       display: none;
     }
   }
