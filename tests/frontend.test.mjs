@@ -4564,3 +4564,22 @@ test("clearing history waits for an older request and its trailing refresh", asy
     window.confirm = previousConfirm;
   }
 });
+
+test("notification details stay compact, escape profiles and exclude pending", () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  row.notifications = {
+    alert: { count: 3, profiles: { a: "Sans rappel", b: "<script>" }, last_sent: "2026-09-05T10:00:00+00:00" },
+    resolved: { count: 2, profiles: { a: "Succès" }, last_sent: "2026-09-05T11:00:00+00:00" },
+  };
+  const live = panel._renderAlertDetails("overview", row);
+  assert.match(live, /3 envoyée\(s\)/);
+  assert.match(live, /Sans rappel, &lt;script&gt;/);
+  assert.match(live, /data-detail-key="notification-last-alert"[\s\S]*data-action="toggle-alert-timestamp"/);
+  assert.doesNotMatch(live, /notifications-resolved/);
+  const history = panel._renderAlertDetails("history", row);
+  assert.match(history, /notifications-resolved/);
+  assert.match(history, /2 envoyée\(s\)/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, status: "pending" }), /notification-profiles/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, notifications: null }), /notification-profiles/);
+});

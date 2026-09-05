@@ -251,6 +251,10 @@ mode: queued
 
 `script.notification` is only an example here: replace it with your own notification script or any Home Assistant notification action.
 
+### Per-alert notification details
+
+Alert details show notifications from the built-in profiles: delivery count (including reminders), matching profiles even without reminders, and last delivery time. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History keeps recovery deliveries, their profiles and last delivery time separately. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
+
 ## Home Assistant entities and events
 
 Alert Manager exposes dedicated entities so its state can also be used outside the built-in panel:

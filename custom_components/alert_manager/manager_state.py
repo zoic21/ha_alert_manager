@@ -39,6 +39,61 @@ _LOGGER = logging.getLogger(__name__)
 class _StateMixin:
     """Maintain live alert state, durability, timers and emitted events."""
 
+    async def _async_record_notification(
+        self, items: list[Any], profile: dict[str, Any], kind: str, sent_at: datetime
+    ) -> None:
+        """Attach delivery facts to the occurrence, including already archived ones."""
+        occurrences = {
+            (item.alert_id, datetime.fromisoformat(item.detected_at))
+            for item in items
+            if item.detected_at is not None
+        }
+
+        def updated(summary: dict[str, Any] | None) -> dict[str, Any]:
+            result = dict(summary or {})
+            key = "resolved" if kind == "resolved" else "alert"
+            stats = dict(result.get(key, {"count": 0, "last_sent": None}))
+            stats["profiles"] = {
+                **stats.get("profiles", {}),
+                profile["id"]: profile["name"],
+            }
+            if kind != "matched":
+                stats["count"] += 1
+                previous = stats["last_sent"]
+                stats["last_sent"] = (
+                    max(sent_at, datetime.fromisoformat(previous)).isoformat()
+                    if previous
+                    else sent_at.isoformat()
+                )
+            result[key] = stats
+            return result
+
+        live_changed = False
+        history_changed = False
+        async with self._history_archive_lock:
+            for alert_id, detected_at in tuple(occurrences):
+                record = self.records.get(alert_id)
+                if record is not None and record.detected_at == detected_at:
+                    record.notifications = updated(record.notifications)
+                    live_changed = True
+                    occurrences.remove((alert_id, detected_at))
+            if occurrences:
+                for entries in (self.history, self._pending_history):
+                    for index, entry in enumerate(entries):
+                        if (entry.id, entry.detected_at) in occurrences:
+                            entries[index] = replace(
+                                entry, notifications=updated(entry.notifications)
+                            )
+                            history_changed = True
+            if history_changed and not self.recovery_active:
+                try:
+                    await self.history_storage.async_save(self.history)
+                except Exception:
+                    _LOGGER.exception("Unable to persist notification history")
+                async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        if live_changed or history_changed:
+            self._schedule_live_message_flush()
+
     def _rebuild_record_index(self) -> None:
         """Rebuild the entity lookup cache from authoritative runtime records."""
         index: dict[str, set[str]] = {}

@@ -78,6 +78,7 @@ class AlertManager(
                 else self.records
             ),
             self.notifications,
+            self._async_record_notification,
         )
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)

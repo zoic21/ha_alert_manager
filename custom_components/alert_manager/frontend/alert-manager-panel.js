@@ -1315,6 +1315,7 @@ function tableRows(kind, historyEvents = []) {
         due: history ? "" : source.due_at,
         duration: history ? Number(source.total_duration_seconds ?? 0) : 0,
         acknowledged: history ? source.acknowledged === true : status === "acknowledged",
+        notifications: source.notifications,
         acknowledgedAt: source.acknowledged_at || "",
         acknowledgedBy: source.acknowledged_by || "",
       };
@@ -1843,6 +1844,27 @@ function alertDetailsItems(kind, row) {
           ? this._t("overview.acknowledged_details", { date: "", author }).trim()
           : "",
       });
+    }
+    if (row.status !== "pending" && row.notifications) {
+      for (const notificationKind of kind === "history" ? ["alert", "resolved"] : ["alert"]) {
+        const stats = row.notifications[notificationKind];
+        if (!stats) continue;
+        items.push({
+          key: `notifications-${notificationKind}`,
+          label: this._t(`alert_details.notifications_${notificationKind}`),
+          value: this._t("alert_details.notifications_count", { count: stats.count }),
+        }, {
+          key: `notification-profiles-${notificationKind}`,
+          label: this._t("alert_details.notification_profiles"),
+          value: Object.values(stats.profiles || {}).join(", "),
+        });
+        if (stats.last_sent) items.push({
+          key: `notification-last-${notificationKind}`,
+          label: this._t("alert_details.notification_last"),
+          value: this._date(stats.last_sent),
+          datetime: stats.last_sent,
+        });
+      }
     }
     items.push({
       key: "alert-id",

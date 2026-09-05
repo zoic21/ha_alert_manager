@@ -774,3 +774,162 @@ def test_usage_restore_keeps_only_current_24_hour_buckets(hass, entry, set_now) 
         await runtime.async_unload()
 
     asyncio.run(scenario())
+
+
+def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
+    """Count profiles, not targets; keep late deliveries on the old occurrence."""
+    from custom_components.alert_manager.models import AlertHistoryEntry
+    from custom_components.alert_manager.notification_runtime import _NotificationItem
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        record = _active_record(now)
+        manager.records = {record.details.id: record}
+        item = _NotificationItem.from_event(record.as_public_dict())
+        profile = _profile()
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: manager.config,
+            lambda: manager.records,
+            delivery,
+            manager._async_record_notification,
+        )
+        manager.config["notification_profiles"] = [profile]
+        await manager._async_record_notification([item], profile, "matched", now)
+        assert record.notifications["alert"]["count"] == 0
+        assert record.notifications["alert"]["profiles"] == {"profile": "Profile"}
+        await runtime._async_record_delivery(
+            profile,
+            "started",
+            [item],
+            {
+                "delivered_targets": ["notify.one", "notify.two"],
+            },
+        )
+        await runtime._async_record_delivery(
+            profile,
+            "reminder",
+            [item],
+            {
+                "delivered_targets": ["notify.one"],
+                "failed_targets": ["notify.two"],
+            },
+        )
+        await runtime._async_record_delivery(
+            profile,
+            "reminder",
+            [item],
+            {
+                "delivered_targets": [],
+            },
+        )
+        assert record.notifications["alert"]["count"] == 2
+        assert (
+            AlertRecord.from_dict(record.as_storage_dict()).notifications
+            == record.notifications
+        )
+        archived = AlertHistoryEntry.resolved(record, now + timedelta(minutes=5))
+        manager.history = [archived]
+        replacement = _active_record(now + timedelta(minutes=6))
+        manager.records = {replacement.details.id: replacement}
+        await manager._async_record_notification(
+            [item], profile, "resolved", now + timedelta(minutes=7)
+        )
+        second = {**profile, "id": "second", "name": "Second"}
+        await manager._async_record_notification(
+            [item], second, "resolved", now + timedelta(minutes=8)
+        )
+        stats = manager.history[0].notifications
+        assert replacement.notifications is None
+        assert stats["alert"]["count"] == 2
+        assert stats["resolved"] == {
+            "count": 2,
+            "profiles": {"profile": "Profile", "second": "Second"},
+            "last_sent": (now + timedelta(minutes=8)).isoformat(),
+        }
+        restored, _ = await manager.history_storage.async_load()
+        assert restored[0].notifications == stats
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_batch_and_reminders_pass_occurrences_to_accounting(
+    hass, entry, set_now
+) -> None:
+    """The actual send paths retain identities, including profiles without reminders."""
+
+    async def scenario() -> None:
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        set_now(now)
+        record = _active_record(now)
+        records = {record.details.id: record}
+        profile = _profile(reminder_interval=60)
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        seen = []
+
+        async def account(items, profile, kind, sent_at):
+            seen.append((kind, [item.detected_at for item in items]))
+
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: records, _DeliverySpy(), account
+        )
+        await runtime.async_setup()
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, record.as_public_dict())
+        await runtime._async_flush_batch("profile", "started")
+        runtime._runtime["profile"][record.details.id].next_reminder = now - timedelta(
+            seconds=1
+        )
+        await runtime._async_send_reminders()
+        assert seen == [
+            (kind, [now.isoformat()]) for kind in ("matched", "started", "reminder")
+        ]
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_legacy_and_invalid_notification_statistics_do_not_drop_alert() -> None:
+    record = _active_record(datetime.now(UTC))
+    data = record.as_storage_dict()
+    assert AlertRecord.from_dict(data).notifications is None
+    data["notifications"] = {"alert": {"count": -1, "profiles": []}}
+    assert AlertRecord.from_dict(data).notifications is None
+
+
+def test_delivery_waiting_for_archive_is_counted_once(hass, entry) -> None:
+    """Resolution while accounting waits for storage cannot duplicate a delivery."""
+    from custom_components.alert_manager.models import AlertHistoryEntry
+    from custom_components.alert_manager.notification_runtime import _NotificationItem
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        manager.config = deepcopy(DEFAULT_CONFIG)
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        record = _active_record(now)
+        manager.records = {record.details.id: record}
+        item = _NotificationItem.from_event(record.as_public_dict())
+        async with manager._history_archive_lock:
+            task = asyncio.create_task(
+                manager._async_record_notification(
+                    [item],
+                    _profile(),
+                    "started",
+                    now,
+                )
+            )
+            await asyncio.sleep(0)
+            manager._pending_history = [AlertHistoryEntry.resolved(record, now)]
+            manager.records.clear()
+        await task
+        assert manager._pending_history[0].notifications["alert"]["count"] == 1
+        await manager._async_flush_history()
+        restored, _ = await manager.history_storage.async_load()
+        assert restored[0].notifications["alert"]["count"] == 1
+
+    asyncio.run(scenario())

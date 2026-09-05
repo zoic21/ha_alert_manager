@@ -140,6 +140,7 @@ class AlertHistoryEntry:
     acknowledged: bool
     acknowledged_at: datetime | None
     acknowledged_by: str | None
+    notifications: dict[str, Any] | None = None
 
     @classmethod
     def resolved(cls, record: AlertRecord, resolved_at: datetime) -> AlertHistoryEntry:
@@ -202,6 +203,7 @@ class AlertHistoryEntry:
             acknowledged=record.acknowledged,
             acknowledged_at=record.acknowledged_at,
             acknowledged_by=record.acknowledged_by,
+            notifications=_json_safe(record.notifications),
         )
 
     @classmethod
@@ -317,6 +319,7 @@ class AlertHistoryEntry:
             acknowledged_at=parsed_acknowledged_at,
             **durations,
         )
+        values["notifications"] = _notification_summary(data.get("notifications"))
         return cls(**values)
 
     def as_dict(self) -> dict[str, Any]:
@@ -326,6 +329,42 @@ class AlertHistoryEntry:
             if result[key] is not None:
                 result[key] = result[key].isoformat()
         return result
+
+
+def _notification_summary(value: Any) -> dict[str, Any] | None:
+    """Ignore malformed optional statistics without losing an existing alert."""
+    if not isinstance(value, dict):
+        return None
+    result = {}
+    for kind in ("alert", "resolved"):
+        data = value.get(kind)
+        if not isinstance(data, dict):
+            continue
+        count = data.get("count")
+        profiles = data.get("profiles")
+        last_sent = data.get("last_sent")
+        if (
+            type(count) is not int
+            or count < 0
+            or not isinstance(profiles, dict)
+            or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in profiles.items()
+            )
+        ):
+            continue
+        if last_sent is not None:
+            try:
+                parsed = datetime.fromisoformat(last_sent)
+                if parsed.tzinfo is None:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        result[kind] = {
+            "count": count,
+            "profiles": dict(profiles),
+            "last_sent": last_sent,
+        }
+    return result or None
 
 
 def _json_safe(value: Any) -> Any:
@@ -363,6 +402,7 @@ class AlertRecord:
     acknowledged: bool = False
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
+    notifications: dict[str, Any] | None = None
 
     @classmethod
     def pending(cls, details: AlertDetails, delay: int, now: datetime) -> AlertRecord:
@@ -504,6 +544,7 @@ class AlertRecord:
             acknowledged=acknowledged,
             acknowledged_at=parsed_acknowledged_at,
             acknowledged_by=acknowledged_by,
+            notifications=_notification_summary(data.get("notifications")),
         )
 
     def as_storage_dict(self) -> dict[str, Any]:
@@ -519,6 +560,8 @@ class AlertRecord:
             ),
             "acknowledged": self.acknowledged,
         }
+        if self.notifications is not None:
+            result["notifications"] = _json_safe(self.notifications)
         if self.visible_at is not None:
             result["visible_at"] = self.visible_at.isoformat()
         if self.expires_at is not None:
@@ -543,6 +586,8 @@ class AlertRecord:
                 "delay": self.delay,
             }
         )
+        if self.notifications is not None:
+            result["notifications"] = _json_safe(self.notifications)
         if self.visible_at is not None:
             result["visible_at"] = self.visible_at.isoformat()
         if self.active_since is not None:

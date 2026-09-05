@@ -16,7 +16,12 @@
       "aria_menu": "Actions de l’alerte",
       "current_value": "Valeur actuelle",
       "trigger_value": "Valeur de déclenchement",
-      "title": "Détails de l’alerte"
+      "title": "Détails de l’alerte",
+      "notifications_alert": "Notifications · alerte et rappels",
+      "notifications_resolved": "Notifications · retour à la normale",
+      "notifications_count": "{count} envoyée(s)",
+      "notification_profiles": "Profils",
+      "notification_last": "Dernier envoi"
     },
     "automatic": {
       "aria_enable": "Activer {name}",

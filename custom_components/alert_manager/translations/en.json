@@ -16,7 +16,12 @@
       "aria_menu": "Alert actions",
       "current_value": "Current value",
       "trigger_value": "Trigger value",
-      "title": "Alert details"
+      "title": "Alert details",
+      "notifications_alert": "Notifications · alert and reminders",
+      "notifications_resolved": "Notifications · recovery",
+      "notifications_count": "{count} sent",
+      "notification_profiles": "Profiles",
+      "notification_last": "Last sent"
     },
     "automatic": {
       "aria_enable": "Enable {name}",
