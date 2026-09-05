@@ -56,6 +56,7 @@ export function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
             <div class="fields">
+              <div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector><small>${esc(t("automatic.labels_help"))}</small></div>
               ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
               ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
                 pack,
@@ -189,6 +190,7 @@ export function collectAutomaticChanges() {
     for (const pack of this._packs.filter((item) => item.available)) {
       automatic[pack.id] = {
         enabled: this._automaticMapDraft[pack.id].enabled,
+        label_ids: [...(this._automaticMapDraft[pack.id].label_ids ?? [])],
       };
       if (pack.uses_delay !== false) {
         automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
@@ -308,6 +310,7 @@ export function ensureAutomaticDraft() {
     this._automaticMapDraft = {};
     for (const pack of this._packs) {
       const fields = { ...this._config.automatic?.[pack.id] };
+      fields.label_ids = [...(fields.label_ids ?? [])];
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
@@ -416,6 +419,16 @@ export function updateAutomaticConfigurationCount(packId) {
 export function hydrateAutomaticControls() {
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
+    const draft = this._automaticMapDraft[pack.id];
+    this._configureSelector(
+      `auto-${pack.id}-labels`,
+      { label: { multiple: true } },
+      draft.label_ids,
+      (value) => {
+        draft.label_ids = this._multipleSelectorValue(value, draft.label_ids);
+        this._markConfigurationDirty("automatic");
+      },
+    );
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (enabled) {
       enabled.onchange = () => {

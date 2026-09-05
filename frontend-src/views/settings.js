@@ -546,9 +546,7 @@ export function hydrateSettingsControls() {
       (value) => this._setEntityDelayEntity(index, value),
     );
   });
-  hydrateNotificationProfileControls(this, {
-    packs: this._packs.filter((pack) => pack.available),
-  });
+  hydrateNotificationProfileControls(this);
 }
 
 export function refreshSettingsConfigurationDrawer() {

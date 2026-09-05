@@ -29,7 +29,7 @@ const profile = {
     reminder_interval: 300,
   },
   exceptions: [{
-    selector_type: "pack",
+    selector_type: "label",
     selector_id: "battery",
     notify_on_resolved: true,
   }],
@@ -84,6 +84,8 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
   assert.equal(markup.match(/id="notification-profile-enabled"/g)?.length, 1);
   assert.doesNotMatch(markup, /notification-profile-enabled-field/);
   assert.match(markup, /data-notification-exception="0"/);
+  assert.match(markup, /<ha-selector id="notification-exception-selector-0"/);
+  assert.doesNotMatch(markup, /notification-exception-type/);
   assert.match(markup, /notification-policy-card[\s\S]*notification-policy-switches[\s\S]*notification-policy-reminder/);
   assert.match(markup, /data-action="save-notification-profile"/);
   assert.doesNotMatch(markup, /data-options=/);
@@ -252,12 +254,12 @@ test("notification exception changes refresh only the settings drawer", async ()
   assert.equal(drawerRefreshes, 1);
 });
 
-test("notification selector options are hydrated directly from view data", () => {
+test("notification label selectors use native HA labels", () => {
   const controls = new Map();
   const panel = {
     _notificationProfileDraft: structuredClone(profile),
-    _configureSelector: () => {},
-    _configureSelect: (id, options) => controls.set(id, options),
+    _configureSelector: (id, selector, value) => controls.set(id, { selector, value }),
+    _configureSelect: () => {},
     _multipleSelectorValue: (value) => value,
     _t: t,
   };
@@ -267,10 +269,10 @@ test("notification selector options are hydrated directly from view data", () =>
     rules: [{ id: "freezer", name: "Freezer" }],
   });
 
-  assert.deepEqual(controls.get("notification-exception-selector-0"), [{
+  assert.deepEqual(controls.get("notification-exception-selector-0"), {
+    selector: { label: {} },
     value: "battery",
-    label: "packs.battery.name",
-  }]);
+  });
 });
 
 test("new profiles default to a small valid policy but require an entity", () => {
@@ -309,7 +311,7 @@ test("single-alert query opens the existing details UI and stale ids do nothing"
   }
 });
 
-test("notification exceptions offer only packs and native labels", () => {
+test("notification exceptions have no type or pack dropdown", () => {
   const selects = new Map();
   hydrateNotificationProfileControls({
     _notificationProfileDraft: structuredClone(profile),
@@ -317,6 +319,6 @@ test("notification exceptions offer only packs and native labels", () => {
     _configureSelector() {},
     _configureSelect: (id, options) => selects.set(id, options),
   }, { packs: [{ id: "battery" }] });
-  assert.deepEqual(selects.get("notification-exception-type-0").map((option) => option.value), ["pack", "label"]);
-  assert.deepEqual(selects.get("notification-exception-selector-0").map((option) => option.value), ["battery"]);
+  assert.equal(selects.has("notification-exception-type-0"), false);
+  assert.equal(selects.has("notification-exception-selector-0"), false);
 });

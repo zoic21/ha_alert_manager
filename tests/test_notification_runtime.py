@@ -1171,8 +1171,11 @@ def test_delivery_waiting_for_archive_is_counted_once(hass, entry) -> None:
     asyncio.run(scenario())
 
 
-def test_rule_labels_route_start_reminders_and_resolution(hass, entry, set_now):
-    """Rule labels filter profiles and select policies at every lifecycle step."""
+@pytest.mark.parametrize("source", ["rule", "battery"])
+def test_source_labels_route_start_reminders_and_resolution(
+    hass, entry, set_now, source
+):
+    """Rule and pack labels route every notification lifecycle step."""
 
     async def scenario():
         now = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
@@ -1192,8 +1195,8 @@ def test_rule_labels_route_start_reminders_and_resolution(hass, entry, set_now):
             {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )
         record = _active_record(now)
-        record.details.type = "rule"
-        record.details.rule_id = "freezer"
+        record.details.type = source
+        record.details.rule_id = "freezer" if source == "rule" else None
         record.details.labels = ["cold"]
         delivery = _DeliverySpy()
         runtime = NotificationRuntime(
@@ -1257,6 +1260,81 @@ def test_rule_label_update_refreshes_frozen_alert_and_reminders(hass, entry):
         history = AlertHistoryEntry.resolved(record, record.active_since)
         record.details.labels.clear()
         assert AlertHistoryEntry.from_dict(history.as_dict()).labels == ["new"]
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("paused", [False, True])
+def test_pack_label_update_preserves_alert_and_refreshes_routing(hass, entry, paused):
+    """Label edits update frozen/live alerts without evaluating sources or events."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.alert_manager.models import AlertHistoryEntry
+
+    async def scenario():
+        hass.states.set("sensor.battery", "10", {"device_class": "battery"})
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config(
+            {"automatic": {"battery": {"delay": 0, "label_ids": ["old"]}}}
+        )
+        alert_id = "battery:sensor.battery"
+        record = manager.records[alert_id]
+        assert record.details.labels == ["old"]
+        active_since = record.active_since
+        history = AlertHistoryEntry.resolved(record, active_since)
+        profile = _profile(reminder_interval=300)
+        profile["label_ids"] = ["new"]
+        await manager.async_update_config({"notification_profiles": [profile]})
+        assert alert_id not in manager.notification_runtime._runtime["profile"]
+        if paused:
+            await manager.async_set_monitoring(False)
+        evaluator = manager.async_evaluate_all
+        manager.async_evaluate_all = AsyncMock()
+        events_before = list(hass.bus.fired)
+        await manager.async_update_config(
+            {"automatic": {"battery": {"label_ids": ["new", "new"]}}}
+        )
+        manager.async_evaluate_all.assert_not_awaited()
+        manager.async_evaluate_all = evaluator
+        assert manager.records[alert_id] is record
+        assert record.active_since == active_since
+        assert record.details.labels == ["new"]
+        assert AlertRecord.from_dict(record.as_storage_dict()).details.labels == ["new"]
+        assert history.labels == ["old"]
+        assert hass.bus.fired == events_before
+        if paused:
+            await manager.async_set_monitoring(True)
+        assert manager.notification_runtime._runtime["profile"][alert_id].next_reminder
+        await manager.async_update_config({"automatic": {"battery": {"label_ids": []}}})
+        assert manager.records[alert_id].details.labels == []
+        assert alert_id not in manager.notification_runtime._runtime["profile"]
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_pack_label_save_failure_restores_config_and_alert(hass, entry):
+    """Failed persistence preserves labels and notification policy."""
+    from unittest.mock import AsyncMock
+
+    async def scenario():
+        hass.states.set("sensor.battery", "10", {"device_class": "battery"})
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config(
+            {"automatic": {"battery": {"delay": 0, "label_ids": ["old"]}}}
+        )
+        save = manager._async_save_state
+        manager._async_save_state = AsyncMock(side_effect=OSError("disk full"))
+        with pytest.raises(OSError, match="disk full"):
+            await manager.async_update_config(
+                {"automatic": {"battery": {"label_ids": ["new"]}}}
+            )
+        manager._async_save_state = save
+        assert manager.config["automatic"]["battery"]["label_ids"] == ["old"]
+        assert manager.records["battery:sensor.battery"].details.labels == ["old"]
         await manager.async_unload()
 
     asyncio.run(scenario())

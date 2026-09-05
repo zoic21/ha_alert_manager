@@ -2815,12 +2815,13 @@ test("automatic monitoring action serializes all category controls", async () =>
   await panel._saveAutomatic();
 
   assert.deepEqual(call.config.automatic, {
-    unavailable: { enabled: true, delay: 60 },
-    connectivity: { enabled: false, delay: 120 },
-    unifi: { enabled: true, delay: 180 },
-    battery: { enabled: true, delay: 240, threshold: 12, device_thresholds: {} },
+    unavailable: { label_ids: [], enabled: true, delay: 60 },
+    connectivity: { label_ids: [], enabled: false, delay: 120 },
+    unifi: { label_ids: [], enabled: true, delay: 180 },
+    battery: { label_ids: [], enabled: true, delay: 240, threshold: 12, device_thresholds: {} },
     execution_errors: {
       enabled: true,
+      label_ids: [],
       delay: null,
       failure_thresholds: { "automation.test": 3 },
     },
@@ -2847,6 +2848,7 @@ test("execution failure thresholds select automations and scripts", async () => 
 
   let selector;
   panel._configureSelector = (...args) => { selector = args; };
+  for (const pack of panel._packs) panel._automaticMapDraft[pack.id] ??= { label_ids: [] };
   panel._hydrateAutomaticControls();
   assert.equal(
     selector[0],
@@ -2960,6 +2962,7 @@ test("flapping saves global and per-device values without a pack delay", async (
 
   assert.deepEqual(call.config.automatic.flapping, {
     enabled: true,
+    label_ids: [],
     occurrences: 4,
     window: 900,
     recovery: 300,
@@ -3181,7 +3184,7 @@ test("an empty pack delay serializes as the global fallback", async () => {
   await panel._saveAutomatic();
 
   assert.deepEqual(call.config.automatic, {
-    unavailable: { enabled: true, delay: null },
+    unavailable: { label_ids: [], enabled: true, delay: null },
   });
 });
 
@@ -4474,7 +4477,7 @@ test("combined settings save sends one configuration update and preserves drafts
   const panel = new Panel();
   panel._config = completeConfig();
   panel._packs = [{ id: "battery", available: true, config_fields: [] }];
-  panel._automaticMapDraft = { battery: { enabled: true, delay: 42 } };
+  panel._automaticMapDraft = { battery: { label_ids: [], enabled: true, delay: 42 } };
   panel._automaticDirty = true;
   panel._settingsDirty = true;
   panel._reportFormValidity = () => true;
@@ -4525,7 +4528,7 @@ test("combined settings save sends one configuration update and preserves drafts
   assert.deepEqual(calls, [{
     type: "alert_manager/config/update",
     config: {
-      automatic: { battery: { enabled: true, delay: 42 } },
+      automatic: { battery: { label_ids: [], enabled: true, delay: 42 } },
       global_delay: 300,
       pending_display_delay: 15,
       coherence_schedule: "weekly",

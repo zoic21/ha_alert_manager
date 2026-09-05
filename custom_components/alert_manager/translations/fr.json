@@ -72,7 +72,9 @@
       },
       "enable_source_pack": "Activer le pack source {name}",
       "pack_delay": "Délai propre au pack",
-      "save": "Enregistrer la surveillance automatique"
+      "save": "Enregistrer la surveillance automatique",
+      "labels": "Étiquettes",
+      "labels_help": "Ajoutées aux alertes du pack et utilisées pour les notifications."
     },
     "buttons": {
       "add": "Ajouter",
@@ -233,7 +235,7 @@
       "enabled": "Activé",
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
-      "exceptions_help": "Les surcharges sont appliquées dans cet ordre : pack, puis première étiquette correspondante.",
+      "exceptions_help": "La première exception dont l’étiquette correspond s’applique, en complément du comportement par défaut.",
       "grouped_alerts": "{count} alertes",
       "help": "Route les alertes groupées vers les entités de notification natives de Home Assistant.",
       "labels": "Étiquettes du profil",
@@ -261,12 +263,7 @@
       "reminder_title": "Alert Manager — {count} alerte(s) active(s)",
       "resolved_title": "Alert Manager — {count} retour(s) à la normale",
       "seconds": "{count} s",
-      "selector": "Cible",
-      "selector_type": "Type d’exception",
-      "selector_types": {
-        "label": "Étiquette",
-        "pack": "Pack automatique"
-      },
+      "selector": "Étiquette",
       "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
       "targets": "Entités de notification",
       "targets_help": "Chaque entité sélectionnée reçoit la notification indépendamment.",

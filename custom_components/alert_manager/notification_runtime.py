@@ -421,7 +421,6 @@ class NotificationRuntime:
                 continue
             policy = resolve_notification_policy(
                 profile,
-                pack_id=item.alert_type if item.rule_id is None else None,
                 label_ids=labels,
             )
             if event_type == EVENT_ALERT_STARTED:
@@ -981,7 +980,6 @@ def _policy_for_record(
     """Resolve a profile policy from authoritative alert metadata."""
     return resolve_notification_policy(
         profile,
-        pack_id=record.details.type if record.details.rule_id is None else None,
         label_ids=labels,
     )
 

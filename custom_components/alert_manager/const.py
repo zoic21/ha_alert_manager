@@ -138,23 +138,27 @@ DEFAULT_CONFIG: Final = {
     "automatic": {
         CATEGORY_UNAVAILABLE: {
             "enabled": True,
+            "label_ids": [],
             "delay": None,
         },
-        CATEGORY_CONNECTIVITY: {"enabled": True, "delay": None},
-        CATEGORY_UNIFI: {"enabled": True, "delay": None},
+        CATEGORY_CONNECTIVITY: {"enabled": True, "label_ids": [], "delay": None},
+        CATEGORY_UNIFI: {"enabled": True, "label_ids": [], "delay": None},
         CATEGORY_BATTERY: {
             "enabled": True,
+            "label_ids": [],
             "delay": None,
             "threshold": DEFAULT_BATTERY_THRESHOLD,
             "device_thresholds": {},
         },
         "execution_errors": {
             "enabled": True,
+            "label_ids": [],
             "delay": 0,
             "failure_thresholds": {},
         },
         CATEGORY_FLAPPING: {
             "enabled": False,
+            "label_ids": [],
             "occurrences": DEFAULT_FLAPPING_OCCURRENCES,
             "window": DEFAULT_FLAPPING_WINDOW,
             "recovery": DEFAULT_FLAPPING_RECOVERY,

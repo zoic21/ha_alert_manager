@@ -68,7 +68,7 @@ for (const narrow of [false, true]) {
     let sent;
     p._call = async (message) => { sent = message.config.automatic; return null; };
     await p._saveAutomatic();
-    assert.deepEqual(sent.battery, { enabled: false, delay: null, threshold: 27, overrides: { dev: 31 } });
+    assert.deepEqual(sent.battery, { label_ids: [], enabled: false, delay: null, threshold: 27, overrides: { dev: 31 } });
   });
 }
 
@@ -166,4 +166,26 @@ test("saving general settings retains a notification draft left in another drawe
   control(p, "#notification-profile-name", { value: "Unsaved" }, "#settings-form").dispatchEvent(new Event("input"));
   p._resetSettingsDraft({ preserveNotification: true });
   assert.equal(p._notificationProfileDraft.name, "Unsaved");
+});
+
+
+test("pack labels use a native multi-selector and retain an independent draft", () => {
+  const p = panel();
+  p._config.automatic.battery.label_ids = ["old"];
+  p._ensureAutomaticDraft();
+  let updateLabels;
+  p._configureSelector = (id, selector, value, onChange) => {
+    if (id !== "auto-battery-labels") return;
+    assert.deepEqual(selector, { label: { multiple: true } });
+    assert.deepEqual(value, ["old"]);
+    updateLabels = onChange;
+  };
+  p._hydrateAutomaticControls();
+  updateLabels(["cold", "technical"]);
+  assert.equal(p._automaticDirty, true);
+  assert.deepEqual(p._config.automatic.battery.label_ids, ["old"]);
+  assert.deepEqual(p._automaticMapDraft.battery.label_ids, ["cold", "technical"]);
+  assert.match(p._renderAutomatic(), /<ha-selector id="auto-battery-labels"/);
+  updateLabels([]);
+  assert.deepEqual(p._automaticMapDraft.battery.label_ids, []);
 });

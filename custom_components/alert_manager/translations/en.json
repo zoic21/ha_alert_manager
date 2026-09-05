@@ -72,7 +72,9 @@
       },
       "enable_source_pack": "Enable source pack {name}",
       "pack_delay": "Pack delay",
-      "save": "Save automatic monitoring"
+      "save": "Save automatic monitoring",
+      "labels": "Labels",
+      "labels_help": "Added to pack alerts and used for notifications."
     },
     "buttons": {
       "add": "Add",
@@ -233,7 +235,7 @@
       "enabled": "Enabled",
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
-      "exceptions_help": "Overrides are applied in this order: pack, then first matching label.",
+      "exceptions_help": "The first matching label exception overrides the default behavior.",
       "grouped_alerts": "{count} alerts",
       "help": "Route grouped alerts to native Home Assistant notify entities.",
       "labels": "Profile labels",
@@ -261,12 +263,7 @@
       "reminder_title": "Alert Manager — {count} active alert(s)",
       "resolved_title": "Alert Manager — {count} back to normal",
       "seconds": "{count} s",
-      "selector": "Target",
-      "selector_type": "Exception type",
-      "selector_types": {
-        "label": "Label",
-        "pack": "Automatic pack"
-      },
+      "selector": "Label",
       "started_title": "Alert Manager — {count} new alert(s)",
       "targets": "Notification entities",
       "targets_help": "Every selected entity receives the notification independently.",
