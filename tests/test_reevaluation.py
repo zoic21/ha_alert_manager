@@ -3,12 +3,12 @@
 import asyncio
 
 import pytest
+from test_acknowledgement import active_manager, event_data
+from test_websocket import Connection
 
 from custom_components.alert_manager.const import DATA_MANAGER, EVENT_ALERT_RESOLVED
 from custom_components.alert_manager.runtime_phase import RuntimePhase
 from custom_components.alert_manager.websocket import websocket_alert_reevaluate
-from tests.test_acknowledgement import active_manager, event_data
-from tests.test_websocket import Connection
 
 
 @pytest.mark.parametrize("acknowledged", [False, True])
