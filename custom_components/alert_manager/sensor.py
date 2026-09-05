@@ -115,6 +115,7 @@ class AlertManagerSensor(SensorEntity):
         self.entity_id = f"sensor.{unique_id}"
         self._publishes_runtime = count_key == "active_count"
         self._history_revision = 0
+        self._alerts_revision = 0
         snapshot = getattr(manager, "_last_public_snapshot", None)
         self._snapshot: dict[str, Any] = (
             snapshot if snapshot is not None else manager.public_snapshot()
@@ -161,6 +162,8 @@ class AlertManagerSensor(SensorEntity):
             )
         if partition == self._last_written_partition:
             return
+        # Full partitions can change without changing their compact attributes.
+        self._alerts_revision += 1
         self._snapshot = snapshot
         self._last_written_partition = partition
         self.async_write_ha_state()
@@ -186,6 +189,8 @@ class AlertManagerSensor(SensorEntity):
                 _compact_device if self._attribute_key == "devices" else _compact_alert
             )
             attributes = _bounded_attributes(self._attribute_key, items, compactor)
+        if self._attribute_key == "alerts":
+            attributes["alerts_revision"] = self._alerts_revision
         if self._publishes_runtime:
             attributes["history_revision"] = self._history_revision
             attributes["runtime"] = {

@@ -394,6 +394,7 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         "sensor.alert_manager_main_active": {
             "alerts": [],
             "history_revision": 0,
+            "alerts_revision": 0,
             "runtime": {
                 "tracked_count": 0,
                 "startup": {
@@ -402,8 +403,8 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
                 },
             },
         },
-        "sensor.alert_manager_main_pending": {"alerts": []},
-        "sensor.alert_manager_main_acknowledge": {"alerts": []},
+        "sensor.alert_manager_main_pending": {"alerts": [], "alerts_revision": 0},
+        "sensor.alert_manager_main_acknowledge": {"alerts": [], "alerts_revision": 0},
         "sensor.alert_manager_device_main_active": {"devices": []},
     }
     assert all(
@@ -5729,3 +5730,55 @@ def test_history_marker_is_independent_of_alert_updates(hass, entry):
         remove()
     async_dispatcher_send(hass, SIGNAL_HISTORY_UPDATED)
     assert sensor.extra_state_attributes["history_revision"] == 3
+
+
+@pytest.mark.parametrize("partition", ["active", "pending", "acknowledge"])
+@pytest.mark.parametrize("change", ["notification", "omitted_alert"])
+def test_alert_revision_tracks_changes_hidden_by_compaction(partition, change):
+    """Full-data changes invalidate the panel without growing sensor attributes."""
+    from copy import deepcopy
+
+    items_key = {
+        "active": "alerts",
+        "pending": "pending",
+        "acknowledge": "acknowledge",
+    }[partition]
+    count_key = f"{partition}_count"
+    alerts = [
+        {"id": f"alert:{i}", "entity_id": f"sensor.test_{i}", "message": "x" * 1024}
+        for i in range(100)
+    ]
+    snapshot = {
+        count_key: len(alerts),
+        items_key: alerts,
+        "tracked_count": 100,
+        "startup": {"in_progress": False, "stabilization_until": None},
+    }
+    manager = SimpleNamespace(monitoring_enabled=True, _last_public_snapshot=snapshot)
+    sensor = AlertManagerSensor(
+        manager,
+        f"main_{partition}",
+        f"alert_manager_main_{partition}",
+        "mdi:alert-circle",
+        count_key,
+        items_key,
+        "alerts",
+    )
+    sensor._async_manager_updated()
+    before = sensor.extra_state_attributes
+    assert before["alerts_omitted"] > 0
+    updated = deepcopy(snapshot)
+    if change == "notification":
+        updated[items_key][0]["notifications"] = {"alert": {"count": 1}}
+    else:
+        updated[items_key][-1]["id"] = "replacement"
+    manager._last_public_snapshot = updated
+    sensor._async_manager_updated()
+    after = sensor.extra_state_attributes
+    assert sensor.native_value == 100
+    assert after["alerts_revision"] == before["alerts_revision"] + 1
+    assert {k: v for k, v in after.items() if k != "alerts_revision"} == {
+        k: v for k, v in before.items() if k != "alerts_revision"
+    }
+    sensor._async_manager_updated()
+    assert sensor.extra_state_attributes == after

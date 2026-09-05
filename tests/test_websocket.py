@@ -464,7 +464,9 @@ def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, en
             hass, connection, {"id": 51, "backup_id": backup_id}
         )
     )
-    assert connection.results[-1][1]["content"] == manager.export_config_yaml()
+    assert connection.results[-1][1]["content"] == asyncio.run(
+        manager.async_export_config_yaml()
+    )
 
     asyncio.run(
         websocket_config_backup_restore(
@@ -592,3 +594,53 @@ def test_history_delete_websocket_returns_updated_snapshot(hass, entry):
     )
     assert received == ["occurrence"]
     assert connection.results == [(40, snapshot)]
+
+
+def test_yaml_preview_and_export_use_executor(hass, entry, monkeypatch):
+    """Real WebSocket paths offload YAML but retain HA validation on the loop."""
+    import threading
+
+    from custom_components.alert_manager import manager_api
+
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    loop_thread = threading.get_ident()
+    calls = []
+    dump = manager_api.dump_config_yaml
+    parse = manager_api.parse_config_yaml
+    validate = manager._validate_config_rule_sources
+
+    def tracked_dump(config):
+        assert threading.get_ident() != loop_thread
+        assert config is not manager.config
+        assert config["automatic"] is not manager.config["automatic"]
+        calls.append("dump")
+        return dump(config)
+
+    def tracked_parse(raw):
+        assert threading.get_ident() != loop_thread
+        calls.append("parse")
+        return parse(raw)
+
+    def tracked_validate(config):
+        assert threading.get_ident() == loop_thread
+        calls.append("validate")
+        return validate(config)
+
+    monkeypatch.setattr(manager_api, "dump_config_yaml", tracked_dump)
+    monkeypatch.setattr(manager_api, "parse_config_yaml", tracked_parse)
+    monkeypatch.setattr(manager, "_validate_config_rule_sources", tracked_validate)
+    asyncio.run(websocket_config_export(hass, connection, {"id": 1}))
+    raw = connection.results[-1][1]["yaml"]
+    asyncio.run(
+        websocket_config_import_validate(hass, connection, {"id": 2, "yaml": raw})
+    )
+    assert connection.results[-1][1]["rules"] == 0
+    assert calls == ["dump", "parse", "validate"]
+    assert not connection.errors
+    asyncio.run(
+        websocket_config_import_validate(hass, connection, {"id": 3, "yaml": "["})
+    )
+    assert connection.errors[-1][0] == 3

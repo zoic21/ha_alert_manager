@@ -55,7 +55,7 @@ def test_valid_export_creates_daily_backup_with_manual_export_representation(
     assert len(status["backups"]) == 1
     backup = status["backups"][0]
     downloaded = run(manager.async_get_config_backup_download(backup["id"]))
-    assert downloaded["content"] == manager.export_config_yaml()
+    assert downloaded["content"] == run(manager.async_export_config_yaml())
     assert parse_config_yaml(downloaded["content"])["rules"] == []
     assert backup["rules"] == 0
 
@@ -102,7 +102,7 @@ def test_config_import_parsing_runs_in_executor(hass, entry, monkeypatch):
     """A backup restore cannot reintroduce YAML parsing on the event loop."""
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
-    raw_yaml = manager.export_config_yaml()
+    raw_yaml = run(manager.async_export_config_yaml())
     event_loop_thread = threading.get_ident()
     parser_threads = []
     original_parser = manager_api_module.parse_config_yaml
@@ -291,7 +291,7 @@ def test_backup_restore_regenerates_rule_ids_resets_runtime_and_reevaluates(
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     created_rule = run(manager.async_create_rule(rule_payload()))
-    backup_yaml = manager.export_config_yaml()
+    backup_yaml = run(manager.async_export_config_yaml())
     backup = run(
         manager.config_backup_storage.async_create(
             backup_yaml,
@@ -312,7 +312,7 @@ def test_backup_restore_regenerates_rule_ids_resets_runtime_and_reevaluates(
 
     restored_rule = manager.get_config()["rules"][0]
     assert restored_rule["id"] != created_rule["id"]
-    assert manager.export_config_yaml() == backup_yaml
+    assert run(manager.async_export_config_yaml()) == backup_yaml
     assert manager.history == []
     assert manager._pending_history == []
     assert manager._variation_baselines == {}
@@ -329,7 +329,7 @@ def test_invalid_backup_is_refused_without_changing_current_config_or_rotation(
     before_config = manager.get_config()
     selected = run(
         manager.config_backup_storage.async_create(
-            manager.export_config_yaml(),
+            run(manager.async_export_config_yaml()),
             created_at=datetime(2026, 8, 25, 12, tzinfo=UTC),
         )
     )
