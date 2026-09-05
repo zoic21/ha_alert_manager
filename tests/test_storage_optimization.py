@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from homeassistant.core import CoreState, Event
 
+from custom_components.alert_manager import storage as storage_module
 from custom_components.alert_manager.const import (
     CONFIG_BACKUP_STORAGE_KEY,
     HISTORY_STORAGE_KEY,
@@ -18,11 +19,13 @@ from custom_components.alert_manager.const import (
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import (
+    AlertDetails,
     AlertRecord,
     AlertStatus,
     advance_record,
 )
 from custom_components.alert_manager.runtime_phase import RuntimePhase
+from custom_components.alert_manager.storage import AlertManagerStorage
 from custom_components.alert_manager.transactions import (
     StartupReconciliationTransaction,
 )
@@ -392,3 +395,162 @@ def test_runtime_stores_serialize_outside_the_event_loop(hass, entry):
         CONFIG_BACKUP_STORAGE_KEY,
         NOTIFICATION_STORAGE_KEY,
     }
+
+
+def pending_record(alert_id, now):
+    """Build a long pending occurrence without manager setup or timers."""
+    return AlertRecord.pending(
+        AlertDetails(
+            id=alert_id,
+            type="unavailable",
+            entity_id="sensor.test",
+            name="Test",
+            value="unavailable",
+            condition="Unavailable",
+        ),
+        900,
+        now,
+    )
+
+
+def test_fresh_pending_is_filtered_before_serialization(hass, monkeypatch):
+    """Only eligible records pay the cost of building detached dictionaries."""
+    now = datetime(2026, 9, 5, 12, tzinfo=UTC)
+    storage = AlertManagerStorage(hass)
+    records = {
+        "fresh": pending_record("fresh", now),
+        "mature": pending_record("mature", now - timedelta(minutes=10)),
+        "active": pending_record("active", now - timedelta(minutes=20)),
+    }
+    assert advance_record(records["active"], now)
+    serialized = []
+    original = AlertRecord.as_storage_dict
+
+    def serialize(record):
+        serialized.append(record.details.id)
+        return original(record)
+
+    monkeypatch.setattr(AlertRecord, "as_storage_dict", serialize)
+    cutoff = now - timedelta(seconds=PENDING_PERSISTENCE_DELAY_SECONDS)
+    run(storage.async_save({}, records, pending_before=cutoff))
+
+    assert serialized == ["mature", "active"]
+    assert set(hass.stores[STORAGE_KEY]["alerts"]) == {"mature", "active"}
+
+
+def test_unchanged_sections_are_reused_and_nested_changes_retry(hass, monkeypatch):
+    """Reuse needs no invalidation flags and a failed write cannot poison it."""
+
+    async def scenario():
+        storage = AlertManagerStorage(hass)
+        config = {"nested": {"values": [1]}}
+        storage.pack_runtime = {"pack": {"values": [2]}}
+        storage.variation_baselines = {"reference": 3.0}
+        await storage.async_save(config, {})
+        original_payload = hass.stores[STORAGE_KEY]
+        copied = []
+
+        def copy_section(value):
+            copied.append(value)
+            return deepcopy(value)
+
+        monkeypatch.setattr(storage_module, "deepcopy", copy_section)
+        # A real alert change must reuse all three unchanged sections.
+        now = datetime(2026, 9, 5, 12, tzinfo=UTC)
+        record = pending_record("test", now)
+        records = {"test": record}
+        await storage.async_save(config, records, include_all_pending=True)
+        assert copied == []
+        persisted = hass.stores[STORAGE_KEY]
+        for key in ("config", "pack_runtime", "variation_baselines"):
+            assert persisted[key] is original_payload[key]
+
+        config["nested"]["values"].append(4)
+        storage.pack_runtime["pack"]["values"].append(5)
+        storage.variation_baselines["reference"] = 6.0
+        original_save = storage._store.async_save
+
+        async def fail_save(payload):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(storage._store, "async_save", fail_save)
+        with pytest.raises(OSError, match="disk full"):
+            await storage.async_save(config, records)
+        assert storage._save_requests == 0
+        assert hass.stores[STORAGE_KEY] is persisted
+        assert persisted["config"]["nested"]["values"] == [1]
+        assert persisted["pack_runtime"]["pack"]["values"] == [2]
+        assert persisted["variation_baselines"] == {"reference": 3.0}
+
+        monkeypatch.setattr(storage._store, "async_save", original_save)
+        await storage.async_save(config, records)
+        updated = hass.stores[STORAGE_KEY]
+        assert updated["config"] == config
+        assert updated["pack_runtime"] == storage.pack_runtime
+        assert updated["variation_baselines"] == storage.variation_baselines
+        before = hass.store_save_count
+        await storage.async_save(config, records)
+        assert hass.store_save_count == before
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("cancel_waiter", [False, True])
+def test_queued_save_keeps_new_pending_durability_and_detached_input(
+    hass, monkeypatch, cancel_waiter
+):
+    """A waiting save retains newly durable pending and call-time values."""
+
+    async def scenario():
+        storage = AlertManagerStorage(hass)
+        now = datetime(2026, 9, 5, 12, tzinfo=UTC)
+        record = pending_record("test", now)
+        records = {"test": record}
+        config = {"nested": {"value": 1}}
+        storage.pack_runtime = {"pack": {"values": [1]}}
+        storage.variation_baselines = {"reference": 1.0}
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        original_save = storage._store.async_save
+
+        async def slow_save(payload):
+            entered.set()
+            await release.wait()
+            await original_save(payload)
+
+        monkeypatch.setattr(storage._store, "async_save", slow_save)
+        first = asyncio.create_task(
+            storage.async_save(config, records, include_all_pending=True)
+        )
+        await entered.wait()
+        record.details.message = "queued"
+        config["nested"]["value"] = 2
+        storage.pack_runtime["pack"]["values"].append(2)
+        storage.variation_baselines["reference"] = 2.0
+        second = asyncio.create_task(storage.async_save(config, records))
+        await asyncio.sleep(0)
+        assert storage._save_requests == 2
+        record.details.message = "later"
+        config["nested"]["value"] = 3
+        storage.pack_runtime["pack"]["values"].append(3)
+        storage.variation_baselines["reference"] = 3.0
+        if cancel_waiter:
+            second.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await second
+        release.set()
+        await first
+        if not cancel_waiter:
+            await second
+        stored = hass.stores[STORAGE_KEY]
+        assert "test" in stored["alerts"]
+        expected = 1 if cancel_waiter else 2
+        assert stored["config"]["nested"]["value"] == expected
+        assert stored["variation_baselines"]["reference"] == expected
+        assert stored["pack_runtime"]["pack"]["values"] == list(range(1, expected + 1))
+        assert stored["alerts"]["test"]["details"].get("message") == (
+            None if cancel_waiter else "queued"
+        )
+        assert storage._save_requests == 0
+
+    run(scenario())

@@ -99,6 +99,7 @@ class AlertManagerStorage:
             serialize_in_event_loop=False,
         )
         self._save_lock = asyncio.Lock()
+        self._save_requests = 0
         self._persisted_payload: dict[str, Any] | None = None
         self.persisted_alert_ids: set[str] = set()
         self._staged_durable_alert_ids: set[str] | None = None
@@ -268,6 +269,17 @@ class AlertManagerStorage:
             changed = True
         return config, changed
 
+    def _snapshot_section(self, key: str, value: dict[str, Any]) -> dict[str, Any]:
+        """Reuse detached durable data until a section's contents change."""
+        previous = (
+            self._persisted_payload.get(key)
+            if self._persisted_payload is not None
+            else None
+        )
+        if previous is not None and value == previous:
+            return previous
+        return deepcopy(value)
+
     async def async_save(
         self,
         config: dict[str, Any],
@@ -277,46 +289,54 @@ class AlertManagerStorage:
         include_all_pending: bool = False,
     ) -> None:
         """Atomically save a detached snapshot, omitting fresh pending records."""
-        config_snapshot = deepcopy(config)
-        record_snapshots = {
-            alert_id: (
-                record.status,
-                record.detected_at.astimezone(UTC),
-                record.as_storage_dict(),
-            )
-            for alert_id, record in records.items()
-        }
-        baselines_snapshot = dict(self.variation_baselines)
-        pack_runtime_snapshot = deepcopy(self.pack_runtime)
+        config_snapshot = self._snapshot_section("config", config)
         cutoff = pending_before.astimezone(UTC) if pending_before is not None else None
-
-        async with self._save_lock:
-            durable_alert_ids = self.effective_durable_alert_ids
-            alerts = {
-                alert_id: data
-                for alert_id, (status, detected_at, data) in sorted(
-                    record_snapshots.items()
-                )
-                if status is not AlertStatus.PENDING
+        durable_alert_ids = self.effective_durable_alert_ids
+        # A preceding write may make a fresh pending durable while we wait.
+        # Keep the full detached input only on this contended path.
+        save_in_progress = self._save_requests > 0
+        record_snapshots = {}
+        for alert_id, record in records.items():
+            eligible = (
+                record.status is not AlertStatus.PENDING
                 or include_all_pending
-                or alert_id in durable_alert_ids
-                or (cutoff is not None and detected_at <= cutoff)
-            }
-            payload = {
-                "config": config_snapshot,
-                "alerts": alerts,
-                "variation_baselines": baselines_snapshot,
-                "pack_runtime": pack_runtime_snapshot,
-            }
-            if payload == self._persisted_payload and not self._force_next_save:
+                or (cutoff is not None and record.detected_at.astimezone(UTC) <= cutoff)
+            )
+            if eligible or alert_id in durable_alert_ids or save_in_progress:
+                record_snapshots[alert_id] = (eligible, record.as_storage_dict())
+        baselines_snapshot = self._snapshot_section(
+            "variation_baselines", self.variation_baselines
+        )
+        pack_runtime_snapshot = self._snapshot_section(
+            "pack_runtime", self.pack_runtime
+        )
+
+        self._save_requests += 1
+        try:
+            async with self._save_lock:
+                durable_alert_ids = self.effective_durable_alert_ids
+                alerts = {
+                    alert_id: data
+                    for alert_id, (eligible, data) in sorted(record_snapshots.items())
+                    if eligible or alert_id in durable_alert_ids
+                }
+                payload = {
+                    "config": config_snapshot,
+                    "alerts": alerts,
+                    "variation_baselines": baselines_snapshot,
+                    "pack_runtime": pack_runtime_snapshot,
+                }
+                if payload == self._persisted_payload and not self._force_next_save:
+                    self.persisted_alert_ids = set(alerts)
+                    self._staged_durable_alert_ids = None
+                    return
+                await self._store.async_save(payload)
+                self._persisted_payload = payload
                 self.persisted_alert_ids = set(alerts)
                 self._staged_durable_alert_ids = None
-                return
-            await self._store.async_save(payload)
-            self._persisted_payload = payload
-            self.persisted_alert_ids = set(alerts)
-            self._staged_durable_alert_ids = None
-            self._force_next_save = False
+                self._force_next_save = False
+        finally:
+            self._save_requests -= 1
 
 
 class AlertManagerConfigBackupStorage:
