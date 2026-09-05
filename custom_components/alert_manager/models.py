@@ -26,6 +26,20 @@ from .const import (
 )
 
 
+def validate_label_list(value: Any, *, path: str = "excluded_labels") -> list[str]:
+    """Validate and deduplicate Home Assistant label registry ids."""
+    if not isinstance(value, list):
+        raise ValueError(f"{path} must be a list")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or len(item) > 255:
+            raise ValueError(f"Invalid label id: {item}")
+        label_id = item.strip()
+        if label_id not in result:
+            result.append(label_id)
+    return result
+
+
 class AlertStatus(StrEnum):
     """Internal alert status."""
 
@@ -58,6 +72,7 @@ class AlertDetails:
     operator: str | None = None
     comparison_value: Any = None
     attribute: str | None = None
+    labels: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertDetails:
@@ -96,6 +111,7 @@ class AlertDetails:
             data["condition_params"], dict
         ):
             raise ValueError("Alert detail condition_params must be an object or null")
+        data["labels"] = validate_label_list(data.get("labels", []), path="labels")
         allowed = cls.__dataclass_fields__
         values = {key: data[key] for key in allowed if key in data}
         return cls(**values)
@@ -141,6 +157,7 @@ class AlertHistoryEntry:
     acknowledged_at: datetime | None
     acknowledged_by: str | None
     notifications: dict[str, Any] | None = None
+    labels: list[str] = field(default_factory=list)
 
     @classmethod
     def resolved(cls, record: AlertRecord, resolved_at: datetime) -> AlertHistoryEntry:
@@ -204,6 +221,7 @@ class AlertHistoryEntry:
             acknowledged_at=record.acknowledged_at,
             acknowledged_by=record.acknowledged_by,
             notifications=_json_safe(record.notifications),
+            labels=list(record.details.labels),
         )
 
     @classmethod
@@ -319,6 +337,7 @@ class AlertHistoryEntry:
             acknowledged_at=parsed_acknowledged_at,
             **durations,
         )
+        values["labels"] = validate_label_list(data.get("labels", []), path="labels")
         values["notifications"] = _notification_summary(data.get("notifications"))
         return cls(**values)
 
@@ -628,6 +647,7 @@ class Rule:
     flapping_occurrences: int | None = None
     flapping_window: int | None = None
     flapping_recovery: int | None = None
+    label_ids: list[str] = field(default_factory=list)
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -690,6 +710,7 @@ class Rule:
             raise ValueError("Rule name is required")
         if len(self.name) > MAX_RULE_NAME_LENGTH:
             raise ValueError("Rule name is too long")
+        self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")
         if any(not isinstance(entity_id, str) for entity_id in self.entity_ids):

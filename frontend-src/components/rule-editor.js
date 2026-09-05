@@ -16,6 +16,7 @@ export function normalizeRuleDraft(rule = {}) {
       ...defaults,
       ...rule,
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
+      label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
     if (normalized.source === "none") normalized.source = "jinja";
     if (normalized.source === "variation") normalized.source = "state_variation";
@@ -123,6 +124,7 @@ export function serializeRuleDraft(draft) {
     return {
       name: String(draft.name ?? "").trim(),
       entity_ids: [...(draft.entity_ids ?? [])],
+      label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
       source,
       attribute: ATTRIBUTE_RULE_SOURCES.has(source)
@@ -434,6 +436,7 @@ export function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
             ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector><small>${esc(t("rules.labels_help"))}</small></div>
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
@@ -538,6 +541,7 @@ export async function duplicateRuleDraft() {
       ...source,
       name: "",
       entity_ids: [...(source.entity_ids ?? [])],
+      label_ids: [...(source.label_ids ?? [])],
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
@@ -781,6 +785,12 @@ export function hydrateRuleEditor(root, context) {
     context.onEntitiesChanged,
   );
   context.configureSelector(
+    "rule-label-ids",
+    { label: { multiple: true } },
+    context.draft.label_ids ?? [],
+    context.onLabelsChanged,
+  );
+  context.configureSelector(
     "rule-attribute",
     { select: { options: context.attributeOptions, custom_value: true, mode: "dropdown" } },
     context.draft.attribute ?? "",
@@ -889,6 +899,10 @@ export function hydrateRuleEditorControls() {
         value,
         this._editingRule.entity_ids,
       );
+      this._ruleDirty = true;
+    },
+    onLabelsChanged: (value) => {
+      this._editingRule.label_ids = this._multipleSelectorValue(value, this._editingRule.label_ids);
       this._ruleDirty = true;
     },
     onAttributeChanged: (value) => {

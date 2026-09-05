@@ -57,6 +57,7 @@ class _NotificationItem:
     message: str | None
     condition: str | None
     detected_at: str | None = None
+    labels: tuple[str, ...] = ()
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
@@ -78,6 +79,7 @@ class _NotificationItem:
             device_name=_optional_text(data.get("device_name")),
             message=_optional_text(data.get("message")),
             condition=_optional_text(data.get("condition")),
+            labels=tuple(data.get("labels", ())),
         )
 
 
@@ -296,7 +298,9 @@ class NotificationRuntime:
             profile_runtime = self._runtime.setdefault(profile_id, {})
             for alert_id, record in active_records.items():
                 labels = self._labels_for(
-                    record.details.entity_id, record.details.device_id
+                    record.details.entity_id,
+                    record.details.device_id,
+                    record.details.labels,
                 )
                 if not profile_matches_labels(profile, labels):
                     profile_runtime.pop(alert_id, None)
@@ -393,7 +397,7 @@ class NotificationRuntime:
             return
         config = self._config_getter()
         now = dt_util.now().astimezone(UTC)
-        labels = self._labels_for(item.entity_id, item.device_id)
+        labels = self._labels_for(item.entity_id, item.device_id, item.labels)
         changed = False
         for profile in config.get("notification_profiles", []):
             if not profile.get("enabled"):
@@ -414,7 +418,6 @@ class NotificationRuntime:
             policy = resolve_notification_policy(
                 profile,
                 pack_id=item.alert_type if item.rule_id is None else None,
-                rule_id=item.rule_id,
                 label_ids=labels,
             )
             if event_type == EVENT_ALERT_STARTED:
@@ -659,7 +662,9 @@ class NotificationRuntime:
                     changed = True
                     continue
                 labels = self._labels_for(
-                    record.details.entity_id, record.details.device_id
+                    record.details.entity_id,
+                    record.details.device_id,
+                    record.details.labels,
                 )
                 if not profile_matches_labels(profile, labels):
                     profile_runtime.pop(alert_id, None)
@@ -817,11 +822,16 @@ class NotificationRuntime:
                 return profile
         raise ValueError(f"Unknown notification profile id: {profile_id}")
 
-    def _labels_for(self, entity_id: str, device_id: str | None) -> frozenset[str]:
+    def _labels_for(
+        self,
+        entity_id: str,
+        device_id: str | None,
+        rule_labels: list[str] | tuple[str, ...] = (),
+    ) -> frozenset[str]:
         """Cache the union of native entity and device labels without scans."""
         cache_key = f"{entity_id}|{device_id or ''}"
         if cache_key in self._label_cache:
-            return self._label_cache[cache_key]
+            return self._label_cache[cache_key].union(rule_labels)
         labels: set[str] = set()
         entity_entry = self._entity_registry.async_get(entity_id)
         labels.update(getattr(entity_entry, "labels", ()) or ())
@@ -831,7 +841,7 @@ class NotificationRuntime:
             labels.update(getattr(device, "labels", ()) or ())
         result = frozenset(labels)
         self._label_cache[cache_key] = result
-        return result
+        return result.union(rule_labels)
 
     @callback
     def registry_changed(self) -> None:
@@ -947,7 +957,6 @@ def _policy_for_record(
     return resolve_notification_policy(
         profile,
         pack_id=record.details.type if record.details.rule_id is None else None,
-        rule_id=record.details.rule_id,
         label_ids=labels,
     )
 

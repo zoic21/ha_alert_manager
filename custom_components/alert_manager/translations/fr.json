@@ -228,11 +228,11 @@
       "enabled": "Activé",
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
-      "exceptions_help": "Les surcharges sont appliquées dans cet ordre : pack, première étiquette correspondante, puis règle.",
+      "exceptions_help": "Les surcharges sont appliquées dans cet ordre : pack, puis première étiquette correspondante.",
       "grouped_alerts": "{count} alertes",
       "help": "Route les alertes groupées vers les entités de notification natives de Home Assistant.",
       "labels": "Étiquettes du profil",
-      "labels_help": "Si elles sont renseignées, seules les entités ou appareils portant l’une de ces étiquettes correspondent au profil.",
+      "labels_help": "Si elles sont renseignées, seules les alertes dont la règle, l’entité ou l’appareil porte l’une de ces étiquettes correspondent au profil.",
       "name": "Nom du profil",
       "never": "Jamais",
       "new": "Nouveau profil de notification",
@@ -260,8 +260,7 @@
       "selector_type": "Type d’exception",
       "selector_types": {
         "label": "Étiquette",
-        "pack": "Pack automatique",
-        "rule": "Règle personnalisée"
+        "pack": "Pack automatique"
       },
       "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
       "targets": "Entités de notification",
@@ -493,7 +492,9 @@
       "values": "Valeurs de comparaison",
       "yaml_help": "Avec une source état ou attribut, la comparaison Alert Manager est obligatoire et condition_template reste facultative. Les sources state_variation et attribute_variation comparent valeur_actuelle - valeur_au_début et exigent condition_template : la référence est capturée lorsque ce template passe à true, puis réinitialisée lorsqu’il redevient false. attribute_variation exige aussi un attribut numérique sans joker. Les variations acceptent les opérateurs above, below, between et outside. Les opérateurs between et outside utilisent value: [borne_inférieure, borne_supérieure] ; l’opérateur unchanged n’utilise pas value. Un attribut data.*.key parcourt chaque élément du tableau data pour les comparaisons classiques. Avec source: unchanged, l’absence de changement de l’état et des attributs est surveillée. Avec source: jinja, seule condition_template est évaluée et elle devient obligatoire. update_message_when_active permet de continuer à recalculer un message Jinja après l’activation.",
       "yaml_invalid": "La règle YAML est invalide.",
-      "yaml_title": "Règle YAML"
+      "yaml_title": "Règle YAML",
+      "labels": "Étiquettes",
+      "labels_help": "Étiquettes Home Assistant ajoutées à celles de l’entité et de l’appareil pour les notifications."
     },
     "settings": {
       "alert_display": "Affichage des alertes",

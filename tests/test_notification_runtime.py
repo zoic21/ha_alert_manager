@@ -933,3 +933,94 @@ def test_delivery_waiting_for_archive_is_counted_once(hass, entry) -> None:
         assert restored[0].notifications["alert"]["count"] == 1
 
     asyncio.run(scenario())
+
+
+def test_rule_labels_route_start_reminders_and_resolution(hass, entry, set_now):
+    """Rule labels filter profiles and select policies at every lifecycle step."""
+
+    async def scenario():
+        now = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
+        set_now(now)
+        profile = _profile()
+        profile["label_ids"] = ["cold"]
+        profile["default_policy"]["notify_on_resolved"] = False
+        profile["exceptions"] = [
+            {
+                "selector_type": "label",
+                "selector_id": "cold",
+                "notify_on_resolved": True,
+                "reminder_interval": 300,
+            }
+        ]
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        record = _active_record(now)
+        record.details.type = "rule"
+        record.details.rule_id = "freezer"
+        record.details.labels = ["cold"]
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {record.details.id: record}, delivery
+        )
+        await runtime.async_setup()
+        assert runtime._runtime["profile"][
+            record.details.id
+        ].next_reminder == now + timedelta(seconds=300)
+        # Two rules on the same source must never contaminate the shared entity cache.
+        assert runtime._labels_for("sensor.test", None, ["other"]) == {"other"}
+        assert runtime._labels_for("sensor.test", None) == set()
+        event = record.details.as_dict()
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_flush_batch("profile", "started")
+        runtime._runtime["profile"][record.details.id].next_reminder = now
+        await runtime._async_send_reminders()
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+        await runtime._async_flush_batch("profile", "resolved")
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 3}}
+        assert len(delivery.calls) == 3
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_rule_label_update_refreshes_frozen_alert_and_reminders(hass, entry):
+    """Label edits during a pause survive storage and resume notification routing."""
+
+    async def scenario():
+        from custom_components.alert_manager.models import AlertHistoryEntry
+
+        hass.states.set("sensor.test", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Hot sensor",
+                "entity_ids": ["sensor.test"],
+                "operator": "above",
+                "value": 8,
+                "duration": 0,
+                "label_ids": ["old"],
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.test"
+        profile = _profile(reminder_interval=300)
+        profile["label_ids"] = ["new"]
+        await manager.async_update_config({"notification_profiles": [profile]})
+        assert alert_id not in manager.notification_runtime._runtime["profile"]
+        await manager.async_set_monitoring(False)
+        await manager.async_update_rule(rule["id"], {"label_ids": ["new"]})
+        record = manager.records[alert_id]
+        assert record.details.labels == ["new"]
+        assert AlertRecord.from_dict(record.as_storage_dict()).details.labels == ["new"]
+        await manager.async_set_monitoring(True)
+        assert (
+            manager.notification_runtime._runtime["profile"][alert_id].next_reminder
+            is not None
+        )
+        history = AlertHistoryEntry.resolved(record, record.active_since)
+        record.details.labels.clear()
+        assert AlertHistoryEntry.from_dict(history.as_dict()).labels == ["new"]
+        await manager.async_unload()
+
+    asyncio.run(scenario())

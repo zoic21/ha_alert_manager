@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ruleToYaml } from "../frontend-src/utils/formatting.js";
 
 import {
   captureRuleDraftFromForm,
@@ -322,8 +323,33 @@ test("rule editor hydration configures Home Assistant controls through callbacks
     "rule-source",
     "rule-operator",
     "rule-entity-ids",
+    "rule-label-ids",
     "rule-attribute",
     "rule-condition-template",
     "rule-message-template",
   ]);
+});
+
+test("rule labels survive drafts, duplication, serialization and YAML", () => {
+  const original = { ...rule(), label_ids: ["cold", "kitchen"] };
+  const draft = normalizeRuleDraft(original);
+  draft.label_ids.push("garage");
+  assert.deepEqual(original.label_ids, ["cold", "kitchen"]);
+  const captured = captureRuleDraftFromForm({ querySelector: () => null }, draft);
+  const serialized = serializeRuleDraft(captured);
+  assert.deepEqual(serialized.label_ids, ["cold", "kitchen", "garage"]);
+  assert.match(ruleToYaml(serialized), /label_ids: \["cold","kitchen","garage"\]/);
+  const calls = [];
+  let changed;
+  hydrateRuleEditor({ querySelector: () => null }, {
+    mode: "visual", draft,
+    configureSelect() {},
+    configureSelector: (...args) => calls.push(args),
+    onLabelsChanged: (value) => { changed = value; },
+  });
+  const selector = calls.find(([id]) => id === "rule-label-ids");
+  assert.deepEqual(selector[1], { label: { multiple: true } });
+  assert.deepEqual(selector[2], serialized.label_ids);
+  selector[3]([]);
+  assert.deepEqual(changed, []);
 });

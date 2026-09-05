@@ -354,6 +354,7 @@ const lines = (value) =>
 const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
+  label_ids: [],
   enabled: true,
   source: "state",
   attribute: "",
@@ -386,6 +387,7 @@ const ruleToYaml = (rule) => {
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
+    `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,
     `source: ${yamlValue(source)}`,
   ];
   if (ATTRIBUTE_RULE_SOURCES.has(source)) {
@@ -1247,16 +1249,7 @@ function entityMetadata(source, labelRegistry) {
       ...(Array.isArray(source.labels) ? source.labels : []),
       ...(Array.isArray(entity?.labels) ? entity.labels : []),
     ].map(String).filter(Boolean))];
-    const labels = labelIds.map((labelId) => {
-      const entry = labelRegistry.get(labelId);
-      return {
-        id: labelId,
-        name: entry?.name || labelId,
-        color: entry?.color || "",
-        description: entry?.description || "",
-        icon: entry?.icon || "",
-      };
-    });
+    const labels = labelMetadata(labelIds, labelRegistry);
     return { domain, integration, labels };
 }
 
@@ -1680,23 +1673,7 @@ function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (row.entityId) name.title = row.entityId;
     content.append(name);
     if (!narrow && row.labels?.length) {
-      const labels = document.createElement("span");
-      labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
-      for (const metadata of row.labels) {
-        const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
-        label.textContent = metadata.name;
-        label.title = metadata.description || metadata.name;
-        if (label.tagName === "HA-LABEL") {
-          label.setAttribute("dense", "");
-          if (metadata.color) label.setAttribute("color", metadata.color);
-          if (metadata.description) label.setAttribute("description", metadata.description);
-          label.className = "text-ellipsis";
-        } else {
-          label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
-        }
-        labels.append(label);
-      }
-      content.append(labels);
+      content.append(nativeLabelBadges(row.labels));
     }
     if (narrow) {
       const secondaryColumns = (this._tableState[kind]?.columns ?? [])
@@ -2209,6 +2186,39 @@ async function handleAlertTableAction(action, button, event) {
   return false;
 }
 
+function labelMetadata(labelIds, labelRegistry) {
+    return labelIds.map((labelId) => {
+      const entry = labelRegistry.get(labelId);
+      return {
+        id: labelId,
+        name: entry?.name || labelId,
+        color: entry?.color || "",
+        description: entry?.description || "",
+        icon: entry?.icon || "",
+      };
+    });
+}
+
+function nativeLabelBadges(metadataList) {
+    const labels = document.createElement("span");
+    labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
+    for (const metadata of metadataList) {
+      const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
+      label.textContent = metadata.name;
+      label.title = metadata.description || metadata.name;
+      if (label.tagName === "HA-LABEL") {
+        label.setAttribute("dense", "");
+        if (metadata.color) label.setAttribute("color", metadata.color);
+        if (metadata.description) label.setAttribute("description", metadata.description);
+        label.className = "text-ellipsis";
+      } else {
+        label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      }
+      labels.append(label);
+    }
+    return labels;
+}
+
 // Source: frontend-src/components/config-backups.js
 function renderConfigBackups(context) {
   const { backups, busy, date, t } = context;
@@ -2508,7 +2518,7 @@ function replaceConfigurationDrawer(root, markup) {
 
 // Source: frontend-src/components/notification-profiles.js
 const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
-const SELECTOR_TYPES = ["pack", "label", "rule"];
+const SELECTOR_TYPES = ["pack", "label"];
 
 function newNotificationProfileDraft() {
   const generatedId = globalThis.crypto?.randomUUID?.()
@@ -2660,7 +2670,7 @@ function booleanOverrideValue(exception, key) {
   return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
 }
 
-function hydrateNotificationProfileControls(panel, { packs, rules }) {
+function hydrateNotificationProfileControls(panel, { packs }) {
   const draft = panel._notificationProfileDraft;
   if (!draft) return;
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
@@ -2699,12 +2709,10 @@ function hydrateNotificationProfileControls(panel, { packs, rules }) {
         (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
       );
     } else {
-      const options = exception.selector_type === "rule"
-        ? rules.map((rule) => ({ value: rule.id, label: rule.name }))
-        : packs.map((pack) => ({
-          value: pack.id,
-          label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
-        }));
+      const options = packs.map((pack) => ({
+        value: pack.id,
+        label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
+      }));
       panel._configureSelect(
         `notification-exception-selector-${index}`,
         options,
@@ -2963,6 +2971,7 @@ function normalizeRuleDraft(rule = {}) {
       ...defaults,
       ...rule,
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
+      label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
     if (normalized.source === "none") normalized.source = "jinja";
     if (normalized.source === "variation") normalized.source = "state_variation";
@@ -3070,6 +3079,7 @@ function serializeRuleDraft(draft) {
     return {
       name: String(draft.name ?? "").trim(),
       entity_ids: [...(draft.entity_ids ?? [])],
+      label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
       source,
       attribute: ATTRIBUTE_RULE_SOURCES.has(source)
@@ -3381,6 +3391,7 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
             ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector><small>${esc(t("rules.labels_help"))}</small></div>
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
@@ -3485,6 +3496,7 @@ async function duplicateRuleDraft() {
       ...source,
       name: "",
       entity_ids: [...(source.entity_ids ?? [])],
+      label_ids: [...(source.label_ids ?? [])],
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
@@ -3728,6 +3740,12 @@ function hydrateRuleEditor(root, context) {
     context.onEntitiesChanged,
   );
   context.configureSelector(
+    "rule-label-ids",
+    { label: { multiple: true } },
+    context.draft.label_ids ?? [],
+    context.onLabelsChanged,
+  );
+  context.configureSelector(
     "rule-attribute",
     { select: { options: context.attributeOptions, custom_value: true, mode: "dropdown" } },
     context.draft.attribute ?? "",
@@ -3836,6 +3854,10 @@ function hydrateRuleEditorControls() {
         value,
         this._editingRule.entity_ids,
       );
+      this._ruleDirty = true;
+    },
+    onLabelsChanged: (value) => {
+      this._editingRule.label_ids = this._multipleSelectorValue(value, this._editingRule.label_ids);
       this._ruleDirty = true;
     },
     onAttributeChanged: (value) => {
@@ -4868,12 +4890,14 @@ function renderRulesPanel() {
 }
 
 function buildRuleTableRows(rules, context) {
-    const { t, summarizeRule, formatDuration } = context;
+    const { t, summarizeRule, formatDuration, labels = [] } = context;
+    const labelRegistry = new Map(labels.map((label) => [label.label_id, label]));
     return rules.map((rule) => {
       const enabled = rule.enabled !== false;
       const row = {
         id: rule.id,
         name: rule.name,
+        labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
         condition: summarizeRule(rule),
@@ -4890,6 +4914,7 @@ function buildRuleTableRows(rules, context) {
         row.condition,
         row.duration,
         row.enabledLabel,
+        ...row.labels.flatMap((label) => [label.id, label.name]),
       ].join(" ");
       return row;
     });
@@ -4900,11 +4925,12 @@ function ruleTableRows() {
       t: (key, replacements) => this._t(key, replacements),
       summarizeRule: (rule) => this._ruleSummary(rule),
       formatDuration: (duration) => this._durationText(duration),
+      labels: this._labels ?? [],
     });
 }
 
 function nativeRuleNameCell(row, narrow = false) {
-    if (!narrow || !globalThis.document?.createElement) return row.name;
+    if (!globalThis.document?.createElement) return row.name;
     const state = this._ensureRulesTableState();
     const hiddenColumns = new Set(state.hiddenColumns);
     const secondaryColumns = state.columnOrder.filter((column) => (
@@ -4916,7 +4942,8 @@ function nativeRuleNameCell(row, narrow = false) {
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(primary);
-    if (secondaryColumns.length) {
+    if (row.labels?.length) content.append(nativeLabelBadges(row.labels));
+    if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
       secondary.textContent = secondaryColumns
         .map((column) => row[column])
@@ -6128,7 +6155,6 @@ function hydrateSettingsControls() {
   });
   hydrateNotificationProfileControls(this, {
     packs: this._packs.filter((pack) => pack.available),
-    rules: this._config.rules ?? [],
   });
 }
 

@@ -1,3 +1,4 @@
+import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
 import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_RULES_TABLE_STATE, RULES_COLUMNS, RULES_SECONDARY_COLUMNS } from "../utils/table-preferences.js";
@@ -306,12 +307,14 @@ export function renderRulesPanel() {
 }
 
 export function buildRuleTableRows(rules, context) {
-    const { t, summarizeRule, formatDuration } = context;
+    const { t, summarizeRule, formatDuration, labels = [] } = context;
+    const labelRegistry = new Map(labels.map((label) => [label.label_id, label]));
     return rules.map((rule) => {
       const enabled = rule.enabled !== false;
       const row = {
         id: rule.id,
         name: rule.name,
+        labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
         condition: summarizeRule(rule),
@@ -328,6 +331,7 @@ export function buildRuleTableRows(rules, context) {
         row.condition,
         row.duration,
         row.enabledLabel,
+        ...row.labels.flatMap((label) => [label.id, label.name]),
       ].join(" ");
       return row;
     });
@@ -338,11 +342,12 @@ export function ruleTableRows() {
       t: (key, replacements) => this._t(key, replacements),
       summarizeRule: (rule) => this._ruleSummary(rule),
       formatDuration: (duration) => this._durationText(duration),
+      labels: this._labels ?? [],
     });
 }
 
 export function nativeRuleNameCell(row, narrow = false) {
-    if (!narrow || !globalThis.document?.createElement) return row.name;
+    if (!globalThis.document?.createElement) return row.name;
     const state = this._ensureRulesTableState();
     const hiddenColumns = new Set(state.hiddenColumns);
     const secondaryColumns = state.columnOrder.filter((column) => (
@@ -354,7 +359,8 @@ export function nativeRuleNameCell(row, narrow = false) {
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(primary);
-    if (secondaryColumns.length) {
+    if (row.labels?.length) content.append(nativeLabelBadges(row.labels));
+    if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
       secondary.textContent = secondaryColumns
         .map((column) => row[column])

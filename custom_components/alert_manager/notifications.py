@@ -43,7 +43,7 @@ _PROFILE_KEYS = {
     "exceptions",
 }
 _EXCEPTION_KEYS = {"selector_type", "selector_id", *_POLICY_KEYS}
-_SELECTOR_TYPES = {"pack", "label", "rule"}
+_SELECTOR_TYPES = {"pack", "label"}
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
 
@@ -236,10 +236,9 @@ def resolve_notification_policy(
     profile: dict[str, Any],
     *,
     pack_id: str | None,
-    rule_id: str | None,
     label_ids: set[str] | frozenset[str],
 ) -> NotificationPolicy:
-    """Resolve Default -> Pack -> first matching Label -> Rule overrides."""
+    """Resolve Default -> Pack -> first matching Label overrides."""
     effective = dict(profile["default_policy"])
     exceptions = profile["exceptions"]
 
@@ -254,12 +253,6 @@ def resolve_notification_policy(
         exceptions,
         selector_type="label",
         selector_ids=set(label_ids),
-    )
-    _apply_first_matching(
-        effective,
-        exceptions,
-        selector_type="rule",
-        selector_ids={rule_id} if rule_id is not None else set(),
     )
     return NotificationPolicy(**effective)
 

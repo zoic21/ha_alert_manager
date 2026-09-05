@@ -9,6 +9,7 @@ const lines = (value) =>
 const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
+  label_ids: [],
   enabled: true,
   source: "state",
   attribute: "",
@@ -41,6 +42,7 @@ const ruleToYaml = (rule) => {
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
+    `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,
     `source: ${yamlValue(source)}`,
   ];
   if (ATTRIBUTE_RULE_SOURCES.has(source)) {
