@@ -259,6 +259,8 @@ mode: queued
 
 ### Per-alert notification details
 
+After a restart, reminders wait until alert reconciliation completes. Only confirmed alerts resume reminders; an overdue deadline restarts from the profile interval, without replaying missed reminders.
+
 Alert details show notifications from the built-in profiles: delivery count (including reminders), matching profiles even without reminders, and last delivery time. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History keeps recovery deliveries, their profiles and last delivery time separately. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
 
 ## Home Assistant entities and events

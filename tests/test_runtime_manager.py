@@ -1079,6 +1079,79 @@ def test_large_scan_yields_during_tracking_and_evaluation(hass, entry, monkeypat
     run(scenario())
 
 
+@pytest.mark.parametrize("reconciling", [False, True])
+def test_queued_evaluations_yield_without_extra_writes(
+    hass, entry, monkeypatch, reconciling
+):
+    """Live and startup queues yield in bounded batches and keep one final write."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.alert_manager.runtime_phase import RuntimePhase
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        for index in range(300):
+            entity_id = f"sensor.batch_{index:03}"
+            hass.states.set(entity_id, "unavailable")
+            manager._queued_evaluation_entities.add(entity_id)
+        save = AsyncMock(wraps=manager._async_save_state)
+        monkeypatch.setattr(manager, "_async_save_state", save)
+        if reconciling:
+            manager._runtime_phase = RuntimePhase.RECONCILING
+            operation = manager._async_drain_startup_state_events()
+        else:
+            operation = manager._async_flush_queued_evaluations()
+        task = asyncio.create_task(operation)
+        progress = []
+        while not task.done():
+            progress.append(len(manager.records))
+            await asyncio.sleep(0)
+        await task
+        progress.append(len(manager.records))
+        assert progress[-1] == 300
+        assert max(b - a for a, b in pairwise(progress)) <= 50
+        assert save.await_count == (0 if reconciling else 1)
+        assert not manager._queued_evaluation_entities
+        await manager.async_unload()
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("shutdown", [False, True])
+def test_state_batch_handles_events_and_shutdown_at_yield(hass, entry, shutdown):
+    """A yield retains newer observations and stops work at the shutdown boundary."""
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        for index in range(100):
+            entity_id = f"sensor.batch_{index:03}"
+            hass.states.set(entity_id, "unavailable")
+            manager._queued_evaluation_entities.add(entity_id)
+        task = asyncio.create_task(manager._async_flush_queued_evaluations())
+        await asyncio.sleep(0)
+        assert len(manager.records) == 50
+        if shutdown:
+            manager._begin_shutdown()
+        else:
+            entity_id = "sensor.batch_000"
+            old_state = hass.states.get(entity_id)
+            new_state = hass.states.set(entity_id, "ok")
+            manager._state_changed(_state_event(entity_id, old_state, new_state))
+        await task
+        await asyncio.sleep(0)
+        assert not manager._evaluation_flush_scheduled
+        if shutdown:
+            assert len(manager.records) == 50
+        else:
+            assert len(manager.records) == 99
+            assert "unavailable:sensor.batch_000" not in manager.records
+        await manager.async_unload()
+
+    run(scenario())
+
+
 @pytest.mark.parametrize("broad_event", [False, True])
 def test_registry_entity_targets_and_broad_fallback(
     hass, entry, monkeypatch, broad_event

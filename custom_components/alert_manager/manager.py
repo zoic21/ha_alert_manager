@@ -79,6 +79,10 @@ class AlertManager(
             ),
             self.notifications,
             self._async_record_notification,
+            reminders_ready=lambda: (
+                self._runtime_phase is RuntimePhase.RUNNING
+                and self.hass.state is CoreState.running
+            ),
         )
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
