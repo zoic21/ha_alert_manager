@@ -495,7 +495,11 @@ class NotificationRuntime:
             self.hass,
             timer_due,
             dt_util.now().astimezone(UTC)
-            + timedelta(seconds=NOTIFICATION_BATCH_SECONDS),
+            + timedelta(
+                seconds=self._config_getter().get(
+                    "notification_batch_delay", NOTIFICATION_BATCH_SECONDS
+                )
+            ),
         )
 
     def _cancel_transient_start(self, profile_id: str, alert_id: str) -> bool:

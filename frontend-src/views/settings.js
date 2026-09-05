@@ -70,6 +70,7 @@ export function renderSettings(context) {
       </div></ha-card>
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
+        batchDelayField: renderNumberField("notification-batch-delay", t("notifications.batch_delay"), settingsDraft.notification_batch_delay ?? config.notification_batch_delay ?? 30, t("units.seconds"), 10, 300, { help: t("notifications.batch_delay_help") }),
         usage: notificationUsage,
         busy,
         t,
@@ -352,6 +353,7 @@ export async function saveSettings(additionalChanges = {}) {
       ...additionalChanges,
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
       pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       coherence_scan_esphome: Boolean(
         this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
@@ -419,6 +421,7 @@ export function ensureSettingsDraft() {
     this._settingsDraft = {
       global_delay: this._config.global_delay,
       pending_display_delay: this._config.pending_display_delay,
+      notification_batch_delay: this._config.notification_batch_delay ?? 30,
       coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
       history_limit: this._historyConfig.retention_limit,
@@ -445,6 +448,7 @@ export function handleSettingsInput(event) {
     const fields = {
       "global-delay": "global_delay",
       "pending-display-delay": "pending_display_delay",
+      "notification-batch-delay": "notification_batch_delay",
       "history-limit": "history_limit",
     };
     const field = fields[event.target?.id];

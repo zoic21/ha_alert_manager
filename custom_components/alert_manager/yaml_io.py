@@ -51,6 +51,7 @@ _CONFIG_YAML_KEY_ORDER = (
     "entity_delays",
     "automatic",
     "notification_profiles",
+    "notification_batch_delay",
 )
 _CONFIG_YAML_KEYS = set(_CONFIG_YAML_KEY_ORDER)
 
@@ -233,6 +234,7 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
             "coherence_ignored_entity_references",
             "pending_display_delay",
             "notification_profiles",
+            "notification_batch_delay",
         }
         - set(config)
     )

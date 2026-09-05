@@ -159,7 +159,8 @@
       "hours": "{count} h",
       "minutes": "{count} min",
       "minutes_seconds": "{minutes} min {seconds} s",
-      "seconds": "{count} s"
+      "seconds": "{count} s",
+      "days": "{count} d"
     },
     "errors": {
       "attribute_path_invalid": "The attribute wildcard must be a complete segment, for example data.*.key.",
@@ -197,7 +198,8 @@
       "unknown": "An unexpected error occurred.",
       "yaml_invalid": "The YAML is invalid. Check its syntax.",
       "reevaluation_unavailable": "Reevaluation requires monitoring to be started and enabled.",
-      "alert_not_found": "This alert was not found or has already ended."
+      "alert_not_found": "This alert was not found or has already ended.",
+      "notification_batch_delay": "The batching delay must be an integer between 10 and 300 seconds."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -283,7 +285,9 @@
         "reminder": "Reminder intervals must be whole numbers of at least 60 seconds.",
         "selector": "Select a target for every exception."
       },
-      "yes": "Yes"
+      "yes": "Yes",
+      "batch_delay": "Batching delay",
+      "batch_delay_help": "10–300 seconds, default 30. Applies to new batches; pending batches keep their deadline."
     },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",

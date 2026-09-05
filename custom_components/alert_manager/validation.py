@@ -43,6 +43,7 @@ _CONFIG_UPDATE_KEYS = {
     "automatic",
     "rules",
     "notification_profiles",
+    "notification_batch_delay",
 }
 _AUTOMATIC_KEYS = {
     pack.id: {
@@ -224,6 +225,18 @@ def validate_config(config: Any) -> dict[str, Any]:
         seen.add(rule.id)
         normalized_rules.append(rule.as_dict())
     result["rules"] = normalized_rules
+    batch_delay = config.get(
+        "notification_batch_delay", result["notification_batch_delay"]
+    )
+    if (
+        isinstance(batch_delay, bool)
+        or not isinstance(batch_delay, int)
+        or not 10 <= batch_delay <= 300
+    ):
+        raise ValueError(
+            "notification_batch_delay must be an integer between 10 and 300 seconds"
+        )
+    result["notification_batch_delay"] = batch_delay
     result["notification_profiles"] = validate_notification_profiles(
         config.get("notification_profiles", [])
     )

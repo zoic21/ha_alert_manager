@@ -800,6 +800,7 @@ class _ApiMixin:
                 "coherence_ignored_entity_references",
                 "pending_display_delay",
                 "notification_profiles",
+                "notification_batch_delay",
                 "history_limit",
             }
         )

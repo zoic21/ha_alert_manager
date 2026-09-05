@@ -364,12 +364,19 @@ def test_notification_setup_failure_removes_lifecycle_subscription(hass, entry) 
     asyncio.run(scenario())
 
 
-def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> None:
+@pytest.mark.parametrize("delay", [10, 30, 300])
+def test_fixed_window_groups_two_device_alerts_in_one_delivery(
+    hass, entry, delay
+) -> None:
     """Adding an alert does not extend the first batch deadline."""
 
     async def scenario() -> None:
         config = validate_config(
-            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile()],
+                "notification_batch_delay": delay,
+            }
         )
         delivery = _DeliverySpy()
         runtime = NotificationRuntime(hass, entry, lambda: config, lambda: {}, delivery)
@@ -387,6 +394,10 @@ def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> N
         first_deadline = max(
             timer["point"] for timer in hass.timers if not timer["cancelled"]
         )
+        assert first_deadline == datetime(2026, 8, 24, 12, tzinfo=UTC) + timedelta(
+            seconds=delay
+        )
+        config["notification_batch_delay"] = 120
         await runtime._async_handle_event(
             EVENT_ALERT_STARTED,
             _event_data(
@@ -410,6 +421,13 @@ def test_fixed_window_groups_two_device_alerts_in_one_delivery(hass, entry) -> N
         assert delivery.calls[0]["click_url"] == "/alert-manager"
         assert delivery.calls[0]["message"] == "• Thermostat — 2 alerts"
         assert runtime.usage_snapshot() == {"last_24h": {"profile": 1}}
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            _event_data(
+                "unavailable:sensor.three", entity_id="sensor.three", device_id=None
+            ),
+        )
+        assert hass.timers[-1]["point"] == datetime(2026, 8, 24, 12, 2, tzinfo=UTC)
         await runtime.async_unload()
 
     asyncio.run(scenario())

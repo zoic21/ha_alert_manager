@@ -159,7 +159,8 @@
       "hours": "{count} h",
       "minutes": "{count} min",
       "minutes_seconds": "{minutes} min {seconds} s",
-      "seconds": "{count} s"
+      "seconds": "{count} s",
+      "days": "{count} j"
     },
     "errors": {
       "attribute_path_invalid": "Le joker d’attribut doit être un segment complet, par exemple data.*.key.",
@@ -197,7 +198,8 @@
       "unknown": "Une erreur inattendue s’est produite.",
       "yaml_invalid": "Le YAML est invalide. Vérifiez sa syntaxe.",
       "reevaluation_unavailable": "La réévaluation nécessite une surveillance démarrée et activée.",
-      "alert_not_found": "Cette alerte est introuvable ou déjà terminée."
+      "alert_not_found": "Cette alerte est introuvable ou déjà terminée.",
+      "notification_batch_delay": "Le délai de groupement doit être un entier entre 10 et 300 secondes."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -283,7 +285,9 @@
         "reminder": "Les intervalles de rappel doivent être des nombres entiers d’au moins 60 secondes.",
         "selector": "Sélectionnez une cible pour chaque exception."
       },
-      "yes": "Oui"
+      "yes": "Oui",
+      "batch_delay": "Délai de groupement",
+      "batch_delay_help": "De 10 à 300 secondes, 30 par défaut. S’applique aux prochains lots ; les lots en attente conservent leur échéance."
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

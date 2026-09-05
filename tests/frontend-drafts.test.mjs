@@ -189,3 +189,13 @@ test("pack labels use a native multi-selector and retain an independent draft", 
   updateLabels([]);
   assert.deepEqual(p._automaticMapDraft.battery.label_ids, []);
 });
+
+test("notification batch delay input survives navigation", () => {
+  const p = panel();
+  p._ensureSettingsDraft();
+  assert.equal(p._settingsDraft.notification_batch_delay, 30);
+  control(p, "#notification-batch-delay", { value: "120" }, "#settings-form").dispatchEvent(new Event("input"));
+  p.route = { path: "/alert-manager/rules" };
+  p.route = { path: "/alert-manager/settings" };
+  assert.equal(p._settingsDraft.notification_batch_delay, "120");
+});

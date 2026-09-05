@@ -39,12 +39,13 @@ export function cloneNotificationProfile(profile) {
   };
 }
 
-export function renderNotificationProfiles({ profiles, usage = {}, busy, t }) {
+export function renderNotificationProfiles({ profiles, usage = {}, busy, t, batchDelayField = "" }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
+    <div class="settings-grid">${batchDelayField}</div>
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>

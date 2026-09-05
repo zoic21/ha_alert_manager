@@ -433,17 +433,20 @@ function remaining(value) {
 
 function durationText(seconds) {
     const value = Math.max(0, Number(seconds) || 0);
-    if (value < 60) return this._t("duration.seconds", { count: value });
-    if (value % 3600 === 0) {
-      return this._t("duration.hours", { count: value / 3600 });
+    const parts = [
+      [86400, "days"],
+      [3600, "hours"],
+      [60, "minutes"],
+      [1, "seconds"],
+    ];
+    let rest = value;
+    const result = [];
+    for (const [unit, key] of parts) {
+      const count = unit === 1 ? rest : Math.floor(rest / unit);
+      if (count) result.push(this._t(`duration.${key}`, { count }));
+      rest %= unit;
     }
-    if (value % 60 === 0) {
-      return this._t("duration.minutes", { count: value / 60 });
-    }
-    return this._t("duration.minutes_seconds", {
-      minutes: Math.floor(value / 60),
-      seconds: value % 60,
-    });
+    return result.join(" ") || this._t("duration.seconds", { count: 0 });
 }
 
 function historyDurationText(seconds) {
@@ -523,6 +526,7 @@ function syncRuntimeMetadata(states) {
 
 // Source: frontend-src/utils/translations.js
 const VALIDATION_ERROR_KEYS = new Map([
+  ["notification_batch_delay must be an integer between 10 and 300 seconds", "notification_batch_delay"],
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],
   ["Rule entity_ids must be a non-empty list", "rule_entities_required"],
@@ -2722,12 +2726,13 @@ function cloneNotificationProfile(profile) {
   };
 }
 
-function renderNotificationProfiles({ profiles, usage = {}, busy, t }) {
+function renderNotificationProfiles({ profiles, usage = {}, busy, t, batchDelayField = "" }) {
   return `<ha-card id="settings-section-notifications" outlined class="panel settings-card notification-profiles-card settings-scroll-section">
     <div class="notification-section-header">
       <div><h2>${esc(t("notifications.title"))}</h2><small>${esc(t("notifications.help"))}</small></div>
       <ha-button type="button" appearance="plain" data-action="new-notification-profile" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("notifications.add"))}</ha-button>
     </div>
+    <div class="settings-grid">${batchDelayField}</div>
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>
@@ -5848,6 +5853,7 @@ function renderSettings(context) {
       </div></ha-card>
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
+        batchDelayField: renderNumberField("notification-batch-delay", t("notifications.batch_delay"), settingsDraft.notification_batch_delay ?? config.notification_batch_delay ?? 30, t("units.seconds"), 10, 300, { help: t("notifications.batch_delay_help") }),
         usage: notificationUsage,
         busy,
         t,
@@ -6130,6 +6136,7 @@ async function saveSettings(additionalChanges = {}) {
       ...additionalChanges,
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
       pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       coherence_scan_esphome: Boolean(
         this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
@@ -6197,6 +6204,7 @@ function ensureSettingsDraft() {
     this._settingsDraft = {
       global_delay: this._config.global_delay,
       pending_display_delay: this._config.pending_display_delay,
+      notification_batch_delay: this._config.notification_batch_delay ?? 30,
       coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
       history_limit: this._historyConfig.retention_limit,
@@ -6223,6 +6231,7 @@ function handleSettingsInput(event) {
     const fields = {
       "global-delay": "global_delay",
       "pending-display-delay": "pending_display_delay",
+      "notification-batch-delay": "notification_batch_delay",
       "history-limit": "history_limit",
     };
     const field = fields[event.target?.id];

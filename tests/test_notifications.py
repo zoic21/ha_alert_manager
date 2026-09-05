@@ -496,3 +496,30 @@ def test_legacy_configuration_without_pack_labels_still_imports():
     exported = dump_config_yaml(config).replace("      label_ids: []\n", "")
     imported = parse_config_yaml(exported)
     assert all(pack["label_ids"] == [] for pack in imported["automatic"].values())
+
+
+@pytest.mark.parametrize("delay", [10, 30, 300])
+def test_notification_batch_delay_valid(delay):
+    assert (
+        validate_config({"notification_batch_delay": delay})["notification_batch_delay"]
+        == delay
+    )
+
+
+@pytest.mark.parametrize("delay", [9, 301, True, None, "30", 30.5])
+def test_notification_batch_delay_invalid(delay):
+    with pytest.raises(ValueError, match="notification_batch_delay"):
+        validate_config({"notification_batch_delay": delay})
+
+
+def test_notification_batch_delay_default_and_yaml_roundtrip():
+    from custom_components.alert_manager.yaml_io import (
+        dump_config_yaml,
+        parse_config_yaml,
+    )
+
+    assert validate_config({})["notification_batch_delay"] == 30
+    config = validate_config({"notification_batch_delay": 120})
+    assert (
+        parse_config_yaml(dump_config_yaml(config))["notification_batch_delay"] == 120
+    )
