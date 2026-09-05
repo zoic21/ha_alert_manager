@@ -145,6 +145,8 @@ Une règle peut surveiller une ou plusieurs entités indépendamment et utiliser
 
 Les temporisations permettent d’exiger qu’une situation persiste avant de devenir une alerte, afin qu’une courte anomalie ne remplisse pas inutilement le dashboard. Les messages Jinja personnalisés sont figés par défaut au déclenchement, mais peuvent être maintenus à jour pendant toute la durée de l’alerte.
 
+Une erreur de rendu Jinja est indéterminée : elle ne crée aucune nouvelle occurrence et conserve les alertes existantes, leurs échéances de passage en actif et le dernier message valide. Les dépendances restent suivies pour réévaluer la règle lors d’un changement pertinent. Pour les règles de variation, une erreur ne crée ni ne réinitialise la référence ; seule une condition Jinja explicitement fausse termine la fenêtre en cours. Les erreurs restent visibles dans les journaux et le testeur de règle.
+
 Cela couvre par exemple les températures anormales, les consommations électriques inhabituelles, l’âge d’une sauvegarde, les codes d’erreur, les capteurs qui ne se mettent plus à jour ou presque n’importe quel état exposé par Home Assistant.
 
 Les règles peuvent être éditées visuellement ou en YAML et dupliquées depuis le panneau. Une règle peut surveiller jusqu’à 50 entités et une configuration peut contenir jusqu’à 500 règles. En YAML, les règles entièrement basées sur Jinja utilisent `source: jinja` ; les anciennes règles en `source: none` sont migrées automatiquement.

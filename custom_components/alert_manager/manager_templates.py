@@ -394,6 +394,21 @@ class _TemplatesMixin:
                 template = Template(rule.condition_template, self.hass)
                 template.ensure_valid()
             render_info = self._render_rule_template_info(template, state, current)
+            own_entities = self._render_info_has_own_dependency(render_info)
+            if own_entities:
+                if track:
+                    self._rule_template_render_info.pop(pair, None)
+                    self._remove_dependency_key(("condition", rule.id, state.entity_id))
+                    _LOGGER.error(
+                        "Ignored unsafe Jinja condition for rule %s because it depends "
+                        "on Alert Manager entities: %s",
+                        rule.id,
+                        ", ".join(sorted(own_entities)),
+                    )
+                return None, ", ".join(sorted(own_entities))
+            if track:
+                self._rule_template_render_info[pair] = render_info
+                self._index_render_info("condition", pair, render_info)
             result = str(render_info.result()).lower() == "true"
         except (KeyError, TemplateError) as err:
             if track:
@@ -405,21 +420,6 @@ class _TemplatesMixin:
                 )
             return None, str(err)
 
-        own_entities = self._render_info_has_own_dependency(render_info)
-        if own_entities:
-            if track:
-                self._rule_template_render_info.pop(pair, None)
-                self._remove_dependency_key(("condition", rule.id, state.entity_id))
-                _LOGGER.error(
-                    "Ignored unsafe Jinja condition for rule %s because it depends "
-                    "on Alert Manager entities: %s",
-                    rule.id,
-                    ", ".join(sorted(own_entities)),
-                )
-            return None, ", ".join(sorted(own_entities))
-        if track:
-            self._rule_template_render_info[pair] = render_info
-            self._index_render_info("condition", pair, render_info)
         return result, None
 
     def _render_rule_message_for_test(
@@ -455,35 +455,35 @@ class _TemplatesMixin:
         dependency_key = ("message", rule.id, state.entity_id)
         alert_id = f"rule:{rule.id}:{state.entity_id}"
         record = self.records.get(alert_id)
-        if (
+        frozen = (
             record is not None
             and record.status is AlertStatus.ACTIVE
             and not rule.update_message_when_active
-        ):
+        )
+        if frozen:
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(dependency_key)
             if not force:
                 return record.details.message
-            try:
-                render_info = self._render_rule_template_info(
-                    self._rule_message_templates[rule.id], state, current
-                )
-                rendered = str(render_info.result()).strip()
-                return rendered or None
-            except TemplateError as err:
-                _LOGGER.warning(
-                    "Jinja message failed for rule %s and entity %s: %s",
-                    rule.id,
-                    state.entity_id,
-                    err,
-                )
-                return None
 
         try:
             render_info = self._render_rule_template_info(
                 self._rule_message_templates[rule.id], state, current
             )
-            self._rule_message_render_info[pair] = render_info
+            own_entities = self._render_info_has_own_dependency(render_info)
+            if own_entities:
+                self._rule_message_render_info.pop(pair, None)
+                self._remove_dependency_key(dependency_key)
+                _LOGGER.error(
+                    "Ignored unsafe Jinja message for rule %s because it depends on "
+                    "Alert Manager entities: %s",
+                    rule.id,
+                    ", ".join(sorted(own_entities)),
+                )
+                return None
+            if not frozen:
+                self._rule_message_render_info[pair] = render_info
+                self._index_render_info("message", pair, render_info)
             rendered = str(render_info.result()).strip()
         except TemplateError as err:
             _LOGGER.warning(
@@ -492,20 +492,7 @@ class _TemplatesMixin:
                 state.entity_id,
                 err,
             )
-            return None
-
-        own_entities = self._render_info_has_own_dependency(render_info)
-        if own_entities:
-            self._rule_message_render_info.pop(pair, None)
-            self._remove_dependency_key(dependency_key)
-            _LOGGER.error(
-                "Ignored unsafe Jinja message for rule %s because it depends on "
-                "Alert Manager entities: %s",
-                rule.id,
-                ", ".join(sorted(own_entities)),
-            )
-            return None
-        self._index_render_info("message", pair, render_info)
+            return record.details.message if record is not None else None
         return rendered or None
 
     def _refresh_active_rule_message(self, rule: Rule, entity_id: str) -> bool:

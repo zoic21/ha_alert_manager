@@ -1592,10 +1592,8 @@ class _RuntimeMixin:
             evaluate_all_conditions=dry_run,
         )
         if not dry_run and variation:
-            if (
-                evaluation.jinja_result is False
-                or evaluation.error_code == "condition_template_error"
-            ):
+            # An indeterminate render neither starts nor resets a variation window.
+            if evaluation.jinja_result is False:
                 self._clear_variation_baseline(rule, state.entity_id)
             elif baseline is None and evaluation.baseline is not None:
                 self._variation_value(rule, state, evaluation.raw_value)
@@ -1604,7 +1602,7 @@ class _RuntimeMixin:
     def _build_candidates(
         self, state: State
     ) -> tuple[dict[str, tuple[AlertDetails, int]], set[str]]:
-        """Build current candidates and identify pack-neutral observations."""
+        """Build current candidates and identify indeterminate observations."""
         if not self._is_base_eligible(state.entity_id):
             return {}, set()
 
@@ -1634,10 +1632,18 @@ class _RuntimeMixin:
             if not rule.enabled:
                 continue
             evaluation = self._evaluate_custom_rule(rule, state)
+            alert_id = f"rule:{rule.id}:{entity_id}"
+            if evaluation.error_code == "condition_template_error":
+                # Reuse the last confirmed occurrence, as for neutral pack results.
+                # Its existing pending deadline continues; no occurrence is created.
+                indeterminate_ids.add(alert_id)
+                record = self.records.get(alert_id)
+                if record is not None:
+                    result[alert_id] = (record.details, record.delay)
+                continue
             if evaluation.result is not True:
                 continue
             current = evaluation.value
-            alert_id = f"rule:{rule.id}:{entity_id}"
             rendered_message = self._render_rule_message(rule, state, current)
             condition = self._rule_condition(rule, state)
             condition_key = (

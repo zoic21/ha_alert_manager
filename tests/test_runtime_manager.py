@@ -534,8 +534,8 @@ def test_variation_reference_follows_required_jinja_window(hass, entry):
     asyncio.run(scenario())
 
 
-def test_variation_template_error_resets_reference(hass, entry, monkeypatch):
-    """A failed Jinja gate ends the current variation window."""
+def test_variation_template_error_preserves_reference(hass, entry, monkeypatch):
+    """An indeterminate gate preserves the window until a confirmed false result."""
 
     async def scenario():
         hass.states.set("sensor.source", "10")
@@ -553,6 +553,7 @@ def test_variation_template_error_resets_reference(hass, entry, monkeypatch):
         baseline_key = f"{created['id']}:sensor.source"
         assert manager._variation_baselines[baseline_key] == 10
 
+        original = manager._evaluate_rule_condition_template
         monkeypatch.setattr(
             manager,
             "_evaluate_rule_condition_template",
@@ -568,7 +569,20 @@ def test_variation_template_error_resets_reference(hass, entry, monkeypatch):
 
         await manager.async_evaluate_entity("sensor.source")
 
+        assert manager._variation_baselines[baseline_key] == 10
+        hass.states.set("sensor.source", "16")
+        monkeypatch.setattr(manager, "_evaluate_rule_condition_template", original)
+        await manager.async_evaluate_entity("sensor.source")
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert manager.records[alert_id].details.value == 6
+        monkeypatch.setattr(
+            manager,
+            "_evaluate_rule_condition_template",
+            lambda _rule, _state, _current, *, track: (False, None),
+        )
+        await manager.async_evaluate_entity("sensor.source")
         assert baseline_key not in manager._variation_baselines
+        assert alert_id not in manager.records
 
     asyncio.run(scenario())
 
