@@ -27,6 +27,7 @@ from .const import (
     DEFAULT_HISTORY_LIMIT,
     HISTORY_STORAGE_KEY,
     HISTORY_STORAGE_VERSION,
+    MAX_RULES,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
@@ -323,6 +324,7 @@ class AlertManagerConfigBackupStorage:
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize an independent atomic backup store."""
+        self._hass = hass
         self._store = Store[dict[str, Any]](
             hass,
             CONFIG_BACKUP_STORAGE_VERSION,
@@ -331,8 +333,8 @@ class AlertManagerConfigBackupStorage:
             serialize_in_event_loop=False,
         )
 
-    async def _async_load_valid(self) -> list[dict[str, Any]]:
-        """Return valid exports without rewriting a damaged backup store."""
+    async def _async_load_entries(self) -> list[dict[str, Any]]:
+        """Return structurally valid entries without parsing their YAML."""
         raw = await self._store.async_load()
         if raw is None:
             return []
@@ -347,19 +349,22 @@ class AlertManagerConfigBackupStorage:
             backup_id = item.get("id")
             created_at = item.get("created_at")
             raw_yaml = item.get("yaml")
+            rules = item.get("rules")
             if (
                 not isinstance(backup_id, str)
                 or not backup_id
                 or backup_id in seen
                 or not isinstance(created_at, str)
                 or not isinstance(raw_yaml, str)
+                or isinstance(rules, bool)
+                or not isinstance(rules, int)
+                or not 0 <= rules <= MAX_RULES
             ):
                 continue
             try:
                 parsed_at = datetime.fromisoformat(created_at)
                 if parsed_at.tzinfo is None:
                     raise ValueError
-                config = parse_config_yaml(raw_yaml)
             except (TypeError, ValueError):
                 _LOGGER.warning("Ignoring invalid configuration backup %r", backup_id)
                 continue
@@ -369,40 +374,60 @@ class AlertManagerConfigBackupStorage:
                     "id": backup_id,
                     "created_at": parsed_at.astimezone(UTC).isoformat(),
                     "yaml": raw_yaml,
-                    "rules": len(config["rules"]),
+                    "rules": rules,
                 }
             )
         return sorted(valid, key=lambda item: item["created_at"], reverse=True)[
             :CONFIG_BACKUP_LIMIT
         ]
 
+    async def _async_validate_entry(self, item: dict[str, Any]) -> bool:
+        """Validate one selected entry away from the Home Assistant event loop."""
+        try:
+            config = await self._hass.async_add_executor_job(
+                parse_config_yaml, item["yaml"]
+            )
+        except (TypeError, ValueError):
+            _LOGGER.warning("Ignoring invalid configuration backup %r", item["id"])
+            return False
+        if len(config["rules"]) != item["rules"]:
+            _LOGGER.warning(
+                "Ignoring configuration backup %r with inconsistent metadata",
+                item["id"],
+            )
+            return False
+        return True
+
     async def async_list(self) -> list[dict[str, Any]]:
-        """Return safe metadata for the administrator frontend."""
+        """Return stored metadata without parsing backup YAML."""
         return [
             {
                 "id": item["id"],
                 "created_at": item["created_at"],
                 "rules": item["rules"],
             }
-            for item in await self._async_load_valid()
+            for item in await self._async_load_entries()
         ]
 
     async def async_get(self, backup_id: str) -> dict[str, Any] | None:
         """Return one validated export by opaque id."""
-        return next(
+        item = next(
             (
                 item
-                for item in await self._async_load_valid()
+                for item in await self._async_load_entries()
                 if item["id"] == backup_id
             ),
             None,
         )
+        if item is None or not await self._async_validate_entry(item):
+            return None
+        return item
 
     async def async_create(
         self, raw_yaml: str, *, created_at: datetime
     ) -> dict[str, Any]:
         """Validate through the import parser before rotating atomically."""
-        config = parse_config_yaml(raw_yaml)
+        config = await self._hass.async_add_executor_job(parse_config_yaml, raw_yaml)
         timestamp = created_at.astimezone(UTC).isoformat()
         backup = {
             "id": uuid4().hex,
@@ -410,7 +435,10 @@ class AlertManagerConfigBackupStorage:
             "yaml": raw_yaml,
             "rules": len(config["rules"]),
         }
-        current = await self._async_load_valid()
+        current: list[dict[str, Any]] = []
+        for item in await self._async_load_entries():
+            if await self._async_validate_entry(item):
+                current.append(item)
         await self._store.async_save(
             {"backups": [backup, *current][:CONFIG_BACKUP_LIMIT]}
         )

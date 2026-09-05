@@ -700,6 +700,9 @@ class FakeHass:
     def async_create_task(self, coroutine, name=None, eager_start=True):
         return asyncio.create_task(coroutine, name=name)
 
+    async def async_add_executor_job(self, target, *args):
+        return await asyncio.to_thread(target, *args)
+
     def async_add_shutdown_job(self, hassjob, *args):
         item = (hassjob, args)
         self.shutdown_jobs.append(item)
