@@ -580,12 +580,11 @@ def test_incomplete_cycle_breaks_consecutive_failure_sequence(
 
         first = runtime.start("first-failure")
         runtime.finish(first, "First failure")
-        await runtime.flush()
-        assert alert_id not in runtime.manager.records
 
         runtime._state_change(1)
         runtime._state_change(0)
         await _expire_pending_cycle(runtime)
+        assert alert_id not in runtime.manager.records
 
         after_gap = runtime.start("failure-after-gap")
         runtime.finish(after_gap, "Failure after gap")
@@ -596,6 +595,26 @@ def test_incomplete_cycle_breaks_consecutive_failure_sequence(
         runtime.finish(consecutive, "Second consecutive failure")
         await runtime.flush()
         assert alert_id in runtime.manager.records
+
+    asyncio.run(scenario())
+
+
+def test_completed_failure_before_incomplete_cycle_is_not_lost(
+    hass, entry, scenario_cls
+):
+    """A later incomplete cycle preserves an earlier authoritative failure."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        failed = runtime.start("failure-before-gap")
+        runtime.finish(failed, "Failure before gap")
+
+        runtime._state_change(1)
+        runtime._state_change(0)
+        await _expire_pending_cycle(runtime)
+
+        record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
+        assert record.details.condition.endswith("Failure before gap")
 
     asyncio.run(scenario())
 
