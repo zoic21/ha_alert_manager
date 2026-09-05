@@ -250,6 +250,10 @@ mode: queued
 
 `script.notification` n’est qu’un exemple : remplacez-le par votre propre script de notification ou n’importe quelle action de notification Home Assistant.
 
+### Suivi des notifications par alerte
+
+Les détails d’une alerte affichent les notifications de ses profils intégrés : nombre d’envois (rappels compris), profils correspondants même sans rappel et date du dernier envoi. Un lot compte une fois par profil et par alerte, dès qu’au moins une cible a été notifiée ; les tests et les échecs complets sont exclus. L’historique conserve séparément les envois de retour à la normale, leurs profils et leur dernière date. Ces informations survivent aux redémarrages ; elles sont masquées pour les alertes à venir et les anciens envois ne sont pas reconstitués. Les notifications envoyées par des automatisations externes ne sont pas comptabilisées.
+
 ## Entités et événements Home Assistant
 
 Alert Manager expose plusieurs entités afin que son état puisse aussi être utilisé en dehors du panneau intégré :

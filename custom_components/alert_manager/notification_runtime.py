@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -56,6 +56,7 @@ class _NotificationItem:
     device_name: str | None
     message: str | None
     condition: str | None
+    detected_at: str | None = None
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
@@ -68,6 +69,7 @@ class _NotificationItem:
             return None
         return cls(
             alert_id=alert_id,
+            detected_at=_optional_text(data.get("detected_at")),
             entity_id=entity_id,
             name=_optional_text(data.get("name")) or entity_id,
             alert_type=_optional_text(data.get("type")) or "alert",
@@ -114,6 +116,7 @@ class NotificationRuntime:
         config_getter: Callable[[], dict[str, Any]],
         records_getter: Callable[[], dict[str, AlertRecord]],
         delivery: NotificationManager,
+        record_notification: Callable[..., Awaitable[None]] | None = None,
     ) -> None:
         """Initialize the independent notification component."""
         self.hass = hass
@@ -121,6 +124,7 @@ class NotificationRuntime:
         self._config_getter = config_getter
         self._records_getter = records_getter
         self._delivery = delivery
+        self._record_notification = record_notification
         self._store = Store[dict[str, Any]](
             hass,
             NOTIFICATION_STORAGE_VERSION,
@@ -422,6 +426,10 @@ class NotificationRuntime:
                     if policy.reminder_interval is not None
                     else None
                 )
+                if self._record_notification is not None and (
+                    policy.notify_on_start or policy.reminder_interval is not None
+                ):
+                    await self._record_notification([item], profile, "matched", now)
                 if policy.notify_on_start:
                     self._queue_batch(profile_id, "started", item)
                 changed = True
@@ -519,7 +527,7 @@ class NotificationRuntime:
             message=message,
             click_url=url,
         )
-        await self._async_record_usage(profile_id, result)
+        await self._async_record_delivery(profile, kind, items, result)
 
     async def _async_send_reminders(self) -> None:
         """Send all due reminders in one grouped delivery per profile."""
@@ -527,7 +535,7 @@ class NotificationRuntime:
             if self._unloading:
                 return
             deliveries = await self._async_collect_due_reminders_locked()
-        for profile, title, message, url in deliveries:
+        for profile, title, message, url, items in deliveries:
             if self._unloading:
                 return
             result = await self._delivery.async_send(
@@ -536,7 +544,23 @@ class NotificationRuntime:
                 message=message,
                 click_url=url,
             )
-            await self._async_record_usage(profile["id"], result)
+            await self._async_record_delivery(profile, "reminder", items, result)
+
+    async def _async_record_delivery(
+        self,
+        profile: dict[str, Any],
+        kind: str,
+        items: list[_NotificationItem],
+        result: Mapping[str, Any],
+    ) -> None:
+        """Account for each occurrence only after at least one target succeeds."""
+        delivered = result.get("delivered_targets")
+        if not isinstance(delivered, list) or not delivered:
+            return
+        sent_at = dt_util.now().astimezone(UTC)
+        if self._record_notification is not None:
+            await self._record_notification(items, profile, kind, sent_at)
+        await self._async_record_usage(profile["id"], result)
 
     async def _async_record_usage(
         self, profile_id: str, result: Mapping[str, Any]
@@ -605,7 +629,7 @@ class NotificationRuntime:
 
     async def _async_collect_due_reminders_locked(
         self,
-    ) -> list[tuple[dict[str, Any], str, str, str]]:
+    ) -> list[tuple[dict[str, Any], str, str, str, list[_NotificationItem]]]:
         """Advance due reminders atomically and return deliveries to perform."""
         self._reminder_cancel = None
         config = self._config_getter()
@@ -614,7 +638,9 @@ class NotificationRuntime:
         now = dt_util.now().astimezone(UTC)
         records = self._records_getter()
         changed = False
-        deliveries: list[tuple[dict[str, Any], str, str, str]] = []
+        deliveries: list[
+            tuple[dict[str, Any], str, str, str, list[_NotificationItem]]
+        ] = []
         for profile in config.get("notification_profiles", []):
             if not profile.get("enabled"):
                 continue
@@ -659,6 +685,7 @@ class NotificationRuntime:
                         title,
                         message,
                         self._batch_url("started", due_items),
+                        due_items,
                     )
                 )
         if changed:
