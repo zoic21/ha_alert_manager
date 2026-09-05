@@ -393,6 +393,7 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     } == {
         "sensor.alert_manager_main_active": {
             "alerts": [],
+            "history_revision": 0,
             "runtime": {
                 "tracked_count": 0,
                 "startup": {
@@ -5688,3 +5689,43 @@ def test_unload_reload_cleans_listeners_and_timers(hass, entry):
         assert len(hass.dispatchers[SIGNAL_NOTIFICATION_LIFECYCLE]) == 1
 
     run(scenario())
+
+
+def test_history_marker_is_independent_of_alert_updates(hass, entry):
+    """History signals reach the panel even with unchanged counts or monitoring off."""
+    from homeassistant.helpers.dispatcher import async_dispatcher_send
+
+    from custom_components.alert_manager.const import (
+        SIGNAL_ALERTS_UPDATED,
+        SIGNAL_HISTORY_UPDATED,
+    )
+
+    manager = make_manager(hass, entry)
+    sensor = AlertManagerSensor(
+        manager,
+        "main_active",
+        "alert_manager_main_active",
+        "mdi:alert-circle",
+        "active_count",
+        "alerts",
+        "alerts",
+    )
+    sensor.hass = hass
+    run(sensor.async_added_to_hass())
+    assert sensor.extra_state_attributes["history_revision"] == 0
+    async_dispatcher_send(hass, SIGNAL_ALERTS_UPDATED)
+    assert sensor.extra_state_attributes["history_revision"] == 0
+    writes = sensor.writes
+    async_dispatcher_send(hass, SIGNAL_HISTORY_UPDATED)
+    assert sensor.writes == writes + 1
+    assert sensor.extra_state_attributes["history_revision"] == 1
+    run(manager.async_set_monitoring(False))
+    assert sensor.extra_state_attributes["history_revision"] == 1
+    run(manager.async_clear_history())
+    assert sensor.extra_state_attributes["history_revision"] == 2
+    run(manager.async_set_history_limit(200))
+    assert sensor.extra_state_attributes["history_revision"] == 3
+    for remove in sensor._removers:
+        remove()
+    async_dispatcher_send(hass, SIGNAL_HISTORY_UPDATED)
+    assert sensor.extra_state_attributes["history_revision"] == 3

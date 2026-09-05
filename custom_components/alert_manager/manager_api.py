@@ -416,8 +416,7 @@ class _ApiMixin:
                         "Unable to restore alert history after retention update failure"
                     )
             raise
-        if history_changed:
-            async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.get_history_config()
 
     @_serialize_runtime_mutation
