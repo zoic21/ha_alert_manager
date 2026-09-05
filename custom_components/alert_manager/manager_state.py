@@ -458,25 +458,36 @@ class _StateMixin:
 
     async def _async_flush_history(self) -> None:
         """Best-effort archive queued resolutions after runtime is durable."""
-        if not self._pending_history:
-            return
-        if self.config["history_limit"] == 0:
-            self._pending_history.clear()
-            return
-        candidate = sort_history([*self.history, *self._pending_history])[
-            : self.config["history_limit"]
-        ]
-        try:
-            await self.history_storage.async_save(candidate)
-        except Exception:
-            _LOGGER.exception(
-                "Unable to persist completed alert history; runtime transition "
-                "remains valid"
-            )
-            return
-        self.history = candidate
-        self._pending_history.clear()
-        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        async with self._history_archive_lock:
+            batch = tuple(self._pending_history)
+            if not batch:
+                return
+            processed_event_ids = {entry.event_id for entry in batch}
+            if self.config["history_limit"] == 0:
+                self._pending_history[:] = [
+                    entry
+                    for entry in self._pending_history
+                    if entry.event_id not in processed_event_ids
+                ]
+                return
+            candidate = sort_history([*self.history, *batch])[
+                : self.config["history_limit"]
+            ]
+            try:
+                await self.history_storage.async_save(candidate)
+            except Exception:
+                _LOGGER.exception(
+                    "Unable to persist completed alert history; runtime transition "
+                    "remains valid"
+                )
+                return
+            self.history = candidate
+            self._pending_history[:] = [
+                entry
+                for entry in self._pending_history
+                if entry.event_id not in processed_event_ids
+            ]
+            async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
 
     def _trim_history(self) -> bool:
         """Apply the configured retention limit deterministically in memory."""
