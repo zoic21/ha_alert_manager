@@ -119,6 +119,8 @@ class NotificationRuntime:
         records_getter: Callable[[], dict[str, AlertRecord]],
         delivery: NotificationManager,
         record_notification: Callable[..., Awaitable[None]] | None = None,
+        *,
+        reminders_ready: Callable[[], bool] | None = None,
     ) -> None:
         """Initialize the independent notification component."""
         self.hass = hass
@@ -127,6 +129,7 @@ class NotificationRuntime:
         self._records_getter = records_getter
         self._delivery = delivery
         self._record_notification = record_notification
+        self._reminders_ready = reminders_ready or (lambda: True)
         self._store = Store[dict[str, Any]](
             hass,
             NOTIFICATION_STORAGE_VERSION,
@@ -145,6 +148,7 @@ class NotificationRuntime:
         self._batches: dict[tuple[str, str], _PendingBatch] = {}
         self._unsubscribe: list[Callable[[], None]] = []
         self._reminder_cancel: Callable[[], None] | None = None
+        self._reminder_refresh_handle: asyncio.Handle | None = None
         self._runtime_save_cancel: Callable[[], None] | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
         self._unloading = False
@@ -205,7 +209,7 @@ class NotificationRuntime:
                 self._batches.pop(key, None)
             if runtime_changed:
                 self._schedule_runtime_save()
-                self._schedule_reminder_timer()
+                self._request_reminder_timer_refresh()
 
     async def async_setup(self) -> None:
         """Restore runtime state, then subscribe after initial alert evaluation."""
@@ -466,7 +470,7 @@ class NotificationRuntime:
                 changed = True
         if changed:
             self._schedule_runtime_save()
-            self._schedule_reminder_timer()
+            self._request_reminder_timer_refresh()
 
     def _queue_batch(self, profile_id: str, kind: str, item: _NotificationItem) -> None:
         """Add an occurrence to a fixed collection window."""
@@ -640,7 +644,7 @@ class NotificationRuntime:
         """Advance due reminders atomically and return deliveries to perform."""
         self._reminder_cancel = None
         config = self._config_getter()
-        if not config.get("monitoring_enabled", True):
+        if not config.get("monitoring_enabled", True) or not self._reminders_ready():
             return []
         now = dt_util.now().astimezone(UTC)
         records = self._records_getter()
@@ -702,10 +706,24 @@ class NotificationRuntime:
         self._schedule_reminder_timer()
         return deliveries
 
+    @callback
+    def _request_reminder_timer_refresh(self) -> None:
+        """Recompute the earliest deadline once per turn of lifecycle events."""
+        if self._unloading or self._reminder_refresh_handle is not None:
+            return
+        self._reminder_refresh_handle = asyncio.get_running_loop().call_soon(
+            self._schedule_reminder_timer
+        )
+
+    @callback
     def _schedule_reminder_timer(self) -> None:
         """Keep exactly one timer for the earliest reminder deadline."""
         self._cancel_reminder_timer()
-        if self._unloading or not self._config_getter().get("monitoring_enabled", True):
+        if (
+            self._unloading
+            or not self._config_getter().get("monitoring_enabled", True)
+            or not self._reminders_ready()
+        ):
             return
         deadlines = [
             runtime.next_reminder
@@ -731,6 +749,9 @@ class NotificationRuntime:
 
     def _cancel_reminder_timer(self) -> None:
         """Cancel the shared reminder deadline if present."""
+        if self._reminder_refresh_handle is not None:
+            self._reminder_refresh_handle.cancel()
+            self._reminder_refresh_handle = None
         if self._reminder_cancel is not None:
             self._reminder_cancel()
             self._reminder_cancel = None

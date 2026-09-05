@@ -256,6 +256,8 @@ mode: queued
 
 ### Suivi des notifications par alerte
 
+Après un redémarrage, les rappels attendent la fin de la réconciliation des alertes. Seules les alertes confirmées reprennent leurs rappels ; une échéance déjà dépassée repart sur l’intervalle du profil, sans rattrapage des rappels manqués.
+
 Les détails d’une alerte affichent les notifications de ses profils intégrés : nombre d’envois (rappels compris), profils correspondants même sans rappel et date du dernier envoi. Un lot compte une fois par profil et par alerte, dès qu’au moins une cible a été notifiée ; les tests et les échecs complets sont exclus. L’historique conserve séparément les envois de retour à la normale, leurs profils et leur dernière date. Ces informations survivent aux redémarrages ; elles sont masquées pour les alertes à venir et les anciens envois ne sont pas reconstitués. Les notifications envoyées par des automatisations externes ne sont pas comptabilisées.
 
 ## Entités et événements Home Assistant

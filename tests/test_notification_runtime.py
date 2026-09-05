@@ -6,7 +6,9 @@ import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import Mock
 
+import pytest
 from homeassistant.core import CoreState, Event
 
 from custom_components.alert_manager.const import (
@@ -712,6 +714,211 @@ def test_restart_resumes_one_reminder_without_backlog(hass, entry, set_now) -> N
         active_timers = [timer for timer in hass.timers if not timer["cancelled"]]
         assert len(active_timers) == 1
         assert active_timers[0]["point"] == now + timedelta(minutes=5)
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("source_state", ["ok", "unavailable"])
+@pytest.mark.parametrize("reminder_after", [20, 120])
+def test_restored_reminders_wait_for_committed_startup(
+    hass, entry, set_now, source_state, reminder_after
+):
+    """Only confirmed alerts resume reminders after startup, without a backlog."""
+
+    async def scenario():
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        set_now(now)
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        config["automatic"]["unavailable"]["delay"] = 0
+        record = _active_record(now - timedelta(hours=1))
+        seed = AlertManager(hass, entry)
+        await seed.storage.async_save(config, {record.details.id: record})
+        hass.stores["alert_manager.notifications"] = {
+            "profiles": {
+                "profile": {
+                    record.details.id: {
+                        "next_reminder": (
+                            now + timedelta(seconds=reminder_after)
+                        ).isoformat()
+                    }
+                }
+            }
+        }
+        hass.states.set(record.details.entity_id, source_state)
+        manager = AlertManager(hass, entry)
+        delivery = _DeliverySpy()
+        manager.notification_runtime._delivery = delivery
+        await manager.async_setup()
+        runtime = manager.notification_runtime
+        assert manager._runtime_phase is RuntimePhase.STARTUP_GRACE
+        assert runtime._reminder_cancel is None
+        set_now(now + timedelta(seconds=30))
+        # Also protect a callback admitted before the readiness check changed.
+        await runtime._async_send_reminders()
+        assert not delivery.calls
+        assert runtime._runtime["profile"][record.details.id].next_reminder == (
+            now + timedelta(seconds=reminder_after)
+        )
+        set_now(now + timedelta(seconds=60))
+        await manager._async_finish_startup_reconciliation()
+        assert manager._runtime_phase is RuntimePhase.RUNNING
+        assert not delivery.calls
+        if source_state == "ok":
+            assert record.details.id not in manager.records
+            assert not runtime._runtime["profile"]
+            assert runtime._reminder_cancel is None
+        else:
+            deadline = now + timedelta(seconds=360 if reminder_after == 20 else 120)
+            assert (
+                runtime._runtime["profile"][record.details.id].next_reminder == deadline
+            )
+            assert runtime._reminder_cancel is not None
+            set_now(deadline)
+            await runtime._async_send_reminders()
+            assert len(delivery.calls) == 1
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("write_fails", [False, True])
+def test_reminders_stay_paused_during_startup_write_and_rollback(
+    hass, entry, set_now, monkeypatch, write_fails
+):
+    """Speculative restored records never produce a reminder during startup I/O."""
+
+    async def scenario():
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        set_now(now)
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        record = _active_record(now - timedelta(hours=1))
+        seed = AlertManager(hass, entry)
+        await seed.storage.async_save(config, {record.details.id: record})
+        hass.stores["alert_manager.notifications"] = {
+            "profiles": {
+                "profile": {
+                    record.details.id: {
+                        "next_reminder": (now + timedelta(seconds=20)).isoformat()
+                    }
+                }
+            }
+        }
+        hass.states.set(record.details.entity_id, "ok")
+        manager = AlertManager(hass, entry)
+        delivery = _DeliverySpy()
+        manager.notification_runtime._delivery = delivery
+        await manager.async_setup()
+        entered, release = asyncio.Event(), asyncio.Event()
+        original_save = manager._async_save_main_store
+
+        async def delayed_save():
+            if not entered.is_set():
+                entered.set()
+                await release.wait()
+                if write_fails:
+                    raise OSError("temporary storage error")
+            await original_save()
+
+        monkeypatch.setattr(manager, "_async_save_main_store", delayed_save)
+        set_now(now + timedelta(seconds=60))
+        task = asyncio.create_task(manager._async_finish_startup_reconciliation())
+        await entered.wait()
+        assert manager._runtime_phase is RuntimePhase.RECONCILING
+        assert record.details.id in manager.notification_runtime._records_getter()
+        await manager.notification_runtime._async_send_reminders()
+        assert not delivery.calls
+        release.set()
+        await task
+        if write_fails:
+            assert manager._runtime_phase is RuntimePhase.STARTUP_GRACE
+            assert manager.notification_runtime._reminder_cancel is None
+            await manager.notification_runtime._async_send_reminders()
+            assert not delivery.calls
+            await manager._async_finish_startup_reconciliation()
+        assert manager._runtime_phase is RuntimePhase.RUNNING
+        assert record.details.id not in manager.records
+        assert manager.notification_runtime._reminder_cancel is None
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_lifecycle_burst_coalesces_reminder_deadline_scans(hass, entry, monkeypatch):
+    """Hundreds of lifecycle mutations schedule one scan with the final deadlines."""
+
+    async def scenario():
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        schedule = Mock(wraps=runtime._schedule_reminder_timer)
+        monkeypatch.setattr(runtime, "_schedule_reminder_timer", schedule)
+        for index in range(200):
+            await runtime._async_handle_event(
+                EVENT_ALERT_STARTED,
+                _event_data(
+                    f"unavailable:sensor.test_{index}",
+                    entity_id=f"sensor.test_{index}",
+                    device_id=None,
+                ),
+            )
+        assert schedule.call_count == 0
+        await asyncio.sleep(0)
+        assert schedule.call_count == 1
+        assert runtime._reminder_cancel is not None
+        await runtime.async_discard_alerts(set(runtime._runtime["profile"]))
+        await asyncio.sleep(0)
+        assert schedule.call_count == 2
+        assert runtime._reminder_cancel is None
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_shutdown_cancels_deferred_reminder_refresh(hass, entry, monkeypatch):
+    """A deferred deadline refresh cannot recreate a timer after unload begins."""
+
+    async def scenario():
+        config = validate_config(
+            {
+                **deepcopy(DEFAULT_CONFIG),
+                "notification_profiles": [_profile(reminder_interval=300)],
+            }
+        )
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        schedule = Mock(wraps=runtime._schedule_reminder_timer)
+        monkeypatch.setattr(runtime, "_schedule_reminder_timer", schedule)
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED,
+            _event_data(
+                "unavailable:sensor.test", entity_id="sensor.test", device_id=None
+            ),
+        )
+        runtime.begin_shutdown()
+        await asyncio.sleep(0)
+        assert schedule.call_count == 0
+        assert runtime._reminder_refresh_handle is None
+        assert runtime._reminder_cancel is None
         await runtime.async_unload()
 
     asyncio.run(scenario())

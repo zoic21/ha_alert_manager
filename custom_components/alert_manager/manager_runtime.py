@@ -185,9 +185,7 @@ class _RuntimeMixin:
             previous_records = self._commit_startup_reconciliation(attempt)
             if previous_records is None:
                 return
-            await self._async_postcommit_startup_reconciliation(
-                attempt, previous_records
-            )
+            await self._async_postcommit_startup_reconciliation(previous_records)
         except asyncio.CancelledError:
             raise
         except Exception:  # pragma: no cover - defensive lifecycle boundary
@@ -334,15 +332,15 @@ class _RuntimeMixin:
 
     async def _async_postcommit_startup_reconciliation(
         self,
-        attempt: _StartupReconciliationAttempt,
         previous_records: dict[str, AlertRecord],
     ) -> None:
         """Publish lifecycle and refresh external consumers after commit."""
         self._commit_reconciliation_lifecycle(previous_records)
         self._publish_if_changed(force=True)
         self._schedule_deferred_runtime_work()
-        if attempt.consumed_registry_dirty:
-            await self._async_refresh_notification_runtime()
+        # Restored reminders must use the committed records, even when no
+        # registry event was received during startup.
+        await self._async_refresh_notification_runtime()
         await self._async_flush_history()
 
     async def _async_rollback_startup_reconciliation(
@@ -513,7 +511,7 @@ class _RuntimeMixin:
             self._queued_evaluation_entities.clear()
             self._queued_evaluation_collect_occurrences = False
             self._queued_public_refresh = False
-            for entity_id in entity_ids:
+            for index, entity_id in enumerate(entity_ids, 1):
                 changed |= await self.async_evaluate_entity(
                     entity_id,
                     save=False,
@@ -521,6 +519,8 @@ class _RuntimeMixin:
                     emit_events=False,
                     archive_resolutions=False,
                 )
+                if index % _EVALUATION_BATCH_SIZE == 0:
+                    await asyncio.sleep(0)
                 if self._runtime_phase is not RuntimePhase.RECONCILING:
                     return changed
         self._queued_expired_alert_ids.clear()
@@ -762,7 +762,7 @@ class _RuntimeMixin:
             else ()
         )
         new_occurrences: list[PackOccurrence] | None = [] if occurrence_packs else None
-        for entity_id in entity_ids:
+        for index, entity_id in enumerate(entity_ids, 1):
             try:
                 await self.async_evaluate_entity(
                     entity_id,
@@ -772,6 +772,14 @@ class _RuntimeMixin:
                 )
             except Exception:  # pragma: no cover - isolate one bad source
                 _LOGGER.exception("Unable to evaluate %s", entity_id)
+            if index % _EVALUATION_BATCH_SIZE == 0:
+                await asyncio.sleep(0)
+                if (
+                    self._unloading
+                    or self._runtime_phase is not RuntimePhase.RUNNING
+                    or self.hass.state is not CoreState.running
+                ):
+                    return
         if new_occurrences:
             batch = tuple(new_occurrences)
             for pack in occurrence_packs:
