@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,24 @@ _LOGGER = logging.getLogger(__name__)
 
 class ConfigStorageError(ValueError):
     """Report an unusable main store without discarding its configuration."""
+
+
+@dataclass(frozen=True, slots=True)
+class StorageDurabilitySnapshot:
+    """Bookkeeping that describes the last acknowledged durable payload."""
+
+    payload: dict[str, Any] | None
+    alert_ids: frozenset[str]
+    staged_alert_ids: frozenset[str] | None
+
+    @property
+    def effective_alert_ids(self) -> frozenset[str]:
+        """Return membership after any admitted but uncommitted identity change."""
+        return (
+            self.staged_alert_ids
+            if self.staged_alert_ids is not None
+            else self.alert_ids
+        )
 
 
 class AlertManagerStore(Store[dict[str, Any]]):
@@ -82,13 +101,17 @@ class AlertManagerStorage:
         self._save_lock = asyncio.Lock()
         self._persisted_payload: dict[str, Any] | None = None
         self.persisted_alert_ids: set[str] = set()
+        self._staged_durable_alert_ids: set[str] | None = None
+        self._force_next_save = False
         self.variation_baselines: dict[str, float] = {}
         self.pack_runtime: dict[str, dict[str, Any]] = {}
+        self.has_stored_snapshot = False
 
     async def async_load(
         self,
     ) -> tuple[dict[str, Any], dict[str, AlertRecord], bool]:
         """Load stored data and reject unusable configuration without writing."""
+        self.has_stored_snapshot = False
         raw_snapshot = await self._async_read_store_snapshot()
         try:
             raw = await self._store.async_load()
@@ -107,9 +130,12 @@ class AlertManagerStorage:
             self.pack_runtime = {}
             self._persisted_payload = None
             self.persisted_alert_ids = set()
+            self._staged_durable_alert_ids = None
+            self._force_next_save = False
             config, migrated = self._migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
+        self.has_stored_snapshot = True
         if not isinstance(raw, dict):
             raise ConfigStorageError("Stored Alert Manager data must be an object")
         stored_config = raw.get("config")
@@ -177,6 +203,45 @@ class AlertManagerStorage:
         """Remember the exact loaded payload and its valid persisted record ids."""
         self._persisted_payload = payload
         self.persisted_alert_ids = set(records)
+        self._staged_durable_alert_ids = None
+        self._force_next_save = False
+
+    @property
+    def effective_durable_alert_ids(self) -> frozenset[str]:
+        """Return durability membership after any uncommitted identity change."""
+        alert_ids = (
+            self._staged_durable_alert_ids
+            if self._staged_durable_alert_ids is not None
+            else self.persisted_alert_ids
+        )
+        return frozenset(alert_ids)
+
+    def stage_durable_alert_ids(self, alert_ids: frozenset[str] | set[str]) -> None:
+        """Retain occurrence durability until its renamed payload is committed."""
+        self._staged_durable_alert_ids = set(alert_ids)
+
+    def durability_snapshot(self) -> StorageDurabilitySnapshot:
+        """Capture the payload identity and pending-retention membership together."""
+        return StorageDurabilitySnapshot(
+            payload=deepcopy(self._persisted_payload),
+            alert_ids=frozenset(self.persisted_alert_ids),
+            staged_alert_ids=(
+                frozenset(self._staged_durable_alert_ids)
+                if self._staged_durable_alert_ids is not None
+                else None
+            ),
+        )
+
+    def restore_durability_snapshot(self, snapshot: StorageDurabilitySnapshot) -> None:
+        """Restore durability bookkeeping and require its next compensating write."""
+        self._persisted_payload = deepcopy(snapshot.payload)
+        self.persisted_alert_ids = set(snapshot.alert_ids)
+        self._staged_durable_alert_ids = (
+            set(snapshot.staged_alert_ids)
+            if snapshot.staged_alert_ids is not None
+            else None
+        )
+        self._force_next_save = True
 
     async def _async_read_store_snapshot(self) -> str | None:
         """Capture an existing store before Home Assistant may rename corruption."""
@@ -226,6 +291,7 @@ class AlertManagerStorage:
         cutoff = pending_before.astimezone(UTC) if pending_before is not None else None
 
         async with self._save_lock:
+            durable_alert_ids = self.effective_durable_alert_ids
             alerts = {
                 alert_id: data
                 for alert_id, (status, detected_at, data) in sorted(
@@ -233,7 +299,7 @@ class AlertManagerStorage:
                 )
                 if status is not AlertStatus.PENDING
                 or include_all_pending
-                or alert_id in self.persisted_alert_ids
+                or alert_id in durable_alert_ids
                 or (cutoff is not None and detected_at <= cutoff)
             }
             payload = {
@@ -242,11 +308,15 @@ class AlertManagerStorage:
                 "variation_baselines": baselines_snapshot,
                 "pack_runtime": pack_runtime_snapshot,
             }
-            if payload == self._persisted_payload:
+            if payload == self._persisted_payload and not self._force_next_save:
+                self.persisted_alert_ids = set(alerts)
+                self._staged_durable_alert_ids = None
                 return
             await self._store.async_save(payload)
             self._persisted_payload = payload
             self.persisted_alert_ids = set(alerts)
+            self._staged_durable_alert_ids = None
+            self._force_next_save = False
 
 
 class AlertManagerConfigBackupStorage:

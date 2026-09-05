@@ -241,6 +241,60 @@ def test_history_write_failure_does_not_block_business_resolution(hass, entry, s
     assert any(event == EVENT_ALERT_RESOLVED for event, _data in hass.bus.fired)
 
 
+def test_concurrent_history_flush_preserves_later_resolution(hass, entry):
+    """A completed archive removes only resolutions included in its write."""
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}})
+        entity_ids = ("sensor.first", "sensor.second")
+        for entity_id in entity_ids:
+            hass.states.set(entity_id, "unavailable")
+            await manager.async_evaluate_entity(entity_id)
+
+        original_save = manager.history_storage.async_save
+        first_write_started = asyncio.Event()
+        release_first_write = asyncio.Event()
+        save_calls = 0
+
+        async def controlled_save(entries):
+            nonlocal save_calls
+            save_calls += 1
+            if save_calls == 1:
+                first_write_started.set()
+                await release_first_write.wait()
+            await original_save(entries)
+
+        manager.history_storage.async_save = controlled_save
+        hass.states.set(entity_ids[0], "ok")
+        global_evaluation = asyncio.create_task(manager.async_evaluate_all())
+        await first_write_started.wait()
+
+        hass.states.set(entity_ids[1], "ok")
+        state_evaluation = asyncio.create_task(
+            manager.async_evaluate_entity(entity_ids[1])
+        )
+        await asyncio.sleep(0)
+
+        assert len(manager._pending_history) == 2
+        assert save_calls == 1
+        assert not state_evaluation.done()
+
+        release_first_write.set()
+        await asyncio.gather(global_evaluation, state_evaluation)
+
+        expected_ids = {f"unavailable:{entity_id}" for entity_id in entity_ids}
+        assert {event.id for event in manager.history} == expected_ids
+        assert {
+            event["id"] for event in hass.stores[HISTORY_STORAGE_KEY]["events"]
+        } == expected_ids
+        assert manager._pending_history == []
+        assert save_calls == 2
+
+    asyncio.run(scenario())
+
+
 def test_yaml_export_import_excludes_history_and_preserves_local_retention(hass, entry):
     """History data and retention are outside the V1.5 YAML interchange."""
     manager = make_manager(hass, entry)

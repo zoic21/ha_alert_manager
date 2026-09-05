@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from homeassistant.core import Event
+from homeassistant.core import CoreState, Event
 
 from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertDetails, AlertStatus
 from custom_components.alert_manager.packs import flapping
 from custom_components.alert_manager.packs.base import PackOccurrence
+from custom_components.alert_manager.runtime_phase import RuntimePhase
 
 PACK = flapping.PACK
 
@@ -25,6 +27,18 @@ def make_manager(hass, entry):
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     return manager
+
+
+def fire_startup_reconciliation(hass):
+    """Run the live one-shot reconciliation timer."""
+    timer = next(
+        timer
+        for timer in hass.timers
+        if not timer["cancelled"]
+        and "_schedule_startup_reconciliation" in timer["action"].__qualname__
+    )
+    timer["cancelled"] = True
+    timer["action"](timer["point"])
 
 
 def configure(
@@ -394,7 +408,7 @@ def test_technical_reevaluations_do_not_create_occurrences(hass, entry, set_now)
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
     configure(manager, occurrences=2)
-    run(manager.async_evaluate_all(restoring=True))
+    run(manager.async_evaluate_all())
     run(manager.async_evaluate_all())
     assert manager._pack_runtime.get("flapping", {}) == {}
     assert not [
@@ -628,3 +642,425 @@ def test_excluding_source_resolves_flapping_through_normal_evaluation(
         for timer in hass.timers
         if timer["point"] == deadline and not timer["cancelled"]
     ]
+
+
+def test_reconciliation_live_flapping_extension_wins_over_shadow(hass, entry, set_now):
+    """A real pack signal may extend a restored deadline during reconciliation."""
+    start = datetime(2026, 9, 4, 8, tzinfo=UTC)
+    set_now(start)
+
+    async def scenario():
+        entity_id = "sensor.test"
+        alert_id = f"flapping:unavailable:{entity_id}"
+        hass.states.set(entity_id, "ok")
+        first = AlertManager(hass, entry)
+        assert await first.async_setup() is True
+        await first.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "enabled": True,
+                        "occurrences": 2,
+                        "window": 3600,
+                        "recovery": 120,
+                        "device_overrides": {},
+                    }
+                }
+            }
+        )
+
+        async def emit_occurrence(when):
+            set_now(when)
+            old_state = hass.states.get(entity_id)
+            unavailable = hass.states.set(entity_id, "unavailable")
+            first._state_changed(
+                Event(
+                    {
+                        "entity_id": entity_id,
+                        "old_state": old_state,
+                        "new_state": unavailable,
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            normal = hass.states.set(entity_id, "ok")
+            first._state_changed(
+                Event(
+                    {
+                        "entity_id": entity_id,
+                        "old_state": unavailable,
+                        "new_state": normal,
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        await emit_occurrence(start)
+        await emit_occurrence(start + timedelta(seconds=10))
+        original = deepcopy(first.records[alert_id])
+        old_expiry = original.expires_at
+        assert old_expiry is not None
+        await first.async_unload()
+
+        set_now(start + timedelta(seconds=20))
+        hass.state = CoreState.starting
+        hass.states.set(entity_id, "ok")
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        restarted._immediate_state_save_required = True
+
+        original_save = restarted.storage.async_save
+        save_started = asyncio.Event()
+        release_save = asyncio.Event()
+
+        async def blocked_save(*args, **kwargs):
+            save_started.set()
+            await release_save.wait()
+            await original_save(*args, **kwargs)
+
+        restarted.storage.async_save = blocked_save
+        hass.bus.fired.clear()
+        fire_startup_reconciliation(hass)
+        await save_started.wait()
+
+        occurrence_at = old_expiry + timedelta(seconds=1)
+        set_now(occurrence_at)
+        restored = restarted.records[alert_id]
+        source = replace(
+            restored.details,
+            id=f"unavailable:{entity_id}",
+            type="unavailable",
+            value="unavailable",
+            condition="Unavailable",
+            condition_key="automatic.unavailable",
+            condition_params=None,
+            rule_name=None,
+            message=None,
+            source=None,
+        )
+        occurrence_item = PackOccurrence(
+            source=source,
+            occurred_at=occurrence_at,
+            active_alert_ids=restarted.records.keys(),
+        )
+        generated = PACK.occurrence_batch_handler(
+            hass,
+            (occurrence_item,),
+            restarted.config,
+            restarted._pack_runtime.setdefault("flapping", {}),
+        )
+        assert len(generated) == 1
+        restarted._apply_generated_alert("flapping", generated[0])
+        restarted._immediate_state_save_required = True
+        restarted._queue_entity_evaluations((entity_id,))
+        new_expiry = generated[0].resolve_at
+        assert new_expiry > old_expiry
+
+        release_save.set()
+        for _index in range(6):
+            await asyncio.sleep(0)
+
+        current = restarted.records[alert_id]
+        assert restarted._runtime_phase is RuntimePhase.RUNNING
+        assert current.detected_at == original.detected_at
+        assert current.active_since == original.active_since
+        assert current.expires_at == new_expiry
+        persisted = hass.stores["alert_manager"]
+        assert persisted["alerts"][alert_id]["expires_at"] == new_expiry.isoformat()
+        assert persisted["pack_runtime"] == restarted._pack_runtime
+        assert restarted._pack_runtime["flapping"][f"unavailable:{entity_id}"][-1] == (
+            occurrence_at.timestamp()
+        )
+        assert any(
+            timer["point"] == new_expiry and not timer["cancelled"]
+            for timer in hass.timers
+        )
+        assert not [
+            event
+            for event, _data in hass.bus.fired
+            if event in ("alert_manager_alert_started", "alert_manager_alert_resolved")
+        ]
+
+        restarted.storage.async_save = original_save
+        await restarted.async_unload()
+
+    run(scenario())
+
+
+def test_reconciliation_state_churn_does_not_collect_occurrences(
+    hass, entry, set_now, monkeypatch
+):
+    """Startup catch-up scans neither count occurrences nor persist fresh pending."""
+    start = datetime(2026, 9, 4, 9, tzinfo=UTC)
+    set_now(start)
+
+    async def scenario():
+        entity_id = "sensor.test"
+        source_alert_id = f"unavailable:{entity_id}"
+        hass.states.set(entity_id, "ok")
+        first = AlertManager(hass, entry)
+        assert await first.async_setup() is True
+        await first.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "enabled": True,
+                        "occurrences": 3,
+                        "window": 3600,
+                        "recovery": 120,
+                        "device_overrides": {},
+                    }
+                }
+            }
+        )
+        set_now(start + timedelta(seconds=1))
+        old_state = hass.states.get(entity_id)
+        unavailable = hass.states.set(entity_id, "unavailable")
+        first._state_changed(
+            Event(
+                {
+                    "entity_id": entity_id,
+                    "old_state": old_state,
+                    "new_state": unavailable,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        normal = hass.states.set(entity_id, "ok")
+        first._state_changed(
+            Event(
+                {
+                    "entity_id": entity_id,
+                    "old_state": unavailable,
+                    "new_state": normal,
+                }
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        expected_runtime = deepcopy(first._pack_runtime)
+        await first.async_unload()
+
+        set_now(start + timedelta(seconds=10))
+        hass.state = CoreState.starting
+        initial_state = hass.states.set(entity_id, "ok")
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        restarted._immediate_state_save_required = True
+
+        occurrence_calls = 0
+        original_handler = PACK.occurrence_batch_handler
+
+        def tracked_handler(*args, **kwargs):
+            nonlocal occurrence_calls
+            occurrence_calls += 1
+            return original_handler(*args, **kwargs)
+
+        monkeypatch.setattr(
+            manager_runtime,
+            "OCCURRENCE_PACKS",
+            (replace(PACK, occurrence_batch_handler=tracked_handler),),
+        )
+
+        original_save = restarted.storage.async_save
+        first_save_started = asyncio.Event()
+        release_first_save = asyncio.Event()
+        second_save_started = asyncio.Event()
+        release_second_save = asyncio.Event()
+        save_calls = 0
+
+        async def blocked_save(*args, **kwargs):
+            nonlocal save_calls
+            save_calls += 1
+            if save_calls == 1:
+                first_save_started.set()
+                await release_first_save.wait()
+            elif save_calls == 2:
+                second_save_started.set()
+                await release_second_save.wait()
+            await original_save(*args, **kwargs)
+            if save_calls == 2:
+                assert source_alert_id not in hass.stores["alert_manager"]["alerts"]
+
+        restarted.storage.async_save = blocked_save
+        fire_startup_reconciliation(hass)
+        await first_save_started.wait()
+
+        unavailable_state = hass.states.set(entity_id, "unavailable")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": entity_id,
+                    "old_state": initial_state,
+                    "new_state": unavailable_state,
+                }
+            )
+        )
+        release_first_save.set()
+        await second_save_started.wait()
+        assert source_alert_id in restarted.records
+
+        final_state = hass.states.set(entity_id, "ok")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": entity_id,
+                    "old_state": unavailable_state,
+                    "new_state": final_state,
+                }
+            )
+        )
+        release_second_save.set()
+        for _index in range(7):
+            await asyncio.sleep(0)
+
+        assert restarted._runtime_phase is RuntimePhase.RUNNING
+        assert source_alert_id not in restarted.records
+        assert not [
+            record
+            for record in restarted.records.values()
+            if record.details.type == "flapping"
+        ]
+        assert occurrence_calls == 0
+        assert restarted._pack_runtime == expected_runtime
+        assert hass.stores["alert_manager"]["pack_runtime"] == expected_runtime
+        assert restarted._queued_evaluation_collect_occurrences is False
+
+        restarted.storage.async_save = original_save
+        await restarted.async_unload()
+
+    run(scenario())
+
+
+def test_reconciliation_flapping_compound_id_survives_entity_rename(
+    hass, entry, set_now
+):
+    """A startup rename keeps the occurrence source segment in a flapping id."""
+    start = datetime(2026, 9, 4, 10, tzinfo=UTC)
+    set_now(start)
+
+    async def scenario():
+        old_entity_id = "sensor.old_gateway"
+        new_entity_id = "sensor.new_gateway"
+        old_alert_id = f"flapping:unavailable:{old_entity_id}"
+        new_alert_id = f"flapping:unavailable:{new_entity_id}"
+        hass.states.set(old_entity_id, "ok")
+        first = AlertManager(hass, entry)
+        assert await first.async_setup() is True
+        await first.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "enabled": True,
+                        "occurrences": 2,
+                        "window": 3600,
+                        "recovery": 300,
+                        "device_overrides": {},
+                    }
+                }
+            }
+        )
+
+        async def emit_occurrence(when):
+            set_now(when)
+            old_state = hass.states.get(old_entity_id)
+            unavailable = hass.states.set(old_entity_id, "unavailable")
+            first._state_changed(
+                Event(
+                    {
+                        "entity_id": old_entity_id,
+                        "old_state": old_state,
+                        "new_state": unavailable,
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            normal = hass.states.set(old_entity_id, "ok")
+            first._state_changed(
+                Event(
+                    {
+                        "entity_id": old_entity_id,
+                        "old_state": unavailable,
+                        "new_state": normal,
+                    }
+                )
+            )
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+        await emit_occurrence(start)
+        await emit_occurrence(start + timedelta(seconds=10))
+        await first.async_acknowledge(old_alert_id, "tester")
+        original = deepcopy(first.records[old_alert_id])
+        await first.async_unload()
+
+        set_now(start + timedelta(seconds=20))
+        hass.state = CoreState.starting
+        hass.states.set(old_entity_id, "ok")
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        restarted._immediate_state_save_required = True
+
+        original_save = restarted.storage.async_save
+        save_started = asyncio.Event()
+        release_save = asyncio.Event()
+
+        async def blocked_save(*args, **kwargs):
+            save_started.set()
+            await release_save.wait()
+            await original_save(*args, **kwargs)
+
+        restarted.storage.async_save = blocked_save
+        hass.bus.fired.clear()
+        fire_startup_reconciliation(hass)
+        await save_started.wait()
+
+        hass.states.data.pop(old_entity_id)
+        hass.states.set(new_entity_id, "ok")
+        restarted._registry_changed(
+            Event(
+                {
+                    "action": "update",
+                    "old_entity_id": old_entity_id,
+                    "entity_id": new_entity_id,
+                }
+            )
+        )
+        release_save.set()
+        for _index in range(7):
+            await asyncio.sleep(0)
+
+        assert restarted._runtime_phase is RuntimePhase.RUNNING
+        assert old_alert_id not in restarted.records
+        assert f"flapping:{new_entity_id}" not in restarted.records
+        current = restarted.records[new_alert_id]
+        assert current.details.entity_id == new_entity_id
+        assert current.detected_at == original.detected_at
+        assert current.active_since == original.active_since
+        assert current.expires_at == original.expires_at
+        assert current.acknowledged is True
+        assert current.acknowledged_at == original.acknowledged_at
+        assert restarted._record_ids_by_entity[new_entity_id] == {new_alert_id}
+        persisted = hass.stores["alert_manager"]["alerts"]
+        assert old_alert_id not in persisted
+        assert new_alert_id in persisted
+        assert not [
+            event
+            for event, _data in hass.bus.fired
+            if event in ("alert_manager_alert_started", "alert_manager_alert_resolved")
+        ]
+
+        restarted.storage.async_save = original_save
+        await restarted.async_unload()
+
+    run(scenario())

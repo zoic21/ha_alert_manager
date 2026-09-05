@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+
+import pytest
+from homeassistant.core import CoreState, Event
 
 from custom_components.alert_manager.const import (
     CONFIG_BACKUP_STORAGE_KEY,
@@ -13,6 +17,15 @@ from custom_components.alert_manager.const import (
     STORAGE_KEY,
 )
 from custom_components.alert_manager.manager import AlertManager
+from custom_components.alert_manager.models import (
+    AlertRecord,
+    AlertStatus,
+    advance_record,
+)
+from custom_components.alert_manager.runtime_phase import RuntimePhase
+from custom_components.alert_manager.transactions import (
+    StartupReconciliationTransaction,
+)
 
 
 def run(coroutine):
@@ -115,6 +128,224 @@ def test_existing_pending_remains_persisted_for_backward_compatibility(
 
     assert alert_id in restarted.storage.persisted_alert_ids
     assert alert_id in hass.stores[STORAGE_KEY]["alerts"]
+
+
+def test_startup_rename_transfers_pending_durability_and_rollback(hass, entry, set_now):
+    """A fresh legacy pending follows its identity and rolls back atomically."""
+
+    async def scenario():
+        start = datetime(2026, 9, 4, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.old", "unavailable")
+        manager = AlertManager(hass, entry)
+        assert await manager.async_setup() is True
+        old_id = "unavailable:sensor.old"
+        new_id = "unavailable:sensor.new"
+        await manager.storage.async_save(
+            manager.config,
+            manager.records,
+            include_all_pending=True,
+        )
+        manager._unverified_restored_alert_ids = {old_id}
+        snapshot = manager._configuration_snapshot()
+        transaction = StartupReconciliationTransaction.capture(
+            manager.records,
+            manager._unverified_restored_alert_ids,
+        )
+        manager._startup_reconciliation_snapshot = snapshot
+        manager._startup_reconciliation_transaction = transaction
+        manager._runtime_phase = RuntimePhase.RECONCILING
+
+        hass.states.data.pop("sensor.old")
+        hass.states.set("sensor.new", "unavailable")
+        manager._pending_entity_renames["sensor.old"] = "sensor.new"
+        assert manager._apply_pending_entity_renames() is True
+        await manager._async_save_main_store()
+
+        assert set(hass.stores[STORAGE_KEY]["alerts"]) == {new_id}
+        assert manager.storage.persisted_alert_ids == {new_id}
+
+        manager._restore_configuration_snapshot(snapshot)
+        manager._runtime_phase = RuntimePhase.STARTUP_GRACE
+        await manager._async_save_main_store()
+
+        assert set(hass.stores[STORAGE_KEY]["alerts"]) == {old_id}
+        assert manager.storage.persisted_alert_ids == {old_id}
+
+    run(scenario())
+
+
+def test_runtime_rename_retries_with_transferred_pending_durability(
+    hass, entry, set_now
+):
+    """A failed rename write retains the new durable identity for its retry."""
+
+    async def scenario():
+        set_now(datetime(2026, 9, 4, 12, tzinfo=UTC))
+        hass.states.set("sensor.old", "unavailable")
+        manager = AlertManager(hass, entry)
+        assert await manager.async_setup() is True
+        old_id = "unavailable:sensor.old"
+        new_id = "unavailable:sensor.new"
+        await manager.storage.async_save(
+            manager.config,
+            manager.records,
+            include_all_pending=True,
+        )
+        before_store = deepcopy(hass.stores[STORAGE_KEY])
+
+        hass.states.data.pop("sensor.old")
+        hass.states.set("sensor.new", "unavailable")
+        manager._pending_entity_renames["sensor.old"] = "sensor.new"
+        assert manager._apply_pending_entity_renames() is True
+        assert manager.storage.effective_durable_alert_ids == {new_id}
+
+        original_save = manager.storage._store.async_save
+        fail_write = True
+
+        async def fail_once(payload):
+            nonlocal fail_write
+            if fail_write:
+                fail_write = False
+                raise RuntimeError("rename write failed")
+            await original_save(payload)
+
+        manager.storage._store.async_save = fail_once
+        with pytest.raises(RuntimeError, match="rename write failed"):
+            await manager._async_save_state()
+
+        assert hass.stores[STORAGE_KEY] == before_store
+        assert manager.storage.persisted_alert_ids == {old_id}
+        assert manager.storage.effective_durable_alert_ids == {new_id}
+
+        await manager._async_save_state()
+        assert set(hass.stores[STORAGE_KEY]["alerts"]) == {new_id}
+        assert manager.storage.persisted_alert_ids == {new_id}
+        assert manager.storage.effective_durable_alert_ids == {new_id}
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("active_side", ["source", "target"])
+def test_runtime_rename_equal_clock_keeps_active_durable_collision(
+    hass, entry, set_now, active_side
+):
+    """An equal-clock rename retains the active lifecycle and its durability."""
+
+    async def scenario():
+        now = datetime(2026, 9, 4, 12, tzinfo=UTC)
+        set_now(now)
+        old_state = hass.states.set("sensor.old", "ok")
+        new_state = hass.states.set("sensor.new", "ok")
+        manager = AlertManager(hass, entry)
+        assert await manager.async_setup() is True
+        old_id = "unavailable:sensor.old"
+        new_id = "unavailable:sensor.new"
+        old_record = AlertRecord.pending(
+            manager._details(old_state, old_id, "unavailable", "Unavailable"),
+            0 if active_side == "source" else 900,
+            now,
+        )
+        new_record = AlertRecord.pending(
+            manager._details(new_state, new_id, "unavailable", "Unavailable"),
+            0 if active_side == "target" else 900,
+            now,
+        )
+        active_record = old_record if active_side == "source" else new_record
+        assert advance_record(active_record, now) is True
+        manager._set_record(old_record)
+        manager._set_record(new_record)
+        active_id = old_id if active_side == "source" else new_id
+        await manager.storage.async_save(
+            manager.config,
+            {active_id: active_record},
+            include_all_pending=True,
+        )
+
+        manager._pending_entity_renames["sensor.old"] = "sensor.new"
+        assert manager._apply_pending_entity_renames() is True
+
+        assert set(manager.records) == {new_id}
+        assert manager.records[new_id].status is AlertStatus.ACTIVE
+        assert manager.storage.effective_durable_alert_ids == {new_id}
+
+        await manager._async_save_state()
+        assert set(hass.stores[STORAGE_KEY]["alerts"]) == {new_id}
+        assert hass.stores[STORAGE_KEY]["alerts"][new_id]["status"] == "active"
+
+    run(scenario())
+
+
+def test_startup_multiscan_keeps_a_fresh_previously_durable_pending(
+    hass, entry, set_now
+):
+    """A speculative clear cannot revoke pending durability before commit."""
+
+    async def scenario():
+        start = datetime(2026, 9, 4, 12, tzinfo=UTC)
+        set_now(start)
+        unavailable_state = hass.states.set("sensor.test", "unavailable")
+        first = AlertManager(hass, entry)
+        assert await first.async_setup() is True
+        alert_id = "unavailable:sensor.test"
+        original = first.records[alert_id].as_storage_dict()
+        await first.async_unload()
+        hass.stores[STORAGE_KEY]["alerts"][alert_id] = deepcopy(original)
+
+        clear_state = hass.states.set("sensor.test", "ok")
+        hass.state = CoreState.starting
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        assert alert_id in restarted.storage.persisted_alert_ids
+        hass.state = CoreState.running
+        restarted._home_assistant_started(Event())
+        restarted._cancel_startup_reconciliation()
+        restarted._startup_reconciliation_scheduled = True
+
+        original_save = restarted.storage.async_save
+        first_write_done = asyncio.Event()
+        release_first_write = asyncio.Event()
+        save_calls = 0
+
+        async def block_after_first_write(*args, **kwargs):
+            nonlocal save_calls
+            save_calls += 1
+            await original_save(*args, **kwargs)
+            if save_calls == 1:
+                first_write_done.set()
+                await release_first_write.wait()
+
+        restarted.storage.async_save = block_after_first_write
+        reconcile = asyncio.create_task(
+            restarted._async_finish_startup_reconciliation()
+        )
+        await first_write_done.wait()
+        assert alert_id not in hass.stores[STORAGE_KEY]["alerts"]
+
+        unavailable_state = hass.states.set("sensor.test", "unavailable")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": "sensor.test",
+                    "old_state": clear_state,
+                    "new_state": unavailable_state,
+                }
+            )
+        )
+        release_first_write.set()
+        await reconcile
+
+        assert save_calls == 2
+        assert (
+            restarted.records[alert_id].detected_at.isoformat()
+            == original["detected_at"]
+        )
+        assert hass.stores[STORAGE_KEY]["alerts"][alert_id] == original
+        assert alert_id in restarted.storage.persisted_alert_ids
+        restarted.storage.async_save = original_save
+        await restarted.async_unload()
+
+    run(scenario())
 
 
 def test_storage_payload_is_detached_and_duplicate_writes_are_skipped(hass, entry):

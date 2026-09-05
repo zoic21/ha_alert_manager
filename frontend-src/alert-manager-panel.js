@@ -39,7 +39,8 @@ import {
 import { fetchTranslations, reloadTranslations, t, errorText } from "./utils/translations.js";
 import {
   applyOptimisticAcknowledgement, bulkAlertAction, handleOverviewAction,
-  refreshOverviewData, refreshStartupBanner, renderOverviewPanel, updateAlertAcknowledgement,
+  refreshOverviewData, refreshStartupBanner, renderOverviewPanel,
+  updateAlertAcknowledgement,
 } from "./views/overview.js";
 import { handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
 import {
@@ -86,8 +87,8 @@ class AlertManagerPanel extends HTMLElement {
   _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
-  _refreshOverviewData = refreshOverviewData; _refreshStartupBanner = refreshStartupBanner;
-  _renderOverview = renderOverviewPanel;
+  _refreshOverviewData = refreshOverviewData;
+  _refreshStartupBanner = refreshStartupBanner; _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _updateAlertAcknowledgement = updateAlertAcknowledgement;

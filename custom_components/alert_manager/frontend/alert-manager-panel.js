@@ -1873,6 +1873,8 @@ function openAlertDetails(kind, row) {
     const dialog = document.createElement("ha-adaptive-dialog");
     dialog.className = "alert-details-dialog";
     dialog.hass = this._hass;
+    dialog.alertKind = kind;
+    dialog.alertId = row.id;
     dialog.headerTitle = row.entityName || row.entityId;
     dialog.heading = row.entityName || row.entityId;
     dialog.width = "medium";
@@ -3759,7 +3761,7 @@ function startupStatusText(startup, t, durationText, now = Date.now()) {
     const finishesAt = Date.parse(startup.stabilization_until);
     if (!Number.isFinite(finishesAt)) return t("overview.startup_waiting");
     const seconds = Math.max(0, Math.ceil((finishesAt - now) / 1000));
-    if (seconds === 0) return null;
+    if (seconds === 0) return t("overview.startup_waiting");
     return t("overview.startup_in_progress", { duration: durationText(seconds) });
 }
 
@@ -3793,6 +3795,20 @@ function refreshStartupBanner() {
 }
 
 function refreshOverviewData() {
+    const detailsDialog = this._alertDetailsDialog;
+    if (detailsDialog?.alertKind === "overview") {
+      const updatedRow = this._tableRows("overview").find(
+        (row) => row.id === detailsDialog.alertId,
+      );
+      if (!updatedRow) {
+        this._closeAlertDetailsDialog();
+      } else {
+        detailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
+        detailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
+        detailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
+        this._hydrateAlertDetailTimestamps(detailsDialog);
+      }
+    }
     const tablePage = this.shadowRoot?.querySelector('[data-alert-table-page="overview"]');
     if (!tablePage) {
       this._render();
@@ -7524,8 +7540,8 @@ class AlertManagerPanel extends HTMLElement {
   _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
   _call = call;
-  _refreshOverviewData = refreshOverviewData; _refreshStartupBanner = refreshStartupBanner;
-  _renderOverview = renderOverviewPanel;
+  _refreshOverviewData = refreshOverviewData;
+  _refreshStartupBanner = refreshStartupBanner; _renderOverview = renderOverviewPanel;
   _bulkAlertAction = bulkAlertAction;
   _applyOptimisticAcknowledgement = applyOptimisticAcknowledgement;
   _updateAlertAcknowledgement = updateAlertAcknowledgement;
