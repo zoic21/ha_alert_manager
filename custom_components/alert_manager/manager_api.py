@@ -570,15 +570,17 @@ class _ApiMixin:
         self._validate_rule_template(rule)
         return rule_to_yaml_data(rule)
 
-    def export_config_yaml(self) -> str:
+    async def async_export_config_yaml(self) -> str:
         """Return a deterministic, runtime-free YAML configuration export."""
         if self.recovery_active:
             raise ValueError("Restore or import a configuration before exporting")
-        return dump_config_yaml(self.config)
+        return await self.hass.async_add_executor_job(
+            dump_config_yaml, self.get_config()
+        )
 
-    def preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
+    async def async_preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
         """Validate an import without touching the active configuration."""
-        candidate = parse_config_yaml(raw_yaml)
+        candidate = await self.hass.async_add_executor_job(parse_config_yaml, raw_yaml)
         self._validate_config_rule_sources(candidate)
         return import_summary(candidate)
 

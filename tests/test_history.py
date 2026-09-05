@@ -299,7 +299,7 @@ def test_yaml_export_import_excludes_history_and_preserves_local_retention(hass,
     """History data and retention are outside the V1.5 YAML interchange."""
     manager = make_manager(hass, entry)
     run(manager.async_set_history_limit(42))
-    exported = manager.export_config_yaml()
+    exported = run(manager.async_export_config_yaml())
     assert "history" not in exported
     assert "retention" not in exported
     imported = run(manager.async_import_config(dump_config_yaml(manager.get_config())))

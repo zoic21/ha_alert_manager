@@ -303,9 +303,9 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         alerts = sensor.extra_state_attributes["alerts"]
         assert sensor.native_value == len(ids)
         expected_attributes = (
-            {"alerts", "runtime", "history_revision"}
+            {"alerts", "runtime", "history_revision", "alerts_revision"}
             if entity_id == "sensor.alert_manager_main_active"
-            else {"alerts"}
+            else {"alerts", "alerts_revision"}
         )
         assert set(sensor.extra_state_attributes) == expected_attributes
         assert {alert["id"] for alert in alerts} == ids
@@ -334,13 +334,17 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
             assert sensor.extra_state_attributes == {
                 "alerts": [],
                 "history_revision": 0,
+                "alerts_revision": sensor._alerts_revision,
                 "runtime": {
                     "tracked_count": manager.public_snapshot()["tracked_count"],
                     "startup": manager.public_snapshot()["startup"],
                 },
             }
         else:
-            assert sensor.extra_state_attributes == {"alerts": []}
+            assert sensor.extra_state_attributes == {
+                "alerts": [],
+                "alerts_revision": sensor._alerts_revision,
+            }
 
 
 def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):

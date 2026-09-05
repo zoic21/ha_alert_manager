@@ -446,7 +446,7 @@ async def websocket_config_export(
     if (manager := _manager(hass, connection, msg["id"])) is None:
         return
     try:
-        raw_yaml = manager.export_config_yaml()
+        raw_yaml = await manager.async_export_config_yaml()
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
@@ -526,7 +526,7 @@ async def websocket_config_import_validate(
     if (manager := _manager(hass, connection, msg["id"])) is None:
         return
     try:
-        summary = manager.preview_config_import(msg["yaml"])
+        summary = await manager.async_preview_config_import(msg["yaml"])
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return

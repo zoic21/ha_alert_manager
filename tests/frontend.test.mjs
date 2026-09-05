@@ -4802,3 +4802,24 @@ test("failed reevaluation keeps the dialog and releases busy state", async () =>
   assert.equal(panel._notice.text, "La réévaluation nécessite une surveillance démarrée et activée.");
   assert.equal(panel._alertDetailsDialog, dialog);
 });
+
+for (const partition of ["active", "pending", "acknowledge"]) {
+  test(`${partition} revision refreshes full alerts with unchanged compact data`, async () => {
+    const panel = refreshTestPanel();
+    const entityId = `sensor.alert_manager_main_${partition}`;
+    const attributes = { alerts: [{ id: "visible" }], alerts_omitted: 99, alerts_revision: 1 };
+    panel._entityStates = { [entityId]: { state: "100", attributes } };
+    const calls = [];
+    const latest = { ...panel._alerts, alerts: [{ id: "replacement", notifications: { alert: { count: 1 } } }] };
+    const hass = { locale: { language: "fr" }, states: {
+      [entityId]: { state: "100", attributes: { ...attributes, alerts_revision: 2 } },
+    }, callWS: async (msg) => { calls.push(msg.type); return latest; } };
+    panel.hass = hass;
+    await panel._alertsRefreshPromise;
+    assert.deepEqual(calls, ["alert_manager/alerts/list"]);
+    assert.equal(panel._alerts, latest);
+    panel.hass = { ...hass, states: { [entityId]: { ...hass.states[entityId], last_updated: "later" } } };
+    await refreshTurn();
+    assert.equal(calls.length, 1);
+  });
+}
