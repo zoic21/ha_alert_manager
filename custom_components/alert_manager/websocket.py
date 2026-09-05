@@ -104,6 +104,28 @@ async def websocket_alert_acknowledgements_update(
 
 @websocket_api.require_admin
 @websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/alerts/reevaluate",
+        vol.Required("alert_id"): vol.All(str, vol.Length(min=1, max=512)),
+    }
+)
+async def websocket_alert_reevaluate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Reevaluate the current state behind one alert."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        present = await manager.async_reevaluate_alert(msg["alert_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], {"present": present})
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/history/list"})
 async def websocket_history_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
@@ -561,6 +583,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_config_update,
         websocket_alerts_list,
         websocket_alert_acknowledgements_update,
+        websocket_alert_reevaluate,
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,

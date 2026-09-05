@@ -4657,3 +4657,60 @@ test("native history selection is isolated and prunes deleted occurrences on ref
   assert.equal(tablePage.selected, 0);
   assert.equal(button.hidden, true);
 });
+
+test("reevaluation is available for ongoing alerts only", () => {
+  const panel = tablePanel();
+  for (const row of panel._tableRows("overview")) {
+    assert.match(panel._renderAlertDetails("overview", row), /value="reevaluate"[\s\S]*Réévaluer/);
+    assert.doesNotMatch(panel._renderAlertDetails("history", row), /value="reevaluate"/);
+  }
+});
+
+for (const present of [true, false]) {
+  test(`reevaluation refreshes current alerts and handles presence=${present}`, async () => {
+    const panel = tablePanel();
+    const row = panel._tableRows("overview")[0];
+    const calls = [];
+    panel._hass.callWS = async (message) => {
+      calls.push(message);
+      return { present };
+    };
+    panel._refreshUiState = () => {};
+    panel._refreshOverviewData = () => {};
+    panel._refreshAlerts = async () => {
+      if (!present) panel._alerts.alerts = [];
+    };
+    panel._alertDetailsDialog = { alertId: row.id, innerHTML: "" };
+    panel._closeAlertDetailsDialog = () => { panel._alertDetailsDialog = null; };
+    await panel._handleMenuSelected({
+      composedPath: () => [{ dataset: { alertDetailsMenu: "", alertId: row.id } }],
+      detail: { item: { value: "reevaluate" } },
+    });
+    assert.deepEqual(calls, [{ type: "alert_manager/alerts/reevaluate", alert_id: row.id }]);
+    assert.equal(panel._busy, false);
+    assert.equal(panel._notice.kind, "success");
+    if (present) assert.match(panel._alertDetailsDialog.innerHTML, /value="reevaluate"/);
+    else assert.equal(panel._alertDetailsDialog, null);
+  });
+}
+
+test("failed reevaluation keeps the dialog and releases busy state", async () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  panel._hass.callWS = async () => {
+    throw { code: "invalid_format", message: "Alert reevaluation requires running monitoring" };
+  };
+  panel._refreshUiState = () => {};
+  panel._refreshOverviewData = () => {};
+  panel._refreshAlerts = () => assert.fail("failed mutation must not refresh");
+  const dialog = { alertId: row.id };
+  panel._alertDetailsDialog = dialog;
+  await panel._handleMenuSelected({
+    composedPath: () => [{ dataset: { alertDetailsMenu: "", alertId: row.id } }],
+    detail: { item: { value: "reevaluate" } },
+  });
+  assert.equal(panel._busy, false);
+  assert.equal(panel._notice.kind, "error");
+  assert.equal(panel._notice.text, "La réévaluation nécessite une surveillance démarrée et activée.");
+  assert.equal(panel._alertDetailsDialog, dialog);
+});

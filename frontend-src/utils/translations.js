@@ -27,6 +27,8 @@ const VALIDATION_ERROR_KEYS = new Map([
 ]);
 
 const VALIDATION_ERROR_PREFIX_KEYS = [
+  ["Unknown or resolved alert id:", "alert_not_found"],
+  ["Alert reevaluation requires running monitoring", "reevaluation_unavailable"],
   ["Missing rule field:", "rule_field_missing"],
   ["Unsupported value source:", "source_unsupported"],
   ["Unsupported operator:", "operator_unsupported"],

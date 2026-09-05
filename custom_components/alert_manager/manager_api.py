@@ -23,6 +23,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
+from homeassistant.core import CoreState
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
@@ -580,6 +581,21 @@ class _ApiMixin:
         candidate = parse_config_yaml(raw_yaml)
         self._validate_config_rule_sources(candidate)
         return import_summary(candidate)
+
+    @_serialize_runtime_mutation
+    async def async_reevaluate_alert(self, alert_id: str) -> bool:
+        """Reevaluate an alert's entity using the normal lifecycle."""
+        record = self.records.get(alert_id)
+        if record is None:
+            raise ValueError(f"Unknown or resolved alert id: {alert_id}")
+        if (
+            not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            raise ValueError("Alert reevaluation requires running monitoring")
+        await self.async_evaluate_entity(record.details.entity_id)
+        return alert_id in self.records
 
     async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Acknowledge one active alert and persist before publishing it."""
