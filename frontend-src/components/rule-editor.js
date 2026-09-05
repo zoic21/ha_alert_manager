@@ -555,6 +555,7 @@ export function handleRuleInput(event) {
     if (this._editingRule === null) return;
     const target = event.target;
     if (target?.closest?.("#rule-form")) {
+      this._captureRuleDraft();
       this._clearRuleEditorError();
       this._clearRuleTestResult();
       this._ruleDirty = true;

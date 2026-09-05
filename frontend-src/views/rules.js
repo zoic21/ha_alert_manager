@@ -371,6 +371,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
       (item) => String(item.id) === String(ruleId),
     );
     if (!rule) return false;
+    if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return false;
     if (navigate) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
@@ -445,6 +446,7 @@ export function replaceRule(rule) {
 
 export async function handleRulesAction(action, button) {
   if (action === "new-rule") {
+    if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
     this._editingRule = {};
     this._ruleEditorMode = "visual";

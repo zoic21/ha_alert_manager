@@ -51,7 +51,7 @@ export function updateDrawerLayout(previousNarrow) {
     || (this._editingRule === null && !this._configurationDrawer)
   ) return;
   if (this._editingRule !== null) this._captureRuleDraft();
-  if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
+  if (this._activeTab === "settings" || this._configurationDrawer?.kind === "automatic") this._captureAutomaticConfigurationValues();
   if (this._activeTab === "settings") {
     this._captureEntityDelayValues();
     this._captureNotificationProfileDraft();

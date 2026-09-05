@@ -213,6 +213,7 @@
       "notification_title": "Surveillance Alert Manager désactivée"
     },
     "notifications": {
+      "discard_confirm": "Abandonner les modifications non enregistrées de ce profil de notification ?",
       "add": "Ajouter un profil",
       "close_aria": "Fermer le profil de notification",
       "defaults": "Comportement par défaut",

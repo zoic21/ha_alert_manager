@@ -2309,7 +2309,7 @@ function updateDrawerLayout(previousNarrow) {
     || (this._editingRule === null && !this._configurationDrawer)
   ) return;
   if (this._editingRule !== null) this._captureRuleDraft();
-  if (this._activeTab === "automatic") this._captureAutomaticConfigurationValues();
+  if (this._activeTab === "settings" || this._configurationDrawer?.kind === "automatic") this._captureAutomaticConfigurationValues();
   if (this._activeTab === "settings") {
     this._captureEntityDelayValues();
     this._captureNotificationProfileDraft();
@@ -2666,7 +2666,7 @@ function setBooleanOverride(exception, key, value) {
 
 function captureNotificationProfileDraft(panel) {
   const draft = panel._notificationProfileDraft;
-  if (!draft) return;
+  if (!draft || !panel.shadowRoot.querySelector("#notification-profile-name")) return;
   draft.name = String(panel.shadowRoot.querySelector("#notification-profile-name")?.value ?? draft.name).trim();
   draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
   draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
@@ -2707,7 +2707,7 @@ function invalidReminder(value) {
   );
 }
 
-async function saveNotificationProfiles(panel, candidateProfiles) {
+async function saveNotificationProfiles(panel, candidateProfiles, savedDraft = false) {
   const profiles = candidateProfiles.map(cloneNotificationProfile);
   panel._busy = true;
   panel._notice = null;
@@ -2721,8 +2721,11 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
     panel._settingsDraft.notification_profiles = (
       panel._config.notification_profiles ?? []
     ).map(cloneNotificationProfile);
-    panel._notificationProfileDraft = null;
-    panel._notificationProfileId = null;
+    if (savedDraft) {
+      panel._notificationProfileDraft = null;
+      panel._notificationProfileId = null;
+      panel._notificationProfileOriginal = null;
+    }
     panel._configurationDrawer = null;
     panel._notice = { kind: "success", text: panel._t("success.settings_saved") };
     saved = true;
@@ -2737,13 +2740,28 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
 }
 
 function openNotificationProfile(panel, profile = null) {
+  if (panel._notificationProfileDraft
+    && panel._notificationProfileId === (profile?.id ?? null)) {
+    panel._configurationDrawer = { kind: "notification" };
+    panel._refreshSettingsConfigurationDrawer();
+    return;
+  }
+  if (!confirmNotificationDiscard(panel)) return;
   panel._notificationProfileDraft = profile
     ? cloneNotificationProfile(profile)
     : newNotificationProfileDraft();
+  panel._notificationProfileOriginal = JSON.stringify(panel._notificationProfileDraft);
   panel._notificationProfileId = profile?.id ?? null;
   panel._notificationProfileValidationError = null;
   panel._configurationDrawer = { kind: "notification" };
   panel._refreshSettingsConfigurationDrawer();
+}
+
+function confirmNotificationDiscard(panel) {
+  captureNotificationProfileDraft(panel);
+  return !panel._notificationProfileDraft
+    || JSON.stringify(panel._notificationProfileDraft) === panel._notificationProfileOriginal
+    || window.confirm(panel._t("notifications.discard_confirm"));
 }
 
 async function handleNotificationProfileAction(action, button) {
@@ -2779,7 +2797,7 @@ async function handleNotificationProfileAction(action, button) {
     const index = profiles.findIndex((item) => item.id === this._notificationProfileId);
     if (index < 0) profiles.push(profile);
     else profiles[index] = profile;
-    await saveNotificationProfiles(this, profiles);
+    await saveNotificationProfiles(this, profiles, true);
     return true;
   }
   if (action === "delete-notification-profile") {
@@ -2835,6 +2853,7 @@ async function handleNotificationProfileAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "notification"
   ) {
+    if (!confirmNotificationDiscard(this)) return true;
     this._configurationDrawer = null;
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
@@ -3398,6 +3417,7 @@ function handleRuleInput(event) {
     if (this._editingRule === null) return;
     const target = event.target;
     if (target?.closest?.("#rule-form")) {
+      this._captureRuleDraft();
       this._clearRuleEditorError();
       this._clearRuleTestResult();
       this._ruleDirty = true;
@@ -4827,6 +4847,7 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
       (item) => String(item.id) === String(ruleId),
     );
     if (!rule) return false;
+    if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return false;
     if (navigate) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
@@ -4901,6 +4922,7 @@ function replaceRule(rule) {
 
 async function handleRulesAction(action, button) {
   if (action === "new-rule") {
+    if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
     this._editingRule = {};
     this._ruleEditorMode = "visual";
@@ -4996,7 +5018,7 @@ function renderAutomatic(context) {
       <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
       <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
-        const packConfig = config.automatic[pack.id];
+        const packConfig = draft[pack.id];
         const packKey = pack.translation_key || pack.id;
         const packName = t(`packs.${packKey}.name`);
         const configurableFields = drawerFields(pack);
@@ -5061,7 +5083,7 @@ function renderAutomaticConfigurationDrawer(context) {
   const field = fields.find((item) => item.id === configurationDrawer.fieldId)
     ?? (fields.length === 1 ? fields[0] : null);
   if (!field) return "";
-  const packConfig = config.automatic[pack.id];
+  const packConfig = draft[pack.id];
   const fieldName = t(`automatic.fields.${field.translation_key}.label`);
   const content = `<div class="fields configuration-drawer-fields">${renderPackField(
     pack,
@@ -5148,11 +5170,10 @@ async function saveAutomatic() {
     const automatic = {};
     for (const pack of this._packs.filter((item) => item.available)) {
       automatic[pack.id] = {
-        enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`).checked,
+        enabled: this._automaticMapDraft[pack.id].enabled,
       };
       if (pack.uses_delay !== false) {
-        const delayInput = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
-        automatic[pack.id].delay = delayInput.value === "" ? null : Number(delayInput.value);
+        automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
       }
       for (const field of pack.config_fields ?? []) {
         if (field.type === "number") {
@@ -5262,7 +5283,7 @@ function ensureAutomaticDraft() {
     if (this._automaticMapDraft || !this._config) return;
     this._automaticMapDraft = {};
     for (const pack of this._packs) {
-      const fields = {};
+      const fields = { ...this._config.automatic?.[pack.id] };
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
@@ -5309,8 +5330,15 @@ function captureAutomaticMapValues() {
 }
 
 function captureAutomaticConfigurationValues() {
+  this._ensureAutomaticDraft();
   captureAutomaticMapValues.call(this);
   for (const pack of this._packs) {
+    const draft = this._automaticMapDraft?.[pack.id];
+    if (!draft) continue;
+    const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
+    const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
+    if (enabled) draft.enabled = enabled.checked;
+    if (delay) draft.delay = delay.value === "" ? null : Number(delay.value);
     for (const field of pack.config_fields ?? []) {
       if (field.type !== "number") continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
@@ -5367,6 +5395,7 @@ function hydrateAutomaticControls() {
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (enabled) {
       enabled.onchange = () => {
+        this._automaticMapDraft[pack.id].enabled = enabled.checked;
         const configuration = this.shadowRoot.querySelector(
           `[data-pack-configuration="${pack.id}"]`,
         );
@@ -5839,7 +5868,7 @@ async function saveSettings() {
         this._config = { ...this._config, history_limit: historyLimit };
         if (this._historyLoaded) await this._refreshHistory();
       }
-      this._resetSettingsDraft();
+      this._resetSettingsDraft({ preserveNotification: true });
       this._configurationDrawer = null;
       replaceConfigurationDrawer(
         this.shadowRoot?.querySelector?.("#settings-form"),
@@ -5856,14 +5885,17 @@ async function saveSettings() {
     return saved;
 }
 
-function resetSettingsDraft() {
+function resetSettingsDraft({ preserveNotification = false } = {}) {
     this._settingsDirty = false;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
-    this._notificationProfileDraft = null;
-    this._notificationProfileId = null;
-    this._notificationProfileValidationError = null;
+    if (!preserveNotification) {
+      this._notificationProfileDraft = null;
+      this._notificationProfileId = null;
+      this._notificationProfileOriginal = null;
+      this._notificationProfileValidationError = null;
+    }
 }
 
 function ensureSettingsDraft() {
@@ -5890,6 +5922,10 @@ function ensureSettingsDraft() {
 }
 
 function handleSettingsInput(event) {
+    if (event.target?.closest?.("#automatic-form")) this._captureAutomaticConfigurationValues();
+    if (event.target?.dataset?.delayIndex !== undefined) this._captureEntityDelayValues();
+    if (this._configurationDrawer?.kind === "notification") this._captureNotificationProfileDraft();
+
     const fields = {
       "global-delay": "global_delay",
       "pending-display-delay": "pending_display_delay",
@@ -8128,7 +8164,7 @@ class AlertManagerPanel extends HTMLElement {
   _handleChange(event) {
     handleSettingsInput.call(this, event);
     this._markConfigurationControlDirty(event.target);
-    if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
+    this._handleRuleInput(event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

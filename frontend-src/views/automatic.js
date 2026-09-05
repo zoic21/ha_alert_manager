@@ -36,7 +36,7 @@ export function renderAutomatic(context) {
       <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
       <form id="automatic-form" class="automatic-grid">
       ${availablePacks.map((pack) => {
-        const packConfig = config.automatic[pack.id];
+        const packConfig = draft[pack.id];
         const packKey = pack.translation_key || pack.id;
         const packName = t(`packs.${packKey}.name`);
         const configurableFields = drawerFields(pack);
@@ -101,7 +101,7 @@ export function renderAutomaticConfigurationDrawer(context) {
   const field = fields.find((item) => item.id === configurationDrawer.fieldId)
     ?? (fields.length === 1 ? fields[0] : null);
   if (!field) return "";
-  const packConfig = config.automatic[pack.id];
+  const packConfig = draft[pack.id];
   const fieldName = t(`automatic.fields.${field.translation_key}.label`);
   const content = `<div class="fields configuration-drawer-fields">${renderPackField(
     pack,
@@ -188,11 +188,10 @@ export async function saveAutomatic() {
     const automatic = {};
     for (const pack of this._packs.filter((item) => item.available)) {
       automatic[pack.id] = {
-        enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`).checked,
+        enabled: this._automaticMapDraft[pack.id].enabled,
       };
       if (pack.uses_delay !== false) {
-        const delayInput = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
-        automatic[pack.id].delay = delayInput.value === "" ? null : Number(delayInput.value);
+        automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
       }
       for (const field of pack.config_fields ?? []) {
         if (field.type === "number") {
@@ -302,7 +301,7 @@ export function ensureAutomaticDraft() {
     if (this._automaticMapDraft || !this._config) return;
     this._automaticMapDraft = {};
     for (const pack of this._packs) {
-      const fields = {};
+      const fields = { ...this._config.automatic?.[pack.id] };
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
@@ -349,8 +348,15 @@ export function captureAutomaticMapValues() {
 }
 
 export function captureAutomaticConfigurationValues() {
+  this._ensureAutomaticDraft();
   captureAutomaticMapValues.call(this);
   for (const pack of this._packs) {
+    const draft = this._automaticMapDraft?.[pack.id];
+    if (!draft) continue;
+    const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
+    const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
+    if (enabled) draft.enabled = enabled.checked;
+    if (delay) draft.delay = delay.value === "" ? null : Number(delay.value);
     for (const field of pack.config_fields ?? []) {
       if (field.type !== "number") continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
@@ -407,6 +413,7 @@ export function hydrateAutomaticControls() {
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (enabled) {
       enabled.onchange = () => {
+        this._automaticMapDraft[pack.id].enabled = enabled.checked;
         const configuration = this.shadowRoot.querySelector(
           `[data-pack-configuration="${pack.id}"]`,
         );

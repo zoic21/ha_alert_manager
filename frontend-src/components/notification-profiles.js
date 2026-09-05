@@ -251,7 +251,7 @@ function setBooleanOverride(exception, key, value) {
 
 export function captureNotificationProfileDraft(panel) {
   const draft = panel._notificationProfileDraft;
-  if (!draft) return;
+  if (!draft || !panel.shadowRoot.querySelector("#notification-profile-name")) return;
   draft.name = String(panel.shadowRoot.querySelector("#notification-profile-name")?.value ?? draft.name).trim();
   draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
   draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
@@ -292,7 +292,7 @@ function invalidReminder(value) {
   );
 }
 
-async function saveNotificationProfiles(panel, candidateProfiles) {
+async function saveNotificationProfiles(panel, candidateProfiles, savedDraft = false) {
   const profiles = candidateProfiles.map(cloneNotificationProfile);
   panel._busy = true;
   panel._notice = null;
@@ -306,8 +306,11 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
     panel._settingsDraft.notification_profiles = (
       panel._config.notification_profiles ?? []
     ).map(cloneNotificationProfile);
-    panel._notificationProfileDraft = null;
-    panel._notificationProfileId = null;
+    if (savedDraft) {
+      panel._notificationProfileDraft = null;
+      panel._notificationProfileId = null;
+      panel._notificationProfileOriginal = null;
+    }
     panel._configurationDrawer = null;
     panel._notice = { kind: "success", text: panel._t("success.settings_saved") };
     saved = true;
@@ -322,13 +325,28 @@ async function saveNotificationProfiles(panel, candidateProfiles) {
 }
 
 function openNotificationProfile(panel, profile = null) {
+  if (panel._notificationProfileDraft
+    && panel._notificationProfileId === (profile?.id ?? null)) {
+    panel._configurationDrawer = { kind: "notification" };
+    panel._refreshSettingsConfigurationDrawer();
+    return;
+  }
+  if (!confirmNotificationDiscard(panel)) return;
   panel._notificationProfileDraft = profile
     ? cloneNotificationProfile(profile)
     : newNotificationProfileDraft();
+  panel._notificationProfileOriginal = JSON.stringify(panel._notificationProfileDraft);
   panel._notificationProfileId = profile?.id ?? null;
   panel._notificationProfileValidationError = null;
   panel._configurationDrawer = { kind: "notification" };
   panel._refreshSettingsConfigurationDrawer();
+}
+
+function confirmNotificationDiscard(panel) {
+  captureNotificationProfileDraft(panel);
+  return !panel._notificationProfileDraft
+    || JSON.stringify(panel._notificationProfileDraft) === panel._notificationProfileOriginal
+    || window.confirm(panel._t("notifications.discard_confirm"));
 }
 
 export async function handleNotificationProfileAction(action, button) {
@@ -364,7 +382,7 @@ export async function handleNotificationProfileAction(action, button) {
     const index = profiles.findIndex((item) => item.id === this._notificationProfileId);
     if (index < 0) profiles.push(profile);
     else profiles[index] = profile;
-    await saveNotificationProfiles(this, profiles);
+    await saveNotificationProfiles(this, profiles, true);
     return true;
   }
   if (action === "delete-notification-profile") {
@@ -420,6 +438,7 @@ export async function handleNotificationProfileAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "notification"
   ) {
+    if (!confirmNotificationDiscard(this)) return true;
     this._configurationDrawer = null;
     this._notificationProfileDraft = null;
     this._notificationProfileId = null;
