@@ -135,6 +135,18 @@ def scenario_cls(request):
     return request.param
 
 
+async def _expire_pending_cycle(runtime: _Scenario) -> None:
+    """Run every bounded trace recheck until the incomplete cycle is discarded."""
+    await runtime.flush()
+    key = ("execution_errors", runtime.entity_id)
+    for _ in range(execution_errors._TRACE_RECHECK_LIMIT):
+        assert key in runtime.manager._pack_recheck_timers
+        timer = runtime.hass.timers[-1]
+        timer["action"](timer["point"])
+        await runtime.flush()
+    assert key not in runtime.manager._pack_recheck_timers
+
+
 def test_pack_ignores_other_domains(hass):
     """Entities other than automations and scripts do not participate."""
     state = hass.states.set("sensor.other", "on", {"current": 0})
@@ -476,5 +488,149 @@ def test_excluded_execution_cycle_is_not_replayed_later(hass, entry, scenario_cl
 
         await runtime.manager.async_update_config({"excluded_entities": []})
         assert runtime.manager.records == {}
+
+    asyncio.run(scenario())
+
+
+def test_missing_trace_expires_and_later_failure_is_detected(hass, entry, scenario_cls):
+    """A missing trace cannot survive its retry budget or block a later failure."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        runtime._state_change(1)
+        runtime._state_change(0)
+
+        await _expire_pending_cycle(runtime)
+
+        tracker = execution_errors._cycles(hass)[runtime.entity_id]
+        assert tracker.active is None
+        assert tracker.completed == []
+
+        failed = runtime.start("valid-after-missing")
+        runtime.finish(failed, "Detected after missing trace")
+        await runtime.flush()
+
+        record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
+        assert record.details.condition.endswith("Detected after missing trace")
+
+    asyncio.run(scenario())
+
+
+def test_new_cycle_discards_incomplete_predecessor_without_waiting(
+    hass, entry, scenario_cls
+):
+    """A new execution bypasses an incomplete cycle still inside its retry window."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        runtime._state_change(1)
+        runtime._state_change(0)
+        await runtime.flush()
+
+        failed = runtime.start("valid-before-timeout")
+        runtime.finish(failed, "Detected before old timeout")
+        await runtime.flush()
+
+        tracker = execution_errors._cycles(hass)[runtime.entity_id]
+        assert tracker.completed == []
+        record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
+        assert record.details.condition.endswith("Detected before old timeout")
+
+    asyncio.run(scenario())
+
+
+def test_malformed_summary_expires_without_blocking_next_cycle(
+    hass, entry, scenario_cls
+):
+    """A malformed finalized summary is bounded like a missing trace."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        malformed = runtime.start("malformed")
+        malformed.as_short_dict = lambda: {
+            "run_id": malformed.run_id,
+            "state": "stopped",
+            "timestamp": "invalid",
+        }
+        runtime._state_change(0)
+
+        await _expire_pending_cycle(runtime)
+
+        failed = runtime.start("valid-after-malformed")
+        runtime.finish(failed, "Detected after malformed trace")
+        await runtime.flush()
+
+        record = runtime.manager.records[f"execution_errors:{runtime.entity_id}"]
+        assert record.details.condition.endswith("Detected after malformed trace")
+
+    asyncio.run(scenario())
+
+
+def test_incomplete_cycle_breaks_consecutive_failure_sequence(
+    hass, entry, scenario_cls
+):
+    """An unverifiable cycle cannot count as part of a consecutive failure run."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        runtime.manager.config["automatic"]["execution_errors"][
+            "failure_thresholds"
+        ] = {runtime.entity_id: 2}
+        alert_id = f"execution_errors:{runtime.entity_id}"
+
+        first = runtime.start("first-failure")
+        runtime.finish(first, "First failure")
+        await runtime.flush()
+        assert alert_id not in runtime.manager.records
+
+        runtime._state_change(1)
+        runtime._state_change(0)
+        await _expire_pending_cycle(runtime)
+
+        after_gap = runtime.start("failure-after-gap")
+        runtime.finish(after_gap, "Failure after gap")
+        await runtime.flush()
+        assert alert_id not in runtime.manager.records
+
+        consecutive = runtime.start("second-consecutive-failure")
+        runtime.finish(consecutive, "Second consecutive failure")
+        await runtime.flush()
+        assert alert_id in runtime.manager.records
+
+    asyncio.run(scenario())
+
+
+def test_runtime_cycle_storage_is_bounded_and_cleared(hass, entry, scenario_cls):
+    """Cycle queues and trace references stay bounded and monitoring clears them."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry, trace_limit=1000)
+
+        for index in range(execution_errors._MAX_TRACE_REFERENCES + 5):
+            runtime.start(f"parallel-{index}")
+        tracker = execution_errors._cycles(hass)[runtime.entity_id]
+        assert tracker.active is not None
+        assert len(tracker.active.traces) == execution_errors._MAX_TRACE_REFERENCES
+
+        await runtime.manager.async_set_monitoring(False)
+        assert execution_errors._DATA_CYCLES not in hass.data
+
+    asyncio.run(scenario())
+
+
+def test_completed_cycle_queue_is_bounded(hass, entry, scenario_cls):
+    """Back-to-back completed runs cannot grow the deferred queue without limit."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        for index in range(execution_errors._MAX_COMPLETED_CYCLES + 5):
+            run = runtime.start(f"queued-{index}")
+            runtime.finish(run, f"Failure {index}")
+
+        tracker = execution_errors._cycles(hass)[runtime.entity_id]
+        assert len(tracker.completed) == execution_errors._MAX_COMPLETED_CYCLES
+        assert all(not cycle.traces for cycle in tracker.completed)
+
+        await runtime.manager.async_set_monitoring(False)
 
     asyncio.run(scenario())
