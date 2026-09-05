@@ -693,6 +693,14 @@ function setHass(value) {
     this._language = language;
     if (!this._config) this._restorePanelState();
     const alertsChanged = this._syncSensor();
+    const historyRevision = value?.states?.["sensor.alert_manager_main_active"]
+      ?.attributes?.history_revision;
+    const historyChanged = historyRevision !== this._historyRevision;
+    this._historyRevision = historyRevision;
+    this._updateHassReferences();
+    if (this.isConnected && this._config && this._activeTab === "history" && historyChanged) {
+      void this._refreshHistory();
+    }
     if (this.isConnected && this._config && this._coherenceLoaded && coherenceChanged) {
       void this._refreshCoherence();
     }
@@ -707,10 +715,6 @@ function setHass(value) {
     } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
       this._refreshOverviewData();
       void this._refreshAlerts();
-    } else if (this.isConnected && this._activeTab === "history" && alertsChanged) {
-      this._refreshHistory();
-    } else if (this.isConnected) {
-      this._hydrateSelectors();
     }
 }
 
@@ -784,20 +788,56 @@ async function load() {
     }
 }
 
-async function refreshHistory() {
-    if (!this._hass || this._historyLoadPromise) return this._historyLoadPromise;
-    this._historyLoadPromise = this._api.call({ type: "alert_manager/history/list" });
-    try {
-      this._history = await this._historyLoadPromise;
-      this._historyLoaded = true;
-    } catch (error) {
-      this._historyLoaded = true;
-      this._notice = { kind: "error", text: this._errorText(error) };
-    } finally {
-      this._historyLoadPromise = null;
-      if (this.isConnected) this._refreshHistoryData();
+// Defer one event-loop turn to combine sensor partitions from a single transition.
+// Requests arriving during the fetch share exactly one pending trailing refresh.
+async function refreshPanelData(panel, kind) {
+    const promiseKey = `_${kind}RefreshPromise`;
+    const requestedKey = `_${kind}RefreshRequested`;
+    if (panel[promiseKey]) {
+      if (panel[`_${kind}Fetching`]) panel[requestedKey] = true;
+      return panel[promiseKey];
     }
-    return this._history;
+    panel[promiseKey] = (async () => {
+      do {
+        panel[requestedKey] = false;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (!panel.isConnected) break;
+        panel[`_${kind}Fetching`] = true;
+        try {
+          panel[`_${kind}`] = await panel._api.call({ type: `alert_manager/${kind}/list` });
+          if (kind === "history") {
+            panel._historyLoaded = true;
+            panel._historyConfig = {
+              retention_limit: panel._history.retention_limit, enabled: panel._history.enabled,
+            };
+            if (panel.isConnected && panel._activeTab === "history") panel._refreshHistoryData();
+          } else {
+            panel._rememberPanelState();
+            panel._openAlertDeepLink();
+            if (panel.isConnected && panel._activeTab === "overview") panel._refreshOverviewData();
+          }
+        } catch (error) {
+          panel._notice = { kind: "error", text: panel._errorText(error) };
+          if (kind === "history" && panel.isConnected && panel._activeTab === "history") {
+            panel._historyLoaded = true;
+            panel._refreshHistoryData();
+          }
+        } finally {
+          panel[`_${kind}Fetching`] = false;
+        }
+      } while (panel[requestedKey] && panel.isConnected);
+      return panel[`_${kind}`];
+    })();
+    try {
+      return await panel[promiseKey];
+    } finally {
+      panel[promiseKey] = null;
+    }
+}
+
+function refreshHistory() {
+    if (!this._hass) return this._history;
+    return refreshPanelData(this, "history");
 }
 
 async function refreshCoherence() {
@@ -841,32 +881,9 @@ async function refreshNotificationStats() {
     return this._notificationStats;
 }
 
-async function refreshAlerts() {
+function refreshAlerts() {
     if (!this._hass || !this._config) return this._alerts;
-    if (this._alertsRefreshPromise) {
-      this._alertsRefreshRequested = true;
-      return this._alertsRefreshPromise;
-    }
-    this._alertsRefreshPromise = this._api.call({
-      type: "alert_manager/alerts/list",
-    });
-    try {
-      this._alerts = await this._alertsRefreshPromise;
-      this._rememberPanelState();
-      this._openAlertDeepLink();
-      if (this.isConnected && this._activeTab === "overview") {
-        this._refreshOverviewData();
-      }
-    } catch (error) {
-      this._notice = { kind: "error", text: this._errorText(error) };
-    } finally {
-      this._alertsRefreshPromise = null;
-      if (this._alertsRefreshRequested) {
-        this._alertsRefreshRequested = false;
-        void this._refreshAlerts();
-      }
-    }
-    return this._alerts;
+    return refreshPanelData(this, "alerts");
 }
 
 async function call(message, successText) {
@@ -884,6 +901,52 @@ async function call(message, successText) {
       this._busy = false;
       this._refreshUiState();
     }
+}
+
+function syncSensor() {
+    const states = this._hass?.states ?? {};
+    const entityIds = [
+      "sensor.alert_manager_main_active",
+      "sensor.alert_manager_main_pending",
+      "sensor.alert_manager_main_acknowledge",
+      "switch.alert_manager_main_monitoring",
+    ];
+    if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
+      return false;
+    }
+    const alertsChanged = entityIds.some((entityId) => {
+      const previous = this._entityStates[entityId];
+      const current = states[entityId];
+      if (previous === current) return false;
+      const { history_revision: _previousRevision, ...previousAttributes } = previous?.attributes ?? {};
+      const { history_revision: _currentRevision, ...currentAttributes } = current?.attributes ?? {};
+      return previous?.state !== current?.state
+        || JSON.stringify(previousAttributes) !== JSON.stringify(currentAttributes);
+    });
+    this._entityStates = Object.fromEntries(
+      entityIds.map((entityId) => [entityId, states[entityId]]),
+    );
+    const monitoringState = states["switch.alert_manager_main_monitoring"]?.state;
+    if (monitoringState === "on" || monitoringState === "off") {
+      this._monitoringEnabled = monitoringState === "on";
+    }
+    syncRuntimeMetadata.call(this, states);
+    // Sensor attributes are intentionally compact and can be truncated to stay
+    // below Recorder's limit. Counts remain immediate; complete rows come from
+    // the coalesced WebSocket refresh triggered by this state change.
+    if (this._monitoringEnabled) {
+      const partitions = [
+        ["sensor.alert_manager_main_active", "active_count"],
+        ["sensor.alert_manager_main_pending", "pending_count"],
+        ["sensor.alert_manager_main_acknowledge", "acknowledge_count"],
+      ];
+      for (const [entityId, countKey] of partitions) {
+        const state = states[entityId];
+        if (!state) continue;
+        this._alerts[countKey] = Number(state.state ?? 0);
+      }
+    }
+    return alertsChanged;
 }
 
 // Source: frontend-src/components/alert-table.js
@@ -4097,6 +4160,7 @@ async function handleHistoryAction(action) {
     if (result) {
       this._history = result;
       this._refreshHistoryData();
+      if (this._historyRefreshPromise) await this._refreshHistory();
     }
     return true;
   }
@@ -7760,7 +7824,6 @@ class AlertManagerPanel extends HTMLElement {
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
-    this._historyLoadPromise = null;
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
     this._activeTab = "overview";
@@ -7895,42 +7958,7 @@ class AlertManagerPanel extends HTMLElement {
     }));
   }
 
-  _syncSensor() {
-    const states = this._hass?.states ?? {};
-    const entityIds = [
-      "sensor.alert_manager_main_active",
-      "sensor.alert_manager_main_pending",
-      "sensor.alert_manager_main_acknowledge",
-      "switch.alert_manager_main_monitoring",
-    ];
-    if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
-      return false;
-    }
-    this._entityStates = Object.fromEntries(
-      entityIds.map((entityId) => [entityId, states[entityId]]),
-    );
-    const monitoringState = states["switch.alert_manager_main_monitoring"]?.state;
-    if (monitoringState === "on" || monitoringState === "off") {
-      this._monitoringEnabled = monitoringState === "on";
-    }
-    syncRuntimeMetadata.call(this, states);
-    // Sensor attributes are intentionally compact and can be truncated to stay
-    // below Recorder's limit. Counts remain immediate; complete rows come from
-    // the coalesced WebSocket refresh triggered by this state change.
-    if (this._monitoringEnabled) {
-      const partitions = [
-        ["sensor.alert_manager_main_active", "active_count"],
-        ["sensor.alert_manager_main_pending", "pending_count"],
-        ["sensor.alert_manager_main_acknowledge", "acknowledge_count"],
-      ];
-      for (const [entityId, countKey] of partitions) {
-        const state = states[entityId];
-        if (!state) continue;
-        this._alerts[countKey] = Number(state.state ?? 0);
-      }
-    }
-    return true;
-  }
+  _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
     this._closeAlertDetailsDialog();
@@ -8062,6 +8090,12 @@ class AlertManagerPanel extends HTMLElement {
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
     this._configuredControls.add(element);
+  }
+
+  _updateHassReferences() {
+    this.shadowRoot?.querySelectorAll("ha-selector, #panel-shell, [data-alert-table-page], [data-rules-table-page], [data-coherence-table-page], ha-code-editor").forEach((element) => {
+      element.hass = this._hass;
+    });
   }
 
   _hydrateSelectors() {

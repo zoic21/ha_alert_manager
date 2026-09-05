@@ -1,5 +1,5 @@
 import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
-  refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass,
+  refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass, syncSensor,
 } from "./api/alert-manager-api.js";
 import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
@@ -31,7 +31,7 @@ import {
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
 import { esc } from "./utils/escaping.js";
-import { conditionText, date, durationText, historyDurationText, lines, newRuleDefaults, remaining, syncRuntimeMetadata, updateCountdowns } from "./utils/formatting.js";
+import { conditionText, date, durationText, historyDurationText, lines, newRuleDefaults, remaining, updateCountdowns } from "./utils/formatting.js";
 import {
   ensureCoherenceTableState, ensureRulesTableState, loadTablePreferences, makeTableState,
   saveCoherenceTableState, saveRulesTableState, saveTablePreferences,
@@ -261,7 +261,6 @@ class AlertManagerPanel extends HTMLElement {
     this._coherenceLoadPromise = null;
     this._coherenceScannedAt = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
-    this._historyLoadPromise = null;
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
     this._activeTab = "overview";
@@ -396,42 +395,7 @@ class AlertManagerPanel extends HTMLElement {
     }));
   }
 
-  _syncSensor() {
-    const states = this._hass?.states ?? {};
-    const entityIds = [
-      "sensor.alert_manager_main_active",
-      "sensor.alert_manager_main_pending",
-      "sensor.alert_manager_main_acknowledge",
-      "switch.alert_manager_main_monitoring",
-    ];
-    if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
-      return false;
-    }
-    this._entityStates = Object.fromEntries(
-      entityIds.map((entityId) => [entityId, states[entityId]]),
-    );
-    const monitoringState = states["switch.alert_manager_main_monitoring"]?.state;
-    if (monitoringState === "on" || monitoringState === "off") {
-      this._monitoringEnabled = monitoringState === "on";
-    }
-    syncRuntimeMetadata.call(this, states);
-    // Sensor attributes are intentionally compact and can be truncated to stay
-    // below Recorder's limit. Counts remain immediate; complete rows come from
-    // the coalesced WebSocket refresh triggered by this state change.
-    if (this._monitoringEnabled) {
-      const partitions = [
-        ["sensor.alert_manager_main_active", "active_count"],
-        ["sensor.alert_manager_main_pending", "pending_count"],
-        ["sensor.alert_manager_main_acknowledge", "acknowledge_count"],
-      ];
-      for (const [entityId, countKey] of partitions) {
-        const state = states[entityId];
-        if (!state) continue;
-        this._alerts[countKey] = Number(state.state ?? 0);
-      }
-    }
-    return true;
-  }
+  _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
     this._closeAlertDetailsDialog();
@@ -563,6 +527,12 @@ class AlertManagerPanel extends HTMLElement {
       if (id === "rule-source") this._refreshRuleAttributeSelector();
     });
     this._configuredControls.add(element);
+  }
+
+  _updateHassReferences() {
+    this.shadowRoot?.querySelectorAll("ha-selector, #panel-shell, [data-alert-table-page], [data-rules-table-page], [data-coherence-table-page], ha-code-editor").forEach((element) => {
+      element.hass = this._hass;
+    });
   }
 
   _hydrateSelectors() {

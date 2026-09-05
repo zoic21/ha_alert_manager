@@ -22,6 +22,7 @@ from .const import (
     MAIN_DEVICE_NAME,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_COHERENCE_UPDATED,
+    SIGNAL_HISTORY_UPDATED,
 )
 from .manager import AlertManager
 
@@ -113,6 +114,7 @@ class AlertManagerSensor(SensorEntity):
         self._attr_unique_id = unique_id
         self.entity_id = f"sensor.{unique_id}"
         self._publishes_runtime = count_key == "active_count"
+        self._history_revision = 0
         snapshot = getattr(manager, "_last_public_snapshot", None)
         self._snapshot: dict[str, Any] = (
             snapshot if snapshot is not None else manager.public_snapshot()
@@ -126,7 +128,19 @@ class AlertManagerSensor(SensorEntity):
                 self.hass, SIGNAL_ALERTS_UPDATED, self._async_manager_updated
             )
         )
+        if self._publishes_runtime:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass, SIGNAL_HISTORY_UPDATED, self._async_history_updated
+                )
+            )
         self._async_manager_updated()
+
+    @callback
+    def _async_history_updated(self) -> None:
+        """Publish a bounded history marker independently of alert counts."""
+        self._history_revision += 1
+        self.async_write_ha_state()
 
     @callback
     def _async_manager_updated(self) -> None:
@@ -173,6 +187,7 @@ class AlertManagerSensor(SensorEntity):
             )
             attributes = _bounded_attributes(self._attribute_key, items, compactor)
         if self._publishes_runtime:
+            attributes["history_revision"] = self._history_revision
             attributes["runtime"] = {
                 "tracked_count": self._snapshot["tracked_count"],
                 "startup": self._snapshot["startup"],

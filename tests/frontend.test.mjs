@@ -1024,6 +1024,7 @@ test("history and coherence data load when their tabs open", async () => {
   };
 
   await panel._handleClick(actionEvent("tab", null, { tab: "history" }));
+  await panel._historyRefreshPromise;
   await panel._handleClick(actionEvent("tab", null, { tab: "coherence" }));
 
   assert.deepEqual(calls, [
@@ -4110,7 +4111,7 @@ test("common settings save accepts a zero history retention limit", async () => 
   assert.deepEqual(panel._historyConfig, { retention_limit: 0, enabled: false });
 });
 
-test("a runtime sensor update refreshes the open history tab immediately", () => {
+test("runtime sensor changes do not reload history without a history marker change", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
@@ -4127,6 +4128,11 @@ test("a runtime sensor update refreshes the open history tab immediately", () =>
       "switch.alert_manager_main_monitoring": { state: "on", attributes: {} },
     },
   };
+  assert.equal(refreshes, 0);
+  panel.hass = { ...panel._hass, states: {
+    ...panel._hass.states,
+    "sensor.alert_manager_main_active": { state: "0", attributes: { history_revision: 1 } },
+  } };
   assert.equal(refreshes, 1);
 });
 
@@ -4442,4 +4448,119 @@ test("combined settings save sends one configuration update and preserves drafts
     retention_limit: 250,
   }]);
   assert.deepEqual(panel._historyConfig, { retention_limit: 250, enabled: true });
+});
+
+const refreshTurn = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function refreshTestPanel(tab = "overview") {
+  const panel = new (customElements.get("alert-manager-panel"))();
+  panel._config = completeConfig();
+  panel._activeTab = tab;
+  panel._language = "fr";
+  panel._refreshOverviewData = () => {};
+  panel._refreshHistoryData = () => {};
+  panel._hydrateSelectors = () => { throw new Error("Unexpected form hydration"); };
+  return panel;
+}
+
+test("unrelated states and timestamp-only sensor changes make no requests and update hass references", async () => {
+  const panel = refreshTestPanel("settings");
+  const selector = { value: "unsaved", listeners: 1 };
+  panel.shadowRoot.querySelectorAll = () => [selector];
+  const calls = [];
+  const hass = { locale: { language: "fr" }, states: {}, callWS: async (msg) => { calls.push(msg); } };
+  panel.hass = hass;
+  panel.hass = { ...hass, states: { "sensor.other": { state: "12" } } };
+  assert.equal(selector.hass, panel._hass);
+  assert.equal(selector.value, "unsaved");
+  assert.equal(selector.listeners, 1);
+  panel._activeTab = "overview";
+  panel._entityStates = { "sensor.alert_manager_main_active": { state: "0", attributes: {} } };
+  panel.hass = { ...hass, states: { "sensor.alert_manager_main_active": { state: "0", attributes: {}, last_updated: "later" } } };
+  await refreshTurn();
+  assert.deepEqual(calls, []);
+});
+
+test("a burst of lifecycle sensor partitions shares one alerts request", async () => {
+  const panel = refreshTestPanel();
+  const calls = [];
+  const hass = { locale: { language: "fr" }, states: {}, callWS: async (msg) => { calls.push(msg.type); return panel._alerts; } };
+  panel.hass = hass;
+  for (const partition of ["active", "pending", "acknowledge"]) {
+    panel.hass = { ...hass, states: { ...panel._hass.states,
+      [`sensor.alert_manager_main_${partition}`]: { state: "1", attributes: {} },
+    } };
+  }
+  await panel._alertsRefreshPromise;
+  assert.deepEqual(calls, ["alert_manager/alerts/list"]);
+});
+
+for (const kind of ["history", "alerts"]) {
+  test(`${kind} updates during a request share one awaited trailing refresh`, async () => {
+    const panel = refreshTestPanel(kind === "alerts" ? "overview" : "history");
+    const responses = [];
+    panel._hass = { callWS: () => new Promise((resolve) => responses.push(resolve)) };
+    const refresh = () => kind === "alerts" ? panel._refreshAlerts() : panel._refreshHistory();
+    const first = refresh();
+    await refreshTurn();
+    const trailing = refresh();
+    void refresh();
+    void refresh();
+    assert.equal(responses.length, 1);
+    responses[0]({ events: [], alerts: [], count: 0 });
+    await refreshTurn();
+    await refreshTurn();
+    assert.equal(responses.length, 2);
+    const latest = { events: [{ id: "resolved" }], alerts: [], count: 1 };
+    responses[1](latest);
+    assert.equal(await first, latest);
+    assert.equal(await trailing, latest);
+    assert.equal(responses.length, 2);
+  });
+}
+
+test("only history revisions refresh an open history tab", async () => {
+  const panel = refreshTestPanel("history");
+  panel._historyRevision = 0;
+  const calls = [];
+  const hass = { locale: { language: "fr" }, callWS: async (msg) => { calls.push(msg.type); return { events: [], count: 0 }; } };
+  for (const count of [1, 2, 0]) {
+    panel.hass = { ...hass, states: {
+      "sensor.alert_manager_main_active": { state: String(count), attributes: { history_revision: 0 } },
+      "switch.alert_manager_main_monitoring": { state: count ? "on" : "off" },
+    } };
+  }
+  await refreshTurn();
+  assert.deepEqual(calls, []);
+  panel.hass = { ...hass, states: {
+    "sensor.alert_manager_main_active": { state: "0", attributes: { history_revision: 1 } },
+  } };
+  await panel._historyRefreshPromise;
+  assert.deepEqual(calls, ["alert_manager/history/list"]);
+});
+
+test("clearing history waits for an older request and its trailing refresh", async () => {
+  const panel = refreshTestPanel("history");
+  const responses = [];
+  panel._hass = { callWS: () => new Promise((resolve) => responses.push(resolve)) };
+  panel._call = async () => ({ events: [], count: 0 });
+  const previousConfirm = window.confirm;
+  window.confirm = () => true;
+  try {
+    const loading = panel._refreshHistory();
+    await refreshTurn();
+    const clearing = panel._handleClick(actionEvent("clear-history"));
+    await refreshTurn();
+    assert.equal(panel._historyRefreshRequested, true);
+    responses[0]({ events: [{ id: "old" }], count: 1 });
+    await refreshTurn();
+    await refreshTurn();
+    assert.equal(responses.length, 2);
+    responses[1]({ events: [], count: 0 });
+    await clearing;
+    await loading;
+    assert.deepEqual(panel._history.events, []);
+  } finally {
+    window.confirm = previousConfirm;
+  }
 });

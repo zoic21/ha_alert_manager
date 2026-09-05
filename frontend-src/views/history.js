@@ -83,6 +83,7 @@ export async function handleHistoryAction(action) {
     if (result) {
       this._history = result;
       this._refreshHistoryData();
+      if (this._historyRefreshPromise) await this._refreshHistory();
     }
     return true;
   }
