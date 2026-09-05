@@ -3905,13 +3905,16 @@ test("floating configuration save validates and saves both dirty forms", async (
     return true;
   };
   panel._saveAutomatic = async () => { calls.push("save:automatic"); return true; };
-  panel._saveSettings = async () => { calls.push("save:settings"); return true; };
+  panel._saveSettings = async (changes) => {
+    assert.deepEqual(changes, { automatic: {} });
+    calls.push("save:settings");
+    return true;
+  };
 
   assert.equal(await panel._saveConfiguration(), true);
   assert.deepEqual(calls, [
     "validate:automatic-form",
     "validate:settings-form",
-    "save:automatic",
     "save:settings",
   ]);
 });
@@ -4365,4 +4368,78 @@ test("rule editor delete menu uses the existing delete flow", async () => {
   assert.deepEqual(calls, [{ type: "alert_manager/rules/delete", rule_id: "rule-1" }]);
   assert.deepEqual(panel._config.rules, []);
   assert.equal(panel._editingRule, null);
+});
+
+test("combined settings save sends one configuration update and preserves drafts on failure", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = [{ id: "battery", available: true, config_fields: [] }];
+  panel._automaticMapDraft = { battery: { enabled: true, delay: 42 } };
+  panel._automaticDirty = true;
+  panel._settingsDirty = true;
+  panel._reportFormValidity = () => true;
+  panel._render = () => {};
+  panel._settingsDraft = {
+    coherence_scan_esphome: false,
+    coherence_ignored_entity_references: ["toto.plop"],
+    excluded_labels: ["sans_alerte"],
+    excluded_entities: ["sensor.skip", "light.skip"],
+    excluded_devices: ["a".repeat(32), "b".repeat(32)],
+  };
+  panel._entityDelayDraft = [
+    { entity_id: "sensor.one", delay: 30 },
+    { entity_id: "light.two", delay: 60 },
+  ];
+  const controls = {
+    "#automatic-form": {},
+    "#settings-form": {},
+    "#global-delay": { value: "300" },
+    "#pending-display-delay": { value: "15" },
+    "#coherence-schedule": { value: "weekly" },
+    "#coherence-scan-esphome": { checked: false },
+    "#ignored-reference-input": { value: " Another.Ref " },
+    "#history-limit": { value: "250" },
+  };
+  panel.shadowRoot.querySelector = (selector) => controls[selector];
+  panel.shadowRoot.querySelectorAll = () => [];
+  const calls = [];
+  panel._refreshHistory = async () => panel._history;
+  panel._hass = { callWS: async (message) => {
+    calls.push(message);
+    if (message.type === "alert_manager/history/config/update") {
+      return { retention_limit: 250, enabled: true };
+    }
+    return panel._config;
+  } };
+
+  const callWS = panel._hass.callWS;
+  panel._hass.callWS = async () => { throw new Error("write failed"); };
+  assert.equal(await panel._saveConfiguration(), false);
+  assert.equal(panel._automaticDirty, true);
+  assert.equal(panel._settingsDirty, true);
+  panel._hass.callWS = callWS;
+  assert.equal(await panel._saveConfiguration(), true);
+  assert.equal(panel._automaticDirty, false);
+  assert.equal(panel._settingsDirty, false);
+
+  assert.deepEqual(calls, [{
+    type: "alert_manager/config/update",
+    config: {
+      automatic: { battery: { enabled: true, delay: 42 } },
+      global_delay: 300,
+      pending_display_delay: 15,
+      coherence_schedule: "weekly",
+      coherence_scan_esphome: false,
+      coherence_ignored_entity_references: ["toto.plop", "another.ref"],
+      excluded_labels: ["sans_alerte"],
+      excluded_entities: ["sensor.skip", "light.skip"],
+      excluded_devices: ["a".repeat(32), "b".repeat(32)],
+      entity_delays: { "sensor.one": 30, "light.two": 60 },
+    },
+  }, {
+    type: "alert_manager/history/config/update",
+    retention_limit: 250,
+  }]);
+  assert.deepEqual(panel._historyConfig, { retention_limit: 250, enabled: true });
 });

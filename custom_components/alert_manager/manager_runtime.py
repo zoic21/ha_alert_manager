@@ -58,6 +58,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+_EVALUATION_BATCH_SIZE = 50
+
 _PACK_CONDITION_FALLBACKS = {
     "automatic.execution_errors": "Execution ended with an error",
     "automatic.execution_errors_detail": ("Execution ended with an error: {error}"),
@@ -809,6 +811,24 @@ class _RuntimeMixin:
             self._pending_entity_renames[old_entity_id] = new_entity_id
         elif not self.monitoring_enabled:
             return
+        # Templates can depend on registry metadata without an entity dependency.
+        # Renames and broad registry events retain the complete reconciliation path.
+        targets = None
+        if (
+            not is_rename
+            and isinstance(new_entity_id, str)
+            and self._runtime_phase is RuntimePhase.RUNNING
+            and not self._rule_templates
+            and not self._rule_message_templates
+        ):
+            targets = {new_entity_id}
+        if not self._registry_evaluation_dirty:
+            self._registry_evaluation_entities = targets
+        elif self._registry_evaluation_entities is not None:
+            if targets is None:
+                self._registry_evaluation_entities = None
+            else:
+                self._registry_evaluation_entities.update(targets)
         self._registry_evaluation_dirty = True
         self._schedule_registry_evaluation()
 
@@ -998,15 +1018,25 @@ class _RuntimeMixin:
                     and self._runtime_phase is RuntimePhase.RUNNING
                     and self.hass.state is CoreState.running
                 ):
+                    targets = self._registry_evaluation_entities
+                    self._registry_evaluation_entities = None
                     self._registry_evaluation_dirty = False
                     processed_registry_change = True
                     renamed = self._apply_pending_entity_renames()
                     evaluated = False
                     if self.monitoring_enabled:
-                        evaluated = await self.async_evaluate_all(
-                            save=False,
-                            publish=False,
-                        )
+                        if targets is None or renamed:
+                            evaluated = await self.async_evaluate_all(
+                                save=False, publish=False
+                            )
+                        else:
+                            self._refresh_custom_tracking()
+                            for index, entity_id in enumerate(targets, 1):
+                                evaluated |= await self.async_evaluate_entity(
+                                    entity_id, save=False, publish=False
+                                )
+                                if index % _EVALUATION_BATCH_SIZE == 0:
+                                    await asyncio.sleep(0)
                     if renamed or evaluated:
                         await self._async_save_state()
                     if (
@@ -1155,12 +1185,20 @@ class _RuntimeMixin:
             or self.hass.state is not CoreState.running
         ):
             return False
-        self._refresh_tracking()
-        entity_ids = {
-            state.entity_id
-            for state in self.hass.states.async_all()
-            if self._is_relevant_entity_id(state.entity_id)
-        }
+        self._refresh_custom_tracking()
+        self._automatic_tracked_entities.clear()
+        entity_ids = set()
+        for index, state in enumerate(self.hass.states.async_all(), 1):
+            # Read the current state after each yield, including removals.
+            self._update_automatic_tracking_for_entity(
+                state.entity_id, self.hass.states.get(state.entity_id)
+            )
+            if self._is_relevant_entity_id(state.entity_id):
+                entity_ids.add(state.entity_id)
+            if index % _EVALUATION_BATCH_SIZE == 0:
+                await asyncio.sleep(0)
+                if self._unloading or not self._runtime_phase.can_evaluate:
+                    return False
         entity_ids.update(self._record_ids_by_entity)
         entity_ids.update(
             entity_id for rule in self.rules for entity_id in rule.entity_ids
@@ -1168,7 +1206,7 @@ class _RuntimeMixin:
         if self._startup_reconciliation_transaction is not None:
             entity_ids.update(self._startup_reconciliation_transaction.entity_ids)
         persisted_changed = False
-        for entity_id in entity_ids:
+        for index, entity_id in enumerate(entity_ids, 1):
             persisted_changed |= await self.async_evaluate_entity(
                 entity_id,
                 save=False,
@@ -1176,6 +1214,10 @@ class _RuntimeMixin:
                 emit_events=emit_events,
                 archive_resolutions=archive_resolutions,
             )
+            if index % _EVALUATION_BATCH_SIZE == 0:
+                await asyncio.sleep(0)
+                if self._unloading or not self._runtime_phase.can_evaluate:
+                    return persisted_changed
         for record in self.records.values():
             if record.expires_at is not None and record.details.id not in self._timers:
                 self._schedule_timer(record)

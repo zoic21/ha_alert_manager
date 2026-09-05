@@ -5164,7 +5164,7 @@ function renderPackField(pack, field, config, context) {
     </div>`;
 }
 
-async function saveAutomatic() {
+function collectAutomaticChanges() {
     this._ensureAutomaticDraft();
     captureAutomaticConfigurationValues.call(this);
     const automatic = {};
@@ -5255,8 +5255,14 @@ async function saveAutomatic() {
         automatic[pack.id][field.id] = values;
       }
     }
+    return { automatic };
+}
+
+async function saveAutomatic() {
+    const changes = collectAutomaticChanges.call(this);
+    if (!changes) return false;
     const config = await this._call(
-      { type: "alert_manager/config/update", config: { automatic } },
+      { type: "alert_manager/config/update", config: changes },
       this._t("success.automatic_saved"),
     );
     if (config) {
@@ -5721,9 +5727,11 @@ async function saveConfiguration() {
       && (!settingsForm || !this._reportFormValidity(settingsForm))
     ) return false;
 
-    if (saveAutomaticChanges && !await this._saveAutomatic()) return false;
-    if (saveSettingsChanges && !await this._saveSettings()) return false;
-    return true;
+    if (!saveSettingsChanges) return this._saveAutomatic();
+    const automaticChanges = saveAutomaticChanges
+      ? collectAutomaticChanges.call(this) : {};
+    if (!automaticChanges) return false;
+    return this._saveSettings(automaticChanges);
 }
 
 function commitIgnoredReferenceInput() {
@@ -5804,7 +5812,7 @@ async function handleImportSelection(event) {
     if (result?.config) await this._applyCompleteConfiguration(result);
 }
 
-async function saveSettings() {
+async function saveSettings(additionalChanges = {}) {
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
       this._refreshUiState();
@@ -5835,6 +5843,7 @@ async function saveSettings() {
       entityDelays[row.entity_id] = row.delay;
     }
     const changes = {
+      ...additionalChanges,
       global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
       pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
@@ -5860,6 +5869,7 @@ async function saveSettings() {
         config: changes,
       });
       this._config = config;
+      if (additionalChanges.automatic) this._resetAutomaticDraft();
       if (historyChanged) {
         this._historyConfig = await this._api.call({
           type: "alert_manager/history/config/update",
