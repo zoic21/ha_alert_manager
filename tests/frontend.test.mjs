@@ -100,6 +100,94 @@ Object.defineProperty(globalThis, "navigator", {
 const { makeTableState, lines, newRuleDefaults } = await import(
   "../frontend-src/alert-manager-panel.js"
 );
+const { timedAcknowledgementSeconds } = await import("../frontend-src/components/alert-table.js");
+
+test("timed acknowledgement validates presets and custom durations", () => {
+  for (const seconds of [900, 1800, 3600, 86400]) {
+    assert.equal(timedAcknowledgementSeconds(String(seconds)), seconds);
+  }
+  assert.equal(timedAcknowledgementSeconds("custom", "2", "86400"), 172800);
+  for (const value of ["", "0", "-1", "Infinity", "bad", "999999999"]) {
+    assert.equal(timedAcknowledgementSeconds("custom", value, "60"), null);
+  }
+});
+
+test("timed acknowledgement dialog stays above details without replacing them", async () => {
+  const panel = tablePanel();
+  const details = { open: true, innerHTML: "unchanged details" };
+  panel._alertDetailsDialog = details;
+  const previousCreate = document.createElement;
+  const controls = new Map();
+  const control = (selector) => {
+    if (!controls.has(selector)) controls.set(selector, fakeDomElement("control"));
+    return controls.get(selector);
+  };
+  const dialog = fakeDomElement("ha-adaptive-dialog");
+  dialog.querySelector = control;
+  dialog.remove = () => { dialog.removed = true; };
+  const appended = [];
+  panel.shadowRoot.append = (element) => appended.push(element);
+  panel.shadowRoot.querySelector = control;
+  control("ha-input").value = "30";
+  const calls = [];
+  let success = false;
+  panel._updateAlertAcknowledgement = async (...args) => {
+    calls.push(args);
+    return success;
+  };
+  try {
+    document.createElement = () => dialog;
+    const selection = {
+      composedPath: () => [{ dataset: { alertDetailsMenu: "", alertId: "test" } }],
+      detail: { value: "acknowledge-temporarily" },
+    };
+    await panel._handleAlertDetailsSelection(selection);
+    await panel._handleAlertDetailsSelection(selection);
+    assert.deepEqual(appended, [dialog]);
+    assert.equal(dialog.open, true);
+    assert.equal(dialog.width, "small");
+    assert.equal(panel._alertDetailsDialog, details);
+    assert.equal(details.open, true);
+    assert.equal(details.innerHTML, "unchanged details");
+    const preset = control("#acknowledgement-preset");
+    assert.deepEqual(preset.options.map((option) => option.value), ["900", "1800", "3600", "86400", "custom"]);
+    preset.listeners.selected({ detail: { value: "custom" } });
+    assert.equal(control(".timed-acknowledgement-custom").hidden, false);
+    const confirm = control('[data-timed-ack="confirm"]');
+    control("ha-input").value = "0";
+    control("ha-input").listeners.input();
+    assert.equal(confirm.disabled, true);
+    control("ha-input").value = "45";
+    control("ha-input").listeners.input();
+    assert.equal(confirm.disabled, false);
+    await confirm.listeners.click();
+    assert.deepEqual(calls[0], ["acknowledge", "test", 2700]);
+    assert.equal(control("ha-alert").hidden, false);
+    assert.equal(dialog.open, true);
+    success = true;
+    await confirm.listeners.click();
+    assert.equal(dialog.open, false);
+    let stopped = false;
+    dialog.listeners.closed({ target: dialog, stopPropagation: () => { stopped = true; } });
+    assert.equal(stopped, true);
+    assert.equal(dialog.removed, true);
+    assert.equal(panel._alertDetailsDialog, details);
+    assert.equal(details.open, true);
+  } finally {
+    document.createElement = previousCreate;
+  }
+});
+
+test("timed acknowledgement details default to a live relative deadline", () => {
+  const panel = tablePanel();
+  const alert = panel._alerts.acknowledge[0];
+  alert.acknowledged_until = "2026-09-05T18:00:00+00:00";
+  const row = panel._tableRows("overview").find((item) => item.status === "acknowledged");
+  assert.match(panel._renderAlertDetails("overview", row), /data-detail-key="acknowledged-until"[\s\S]*data-timestamp-mode="relative"/);
+  row.acknowledgedUntil = "";
+  assert.match(panel._renderAlertDetails("overview", row), /Sans limite de durée/);
+  assert.doesNotMatch(panel._renderAlertDetails("history", row), /data-detail-key="acknowledged-until"/);
+});
 
 test("human duration formatter", () => {
   const Panel = customElements.get("alert-manager-panel");

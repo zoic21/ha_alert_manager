@@ -13,6 +13,7 @@ from custom_components.alert_manager.const import (
     DEFAULT_CONFIG,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
+    EVENT_ALERT_UNACKNOWLEDGED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
 )
 from custom_components.alert_manager.manager import AlertManager
@@ -114,6 +115,34 @@ def test_start_resolved_inside_batch_window_is_cancelled(hass, entry) -> None:
         assert runtime._batches == {}
         assert delivery.calls == []
         await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_timed_expiry_notifies_without_reminders_but_respects_start_policy(hass, entry):
+    """Only automatic expiry re-notifies; manual unacknowledgement stays unchanged."""
+
+    async def scenario():
+        for notify in (True, False):
+            profile = _profile()
+            profile["default_policy"]["notify_on_start"] = notify
+            config = validate_config(
+                {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+            )
+            runtime = NotificationRuntime(
+                hass, entry, lambda config=config: config, lambda: {}, _DeliverySpy()
+            )
+            await runtime.async_setup()
+            event = _event_data(
+                "unavailable:sensor.test", entity_id="sensor.test", device_id=None
+            )
+            await runtime._async_handle_event(EVENT_ALERT_UNACKNOWLEDGED, event)
+            assert not runtime._batches
+            event["acknowledgement_expired"] = True
+            await runtime._async_handle_event(EVENT_ALERT_UNACKNOWLEDGED, event)
+            assert bool(runtime._batches) is notify
+            assert runtime._runtime["profile"][event["id"]].next_reminder is None
+            await runtime.async_unload()
 
     asyncio.run(scenario())
 

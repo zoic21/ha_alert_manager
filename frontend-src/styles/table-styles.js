@@ -115,6 +115,34 @@ export const tableStyles = `
     --ha-bottom-sheet-height: calc(100dvh - max(var(--safe-area-inset-top), 48px));
     --ha-bottom-sheet-max-height: var(--ha-bottom-sheet-height);
   }
+  .timed-acknowledgement-dialog {
+    --ha-dialog-width-sm: 420px;
+    --ha-bottom-sheet-height: auto;
+    --ha-bottom-sheet-max-height: calc(100dvh - 48px);
+  }
+  .timed-acknowledgement-fields {
+    display: grid;
+    gap: var(--ha-space-4, 16px);
+  }
+  .timed-acknowledgement-custom {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--ha-space-4, 16px);
+    align-items: start;
+  }
+  .timed-acknowledgement-fields [hidden] {
+    display: none;
+  }
+  .timed-acknowledgement-fields ha-select,
+  .timed-acknowledgement-fields ha-input {
+    min-width: 0;
+    width: 100%;
+  }
+  .timed-acknowledgement-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--ha-space-2, 8px);
+  }
   .alert-details-summary {
     display: flex;
     align-items: center;

@@ -159,13 +159,14 @@ export function applyOptimisticAcknowledgement(alertId, acknowledged) {
         acknowledged: false,
         acknowledged_at: null,
         acknowledged_by: null,
+        acknowledged_until: null,
       };
     this._alerts[toKey] = [...(this._alerts[toKey] ?? []), updated];
     this._alerts.active_count = this._alerts.alerts.length;
     this._alerts.acknowledge_count = this._alerts.acknowledge.length;
 }
 
-export async function updateAlertAcknowledgement(service, alertId) {
+export async function updateAlertAcknowledgement(service, alertId, duration = null) {
     if (this._busy || !["acknowledge", "unacknowledge"].includes(service)) return false;
     const expectedStatus = service === "acknowledge" ? "active" : "acknowledged";
     const row = this._tableRows("overview").find((item) => item.id === alertId);
@@ -174,8 +175,13 @@ export async function updateAlertAcknowledgement(service, alertId) {
     this._notice = null;
     this._refreshUiState();
     try {
-      await this._hass.callService("alert_manager", service, { alert_id: alertId });
-      this._applyOptimisticAcknowledgement(alertId, service === "acknowledge");
+      if (duration !== null) {
+        await this._api.acknowledgeFor(alertId, duration);
+        await this._refreshAlerts();
+      } else {
+        await this._hass.callService("alert_manager", service, { alert_id: alertId });
+        this._applyOptimisticAcknowledgement(alertId, service === "acknowledge");
+      }
       const updatedRow = this._tableRows("overview").find((item) => item.id === alertId);
       if (this._alertDetailsDialog && updatedRow) {
         this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;

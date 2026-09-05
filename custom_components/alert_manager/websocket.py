@@ -82,6 +82,7 @@ async def websocket_alerts_list(
         vol.Required("type"): "alert_manager/alerts/acknowledgement/update",
         vol.Required("alert_ids"): ALERT_IDS_SCHEMA,
         vol.Required("acknowledged"): bool,
+        vol.Optional("duration"): vol.All(int, vol.Range(min=1, max=31536000)),
     }
 )
 async def websocket_alert_acknowledgements_update(
@@ -95,6 +96,7 @@ async def websocket_alert_acknowledgements_update(
             msg["alert_ids"],
             msg["acknowledged"],
             getattr(connection.user, "name", None) or None,
+            duration=msg.get("duration"),
         )
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))

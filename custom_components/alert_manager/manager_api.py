@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import Any
 
@@ -607,14 +607,46 @@ class _ApiMixin:
 
     @_serialize_runtime_mutation
     async def async_set_acknowledgements(
-        self, alert_ids: list[str], acknowledged: bool, actor: str | None
+        self,
+        alert_ids: list[str],
+        acknowledged: bool,
+        actor: str | None,
+        duration: int | None = None,
     ) -> list[str]:
         """Apply one durable acknowledgement transaction to several alerts."""
+        if duration is not None and (
+            not acknowledged
+            or type(duration) is not int
+            or not 1 <= duration <= 31536000
+        ):
+            raise ValueError("Acknowledgement duration must be 1-31536000 seconds")
         records = [
             self._active_record_for_service(alert_id)
             for alert_id in dict.fromkeys(alert_ids)
         ]
-        changes = [record for record in records if record.acknowledged != acknowledged]
+        return await self._async_apply_acknowledgements(
+            records, acknowledged, actor, duration=duration
+        )
+
+    async def _async_apply_acknowledgements(
+        self,
+        records: list[AlertRecord],
+        acknowledged: bool,
+        actor: str | None,
+        *,
+        duration: int | None = None,
+        expired: bool = False,
+    ) -> list[str]:
+        """Persist acknowledgement changes while the runtime mutation lock is held."""
+        changes = [
+            record
+            for record in records
+            if record.acknowledged != acknowledged
+            or (
+                acknowledged
+                and (duration is not None or record.acknowledged_until is not None)
+            )
+        ]
         if not changes:
             return []
         now = dt_util.now()
@@ -624,6 +656,7 @@ class _ApiMixin:
                 record.acknowledged,
                 record.acknowledged_at,
                 record.acknowledged_by,
+                record.acknowledged_until,
             )
             for record in changes
         ]
@@ -632,23 +665,75 @@ class _ApiMixin:
                 record.acknowledged = True
                 record.acknowledged_at = now
                 record.acknowledged_by = actor
+                record.acknowledged_until = (
+                    now + timedelta(seconds=duration) if duration is not None else None
+                )
             else:
                 record.clear_acknowledgement()
         try:
             await self._async_save_state()
         except BaseException:
-            for record, was_acknowledged, previous_at, previous_by in previous:
+            for (
+                record,
+                was_acknowledged,
+                previous_at,
+                previous_by,
+                previous_until,
+            ) in previous:
                 record.acknowledged = was_acknowledged
                 record.acknowledged_at = previous_at
                 record.acknowledged_by = previous_by
+                record.acknowledged_until = previous_until
             raise
         self._publish_if_changed()
-        for record, _was_acknowledged, previous_at, previous_by in previous:
+        for (
+            record,
+            _was_acknowledged,
+            previous_at,
+            previous_by,
+            _previous_until,
+        ) in previous:
+            self._schedule_timer(record)
             if acknowledged:
                 self._fire_acknowledged(record)
             else:
-                self._fire_unacknowledged(record, now, actor, previous_at, previous_by)
+                self._fire_unacknowledged(
+                    record, now, actor, previous_at, previous_by, expired=expired
+                )
         return [record.details.id for record in changes]
+
+    @_serialize_runtime_mutation
+    async def _async_expire_acknowledgement(
+        self, record: AlertRecord, deadline: datetime
+    ) -> None:
+        """Expire only the occurrence and deadline that scheduled this callback."""
+        if (
+            self.records.get(record.details.id) is not record
+            or not record.acknowledged
+            or record.acknowledged_until != deadline
+            or not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+            or self.hass.state is not CoreState.running
+        ):
+            return
+        now = dt_util.now()
+        if record.expires_at is not None and record.expires_at <= now:
+            self._schedule_timer(record, acknowledgement_retry_at=record.expires_at)
+            return
+        if now < deadline:
+            self._schedule_timer(record)
+            return
+        try:
+            await self._async_apply_acknowledgements(
+                [record], False, None, expired=True
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Unable to expire acknowledgement for %s", record.details.id
+            )
+            self._schedule_timer(
+                record, acknowledgement_retry_at=dt_util.now() + timedelta(seconds=60)
+            )
 
     def _active_record_for_service(self, alert_id: str) -> AlertRecord:
         """Resolve an exact active alert or raise a clear service error."""

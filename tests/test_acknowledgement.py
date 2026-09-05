@@ -374,3 +374,195 @@ def test_failed_persistence_rolls_back_acknowledgement(hass, entry, set_now):
     assert snapshot["acknowledge"] == []
     assert not event_data(hass, EVENT_ALERT_ACKNOWLEDGED)
     manager.storage.async_save = original_save
+
+
+def test_timed_acknowledgement_persists_and_expires_once(hass, entry, set_now):
+    """Expiry preserves the occurrence and publishes only after a durable write."""
+    from custom_components.alert_manager.models import AlertRecord
+
+    manager, alert_id = active_manager(hass, entry, set_now)
+    record = manager.records[alert_id]
+    active_since = record.active_since
+    run(manager.async_set_acknowledgements([alert_id], True, "Loïc", 900))
+    deadline = record.acknowledged_until
+    assert deadline == record.acknowledged_at + timedelta(minutes=15)
+    assert (
+        manager.public_snapshot()["acknowledge"][0]["acknowledged_until"]
+        == deadline.isoformat()
+    )
+    assert (
+        AlertRecord.from_dict(record.as_storage_dict()).acknowledged_until == deadline
+    )
+    timer = hass.timers[-1]
+    assert timer["point"] == deadline
+    set_now(deadline)
+
+    async def expire():
+        timer["action"](deadline)
+        for _ in range(10):
+            await asyncio.sleep(0)
+
+    run(expire())
+    assert not record.acknowledged
+    assert record.acknowledged_until is None
+    assert record.active_since == active_since
+    assert manager.public_snapshot()["active_count"] == 1
+    events = event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
+    assert len(events) == 1
+    assert events[0]["acknowledgement_expired"] is True
+    assert "acknowledged_until" not in record.as_storage_dict()
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert len(event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)) == 1
+
+
+@pytest.mark.parametrize("duration", [0, -1, True, 1.5, "900", 31536001])
+def test_invalid_acknowledgement_duration_has_no_effect(hass, entry, set_now, duration):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    with pytest.raises(ValueError, match="duration"):
+        run(manager.async_set_acknowledgements([alert_id], True, None, duration))
+    assert not manager.records[alert_id].acknowledged
+
+
+def test_timed_acknowledgement_save_failure_and_expiry_retry(hass, entry, set_now):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    record = manager.records[alert_id]
+    save = manager._async_save_state
+
+    async def fail():
+        raise OSError("disk full")
+
+    manager._async_save_state = fail
+    with pytest.raises(OSError):
+        run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    assert not record.acknowledged
+    assert record.acknowledged_until is None
+    assert not event_data(hass, EVENT_ALERT_ACKNOWLEDGED)
+    manager._async_save_state = save
+    run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    deadline = record.acknowledged_until
+    set_now(deadline)
+    manager._async_save_state = fail
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert record.acknowledged_until == deadline
+    assert record.acknowledged
+    assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
+    assert hass.timers[-1]["point"] == deadline + timedelta(seconds=60)
+    manager._async_save_state = save
+    set_now(deadline + timedelta(seconds=60))
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert not record.acknowledged
+
+
+@pytest.mark.parametrize("action", ["manual", "permanent", "extend", "resolve"])
+def test_obsolete_acknowledgement_timer_cannot_change_alert(
+    hass, entry, set_now, action
+):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    record = manager.records[alert_id]
+    deadline = record.acknowledged_until
+    timer = hass.timers[-1]
+    if action == "manual":
+        run(manager.async_unacknowledge(alert_id, None))
+    elif action == "permanent":
+        run(manager.async_acknowledge(alert_id, None))
+    elif action == "extend":
+        run(manager.async_set_acknowledgements([alert_id], True, None, 1800))
+    else:
+        hass.states.set("sensor.test", "ok")
+        run(manager.async_evaluate_entity("sensor.test"))
+        hass.states.set("sensor.test", "unavailable")
+        run(manager.async_evaluate_entity("sensor.test"))
+    assert timer["cancelled"]
+    before = manager.public_snapshot()
+    timers_before = dict(manager._timers)
+    set_now(deadline)
+    timer["action"](deadline)
+    assert manager._timers == timers_before
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert manager.public_snapshot() == before
+
+
+@pytest.mark.parametrize("resolved", [False, True])
+def test_expired_acknowledgement_waits_for_startup_reconciliation(
+    hass, entry, set_now, resolved
+):
+    from custom_components.alert_manager.runtime_phase import RuntimePhase
+
+    first, alert_id = active_manager(hass, entry, set_now)
+    run(first.async_set_acknowledgements([alert_id], True, None, 900))
+    deadline = first.records[alert_id].acknowledged_until
+    run(first.async_unload())
+    set_now(deadline + timedelta(seconds=1))
+    if resolved:
+        hass.states.set("sensor.test", "ok")
+    second = AlertManager(hass, entry)
+    run(second.async_setup())
+    restored = second.records[alert_id]
+    assert second._runtime_phase is not RuntimePhase.RUNNING
+    run(second._async_expire_acknowledgement(restored, deadline))
+    assert restored.acknowledged
+    run(second._async_finish_startup_reconciliation())
+    if resolved:
+        assert alert_id not in second.records
+        assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
+    else:
+        restored = second.records[alert_id]
+        assert alert_id in second._timers
+        run(second._async_expire_acknowledgement(restored, deadline))
+        assert not restored.acknowledged
+
+
+def test_timed_acknowledgement_pauses_with_monitoring_and_cancels_on_unload(
+    hass, entry, set_now
+):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    record = manager.records[alert_id]
+    deadline = record.acknowledged_until
+    timer = hass.timers[-1]
+    run(manager.async_set_monitoring(False))
+    assert timer["cancelled"]
+    set_now(deadline)
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert record.acknowledged
+    run(manager.async_set_monitoring(True))
+    assert alert_id in manager._timers
+    timer = hass.timers[-1]
+    run(manager.async_unload())
+    assert timer["cancelled"]
+
+
+def test_resolution_deadline_wins_when_both_deadlines_passed(hass, entry, set_now):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    record = manager.records[alert_id]
+    deadline = record.acknowledged_until
+    record.expires_at = deadline + timedelta(seconds=10)
+    set_now(record.expires_at + timedelta(seconds=1))
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert record.acknowledged
+    assert hass.timers[-1]["point"] == record.expires_at
+    assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
+
+
+def test_expiry_waiting_on_lock_cannot_override_new_deadline(hass, entry, set_now):
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_set_acknowledgements([alert_id], True, None, 900))
+    record = manager.records[alert_id]
+    deadline = record.acknowledged_until
+    set_now(deadline)
+
+    async def scenario():
+        await manager._config_mutation_lock.acquire()
+        task = asyncio.create_task(
+            manager._async_expire_acknowledgement(record, deadline)
+        )
+        await asyncio.sleep(0)
+        record.acknowledged_until = deadline + timedelta(hours=1)
+        manager._config_mutation_lock.release()
+        await task
+
+    run(scenario())
+    assert record.acknowledged
+    assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)

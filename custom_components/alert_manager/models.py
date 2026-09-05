@@ -421,6 +421,7 @@ class AlertRecord:
     acknowledged: bool = False
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
+    acknowledged_until: datetime | None = None
     notifications: dict[str, Any] | None = None
 
     @classmethod
@@ -533,6 +534,18 @@ class AlertRecord:
             if acknowledged_at is not None
             else None
         )
+        acknowledged_until = data.get("acknowledged_until")
+        parsed_acknowledged_until = (
+            _parse_aware_datetime(acknowledged_until, "acknowledged_until")
+            if acknowledged_until is not None
+            else None
+        )
+        if parsed_acknowledged_until is not None and (
+            not acknowledged
+            or parsed_acknowledged_at is None
+            or parsed_acknowledged_until <= parsed_acknowledged_at
+        ):
+            raise ValueError("Alert acknowledgement deadline is inconsistent")
         acknowledged_by = data.get("acknowledged_by")
         if acknowledged_by is not None and (
             not isinstance(acknowledged_by, str) or not acknowledged_by
@@ -563,6 +576,7 @@ class AlertRecord:
             acknowledged=acknowledged,
             acknowledged_at=parsed_acknowledged_at,
             acknowledged_by=acknowledged_by,
+            acknowledged_until=parsed_acknowledged_until,
             notifications=_notification_summary(data.get("notifications")),
         )
 
@@ -591,6 +605,8 @@ class AlertRecord:
             result["paused_seconds"] = self.paused_seconds
         if self.acknowledged:
             result["acknowledged_at"] = self.acknowledged_at.isoformat()
+            if self.acknowledged_until is not None:
+                result["acknowledged_until"] = self.acknowledged_until.isoformat()
             if self.acknowledged_by is not None:
                 result["acknowledged_by"] = self.acknowledged_by
         return result
@@ -616,6 +632,8 @@ class AlertRecord:
             result["acknowledged"] = self.acknowledged
             if self.acknowledged:
                 result["acknowledged_at"] = self.acknowledged_at.isoformat()
+                if self.acknowledged_until is not None:
+                    result["acknowledged_until"] = self.acknowledged_until.isoformat()
                 if self.acknowledged_by is not None:
                     result["acknowledged_by"] = self.acknowledged_by
         return result
@@ -625,6 +643,7 @@ class AlertRecord:
         self.acknowledged = False
         self.acknowledged_at = None
         self.acknowledged_by = None
+        self.acknowledged_until = None
 
 
 @dataclass(slots=True)
