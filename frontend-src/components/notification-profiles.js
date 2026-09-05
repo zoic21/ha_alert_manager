@@ -1,3 +1,4 @@
+import { durationFieldValue, renderDurationControl } from "./duration-field.js";
 import { renderConfigurationDrawer } from "./configuration-drawer.js";
 import {
   DEFAULT_NOTIFICATION_REMINDER_SECONDS,
@@ -100,7 +101,7 @@ export function renderNotificationProfileDrawer({
         ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
         ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
       </div>
-      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl("notification-reminder", t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
     </ha-card>
   </section>
   <section class="notification-profile-section">
@@ -138,7 +139,7 @@ function renderException(exception, index, t) {
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div></div>
+      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), exception.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS)}` : ""}</div></div>
     </div>
   </ha-card>`;
 }
@@ -218,11 +219,11 @@ export function captureNotificationProfileDraft(panel) {
   draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
   draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
   draft.default_policy.notify_on_resolved = Boolean(panel.shadowRoot.querySelector("#notification-resolved")?.checked);
-  const reminder = String(panel.shadowRoot.querySelector("#notification-reminder")?.value ?? "").trim();
+  const reminder = String(durationFieldValue(panel.shadowRoot.querySelector("#notification-reminder")) ?? "").trim();
   draft.default_policy.reminder_interval = reminder === "" ? null : Number(reminder);
   draft.exceptions.forEach((exception, index) => {
     if (!Object.hasOwn(exception, "reminder_interval") || exception.reminder_interval === null) return;
-    const value = panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`)?.value;
+    const value = durationFieldValue(panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`));
     if (value !== undefined) exception.reminder_interval = Number(value);
   });
 }

@@ -126,7 +126,7 @@ export const tableStyles = `
   }
   .timed-acknowledgement-custom {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--ha-space-4, 16px);
     align-items: start;
   }
@@ -134,7 +134,7 @@ export const tableStyles = `
     display: none;
   }
   .timed-acknowledgement-fields ha-select,
-  .timed-acknowledgement-fields ha-input {
+  .timed-acknowledgement-fields ha-selector {
     min-width: 0;
     width: 100%;
   }

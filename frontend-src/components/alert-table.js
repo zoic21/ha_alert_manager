@@ -1,4 +1,5 @@
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
+import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_TABLE_STATE, REQUIRED_COLUMNS } from "../utils/table-preferences.js";
 
@@ -1120,8 +1121,7 @@ export function openTimedAcknowledgement(alertId) {
       <div class="timed-acknowledgement-fields">
         <ha-select id="acknowledgement-preset" label="${esc(this._t("timed_acknowledgement.duration"))}" autofocus></ha-select>
         <div class="timed-acknowledgement-custom" hidden>
-          <ha-input type="number" min="1" step="1" value="30" label="${esc(this._t("timed_acknowledgement.duration"))}" required></ha-input>
-          <ha-select id="acknowledgement-unit" label="${esc(this._t("timed_acknowledgement.unit"))}"></ha-select>
+          ${renderDurationControl("acknowledgement-duration", this._t("timed_acknowledgement.duration"), 1800, 1, MAX_DURATION_SECONDS)}
         </div>
         <ha-alert alert-type="error" hidden></ha-alert>
       </div>
@@ -1133,16 +1133,14 @@ export function openTimedAcknowledgement(alertId) {
     this._timedAcknowledgementDialog = dialog;
     this.shadowRoot.append(dialog);
     const preset = dialog.querySelector("#acknowledgement-preset");
-    const unit = dialog.querySelector("#acknowledgement-unit");
-    const input = dialog.querySelector("ha-input");
+    const input = dialog.querySelector("#acknowledgement-duration");
     const custom = dialog.querySelector(".timed-acknowledgement-custom");
     const confirm = dialog.querySelector('[data-timed-ack="confirm"]');
     const error = dialog.querySelector("ha-alert");
     let saving = false;
-    const duration = () => timedAcknowledgementSeconds(preset.value, input.value, unit.value);
+    const duration = () => timedAcknowledgementSeconds(preset.value, durationFieldValue(input), 1);
     const validate = () => {
       confirm.disabled = saving || duration() === null;
-      input.max = String(Math.floor(MAX_DURATION_SECONDS / Number(unit.value)));
     };
     this._configureSelect("acknowledgement-preset", [
       ...[900, 1800, 3600, 86400].map((seconds) => ({
@@ -1153,10 +1151,7 @@ export function openTimedAcknowledgement(alertId) {
       custom.hidden = preset.value !== "custom";
       validate();
     });
-    this._configureSelect("acknowledgement-unit", [
-      [60, "minutes"], [3600, "hours"], [86400, "days"],
-    ].map(([seconds, key]) => ({ value: String(seconds), label: this._t(`timed_acknowledgement.${key}`) })), "60", validate);
-    input.addEventListener("input", validate);
+    hydrateDurationFields(dialog, this, validate);
     dialog.querySelector('[data-timed-ack="cancel"]').addEventListener("click", () => { dialog.open = false; });
     confirm.addEventListener("click", async () => {
       const seconds = duration();

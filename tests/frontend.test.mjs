@@ -128,7 +128,9 @@ test("timed acknowledgement dialog stays above details without replacing them", 
   const appended = [];
   panel.shadowRoot.append = (element) => appended.push(element);
   panel.shadowRoot.querySelector = control;
-  control("ha-input").value = "30";
+  const durationInput = control("#acknowledgement-duration");
+  durationInput.dataset = { durationValue: "1800", durationRequired: "true", durationMin: "1", durationMax: "31536000" };
+  dialog.querySelectorAll = (selector) => selector === "[data-duration-value]" ? [durationInput] : [];
   const calls = [];
   let success = false;
   panel._updateAlertAcknowledgement = async (...args) => {
@@ -154,11 +156,9 @@ test("timed acknowledgement dialog stays above details without replacing them", 
     preset.listeners.selected({ detail: { value: "custom" } });
     assert.equal(control(".timed-acknowledgement-custom").hidden, false);
     const confirm = control('[data-timed-ack="confirm"]');
-    control("ha-input").value = "0";
-    control("ha-input").listeners.input();
+    durationInput.listeners["value-changed"]({ detail: { value: { minutes: 0 } }, stopPropagation() {} });
     assert.equal(confirm.disabled, true);
-    control("ha-input").value = "45";
-    control("ha-input").listeners.input();
+    durationInput.listeners["value-changed"]({ detail: { value: { minutes: 45 } }, stopPropagation() {} });
     assert.equal(confirm.disabled, false);
     await confirm.listeners.click();
     assert.deepEqual(calls[0], ["acknowledge", "test", 2700]);
@@ -2454,7 +2454,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const settings = panel._renderSettings();
   const styles = compactCss(panel._styles());
 
-  assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
+  assert.match(automatic, /<ha-selector[^>]+id="auto-unavailable-delay"[^>]*data-duration-value=/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.doesNotMatch(automatic, /data-action="save-automatic"/);
   assert.match(automatic, /^<ha-card id="settings-section-automatic" outlined/);
@@ -2475,7 +2475,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(batteryDelayHelp < batteryThreshold);
   assert.ok(batteryThreshold < batteryConfiguration);
   assert.doesNotMatch(automatic, /low_battery_level/);
-  assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /<ha-selector[^>]+id="global-delay"[^>]*data-duration-value=/);
   assert.match(settings, /id="settings-section-automatic"/);
   assert.match(settings, /<h2 class="automatic-section-title">Surveillance automatique<\/h2>/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
@@ -3184,7 +3184,7 @@ test("automatic and settings configuration render in the shared side drawer", ()
   panel._config.entity_delays = { "sensor.one": 30 };
   const delays = panel._renderSettings();
   assert.match(delays, /class="side-drawer configuration-drawer"/);
-  assert.match(delays, /data-delay-index="0"[^>]*value="30"/);
+  assert.match(delays, /data-duration-value="30"[^>]*data-delay-index="0"/);
 
   panel._configurationDrawer = { kind: "settings", id: "excluded_entities" };
   assert.match(panel._renderSettings(), /<ha-selector id="excluded-entities"><\/ha-selector>/);

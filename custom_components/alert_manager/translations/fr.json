@@ -199,7 +199,9 @@
       "yaml_invalid": "Le YAML est invalide. Vérifiez sa syntaxe.",
       "reevaluation_unavailable": "La réévaluation nécessite une surveillance démarrée et activée.",
       "alert_not_found": "Cette alerte est introuvable ou déjà terminée.",
-      "notification_batch_delay": "Le délai de groupement doit être un entier entre 10 et 300 secondes."
+      "notification_batch_delay": "Le délai de groupement doit être un entier entre 10 et 300 secondes.",
+      "duration_field_range": "Vérifiez les durées saisies et leurs limites.",
+      "duration_field_bounds": "Saisissez une durée entre {min} et {max}."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -524,7 +526,7 @@
       },
       "pending_display_delay": "Délai d’affichage des alertes à venir",
       "pending_display_delay_help": "Une alerte à venir attend ce délai avant d’être affichée. Si elle devient active plus tôt, elle apparaît immédiatement comme active sans passer par la liste des alertes à venir.",
-      "aria_delay": "Délai en secondes",
+      "aria_delay": "Délai",
       "aria_remove_delay": "Supprimer ce délai",
       "delay_help": "Prioritaire sur le délai du pack et le délai global.",
       "delay_validation": "Chaque délai particulier doit avoir une entité et un nombre entier positif.",

@@ -968,6 +968,78 @@ function syncSensor() {
     return alertsChanged;
 }
 
+// Source: frontend-src/components/duration-field.js
+// Keep the native selector's object value at the UI boundary; persistence uses seconds.
+function durationFieldValue(field) {
+  if (!field?.dataset || !("durationValue" in field.dataset)) return field?.value;
+  const value = field.value;
+  if (value === undefined || value === null) return field.required ? NaN : "";
+  if (typeof value !== "object") return value;
+  let seconds = 0;
+  for (const [key, factor] of [["hours", 3600], ["minutes", 60], ["seconds", 1]]) {
+    const part = Number(value[key] ?? 0);
+    if (!Number.isSafeInteger(part) || part < 0) return NaN;
+    seconds += part * factor;
+  }
+  return Number.isSafeInteger(seconds) ? seconds : NaN;
+}
+
+function durationSelectorValue(value) {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const seconds = Number(value);
+  return {
+    hours: Math.floor(seconds / 3600),
+    minutes: Math.floor(seconds / 60) % 60,
+    seconds: seconds % 60,
+  };
+}
+
+function renderDurationControl(id, label, value, min, max, options = {}) {
+  const { required = true, nameMode = "id", attributes = {} } = options;
+  const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
+  return `<ha-selector ${id ? `id="${esc(id)}"` : ""} ${nameMode === "name" ? `data-field="${esc(id)}"` : ""} data-duration-value="${esc(value ?? "")}" data-duration-min="${min}" data-duration-max="${max}" data-duration-required="${required}" ${attrs} aria-label="${esc(label)}"></ha-selector>`;
+}
+
+function renderDurationField(id, label, value, min, max, options = {}) {
+  return `<div class="field duration-field"><span class="field-label">${esc(label)}</span>${renderDurationControl(id, label, value, min, max, options)}${options.help ? `<small>${esc(options.help)}</small>` : ""}</div>`;
+}
+
+function hydrateDurationFields(root, panel, onChange) {
+  root?.querySelectorAll?.("[data-duration-value]").forEach((field) => {
+    field.hass = panel._hass;
+    if (panel._configuredControls.has(field)) return;
+    field.selector = { duration: { enable_day: false, enable_millisecond: false, enable_second: true } };
+    field.required = field.dataset.durationRequired === "true";
+    field.value = durationSelectorValue(field.dataset.durationValue);
+    // Internal input/change events precede value-changed and still carry the old value.
+    for (const type of ["input", "change"]) field.addEventListener(type, (event) => event.stopPropagation());
+    field.addEventListener("value-changed", (event) => {
+      event.stopPropagation();
+      field.value = event.detail?.value;
+      if (onChange) onChange(field);
+      else panel._handleInput({ target: field });
+    });
+    panel._configuredControls.add(field);
+  });
+}
+
+function validateDurationFields(root, panel) {
+  let valid = true;
+  for (const field of root?.querySelectorAll?.("[data-duration-value]") ?? []) {
+    const value = durationFieldValue(field);
+    const min = Number(field.dataset.durationMin);
+    const max = Number(field.dataset.durationMax);
+    const fieldValid = (value === "" && !field.required)
+      || (Number.isSafeInteger(value) && value >= min && value <= max);
+    field.helper = fieldValid ? undefined : panel._t("errors.duration_field_bounds", {
+      min: panel._durationText(min), max: panel._durationText(max),
+    });
+    if (!fieldValid) field.reportValidity?.();
+    valid = fieldValid && valid;
+  }
+  return valid;
+}
+
 // Source: frontend-src/components/alert-table.js
 function refreshAlertTableData(kind, tablePage) {
     const sourceRows = kind === "overview"
@@ -2087,8 +2159,7 @@ function openTimedAcknowledgement(alertId) {
       <div class="timed-acknowledgement-fields">
         <ha-select id="acknowledgement-preset" label="${esc(this._t("timed_acknowledgement.duration"))}" autofocus></ha-select>
         <div class="timed-acknowledgement-custom" hidden>
-          <ha-input type="number" min="1" step="1" value="30" label="${esc(this._t("timed_acknowledgement.duration"))}" required></ha-input>
-          <ha-select id="acknowledgement-unit" label="${esc(this._t("timed_acknowledgement.unit"))}"></ha-select>
+          ${renderDurationControl("acknowledgement-duration", this._t("timed_acknowledgement.duration"), 1800, 1, MAX_DURATION_SECONDS)}
         </div>
         <ha-alert alert-type="error" hidden></ha-alert>
       </div>
@@ -2100,16 +2171,14 @@ function openTimedAcknowledgement(alertId) {
     this._timedAcknowledgementDialog = dialog;
     this.shadowRoot.append(dialog);
     const preset = dialog.querySelector("#acknowledgement-preset");
-    const unit = dialog.querySelector("#acknowledgement-unit");
-    const input = dialog.querySelector("ha-input");
+    const input = dialog.querySelector("#acknowledgement-duration");
     const custom = dialog.querySelector(".timed-acknowledgement-custom");
     const confirm = dialog.querySelector('[data-timed-ack="confirm"]');
     const error = dialog.querySelector("ha-alert");
     let saving = false;
-    const duration = () => timedAcknowledgementSeconds(preset.value, input.value, unit.value);
+    const duration = () => timedAcknowledgementSeconds(preset.value, durationFieldValue(input), 1);
     const validate = () => {
       confirm.disabled = saving || duration() === null;
-      input.max = String(Math.floor(MAX_DURATION_SECONDS / Number(unit.value)));
     };
     this._configureSelect("acknowledgement-preset", [
       ...[900, 1800, 3600, 86400].map((seconds) => ({
@@ -2120,10 +2189,7 @@ function openTimedAcknowledgement(alertId) {
       custom.hidden = preset.value !== "custom";
       validate();
     });
-    this._configureSelect("acknowledgement-unit", [
-      [60, "minutes"], [3600, "hours"], [86400, "days"],
-    ].map(([seconds, key]) => ({ value: String(seconds), label: this._t(`timed_acknowledgement.${key}`) })), "60", validate);
-    input.addEventListener("input", validate);
+    hydrateDurationFields(dialog, this, validate);
     dialog.querySelector('[data-timed-ack="cancel"]').addEventListener("click", () => { dialog.open = false; });
     confirm.addEventListener("click", async () => {
       const seconds = duration();
@@ -2787,7 +2853,7 @@ function renderNotificationProfileDrawer({
         ${renderPolicySwitch("notification-start", t("notifications.on_start"), policy.notify_on_start)}
         ${renderPolicySwitch("notification-resolved", t("notifications.on_resolved"), policy.notify_on_resolved)}
       </div>
-      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span><ha-input id="notification-reminder" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(policy.reminder_interval ?? "")}" aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input><small>${esc(t("notifications.reminder_help"))}</small></div>
+      <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl("notification-reminder", t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
     </ha-card>
   </section>
   <section class="notification-profile-section">
@@ -2825,7 +2891,7 @@ function renderException(exception, index, t) {
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div></div>
+      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), exception.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS)}` : ""}</div></div>
     </div>
   </ha-card>`;
 }
@@ -2905,11 +2971,11 @@ function captureNotificationProfileDraft(panel) {
   draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
   draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
   draft.default_policy.notify_on_resolved = Boolean(panel.shadowRoot.querySelector("#notification-resolved")?.checked);
-  const reminder = String(panel.shadowRoot.querySelector("#notification-reminder")?.value ?? "").trim();
+  const reminder = String(durationFieldValue(panel.shadowRoot.querySelector("#notification-reminder")) ?? "").trim();
   draft.default_policy.reminder_interval = reminder === "" ? null : Number(reminder);
   draft.exceptions.forEach((exception, index) => {
     if (!Object.hasOwn(exception, "reminder_interval") || exception.reminder_interval === null) return;
-    const value = panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`)?.value;
+    const value = durationFieldValue(panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`));
     if (value !== undefined) exception.reminder_interval = Number(value);
   });
 }
@@ -3140,7 +3206,7 @@ function formField(form, name) {
 }
 
 function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
-    const value = (name) => formField(form, name)?.value;
+    const value = (name) => durationFieldValue(formField(form, name));
     const optionalNumber = (name) => {
       const raw = value(name);
       return raw === undefined
@@ -5403,7 +5469,7 @@ function renderPackField(pack, field, config, context) {
           const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
           return `<div class="pack-source-row">
             <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
-            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(settings[setting.id])}" data-pack-source-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" data-setting-id="${esc(setting.id)}" aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
+            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, settings[setting.id], t, { "data-pack-source-setting": pack.id, "data-pack-field": field.id, "data-source-pack-id": sourcePack.id, "data-setting-id": setting.id }, false)}</label>`).join("")}</div>
           </div>`;
         }).join("")}</div>
       </div>`;
@@ -5418,7 +5484,7 @@ function renderPackField(pack, field, config, context) {
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(row[setting.id])}" data-pack-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(setting.id)}" required aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
+            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -5439,6 +5505,17 @@ function renderPackField(pack, field, config, context) {
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
+}
+
+function renderPackSettingControl(setting, value, t, attributes, required = true) {
+  const label = t(`automatic.fields.${setting.translation_key}.label`);
+  const min = setting.minimum ?? -1000000000;
+  const max = setting.maximum ?? 1000000000;
+  if (setting.unit === "s") {
+    return renderDurationControl("", label, value, min, max, { attributes, required });
+  }
+  const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
+  return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;
 }
 
 function collectAutomaticChanges() {
@@ -5596,20 +5673,20 @@ function captureAutomaticMapValues() {
       const row = this._automaticMapDraft[input.dataset.packMap]?.[
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
-      if (row) row.value = Number(input.value);
+      if (row) row.value = Number(durationFieldValue(input));
     });
     this.shadowRoot.querySelectorAll("[data-pack-setting]").forEach((input) => {
       const row = this._automaticMapDraft[input.dataset.packSetting]?.[
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = Number(input.value);
+      if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
     });
     this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
       const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
         input.dataset.packField
       ]?.[input.dataset.sourcePackId];
       if (settings) {
-        settings[input.dataset.settingId] = input.value === "" ? null : Number(input.value);
+        settings[input.dataset.settingId] = durationFieldValue(input) === "" ? null : Number(durationFieldValue(input));
       }
     });
 }
@@ -5623,12 +5700,12 @@ function captureAutomaticConfigurationValues() {
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
     if (enabled) draft.enabled = enabled.checked;
-    if (delay) draft.delay = delay.value === "" ? null : Number(delay.value);
+    if (delay) draft.delay = durationFieldValue(delay) === "" ? null : Number(durationFieldValue(delay));
     for (const field of pack.config_fields ?? []) {
       if (field.type !== "number") continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
       if (input && this._automaticMapDraft?.[pack.id]) {
-        this._automaticMapDraft[pack.id][field.id] = Number(input.value);
+        this._automaticMapDraft[pack.id][field.id] = Number(durationFieldValue(input));
       }
     }
   }
@@ -5919,7 +5996,7 @@ function renderSettingsConfigurationDrawer(context) {
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
-        <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        ${renderDurationControl(`entity-delay-${index}`, t("settings.aria_delay"), row.delay, 0, MAX_DURATION_SECONDS, { attributes: { "data-delay-index": index } })}
         <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
@@ -6134,8 +6211,8 @@ async function saveSettings(additionalChanges = {}) {
     }
     const changes = {
       ...additionalChanges,
-      global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
-      pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      global_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#global-delay"))),
+      pending_display_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#pending-display-delay"))),
       notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       coherence_scan_esphome: Boolean(
@@ -6237,14 +6314,14 @@ function handleSettingsInput(event) {
     const field = fields[event.target?.id];
     if (!field) return;
     this._ensureSettingsDraft();
-    this._settingsDraft[field] = String(event.target.value ?? "");
+    this._settingsDraft[field] = String(durationFieldValue(event.target) ?? "");
 }
 
 function captureEntityDelayValues() {
     if (!this._entityDelayDraft) return;
     this.shadowRoot.querySelectorAll("[data-delay-index]").forEach((input) => {
       const row = this._entityDelayDraft[Number(input.dataset.delayIndex)];
-      if (row) row.delay = Number(input.value);
+      if (row) row.delay = Number(durationFieldValue(input));
     });
 }
 
@@ -6641,7 +6718,7 @@ const tableStyles = `
   }
   .timed-acknowledgement-custom {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--ha-space-4, 16px);
     align-items: start;
   }
@@ -6649,7 +6726,7 @@ const tableStyles = `
     display: none;
   }
   .timed-acknowledgement-fields ha-select,
-  .timed-acknowledgement-fields ha-input {
+  .timed-acknowledgement-fields ha-selector {
     min-width: 0;
     width: 100%;
   }
@@ -7226,6 +7303,9 @@ const settingsStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
+  [data-duration-value] {
+    min-width: 0;
+  }
   ha-input, ha-select, ha-selector {
     display: block;
     width: 100%;
@@ -7286,7 +7366,7 @@ const settingsStyles = `
   .pack-settings-values {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
     align-items: stretch;
     gap: 10px;
   }
@@ -7578,11 +7658,14 @@ const ruleEditorStyles = `
   }
   .delay-row {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
+    grid-template-columns: minmax(210px, 1fr) auto;
     gap: 10px;
     align-items: start;
   }
-  .delay-row ha-input {
+  .delay-row > ha-selector:not([data-duration-value]) {
+    grid-column: 1 / -1;
+  }
+  .delay-row [data-duration-value] {
     min-width: 0;
   }
   .delay-row > ha-button {
@@ -8357,6 +8440,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _hydrateSelectors() {
+    hydrateDurationFields(this.shadowRoot, this);
     this.shadowRoot.querySelectorAll("ha-icon-button[aria-label]").forEach((button) => {
       button.label = button.getAttribute("aria-label");
     });
@@ -8419,6 +8503,9 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _numberField(id, label, value, suffix, min, max, options = {}) {
+    if (suffix === "s" || suffix === this._t("units.seconds")) {
+      return renderDurationField(id, label, value, min, max, options);
+    }
     const {
       step = "1",
       nameMode = "id",
@@ -8529,6 +8616,11 @@ class AlertManagerPanel extends HTMLElement {
         valid = false;
       }
     });
+    if (!validateDurationFields(form, this)) {
+      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
+      this._refreshUiState();
+      valid = false;
+    }
     return valid;
   }
   _styles() {
