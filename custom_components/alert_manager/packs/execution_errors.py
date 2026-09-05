@@ -23,6 +23,8 @@ PACK_ID = "execution_errors"
 _SUPPORTED_DOMAINS = ("automation", "script")
 _TRACE_RECHECK_DELAY = 0.1
 _TRACE_RECHECK_LIMIT = 5
+_MAX_COMPLETED_CYCLES = 32
+_MAX_TRACE_REFERENCES = 64
 
 _DATA_CYCLES: HassKey[dict[str, _ExecutionTracker]] = HassKey(
     "alert_manager_execution_error_cycles"
@@ -48,6 +50,7 @@ class _ExecutionTracker:
     active: _ExecutionCycle | None = None
     completed: list[_ExecutionCycle] = field(default_factory=list)
     consecutive_failures: int = 0
+    pending_result: _ExecutionCycle | None = None
 
 
 class _ExecutionTrace(Protocol):
@@ -105,21 +108,34 @@ def _trace_id(trace: _ExecutionTrace, summary: dict[str, Any]) -> str:
     return str(run_id) if run_id is not None else str(id(trace))
 
 
+def _short_summary(trace: _ExecutionTrace) -> dict[str, Any] | None:
+    """Return a usable short summary while rejecting malformed trace data."""
+    summary = trace.as_short_dict()
+    return summary if isinstance(summary, dict) else None
+
+
 def _capture_running_traces(
     hass: HomeAssistant, entity_id: str, cycle: _ExecutionCycle
 ) -> None:
     """Keep references to new running traces before HA's short bucket evicts them."""
     for trace in _get_entity_run_traces(hass, entity_id):
-        summary = trace.as_short_dict()
-        if summary.get("state") != "running":
+        summary = _short_summary(trace)
+        if summary is None or summary.get("state") != "running":
             continue
-        cycle.traces.setdefault(_trace_id(trace, summary), trace)
+        run_id = _trace_id(trace, summary)
+        if run_id in cycle.traces:
+            continue
+        if len(cycle.traces) >= _MAX_TRACE_REFERENCES:
+            continue
+        cycle.traces[run_id] = trace
 
 
 def _process_completed_traces(cycle: _ExecutionCycle) -> None:
     """Accumulate newly completed short traces into the current cycle result."""
     for run_id, trace in tuple(cycle.traces.items()):
-        summary = trace.as_short_dict()
+        summary = _short_summary(trace)
+        if summary is None:
+            continue
         timestamp = summary.get("timestamp")
         if (
             summary.get("state") != "stopped"
@@ -141,6 +157,48 @@ def _cycle_is_complete(cycle: _ExecutionCycle) -> bool:
     return not cycle.traces and cycle.completed_runs == cycle.expected_runs
 
 
+def _apply_cycle_outcome(
+    tracker: _ExecutionTracker, cycle: _ExecutionCycle, threshold: int
+) -> None:
+    """Advance counters and retain the latest authoritative result."""
+    if cycle.failed:
+        tracker.consecutive_failures += 1
+        if tracker.consecutive_failures >= threshold:
+            tracker.pending_result = cycle
+        return
+    tracker.consecutive_failures = 0
+    tracker.pending_result = cycle
+
+
+def _discard_incomplete_cycle(
+    tracker: _ExecutionTracker, cycle: _ExecutionCycle
+) -> None:
+    """Release trace references and break an unverifiable failure sequence."""
+    cycle.traces.clear()
+    tracker.consecutive_failures = 0
+
+
+def _queue_cycle(
+    tracker: _ExecutionTracker, cycle: _ExecutionCycle, threshold: int
+) -> None:
+    """Retain a bounded queue while preserving chronological outcomes."""
+    if len(tracker.completed) >= _MAX_COMPLETED_CYCLES:
+        oldest = tracker.completed.pop(0)
+        if _cycle_is_complete(oldest):
+            _apply_cycle_outcome(tracker, oldest, threshold)
+        else:
+            _discard_incomplete_cycle(tracker, oldest)
+    tracker.completed.append(cycle)
+
+
+def _queue_incomplete_cycle(
+    tracker: _ExecutionTracker, cycle: _ExecutionCycle, threshold: int
+) -> None:
+    """Queue a reference-free barrier that breaks a consecutive failure run."""
+    cycle.traces.clear()
+    _queue_cycle(tracker, cycle, threshold)
+
+
 def _should_evaluate(
     hass: HomeAssistant,
     old_state: State | None,
@@ -154,10 +212,15 @@ def _should_evaluate(
         return False
     cycles = _cycles(hass)
     tracker = cycles.setdefault(new_state.entity_id, _ExecutionTracker())
+    threshold = _failure_threshold(_config, new_state.entity_id)
     if current > previous:
         if previous == 0 or tracker.active is None:
             if tracker.active is not None:
-                tracker.completed.append(tracker.active)
+                _process_completed_traces(tracker.active)
+                if _cycle_is_complete(tracker.active):
+                    _queue_cycle(tracker, tracker.active, threshold)
+                else:
+                    _queue_incomplete_cycle(tracker, tracker.active, threshold)
             tracker.active = _ExecutionCycle()
         tracker.active.expected_runs += current - previous
         _capture_running_traces(hass, new_state.entity_id, tracker.active)
@@ -191,35 +254,35 @@ def _evaluate(
             _capture_running_traces(hass, state.entity_id, tracker.active)
         return PackNeutral()
 
+    threshold = _failure_threshold(config, state.entity_id)
     if tracker.active is not None:
         _capture_running_traces(hass, state.entity_id, tracker.active)
         _process_completed_traces(tracker.active)
         if current == 0:
             if _cycle_is_complete(tracker.active):
-                tracker.completed.append(tracker.active)
+                _queue_cycle(tracker, tracker.active, threshold)
                 tracker.active = None
             elif tracker.active.rechecks < _TRACE_RECHECK_LIMIT:
                 tracker.active.rechecks += 1
                 return PackRecheck(_TRACE_RECHECK_DELAY)
+            else:
+                _queue_incomplete_cycle(tracker, tracker.active, threshold)
+                tracker.active = None
 
-    result: _ExecutionCycle | None = None
     while tracker.completed:
-        completed = tracker.completed[0]
+        completed = tracker.completed.pop(0)
         _process_completed_traces(completed)
         if not _cycle_is_complete(completed):
-            break
-        result = tracker.completed.pop(0)
-        if result.failed:
-            tracker.consecutive_failures += 1
-        else:
-            tracker.consecutive_failures = 0
+            _discard_incomplete_cycle(tracker, completed)
+            continue
+        _apply_cycle_outcome(tracker, completed, threshold)
 
+    result = tracker.pending_result
+    tracker.pending_result = None
     if result is None:
         return PackNeutral()
     if not result.failed:
         return None
-    if tracker.consecutive_failures < _failure_threshold(config, state.entity_id):
-        return PackNeutral()
     if result.error:
         return PackMatch(
             condition_key="automatic.execution_errors_detail",
