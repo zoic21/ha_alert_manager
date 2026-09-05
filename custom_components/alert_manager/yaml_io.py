@@ -18,13 +18,13 @@ from .validation import validate_config, validate_rule_payload
 
 FORMAT_VERSION = 1
 MAX_YAML_SIZE = 1_000_000
-_RULE_REFERENCE_PREFIX = "@rule:"
 
 _RULE_YAML_KEYS = {
     "id",
     "name",
     "enabled",
     "entity_ids",
+    "label_ids",
     "source",
     "attribute",
     "operator",
@@ -124,6 +124,7 @@ def rule_to_yaml_data(
         "name": data.get("name"),
         "enabled": data.get("enabled", True),
         "entity_ids": data.get("entity_ids"),
+        "label_ids": data.get("label_ids", []),
         "source": source,
     }
     if result["source"] in ATTRIBUTE_SOURCES:
@@ -185,16 +186,6 @@ def dump_config_yaml(config: Mapping[str, Any]) -> str:
     """Serialize all persistent configuration, excluding runtime alert data."""
     normalized = validate_config(dict(config))
     config_data = {key: deepcopy(normalized[key]) for key in _CONFIG_YAML_KEY_ORDER}
-    rule_indexes = {rule["id"]: index for index, rule in enumerate(normalized["rules"])}
-    for profile in config_data["notification_profiles"]:
-        for exception in profile["exceptions"]:
-            if (
-                exception["selector_type"] == "rule"
-                and exception["selector_id"] in rule_indexes
-            ):
-                exception["selector_id"] = (
-                    f"{_RULE_REFERENCE_PREFIX}{rule_indexes[exception['selector_id']]}"
-                )
     rules = [rule_to_yaml_data(rule) for rule in normalized["rules"]]
     return _dump_yaml(
         {
@@ -300,31 +291,6 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         except TypeError as err:
             raise ValueError(f"Invalid rules[{index}]: {err}") from err
         normalized_rules.append(rule.as_dict())
-
-    for profile_index, profile in enumerate(config.get("notification_profiles", [])):
-        if not isinstance(profile, dict):
-            continue
-        exceptions = profile.get("exceptions", [])
-        if not isinstance(exceptions, list):
-            continue
-        for exception_index, exception in enumerate(exceptions):
-            if not isinstance(exception, dict):
-                continue
-            selector_id = exception.get("selector_id")
-            if (
-                exception.get("selector_type") != "rule"
-                or not isinstance(selector_id, str)
-                or not selector_id.startswith(_RULE_REFERENCE_PREFIX)
-            ):
-                continue
-            raw_index = selector_id.removeprefix(_RULE_REFERENCE_PREFIX)
-            if not raw_index.isdigit() or int(raw_index) >= len(normalized_rules):
-                raise ValueError(
-                    "Invalid rule reference in "
-                    f"config.notification_profiles[{profile_index}].exceptions"
-                    f"[{exception_index}]"
-                )
-            exception["selector_id"] = normalized_rules[int(raw_index)]["id"]
 
     candidate = {**deepcopy(config), "rules": normalized_rules}
     return validate_config(candidate)

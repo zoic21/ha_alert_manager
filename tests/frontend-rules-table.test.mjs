@@ -238,3 +238,21 @@ test("active filter and mobile secondary details follow the saved column choices
   assert.equal(cell.children[0].textContent, "Humidity");
   assert.equal(cell.children[1].textContent, "5 min · sensor.humidity");
 });
+
+test("rule table renders native label badges on desktop and mobile and indexes their names", () => {
+  const panel = new Panel();
+  panel._config = { rules: [{ ...rules()[0], label_ids: ["cold", "deleted"] }] };
+  panel._labels = [{ label_id: "cold", name: "Freezer", color: "blue", description: "Food" }];
+  customElements.define("ha-label", class {});
+  const row = panel._ruleTableRows()[0];
+  assert.match(row.search_index, /cold Freezer deleted deleted/);
+  for (const narrow of [false, true]) {
+    const cell = panel._nativeRuleNameCell(row, narrow);
+    const badges = cell.children[1].children;
+    assert.equal(badges[0].tagName, "HA-LABEL");
+    assert.equal(badges[0].textContent, "Freezer");
+    assert.equal(badges[0].attributes.color, "blue");
+    assert.equal(badges[0].attributes.description, "Food");
+    assert.equal(badges[1].textContent, "deleted");
+  }
+});

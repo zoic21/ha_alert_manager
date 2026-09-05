@@ -21,7 +21,7 @@ from .const import (
     MIN_DELAY,
     MIN_HISTORY_LIMIT,
 )
-from .models import Rule, safe_float
+from .models import Rule, safe_float, validate_label_list
 from .notifications import validate_notification_profiles
 from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
@@ -57,6 +57,7 @@ _AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
     "name",
     "entity_ids",
+    "label_ids",
     "enabled",
     "source",
     "attribute",
@@ -460,20 +461,6 @@ def validate_device_list(value: Any) -> list[str]:
             raise ValueError(f"Invalid device id: {item}")
         if item not in result:
             result.append(item)
-    return result
-
-
-def validate_label_list(value: Any) -> list[str]:
-    """Validate and deduplicate Home Assistant label registry ids."""
-    if not isinstance(value, list):
-        raise ValueError("excluded_labels must be a list")
-    result: list[str] = []
-    for item in value:
-        if not isinstance(item, str) or not item.strip() or len(item) > 255:
-            raise ValueError(f"Invalid label id: {item}")
-        label_id = item.strip()
-        if label_id not in result:
-            result.append(label_id)
     return result
 
 

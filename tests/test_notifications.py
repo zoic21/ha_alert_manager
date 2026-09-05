@@ -38,11 +38,6 @@ def _profile() -> dict:
         },
         "exceptions": [
             {
-                "selector_type": "rule",
-                "selector_id": "freezer",
-                "reminder_interval": 300,
-            },
-            {
                 "selector_type": "label",
                 "selector_id": "important",
                 "reminder_interval": 1800,
@@ -62,7 +57,7 @@ def _profile() -> dict:
 
 
 def test_policy_resolution_is_partial_and_uses_documented_priority() -> None:
-    """Rule wins over first label, pack and profile defaults field by field."""
+    """First matching label overrides pack and profile defaults field by field."""
     config = validate_config(
         {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
     )
@@ -71,14 +66,13 @@ def test_policy_resolution_is_partial_and_uses_documented_priority() -> None:
     effective = resolve_notification_policy(
         profile,
         pack_id="battery",
-        rule_id="freezer",
         label_ids={"important", "secondary"},
     )
 
     assert effective.as_dict() == {
         "notify_on_start": True,
         "notify_on_resolved": False,
-        "reminder_interval": 300,
+        "reminder_interval": 1800,
     }
 
 
@@ -91,7 +85,6 @@ def test_first_matching_label_exception_wins_in_explicit_list_order() -> None:
     effective = resolve_notification_policy(
         profile,
         pack_id=None,
-        rule_id=None,
         label_ids={"secondary", "important"},
     )
 
@@ -216,7 +209,7 @@ def test_profile_update_failure_always_resumes_notification_events(hass, entry) 
             "not a known pack",
         ),
         (
-            {"exceptions": [{"selector_type": "rule", "selector_id": "freezer"}]},
+            {"exceptions": [{"selector_type": "label", "selector_id": "freezer"}]},
             "at least one policy field",
         ),
     ],
@@ -265,8 +258,10 @@ def test_policy_rejects_non_string_field_names_with_stable_error() -> None:
         )
 
 
-def test_rule_deletion_cleans_notification_runtime_and_exception(hass, entry) -> None:
-    """Deleting a rule leaves no pending delivery, reminder or orphan override."""
+def test_rule_deletion_cleans_runtime_and_preserves_label_exceptions(
+    hass, entry
+) -> None:
+    """Deleting a rule clears pending delivery and reminders, preserving labels."""
 
     async def scenario() -> None:
         hass.states.set("sensor.test", "10")
@@ -283,7 +278,7 @@ def test_rule_deletion_cleans_notification_runtime_and_exception(hass, entry) ->
         )
         profile = _profile()
         profile["label_ids"] = []
-        profile["exceptions"][0]["selector_id"] = rule["id"]
+        profile["default_policy"]["reminder_interval"] = 300
         await manager.async_update_config({"notification_profiles": [profile]})
         alert_id = f"rule:{rule['id']}:sensor.test"
         await manager.notification_runtime._async_handle_event(
@@ -305,10 +300,7 @@ def test_rule_deletion_cleans_notification_runtime_and_exception(hass, entry) ->
         await manager.async_delete_rule(rule["id"])
 
         configured_profile = manager.get_config()["notification_profiles"][0]
-        assert all(
-            exception.get("selector_id") != rule["id"]
-            for exception in configured_profile["exceptions"]
-        )
+        assert configured_profile["exceptions"] == profile["exceptions"]
         assert all(
             alert_id not in profile_runtime
             for profile_runtime in manager.notification_runtime._runtime.values()
@@ -322,13 +314,14 @@ def test_rule_deletion_cleans_notification_runtime_and_exception(hass, entry) ->
     asyncio.run(scenario())
 
 
-def test_yaml_round_trip_rebinds_rule_exceptions_to_new_rule_ids() -> None:
+def test_yaml_round_trip_preserves_rule_labels_and_label_exceptions() -> None:
     """Portable exports omit internal rule ids without losing profile routing."""
     config = deepcopy(DEFAULT_CONFIG)
     config["rules"] = [
         {
             "id": "freezer",
             "name": "Freezer",
+            "label_ids": ["important"],
             "entity_ids": ["sensor.freezer"],
             "operator": "above",
             "value": 8,
@@ -341,11 +334,12 @@ def test_yaml_round_trip_rebinds_rule_exceptions_to_new_rule_ids() -> None:
     imported = parse_config_yaml(exported)
 
     imported_rule_id = imported["rules"][0]["id"]
-    rule_exception = imported["notification_profiles"][0]["exceptions"][0]
+    label_exception = imported["notification_profiles"][0]["exceptions"][0]
     assert "id: freezer" not in exported
-    assert "selector_id: '@rule:0'" in exported
+    assert "@rule:" not in exported
     assert imported_rule_id != "freezer"
-    assert rule_exception["selector_id"] == imported_rule_id
+    assert imported["rules"][0]["label_ids"] == ["important"]
+    assert label_exception["selector_id"] == "important"
 
 
 def test_delivery_attempts_every_target_when_one_fails(hass) -> None:
@@ -473,3 +467,19 @@ def test_unexpected_target_failure_is_isolated(hass) -> None:
 
     assert result["success"] is True
     assert result["delivered_targets"] == ["notify.working"]
+
+
+def test_rule_notification_exceptions_are_no_longer_supported():
+    """Removed development-only selectors are rejected by the API and YAML boundary."""
+    profile = _profile()
+    profile["exceptions"] = [
+        {
+            "selector_type": "rule",
+            "selector_id": "freezer",
+            "notify_on_start": True,
+        }
+    ]
+    with pytest.raises(ValueError, match="selector_type"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )

@@ -444,6 +444,7 @@ test("new rules start enabled with safe defaults", () => {
   assert.deepEqual(newRuleDefaults(), {
     name: "",
     entity_ids: [],
+    label_ids: [],
     enabled: true,
     source: "state",
     attribute: "",
@@ -1190,6 +1191,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
       type: "alert_manager/rules/create",
       rule: {
         name: "Liste vide",
+      label_ids: [],
         entity_ids: ["todo.liste_d_achats"],
         enabled: true,
         source: "state",

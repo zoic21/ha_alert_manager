@@ -308,3 +308,15 @@ test("single-alert query opens the existing details UI and stale ids do nothing"
     globalThis.window = originalWindow;
   }
 });
+
+test("notification exceptions offer only packs and native labels", () => {
+  const selects = new Map();
+  hydrateNotificationProfileControls({
+    _notificationProfileDraft: structuredClone(profile),
+    _t: t,
+    _configureSelector() {},
+    _configureSelect: (id, options) => selects.set(id, options),
+  }, { packs: [{ id: "battery" }] });
+  assert.deepEqual(selects.get("notification-exception-type-0").map((option) => option.value), ["pack", "label"]);
+  assert.deepEqual(selects.get("notification-exception-selector-0").map((option) => option.value), ["battery"]);
+});

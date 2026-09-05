@@ -548,7 +548,6 @@ export function hydrateSettingsControls() {
   });
   hydrateNotificationProfileControls(this, {
     packs: this._packs.filter((pack) => pack.available),
-    rules: this._config.rules ?? [],
   });
 }
 

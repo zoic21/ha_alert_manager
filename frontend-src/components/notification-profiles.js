@@ -8,7 +8,7 @@ import {
 import { esc } from "../utils/escaping.js";
 
 const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
-const SELECTOR_TYPES = ["pack", "label", "rule"];
+const SELECTOR_TYPES = ["pack", "label"];
 
 export function newNotificationProfileDraft() {
   const generatedId = globalThis.crypto?.randomUUID?.()
@@ -160,7 +160,7 @@ function booleanOverrideValue(exception, key) {
   return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
 }
 
-export function hydrateNotificationProfileControls(panel, { packs, rules }) {
+export function hydrateNotificationProfileControls(panel, { packs }) {
   const draft = panel._notificationProfileDraft;
   if (!draft) return;
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
@@ -199,12 +199,10 @@ export function hydrateNotificationProfileControls(panel, { packs, rules }) {
         (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
       );
     } else {
-      const options = exception.selector_type === "rule"
-        ? rules.map((rule) => ({ value: rule.id, label: rule.name }))
-        : packs.map((pack) => ({
-          value: pack.id,
-          label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
-        }));
+      const options = packs.map((pack) => ({
+        value: pack.id,
+        label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
+      }));
       panel._configureSelect(
         `notification-exception-selector-${index}`,
         options,

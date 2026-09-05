@@ -1709,6 +1709,7 @@ class _RuntimeMixin:
                     condition_params=condition_params,
                     rule_id=rule.id,
                     rule_name=rule.name,
+                    labels=rule.label_ids,
                     message=rendered_message,
                     source=rule.source,
                     operator=(
@@ -1905,6 +1906,7 @@ class _RuntimeMixin:
         condition_params: dict[str, Any] | None = None,
         rule_id: str | None = None,
         rule_name: str | None = None,
+        labels: list[str] | None = None,
         message: str | None = None,
         source: str | None = None,
         operator: str | None = None,
@@ -1942,6 +1944,7 @@ class _RuntimeMixin:
             condition_params=condition_params,
             rule_id=rule_id,
             rule_name=rule_name,
+            labels=list(labels or []),
             message=message,
             source=source,
             operator=operator,

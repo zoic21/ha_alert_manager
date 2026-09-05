@@ -228,11 +228,11 @@
       "enabled": "Enabled",
       "exception_number": "Exception {count}",
       "exceptions": "Exceptions",
-      "exceptions_help": "Overrides are applied in this order: pack, first matching label, then rule.",
+      "exceptions_help": "Overrides are applied in this order: pack, then first matching label.",
       "grouped_alerts": "{count} alerts",
       "help": "Route grouped alerts to native Home Assistant notify entities.",
       "labels": "Profile labels",
-      "labels_help": "When set, only entities or devices carrying one of these labels match this profile.",
+      "labels_help": "When set, only alerts whose rule, entity or device carries one of these labels match this profile.",
       "name": "Profile name",
       "never": "Never",
       "new": "New notification profile",
@@ -260,8 +260,7 @@
       "selector_type": "Exception type",
       "selector_types": {
         "label": "Label",
-        "pack": "Automatic pack",
-        "rule": "Custom rule"
+        "pack": "Automatic pack"
       },
       "started_title": "Alert Manager — {count} new alert(s)",
       "targets": "Notification entities",
@@ -493,7 +492,9 @@
       "values": "Comparison values",
       "yaml_help": "With a state or attribute source, the Alert Manager comparison is required and condition_template remains optional. The state_variation and attribute_variation sources compare current_value - starting_value and require condition_template: the reference is captured when that template becomes true, then reset when it becomes false. attribute_variation also requires one numeric attribute without wildcards. Variations accept above, below, between and outside. The between and outside operators use value: [lower_bound, upper_bound]; unchanged has no value. An attribute path such as data.*.key checks every array item for regular comparisons. With source: unchanged, state and attributes are monitored together. With source: jinja, only condition_template is evaluated and it is required. update_message_when_active keeps recalculating a Jinja message after activation.",
       "yaml_invalid": "The YAML rule is invalid.",
-      "yaml_title": "YAML rule"
+      "yaml_title": "YAML rule",
+      "labels": "Labels",
+      "labels_help": "Home Assistant labels added to the entity and device labels for notifications."
     },
     "settings": {
       "alert_display": "Alert display",

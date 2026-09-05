@@ -299,16 +299,7 @@ export function entityMetadata(source, labelRegistry) {
       ...(Array.isArray(source.labels) ? source.labels : []),
       ...(Array.isArray(entity?.labels) ? entity.labels : []),
     ].map(String).filter(Boolean))];
-    const labels = labelIds.map((labelId) => {
-      const entry = labelRegistry.get(labelId);
-      return {
-        id: labelId,
-        name: entry?.name || labelId,
-        color: entry?.color || "",
-        description: entry?.description || "",
-        icon: entry?.icon || "",
-      };
-    });
+    const labels = labelMetadata(labelIds, labelRegistry);
     return { domain, integration, labels };
 }
 
@@ -732,23 +723,7 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (row.entityId) name.title = row.entityId;
     content.append(name);
     if (!narrow && row.labels?.length) {
-      const labels = document.createElement("span");
-      labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
-      for (const metadata of row.labels) {
-        const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
-        label.textContent = metadata.name;
-        label.title = metadata.description || metadata.name;
-        if (label.tagName === "HA-LABEL") {
-          label.setAttribute("dense", "");
-          if (metadata.color) label.setAttribute("color", metadata.color);
-          if (metadata.description) label.setAttribute("description", metadata.description);
-          label.className = "text-ellipsis";
-        } else {
-          label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
-        }
-        labels.append(label);
-      }
-      content.append(labels);
+      content.append(nativeLabelBadges(row.labels));
     }
     if (narrow) {
       const secondaryColumns = (this._tableState[kind]?.columns ?? [])
@@ -1259,4 +1234,37 @@ export async function handleAlertTableAction(action, button, event) {
     return true;
   }
   return false;
+}
+
+export function labelMetadata(labelIds, labelRegistry) {
+    return labelIds.map((labelId) => {
+      const entry = labelRegistry.get(labelId);
+      return {
+        id: labelId,
+        name: entry?.name || labelId,
+        color: entry?.color || "",
+        description: entry?.description || "",
+        icon: entry?.icon || "",
+      };
+    });
+}
+
+export function nativeLabelBadges(metadataList) {
+    const labels = document.createElement("span");
+    labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
+    for (const metadata of metadataList) {
+      const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
+      label.textContent = metadata.name;
+      label.title = metadata.description || metadata.name;
+      if (label.tagName === "HA-LABEL") {
+        label.setAttribute("dense", "");
+        if (metadata.color) label.setAttribute("color", metadata.color);
+        if (metadata.description) label.setAttribute("description", metadata.description);
+        label.className = "text-ellipsis";
+      } else {
+        label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      }
+      labels.append(label);
+    }
+    return labels;
 }

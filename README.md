@@ -151,6 +151,8 @@ Example use cases include abnormal temperatures, unexpected power consumption, b
 
 Rules can be edited visually or in YAML and duplicated from the panel. One rule can monitor up to 50 entities, and one configuration can contain up to 500 rules. Jinja-only YAML rules use `source: jinja`; existing `source: none` rules are migrated automatically.
 
+Rules can carry Home Assistant labels (`label_ids` in YAML), displayed in the table. For notifications, these complement entity and device labels and apply to both profile filters and label exceptions. Exceptions target only a pack or a label.
+
 ### Examples
 
 #### A thermostat that heats without warming the room

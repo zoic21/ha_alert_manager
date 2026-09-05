@@ -882,6 +882,10 @@ class _ApiMixin:
             affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
             for entity_id in affected_entities:
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
+            if old_rule.label_ids != rule.label_ids:
+                for entity_id in rule.entity_ids:
+                    if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
+                        record.details.labels = list(rule.label_ids)
             if old_rule.message != rule.message:
                 for entity_id in rule.entity_ids:
                     self._refresh_active_rule_message(rule, entity_id)
@@ -903,6 +907,8 @@ class _ApiMixin:
                 continue
             alert_ids_to_discard.add(alert_id)
         await self.notification_runtime.async_discard_alerts(alert_ids_to_discard)
+        if old_rule.label_ids != rule.label_ids:
+            await self._async_refresh_notification_runtime(reset_reminders=True)
         self._publish_if_changed()
         return rule.as_dict()
 
@@ -921,13 +927,6 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             del self.config["rules"][index]
-            for profile in self.config.get("notification_profiles", []):
-                profile["exceptions"] = [
-                    exception
-                    for exception in profile["exceptions"]
-                    if exception["selector_type"] != "rule"
-                    or exception["selector_id"] != rule_id
-                ]
             self._rebuild_rule_index()
             if self.monitoring_enabled:
                 self._remove_rule_instances(rule_id, set(rule.entity_ids))

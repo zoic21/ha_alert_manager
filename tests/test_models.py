@@ -1039,3 +1039,26 @@ def test_backend_and_frontend_versions_stay_in_sync():
     )
     package = json.loads((root / "package.json").read_text())
     assert manifest["version"] == package["version"] == INTEGRATION_VERSION
+
+
+def test_rule_labels_round_trip_and_legacy_default():
+    """Native label ids are optional, normalized and independently serialized."""
+    data = {
+        "name": "Temperature",
+        "entity_ids": ["sensor.test"],
+        "operator": "above",
+        "value": 8,
+        "duration": 0,
+    }
+    assert validate_rule_payload(data).label_ids == []
+    rule = validate_rule_payload(
+        {**data, "label_ids": [" kitchen ", "kitchen", "cold"]}
+    )
+    assert rule.label_ids == ["kitchen", "cold"]
+    saved = rule.as_dict()
+    assert Rule.from_dict(saved).label_ids == rule.label_ids
+    saved["label_ids"].clear()
+    assert rule.label_ids == ["kitchen", "cold"]
+    for invalid in (None, "kitchen", [1], [""], ["x" * 256]):
+        with pytest.raises(ValueError):
+            validate_rule_payload({**data, "label_ids": invalid})
