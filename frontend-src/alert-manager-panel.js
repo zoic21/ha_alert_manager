@@ -1,3 +1,4 @@
+import { hydrateDurationFields, renderDurationField, validateDurationFields } from "./components/duration-field.js";
 import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
   refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass, syncSensor,
 } from "./api/alert-manager-api.js";
@@ -540,6 +541,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _hydrateSelectors() {
+    hydrateDurationFields(this.shadowRoot, this);
     this.shadowRoot.querySelectorAll("ha-icon-button[aria-label]").forEach((button) => {
       button.label = button.getAttribute("aria-label");
     });
@@ -602,6 +604,9 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _numberField(id, label, value, suffix, min, max, options = {}) {
+    if (suffix === "s" || suffix === this._t("units.seconds")) {
+      return renderDurationField(id, label, value, min, max, options);
+    }
     const {
       step = "1",
       nameMode = "id",
@@ -712,6 +717,11 @@ class AlertManagerPanel extends HTMLElement {
         valid = false;
       }
     });
+    if (!validateDurationFields(form, this)) {
+      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
+      this._refreshUiState();
+      valid = false;
+    }
     return valid;
   }
   _styles() {

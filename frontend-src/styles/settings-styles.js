@@ -466,6 +466,9 @@ export const settingsStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
+  [data-duration-value] {
+    min-width: 0;
+  }
   ha-input, ha-select, ha-selector {
     display: block;
     width: 100%;
@@ -526,7 +529,7 @@ export const settingsStyles = `
   .pack-settings-values {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
     align-items: stretch;
     gap: 10px;
   }

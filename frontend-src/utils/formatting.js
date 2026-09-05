@@ -88,17 +88,20 @@ export function remaining(value) {
 
 export function durationText(seconds) {
     const value = Math.max(0, Number(seconds) || 0);
-    if (value < 60) return this._t("duration.seconds", { count: value });
-    if (value % 3600 === 0) {
-      return this._t("duration.hours", { count: value / 3600 });
+    const parts = [
+      [86400, "days"],
+      [3600, "hours"],
+      [60, "minutes"],
+      [1, "seconds"],
+    ];
+    let rest = value;
+    const result = [];
+    for (const [unit, key] of parts) {
+      const count = unit === 1 ? rest : Math.floor(rest / unit);
+      if (count) result.push(this._t(`duration.${key}`, { count }));
+      rest %= unit;
     }
-    if (value % 60 === 0) {
-      return this._t("duration.minutes", { count: value / 60 });
-    }
-    return this._t("duration.minutes_seconds", {
-      minutes: Math.floor(value / 60),
-      seconds: value % 60,
-    });
+    return result.join(" ") || this._t("duration.seconds", { count: 0 });
 }
 
 export function historyDurationText(seconds) {

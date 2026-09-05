@@ -1,3 +1,4 @@
+import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import {
@@ -145,7 +146,7 @@ export function renderPackField(pack, field, config, context) {
           const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
           return `<div class="pack-source-row">
             <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
-            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(settings[setting.id])}" data-pack-source-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" data-setting-id="${esc(setting.id)}" aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
+            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, settings[setting.id], t, { "data-pack-source-setting": pack.id, "data-pack-field": field.id, "data-source-pack-id": sourcePack.id, "data-setting-id": setting.id }, false)}</label>`).join("")}</div>
           </div>`;
         }).join("")}</div>
       </div>`;
@@ -160,7 +161,7 @@ export function renderPackField(pack, field, config, context) {
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span><ha-input type="number" min="${setting.minimum ?? -1000000000}" max="${setting.maximum ?? 1000000000}" step="${setting.step ?? "any"}" value="${esc(row[setting.id])}" data-pack-setting="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(setting.id)}" required aria-label="${esc(t(`automatic.fields.${setting.translation_key}.label`))}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input></label>`).join("")}</div>
+            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -181,6 +182,17 @@ export function renderPackField(pack, field, config, context) {
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
+}
+
+function renderPackSettingControl(setting, value, t, attributes, required = true) {
+  const label = t(`automatic.fields.${setting.translation_key}.label`);
+  const min = setting.minimum ?? -1000000000;
+  const max = setting.maximum ?? 1000000000;
+  if (setting.unit === "s") {
+    return renderDurationControl("", label, value, min, max, { attributes, required });
+  }
+  const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
+  return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;
 }
 
 export function collectAutomaticChanges() {
@@ -338,20 +350,20 @@ export function captureAutomaticMapValues() {
       const row = this._automaticMapDraft[input.dataset.packMap]?.[
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
-      if (row) row.value = Number(input.value);
+      if (row) row.value = Number(durationFieldValue(input));
     });
     this.shadowRoot.querySelectorAll("[data-pack-setting]").forEach((input) => {
       const row = this._automaticMapDraft[input.dataset.packSetting]?.[
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = Number(input.value);
+      if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
     });
     this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
       const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
         input.dataset.packField
       ]?.[input.dataset.sourcePackId];
       if (settings) {
-        settings[input.dataset.settingId] = input.value === "" ? null : Number(input.value);
+        settings[input.dataset.settingId] = durationFieldValue(input) === "" ? null : Number(durationFieldValue(input));
       }
     });
 }
@@ -365,12 +377,12 @@ export function captureAutomaticConfigurationValues() {
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
     if (enabled) draft.enabled = enabled.checked;
-    if (delay) draft.delay = delay.value === "" ? null : Number(delay.value);
+    if (delay) draft.delay = durationFieldValue(delay) === "" ? null : Number(durationFieldValue(delay));
     for (const field of pack.config_fields ?? []) {
       if (field.type !== "number") continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
       if (input && this._automaticMapDraft?.[pack.id]) {
-        this._automaticMapDraft[pack.id][field.id] = Number(input.value);
+        this._automaticMapDraft[pack.id][field.id] = Number(durationFieldValue(input));
       }
     }
   }

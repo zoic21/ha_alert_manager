@@ -1,3 +1,4 @@
+import { durationFieldValue } from "./duration-field.js";
 import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
@@ -44,7 +45,7 @@ function formField(form, name) {
 }
 
 export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
-    const value = (name) => formField(form, name)?.value;
+    const value = (name) => durationFieldValue(formField(form, name));
     const optionalNumber = (name) => {
       const raw = value(name);
       return raw === undefined

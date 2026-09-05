@@ -254,11 +254,14 @@ export const ruleEditorStyles = `
   }
   .delay-row {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
+    grid-template-columns: minmax(210px, 1fr) auto;
     gap: 10px;
     align-items: start;
   }
-  .delay-row ha-input {
+  .delay-row > ha-selector:not([data-duration-value]) {
+    grid-column: 1 / -1;
+  }
+  .delay-row [data-duration-value] {
     min-width: 0;
   }
   .delay-row > ha-button {

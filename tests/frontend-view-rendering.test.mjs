@@ -535,7 +535,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
   assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
-  assert.match(markup, /data-delay-index="0"[^>]*value="60"/);
+  assert.match(markup, /data-duration-value="60"[^>]*data-delay-index="0"/);
   assert.match(markup, /slot="fab" size="l" class="dirty"[^>]*data-action="save-configuration"/);
 });
 

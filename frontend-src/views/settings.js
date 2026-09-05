@@ -1,3 +1,4 @@
+import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { collectAutomaticChanges } from "./automatic.js";
 import {
   ALERT_MANAGER_ENTITY_IDS,
@@ -70,6 +71,7 @@ export function renderSettings(context) {
       </div></ha-card>
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
+        batchDelayField: renderNumberField("notification-batch-delay", t("notifications.batch_delay"), settingsDraft.notification_batch_delay ?? config.notification_batch_delay ?? 30, t("units.seconds"), 10, 300, { help: t("notifications.batch_delay_help") }),
         usage: notificationUsage,
         busy,
         t,
@@ -135,7 +137,7 @@ export function renderSettingsConfigurationDrawer(context) {
       </div>
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
-        <ha-input data-delay-index="${index}" type="number" min="0" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(row.delay)}" required aria-label="${esc(t("settings.aria_delay"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>
+        ${renderDurationControl(`entity-delay-${index}`, t("settings.aria_delay"), row.delay, 0, MAX_DURATION_SECONDS, { attributes: { "data-delay-index": index } })}
         <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
@@ -350,8 +352,9 @@ export async function saveSettings(additionalChanges = {}) {
     }
     const changes = {
       ...additionalChanges,
-      global_delay: Number(this.shadowRoot.querySelector("#global-delay").value),
-      pending_display_delay: Number(this.shadowRoot.querySelector("#pending-display-delay").value),
+      global_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#global-delay"))),
+      pending_display_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#pending-display-delay"))),
+      notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       coherence_scan_esphome: Boolean(
         this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
@@ -419,6 +422,7 @@ export function ensureSettingsDraft() {
     this._settingsDraft = {
       global_delay: this._config.global_delay,
       pending_display_delay: this._config.pending_display_delay,
+      notification_batch_delay: this._config.notification_batch_delay ?? 30,
       coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
       history_limit: this._historyConfig.retention_limit,
@@ -445,19 +449,20 @@ export function handleSettingsInput(event) {
     const fields = {
       "global-delay": "global_delay",
       "pending-display-delay": "pending_display_delay",
+      "notification-batch-delay": "notification_batch_delay",
       "history-limit": "history_limit",
     };
     const field = fields[event.target?.id];
     if (!field) return;
     this._ensureSettingsDraft();
-    this._settingsDraft[field] = String(event.target.value ?? "");
+    this._settingsDraft[field] = String(durationFieldValue(event.target) ?? "");
 }
 
 export function captureEntityDelayValues() {
     if (!this._entityDelayDraft) return;
     this.shadowRoot.querySelectorAll("[data-delay-index]").forEach((input) => {
       const row = this._entityDelayDraft[Number(input.dataset.delayIndex)];
-      if (row) row.delay = Number(input.value);
+      if (row) row.delay = Number(durationFieldValue(input));
     });
 }
 

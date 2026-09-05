@@ -1,4 +1,5 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["notification_batch_delay must be an integer between 10 and 300 seconds", "notification_batch_delay"],
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],
   ["Rule entity_ids must be a non-empty list", "rule_entities_required"],

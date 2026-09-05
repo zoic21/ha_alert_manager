@@ -128,7 +128,9 @@ test("timed acknowledgement dialog stays above details without replacing them", 
   const appended = [];
   panel.shadowRoot.append = (element) => appended.push(element);
   panel.shadowRoot.querySelector = control;
-  control("ha-input").value = "30";
+  const durationInput = control("#acknowledgement-duration");
+  durationInput.dataset = { durationValue: "1800", durationRequired: "true", durationMin: "1", durationMax: "31536000" };
+  dialog.querySelectorAll = (selector) => selector === "[data-duration-value]" ? [durationInput] : [];
   const calls = [];
   let success = false;
   panel._updateAlertAcknowledgement = async (...args) => {
@@ -154,11 +156,9 @@ test("timed acknowledgement dialog stays above details without replacing them", 
     preset.listeners.selected({ detail: { value: "custom" } });
     assert.equal(control(".timed-acknowledgement-custom").hidden, false);
     const confirm = control('[data-timed-ack="confirm"]');
-    control("ha-input").value = "0";
-    control("ha-input").listeners.input();
+    durationInput.listeners["value-changed"]({ detail: { value: { minutes: 0 } }, stopPropagation() {} });
     assert.equal(confirm.disabled, true);
-    control("ha-input").value = "45";
-    control("ha-input").listeners.input();
+    durationInput.listeners["value-changed"]({ detail: { value: { minutes: 45 } }, stopPropagation() {} });
     assert.equal(confirm.disabled, false);
     await confirm.listeners.click();
     assert.deepEqual(calls[0], ["acknowledge", "test", 2700]);
@@ -195,6 +195,31 @@ test("human duration formatter", () => {
   assert.equal(panel._durationText(45), "45 s");
   assert.equal(panel._durationText(900), "15 min");
   assert.equal(panel._durationText(7200), "2 h");
+  for (const [seconds, expected] of [
+    [0, "0 s"], [59, "59 s"], [60, "1 min"], [3599, "59 min 59 s"],
+    [3600, "1 h"], [3661, "1 h 1 min 1 s"], [86399, "23 h 59 min 59 s"],
+    [86400, "1 j"], [90061, "1 j 1 h 1 min 1 s"],
+  ]) assert.equal(panel._durationText(seconds), expected);
+});
+
+test("pending countdown rolls from days to hours and minutes", (t) => {
+  const panel = tablePanel();
+  const now = Date.parse("2026-09-05T12:00:00Z");
+  t.mock.method(Date, "now", () => now);
+  for (const [seconds, expected] of [[86400, "1 j"], [86399, "23 h 59 min 59 s"], [3600, "1 h"], [3599, "59 min 59 s"]]) {
+    const due = new Date(now + seconds * 1000).toISOString();
+    const detail = { dataset: { due }, textContent: "" };
+    const cell = { dataset: { due }, textContent: "" };
+    const table = { shadowRoot: { querySelectorAll: () => [cell] } };
+    panel.shadowRoot.querySelectorAll = (selector) => {
+      if (selector === "[data-due]") return [detail];
+      if (selector === "ha-data-table") return [table];
+      return [];
+    };
+    panel._updateCountdowns();
+    assert.equal(detail.textContent, expected);
+    assert.equal(cell.textContent, expected);
+  }
 });
 
 test("textarea list parser", () => {
@@ -2429,7 +2454,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   const settings = panel._renderSettings();
   const styles = compactCss(panel._styles());
 
-  assert.match(automatic, /<ha-input[^>]+id="auto-unavailable-delay"/);
+  assert.match(automatic, /<ha-selector[^>]+id="auto-unavailable-delay"[^>]*data-duration-value=/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
   assert.doesNotMatch(automatic, /data-action="save-automatic"/);
   assert.match(automatic, /^<ha-card id="settings-section-automatic" outlined/);
@@ -2450,7 +2475,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.ok(batteryDelayHelp < batteryThreshold);
   assert.ok(batteryThreshold < batteryConfiguration);
   assert.doesNotMatch(automatic, /low_battery_level/);
-  assert.match(settings, /<ha-input[^>]+id="global-delay"/);
+  assert.match(settings, /<ha-selector[^>]+id="global-delay"[^>]*data-duration-value=/);
   assert.match(settings, /id="settings-section-automatic"/);
   assert.match(settings, /<h2 class="automatic-section-title">Surveillance automatique<\/h2>/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
@@ -3159,7 +3184,7 @@ test("automatic and settings configuration render in the shared side drawer", ()
   panel._config.entity_delays = { "sensor.one": 30 };
   const delays = panel._renderSettings();
   assert.match(delays, /class="side-drawer configuration-drawer"/);
-  assert.match(delays, /data-delay-index="0"[^>]*value="30"/);
+  assert.match(delays, /data-duration-value="30"[^>]*data-delay-index="0"/);
 
   panel._configurationDrawer = { kind: "settings", id: "excluded_entities" };
   assert.match(panel._renderSettings(), /<ha-selector id="excluded-entities"><\/ha-selector>/);
@@ -3270,6 +3295,7 @@ test("settings action serializes exclusions and entity delays", async () => {
     config: {
       global_delay: 300,
       pending_display_delay: 15,
+      notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
@@ -4531,6 +4557,7 @@ test("combined settings save sends one configuration update and preserves drafts
       automatic: { battery: { label_ids: [], enabled: true, delay: 42 } },
       global_delay: 300,
       pending_display_delay: 15,
+      notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],

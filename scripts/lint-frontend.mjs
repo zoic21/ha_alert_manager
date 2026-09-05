@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 const filenames = [
   "alert-manager-panel.js",
   "api/alert-manager-api.js",
+  "components/duration-field.js",
   "components/alert-table.js",
   "components/config-backups.js",
   "components/configuration-drawer.js",

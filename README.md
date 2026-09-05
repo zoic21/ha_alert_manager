@@ -261,6 +261,10 @@ mode: queued
 
 After a restart, reminders wait until alert reconciliation completes. Only confirmed alerts resume reminders; an overdue deadline restarts from the profile interval, without replaying missed reminders.
 
+Duration fields use Home Assistant’s native duration selector (hours, minutes and seconds), including optional overrides and notification reminders. Configuration and YAML continue to store seconds; clearing an optional duration retains its inherited/disabled behavior.
+
+The notification settings include a global batching delay of **10–300 seconds**, default **30 seconds**. New batches use the configured delay; batches already waiting keep their deadline.
+
 Alert details show notifications from the built-in profiles: delivery count (including reminders), matching profiles even without reminders, and last delivery time. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History keeps recovery deliveries, their profiles and last delivery time separately. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
 
 ## Home Assistant entities and events
