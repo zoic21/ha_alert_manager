@@ -28,6 +28,7 @@ from custom_components.alert_manager.websocket import (
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
+    websocket_history_delete,
     websocket_history_list,
     websocket_notification_stats_get,
     websocket_packs_list,
@@ -309,6 +310,10 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_history_config_get, {"id": 15}),
         (websocket_history_config_update, {"id": 16, "retention_limit": 10}),
         (websocket_history_clear, {"id": 17, "confirmed": True}),
+        (
+            websocket_history_delete,
+            {"id": 18, "event_ids": ["event"], "confirmed": True},
+        ),
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
         (websocket_deleted_entities_list, {"id": 23}),
@@ -320,7 +325,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 21
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 22
     assert connection.results == []
 
 
@@ -535,3 +540,26 @@ def test_configuration_export_validation_and_import_round_trip(hass, entry):
         )
     )
     assert connection.results[-1][1]["config"] == manager.get_config()
+
+
+def test_history_delete_websocket_returns_updated_snapshot(hass, entry):
+    """The transport forwards occurrence IDs and returns the updated history."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    received = []
+    snapshot = {"events": [], "count": 0, "retention_limit": 100, "enabled": True}
+
+    async def delete_history(event_ids):
+        received.extend(event_ids)
+        return snapshot
+
+    manager.async_delete_history = delete_history
+    asyncio.run(
+        websocket_history_delete(
+            hass, connection, {"id": 40, "event_ids": ["occurrence"], "confirmed": True}
+        )
+    )
+    assert received == ["occurrence"]
+    assert connection.results == [(40, snapshot)]

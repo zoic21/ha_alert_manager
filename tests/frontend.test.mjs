@@ -724,7 +724,7 @@ test("history data refresh updates the native table without rebuilding the page"
   panel._historyConfig = { retention_limit: 100, enabled: true };
   panel._history = { events: [], count: 0, retention_limit: 100, enabled: true };
   panel._hass = { entities: {}, states: {} };
-  const tablePage = {};
+  const tablePage = { querySelector() { return null; } };
   const messages = { innerHTML: "" };
   panel.shadowRoot.querySelector = (selector) => {
     if (selector === '[data-alert-table-page="history"]') return tablePage;
@@ -791,7 +791,7 @@ test("rules data refresh updates filtered rows without rebuilding the page", () 
     ...completeConfig(),
     rules: [{ ...ruleValues({ id: "rule-1", enabled: true }), entity_ids: ["sensor.one"] }],
   };
-  const tablePage = {};
+  const tablePage = { querySelector() { return null; } };
   const messages = { innerHTML: "" };
   panel.shadowRoot.querySelector = (selector) => {
     if (selector === "[data-rules-table-page]") return tablePage;
@@ -2059,7 +2059,7 @@ test("selection mode selects visible rows and mixed bulk actions affect compatib
   assert.equal(panel._selectedAlertIds.has("battery:sensor.pending"), true);
 });
 
-test("history uses the same table tools without selection or runtime actions", () => {
+test("history uses the same table tools with deletion selection and no runtime actions", () => {
   const panel = tablePanel();
   panel._historyConfig = { retention_limit: 100, enabled: true };
   panel._history = {
@@ -2075,7 +2075,10 @@ test("history uses the same table tools without selection or runtime actions", (
   assert.equal(rows[0].integrationLabel, "MQTT");
   assert.equal(rows[0].value, "34.5 °C");
   assert.match(html, /<hass-tabs-subpage-data-table[\s\S]*data-alert-table-page="history"/);
-  assert.doesNotMatch(html, /selectable|slot="selection-bar"|bulk-acknowledge|bulk-unacknowledge|data-due=/);
+  assert.match(html, /selectable/);
+  assert.match(html, /slot="selection-bar"/);
+  assert.match(html, /data-action="delete-history"/);
+  assert.doesNotMatch(html, /bulk-acknowledge|bulk-unacknowledge|data-due=/);
   assert.doesNotMatch(html, /data-table-filter-option="status"/);
   assert.doesNotMatch(html, /data-table-filter-option="acknowledged"/);
   assert.doesNotMatch(html, /<button|<select|type="radio"|type="checkbox"/);
@@ -4584,4 +4587,73 @@ test("notification details stay compact, escape profiles and exclude pending", (
   assert.match(history, /2 envoyée\(s\)/);
   assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, status: "pending" }), /notification-profiles/);
   assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, notifications: null }), /notification-profiles/);
+});
+
+
+test("history deletion confirms exact occurrences and retains selection on failure", async () => {
+  const panel = tablePanel();
+  const first = historyEvent();
+  const second = { ...first, event_id: "second-occurrence" };
+  panel._history = { events: [first, second], count: 2 };
+  panel._selectedHistoryIds = new Set([first.event_id, "expired"]);
+  panel._selectedAlertIds = new Set(["live-alert"]);
+  panel._render = () => {};
+  const calls = [];
+  let result = null;
+  panel._call = async (message) => { calls.push(message); return result; };
+  const previousConfirm = window.confirm;
+  try {
+    window.confirm = () => false;
+    await panel._handleClick(actionEvent("delete-history"));
+    assert.equal(calls.length, 0);
+    window.confirm = () => true;
+    panel._busy = true;
+    await panel._handleClick(actionEvent("delete-history"));
+    assert.equal(calls.length, 0);
+    panel._busy = false;
+    await panel._handleClick(actionEvent("delete-history"));
+    assert.deepEqual(calls[0], {
+      type: "alert_manager/history/delete", confirmed: true, event_ids: [first.event_id],
+    });
+    assert.equal(panel._selectedHistoryIds.has(first.event_id), true);
+    assert.equal(panel._history.events.length, 2);
+    result = { events: [second], count: 1 };
+    await panel._handleClick(actionEvent("delete-history"));
+    assert.deepEqual(panel._history.events, [second]);
+    assert.equal(panel._selectedHistoryIds.size, 0);
+    assert.deepEqual([...panel._selectedAlertIds], ["live-alert"]);
+  } finally {
+    window.confirm = previousConfirm;
+  }
+});
+
+test("native history selection is isolated and prunes deleted occurrences on refresh", () => {
+  const panel = tablePanel();
+  panel._activeTab = "history";
+  const event = historyEvent();
+  panel._history = { events: [event] };
+  panel._selectedAlertIds = new Set(["live-alert"]);
+  const listeners = {};
+  const button = {};
+  const tablePage = {
+    addEventListener(name, callback) { listeners[name] = callback; },
+    querySelectorAll() { return []; },
+    querySelector(selector) { return selector === '[data-action="delete-history"]' ? button : null; },
+  };
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === '[data-alert-table-page="history"]' ? tablePage : null
+  );
+  panel._hydrateDataTables();
+  assert.equal(tablePage.selectable, true);
+  listeners["selection-changed"]({ detail: { value: [event.event_id] } });
+  assert.equal(tablePage.selected, 1);
+  assert.equal(button.hidden, false);
+  assert.match(button.textContent, /Supprimer \(1\)/);
+  assert.deepEqual([...panel._selectedHistoryIds], [event.event_id]);
+  assert.deepEqual([...panel._selectedAlertIds], ["live-alert"]);
+  panel._history.events = [];
+  panel._refreshHistoryData();
+  assert.equal(panel._selectedHistoryIds.size, 0);
+  assert.equal(tablePage.selected, 0);
+  assert.equal(button.hidden, true);
 });

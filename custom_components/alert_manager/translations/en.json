@@ -197,6 +197,9 @@
     },
     "loading": "Loading Alert Manager…",
     "history": {
+      "delete_selected": "Delete ({count})",
+      "delete_confirm": "Permanently delete the {count} selected alerts from history?",
+      "deleted": "Selected alerts have been deleted from history.",
       "acknowledged_before_resolution": "Acknowledged before resolution",
       "disabled_help": "Set a retention limit greater than 0 in Configuration to keep future resolved alerts.",
       "disabled_title": "History is disabled",

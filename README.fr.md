@@ -223,6 +223,8 @@ Une alerte peut être :
 
 Les alertes résolues peuvent être conservées dans l’historique, ce qui permet de repérer les problèmes récurrents au lieu de seulement voir ce qui ne va pas à l’instant présent.
 
+Sélectionnez des lignes du tableau Historique pour supprimer les occurrences choisies après confirmation, sans affecter les alertes en cours.
+
 Un clic sur une alerte ouvre son détail, notamment la valeur qui l’a déclenchée et sa valeur actuelle, avec un accès contextuel à l’entité Home Assistant concernée lorsqu’il est disponible.
 
 ## Être notifié sans être spammé

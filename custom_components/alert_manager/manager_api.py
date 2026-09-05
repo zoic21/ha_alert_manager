@@ -435,6 +435,19 @@ class _ApiMixin:
         async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.history_snapshot()
 
+    @_serialize_runtime_mutation
+    async def async_delete_history(self, event_ids: list[str]) -> dict[str, Any]:
+        """Delete selected occurrences without changing live alerts or new archives."""
+        selected = set(event_ids)
+        async with self._history_archive_lock:
+            remaining = [e for e in self.history if e.event_id not in selected]
+            if len(remaining) == len(self.history):
+                return self.history_snapshot()
+            await self.history_storage.async_save(remaining)
+            self.history = remaining
+        async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
+        return self.history_snapshot()
+
     @_serialize_config_mutation
     async def async_set_monitoring(self, enabled: bool) -> bool:
         """Persistently suspend or resume the main monitoring category."""

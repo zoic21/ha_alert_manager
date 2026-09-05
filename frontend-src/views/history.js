@@ -11,6 +11,7 @@ export function refreshHistoryData() {
       return;
     }
     this._refreshAlertTableData("history", tablePage);
+    this._updateSelectionToolbar();
     const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
     if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
@@ -74,14 +75,29 @@ export function historyConditionText(event) {
 }
 
 export async function handleHistoryAction(action) {
-  if (action === "clear-history") {
-    if (!window.confirm(this._t("settings.history_clear_confirm"))) return true;
+  if (action === "clear-history" || action === "delete-history") {
+    if (this._busy) return true;
+    const deleting = action === "delete-history";
+    const eventIds = (this._history?.events ?? [])
+      .filter((event) => this._selectedHistoryIds.has(event.event_id))
+      .map((event) => event.event_id);
+    if (deleting && !eventIds.length) return true;
+    if (!window.confirm(this._t(deleting
+      ? "history.delete_confirm"
+      : "settings.history_clear_confirm", { count: eventIds.length }))) return true;
     const result = await this._call(
-      { type: "alert_manager/history/clear", confirmed: true },
-      this._t("success.history_cleared"),
+      {
+        type: deleting ? "alert_manager/history/delete" : "alert_manager/history/clear",
+        confirmed: true,
+        ...(deleting ? { event_ids: eventIds } : {}),
+      },
+      this._t(deleting ? "history.deleted" : "success.history_cleared"),
     );
     if (result) {
       this._history = result;
+      const tablePage = this.shadowRoot?.querySelector?.('[data-alert-table-page="history"]');
+      tablePage?.shadowRoot?.querySelector?.("ha-data-table")?.select?.([...this._selectedHistoryIds], false);
+      this._selectedHistoryIds.clear();
       this._refreshHistoryData();
       if (this._historyRefreshPromise) await this._refreshHistory();
     }
