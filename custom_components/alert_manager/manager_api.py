@@ -655,12 +655,27 @@ class _ApiMixin:
         candidate = validate_config(candidate)
         if candidate == self.config:
             return self.get_config()
+        changed_keys = {key for key in candidate if candidate[key] != self.config[key]}
+        detection_changed = bool(
+            changed_keys
+            - {
+                "coherence_schedule",
+                "coherence_scan_esphome",
+                "coherence_ignored_entity_references",
+                "pending_display_delay",
+                "notification_profiles",
+                "history_limit",
+            }
+        )
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
-        reset_all_pack_runtimes = not candidate["monitoring_enabled"] or any(
-            candidate[key] != self.config[key]
-            for key in ("excluded_entities", "excluded_devices", "excluded_labels")
+        reset_all_pack_runtimes = detection_changed and (
+            not candidate["monitoring_enabled"]
+            or bool(
+                changed_keys
+                & {"excluded_entities", "excluded_devices", "excluded_labels"}
+            )
         )
         disabled_pack_ids = {
             pack.id
@@ -688,7 +703,8 @@ class _ApiMixin:
                     "monitoring_enabled", True
                 ):
                     self._clear_variation_baselines()
-                self._rebuild_rule_index()
+                if detection_changed:
+                    self._rebuild_rule_index()
                 for pack_id in disabled_pack_ids:
                     self._pack_runtime.pop(pack_id, None)
                 if reset_all_pack_runtimes:
@@ -696,9 +712,9 @@ class _ApiMixin:
                     self._pack_runtime.clear()
                 elif disabled_pack_ids:
                     reset_pack_runtimes(self.hass, disabled_pack_ids)
-                if set(changes) != {"notification_profiles"}:
+                if detection_changed:
                     await self.async_evaluate_all(save=False, publish=False)
-                if "pending_display_delay" in changes:
+                if "pending_display_delay" in changed_keys:
                     self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self._async_save_state()
             except BaseException:
@@ -706,9 +722,10 @@ class _ApiMixin:
                 raise
             if notification_profiles_changed:
                 self.notification_runtime.discard_batches()
-            await self._async_refresh_notification_runtime(
-                reset_reminders=notification_events_paused
-            )
+            if detection_changed or notification_profiles_changed:
+                await self._async_refresh_notification_runtime(
+                    reset_reminders=notification_events_paused
+                )
         if coherence_schedule_changed:
             self._refresh_coherence_schedule()
         self._publish_if_changed()

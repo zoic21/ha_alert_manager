@@ -139,6 +139,7 @@ class AlertManager(
         self._queued_public_refresh = False
         self._evaluation_flush_scheduled = False
         self._registry_evaluation_scheduled = False
+        self._registry_evaluation_entities: set[str] | None = None
         self._registry_evaluation_dirty = False
         self._pending_entity_renames: dict[str, str] = {}
         self._pack_refresh_scheduled = False

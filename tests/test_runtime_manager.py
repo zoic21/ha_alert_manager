@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -979,3 +980,135 @@ def test_runtime_rule_cleanup_remains_silent(hass, entry):
         ]
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("changes", "evaluations", "presentation", "notifications"),
+    [
+        ({"coherence_schedule": "daily"}, 0, 0, 0),
+        ({"coherence_scan_esphome": False}, 0, 0, 0),
+        ({"coherence_ignored_entity_references": ["sensor.missing"]}, 0, 0, 0),
+        ({"pending_display_delay": 23}, 0, 1, 0),
+        (
+            {
+                "notification_profiles": [
+                    {
+                        "id": "test",
+                        "name": "Test",
+                        "enabled": True,
+                        "targets": ["notify.test"],
+                        "label_ids": [],
+                        "default_policy": {
+                            "notify_on_start": True,
+                            "notify_on_resolved": True,
+                            "reminder_interval": None,
+                        },
+                        "exceptions": [],
+                    }
+                ]
+            },
+            0,
+            0,
+            1,
+        ),
+        ({"global_delay": 123}, 1, 0, 1),
+        ({"automatic": {"battery": {"threshold": 23}}, "global_delay": 123}, 1, 0, 1),
+    ],
+)
+def test_config_update_work_matches_changed_values(
+    hass, entry, monkeypatch, changes, evaluations, presentation, notifications
+):
+    """One save does only the necessary runtime work and one main-store write."""
+    from unittest.mock import AsyncMock
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        evaluate = AsyncMock(wraps=manager.async_evaluate_all)
+        visibility = Mock(wraps=manager._reschedule_hidden_pending_visibility)
+        notify = AsyncMock()
+        save = AsyncMock(wraps=manager.storage._store.async_save)
+        monkeypatch.setattr(manager, "async_evaluate_all", evaluate)
+        monkeypatch.setattr(
+            manager, "_reschedule_hidden_pending_visibility", visibility
+        )
+        monkeypatch.setattr(manager, "_async_refresh_notification_runtime", notify)
+        monkeypatch.setattr(manager.storage._store, "async_save", save)
+        # The UI includes unchanged detection fields in a general settings save.
+        await manager.async_update_config(
+            {"global_delay": manager.config["global_delay"], **changes}
+        )
+        assert evaluate.await_count == evaluations
+        assert visibility.call_count == presentation
+        assert notify.await_count == notifications
+        assert save.await_count == 1
+        await manager.async_update_config(changes)
+        assert save.await_count == 1
+
+    run(scenario())
+
+
+def test_large_scan_yields_during_tracking_and_evaluation(hass, entry, monkeypatch):
+    """Thousands of states allow another task to run within each bounded batch."""
+    from unittest.mock import AsyncMock
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        for index in range(3000):
+            hass.states.set(f"sensor.load_{index}", "unavailable")
+        all_states = Mock(wraps=hass.states.async_all)
+        evaluate = AsyncMock(wraps=manager.async_evaluate_entity)
+        monkeypatch.setattr(hass.states, "async_all", all_states)
+        monkeypatch.setattr(manager, "async_evaluate_entity", evaluate)
+        progress = []
+        task = asyncio.create_task(manager.async_evaluate_all(save=False))
+        while not task.done():
+            progress.append(
+                (len(manager._automatic_tracked_entities), evaluate.await_count)
+            )
+            await asyncio.sleep(0)
+        await task
+        assert all_states.call_count == 1
+        assert evaluate.await_count == 3000
+        assert len(manager.records) == 3000
+        assert any(0 < tracked < 3000 for tracked, _ in progress)
+        counts = [evaluated for _, evaluated in progress]
+        assert max(b - a for a, b in pairwise(counts)) <= 50
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("broad_event", [False, True])
+def test_registry_entity_targets_and_broad_fallback(
+    hass, entry, monkeypatch, broad_event
+):
+    """Known entity changes coalesce; an ambiguous event upgrades to a full scan."""
+    from unittest.mock import AsyncMock
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        hass.states.set("sensor.target", "unavailable")
+        hass.states.set("sensor.other", "unavailable")
+        evaluate = AsyncMock(wraps=manager.async_evaluate_all)
+        entity = AsyncMock(wraps=manager.async_evaluate_entity)
+        monkeypatch.setattr(manager, "async_evaluate_all", evaluate)
+        monkeypatch.setattr(manager, "async_evaluate_entity", entity)
+        manager._registry_changed(
+            Event(data={"action": "update", "entity_id": "sensor.target"})
+        )
+        manager._registry_changed(
+            Event(data={"action": "update", "entity_id": "sensor.target"})
+        )
+        if broad_event:
+            manager._registry_changed(Event())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert evaluate.await_count == int(broad_event)
+        assert {call.args[0] for call in entity.await_args_list} == (
+            {"sensor.target", "sensor.other"} if broad_event else {"sensor.target"}
+        )
+        assert "unavailable:sensor.target" in manager.records
+
+    run(scenario())

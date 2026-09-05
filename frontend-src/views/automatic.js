@@ -182,7 +182,7 @@ export function renderPackField(pack, field, config, context) {
     </div>`;
 }
 
-export async function saveAutomatic() {
+export function collectAutomaticChanges() {
     this._ensureAutomaticDraft();
     captureAutomaticConfigurationValues.call(this);
     const automatic = {};
@@ -273,8 +273,14 @@ export async function saveAutomatic() {
         automatic[pack.id][field.id] = values;
       }
     }
+    return { automatic };
+}
+
+export async function saveAutomatic() {
+    const changes = collectAutomaticChanges.call(this);
+    if (!changes) return false;
     const config = await this._call(
-      { type: "alert_manager/config/update", config: { automatic } },
+      { type: "alert_manager/config/update", config: changes },
       this._t("success.automatic_saved"),
     );
     if (config) {
