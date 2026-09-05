@@ -675,7 +675,7 @@ class AlertManagerPanel extends HTMLElement {
   _handleChange(event) {
     handleSettingsInput.call(this, event);
     this._markConfigurationControlDirty(event.target);
-    if (event.target?.closest?.("#rule-form")) this._clearRuleTestResult();
+    this._handleRuleInput(event);
     if (event.target?.id === "coherence-scan-esphome") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_scan_esphome = Boolean(event.target.checked);

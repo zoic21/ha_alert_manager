@@ -213,6 +213,7 @@
       "notification_title": "Alert Manager monitoring disabled"
     },
     "notifications": {
+      "discard_confirm": "Discard unsaved changes to this notification profile?",
       "add": "Add profile",
       "close_aria": "Close notification profile",
       "defaults": "Default behavior",

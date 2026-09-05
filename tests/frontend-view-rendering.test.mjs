@@ -307,6 +307,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     },
     draft: {
       battery: {
+        enabled: true,
+        delay: 60,
         threshold: 15,
         device_thresholds: [{ target_id: "device-1", value: 15 }],
       },
@@ -360,6 +362,8 @@ test("automatic rendering uses prepared configuration and draft data", () => {
     },
     draft: {
       execution_errors: {
+        enabled: true,
+        delay: 0,
         failure_thresholds: [{ target_id: "automation.test", value: 3 }],
       },
     },
@@ -423,7 +427,9 @@ test("flapping renders source packs and device overrides in separate drawers", (
     },
   };
   const draft = {
+    ...config.automatic,
     flapping: {
+      ...config.automatic.flapping,
       occurrences: 5,
       window: 3600,
       recovery: 1800,

@@ -379,7 +379,7 @@ export async function saveSettings() {
         this._config = { ...this._config, history_limit: historyLimit };
         if (this._historyLoaded) await this._refreshHistory();
       }
-      this._resetSettingsDraft();
+      this._resetSettingsDraft({ preserveNotification: true });
       this._configurationDrawer = null;
       replaceConfigurationDrawer(
         this.shadowRoot?.querySelector?.("#settings-form"),
@@ -396,14 +396,17 @@ export async function saveSettings() {
     return saved;
 }
 
-export function resetSettingsDraft() {
+export function resetSettingsDraft({ preserveNotification = false } = {}) {
     this._settingsDirty = false;
     this._settingsDraft = null;
     this._entityDelayDraft = null;
     this._ignoredReferenceDraft = "";
-    this._notificationProfileDraft = null;
-    this._notificationProfileId = null;
-    this._notificationProfileValidationError = null;
+    if (!preserveNotification) {
+      this._notificationProfileDraft = null;
+      this._notificationProfileId = null;
+      this._notificationProfileOriginal = null;
+      this._notificationProfileValidationError = null;
+    }
 }
 
 export function ensureSettingsDraft() {
@@ -430,6 +433,10 @@ export function ensureSettingsDraft() {
 }
 
 export function handleSettingsInput(event) {
+    if (event.target?.closest?.("#automatic-form")) this._captureAutomaticConfigurationValues();
+    if (event.target?.dataset?.delayIndex !== undefined) this._captureEntityDelayValues();
+    if (this._configurationDrawer?.kind === "notification") this._captureNotificationProfileDraft();
+
     const fields = {
       "global-delay": "global_delay",
       "pending-display-delay": "pending_display_delay",
