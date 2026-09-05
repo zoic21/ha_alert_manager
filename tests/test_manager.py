@@ -290,9 +290,6 @@ def test_reconciliation_equal_clock_collision_prefers_restored_active(
 
         manager._pending_entity_renames["sensor.old"] = "sensor.new"
         assert manager._apply_pending_entity_renames() is True
-        hass.states.data.pop("sensor.old")
-        hass.states.set("sensor.new", "unknown")
-        await manager.async_evaluate_entity("sensor.new", save=False, publish=False)
 
         assert manager.records[new_id].status is AlertStatus.ACTIVE
         assert transaction.original_was_active(new_id) is True
@@ -1982,8 +1979,8 @@ def test_reconciliation_active_unavailable_keeps_identity_ack_and_notification(
     run(scenario())
 
 
-def test_reconciliation_confirmed_custom_then_unknown_keeps_identity(hass, entry):
-    """Unknown during Store cannot consume a restored rule's provenance."""
+def test_reconciliation_confirmed_custom_then_unknown_resolves(hass, entry):
+    """A final unknown observation resolves the restored rule at the deadline."""
 
     async def scenario():
         hass.states.set("binary_sensor.filter", "on")
@@ -1999,7 +1996,6 @@ def test_reconciliation_confirmed_custom_then_unknown_keeps_identity(hass, entry
             }
         )
         alert_id = f"rule:{rule['id']}:binary_sensor.filter"
-        original = deepcopy(first.records[alert_id])
         await first.async_unload()
 
         hass.state = CoreState.starting
@@ -2020,6 +2016,7 @@ def test_reconciliation_confirmed_custom_then_unknown_keeps_identity(hass, entry
             await original_save(*args, **kwargs)
 
         restarted.storage.async_save = blocked_save
+        hass.bus.fired.clear()
         fire_startup_reconciliation(hass)
         await save_started.wait()
         assert alert_id in restarted._unverified_restored_alert_ids
@@ -2038,11 +2035,15 @@ def test_reconciliation_confirmed_custom_then_unknown_keeps_identity(hass, entry
         for _index in range(5):
             await asyncio.sleep(0)
 
-        restored = restarted.records[alert_id]
-        assert restored.status is AlertStatus.ACTIVE
-        assert restored.detected_at == original.detected_at
-        assert restored.active_since == original.active_since
-        assert alert_id in restarted._unverified_restored_alert_ids
+        assert alert_id not in restarted.records
+        assert alert_id not in restarted._unverified_restored_alert_ids
+        assert alert_id not in hass.stores["alert_manager"]["alerts"]
+        resolved = [
+            data
+            for event_type, data in hass.bus.fired
+            if event_type == EVENT_ALERT_RESOLVED and data["id"] == alert_id
+        ]
+        assert len(resolved) == 1
 
         restarted.storage.async_save = original_save
         await restarted.async_unload()
@@ -2675,10 +2676,10 @@ def test_persisted_pending_rule_survives_transient_startup_state(hass, entry, se
 
 
 @pytest.mark.parametrize("uncertain_state", [None, "unknown", "unavailable"])
-def test_restored_pending_rule_timer_advances_while_state_is_indeterminate(
+def test_restored_pending_rule_follows_final_startup_state(
     hass, entry, set_now, uncertain_state
 ):
-    """A restored timer keeps running and cannot remain pending past its due time."""
+    """A restored pending rule is bounded unless unavailable remains authoritative."""
     start = datetime(2026, 9, 4, 10, tzinfo=UTC)
     set_now(start)
     hass.states.set("binary_sensor.pool_filter", "on")
@@ -2727,6 +2728,17 @@ def test_restored_pending_rule_timer_advances_while_state_is_indeterminate(
         fire_startup_reconciliation(hass)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
+
+        if uncertain_state in (None, "unknown"):
+            assert alert_id not in restarted.records
+            assert alert_id not in restarted._unverified_restored_alert_ids
+            assert alert_id not in hass.stores["alert_manager"]["alerts"]
+            assert not [
+                data
+                for event_type, data in hass.bus.fired
+                if event_type == EVENT_ALERT_RESOLVED and data["id"] == alert_id
+            ]
+            return
 
         restored = restarted.records[alert_id]
         assert restored.status is AlertStatus.PENDING
@@ -3052,10 +3064,10 @@ def test_restored_pending_unavailable_keeps_clock_when_outage_is_confirmed(
     run(scenario())
 
 
-def test_active_unavailable_is_protected_during_unknown_startup_grace(
+def test_active_unavailable_is_protected_until_unknown_startup_deadline(
     hass, entry, set_now
 ):
-    """A restored active outage waits for a known recovery after startup."""
+    """A restored active outage is protected only until the startup deadline."""
     start = datetime(2026, 9, 4, 12, tzinfo=UTC)
     set_now(start)
 
@@ -3087,52 +3099,26 @@ def test_active_unavailable_is_protected_during_unknown_startup_grace(
         assert restored.detected_at == detected_at
         assert restored.active_since == active_since
 
+        hass.bus.fired.clear()
         fire_startup_reconciliation(hass)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-        restored = restarted.records[alert_id]
-        assert restored.status is AlertStatus.ACTIVE
-        assert restored.detected_at == detected_at
-        assert restored.active_since == active_since
-
-        unknown_state = hass.states.get("sensor.offline")
-        refreshed_unknown_state = hass.states.set("sensor.offline", "unknown")
-        restarted._state_changed(
-            Event(
-                {
-                    "entity_id": "sensor.offline",
-                    "old_state": unknown_state,
-                    "new_state": refreshed_unknown_state,
-                }
-            )
-        )
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
-        assert restarted.records[alert_id].status is AlertStatus.ACTIVE
-
-        normal_state = hass.states.set("sensor.offline", "ok")
-        restarted._state_changed(
-            Event(
-                {
-                    "entity_id": "sensor.offline",
-                    "old_state": refreshed_unknown_state,
-                    "new_state": normal_state,
-                }
-            )
-        )
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
         assert alert_id not in restarted.records
+        assert alert_id not in restarted._unverified_restored_alert_ids
+        resolved = [
+            data
+            for event_type, data in hass.bus.fired
+            if event_type == EVENT_ALERT_RESOLVED and data["id"] == alert_id
+        ]
+        assert len(resolved) == 1
 
     run(scenario())
 
 
 @pytest.mark.parametrize("uncertain_state", [None, "unknown", "unavailable"])
-def test_restored_active_rule_waits_for_an_authoritative_state(
-    hass, entry, uncertain_state
-):
-    """A restored active rule survives uncertainty, then follows known state."""
+def test_restored_active_rule_follows_final_startup_state(hass, entry, uncertain_state):
+    """A restored active rule is bounded unless unavailable remains authoritative."""
 
     async def scenario():
         hass.states.set("binary_sensor.pool_filter", "on")
@@ -3165,6 +3151,11 @@ def test_restored_active_rule_waits_for_an_authoritative_state(
         fire_startup_reconciliation(hass)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
+
+        if uncertain_state in (None, "unknown"):
+            assert alert_id not in restarted.records
+            assert alert_id not in restarted._unverified_restored_alert_ids
+            return
 
         restored = restarted.records[alert_id]
         assert restored.status is AlertStatus.ACTIVE
@@ -3560,10 +3551,10 @@ def test_missed_startup_recovery_is_applied_by_authoritative_scan(hass, entry, s
 
 
 @pytest.mark.parametrize("startup_state", [None, "unknown"])
-def test_active_alert_survives_uncertain_state_during_restart(
+def test_active_alert_is_reconciled_after_uncertain_startup_grace(
     hass, entry, set_now, startup_state
 ):
-    """A missing or unknown startup state cannot resolve a persisted alert."""
+    """Missing and unknown protect an active alert only during startup grace."""
     start = datetime(2026, 8, 24, 12, tzinfo=UTC)
     set_now(start)
 
@@ -3590,29 +3581,24 @@ def test_active_alert_survives_uncertain_state_during_restart(
         restarted._home_assistant_started(Event())
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        fire_startup_reconciliation(hass)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
 
         restored = restarted.records[alert_id]
         assert restored.status is AlertStatus.ACTIVE
         assert restored.detected_at == detected_at
         assert restored.active_since == active_since
 
-        old_state = hass.states.get("sensor.test")
-        known_state = hass.states.set("sensor.test", "ok")
-        restarted._state_changed(
-            Event(
-                {
-                    "entity_id": "sensor.test",
-                    "old_state": old_state,
-                    "new_state": known_state,
-                }
-            )
-        )
+        hass.bus.fired.clear()
+        fire_startup_reconciliation(hass)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         assert restarted.records == {}
+        assert restarted._unverified_restored_alert_ids == set()
+        resolved = [
+            data
+            for event_type, data in hass.bus.fired
+            if event_type == EVENT_ALERT_RESOLVED and data["id"] == alert_id
+        ]
+        assert len(resolved) == 1
 
     run(scenario())
 
