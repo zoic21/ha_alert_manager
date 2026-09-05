@@ -672,6 +672,18 @@
     "units": {
       "events": "events",
       "seconds": "seconds"
+    },
+    "timed_acknowledgement": {
+      "title": "Acknowledge temporarily…",
+      "duration": "Duration",
+      "unit": "Unit",
+      "custom": "Custom",
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "days": "Days",
+      "until": "Acknowledgement ends",
+      "unlimited": "No time limit",
+      "failed": "Unable to acknowledge this alert. It may have changed or resolved."
     }
   },
   "services": {

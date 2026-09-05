@@ -55,6 +55,35 @@ class Connection:
         self.results.append((message_id, result))
 
 
+def test_timed_acknowledgement_websocket_validates_and_forwards_duration(hass, entry):
+    manager = AlertManager(hass, entry)
+    hass.states.set("sensor.test", "unavailable")
+    asyncio.run(manager.async_setup())
+    asyncio.run(manager.async_update_config({"global_delay": 0}))
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    message = {
+        "id": 1,
+        "alert_ids": ["unavailable:sensor.test"],
+        "acknowledged": True,
+        "duration": 1800,
+    }
+    asyncio.run(websocket_alert_acknowledgements_update(hass, connection, message))
+    record = manager.records["unavailable:sensor.test"]
+    assert record.acknowledged_until == record.acknowledged_at + timedelta(minutes=30)
+    assert connection.errors == []
+    for duration in [0, -1, True, "900", 1.5, 31536001]:
+        asyncio.run(
+            websocket_alert_acknowledgements_update(
+                hass, connection, {**message, "duration": duration}
+            )
+        )
+        assert connection.errors[-1][1] == "invalid_format"
+    unauthorized = Connection(admin=False)
+    asyncio.run(websocket_alert_acknowledgements_update(hass, unauthorized, message))
+    assert unauthorized.errors[-1][1] == "unauthorized"
+
+
 def test_websocket_non_admin_is_refused(hass, entry):
     """Every mutating command is protected by the Home Assistant admin decorator."""
     manager = AlertManager(hass, entry)

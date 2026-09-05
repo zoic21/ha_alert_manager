@@ -1,4 +1,4 @@
-import { MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
+import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_TABLE_STATE, REQUIRED_COLUMNS } from "../utils/table-preferences.js";
 
@@ -378,6 +378,7 @@ export function tableRows(kind, historyEvents = []) {
         notifications: source.notifications,
         acknowledgedAt: source.acknowledged_at || "",
         acknowledgedBy: source.acknowledged_by || "",
+        acknowledgedUntil: source.acknowledged_until || "",
       };
       row.search = [
         row.rule, row.entityName, row.entityId, row.device, row.area, row.message,
@@ -891,6 +892,15 @@ export function alertDetailsItems(kind, row) {
           : "",
       });
     }
+    if (kind === "overview" && row.acknowledged) {
+      items.push({
+        key: "acknowledged-until",
+        label: this._t("timed_acknowledgement.until"),
+        value: row.acknowledgedUntil || this._t("timed_acknowledgement.unlimited"),
+        datetime: row.acknowledgedUntil,
+        relative: true,
+      });
+    }
     if (row.status !== "pending" && row.notifications) {
       for (const notificationKind of kind === "history" ? ["alert", "resolved"] : ["alert"]) {
         const stats = row.notifications[notificationKind];
@@ -928,6 +938,7 @@ export function renderAlertDetails(context) {
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
       ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
+      ${summary.timedAcknowledgeLabel ? `<ha-dropdown-item value="acknowledge-temporarily"><ha-icon slot="icon" icon="mdi:clock-check-outline"></ha-icon>${esc(summary.timedAcknowledgeLabel)}</ha-dropdown-item>` : ""}
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
     <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
@@ -939,7 +950,7 @@ export function renderAlertDetails(context) {
         ${items.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
           <dd>${item.datetime
-            ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
+            ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="${item.relative ? "relative" : "absolute"}" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
             : item.due
             ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
             : item.action
@@ -986,6 +997,7 @@ export function renderAlertDetailsPanel(kind, row) {
         alertId: row.id,
         iconPath,
         menuAction,
+        timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
         reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
         menuIcon: menuAction === "acknowledge"
@@ -1013,7 +1025,9 @@ export function openAlertDetails(kind, row) {
     dialog.width = "medium";
     dialog.flexContent = true;
     dialog.innerHTML = this._renderAlertDetails(kind, row);
-    dialog.addEventListener("closed", () => {
+    dialog.addEventListener("closed", (event) => {
+      if (event.target !== dialog) return;
+      closeTimedAcknowledgement.call(this);
       if (this._alertDetailsDialog === dialog) this._alertDetailsDialog = null;
       dialog.remove?.();
     });
@@ -1041,6 +1055,10 @@ export async function handleAlertDetailsSelection(event) {
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
     const service = event.detail?.item?.value ?? event.detail?.value;
+    if (service === "acknowledge-temporarily") {
+      if (!this._busy) openTimedAcknowledgement.call(this, menu.dataset.alertId);
+      return true;
+    }
     if (service === "reevaluate") {
       if (this._busy) return true;
       this._busy = true;
@@ -1076,7 +1094,98 @@ export async function handleAlertDetailsSelection(event) {
     return true;
 }
 
+export function timedAcknowledgementSeconds(preset, value, unit) {
+    const seconds = preset === "custom" ? Number(value) * Number(unit) : Number(preset);
+    return Number.isSafeInteger(seconds) && seconds > 0 && seconds <= MAX_DURATION_SECONDS
+      ? seconds : null;
+}
+
+function closeTimedAcknowledgement() {
+    const dialog = this._timedAcknowledgementDialog;
+    this._timedAcknowledgementDialog = null;
+    if (dialog) {
+      dialog.open = false;
+      dialog.remove();
+    }
+}
+
+export function openTimedAcknowledgement(alertId) {
+    if (this._timedAcknowledgementDialog || !this._alertDetailsDialog) return;
+    const dialog = document.createElement("ha-adaptive-dialog");
+    dialog.className = "timed-acknowledgement-dialog";
+    dialog.headerTitle = this._t("timed_acknowledgement.title");
+    dialog.hass = this._hass;
+    dialog.width = "small";
+    dialog.innerHTML = `
+      <div class="timed-acknowledgement-fields">
+        <ha-select id="acknowledgement-preset" label="${esc(this._t("timed_acknowledgement.duration"))}" autofocus></ha-select>
+        <div class="timed-acknowledgement-custom" hidden>
+          <ha-input type="number" min="1" step="1" value="30" label="${esc(this._t("timed_acknowledgement.duration"))}" required></ha-input>
+          <ha-select id="acknowledgement-unit" label="${esc(this._t("timed_acknowledgement.unit"))}"></ha-select>
+        </div>
+        <ha-alert alert-type="error" hidden></ha-alert>
+      </div>
+      <div slot="footer" class="timed-acknowledgement-footer">
+        <ha-button appearance="plain" data-timed-ack="cancel">${esc(this._t("buttons.cancel"))}</ha-button>
+        <ha-button data-timed-ack="confirm">${esc(this._t("overview.acknowledge"))}</ha-button>
+      </div>`;
+    // Sibling native dialogs share HA's modal stack. Never replace or close the details.
+    this._timedAcknowledgementDialog = dialog;
+    this.shadowRoot.append(dialog);
+    const preset = dialog.querySelector("#acknowledgement-preset");
+    const unit = dialog.querySelector("#acknowledgement-unit");
+    const input = dialog.querySelector("ha-input");
+    const custom = dialog.querySelector(".timed-acknowledgement-custom");
+    const confirm = dialog.querySelector('[data-timed-ack="confirm"]');
+    const error = dialog.querySelector("ha-alert");
+    let saving = false;
+    const duration = () => timedAcknowledgementSeconds(preset.value, input.value, unit.value);
+    const validate = () => {
+      confirm.disabled = saving || duration() === null;
+      input.max = String(Math.floor(MAX_DURATION_SECONDS / Number(unit.value)));
+    };
+    this._configureSelect("acknowledgement-preset", [
+      ...[900, 1800, 3600, 86400].map((seconds) => ({
+        value: String(seconds), label: this._durationText(seconds),
+      })),
+      { value: "custom", label: this._t("timed_acknowledgement.custom") },
+    ], "1800", () => {
+      custom.hidden = preset.value !== "custom";
+      validate();
+    });
+    this._configureSelect("acknowledgement-unit", [
+      [60, "minutes"], [3600, "hours"], [86400, "days"],
+    ].map(([seconds, key]) => ({ value: String(seconds), label: this._t(`timed_acknowledgement.${key}`) })), "60", validate);
+    input.addEventListener("input", validate);
+    dialog.querySelector('[data-timed-ack="cancel"]').addEventListener("click", () => { dialog.open = false; });
+    confirm.addEventListener("click", async () => {
+      const seconds = duration();
+      if (saving || seconds === null) return;
+      saving = true;
+      validate();
+      error.hidden = true;
+      const success = await this._updateAlertAcknowledgement("acknowledge", alertId, seconds);
+      saving = false;
+      if (success) {
+        dialog.open = false;
+      } else {
+        error.textContent = this._notice?.text || this._t("timed_acknowledgement.failed");
+        error.hidden = false;
+        validate();
+      }
+    });
+    dialog.addEventListener("closed", (event) => {
+      if (event.target !== dialog) return;
+      event.stopPropagation();
+      if (this._timedAcknowledgementDialog === dialog) this._timedAcknowledgementDialog = null;
+      dialog.remove();
+    });
+    validate();
+    dialog.open = true;
+}
+
 export function closeAlertDetailsDialog(afterClosed) {
+    closeTimedAcknowledgement.call(this);
     const dialog = this._alertDetailsDialog;
     const callback = typeof afterClosed === "function" ? afterClosed : null;
     if (!dialog) {

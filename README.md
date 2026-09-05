@@ -282,6 +282,10 @@ Useful events include:
 
 Alert acknowledgement is also available through `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
 
+The active alert details ⋮ menu also offers **Acknowledge temporarily…**: 15 min, 30 min, 1 h, 24 h or a custom duration in minutes, hours or days (up to one year). The details stay open and show the remaining time; click it for the exact deadline. Regular acknowledgement remains unlimited.
+
+At expiry, an ongoing alert becomes active again without changing its identity or start time. Profiles allowing new-alert notifications are notified again, even without reminders configured. Resolution or manual unacknowledgement cancels the deadline. It survives restarts and is processed after startup reconciliation; while monitoring is disabled, expiry waits for monitoring to resume without shifting the deadline.
+
 ## Requirements
 
 - Home Assistant **2026.8 or newer**.

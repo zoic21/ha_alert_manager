@@ -279,6 +279,10 @@ Alert Manager expose plusieurs entités afin que son état puisse aussi être ut
 
 L’acquittement est également disponible via `alert_manager.acknowledge` et `alert_manager.unacknowledge`.
 
+Le menu ⋮ de la fiche d’une alerte active propose aussi **Acquitter temporairement…** : 15 min, 30 min, 1 h, 24 h ou une durée personnalisée en minutes, heures ou jours (maximum un an). La fiche reste ouverte et affiche le temps restant, avec la date exacte au clic. L’acquittement normal reste sans limite de durée.
+
+À l’échéance, une alerte toujours en cours redevient active sans changer d’identité ni de date de début. Les profils autorisant l’envoi des nouvelles alertes sont notifiés à nouveau, même sans rappel configuré. Une résolution ou un désacquittement manuel annule l’échéance. Celle-ci survit au redémarrage et est traitée après la réconciliation de démarrage ; si la surveillance est désactivée, elle attend sa réactivation sans décaler la date prévue.
+
 ## Prérequis
 
 - Home Assistant **2026.8 ou plus récent**.

@@ -459,6 +459,10 @@ class NotificationRuntime:
                     if policy.reminder_interval is not None
                     else None
                 )
+                if data.get("acknowledgement_expired") and policy.notify_on_start:
+                    if self._record_notification is not None:
+                        await self._record_notification([item], profile, "matched", now)
+                    self._queue_batch(profile_id, "started", item)
                 changed = True
         if changed:
             self._schedule_runtime_save()

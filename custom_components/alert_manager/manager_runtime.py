@@ -1345,7 +1345,10 @@ class _RuntimeMixin:
                 self._cancel_timer(alert_id)
                 if emit_events:
                     self._fire_started(record)
-            elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
+            elif alert_id not in self._timers and (
+                record.status is AlertStatus.PENDING
+                or record.acknowledged_until is not None
+            ):
                 self._schedule_timer(record)
 
         for alert_id in preserved_ids - candidates.keys():
@@ -1358,7 +1361,10 @@ class _RuntimeMixin:
                 self._cancel_timer(alert_id)
                 if emit_events:
                     self._fire_started(record)
-            elif record.status is AlertStatus.PENDING and alert_id not in self._timers:
+            elif alert_id not in self._timers and (
+                record.status is AlertStatus.PENDING
+                or record.acknowledged_until is not None
+            ):
                 self._schedule_timer(record)
 
         missing_candidate_ids = existing_ids - candidates.keys() - preserved_ids

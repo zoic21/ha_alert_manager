@@ -9,6 +9,13 @@ export class AlertManagerApi {
     return this._getHass().callWS(message);
   }
 
+  acknowledgeFor(alertId, duration) {
+    return this.call({
+      type: "alert_manager/alerts/acknowledgement/update",
+      alert_ids: [alertId], acknowledged: true, duration,
+    });
+  }
+
   reevaluateAlert(alertId) {
     return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
   }

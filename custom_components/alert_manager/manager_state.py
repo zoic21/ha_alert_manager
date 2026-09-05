@@ -660,8 +660,7 @@ class _StateMixin:
         if not self.monitoring_enabled:
             return
         for record in self.records.values():
-            if record.status is AlertStatus.PENDING or record.expires_at is not None:
-                self._schedule_timer(record)
+            self._schedule_timer(record)
 
     def _reschedule_hidden_pending_visibility(self, now: datetime) -> None:
         """Recalculate only not-yet-exposed pending alerts and their timers."""
@@ -672,7 +671,9 @@ class _StateMixin:
             self._cancel_timer(record.details.id)
             self._schedule_timer(record)
 
-    def _schedule_timer(self, record: AlertRecord) -> None:
+    def _schedule_timer(
+        self, record: AlertRecord, *, acknowledgement_retry_at: datetime | None = None
+    ) -> None:
         """Schedule exactly one lifecycle or presentation timer for an alert."""
         if (
             not self.monitoring_enabled
@@ -682,8 +683,18 @@ class _StateMixin:
             return
         alert_id = record.details.id
         self._cancel_timer(alert_id)
-        if record.status is AlertStatus.ACTIVE and record.expires_at is not None:
-            when = record.expires_at.astimezone(UTC)
+        acknowledgement_due = False
+        if record.status is AlertStatus.ACTIVE:
+            deadline = acknowledgement_retry_at or record.acknowledged_until
+            if deadline is not None and (
+                record.expires_at is None or deadline < record.expires_at
+            ):
+                when = deadline.astimezone(UTC)
+                acknowledgement_due = True
+            elif record.expires_at is not None:
+                when = record.expires_at.astimezone(UTC)
+            else:
+                return
         elif record.status is AlertStatus.PENDING:
             when = record.due_at.astimezone(UTC)
             if record.visible_at is not None and not self._pending_is_visible(record):
@@ -691,15 +702,35 @@ class _StateMixin:
         else:
             return
 
+        deadline = record.acknowledged_until
+
         @callback
         def timer_due(_now: datetime) -> None:
-            self._timer_due(alert_id)
+            if acknowledgement_due:
+                if self._timers.get(alert_id) is not cancel:
+                    return
+                self._timers.pop(alert_id, None)
+                if (
+                    self._unloading
+                    or not self.monitoring_enabled
+                    or self._runtime_phase is not RuntimePhase.RUNNING
+                    or self.hass.state is not CoreState.running
+                ):
+                    return
+                self.entry.async_create_task(
+                    self.hass,
+                    self._async_expire_acknowledgement(record, deadline),
+                    name="alert_manager acknowledgement expiry",
+                )
+            else:
+                self._timer_due(alert_id)
 
-        self._timers[alert_id] = async_track_point_in_utc_time(
+        cancel = async_track_point_in_utc_time(
             self.hass,
             timer_due,
             when,
         )
+        self._timers[alert_id] = cancel
 
     @callback
     def _timer_due(self, alert_id: str) -> None:
@@ -758,10 +789,14 @@ class _StateMixin:
         actor: str | None,
         previous_at: datetime | None,
         previous_by: str | None,
+        *,
+        expired: bool = False,
     ) -> None:
         """Emit removal metadata without retaining it on the active alert."""
         data = record.as_public_dict()
         data["unacknowledged_at"] = now.isoformat()
+        if expired:
+            data["acknowledgement_expired"] = True
         if actor is not None:
             data["unacknowledged_by"] = actor
         if previous_at is not None:

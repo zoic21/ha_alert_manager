@@ -672,6 +672,18 @@
     "units": {
       "events": "événements",
       "seconds": "secondes"
+    },
+    "timed_acknowledgement": {
+      "title": "Acquitter temporairement…",
+      "duration": "Durée",
+      "unit": "Unité",
+      "custom": "Personnalisée",
+      "minutes": "Minutes",
+      "hours": "Heures",
+      "days": "Jours",
+      "until": "Fin de l’acquittement",
+      "unlimited": "Sans limite de durée",
+      "failed": "Impossible d’acquitter cette alerte. Elle a peut-être changé ou été résolue."
     }
   },
   "services": {
