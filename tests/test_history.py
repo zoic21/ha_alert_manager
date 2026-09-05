@@ -305,3 +305,85 @@ def test_yaml_export_import_excludes_history_and_preserves_local_retention(hass,
     imported = run(manager.async_import_config(dump_config_yaml(manager.get_config())))
     assert imported["config"]["history_limit"] == 42
     assert manager.get_history_config()["retention_limit"] == 42
+
+
+def test_delete_history_targets_occurrence_and_preserves_live_alerts(
+    hass, entry, set_now
+):
+    """Deleting one repeat leaves other occurrences and live records untouched."""
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    start = datetime(2026, 8, 26, 12, tzinfo=UTC)
+    _resolve_unavailable(manager, hass, set_now, start)
+    _resolve_unavailable(manager, hass, set_now, start + timedelta(minutes=1))
+    removed, retained = manager.history
+    hass.states.set("sensor.test", "unavailable")
+    run(manager.async_evaluate_entity("sensor.test"))
+    records = deepcopy(manager.records)
+    result = run(manager.async_delete_history([removed.event_id, "expired"]))
+    assert [event["event_id"] for event in result["events"]] == [retained.event_id]
+    assert manager.records == records
+    assert hass.stores[HISTORY_STORAGE_KEY]["events"] == result["events"]
+    assert run(manager.async_delete_history([removed.event_id])) == result
+
+
+def test_delete_history_save_failure_preserves_entries(hass, entry, set_now):
+    """A failed delete leaves the stored and visible history unchanged."""
+    import pytest
+
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    _resolve_unavailable(manager, hass, set_now, datetime(2026, 8, 26, 12, tzinfo=UTC))
+    before = manager.history_snapshot()
+
+    async def fail_save(entries):
+        raise OSError("disk full")
+
+    manager.history_storage.async_save = fail_save
+    with pytest.raises(OSError, match="disk full"):
+        run(manager.async_delete_history([manager.history[0].event_id]))
+    assert manager.history_snapshot() == before
+    assert hass.stores[HISTORY_STORAGE_KEY]["events"] == before["events"]
+
+
+def test_delete_history_serializes_with_new_archive(hass, entry):
+    """A resolution arriving during deletion is retained after both writes."""
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}})
+        for entity_id in ("sensor.first", "sensor.second"):
+            hass.states.set(entity_id, "unavailable")
+            await manager.async_evaluate_entity(entity_id)
+        hass.states.set("sensor.first", "ok")
+        await manager.async_evaluate_entity("sensor.first")
+        removed_id = manager.history[0].event_id
+        original_save = manager.history_storage.async_save
+        saving = asyncio.Event()
+        release = asyncio.Event()
+
+        async def controlled_save(entries):
+            if not entries:
+                saving.set()
+                await release.wait()
+            await original_save(entries)
+
+        manager.history_storage.async_save = controlled_save
+        deleting = asyncio.create_task(manager.async_delete_history([removed_id]))
+        await saving.wait()
+        hass.states.set("sensor.second", "ok")
+        resolving = asyncio.create_task(manager.async_evaluate_entity("sensor.second"))
+        await asyncio.sleep(0)
+        assert manager._pending_history
+        assert not resolving.done()
+        release.set()
+        await asyncio.gather(deleting, resolving)
+        assert [e.entity_id for e in manager.history] == ["sensor.second"]
+        assert (
+            hass.stores[HISTORY_STORAGE_KEY]["events"]
+            == manager.history_snapshot()["events"]
+        )
+        assert manager._pending_history == []
+
+    run(scenario())

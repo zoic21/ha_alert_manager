@@ -10,7 +10,12 @@ export function refreshAlertTableData(kind, tablePage) {
     tablePage.hass = this._hass;
     tablePage.data = this._nativeTableData(kind, visibleRows);
     tablePage._alertManagerRows = tablePage.data;
-    if (kind === "overview") tablePage.selected = this._selectedAlertIds.size;
+    const selectedIds = kind === "overview" ? this._selectedAlertIds : this._selectedHistoryIds;
+    const availableIds = new Set(sourceRows.map((row) => row.id));
+    for (const id of selectedIds) {
+      if (!availableIds.has(id)) selectedIds.delete(id);
+    }
+    tablePage.selected = selectedIds.size;
     tablePage.noDataText = sourceRows.length
       ? this._t("table.empty_filtered")
       : this._t(kind === "history" ? "history.empty" : "table.empty_current");
@@ -83,7 +88,9 @@ export function hydrateDataTables() {
       tablePage.filter = this._tableState[kind].search;
       tablePage.searchLabel = this._t("table.search");
       tablePage.filters = this._filterCount(kind);
-      tablePage.selected = kind === "overview" ? this._selectedAlertIds.size : undefined;
+      const selectionKey = kind === "overview" ? "_selectedAlertIds" : "_selectedHistoryIds";
+      const selectionMode = kind === "overview" ? this._selectionMode : this._historySelectionMode;
+      tablePage.selected = this[selectionKey].size;
       tablePage.initialGroupColumn = this._nativeGroupColumn(this._tableState[kind].groupBy);
       tablePage.initialSorting = {
         column: this._nativeSortColumn(this._tableState[kind].sortBy),
@@ -92,10 +99,10 @@ export function hydrateDataTables() {
       tablePage.initialCollapsedGroups = [...this._collapsedTableGroups]
         .filter((key) => key.startsWith(`${kind}:`))
         .map((key) => key.slice(kind.length + 1));
-      tablePage.selectable = kind === "overview";
+      tablePage.selectable = true;
       tablePage.clickable = true;
       tablePage.showFilters = this._filterPaneKind === kind;
-      if (kind === "overview" && this._selectionMode) tablePage._selectMode = true;
+      if (selectionMode) tablePage._selectMode = true;
       tablePage.noDataText = sourceRows.length
         ? this._t("table.empty_filtered")
         : this._t(kind === "history" ? "history.empty" : "table.empty_current");
@@ -147,21 +154,19 @@ export function hydrateDataTables() {
         );
         if (row) this._openAlertDetails(kind, row);
       });
-      if (kind === "overview") {
-        tablePage.addEventListener("selection-changed", (event) => {
-          const selected = new Set((event.detail?.value ?? []).map(String));
-          if (selected.size === this._selectedAlertIds.size
-            && [...selected].every((id) => this._selectedAlertIds.has(id))) return;
-          this._selectedAlertIds = selected;
-          this._updateSelectionToolbar();
-        });
-        if (this._selectionMode && this._selectedAlertIds.size && tablePage.shadowRoot) {
-          const restoreSelection = () => {
-            const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-            nativeTable?.select?.([...this._selectedAlertIds], true);
-          };
-          Promise.resolve(tablePage.updateComplete).then(restoreSelection);
-        }
+      tablePage.addEventListener("selection-changed", (event) => {
+        const selected = new Set((event.detail?.value ?? []).map(String));
+        if (selected.size === this[selectionKey].size
+          && [...selected].every((id) => this[selectionKey].has(id))) return;
+        this[selectionKey] = selected;
+        this._updateSelectionToolbar();
+      });
+      if (selectionMode && this[selectionKey].size && tablePage.shadowRoot) {
+        const restoreSelection = () => {
+          const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+          nativeTable?.select?.([...this[selectionKey]], true);
+        };
+        Promise.resolve(tablePage.updateComplete).then(restoreSelection);
       }
       tablePage.querySelectorAll("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
         const key = checkbox.dataset.tableFilterOption;
@@ -192,6 +197,18 @@ export function hydrateDataTables() {
 }
 
 export function updateSelectionToolbar() {
+    const historyPage = this.shadowRoot.querySelector('[data-alert-table-page="history"]');
+    if (historyPage) {
+      const count = (this._history?.events ?? [])
+        .filter((event) => this._selectedHistoryIds.has(event.event_id)).length;
+      const button = historyPage.querySelector('[data-action="delete-history"]');
+      if (button) {
+        button.hidden = count === 0;
+        button.textContent = this._t("history.delete_selected", { count });
+      }
+      historyPage.selected = count;
+      return;
+    }
     const selectedRows = this._tableRows("overview").filter((row) => this._selectedAlertIds.has(row.id));
     const acknowledgeCount = selectedRows.filter((row) => row.status === "active").length;
     const unacknowledgeCount = selectedRows.filter((row) => row.status === "acknowledged").length;
@@ -482,7 +499,7 @@ export function renderAlertTable(kind, sourceRows, topHeader = "") {
       id="panel-shell"
       data-alert-table-page="${kind}"
       has-filters
-      ${kind === "overview" ? "selectable" : ""}
+      selectable
       clickable
       main-page
     >
@@ -491,7 +508,9 @@ export function renderAlertTable(kind, sourceRows, topHeader = "") {
       ${kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
         <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
         <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
-      </div>` : ""}
+      </div>` : `<div slot="selection-bar" class="selection-actions">
+        <ha-button appearance="plain" variant="danger" data-action="delete-history" ${this._selectedHistoryIds.size ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("history.delete_selected", { count: this._selectedHistoryIds.size }))}</ha-button>
+      </div>`}
     </hass-tabs-subpage-data-table>`;
 }
 

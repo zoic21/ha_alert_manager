@@ -286,6 +286,8 @@ class AlertManagerPanel extends HTMLElement {
     this._filterPaneKind = "";
     this._selectionMode = false;
     this._selectedAlertIds = new Set();
+    this._selectedHistoryIds = new Set();
+    this._historySelectionMode = false;
     resetSettingsDraft.call(this);
     this._automaticMapDraft = null;
     this._configurationDrawer = null;
@@ -404,6 +406,7 @@ class AlertManagerPanel extends HTMLElement {
       const kind = currentTablePage.dataset.alertTablePage;
       this._filterPaneKind = currentTablePage.showFilters ? kind : "";
       if (kind === "overview") this._selectionMode = Boolean(currentTablePage._selectMode);
+      if (kind === "history") this._historySelectionMode = Boolean(currentTablePage._selectMode);
     }
     const content = this._loading
       ? `<div class="loading">${esc(this._t("loading"))}</div>`
@@ -443,6 +446,7 @@ class AlertManagerPanel extends HTMLElement {
     const busyActions = new Set([
       "enable-monitoring",
       "clear-history",
+      "delete-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
       "save-automatic",

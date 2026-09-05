@@ -197,6 +197,9 @@
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
+      "delete_selected": "Supprimer ({count})",
+      "delete_confirm": "Supprimer définitivement les {count} alertes sélectionnées de l’historique ?",
+      "deleted": "Les alertes sélectionnées ont été supprimées de l’historique.",
       "acknowledged_before_resolution": "Acquittée avant résolution",
       "disabled_help": "Définissez une limite supérieure à 0 dans Configuration pour conserver les prochaines alertes résolues.",
       "disabled_title": "L’historique est désactivé",

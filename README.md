@@ -224,6 +224,8 @@ An alert can be:
 
 Resolved alerts can be kept in history, making it easier to spot recurring problems instead of only seeing what is wrong right now.
 
+Select entries in the History table to delete individual occurrences after confirmation, without affecting current alerts.
+
 Selecting an alert opens its details, including the value that triggered it and the current value, with contextual access to the related Home Assistant entity when available.
 
 ## Notifications without getting spammed
