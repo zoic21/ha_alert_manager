@@ -2691,7 +2691,6 @@ function replaceConfigurationDrawer(root, markup) {
 
 // Source: frontend-src/components/notification-profiles.js
 const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
-const SELECTOR_TYPES = ["pack", "label"];
 
 function newNotificationProfileDraft() {
   const generatedId = globalThis.crypto?.randomUUID?.()
@@ -2812,27 +2811,18 @@ function renderPolicySwitch(id, label, checked) {
 }
 
 function renderException(exception, index, t) {
-  const type = exception.selector_type ?? "pack";
   const reminderMode = Object.hasOwn(exception, "reminder_interval")
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
     <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button type="button" appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
     <div class="notification-exception-grid">
-      <div class="field"><span class="field-label">${esc(t("notifications.selector_type"))}</span><ha-select id="notification-exception-type-${index}"></ha-select></div>
-      <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span>${renderSelectorControl(type, index)}</div>
+      <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
       <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `<ha-input id="notification-exception-reminder-${index}" type="number" min="${MIN_NOTIFICATION_REMINDER_SECONDS}" max="${MAX_DURATION_SECONDS}" step="1" value="${esc(exception.reminder_interval)}" required aria-label="${esc(t("notifications.reminder"))}"><span slot="end">${esc(t("units.seconds"))}</span></ha-input>` : ""}</div></div>
     </div>
   </ha-card>`;
-}
-
-function renderSelectorControl(type, index) {
-  if (type === "label") {
-    return `<ha-selector id="notification-exception-selector-${index}"></ha-selector>`;
-  }
-  return `<ha-select id="notification-exception-selector-${index}"></ha-select>`;
 }
 
 function renderOverrideSelect(id, label, value) {
@@ -2843,7 +2833,7 @@ function booleanOverrideValue(exception, key) {
   return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
 }
 
-function hydrateNotificationProfileControls(panel, { packs }) {
+function hydrateNotificationProfileControls(panel) {
   const draft = panel._notificationProfileDraft;
   if (!draft) return;
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
@@ -2860,39 +2850,12 @@ function hydrateNotificationProfileControls(panel, { packs }) {
     (value) => { draft.label_ids = panel._multipleSelectorValue(value, draft.label_ids); },
   );
   draft.exceptions.forEach((exception, index) => {
-    panel._configureSelect(
-      `notification-exception-type-${index}`,
-      SELECTOR_TYPES.map((value) => ({
-        value,
-        label: panel._t(`notifications.selector_types.${value}`),
-      })),
-      exception.selector_type,
-      (value) => {
-        captureNotificationProfileDraft(panel);
-        exception.selector_type = value;
-        exception.selector_id = "";
-        panel._refreshSettingsConfigurationDrawer();
-      },
+    panel._configureSelector(
+      `notification-exception-selector-${index}`,
+      { label: {} },
+      exception.selector_id,
+      (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
     );
-    if (exception.selector_type === "label") {
-      panel._configureSelector(
-        `notification-exception-selector-${index}`,
-        { label: {} },
-        exception.selector_id,
-        (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
-      );
-    } else {
-      const options = packs.map((pack) => ({
-        value: pack.id,
-        label: panel._t(`packs.${pack.translation_key || pack.id}.name`),
-      }));
-      panel._configureSelect(
-        `notification-exception-selector-${index}`,
-        options,
-        exception.selector_id,
-        (value) => { exception.selector_id = value ?? ""; },
-      );
-    }
     for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
       panel._configureSelect(
         `notification-exception-${suffix}-${index}`,
@@ -3103,7 +3066,7 @@ async function handleNotificationProfileAction(action, button) {
   if (action === "add-notification-exception") {
     captureNotificationProfileDraft(this);
     this._notificationProfileDraft.exceptions.push({
-      selector_type: "pack",
+      selector_type: "label",
       selector_id: "",
     });
     this._refreshSettingsConfigurationDrawer();
@@ -5346,6 +5309,7 @@ function renderAutomatic(context) {
           <p>${esc(t(`packs.${packKey}.description`))}</p>
           <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
             <div class="fields">
+              <div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector><small>${esc(t("automatic.labels_help"))}</small></div>
               ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
               ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
                 pack,
@@ -5479,6 +5443,7 @@ function collectAutomaticChanges() {
     for (const pack of this._packs.filter((item) => item.available)) {
       automatic[pack.id] = {
         enabled: this._automaticMapDraft[pack.id].enabled,
+        label_ids: [...(this._automaticMapDraft[pack.id].label_ids ?? [])],
       };
       if (pack.uses_delay !== false) {
         automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
@@ -5598,6 +5563,7 @@ function ensureAutomaticDraft() {
     this._automaticMapDraft = {};
     for (const pack of this._packs) {
       const fields = { ...this._config.automatic?.[pack.id] };
+      fields.label_ids = [...(fields.label_ids ?? [])];
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
@@ -5706,6 +5672,16 @@ function updateAutomaticConfigurationCount(packId) {
 function hydrateAutomaticControls() {
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
+    const draft = this._automaticMapDraft[pack.id];
+    this._configureSelector(
+      `auto-${pack.id}-labels`,
+      { label: { multiple: true } },
+      draft.label_ids,
+      (value) => {
+        draft.label_ids = this._multipleSelectorValue(value, draft.label_ids);
+        this._markConfigurationDirty("automatic");
+      },
+    );
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (enabled) {
       enabled.onchange = () => {
@@ -6348,9 +6324,7 @@ function hydrateSettingsControls() {
       (value) => this._setEntityDelayEntity(index, value),
     );
   });
-  hydrateNotificationProfileControls(this, {
-    packs: this._packs.filter((pack) => pack.available),
-  });
+  hydrateNotificationProfileControls(this);
 }
 
 function refreshSettingsConfigurationDrawer() {

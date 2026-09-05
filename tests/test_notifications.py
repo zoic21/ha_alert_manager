@@ -47,17 +47,12 @@ def _profile() -> dict:
                 "selector_id": "secondary",
                 "reminder_interval": 3600,
             },
-            {
-                "selector_type": "pack",
-                "selector_id": "battery",
-                "notify_on_resolved": False,
-            },
         ],
     }
 
 
 def test_policy_resolution_is_partial_and_uses_documented_priority() -> None:
-    """First matching label overrides pack and profile defaults field by field."""
+    """First matching label overrides profile defaults field by field."""
     config = validate_config(
         {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
     )
@@ -65,13 +60,12 @@ def test_policy_resolution_is_partial_and_uses_documented_priority() -> None:
 
     effective = resolve_notification_policy(
         profile,
-        pack_id="battery",
         label_ids={"important", "secondary"},
     )
 
     assert effective.as_dict() == {
         "notify_on_start": True,
-        "notify_on_resolved": False,
+        "notify_on_resolved": True,
         "reminder_interval": 1800,
     }
 
@@ -84,7 +78,6 @@ def test_first_matching_label_exception_wins_in_explicit_list_order() -> None:
 
     effective = resolve_notification_policy(
         profile,
-        pack_id=None,
         label_ids={"secondary", "important"},
     )
 
@@ -206,7 +199,7 @@ def test_profile_update_failure_always_resumes_notification_events(hass, entry) 
                     }
                 ]
             },
-            "not a known pack",
+            "selector_type is invalid",
         ),
         (
             {"exceptions": [{"selector_type": "label", "selector_id": "freezer"}]},
@@ -329,6 +322,7 @@ def test_yaml_round_trip_preserves_rule_labels_and_label_exceptions() -> None:
         }
     ]
     config["notification_profiles"] = [_profile()]
+    config["automatic"]["battery"]["label_ids"] = ["important"]
 
     exported = dump_config_yaml(config)
     imported = parse_config_yaml(exported)
@@ -339,6 +333,7 @@ def test_yaml_round_trip_preserves_rule_labels_and_label_exceptions() -> None:
     assert "@rule:" not in exported
     assert imported_rule_id != "freezer"
     assert imported["rules"][0]["label_ids"] == ["important"]
+    assert imported["automatic"]["battery"]["label_ids"] == ["important"]
     assert label_exception["selector_id"] == "important"
 
 
@@ -483,3 +478,21 @@ def test_rule_notification_exceptions_are_no_longer_supported():
         validate_config(
             {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )
+
+
+@pytest.mark.parametrize("labels", ["cold", [None], [123], [""]])
+def test_pack_labels_reject_invalid_values(labels):
+    """Pack labels use the same backend validation as rule labels."""
+    with pytest.raises(ValueError):
+        validate_config({"automatic": {"battery": {"label_ids": labels}}})
+
+
+def test_legacy_configuration_without_pack_labels_still_imports():
+    """Existing detector configuration remains compatible without a migration."""
+    config = deepcopy(DEFAULT_CONFIG)
+    for pack in config["automatic"].values():
+        pack.pop("label_ids", None)
+    # dump_config_yaml normalizes defaults, so remove labels from the export itself.
+    exported = dump_config_yaml(config).replace("      label_ids: []\n", "")
+    imported = parse_config_yaml(exported)
+    assert all(pack["label_ids"] == [] for pack in imported["automatic"].values())

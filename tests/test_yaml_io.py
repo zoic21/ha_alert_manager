@@ -328,6 +328,7 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
     legacy = exported.replace(
         "    execution_errors:\n"
         "      enabled: true\n"
+        "      label_ids: []\n"
         "      delay: 0\n"
         "      failure_thresholds: {}\n",
         "",
@@ -335,8 +336,10 @@ def test_older_export_without_execution_errors_pack_uses_default() -> None:
 
     imported = parse_config_yaml(legacy)
 
+    assert "    execution_errors:" not in legacy
     assert imported["automatic"]["execution_errors"] == {
         "enabled": True,
+        "label_ids": [],
         "delay": 0,
         "failure_thresholds": {},
     }

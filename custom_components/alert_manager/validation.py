@@ -47,6 +47,7 @@ _CONFIG_UPDATE_KEYS = {
 _AUTOMATIC_KEYS = {
     pack.id: {
         "enabled",
+        "label_ids",
         *(("delay",) if pack.uses_delay else ()),
         *(field.id for field in pack.config_fields),
     }
@@ -184,6 +185,9 @@ def validate_config(config: Any) -> dict[str, Any]:
         if not isinstance(enabled, bool):
             raise ValueError(f"automatic.{category}.enabled must be a boolean")
         category_config["enabled"] = enabled
+        category_config["label_ids"] = validate_label_list(
+            incoming.get("label_ids", []), path=f"automatic.{category}.label_ids"
+        )
         pack = PACKS_BY_ID[category]
         if pack.uses_delay:
             pack_delay = incoming.get("delay", category_config["delay"])

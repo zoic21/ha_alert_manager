@@ -771,8 +771,29 @@ class _ApiMixin:
         if candidate == self.config:
             return self.get_config()
         changed_keys = {key for key in candidate if candidate[key] != self.config[key]}
+        labels_changed = {
+            pack.id
+            for pack in PACKS
+            if candidate["automatic"][pack.id].get("label_ids", [])
+            != self.config["automatic"][pack.id].get("label_ids", [])
+        }
+        detection_keys = changed_keys.copy()
+        if "automatic" in detection_keys and all(
+            {
+                key: value
+                for key, value in candidate["automatic"][pack.id].items()
+                if key != "label_ids"
+            }
+            == {
+                key: value
+                for key, value in self.config["automatic"][pack.id].items()
+                if key != "label_ids"
+            }
+            for pack in PACKS
+        ):
+            detection_keys.remove("automatic")
         detection_changed = bool(
-            changed_keys
+            detection_keys
             - {
                 "coherence_schedule",
                 "coherence_scan_esphome",
@@ -804,6 +825,7 @@ class _ApiMixin:
         notification_events_paused = (
             candidate["monitoring_enabled"] != self.monitoring_enabled
             or notification_profiles_changed
+            or bool(labels_changed)
         )
         event_pause = (
             self.notification_runtime.events_paused()
@@ -829,15 +851,24 @@ class _ApiMixin:
                     reset_pack_runtimes(self.hass, disabled_pack_ids)
                 if detection_changed:
                     await self.async_evaluate_all(save=False, publish=False)
+                if labels_changed:
+                    for record in self.records.values():
+                        if (
+                            record.details.rule_id is None
+                            and record.details.type in labels_changed
+                        ):
+                            record.details.labels = list(
+                                candidate["automatic"][record.details.type]["label_ids"]
+                            )
                 if "pending_display_delay" in changed_keys:
                     self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self._async_save_state()
             except BaseException:
                 self._restore_configuration_snapshot(previous)
                 raise
-            if notification_profiles_changed:
+            if notification_profiles_changed or labels_changed:
                 self.notification_runtime.discard_batches()
-            if detection_changed or notification_profiles_changed:
+            if detection_changed or notification_profiles_changed or labels_changed:
                 await self._async_refresh_notification_runtime(
                     reset_reminders=notification_events_paused
                 )

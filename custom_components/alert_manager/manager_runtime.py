@@ -1940,6 +1940,9 @@ class _RuntimeMixin:
             area_id = device.area_id
         area_entry = self._area_registry.async_get_area(area_id) if area_id else None
 
+        if rule_id is None:
+            labels = self.config["automatic"].get(alert_type, {}).get("label_ids", [])
+
         return AlertDetails(
             id=alert_id,
             type=alert_type,

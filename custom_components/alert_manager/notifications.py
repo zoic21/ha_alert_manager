@@ -21,7 +21,6 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
-    CATEGORIES,
     DOMAIN,
     MAX_DELAY,
     MAX_NOTIFICATION_EXCEPTIONS,
@@ -43,7 +42,6 @@ _PROFILE_KEYS = {
     "exceptions",
 }
 _EXCEPTION_KEYS = {"selector_type", "selector_id", *_POLICY_KEYS}
-_SELECTOR_TYPES = {"pack", "label"}
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
 
@@ -235,46 +233,17 @@ def profile_matches_labels(
 def resolve_notification_policy(
     profile: dict[str, Any],
     *,
-    pack_id: str | None,
     label_ids: set[str] | frozenset[str],
 ) -> NotificationPolicy:
-    """Resolve Default -> Pack -> first matching Label overrides."""
+    """Apply the first matching label exception over the profile defaults."""
     effective = dict(profile["default_policy"])
-    exceptions = profile["exceptions"]
-
-    _apply_first_matching(
-        effective,
-        exceptions,
-        selector_type="pack",
-        selector_ids={pack_id} if pack_id is not None else set(),
-    )
-    _apply_first_matching(
-        effective,
-        exceptions,
-        selector_type="label",
-        selector_ids=set(label_ids),
-    )
+    for exception in profile["exceptions"]:
+        if exception["selector_id"] in label_ids:
+            effective.update(
+                {key: exception[key] for key in _POLICY_KEYS if key in exception}
+            )
+            break
     return NotificationPolicy(**effective)
-
-
-def _apply_first_matching(
-    effective: dict[str, Any],
-    exceptions: list[dict[str, Any]],
-    *,
-    selector_type: str,
-    selector_ids: set[str],
-) -> None:
-    """Apply one ordered selector match and retain inherited policy fields."""
-    for exception in exceptions:
-        if (
-            exception["selector_type"] != selector_type
-            or exception["selector_id"] not in selector_ids
-        ):
-            continue
-        effective.update(
-            {key: exception[key] for key in _POLICY_KEYS if key in exception}
-        )
-        return
 
 
 def _validate_profile(value: Any, path: str) -> dict[str, Any]:
@@ -342,13 +311,11 @@ def _validate_exception(value: Any, path: str) -> dict[str, Any]:
         raise ValueError(f"{path} must be an object")
     _reject_unknown(value, _EXCEPTION_KEYS, path)
     selector_type = value.get("selector_type")
-    if selector_type not in _SELECTOR_TYPES:
+    if selector_type != "label":
         raise ValueError(f"{path}.selector_type is invalid")
     selector_id = _non_empty_string(
         value.get("selector_id"), f"{path}.selector_id", maximum=255
     )
-    if selector_type == "pack" and selector_id not in CATEGORIES:
-        raise ValueError(f"{path}.selector_id is not a known pack")
     policy = _validate_policy(value, path, partial=True)
     if not policy:
         raise ValueError(f"{path} must override at least one policy field")

@@ -255,6 +255,7 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
             set(automatic[category]) if isinstance(automatic[category], dict) else set()
         )
         allowed_missing_fields = {"source_packs"} if category == "flapping" else set()
+        allowed_missing_fields.add("label_ids")
         missing = expected_fields - actual_fields
         if actual_fields - expected_fields or missing - allowed_missing_fields:
             unknown = actual_fields - expected_fields
