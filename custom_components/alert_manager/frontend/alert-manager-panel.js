@@ -551,6 +551,8 @@ const VALIDATION_ERROR_KEYS = new Map([
 ]);
 
 const VALIDATION_ERROR_PREFIX_KEYS = [
+  ["Unknown or resolved alert id:", "alert_not_found"],
+  ["Alert reevaluation requires running monitoring", "reevaluation_unavailable"],
   ["Missing rule field:", "rule_field_missing"],
   ["Unsupported value source:", "source_unsupported"],
   ["Unsupported operator:", "operator_unsupported"],
@@ -627,6 +629,10 @@ class AlertManagerApi {
 
   call(message) {
     return this._getHass().callWS(message);
+  }
+
+  reevaluateAlert(alertId) {
+    return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
   }
 
   testRule(rule, ruleId = "") {
@@ -1875,9 +1881,10 @@ function renderAlertDetails(context) {
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    return `${summary.menuAction ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
+    return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
-      <ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>
+      ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
+      ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
     <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
@@ -1935,6 +1942,7 @@ function renderAlertDetailsPanel(kind, row) {
         alertId: row.id,
         iconPath,
         menuAction,
+        reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
         menuIcon: menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
@@ -1989,6 +1997,36 @@ async function handleAlertDetailsSelection(event) {
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
     const service = event.detail?.item?.value ?? event.detail?.value;
+    if (service === "reevaluate") {
+      if (this._busy) return true;
+      this._busy = true;
+      this._notice = null;
+      this._refreshUiState();
+      try {
+        const result = await this._api.reevaluateAlert(menu.dataset.alertId);
+        await this._refreshAlerts();
+        const row = this._tableRows("overview").find((item) => item.id === menu.dataset.alertId);
+        if (this._alertDetailsDialog?.alertId === menu.dataset.alertId) {
+          if (row) {
+            this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", row);
+            this._hydrateAlertDetailTimestamps(this._alertDetailsDialog);
+          } else {
+            this._closeAlertDetailsDialog();
+          }
+        }
+        this._notice = {
+          kind: "success",
+          text: this._t(result.present ? "success.alert_reevaluated_present" : "success.alert_reevaluated_cleared"),
+        };
+      } catch (error) {
+        this._notice = { kind: "error", text: this._errorText(error) };
+      } finally {
+        this._busy = false;
+        this._refreshOverviewData();
+        this._refreshUiState();
+      }
+      return true;
+    }
     if (!["acknowledge", "unacknowledge"].includes(service)) return true;
     await this._updateAlertAcknowledgement(service, menu.dataset.alertId);
     return true;

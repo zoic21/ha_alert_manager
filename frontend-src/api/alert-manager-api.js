@@ -9,6 +9,10 @@ export class AlertManagerApi {
     return this._getHass().callWS(message);
   }
 
+  reevaluateAlert(alertId) {
+    return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",

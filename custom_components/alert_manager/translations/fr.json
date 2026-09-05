@@ -193,7 +193,9 @@
       "text_value_required": "Ajoutez au moins une valeur de comparaison.",
       "text_value_scalar": "Les valeurs de comparaison doivent être du texte, un nombre ou un booléen.",
       "unknown": "Une erreur inattendue s’est produite.",
-      "yaml_invalid": "Le YAML est invalide. Vérifiez sa syntaxe."
+      "yaml_invalid": "Le YAML est invalide. Vérifiez sa syntaxe.",
+      "reevaluation_unavailable": "La réévaluation nécessite une surveillance démarrée et activée.",
+      "alert_not_found": "Cette alerte est introuvable ou déjà terminée."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -344,7 +346,8 @@
       "summary_pending": "Alertes à venir",
       "summary_tracked": "Total suivi",
       "summary_tracked_calculating": "Calcul en cours…",
-      "unacknowledge": "Retirer l’acquittement"
+      "unacknowledge": "Retirer l’acquittement",
+      "reevaluate": "Réévaluer"
     },
     "packs": {
       "execution_errors": {
@@ -566,7 +569,9 @@
       "rule_disabled": "Règle désactivée",
       "rule_enabled": "Règle activée",
       "rule_updated": "Règle modifiée",
-      "settings_saved": "Paramètres enregistrés"
+      "settings_saved": "Paramètres enregistrés",
+      "alert_reevaluated_present": "Réévaluation effectuée : l’alerte reste présente.",
+      "alert_reevaluated_cleared": "Réévaluation effectuée : l’alerte n’est plus en cours."
     },
     "table": {
       "columns": {

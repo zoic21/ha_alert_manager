@@ -228,6 +228,8 @@ Select entries in the History table to delete individual occurrences after confi
 
 Selecting an alert opens its details, including the value that triggered it and the current value, with contextual access to the related Home Assistant entity when available.
 
+Use **Reevaluate** in the details menu of an ongoing alert to check its entity’s current state again. This also reevaluates other alerts for that entity, preserves normal delays and protections, and resolves alerts through the usual history and notification flow. It requires monitoring to be enabled and startup to be complete.
+
 ## Notifications without getting spammed
 
 Alert Manager emits `alert_manager_device_alert_started` when a device enters an alert state. Alerts that arrive close together for the same device are grouped before the event is emitted, which makes it useful for sending **one useful notification for the device instead of one notification per rule**.
