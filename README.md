@@ -145,6 +145,8 @@ A rule can monitor one or several entities independently and use:
 
 Delays let you require the situation to persist before it becomes an alert, which prevents short glitches from filling the dashboard. Custom Jinja messages are frozen when the alert activates by default, or can be kept up to date while it remains active.
 
+A Jinja rendering error is indeterminate: it creates no new occurrence and preserves existing alerts, their pending deadlines and the last valid message. Dependencies remain tracked so a relevant change retries the rule. For variation rules, an error neither creates nor resets the baseline; only an explicitly false Jinja condition ends the current window. Errors remain visible in logs and the rule tester.
+
 Example use cases include abnormal temperatures, unexpected power consumption, backup age, error codes, stale sensors, equipment that stopped updating or almost any state Home Assistant exposes.
 
 Rules can be edited visually or in YAML and duplicated from the panel. One rule can monitor up to 50 entities, and one configuration can contain up to 500 rules. Jinja-only YAML rules use `source: jinja`; existing `source: none` rules are migrated automatically.
