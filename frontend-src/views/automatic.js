@@ -133,7 +133,7 @@ export function renderPackField(pack, field, config, context) {
         field.unit ?? "",
         field.minimum ?? -1000000000,
         field.maximum ?? 1000000000,
-        { step: field.step ?? "any" },
+        { step: field.step ?? "any", help: field.translation_key === "flapping_recovery" ? t("automatic.fields.flapping_recovery.help") : undefined },
       );
     }
     if (field.type === "pack_settings_map") {
@@ -189,7 +189,8 @@ function renderPackSettingControl(setting, value, t, attributes, required = true
   const min = setting.minimum ?? -1000000000;
   const max = setting.maximum ?? 1000000000;
   if (setting.unit === "s") {
-    return renderDurationControl("", label, value, min, max, { attributes, required });
+    return renderDurationControl("", label, value, min, max, { attributes, required })
+      + (setting.translation_key === "flapping_recovery" ? `<small>${esc(t("automatic.fields.flapping_recovery.help"))}</small>` : "");
   }
   const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
   return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;

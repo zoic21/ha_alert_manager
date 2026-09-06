@@ -3692,7 +3692,7 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.flapping_title"))}</h3><small>${esc(t("rules.flapping_help"))}</small></div></div>
           <div class="fields">
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.flapping_enabled"))}</span><ha-switch id="rule-flapping-enabled" aria-label="${esc(t("rules.flapping_enabled"))}" ${rule.flapping_enabled ? "checked" : ""}></ha-switch></div></div>
-            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}</div>
+            <div class="fields full rule-flapping-settings" ${rule.flapping_enabled ? "" : "hidden"}>${renderNumberField("flapping_occurrences", t("automatic.fields.flapping_occurrences.label"), rule.flapping_occurrences, "", 2, 1000, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_window", t("automatic.fields.flapping_window.label"), rule.flapping_window, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: t("rules.flapping_inherit_help") })}${renderNumberField("flapping_recovery", t("automatic.fields.flapping_recovery.label"), rule.flapping_recovery, t("units.seconds"), 1, MAX_DURATION_SECONDS, { required: false, nameMode: "name", help: `${t("automatic.fields.flapping_recovery.help")} ${t("rules.flapping_inherit_help")}` })}</div>
           </div>
         </section>` : ""}`;
 }
@@ -5531,7 +5531,7 @@ function renderPackField(pack, field, config, context) {
         field.unit ?? "",
         field.minimum ?? -1000000000,
         field.maximum ?? 1000000000,
-        { step: field.step ?? "any" },
+        { step: field.step ?? "any", help: field.translation_key === "flapping_recovery" ? t("automatic.fields.flapping_recovery.help") : undefined },
       );
     }
     if (field.type === "pack_settings_map") {
@@ -5587,7 +5587,8 @@ function renderPackSettingControl(setting, value, t, attributes, required = true
   const min = setting.minimum ?? -1000000000;
   const max = setting.maximum ?? 1000000000;
   if (setting.unit === "s") {
-    return renderDurationControl("", label, value, min, max, { attributes, required });
+    return renderDurationControl("", label, value, min, max, { attributes, required })
+      + (setting.translation_key === "flapping_recovery" ? `<small>${esc(t("automatic.fields.flapping_recovery.help"))}</small>` : "");
   }
   const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
   return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;

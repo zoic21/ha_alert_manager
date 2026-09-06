@@ -56,6 +56,7 @@
           "label": "Nombre d’occurrences"
         },
         "flapping_recovery": {
+          "help": "L’alerte d’instabilité se résout après ce délai sans nouvelle occurrence. Chaque nouvelle occurrence relance le délai.",
           "label": "Délai avant retour à la normale"
         },
         "flapping_source_packs": {
