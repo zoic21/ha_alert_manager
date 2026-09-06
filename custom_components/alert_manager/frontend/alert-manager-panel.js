@@ -7993,7 +7993,7 @@ const responsiveStyles = `
     .configuration-drawer .pack-map-heading .field-label {
       display: none;
     }
-    .pack-number-row, .delay-row {
+    .pack-number-row, .pack-settings-row, .delay-row {
       padding: 12px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color);
@@ -8031,6 +8031,10 @@ const responsiveStyles = `
     }
     .pack-settings-row .pack-duration-setting {
       grid-column: 1 / -1;
+    }
+    .pack-number-row ha-input::part(wa-hint),
+    .pack-settings-row ha-input::part(wa-hint) {
+      min-height: 0;
     }
     .pack-settings-row > ha-button {
       align-self: end;

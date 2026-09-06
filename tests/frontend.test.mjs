@@ -4978,5 +4978,9 @@ test("mobile configuration pairs inputs with removal actions without changing de
   assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:contents/);
   assert.match(mobile, /\.pack-settings-row>ha-button\{align-self:end;margin-bottom:8px/);
   assert.match(mobile, /@container\(min-width:390px\)/);
+  assert.match(mobile, /\.pack-number-row,\.pack-settings-row,\.delay-row\{[^}]*border:1px solid var\(--divider-color\)/);
+  assert.match(mobile, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
+  assert.doesNotMatch(mobile, /ha-input::part\(wa-hint\)[^{]*\{[^}]*(?:display:none|[;{]height:0;)/);
+
   assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
 });
