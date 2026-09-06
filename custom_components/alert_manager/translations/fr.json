@@ -17,7 +17,7 @@
       "current_value": "Valeur actuelle",
       "trigger_value": "Valeur de déclenchement",
       "title": "Détails de l’alerte",
-      "notifications_alert": "Notifications · alerte et rappels",
+      "notifications_alert": "Notifications",
       "notifications_resolved": "Notifications · retour à la normale",
       "notifications_count": "{count} envoyée(s)",
       "notification_profiles": "Profils",

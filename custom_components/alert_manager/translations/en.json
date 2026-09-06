@@ -17,7 +17,7 @@
       "current_value": "Current value",
       "trigger_value": "Trigger value",
       "title": "Alert details",
-      "notifications_alert": "Notifications · alert and reminders",
+      "notifications_alert": "Notifications",
       "notifications_resolved": "Notifications · recovery",
       "notifications_count": "{count} sent",
       "notification_profiles": "Profiles",
