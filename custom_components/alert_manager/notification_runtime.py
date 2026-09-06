@@ -811,6 +811,8 @@ class NotificationRuntime:
             "reminder": f"Alert Manager — {count} active alert(s)",
         }[kind]
         title = self._delivery.text(title_key, fallback).replace("{count}", str(count))
+        icon = {"started": "🚨", "reminder": "🔔", "resolved": "✅"}[kind]
+        title = f"{icon} {title}"
         grouped: dict[str, list[_NotificationItem]] = {}
         for item in items:
             key = (
