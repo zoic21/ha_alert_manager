@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.6 — 6 septembre 2026
+
+### Corrigé
+
+- Le bouton de suppression de l’historique reste désactivé lorsque celui-ci est
+  vide, y compris après un changement d’onglet et un rafraîchissement de l’interface.
+- La réévaluation affiche son résultat dans les détails de l’alerte. La fenêtre
+  reste ouverte pour lire le résultat si l’alerte n’est plus en cours.
+- L’icône de désacquittement utilise une icône Home Assistant valide.
+- Le compteur de notifications des détails d’alerte est intitulé « Notifications ».
+
 ## 2.2.0-beta.5 — 6 septembre 2026
 
 ### Corrigé
