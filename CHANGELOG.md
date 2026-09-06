@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.3 — 6 septembre 2026
+
+### Corrigé
+
+- Les actions d’enregistrement restent fixes en bas de tous les volets de
+  configuration, y compris les profils de notification et les règles personnalisées.
+- Le contenu des volets mobiles défile dans l’espace disponible sans entraîner
+  la page sous-jacente en fin de défilement.
+- Les labels des règles et des alertes affichent leur couleur et leur icône
+  avec le composant natif Home Assistant, y compris après un chargement différé.
+- La carte des détails d’une alerte conserve sa hauteur et ne coupe plus sa
+  dernière ligne dans les fenêtres de faible hauteur.
+
 ## 2.2.0-beta.2 — 6 septembre 2026
 
 ### Corrigé
