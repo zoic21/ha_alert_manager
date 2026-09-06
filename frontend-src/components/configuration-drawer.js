@@ -1,6 +1,11 @@
 import { esc } from "../utils/escaping.js";
 import { MDI_CLOSE } from "../utils/constants.js";
 
+export function confirmConfigurationDiscard(panel, value, original) {
+  return original === undefined || JSON.stringify(value) === original
+    || window.confirm(panel._t("settings.discard_confirm"));
+}
+
 export function renderConfigurationRemove(label, action, attributes = {}) {
   const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
   return `<ha-icon-button class="configuration-remove" data-action="${esc(action)}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>`;
@@ -75,7 +80,11 @@ export async function handleBottomSheetClosed(panel, actionHandlers, event) {
   if (!action) return;
   const button = { dataset: { action } };
   for (const handler of actionHandlers) {
-    if (await handler.call(panel, action, button, event)) return;
+    if (await handler.call(panel, action, button, event)) {
+      // A native swipe already closed the sheet; remount it if discard was refused.
+      if (action === "close-configuration-drawer" && panel._configurationDrawer) panel._render();
+      return;
+    }
   }
 }
 

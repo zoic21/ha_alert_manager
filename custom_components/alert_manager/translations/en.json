@@ -508,6 +508,7 @@
       "labels_help": "Home Assistant labels added to the entity and device labels for notifications."
     },
     "settings": {
+      "discard_confirm": "Discard unsaved changes in this drawer?",
       "alert_display": "Alert display",
       "coherence_schedule": "Automatic coherence scan",
       "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",

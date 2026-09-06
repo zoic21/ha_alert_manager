@@ -2649,6 +2649,11 @@ async function handleConfigBackupAction(action, button) {
 }
 
 // Source: frontend-src/components/configuration-drawer.js
+function confirmConfigurationDiscard(panel, value, original) {
+  return original === undefined || JSON.stringify(value) === original
+    || window.confirm(panel._t("settings.discard_confirm"));
+}
+
 function renderConfigurationRemove(label, action, attributes = {}) {
   const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
   return `<ha-icon-button class="configuration-remove" data-action="${esc(action)}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>`;
@@ -2723,7 +2728,11 @@ async function handleBottomSheetClosed(panel, actionHandlers, event) {
   if (!action) return;
   const button = { dataset: { action } };
   for (const handler of actionHandlers) {
-    if (await handler.call(panel, action, button, event)) return;
+    if (await handler.call(panel, action, button, event)) {
+      // A native swipe already closed the sheet; remount it if discard was refused.
+      if (action === "close-configuration-drawer" && panel._configurationDrawer) panel._render();
+      return;
+    }
   }
 }
 
@@ -5921,6 +5930,9 @@ async function handleAutomaticAction(action, button) {
       kind: "automatic",
       id: button.dataset.packId,
       fieldId: button.dataset.fieldId,
+      original: JSON.stringify(this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId]),
+      wasDirty: this._automaticDirty,
+
     };
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
@@ -5929,8 +5941,14 @@ async function handleAutomaticAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "automatic"
   ) {
-    const packId = this._configurationDrawer.id;
+    const { id: packId, fieldId, original, wasDirty } = this._configurationDrawer;
     captureAutomaticConfigurationValues.call(this);
+    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[packId]?.[fieldId], original)) return true;
+    if (original !== undefined) {
+      this._automaticMapDraft[packId][fieldId] = JSON.parse(original);
+      this._automaticDirty = wasDirty;
+      this._updateConfigurationSaveButton();
+    }
     this._configurationDrawer = null;
     refreshAutomaticConfigurationDrawer.call(this);
     updateAutomaticConfigurationCount.call(this, packId);
@@ -6566,6 +6584,10 @@ async function handleSettingsAction(action, button) {
     this._configurationDrawer = {
       kind: "settings",
       id: button.dataset.configurationId,
+      original: JSON.stringify(button.dataset.configurationId === "entity_delays"
+        ? this._entityDelayDraft : this._settingsDraft[button.dataset.configurationId]),
+      wasDirty: this._settingsDirty,
+
     };
     refreshSettingsConfigurationDrawer.call(this);
     return true;
@@ -6574,8 +6596,16 @@ async function handleSettingsAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "settings"
   ) {
-    const id = this._configurationDrawer.id;
+    const { id, original, wasDirty } = this._configurationDrawer;
     this._captureEntityDelayValues();
+    const value = id === "entity_delays" ? this._entityDelayDraft : this._settingsDraft[id];
+    if (!confirmConfigurationDiscard(this, value, original)) return true;
+    if (original !== undefined) {
+      if (id === "entity_delays") this._entityDelayDraft = JSON.parse(original);
+      else this._settingsDraft[id] = JSON.parse(original);
+      this._settingsDirty = wasDirty;
+      this._updateConfigurationSaveButton();
+    }
     this._configurationDrawer = null;
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, id);

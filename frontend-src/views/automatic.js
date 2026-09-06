@@ -2,6 +2,7 @@ import { durationFieldValue, renderDurationControl } from "../components/duratio
 import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import {
+  confirmConfigurationDiscard,
   renderConfigurationDrawer,
   renderConfigurationRemove,
   replaceConfigurationDrawer,
@@ -513,6 +514,9 @@ export async function handleAutomaticAction(action, button) {
       kind: "automatic",
       id: button.dataset.packId,
       fieldId: button.dataset.fieldId,
+      original: JSON.stringify(this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId]),
+      wasDirty: this._automaticDirty,
+
     };
     refreshAutomaticConfigurationDrawer.call(this);
     return true;
@@ -521,8 +525,14 @@ export async function handleAutomaticAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "automatic"
   ) {
-    const packId = this._configurationDrawer.id;
+    const { id: packId, fieldId, original, wasDirty } = this._configurationDrawer;
     captureAutomaticConfigurationValues.call(this);
+    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[packId]?.[fieldId], original)) return true;
+    if (original !== undefined) {
+      this._automaticMapDraft[packId][fieldId] = JSON.parse(original);
+      this._automaticDirty = wasDirty;
+      this._updateConfigurationSaveButton();
+    }
     this._configurationDrawer = null;
     refreshAutomaticConfigurationDrawer.call(this);
     updateAutomaticConfigurationCount.call(this, packId);

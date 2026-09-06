@@ -224,3 +224,58 @@ test("form validation includes the detached configuration drawer", () => {
   assert.equal(p._reportFormValidity({ id: "settings-form", querySelectorAll: () => [] }), false);
   assert.equal(p._reportFormValidity({ id: "automatic-form", querySelectorAll: () => [] }), true);
 });
+
+const { handleAutomaticAction } = await import("../frontend-src/views/automatic.js");
+const { handleSettingsAction } = await import("../frontend-src/views/settings.js");
+const { handleBottomSheetClosed } = await import("../frontend-src/components/configuration-drawer.js");
+
+for (const kind of ["automatic", "entity_delays", "excluded_entities"]) {
+  test(`${kind} drawer confirms changes and discards only its own edits`, async () => {
+    const p = panel();
+    p._ensureAutomaticDraft();
+    p._ensureSettingsDraft();
+    p._settingsDraft.excluded_entities = ["sensor.keep"];
+    p._automaticDirty = p._settingsDirty = true;
+    const handler = kind === "automatic" ? handleAutomaticAction : handleSettingsAction;
+    const open = () => handler.call(p, kind === "automatic" ? "open-automatic-configuration" : "open-settings-configuration", {
+      dataset: { packId: "battery", fieldId: "overrides", configurationId: kind },
+    });
+    const value = () => kind === "automatic" ? p._automaticMapDraft.battery.overrides
+      : kind === "entity_delays" ? p._entityDelayDraft : p._settingsDraft.excluded_entities;
+    let prompts = 0;
+    window.confirm = () => { prompts++; return false; };
+    try {
+      await open();
+      await handler.call(p, "close-configuration-drawer", {});
+      assert.equal(prompts, 0, "unchanged drawers close silently");
+      assert.equal(p._configurationDrawer, null);
+      await open();
+      const original = JSON.stringify(value());
+      value().push(kind === "automatic" ? { target_id: "new", value: 7 }
+        : kind === "entity_delays" ? { entity_id: "sensor.new", delay: 7 } : "sensor.new");
+      await handler.call(p, "close-configuration-drawer", {});
+      assert.equal(prompts, 1);
+      assert.ok(p._configurationDrawer, "declining preserves the drawer");
+      assert.notEqual(JSON.stringify(value()), original);
+      window.confirm = () => true;
+      await handler.call(p, "close-configuration-drawer", {});
+      assert.equal(p._configurationDrawer, null);
+      assert.equal(JSON.stringify(value()), original);
+      assert.equal(p._automaticMapDraft.battery.threshold, 15);
+      assert.equal(p._settingsDirty, true, "pre-existing unsaved edits stay dirty");
+      assert.equal(p._automaticDirty, true);
+    } finally { window.confirm = () => false; }
+  });
+}
+
+test("declining a native swipe close remounts the configuration drawer", async () => {
+  const p = panel();
+  await handleAutomaticAction.call(p, "open-automatic-configuration", { dataset: { packId: "battery", fieldId: "overrides" } });
+  p._automaticMapDraft.battery.overrides[0].value = 99;
+  let renders = 0;
+  p._render = () => { renders++; };
+  await handleBottomSheetClosed(p, [handleAutomaticAction], { target: { dataset: { closeAction: "close-configuration-drawer" } } });
+  assert.ok(p._configurationDrawer);
+  assert.equal(p._automaticMapDraft.battery.overrides[0].value, 99);
+  assert.equal(renders, 1);
+});

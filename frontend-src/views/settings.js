@@ -10,6 +10,7 @@ import {
 import { esc } from "../utils/escaping.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import {
+  confirmConfigurationDiscard,
   renderConfigurationDrawer,
   renderConfigurationRemove,
   replaceConfigurationDrawer,
@@ -616,6 +617,10 @@ export async function handleSettingsAction(action, button) {
     this._configurationDrawer = {
       kind: "settings",
       id: button.dataset.configurationId,
+      original: JSON.stringify(button.dataset.configurationId === "entity_delays"
+        ? this._entityDelayDraft : this._settingsDraft[button.dataset.configurationId]),
+      wasDirty: this._settingsDirty,
+
     };
     refreshSettingsConfigurationDrawer.call(this);
     return true;
@@ -624,8 +629,16 @@ export async function handleSettingsAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "settings"
   ) {
-    const id = this._configurationDrawer.id;
+    const { id, original, wasDirty } = this._configurationDrawer;
     this._captureEntityDelayValues();
+    const value = id === "entity_delays" ? this._entityDelayDraft : this._settingsDraft[id];
+    if (!confirmConfigurationDiscard(this, value, original)) return true;
+    if (original !== undefined) {
+      if (id === "entity_delays") this._entityDelayDraft = JSON.parse(original);
+      else this._settingsDraft[id] = JSON.parse(original);
+      this._settingsDirty = wasDirty;
+      this._updateConfigurationSaveButton();
+    }
     this._configurationDrawer = null;
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, id);
