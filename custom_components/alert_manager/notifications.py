@@ -41,7 +41,7 @@ _PROFILE_KEYS = {
     "default_policy",
     "exceptions",
 }
-_EXCEPTION_KEYS = {"selector_type", "selector_id", *_POLICY_KEYS}
+_EXCEPTION_KEYS = {"selector_type", "selector_id", "selector_ids", *_POLICY_KEYS}
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
 
@@ -238,7 +238,7 @@ def resolve_notification_policy(
     """Apply the first matching label exception over the profile defaults."""
     effective = dict(profile["default_policy"])
     for exception in profile["exceptions"]:
-        if exception["selector_id"] in label_ids:
+        if any(label_id in label_ids for label_id in exception["selector_ids"]):
             effective.update(
                 {key: exception[key] for key in _POLICY_KEYS if key in exception}
             )
@@ -284,15 +284,15 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
         _validate_exception(item, f"{path}.exceptions[{index}]")
         for index, item in enumerate(raw_exceptions)
     ]
-    duplicate_selectors: set[tuple[str, str]] = set()
+    duplicate_selectors: set[str] = set()
     for exception in exceptions:
-        selector = (exception["selector_type"], exception["selector_id"])
-        if selector in duplicate_selectors:
-            raise ValueError(
-                f"{path}.exceptions contains duplicate selector: "
-                f"{selector[0]}:{selector[1]}"
-            )
-        duplicate_selectors.add(selector)
+        for selector_id in exception["selector_ids"]:
+            if selector_id in duplicate_selectors:
+                raise ValueError(
+                    f"{path}.exceptions contains duplicate selector: "
+                    f"label:{selector_id}"
+                )
+            duplicate_selectors.add(selector_id)
 
     return {
         "id": profile_id,
@@ -313,15 +313,21 @@ def _validate_exception(value: Any, path: str) -> dict[str, Any]:
     selector_type = value.get("selector_type")
     if selector_type != "label":
         raise ValueError(f"{path}.selector_type is invalid")
-    selector_id = _non_empty_string(
-        value.get("selector_id"), f"{path}.selector_id", maximum=255
+    if "selector_ids" in value and "selector_id" in value:
+        raise ValueError(f"{path} cannot mix selector_id and selector_ids")
+    # Normalize existing stored/YAML exceptions at the validation boundary.
+    raw_ids = value.get("selector_ids", [value.get("selector_id")])
+    selector_ids = _validate_string_list(
+        raw_ids, f"{path}.selector_ids", maximum=MAX_NOTIFICATION_LABELS
     )
+    if not selector_ids:
+        raise ValueError(f"{path}.selector_ids must contain at least one label")
     policy = _validate_policy(value, path, partial=True)
     if not policy:
         raise ValueError(f"{path} must override at least one policy field")
     return {
         "selector_type": selector_type,
-        "selector_id": selector_id,
+        "selector_ids": selector_ids,
         **policy,
     }
 
@@ -330,7 +336,7 @@ def _validate_policy(value: Any, path: str, *, partial: bool) -> dict[str, Any]:
     """Normalize a complete policy or a partial inherited override."""
     if not isinstance(value, dict):
         raise ValueError(f"{path} must be an object")
-    allowed = _POLICY_KEYS | ({"selector_type", "selector_id"} if partial else set())
+    allowed = _EXCEPTION_KEYS if partial else _POLICY_KEYS
     _reject_unknown(value, allowed, path)
     if not partial and (missing := _POLICY_KEYS - value.keys()):
         raise ValueError(f"Missing {path} field: {sorted(missing)[0]}")

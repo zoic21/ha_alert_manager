@@ -324,28 +324,35 @@ test("notification exceptions have no type or pack dropdown", () => {
 });
 
 
-test("exception label chips retain one stored label on replacement and removal", () => {
+test("exception label chips retain every selected label and support removal", () => {
   const draft = structuredClone(profile);
-  const selector = {};
   let selectLabel;
   const panel = {
     _notificationProfileDraft: draft,
-    shadowRoot: { querySelector: () => selector },
     _configureSelector: (id, schema, value, onChange) => {
       if (id === "notification-exception-selector-0") selectLabel = onChange;
     },
     _configureSelect: () => {},
-    _multipleSelectorValue: (value) => Array.isArray(value) ? value : [],
+    _multipleSelectorValue: (value) => value,
     _t: t,
   };
   hydrateNotificationProfileControls(panel);
   selectLabel(["battery", "important"]);
-  assert.equal(draft.exceptions[0].selector_id, "important");
-  assert.deepEqual(selector.value, ["important"]);
+  assert.deepEqual(draft.exceptions[0].selector_ids, ["battery", "important"]);
+  assert.equal(Object.hasOwn(draft.exceptions[0], "selector_id"), false);
   selectLabel([]);
-  assert.equal(draft.exceptions[0].selector_id, "");
-  assert.deepEqual(selector.value, []);
+  assert.deepEqual(draft.exceptions[0].selector_ids, []);
+  assert.equal(notificationProfileValidationError(draft, t), "notifications.validation.selector");
   selectLabel(["battery"]);
-  assert.equal(draft.exceptions[0].selector_id, "battery");
-  assert.deepEqual(selector.value, ["battery"]);
+  assert.deepEqual(draft.exceptions[0].selector_ids, ["battery"]);
+});
+
+test("cloning exception labels isolates edits and converts legacy single labels", async () => {
+  const { cloneNotificationProfile } = await import("../frontend-src/components/notification-profiles.js");
+  const legacy = cloneNotificationProfile(profile);
+  assert.deepEqual(legacy.exceptions[0].selector_ids, ["battery"]);
+  assert.equal(Object.hasOwn(legacy.exceptions[0], "selector_id"), false);
+  const clone = cloneNotificationProfile(legacy);
+  clone.exceptions[0].selector_ids.push("important");
+  assert.deepEqual(legacy.exceptions[0].selector_ids, ["battery"]);
 });

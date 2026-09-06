@@ -151,7 +151,7 @@ Cela couvre par exemple les températures anormales, les consommations électriq
 
 Les règles peuvent être éditées visuellement ou en YAML et dupliquées depuis le panneau. Une règle peut surveiller jusqu’à 50 entités et une configuration peut contenir jusqu’à 500 règles. En YAML, les règles entièrement basées sur Jinja utilisent `source: jinja` ; les anciennes règles en `source: none` sont migrées automatiquement.
 
-Les règles peuvent porter des étiquettes Home Assistant (`label_ids` en YAML), affichées dans le tableau. Pour les notifications, elles complètent les étiquettes de l’entité et de l’appareil : elles servent au filtre du profil et aux exceptions par étiquette. Les exceptions ciblent uniquement un pack ou une étiquette.
+Les règles peuvent porter des étiquettes Home Assistant (`label_ids` en YAML), affichées dans le tableau. Pour les notifications, elles complètent les étiquettes de l’entité et de l’appareil : elles servent au filtre du profil et aux exceptions par étiquette. Les exceptions ciblent une ou plusieurs étiquettes (`selector_ids` en YAML) : une seule étiquette correspondante suffit. La première exception correspondante dans l’ordre de la liste remplace les paramètres par défaut du profil. Les anciennes exceptions à une étiquette (`selector_id`) restent acceptées.
 
 ### Exemples
 

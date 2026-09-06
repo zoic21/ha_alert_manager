@@ -290,10 +290,13 @@ def test_rule_deletion_cleans_runtime_and_preserves_label_exceptions(
             alert_id in manager.notification_runtime._batches[("loic", "started")].items
         )
 
+        exceptions_before_deletion = deepcopy(
+            manager.get_config()["notification_profiles"][0]["exceptions"]
+        )
         await manager.async_delete_rule(rule["id"])
 
         configured_profile = manager.get_config()["notification_profiles"][0]
-        assert configured_profile["exceptions"] == profile["exceptions"]
+        assert configured_profile["exceptions"] == exceptions_before_deletion
         assert all(
             alert_id not in profile_runtime
             for profile_runtime in manager.notification_runtime._runtime.values()
@@ -334,7 +337,7 @@ def test_yaml_round_trip_preserves_rule_labels_and_label_exceptions() -> None:
     assert imported_rule_id != "freezer"
     assert imported["rules"][0]["label_ids"] == ["important"]
     assert imported["automatic"]["battery"]["label_ids"] == ["important"]
-    assert label_exception["selector_id"] == "important"
+    assert label_exception["selector_ids"] == ["important"]
 
 
 def test_delivery_attempts_every_target_when_one_fails(hass) -> None:
@@ -523,3 +526,71 @@ def test_notification_batch_delay_default_and_yaml_roundtrip():
     assert (
         parse_config_yaml(dump_config_yaml(config))["notification_batch_delay"] == 120
     )
+
+
+@pytest.mark.parametrize(
+    ("labels", "interval"),
+    [
+        ({"important"}, 1800),
+        ({"cold"}, 1800),
+        ({"cold", "secondary"}, 1800),
+        ({"secondary"}, 3600),
+        ({"unrelated"}, None),
+        (set(), None),
+    ],
+)
+def test_exception_matches_any_selected_label(labels, interval):
+    profile = _profile()
+    first = profile["exceptions"][0]
+    del first["selector_id"]
+    first["selector_ids"] = ["important", "cold"]
+    config = validate_config(
+        {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+    )
+    normalized = config["notification_profiles"][0]
+    assert (
+        resolve_notification_policy(normalized, label_ids=labels).reminder_interval
+        == interval
+    )
+    assert validate_config(config) == config
+    assert (
+        parse_config_yaml(dump_config_yaml(config))["notification_profiles"]
+        == config["notification_profiles"]
+    )
+
+
+@pytest.mark.parametrize(
+    "ids", [[], "important", [123], [""], ["a"] * (MAX_NOTIFICATION_LABELS + 1)]
+)
+def test_exception_label_list_is_validated(ids):
+    profile = _profile()
+    first = profile["exceptions"][0]
+    del first["selector_id"]
+    first["selector_ids"] = ids
+    with pytest.raises(ValueError, match="selector_ids"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+
+
+def test_exception_labels_deduplicate_and_reject_overlaps_or_ambiguous_legacy_input():
+    profile = _profile()
+    first = profile["exceptions"][0]
+    first["selector_ids"] = ["important", "important", "cold"]
+    with pytest.raises(ValueError, match="cannot mix"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+    del first["selector_id"]
+    config = validate_config(
+        {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+    )
+    assert config["notification_profiles"][0]["exceptions"][0]["selector_ids"] == [
+        "important",
+        "cold",
+    ]
+    first["selector_ids"].append("secondary")
+    with pytest.raises(ValueError, match="duplicate selector"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )

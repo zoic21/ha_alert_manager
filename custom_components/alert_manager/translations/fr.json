@@ -268,7 +268,7 @@
       "resolved_title": "Alert Manager — {count} retour(s) à la normale",
       "seconds": "{count} s",
       "selector": "Étiquette",
-      "selector_help": "Une étiquette par exception. Une nouvelle sélection remplace la précédente.",
+      "selector_help": "L’exception s’applique si au moins une de ces étiquettes correspond à l’alerte.",
       "started_title": "Alert Manager — {count} nouvelle(s) alerte(s)",
       "targets": "Entités de notification",
       "targets_help": "Chaque entité sélectionnée reçoit la notification indépendamment.",

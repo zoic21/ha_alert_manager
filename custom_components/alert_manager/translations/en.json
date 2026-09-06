@@ -268,7 +268,7 @@
       "resolved_title": "Alert Manager — {count} back to normal",
       "seconds": "{count} s",
       "selector": "Label",
-      "selector_help": "One label per exception. Selecting another label replaces the previous one.",
+      "selector_help": "The exception applies if at least one of these labels matches the alert.",
       "started_title": "Alert Manager — {count} new alert(s)",
       "targets": "Notification entities",
       "targets_help": "Every selected entity receives the notification independently.",

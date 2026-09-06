@@ -10,6 +10,9 @@ import { esc } from "../utils/escaping.js";
 
 const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
 
+const exceptionLabelIds = (exception) => exception.selector_ids
+  ?? (exception.selector_id ? [exception.selector_id] : []);
+
 export function newNotificationProfileDraft() {
   const generatedId = globalThis.crypto?.randomUUID?.()
     ?? `profile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -36,7 +39,11 @@ export function cloneNotificationProfile(profile) {
     targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
-    exceptions: (profile.exceptions ?? []).map((exception) => ({ ...exception })),
+    exceptions: (profile.exceptions ?? []).map((exception) => {
+      const copy = { ...exception, selector_ids: [...exceptionLabelIds(exception)] };
+      delete copy.selector_id;
+      return copy;
+    }),
   };
 }
 
@@ -173,13 +180,10 @@ export function hydrateNotificationProfileControls(panel) {
     panel._configureSelector(
       selectorId,
       { label: { multiple: true } },
-      exception.selector_id ? [exception.selector_id] : [],
+      exceptionLabelIds(exception),
       (value) => {
-        // Use HA's label chips while retaining one label per exception.
-        const values = panel._multipleSelectorValue(value);
-        exception.selector_id = values.at(-1) ?? "";
-        const selector = panel.shadowRoot.querySelector(`#${selectorId}`);
-        if (selector) selector.value = exception.selector_id ? [exception.selector_id] : [];
+        exception.selector_ids = panel._multipleSelectorValue(value);
+        delete exception.selector_id;
       },
     );
     for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
@@ -243,7 +247,7 @@ export function notificationProfileValidationError(draft, t) {
     return t("notifications.validation.reminder");
   }
   for (const exception of draft.exceptions) {
-    if (!exception.selector_id) return t("notifications.validation.selector");
+    if (!exceptionLabelIds(exception).length) return t("notifications.validation.selector");
     const fields = ["notify_on_start", "notify_on_resolved", "reminder_interval"];
     if (!fields.some((field) => Object.hasOwn(exception, field))) {
       return t("notifications.validation.override");
@@ -393,7 +397,7 @@ export async function handleNotificationProfileAction(action, button) {
     captureNotificationProfileDraft(this);
     this._notificationProfileDraft.exceptions.push({
       selector_type: "label",
-      selector_id: "",
+      selector_ids: [],
     });
     this._refreshSettingsConfigurationDrawer();
     return true;
