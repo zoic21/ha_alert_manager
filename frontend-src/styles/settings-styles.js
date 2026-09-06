@@ -523,6 +523,17 @@ export const settingsStyles = `
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
+  .battery-threshold-row {
+    align-items: end;
+  }
+  .battery-threshold-value {
+    min-width: 0;
+  }
+  .battery-threshold-remove {
+    align-self: end;
+    margin-bottom: 4px;
+    color: var(--error-color);
+  }
   .pack-settings-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }

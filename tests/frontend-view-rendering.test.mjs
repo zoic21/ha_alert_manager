@@ -329,6 +329,11 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /automatic-configuration-entry/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
+  assert.match(markup, /class="pack-map-row battery-threshold-row"/);
+  assert.match(markup, /class="battery-threshold-value"><span class="field-label">automatic\.fields\.threshold\.label/);
+  assert.match(markup, /<ha-icon-button class="battery-threshold-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
+  assert.doesNotMatch(markup, /<span class="field-label">automatic\.fields\.device_thresholds\.label<\/span>/);
+
   assert.match(markup, /value="15"/);
   assert.match(markup, /pack-map-heading[\s\S]*data-action="add-pack-map-row"/);
   const drawerMarkup = markup.slice(markup.indexOf("configuration-drawer-backdrop"));

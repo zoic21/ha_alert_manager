@@ -166,6 +166,17 @@ export const responsiveStyles = `
       width: 100%;
       margin-top: 0;
     }
+    .pack-map-row.battery-threshold-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 12px;
+      box-sizing: border-box;
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-border-radius-lg, 12px);
+    }
+    .battery-threshold-row > ha-selector {
+      grid-column: 1 / -1;
+      min-width: 0;
+    }
     .pack-settings-values {
       grid-column: 1;
       grid-template-columns: 1fr;

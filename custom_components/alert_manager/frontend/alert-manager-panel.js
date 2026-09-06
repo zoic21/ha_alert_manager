@@ -5572,17 +5572,19 @@ function renderPackField(pack, field, config, context) {
       </div>`;
     }
     if (!isNumberMapField(field)) return "";
+    const batteryThresholds = pack.id === "battery" && field.id === "device_thresholds";
     const rows = draft[pack.id]?.[field.id] ?? [];
     return `<div class="field full pack-map-field">
       <div class="configuration-section-heading pack-map-heading">
-        <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
+        <div>${batteryThresholds ? "" : `<span class="field-label">${esc(label)}</span>`}<small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
         <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
       </div>
       <div class="pack-map-list">
-        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row">
+        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row${batteryThresholds ? " battery-threshold-row" : ""}">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
+          ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
+          ${batteryThresholds ? `</label><ha-icon-button class="battery-threshold-remove" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}" aria-label="${esc(t("buttons.remove"))}" title="${esc(t("buttons.remove"))}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>` : `<ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>`}
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
@@ -5866,7 +5868,9 @@ function hydrateAutomaticControls() {
           `auto-${pack.id}-${field.id}-target-${index}`,
           field.type === "entity_number_map"
             ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
-            : { device: {} },
+            : { device: pack.id === "battery" && field.id === "device_thresholds"
+              ? { entity: { domain: "sensor", device_class: "battery" } }
+              : {} },
           row.target_id,
           (value) => { row.target_id = typeof value === "string" ? value : ""; },
         );
@@ -7468,6 +7472,17 @@ const settingsStyles = `
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
+  .battery-threshold-row {
+    align-items: end;
+  }
+  .battery-threshold-value {
+    min-width: 0;
+  }
+  .battery-threshold-remove {
+    align-self: end;
+    margin-bottom: 4px;
+    color: var(--error-color);
+  }
   .pack-settings-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -7976,6 +7991,17 @@ const responsiveStyles = `
     .delay-row ha-button, .pack-map-row > ha-button {
       width: 100%;
       margin-top: 0;
+    }
+    .pack-map-row.battery-threshold-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 12px;
+      box-sizing: border-box;
+      border: 1px solid var(--divider-color);
+      border-radius: var(--ha-border-radius-lg, 12px);
+    }
+    .battery-threshold-row > ha-selector {
+      grid-column: 1 / -1;
+      min-width: 0;
     }
     .pack-settings-values {
       grid-column: 1;

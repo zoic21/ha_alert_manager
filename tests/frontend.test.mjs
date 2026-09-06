@@ -2902,6 +2902,27 @@ test("execution failure thresholds select automations and scripts", async () => 
   });
 });
 
+test("battery thresholds use the native battery sensor device filter", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks().filter((pack) => pack.id === "battery");
+  panel._automaticMapDraft = { battery: { device_thresholds: [{ target_id: "", value: 15 }] } };
+  panel.shadowRoot.querySelector = () => null;
+  panel.shadowRoot.querySelectorAll = () => [];
+  let selector;
+  panel._configureSelector = (...args) => { selector = args; };
+
+  panel._hydrateAutomaticControls();
+
+  assert.equal(selector[0], "auto-battery-device_thresholds-target-0");
+  assert.deepEqual(selector[1], {
+    device: { entity: { domain: "sensor", device_class: "battery" } },
+  });
+  selector[3]("battery-device");
+  assert.equal(panel._automaticMapDraft.battery.device_thresholds[0].target_id, "battery-device");
+});
+
 test("flapping device overrides hydrate a device selector", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
