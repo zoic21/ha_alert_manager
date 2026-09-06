@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.10 — 6 septembre 2026
+
+### Corrigé
+
+- La fermeture d’un volet de configuration modifié demande confirmation pour les
+  réglages des packs, les délais par entité et les exclusions, comme les profils
+  de notification. Confirmer restaure le contenu du volet à son ouverture sans
+  supprimer les autres modifications en attente.
+- Refuser l’abandon après un geste de fermeture mobile réaffiche le volet avec
+  ses modifications. Les volets inchangés se ferment sans confirmation.
+
 ## 2.2.0-beta.9 — 6 septembre 2026
 
 ### Corrigé
