@@ -4235,7 +4235,13 @@ function refreshOverviewData() {
     };
     for (const [key, count] of Object.entries(counts)) {
       const value = tablePage.querySelector?.(`[data-summary="${key}"] strong`);
-      if (value) value.textContent = String(count);
+      if (value) {
+        value.textContent = String(count);
+        if (key === "tracked") {
+          value.className = this._alerts.startup?.in_progress ? "summary-calculating" : "";
+          value.title = this._alerts.startup?.in_progress ? String(count) : "";
+        }
+      }
     }
     this._refreshAlertTableData("overview", tablePage);
     this._updateCountdowns();
@@ -4254,7 +4260,7 @@ function renderOverview(context) {
         <ha-card outlined data-summary="active" data-action="filter-summary-status" data-status="active" tabindex="0" role="button" aria-pressed="${selected("active")}"><span>${esc(t("overview.summary_active"))}</span><strong class="danger">${alerts.active_count}</strong></ha-card>
         <ha-card outlined data-summary="pending" data-action="filter-summary-status" data-status="pending" tabindex="0" role="button" aria-pressed="${selected("pending")}"><span>${esc(t("overview.summary_pending"))}</span><strong class="pending">${alerts.pending_count}</strong></ha-card>
         <ha-card outlined data-summary="acknowledged" data-action="filter-summary-status" data-status="acknowledged" tabindex="0" role="button" aria-pressed="${selected("acknowledged")}"><span>${esc(t("overview.summary_acknowledged"))}</span><strong class="acknowledged">${alerts.acknowledge_count ?? alerts.acknowledge?.length ?? 0}</strong></ha-card>
-        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong>${esc(alerts.startup?.in_progress ? t("overview.summary_tracked_calculating") : alerts.tracked_count ?? 0)}</strong></ha-card>
+        <ha-card outlined data-summary="tracked"><span>${esc(t("overview.summary_tracked"))}</span><strong${alerts.startup?.in_progress ? ` class="summary-calculating" title="${esc(t("overview.summary_tracked_calculating"))}"` : ""}>${esc(alerts.startup?.in_progress ? t("overview.summary_tracked_calculating") : alerts.tracked_count ?? 0)}</strong></ha-card>
       </section>`;
     return renderAlertTable("overview", rows, summary);
 }
@@ -6658,6 +6664,21 @@ const baseStyles = `
   }
   .summary strong {
     font-size: 30px;
+  }
+  .summary ha-card[data-summary="tracked"] {
+    gap: 8px;
+  }
+  .summary ha-card[data-summary="tracked"] > span {
+    flex-shrink: 0;
+  }
+  .summary strong.summary-calculating {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--secondary-text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .danger {
     color: var(--error-color, #db4437);

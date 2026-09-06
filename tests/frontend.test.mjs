@@ -774,6 +774,16 @@ test("overview row changes update the native table without rebuilding the page",
 
   assert.equal(renders, 0);
   assert.equal(summaries.active.textContent, "1");
+  panel._alerts.startup = { in_progress: true };
+  panel._refreshOverviewData();
+  assert.equal(summaries.tracked.className, "summary-calculating");
+  assert.equal(summaries.tracked.textContent, panel._t("overview.summary_tracked_calculating"));
+  assert.equal(summaries.tracked.title, summaries.tracked.textContent);
+  panel._alerts.startup.in_progress = false;
+  panel._refreshOverviewData();
+  assert.equal(summaries.tracked.className, "");
+  assert.equal(summaries.tracked.title, "");
+  assert.equal(summaries.tracked.textContent, "1");
   assert.deepEqual(tablePage.data.map((row) => row.id), ["unavailable:sensor.test"]);
 });
 

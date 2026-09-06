@@ -92,7 +92,7 @@ test("overview hides the provisional tracked total during startup", () => {
     t,
   });
 
-  assert.match(markup, /data-summary="tracked"[\s\S]*overview\.summary_tracked_calculating/);
+  assert.match(markup, /data-summary="tracked"[\s\S]*<strong class="summary-calculating" title="overview\.summary_tracked_calculating">overview\.summary_tracked_calculating<\/strong>/);
   assert.doesNotMatch(markup, /data-summary="tracked"[\s\S]*<strong>3<\/strong>/);
 });
 

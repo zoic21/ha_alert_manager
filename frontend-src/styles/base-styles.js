@@ -58,6 +58,21 @@ export const baseStyles = `
   .summary strong {
     font-size: 30px;
   }
+  .summary ha-card[data-summary="tracked"] {
+    gap: 8px;
+  }
+  .summary ha-card[data-summary="tracked"] > span {
+    flex-shrink: 0;
+  }
+  .summary strong.summary-calculating {
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--secondary-text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .danger {
     color: var(--error-color, #db4437);
   }
