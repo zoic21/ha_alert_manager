@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.4 — 6 septembre 2026
+
+### Corrigé
+
+- Les volets de configuration sont montés hors de la page à onglets, comme
+  l’éditeur de règles : leur barre d’actions passe au-dessus de la navigation
+  mobile au lieu d’être masquée par celle-ci.
+- Ce montage s’applique à l’ouverture, au rafraîchissement et au changement
+  de disposition. La saisie, la validation et la fermeture des volets restent
+  prises en charge après leur déplacement.
+
 ## 2.2.0-beta.3 — 6 septembre 2026
 
 ### Corrigé
