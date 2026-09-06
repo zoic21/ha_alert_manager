@@ -2,6 +2,23 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.5 — 6 septembre 2026
+
+### Corrigé
+
+- Sur mobile, le bouton Enregistrer de la page Configuration utilise le
+  décalage natif Home Assistant au-dessus des onglets. Sa position desktop
+  reste inchangée.
+- Les étiquettes des exceptions de notification utilisent les badges natifs
+  avec couleur et icône.
+
+### Ajouté
+
+- Une exception peut sélectionner plusieurs étiquettes : une seule correspondance
+  suffit (logique OU). La première exception correspondante reste prioritaire.
+- Les anciennes exceptions à une seule étiquette restent acceptées et sont
+  normalisées lors de la validation, y compris pour l’import YAML.
+
 ## 2.2.0-beta.4 — 6 septembre 2026
 
 ### Corrigé
