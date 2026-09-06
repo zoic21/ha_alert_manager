@@ -2014,7 +2014,10 @@ function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
           ? "ha-relative-time"
           : "ha-absolute-time",
       );
+      component.hass = this._hass;
       component.datetime = datetime;
+      // Keep a readable date until the native component loads and renders.
+      component.textContent = this._date(datetime);
       target.replaceChildren?.(component);
     }
 }

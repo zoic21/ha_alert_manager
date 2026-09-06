@@ -1596,6 +1596,8 @@ test("alert detail timestamps reuse Home Assistant absolute and relative time", 
   panel._hydrateAlertDetailTimestamps(target);
   assert.equal(target.component.tagName, "HA-ABSOLUTE-TIME");
   assert.equal(target.component.datetime, "2026-08-26T12:00:00Z");
+  assert.equal(target.component.hass, panel._hass);
+  assert.equal(target.component.textContent, panel._date(target.dataset.timestamp));
 
   await panel._handleClick({
     target: { closest: () => target },
@@ -1604,6 +1606,9 @@ test("alert detail timestamps reuse Home Assistant absolute and relative time", 
   });
   assert.equal(target.dataset.timestampMode, "relative");
   assert.equal(target.component.tagName, "HA-RELATIVE-TIME");
+  assert.equal(target.component.hass, panel._hass);
+  assert.equal(target.component.datetime, target.dataset.timestamp);
+  assert.equal(target.component.textContent, panel._date(target.dataset.timestamp));
 });
 
 test("alert details read the current value from a configured attribute path", () => {
