@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.7 — 6 septembre 2026
+
+### Corrigé
+
+- Sur mobile, les seuils par automatisation ou script et les délais par entité
+  affichent leur bouton de retrait à côté du champ, avec un alignement vertical.
+- Les configurations particulières de flapping présentent les durées avant le
+  nombre d’occurrences. Sur mobile, les durées sont côte à côte lorsque la largeur
+  disponible le permet ; les occurrences et le bouton Retirer partagent une ligne.
+- Le volet batterie est plus compact sur mobile et propose uniquement les
+  appareils ayant un capteur de batterie numérique.
+- Le texte « Calcul en cours… » du total suivi reste compact au démarrage.
+- Le délai de retour à la normale du flapping dispose d’une explication.
+
 ## 2.2.0-beta.6 — 6 septembre 2026
 
 ### Corrigé
