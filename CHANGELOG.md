@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.2 — 6 septembre 2026
+
+### Corrigé
+
+- Rétablissement des dates de détection et d’activation dans les détails des
+  alertes : les composants de date natifs reçoivent le contexte Home Assistant.
+- Conservation d’une date lisible tant que le composant natif n’est pas chargé
+  ou ne dispose pas encore du contexte nécessaire à son rendu. Le correctif
+  couvre aussi les dates d’acquittement, de résolution et de notification.
+
 ## 2.2.0-dev16 — 4 septembre 2026
 
 ### Modifié
