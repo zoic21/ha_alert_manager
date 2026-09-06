@@ -199,3 +199,28 @@ test("notification batch delay input survives navigation", () => {
   p.route = { path: "/alert-manager/settings" };
   assert.equal(p._settingsDraft.notification_batch_delay, "120");
 });
+
+
+test("detached configuration drawer inputs still capture and mark the correct draft", () => {
+  for (const kind of ["automatic", "settings"]) {
+    const p = panel();
+    p._configurationDrawer = { kind };
+    p._automaticDirty = p._settingsDirty = false;
+    let captures = 0;
+    p._captureAutomaticConfigurationValues = () => { captures += 1; };
+    const c = control(p, "#drawer-field", {}, ".configuration-drawer");
+    c.dispatchEvent(new Event("input"));
+    assert.equal(p._automaticDirty, kind === "automatic");
+    assert.equal(p._settingsDirty, kind === "settings");
+    assert.equal(captures, kind === "automatic" ? 1 : 0);
+  }
+});
+
+test("form validation includes the detached configuration drawer", () => {
+  const p = panel();
+  p._configurationDrawer = { kind: "settings" };
+  const drawer = { querySelectorAll: () => [], reportValidity: () => false };
+  p.shadowRoot.controls.set(".configuration-drawer", drawer);
+  assert.equal(p._reportFormValidity({ id: "settings-form", querySelectorAll: () => [] }), false);
+  assert.equal(p._reportFormValidity({ id: "automatic-form", querySelectorAll: () => [] }), true);
+});

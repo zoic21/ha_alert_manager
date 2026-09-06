@@ -17,7 +17,7 @@ import {
 } from "./components/alert-table.js";
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
-  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, SIDE_DRAWER_OPEN_ACTIONS,
+  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, mountConfigurationDrawer, SIDE_DRAWER_OPEN_ACTIONS,
   updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
 import { captureNotificationProfileDraft, handleNotificationProfileAction } from "./components/notification-profiles.js";
@@ -422,6 +422,7 @@ class AlertManagerPanel extends HTMLElement {
       <style>${this._styles()}</style>
       ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
       ${this._renderBackupRestoreDialog()}`;
+    mountConfigurationDrawer(this.shadowRoot);
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
@@ -721,6 +722,11 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
       this._refreshUiState();
       valid = false;
+    }
+    const kind = this._configurationDrawer?.kind;
+    if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
+      const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
+      if (drawer) valid = this._reportFormValidity(drawer) && valid;
     }
     return valid;
   }

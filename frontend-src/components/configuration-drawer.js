@@ -130,6 +130,18 @@ function restoreDrawerScroll(scroller, scrollTop) {
   });
 }
 
+export function mountConfigurationDrawer(root) {
+  // Like the rule editor, drawers must sit outside hass-tabs-subpage's
+  // scrolling content and stacking context, above its mobile navigation.
+  const drawer = root?.querySelector?.(".configuration-drawer");
+  if (!drawer) return;
+  const sheet = drawer.closest?.(".side-drawer-bottom-sheet");
+  const backdrop = root.querySelector?.(".configuration-drawer-backdrop");
+  if (backdrop && backdrop.parentNode !== root) root.append(backdrop);
+  const overlay = sheet ?? drawer;
+  if (overlay.parentNode !== root) root.append(overlay);
+}
+
 export function replaceConfigurationDrawer(root, markup) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
@@ -155,7 +167,9 @@ export function replaceConfigurationDrawer(root, markup) {
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
   if (root && markup) {
-    root.insertAdjacentHTML("beforeend", markup);
+    const template = document.createElement("template");
+    template.innerHTML = markup;
+    root.append(template.content);
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );

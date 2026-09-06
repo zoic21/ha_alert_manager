@@ -211,9 +211,11 @@ export function markConfigurationDirty(kind) {
 
 export function markConfigurationControlDirty(control) {
     if (!control?.closest || this._configurationDrawer?.kind === "notification") return;
-    if (control.closest("#automatic-form")) {
+    const drawerKind = control.closest(".configuration-drawer")
+      ? this._configurationDrawer?.kind : null;
+    if (control.closest("#automatic-form") || drawerKind === "automatic") {
       this._markConfigurationDirty("automatic");
-    } else if (control.closest("#settings-form")) {
+    } else if (control.closest("#settings-form") || drawerKind === "settings") {
       this._markConfigurationDirty("settings");
     }
 }
@@ -390,7 +392,7 @@ export async function saveSettings(additionalChanges = {}) {
       this._resetSettingsDraft({ preserveNotification: true });
       this._configurationDrawer = null;
       replaceConfigurationDrawer(
-        this.shadowRoot?.querySelector?.("#settings-form"),
+        this.shadowRoot,
         "",
       );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
@@ -442,7 +444,10 @@ export function ensureSettingsDraft() {
 }
 
 export function handleSettingsInput(event) {
-    if (event.target?.closest?.("#automatic-form")) this._captureAutomaticConfigurationValues();
+    if (event.target?.closest?.("#automatic-form")
+      || (event.target?.closest?.(".configuration-drawer") && this._configurationDrawer?.kind === "automatic")) {
+      this._captureAutomaticConfigurationValues();
+    }
     if (event.target?.dataset?.delayIndex !== undefined) this._captureEntityDelayValues();
     if (this._configurationDrawer?.kind === "notification") this._captureNotificationProfileDraft();
 
@@ -560,7 +565,7 @@ export function refreshSettingsConfigurationDrawer() {
     this._render();
     return;
   }
-  replaceConfigurationDrawer(form, renderSettingsConfigurationDrawer({
+  replaceConfigurationDrawer(this.shadowRoot, renderSettingsConfigurationDrawer({
     settingsDraft: this._settingsDraft,
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,

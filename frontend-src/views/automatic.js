@@ -302,7 +302,7 @@ export async function saveAutomatic() {
       this._configurationDrawer = null;
       this._resetAutomaticDraft();
       replaceConfigurationDrawer(
-        this.shadowRoot?.querySelector?.("#automatic-form"),
+        this.shadowRoot,
         "",
       );
       this._refreshUiState();
@@ -394,7 +394,7 @@ export function refreshAutomaticConfigurationDrawer() {
     this._render();
     return;
   }
-  replaceConfigurationDrawer(form, renderAutomaticConfigurationDrawer({
+  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
     availablePacks: this._packs.filter((pack) => pack.available),
     config: this._config,
     draft: this._automaticMapDraft,

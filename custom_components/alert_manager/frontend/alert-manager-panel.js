@@ -2755,6 +2755,18 @@ function restoreDrawerScroll(scroller, scrollTop) {
   });
 }
 
+function mountConfigurationDrawer(root) {
+  // Like the rule editor, drawers must sit outside hass-tabs-subpage's
+  // scrolling content and stacking context, above its mobile navigation.
+  const drawer = root?.querySelector?.(".configuration-drawer");
+  if (!drawer) return;
+  const sheet = drawer.closest?.(".side-drawer-bottom-sheet");
+  const backdrop = root.querySelector?.(".configuration-drawer-backdrop");
+  if (backdrop && backdrop.parentNode !== root) root.append(backdrop);
+  const overlay = sheet ?? drawer;
+  if (overlay.parentNode !== root) root.append(overlay);
+}
+
 function replaceConfigurationDrawer(root, markup) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
@@ -2780,7 +2792,9 @@ function replaceConfigurationDrawer(root, markup) {
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
   root?.querySelector?.(".configuration-drawer")?.remove?.();
   if (root && markup) {
-    root.insertAdjacentHTML("beforeend", markup);
+    const template = document.createElement("template");
+    template.innerHTML = markup;
+    root.append(template.content);
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );
@@ -5654,7 +5668,7 @@ async function saveAutomatic() {
       this._configurationDrawer = null;
       this._resetAutomaticDraft();
       replaceConfigurationDrawer(
-        this.shadowRoot?.querySelector?.("#automatic-form"),
+        this.shadowRoot,
         "",
       );
       this._refreshUiState();
@@ -5746,7 +5760,7 @@ function refreshAutomaticConfigurationDrawer() {
     this._render();
     return;
   }
-  replaceConfigurationDrawer(form, renderAutomaticConfigurationDrawer({
+  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
     availablePacks: this._packs.filter((pack) => pack.available),
     config: this._config,
     draft: this._automaticMapDraft,
@@ -6099,9 +6113,11 @@ function markConfigurationDirty(kind) {
 
 function markConfigurationControlDirty(control) {
     if (!control?.closest || this._configurationDrawer?.kind === "notification") return;
-    if (control.closest("#automatic-form")) {
+    const drawerKind = control.closest(".configuration-drawer")
+      ? this._configurationDrawer?.kind : null;
+    if (control.closest("#automatic-form") || drawerKind === "automatic") {
       this._markConfigurationDirty("automatic");
-    } else if (control.closest("#settings-form")) {
+    } else if (control.closest("#settings-form") || drawerKind === "settings") {
       this._markConfigurationDirty("settings");
     }
 }
@@ -6278,7 +6294,7 @@ async function saveSettings(additionalChanges = {}) {
       this._resetSettingsDraft({ preserveNotification: true });
       this._configurationDrawer = null;
       replaceConfigurationDrawer(
-        this.shadowRoot?.querySelector?.("#settings-form"),
+        this.shadowRoot,
         "",
       );
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
@@ -6330,7 +6346,10 @@ function ensureSettingsDraft() {
 }
 
 function handleSettingsInput(event) {
-    if (event.target?.closest?.("#automatic-form")) this._captureAutomaticConfigurationValues();
+    if (event.target?.closest?.("#automatic-form")
+      || (event.target?.closest?.(".configuration-drawer") && this._configurationDrawer?.kind === "automatic")) {
+      this._captureAutomaticConfigurationValues();
+    }
     if (event.target?.dataset?.delayIndex !== undefined) this._captureEntityDelayValues();
     if (this._configurationDrawer?.kind === "notification") this._captureNotificationProfileDraft();
 
@@ -6448,7 +6467,7 @@ function refreshSettingsConfigurationDrawer() {
     this._render();
     return;
   }
-  replaceConfigurationDrawer(form, renderSettingsConfigurationDrawer({
+  replaceConfigurationDrawer(this.shadowRoot, renderSettingsConfigurationDrawer({
     settingsDraft: this._settingsDraft,
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
@@ -8357,6 +8376,7 @@ class AlertManagerPanel extends HTMLElement {
       <style>${this._styles()}</style>
       ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
       ${this._renderBackupRestoreDialog()}`;
+    mountConfigurationDrawer(this.shadowRoot);
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
@@ -8656,6 +8676,11 @@ class AlertManagerPanel extends HTMLElement {
       this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
       this._refreshUiState();
       valid = false;
+    }
+    const kind = this._configurationDrawer?.kind;
+    if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
+      const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
+      if (drawer) valid = this._reportFormValidity(drawer) && valid;
     }
     return valid;
   }

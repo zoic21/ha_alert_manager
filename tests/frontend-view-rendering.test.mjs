@@ -6,7 +6,7 @@ import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
 import {
-  renderConfigurationDrawer,
+  mountConfigurationDrawer, renderConfigurationDrawer,
   replaceConfigurationDrawer,
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
@@ -633,5 +633,43 @@ test("all configuration drawers keep save actions outside their scroll area", ()
       saveAction: "save-settings", saveLabel: "Save", busy: false, useBottomSheet,
     });
     assert.match(markup, /<section class="side-drawer-section">Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);
+  }
+});
+
+
+test("configuration overlays mount outside the tabs page on mobile and desktop", () => {
+  for (const mobile of [false, true]) {
+    const page = {};
+    const sheet = mobile ? { parentNode: page } : null;
+    const backdrop = mobile ? null : { parentNode: page };
+    const drawer = { parentNode: sheet ?? page, closest: () => sheet };
+    const appended = [];
+    const root = {
+      querySelector: (selector) => selector === ".configuration-drawer" ? drawer : backdrop,
+      append: (node) => { node.parentNode = root; appended.push(node); },
+    };
+    mountConfigurationDrawer(root);
+    assert.deepEqual(appended, mobile ? [sheet] : [backdrop, drawer]);
+    assert.equal((sheet ?? drawer).parentNode, root);
+    mountConfigurationDrawer(root);
+    assert.equal(appended.length, mobile ? 1 : 2);
+  }
+});
+
+
+test("a newly opened configuration drawer can be inserted into the panel shadow root", () => {
+  const originalDocument = globalThis.document;
+  const fragment = {};
+  const template = { content: fragment, innerHTML: "" };
+  const appended = [];
+  // ShadowRoot supports append, but has no insertAdjacentHTML method.
+  const root = { querySelector: () => null, append: (node) => appended.push(node) };
+  globalThis.document = { createElement: () => template };
+  try {
+    replaceConfigurationDrawer(root, '<ha-card class="configuration-drawer"></ha-card>');
+    assert.deepEqual(appended, [fragment]);
+    assert.match(template.innerHTML, /configuration-drawer/);
+  } finally {
+    globalThis.document = originalDocument;
   }
 });
