@@ -12,8 +12,6 @@ export function refreshHistoryData() {
     }
     this._refreshAlertTableData("history", tablePage);
     this._updateSelectionToolbar();
-    const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
-    if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
 }
 

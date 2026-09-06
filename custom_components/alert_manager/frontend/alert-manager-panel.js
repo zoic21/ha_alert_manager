@@ -4423,8 +4423,6 @@ function refreshHistoryData() {
     }
     this._refreshAlertTableData("history", tablePage);
     this._updateSelectionToolbar();
-    const clearButton = tablePage.querySelector?.('[data-action="clear-history"]');
-    if (clearButton) clearButton.disabled = !(this._history?.events?.length);
     this._refreshUiState();
 }
 
@@ -8444,7 +8442,6 @@ class AlertManagerPanel extends HTMLElement {
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
       "enable-monitoring",
-      "clear-history",
       "delete-history",
       "bulk-acknowledge",
       "bulk-unacknowledge",
@@ -8458,7 +8455,11 @@ class AlertManagerPanel extends HTMLElement {
       "confirm-config-backup-restore",
     ]);
     for (const button of this.shadowRoot?.querySelectorAll?.("[data-action]") ?? []) {
-      if (busyActions.has(button.dataset.action)) button.disabled = this._busy;
+      if (button.dataset.action === "clear-history") {
+        button.disabled = this._busy || !this._history?.events?.length;
+      } else if (busyActions.has(button.dataset.action)) {
+        button.disabled = this._busy;
+      }
     }
     this._updateConfigurationSaveButton();
     this._decorateActionIcons();

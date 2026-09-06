@@ -4908,3 +4908,32 @@ test("reevaluation does not overwrite another dialog opened while awaiting the r
   assert.equal(replacement.innerHTML, "another dialog");
   assert.equal(original.reevaluating, false);
 });
+
+test("clear history stays disabled after returning to an empty history tab", () => {
+  const panel = tablePanel();
+  const button = { dataset: { action: "clear-history" }, disabled: true };
+  const tablePage = {};
+  panel.shadowRoot.querySelector = (selector) => selector === '[data-alert-table-page="history"]' ? tablePage : null;
+  panel.shadowRoot.querySelectorAll = () => [button];
+  panel._refreshAlertTableData = panel._updateSelectionToolbar = () => {};
+  panel._updateConfigurationSaveButton = panel._decorateActionIcons = () => {};
+  panel._history.events = [];
+  panel._busy = false;
+  panel._activeTab = "settings";
+  panel._refreshUiState();
+  panel._activeTab = "history";
+  panel._refreshHistoryData();
+  assert.equal(button.disabled, true);
+  panel._refreshUiState();
+  assert.equal(button.disabled, true);
+  panel._history.events = [{ event_id: "one" }];
+  panel._refreshHistoryData();
+  assert.equal(button.disabled, false);
+  panel._busy = true;
+  panel._refreshHistoryData();
+  assert.equal(button.disabled, true);
+  panel._busy = false;
+  panel._history.events = [];
+  panel._refreshHistoryData();
+  assert.equal(button.disabled, true);
+});
