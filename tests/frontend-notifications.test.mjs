@@ -270,8 +270,8 @@ test("notification label selectors use native HA labels", () => {
   });
 
   assert.deepEqual(controls.get("notification-exception-selector-0"), {
-    selector: { label: {} },
-    value: "battery",
+    selector: { label: { multiple: true } },
+    value: ["battery"],
   });
 });
 
@@ -321,4 +321,31 @@ test("notification exceptions have no type or pack dropdown", () => {
   }, { packs: [{ id: "battery" }] });
   assert.equal(selects.has("notification-exception-type-0"), false);
   assert.equal(selects.has("notification-exception-selector-0"), false);
+});
+
+
+test("exception label chips retain one stored label on replacement and removal", () => {
+  const draft = structuredClone(profile);
+  const selector = {};
+  let selectLabel;
+  const panel = {
+    _notificationProfileDraft: draft,
+    shadowRoot: { querySelector: () => selector },
+    _configureSelector: (id, schema, value, onChange) => {
+      if (id === "notification-exception-selector-0") selectLabel = onChange;
+    },
+    _configureSelect: () => {},
+    _multipleSelectorValue: (value) => Array.isArray(value) ? value : [],
+    _t: t,
+  };
+  hydrateNotificationProfileControls(panel);
+  selectLabel(["battery", "important"]);
+  assert.equal(draft.exceptions[0].selector_id, "important");
+  assert.deepEqual(selector.value, ["important"]);
+  selectLabel([]);
+  assert.equal(draft.exceptions[0].selector_id, "");
+  assert.deepEqual(selector.value, []);
+  selectLabel(["battery"]);
+  assert.equal(draft.exceptions[0].selector_id, "battery");
+  assert.deepEqual(selector.value, ["battery"]);
 });

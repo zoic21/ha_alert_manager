@@ -136,7 +136,7 @@ function renderException(exception, index, t) {
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
     <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button type="button" appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
     <div class="notification-exception-grid">
-      <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector></div>
+      <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
       ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
       <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), exception.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS)}` : ""}</div></div>
@@ -169,11 +169,18 @@ export function hydrateNotificationProfileControls(panel) {
     (value) => { draft.label_ids = panel._multipleSelectorValue(value, draft.label_ids); },
   );
   draft.exceptions.forEach((exception, index) => {
+    const selectorId = `notification-exception-selector-${index}`;
     panel._configureSelector(
-      `notification-exception-selector-${index}`,
-      { label: {} },
-      exception.selector_id,
-      (value) => { exception.selector_id = typeof value === "string" ? value : ""; },
+      selectorId,
+      { label: { multiple: true } },
+      exception.selector_id ? [exception.selector_id] : [],
+      (value) => {
+        // Use HA's label chips while retaining one label per exception.
+        const values = panel._multipleSelectorValue(value);
+        exception.selector_id = values.at(-1) ?? "";
+        const selector = panel.shadowRoot.querySelector(`#${selectorId}`);
+        if (selector) selector.value = exception.selector_id ? [exception.selector_id] : [];
+      },
     );
     for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
       panel._configureSelect(
