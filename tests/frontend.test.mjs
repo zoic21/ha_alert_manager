@@ -1712,6 +1712,8 @@ test("alert details use compact rows without forcing internal dialog width", () 
   assert.match(styles, /\.alert-details-list\{width:100%;min-width:0;margin:0\}/);
   assert.match(styles, /\.alert-details-item\{display:grid;min-width:0;grid-template-columns:[^}]+border-bottom:/);
   assert.match(styles, /\.alert-details-card\{display:block;overflow:hidden;/);
+  assert.match(styles, /\.alert-details-card\{[^}]*flex-shrink:0;/);
+  assert.match(styles, /\.alert-details-summary\{[^}]*flex-shrink:0;/);
   assert.doesNotMatch(styles, /min-width:min\(620px/);
   assert.doesNotMatch(styles, /mdi:chevron-right/);
   assert.doesNotMatch(styles, /\.alert-details-item\{[^}]*background:/);

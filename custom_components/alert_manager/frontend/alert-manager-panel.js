@@ -6740,6 +6740,7 @@ const tableStyles = `
   }
   .alert-details-summary {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     gap: var(--ha-space-3, 12px);
     margin-bottom: var(--ha-space-4, 16px);
@@ -6783,6 +6784,7 @@ const tableStyles = `
   .alert-details-card {
     display: block;
     overflow: hidden;
+    flex-shrink: 0;
     border-radius: var(--ha-card-border-radius, var(--ha-border-radius-lg, 12px));
     box-shadow: none;
   }
