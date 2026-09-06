@@ -329,7 +329,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /automatic-configuration-entry/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
-  assert.match(markup, /class="pack-map-row battery-threshold-row"/);
+  assert.match(markup, /class="pack-map-row pack-number-row battery-threshold-row"/);
   assert.match(markup, /class="battery-threshold-value"><span class="field-label">automatic\.fields\.threshold\.label/);
   assert.match(markup, /<ha-icon-button class="battery-threshold-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
   assert.doesNotMatch(markup, /<span class="field-label">automatic\.fields\.device_thresholds\.label<\/span>/);
@@ -497,6 +497,8 @@ test("flapping renders source packs and device overrides in separate drawers", (
   assert.match(deviceMarkup, /auto-flapping-device_overrides-target-0/);
   assert.match(deviceMarkup, /automatic\.device/);
   assert.match(deviceMarkup, /class="pack-setting-field"/);
+  assert.match(deviceMarkup, /data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-setting-id="occurrences"[\s\S]*data-action="remove-pack-map-row"/);
+  assert.deepEqual(numberFields.map((field) => field.id), ["occurrences", "window", "recovery"]);
   assert.doesNotMatch(deviceMarkup, /data-pack-source-toggle/);
 });
 

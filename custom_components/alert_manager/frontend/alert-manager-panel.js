@@ -5557,6 +5557,7 @@ function renderPackField(pack, field, config, context) {
     }
     if (field.type === "device_settings_map") {
       const rows = draft[pack.id]?.[field.id] ?? [];
+      const settings = [...(field.fields ?? [])].sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
       return `<div class="field full pack-map-field">
         <div class="configuration-section-heading pack-map-heading">
           <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
@@ -5565,7 +5566,7 @@ function renderPackField(pack, field, config, context) {
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            <div class="pack-settings-values">${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
+            <div class="pack-settings-values">${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -5580,7 +5581,7 @@ function renderPackField(pack, field, config, context) {
         <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
       </div>
       <div class="pack-map-list">
-        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row${batteryThresholds ? " battery-threshold-row" : ""}">
+        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-number-row${batteryThresholds ? " battery-threshold-row" : ""}">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
           ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
@@ -7986,26 +7987,60 @@ const responsiveStyles = `
       width: auto;
     }
     .delay-row, .pack-map-row {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
     }
-    .delay-row ha-button, .pack-map-row > ha-button {
-      width: 100%;
-      margin-top: 0;
+    .configuration-drawer .pack-map-heading .field-label {
+      display: none;
     }
-    .pack-map-row.battery-threshold-row {
-      grid-template-columns: minmax(0, 1fr) auto;
+    .pack-number-row, .delay-row {
       padding: 12px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color);
       border-radius: var(--ha-border-radius-lg, 12px);
     }
-    .battery-threshold-row > ha-selector {
+    .pack-number-row > ha-selector,
+    .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
       min-width: 0;
+    }
+    .delay-row > ha-button, .pack-map-row > ha-button {
+      width: auto;
+      justify-self: center;
+      margin: 0;
+    }
+    .delay-row {
+      grid-template-columns: minmax(190px, 1fr) auto;
+    }
+    .pack-map-row.battery-threshold-row {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
     .pack-settings-values {
       grid-column: 1;
       grid-template-columns: 1fr;
+    }
+    .pack-settings-row {
+      container-type: inline-size;
+    }
+    .pack-settings-row > .pack-settings-values {
+      display: contents;
+    }
+    .pack-settings-row .pack-setting-field {
+      grid-template-rows: auto auto;
+      align-self: start;
+    }
+    .pack-settings-row .pack-duration-setting {
+      grid-column: 1 / -1;
+    }
+    .pack-settings-row > ha-button {
+      align-self: end;
+      margin-bottom: 8px;
+    }
+    @container (min-width: 390px) {
+      .pack-settings-row .pack-duration-setting {
+        grid-column: auto;
+        grid-template-rows: 3.9em auto auto;
+      }
     }
     .table-page-top {
       padding: 12px 12px 0;

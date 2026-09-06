@@ -160,26 +160,60 @@ export const responsiveStyles = `
       width: auto;
     }
     .delay-row, .pack-map-row {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
     }
-    .delay-row ha-button, .pack-map-row > ha-button {
-      width: 100%;
-      margin-top: 0;
+    .configuration-drawer .pack-map-heading .field-label {
+      display: none;
     }
-    .pack-map-row.battery-threshold-row {
-      grid-template-columns: minmax(0, 1fr) auto;
+    .pack-number-row, .delay-row {
       padding: 12px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color);
       border-radius: var(--ha-border-radius-lg, 12px);
     }
-    .battery-threshold-row > ha-selector {
+    .pack-number-row > ha-selector,
+    .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
       min-width: 0;
+    }
+    .delay-row > ha-button, .pack-map-row > ha-button {
+      width: auto;
+      justify-self: center;
+      margin: 0;
+    }
+    .delay-row {
+      grid-template-columns: minmax(190px, 1fr) auto;
+    }
+    .pack-map-row.battery-threshold-row {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
     .pack-settings-values {
       grid-column: 1;
       grid-template-columns: 1fr;
+    }
+    .pack-settings-row {
+      container-type: inline-size;
+    }
+    .pack-settings-row > .pack-settings-values {
+      display: contents;
+    }
+    .pack-settings-row .pack-setting-field {
+      grid-template-rows: auto auto;
+      align-self: start;
+    }
+    .pack-settings-row .pack-duration-setting {
+      grid-column: 1 / -1;
+    }
+    .pack-settings-row > ha-button {
+      align-self: end;
+      margin-bottom: 8px;
+    }
+    @container (min-width: 390px) {
+      .pack-settings-row .pack-duration-setting {
+        grid-column: auto;
+        grid-template-rows: 3.9em auto auto;
+      }
     }
     .table-page-top {
       padding: 12px 12px 0;

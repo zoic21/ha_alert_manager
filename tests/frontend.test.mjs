@@ -4968,3 +4968,15 @@ test("clear history stays disabled after returning to an empty history tab", () 
   panel._refreshHistoryData();
   assert.equal(button.disabled, true);
 });
+
+
+test("mobile configuration pairs inputs with removal actions without changing desktop grids", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const styles = compactCss(new Panel()._styles());
+  const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
+  assert.match(mobile, /\.delay-row,\.pack-map-row\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\);align-items:center/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:contents/);
+  assert.match(mobile, /\.pack-settings-row>ha-button\{align-self:end;margin-bottom:8px/);
+  assert.match(mobile, /@container\(min-width:390px\)/);
+  assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
+});
