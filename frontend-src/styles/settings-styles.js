@@ -534,8 +534,7 @@ export const settingsStyles = `
     color: var(--error-color);
   }
   .pack-map-row > .configuration-remove,
-  .delay-row > .configuration-remove,
-  .rule-value-row > .configuration-remove {
+  .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
     color: var(--error-color);

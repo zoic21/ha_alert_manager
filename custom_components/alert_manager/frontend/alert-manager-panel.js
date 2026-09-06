@@ -7519,8 +7519,7 @@ const settingsStyles = `
     color: var(--error-color);
   }
   .pack-map-row > .configuration-remove,
-  .delay-row > .configuration-remove,
-  .rule-value-row > .configuration-remove {
+  .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
     color: var(--error-color);
@@ -7686,10 +7685,10 @@ const ruleEditorStyles = `
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
-    align-items: start;
+    align-items: center;
   }
-  .rule-value-row ha-button {
-    margin-top: 8px;
+  .rule-value-row ha-input::part(wa-hint) {
+    min-height: 0;
   }
   .rule-value-footer {
     display: flex;
@@ -8156,9 +8155,6 @@ const responsiveStyles = `
     }
     .rule-value-row {
       grid-template-columns: minmax(0, 1fr) auto;
-    }
-    .rule-value-row ha-button {
-      margin-top: 0;
     }
     .side-drawer-actions {
       flex-wrap: wrap;

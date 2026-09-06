@@ -117,10 +117,10 @@ export const ruleEditorStyles = `
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
-    align-items: start;
+    align-items: center;
   }
-  .rule-value-row ha-button {
-    margin-top: 8px;
+  .rule-value-row ha-input::part(wa-hint) {
+    min-height: 0;
   }
   .rule-value-footer {
     display: flex;

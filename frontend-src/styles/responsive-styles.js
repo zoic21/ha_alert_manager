@@ -289,9 +289,6 @@ export const responsiveStyles = `
     .rule-value-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }
-    .rule-value-row ha-button {
-      margin-top: 0;
-    }
     .side-drawer-actions {
       flex-wrap: wrap;
     }
