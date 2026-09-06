@@ -173,11 +173,12 @@ export const responsiveStyles = `
       border-radius: var(--ha-border-radius-lg, 12px);
     }
     .pack-number-row > ha-selector,
-    .pack-settings-row > .pack-target-field {
+    .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
       min-width: 0;
     }
-    .delay-row > ha-button, .pack-map-row > ha-button {
+    .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
+      align-self: center;
       width: auto;
       justify-self: center;
       margin: 0;
@@ -209,9 +210,10 @@ export const responsiveStyles = `
     .pack-settings-row ha-input::part(wa-hint) {
       min-height: 0;
     }
-    .pack-settings-row > ha-button {
+    .battery-threshold-row > .configuration-remove,
+    .pack-settings-row > .configuration-remove {
       align-self: end;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
     @container (min-width: 390px) {
       .pack-settings-row .pack-duration-setting {
@@ -285,7 +287,7 @@ export const responsiveStyles = `
       grid-template-columns: 1fr;
     }
     .rule-value-row {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) auto;
     }
     .rule-value-row ha-button {
       margin-top: 0;

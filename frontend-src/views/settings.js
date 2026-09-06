@@ -11,6 +11,7 @@ import { esc } from "../utils/escaping.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import {
   renderConfigurationDrawer,
+  renderConfigurationRemove,
   replaceConfigurationDrawer,
 } from "../components/configuration-drawer.js";
 import {
@@ -138,7 +139,7 @@ export function renderSettingsConfigurationDrawer(context) {
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
         ${renderDurationControl(`entity-delay-${index}`, t("settings.aria_delay"), row.delay, 0, MAX_DURATION_SECONDS, { attributes: { "data-delay-index": index } })}
-        <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        ${renderConfigurationRemove(t("settings.aria_remove_delay"), "remove-entity-delay", { "data-index": index })}
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
     title = t("settings.entity_exclusions");

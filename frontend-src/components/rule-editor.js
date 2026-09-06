@@ -2,7 +2,7 @@ import { durationFieldValue } from "./duration-field.js";
 import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
-import { renderSideDrawer } from "./configuration-drawer.js";
+import { renderSideDrawer, renderConfigurationRemove } from "./configuration-drawer.js";
 
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -497,7 +497,7 @@ export function renderRuleValues({ rule, t }) {
       ? t("rules.multiple_any")
       : t("rules.multiple_none");
     return `<div class="field full rule-values-field"><span class="field-label">${esc(t("rules.values"))}</span><div class="rule-value-list">
-      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(t("rules.aria_remove_value", { index: index + 1 }))}">${esc(t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? renderConfigurationRemove(t("rules.aria_remove_value", { index: index + 1 }), "remove-rule-value", { "data-index": index }) : ""}</div>`).join("")}
     </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div></div>`;
 }
 

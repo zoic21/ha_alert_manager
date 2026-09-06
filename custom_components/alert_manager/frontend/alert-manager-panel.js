@@ -2649,6 +2649,11 @@ async function handleConfigBackupAction(action, button) {
 }
 
 // Source: frontend-src/components/configuration-drawer.js
+function renderConfigurationRemove(label, action, attributes = {}) {
+  const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  return `<ha-icon-button class="configuration-remove" data-action="${esc(action)}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>`;
+}
+
 const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
   "open-automatic-configuration",
@@ -2959,7 +2964,7 @@ function renderException(exception, index, t) {
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong><ha-button type="button" appearance="plain" variant="danger" data-action="remove-notification-exception" data-index="${index}">${esc(t("buttons.delete"))}</ha-button></div>
+    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
@@ -3735,7 +3740,7 @@ function renderRuleValues({ rule, t }) {
       ? t("rules.multiple_any")
       : t("rules.multiple_none");
     return `<div class="field full rule-values-field"><span class="field-label">${esc(t("rules.values"))}</span><div class="rule-value-list">
-      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? `<ha-button appearance="plain" variant="danger" data-action="remove-rule-value" data-index="${index}" aria-label="${esc(t("rules.aria_remove_value", { index: index + 1 }))}">${esc(t("buttons.remove"))}</ha-button>` : ""}</div>`).join("")}
+      ${values.map((value, index) => `<div class="rule-value-row"><ha-input data-rule-value-index="${index}" type="text" value="${esc(value)}" required aria-label="${esc(t("rules.aria_value", { index: index + 1 }))}"></ha-input>${values.length > 1 ? renderConfigurationRemove(t("rules.aria_remove_value", { index: index + 1 }), "remove-rule-value", { "data-index": index }) : ""}</div>`).join("")}
     </div><div class="rule-value-footer"><small>${esc(multipleHint)}</small><ha-button appearance="plain" data-action="add-rule-value"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div></div>`;
 }
 
@@ -5567,7 +5572,7 @@ function renderPackField(pack, field, config, context) {
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
             <div class="pack-settings-values">${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
-            <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
+            ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
       </div>`;
@@ -5585,7 +5590,7 @@ function renderPackField(pack, field, config, context) {
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
           ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${batteryThresholds ? `</label><ha-icon-button class="battery-threshold-remove" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}" aria-label="${esc(t("buttons.remove"))}" title="${esc(t("buttons.remove"))}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>` : `<ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>`}
+          ${batteryThresholds ? "</label>" : ""}${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
@@ -6084,7 +6089,7 @@ function renderSettingsConfigurationDrawer(context) {
       <div class="delay-list">${entityDelayDraft.length ? entityDelayDraft.map((row, index) => `<div class="delay-row">
         <ha-selector id="delay-entity-${index}"></ha-selector>
         ${renderDurationControl(`entity-delay-${index}`, t("settings.aria_delay"), row.delay, 0, MAX_DURATION_SECONDS, { attributes: { "data-delay-index": index } })}
-        <ha-button type="button" appearance="plain" variant="danger" data-action="remove-entity-delay" data-index="${index}" aria-label="${esc(t("settings.aria_remove_delay"))}">${esc(t("buttons.delete"))}</ha-button>
+        ${renderConfigurationRemove(t("settings.aria_remove_delay"), "remove-entity-delay", { "data-index": index })}
       </div>`).join("") : `<div class="empty compact">${esc(t("settings.no_delay"))}</div>`}</div>`;
   } else if (id === "excluded_entities") {
     title = t("settings.entity_exclusions");
@@ -7479,7 +7484,13 @@ const settingsStyles = `
   .battery-threshold-value {
     min-width: 0;
   }
-  .battery-threshold-remove {
+  .configuration-remove {
+    --ha-icon-button-size: 48px;
+    color: var(--error-color);
+  }
+  .pack-map-row > .configuration-remove,
+  .delay-row > .configuration-remove,
+  .rule-value-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
     color: var(--error-color);
@@ -8000,11 +8011,12 @@ const responsiveStyles = `
       border-radius: var(--ha-border-radius-lg, 12px);
     }
     .pack-number-row > ha-selector,
-    .pack-settings-row > .pack-target-field {
+    .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
       min-width: 0;
     }
-    .delay-row > ha-button, .pack-map-row > ha-button {
+    .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
+      align-self: center;
       width: auto;
       justify-self: center;
       margin: 0;
@@ -8036,9 +8048,10 @@ const responsiveStyles = `
     .pack-settings-row ha-input::part(wa-hint) {
       min-height: 0;
     }
-    .pack-settings-row > ha-button {
+    .battery-threshold-row > .configuration-remove,
+    .pack-settings-row > .configuration-remove {
       align-self: end;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
     @container (min-width: 390px) {
       .pack-settings-row .pack-duration-setting {
@@ -8112,7 +8125,7 @@ const responsiveStyles = `
       grid-template-columns: 1fr;
     }
     .rule-value-row {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) auto;
     }
     .rule-value-row ha-button {
       margin-top: 0;

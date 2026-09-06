@@ -1,6 +1,11 @@
 import { esc } from "../utils/escaping.js";
 import { MDI_CLOSE } from "../utils/constants.js";
 
+export function renderConfigurationRemove(label, action, attributes = {}) {
+  const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  return `<ha-icon-button class="configuration-remove" data-action="${esc(action)}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>`;
+}
+
 export const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
   "open-automatic-configuration",

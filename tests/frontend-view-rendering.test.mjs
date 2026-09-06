@@ -6,7 +6,7 @@ import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
 import {
-  mountConfigurationDrawer, renderConfigurationDrawer,
+  mountConfigurationDrawer, renderConfigurationDrawer, renderConfigurationRemove,
   replaceConfigurationDrawer,
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
@@ -331,7 +331,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /class="pack-map-row pack-number-row battery-threshold-row"/);
   assert.match(markup, /class="battery-threshold-value"><span class="field-label">automatic\.fields\.threshold\.label/);
-  assert.match(markup, /<ha-icon-button class="battery-threshold-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
+  assert.match(markup, /<ha-icon-button class="configuration-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
   assert.doesNotMatch(markup, /<span class="field-label">automatic\.fields\.device_thresholds\.label<\/span>/);
 
   assert.match(markup, /value="15"/);
@@ -679,4 +679,13 @@ test("a newly opened configuration drawer can be inserted into the panel shadow 
   } finally {
     globalThis.document = originalDocument;
   }
+});
+
+
+test("configuration row removal uses an accessible shared trash icon", () => {
+  const markup = renderConfigurationRemove('Retirer "ceci"', "remove-entity-delay", { "data-index": 2 });
+  assert.match(markup, /<ha-icon-button class="configuration-remove" data-action="remove-entity-delay" data-index="2"/);
+  assert.match(markup, /aria-label="Retirer &quot;ceci&quot;" title="Retirer &quot;ceci&quot;"/);
+  assert.match(markup, /<ha-icon icon="mdi:delete-outline"><\/ha-icon>/);
+  assert.doesNotMatch(markup, /<ha-button/);
 });

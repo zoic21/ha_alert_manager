@@ -3,6 +3,7 @@ import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import {
   renderConfigurationDrawer,
+  renderConfigurationRemove,
   replaceConfigurationDrawer,
 } from "../components/configuration-drawer.js";
 
@@ -163,7 +164,7 @@ export function renderPackField(pack, field, config, context) {
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
             <div class="pack-settings-values">${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
-            <ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>
+            ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
       </div>`;
@@ -181,7 +182,7 @@ export function renderPackField(pack, field, config, context) {
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
           ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${batteryThresholds ? `</label><ha-icon-button class="battery-threshold-remove" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}" aria-label="${esc(t("buttons.remove"))}" title="${esc(t("buttons.remove"))}"><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>` : `<ha-button appearance="plain" variant="danger" data-action="remove-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" data-index="${index}">${esc(t("buttons.remove"))}</ha-button>`}
+          ${batteryThresholds ? "</label>" : ""}${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;

@@ -2693,7 +2693,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
   assert.doesNotMatch(editor, /<ha-button[^>]*data-action="cancel-rule"[^>]*>Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
-  assert.match(settings, /appearance="plain" variant="danger" data-action="remove-entity-delay"/);
+  assert.match(settings, /class="configuration-remove" data-action="remove-entity-delay"/);
   const styles = compactCss(panel._styles());
   assert.match(styles, /\.delay-row\{[^}]*align-items:start/);
   assert.match(styles, /\.delay-row>ha-button\{margin-top:8px\}/);
@@ -4976,8 +4976,10 @@ test("mobile configuration pairs inputs with removal actions without changing de
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
   assert.match(mobile, /\.delay-row,\.pack-map-row\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\);align-items:center/);
   assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:contents/);
-  assert.match(mobile, /\.pack-settings-row>ha-button\{align-self:end;margin-bottom:8px/);
+  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{align-self:end;margin-bottom:4px/);
   assert.match(mobile, /@container\(min-width:390px\)/);
+  assert.match(mobile, /\.fields\.configuration-drawer-fields \.pack-settings-row>\.pack-target-field\{grid-column:1\s*\/\s*-1;min-width:0/);
+
   assert.match(mobile, /\.pack-number-row,\.pack-settings-row,\.delay-row\{[^}]*border:1px solid var\(--divider-color\)/);
   assert.match(mobile, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
   assert.doesNotMatch(mobile, /ha-input::part\(wa-hint\)[^{]*\{[^}]*(?:display:none|[;{]height:0;)/);
