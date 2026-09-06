@@ -931,8 +931,13 @@ export function alertDetailsItems(kind, row) {
     return items.filter((item) => item.value !== undefined && item.value !== null && item.value !== "");
 }
 
+function renderAlertDetailsNotice(notice) {
+    if (!notice) return "";
+    return `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>`;
+}
+
 export function renderAlertDetails(context) {
-    const { items, summary } = context;
+    const { items, summary, notice } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
@@ -942,6 +947,7 @@ export function renderAlertDetails(context) {
       ${summary.timedAcknowledgeLabel ? `<ha-dropdown-item value="acknowledge-temporarily"><ha-icon slot="icon" icon="mdi:clock-check-outline"></ha-icon>${esc(summary.timedAcknowledgeLabel)}</ha-dropdown-item>` : ""}
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
+    ${renderAlertDetailsNotice(notice)}
     <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
@@ -996,6 +1002,8 @@ export function renderAlertDetailsPanel(kind, row) {
         ? "unacknowledge"
         : "";
     return renderAlertDetails({
+      notice: this._alertDetailsDialog?.alertId === row.id
+        ? this._alertDetailsDialog.notice : null,
       items: this._alertDetailsItems(kind, row),
       summary: {
         alertId: row.id,
@@ -1006,7 +1014,7 @@ export function renderAlertDetailsPanel(kind, row) {
         menuAriaLabel: this._t("alert_details.aria_menu"),
         menuIcon: menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
-          : "mdi:check-circle-off-outline",
+          : "mdi:undo-variant",
         menuLabel: menuAction
           ? this._t(`overview.${menuAction}`)
           : "",
@@ -1065,31 +1073,46 @@ export async function handleAlertDetailsSelection(event) {
     }
     if (service === "reevaluate") {
       if (this._busy) return true;
+      const dialog = this._alertDetailsDialog;
+      const alertId = menu.dataset.alertId;
+      const previousRow = this._tableRows("overview").find((item) => item.id === alertId);
+      if (dialog) dialog.reevaluating = true;
       this._busy = true;
       this._notice = null;
       this._refreshUiState();
       try {
-        const result = await this._api.reevaluateAlert(menu.dataset.alertId);
+        const result = await this._api.reevaluateAlert(alertId);
         await this._refreshAlerts();
-        const row = this._tableRows("overview").find((item) => item.id === menu.dataset.alertId);
-        if (this._alertDetailsDialog?.alertId === menu.dataset.alertId) {
-          if (row) {
-            this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", row);
-            this._hydrateAlertDetailTimestamps(this._alertDetailsDialog);
-          } else {
-            this._closeAlertDetailsDialog();
-          }
-        }
+        const row = this._tableRows("overview").find((item) => item.id === alertId);
         this._notice = {
           kind: "success",
           text: this._t(result.present ? "success.alert_reevaluated_present" : "success.alert_reevaluated_cleared"),
         };
+        if (dialog && this._alertDetailsDialog === dialog) {
+          dialog.notice = this._notice;
+          if (!row) dialog.alertKind = "result";
+          dialog.innerHTML = row
+            ? this._renderAlertDetails("overview", row)
+            : renderAlertDetailsNotice(dialog.notice);
+          this._hydrateAlertDetailTimestamps(dialog);
+        }
       } catch (error) {
         this._notice = { kind: "error", text: this._errorText(error) };
+        if (dialog && this._alertDetailsDialog === dialog) {
+          dialog.notice = this._notice;
+          dialog.innerHTML = previousRow
+            ? this._renderAlertDetails("overview", previousRow)
+            : renderAlertDetailsNotice(dialog.notice);
+          this._hydrateAlertDetailTimestamps(dialog);
+        }
       } finally {
+        if (dialog) dialog.reevaluating = false;
         this._busy = false;
         this._refreshOverviewData();
         this._refreshUiState();
+        if (dialog && this._alertDetailsDialog === dialog) {
+          dialog.querySelector?.("[data-alert-details-notice]")?.scrollIntoView?.({ block: "start" });
+        }
       }
       return true;
     }

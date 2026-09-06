@@ -40,7 +40,7 @@ export function refreshStartupBanner() {
 
 export function refreshOverviewData() {
     const detailsDialog = this._alertDetailsDialog;
-    if (detailsDialog?.alertKind === "overview") {
+    if (detailsDialog?.alertKind === "overview" && !detailsDialog.reevaluating) {
       const updatedRow = this._tableRows("overview").find(
         (row) => row.id === detailsDialog.alertId,
       );

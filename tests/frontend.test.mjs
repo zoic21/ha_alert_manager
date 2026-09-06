@@ -4816,7 +4816,12 @@ for (const present of [true, false]) {
     assert.equal(panel._busy, false);
     assert.equal(panel._notice.kind, "success");
     if (present) assert.match(panel._alertDetailsDialog.innerHTML, /value="reevaluate"/);
-    else assert.equal(panel._alertDetailsDialog, null);
+    else {
+      assert.equal(panel._alertDetailsDialog.alertKind, "result");
+      assert.doesNotMatch(panel._alertDetailsDialog.innerHTML, /value="reevaluate"/);
+    }
+    assert.match(panel._alertDetailsDialog.innerHTML, /data-alert-details-notice[^>]*alert-type="success"/);
+    assert.match(panel._alertDetailsDialog.innerHTML, /Réévaluation effectuée/);
   });
 }
 
@@ -4839,6 +4844,7 @@ test("failed reevaluation keeps the dialog and releases busy state", async () =>
   assert.equal(panel._notice.kind, "error");
   assert.equal(panel._notice.text, "La réévaluation nécessite une surveillance démarrée et activée.");
   assert.equal(panel._alertDetailsDialog, dialog);
+  assert.match(dialog.innerHTML, /data-alert-details-notice[^>]*alert-type="error"/);
 });
 
 for (const partition of ["active", "pending", "acknowledge"]) {
@@ -4861,3 +4867,44 @@ for (const partition of ["active", "pending", "acknowledge"]) {
     assert.equal(calls.length, 1);
   });
 }
+
+
+test("acknowledged alert menu uses a valid undo icon", () => {
+  const panel = tablePanel();
+  const row = { ...panel._tableRows("overview")[0], status: "acknowledged" };
+  assert.match(panel._renderAlertDetails("overview", row), /value="unacknowledge"><ha-icon slot="icon" icon="mdi:undo-variant"/);
+});
+
+test("overview refresh leaves a reevaluating dialog open when its alert disappears", async () => {
+  const { refreshOverviewData } = await import("../frontend-src/views/overview.js");
+  const panel = tablePanel();
+  const dialog = { alertKind: "overview", alertId: "gone", reevaluating: true };
+  panel._alertDetailsDialog = dialog;
+  panel._alerts.alerts = [];
+  panel._render = () => {};
+  panel._closeAlertDetailsDialog = () => assert.fail("result is still being fetched");
+  refreshOverviewData.call(panel);
+  assert.equal(panel._alertDetailsDialog, dialog);
+});
+
+test("reevaluation does not overwrite another dialog opened while awaiting the result", async () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  let finish;
+  panel._hass.callWS = () => new Promise((resolve) => { finish = resolve; });
+  panel._refreshUiState = panel._refreshOverviewData = () => {};
+  panel._refreshAlerts = async () => {};
+  const original = { alertId: row.id, innerHTML: "original" };
+  panel._alertDetailsDialog = original;
+  const pending = panel._handleMenuSelected({
+    composedPath: () => [{ dataset: { alertDetailsMenu: "", alertId: row.id } }],
+    detail: { item: { value: "reevaluate" } },
+  });
+  const replacement = { alertId: "another-alert", innerHTML: "another dialog" };
+  panel._alertDetailsDialog = replacement;
+  finish({ present: true });
+  await pending;
+  assert.equal(panel._alertDetailsDialog, replacement);
+  assert.equal(replacement.innerHTML, "another dialog");
+  assert.equal(original.reevaluating, false);
+});

@@ -143,6 +143,10 @@ export const tableStyles = `
     justify-content: flex-end;
     gap: var(--ha-space-2, 8px);
   }
+  .alert-details-notice {
+    flex: none;
+    margin-bottom: var(--ha-space-4, 16px);
+  }
   .alert-details-summary {
     display: flex;
     flex-shrink: 0;
