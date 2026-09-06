@@ -624,3 +624,14 @@ test("backup restoration uses a native confirmation dialog", () => {
   assert.match(markup, /slot="primaryAction"[^>]+data-action="confirm-config-backup-restore"/);
   assert.match(markup, /data-backup-id="backup-1"/);
 });
+
+
+test("all configuration drawers keep save actions outside their scroll area", () => {
+  for (const useBottomSheet of [false, true]) {
+    const markup = renderConfigurationDrawer({
+      title: "Configuration", ariaLabel: "Configuration", content: "Long content",
+      saveAction: "save-settings", saveLabel: "Save", busy: false, useBottomSheet,
+    });
+    assert.match(markup, /<section class="side-drawer-section">Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);
+  }
+});

@@ -242,8 +242,8 @@ test("active filter and mobile secondary details follow the saved column choices
 test("rule table renders native label badges on desktop and mobile and indexes their names", () => {
   const panel = new Panel();
   panel._config = { rules: [{ ...rules()[0], label_ids: ["cold", "deleted"] }] };
-  panel._labels = [{ label_id: "cold", name: "Freezer", color: "blue", description: "Food" }];
-  customElements.define("ha-label", class {});
+  panel._labels = [{ label_id: "cold", name: "Freezer", color: "blue", description: "Food", icon: "mdi:snowflake" }];
+  customElements._items.delete("ha-label");
   const row = panel._ruleTableRows()[0];
   assert.match(row.search_index, /cold Freezer deleted deleted/);
   for (const narrow of [false, true]) {
@@ -253,6 +253,48 @@ test("rule table renders native label badges on desktop and mobile and indexes t
     assert.equal(badges[0].textContent, "Freezer");
     assert.equal(badges[0].attributes.color, "blue");
     assert.equal(badges[0].attributes.description, "Food");
+    assert.equal(badges[0].children[0].tagName, "HA-ICON");
+    assert.equal(badges[0].children[0].attributes.slot, "icon");
+    assert.equal(badges[0].children[0].attributes.icon, "mdi:snowflake");
     assert.equal(badges[1].textContent, "deleted");
+  }
+});
+
+
+test("native labels load once through HA's entities route and retain pending badges", async () => {
+  const { loadNativeLabels, nativeLabelBadges } = await import("../frontend-src/components/alert-table.js");
+  const originalDocument = globalThis.document;
+  let configLoads = 0;
+  let entityLoads = 0;
+  const hass = { panels: { config: { component_name: "config", url_path: "config" } } };
+  const resolver = { routerOptions: { routes: { config: { load: async () => {
+    configLoads += 1;
+    customElements.define("ha-panel-config", class {});
+  } } } } };
+  const main = { shadowRoot: { querySelector: () => resolver } };
+  const homeAssistant = { shadowRoot: { querySelector: () => main } };
+  customElements._items.delete("ha-label");
+  globalThis.document = {
+    querySelector: () => homeAssistant,
+    createElement: (tag) => tag === "ha-panel-config"
+      ? { routerOptions: { routes: { entities: { load: async () => {
+        entityLoads += 1;
+        customElements.define("ha-label", class {});
+      } } } } }
+      : fakeDomElement(tag),
+  };
+  try {
+    const badges = nativeLabelBadges([{ name: "Cold", color: "blue", icon: "mdi:snowflake" }], hass);
+    await Promise.all([loadNativeLabels(hass), loadNativeLabels(hass)]);
+    assert.equal(configLoads, 1);
+    assert.equal(entityLoads, 1);
+    assert.equal(badges.children[0].tagName, "HA-LABEL");
+    assert.equal(badges.children[0].attributes.color, "blue");
+    await loadNativeLabels(hass);
+    assert.equal(entityLoads, 1);
+  } finally {
+    globalThis.document = originalDocument;
+    customElements._items.delete("ha-label");
+    customElements._items.delete("ha-panel-config");
   }
 });

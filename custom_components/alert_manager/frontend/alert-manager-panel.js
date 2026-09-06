@@ -1782,7 +1782,7 @@ function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     if (row.entityId) name.title = row.entityId;
     content.append(name);
     if (!narrow && row.labels?.length) {
-      content.append(nativeLabelBadges(row.labels));
+      content.append(nativeLabelBadges(row.labels, this._hass));
     }
     if (narrow) {
       const secondaryColumns = (this._tableState[kind]?.columns ?? [])
@@ -2445,20 +2445,46 @@ function labelMetadata(labelIds, labelRegistry) {
     });
 }
 
-function nativeLabelBadges(metadataList) {
+let nativeLabelsLoadPromise;
+
+function loadNativeLabels(hass) {
+    if (customElements.get("ha-label")) return Promise.resolve();
+    if (nativeLabelsLoadPromise) return nativeLabelsLoadPromise;
+    const homeAssistant = document.querySelector?.("home-assistant");
+    const main = homeAssistant?.shadowRoot?.querySelector?.("home-assistant-main");
+    const resolver = main?.shadowRoot?.querySelector?.("partial-panel-resolver");
+    const configPath = Object.values(hass?.panels ?? {})
+      .find((panel) => panel.component_name === "config")?.url_path;
+    const loadConfig = resolver?.routerOptions?.routes?.[configPath]?.load;
+    if (typeof loadConfig !== "function") return Promise.resolve();
+    // Reuse HA's lazy entities table, which registers ha-label and its icons.
+    nativeLabelsLoadPromise = Promise.resolve().then(async () => {
+      await loadConfig();
+      if (!customElements.get("ha-panel-config")) return;
+      const configPanel = document.createElement("ha-panel-config");
+      await configPanel.routerOptions?.routes?.entities?.load?.();
+    }).catch(() => undefined).finally(() => { nativeLabelsLoadPromise = undefined; });
+    return nativeLabelsLoadPromise;
+}
+
+function nativeLabelBadges(metadataList, hass) {
+    if (metadataList.length) void loadNativeLabels(hass);
     const labels = document.createElement("span");
     labels.style.cssText = "display:flex;min-width:0;gap:4px;overflow:hidden;align-items:center";
     for (const metadata of metadataList) {
-      const label = document.createElement(customElements.get("ha-label") ? "ha-label" : "span");
+      // Keep the native tag so an initially unloaded component can upgrade.
+      const label = document.createElement("ha-label");
       label.textContent = metadata.name;
       label.title = metadata.description || metadata.name;
-      if (label.tagName === "HA-LABEL") {
-        label.setAttribute("dense", "");
-        if (metadata.color) label.setAttribute("color", metadata.color);
-        if (metadata.description) label.setAttribute("description", metadata.description);
-        label.className = "text-ellipsis";
-      } else {
-        label.style.cssText = "display:inline-flex;max-width:100%;height:20px;align-items:center;padding:0 8px;border:1px solid var(--outline-color,var(--divider-color,#ddd));border-radius:var(--ha-border-radius-md,6px);background:var(--secondary-background-color,#f5f5f5);font-size:var(--ha-font-size-s,12px);font-weight:var(--ha-font-weight-medium,500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      label.setAttribute("dense", "");
+      if (metadata.color) label.setAttribute("color", metadata.color);
+      if (metadata.description) label.setAttribute("description", metadata.description);
+      label.className = "text-ellipsis";
+      if (metadata.icon) {
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("slot", "icon");
+        icon.setAttribute("icon", metadata.icon);
+        label.append(icon);
       }
       labels.append(label);
     }
@@ -2708,8 +2734,8 @@ function renderConfigurationDrawer({
       ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
         <section class="side-drawer-section">${content}</section>
-        <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
       </div>
+      <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
     </ha-card>`;
   return renderSideDrawer({
     drawer,
@@ -3563,8 +3589,8 @@ function renderRuleEditor(context) {
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
-        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
     </ha-card>`;
     return renderSideDrawer({
       drawer,
@@ -5174,7 +5200,7 @@ function nativeRuleNameCell(row, narrow = false) {
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(primary);
-    if (row.labels?.length) content.append(nativeLabelBadges(row.labels));
+    if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
     if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
       secondary.textContent = secondaryColumns
@@ -7457,6 +7483,7 @@ const ruleEditorStyles = `
     display: flex;
     flex-direction: column;
     overflow: visible;
+    overscroll-behavior: contain;
     border-color: var(--primary-color, #03a9f4);
     border-width: 2px;
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
@@ -7473,6 +7500,7 @@ const ruleEditorStyles = `
     flex: 1;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     margin: 0;
     padding: 0;
     background: var(--primary-background-color, #fafafa);
@@ -7561,8 +7589,7 @@ const ruleEditorStyles = `
     overflow-wrap: anywhere;
   }
   .side-drawer-actions {
-    position: sticky;
-    bottom: 0;
+    flex: none;
     z-index: 1;
     align-items: center;
     justify-content: flex-start;
@@ -7571,6 +7598,8 @@ const ruleEditorStyles = `
     background: var(--card-background-color, #fff);
     border-top: 1px solid var(--divider-color, #ddd);
     box-shadow: 0 -2px 8px rgba(0, 0, 0, .08);
+    border-end-start-radius: var(--ha-card-border-radius);
+    border-end-end-radius: var(--ha-card-border-radius);
   }
   .rule-editor-error {
     flex: 1 0 100%;
@@ -7737,6 +7766,8 @@ const responsiveStyles = `
     height: 100%;
     max-width: none;
     border-width: 0;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     --ha-card-border-radius: var(--side-drawer-mobile-border-radius);
     border-start-start-radius: var(--side-drawer-mobile-border-radius);

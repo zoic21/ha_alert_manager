@@ -399,8 +399,8 @@ export function renderRuleEditor(context) {
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
-        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
       </form>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
     </ha-card>`;
     return renderSideDrawer({
       drawer,

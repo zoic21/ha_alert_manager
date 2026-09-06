@@ -122,6 +122,8 @@ test("the native bottom sheet never keeps the desktop drawer nested inside", () 
   );
 
   assert.ok(nativeSheet >= 0);
+  assert.match(styles, /\.side-drawer-form\{[^}]*overscroll-behavior:contain/);
+  assert.match(styles, /\.side-drawer-bottom-sheet ha-card\.side-drawer\{[^}]*flex:1;min-height:0/);
   assert.ok(nativeSheet < smallScreenMedia);
   assert.match(
     styles,

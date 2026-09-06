@@ -78,7 +78,7 @@ const rangeForm = () => {
   };
 };
 
-test("rule validation errors are rendered inside the sticky editor actions", () => {
+test("rule validation errors are rendered inside the fixed editor actions", () => {
   const panel = new AlertManagerPanel();
   panel._editingRule = rule();
   panel._ruleEditorError = "La borne inférieure doit être inférieure ou égale à la borne supérieure.";
@@ -92,7 +92,8 @@ test("rule validation errors are rendered inside the sticky editor actions", () 
   );
   assert.match(styles, /\.side-drawer-actions\{flex-wrap:wrap\}/);
   assert.match(styles, /\.rule-editor-error\{flex:1 0 100%;width:100%;margin:0 0 4px\}/);
-  assert.match(styles, /\.side-drawer-actions\{position:sticky;bottom:0/);
+  assert.match(styles, /\.side-drawer-actions\{flex:none;/);
+  assert.match(markup, /<\/form>\s*<div class="actions side-drawer-actions rule-editor-actions">/);
 });
 
 test("rules content reserves the editor position and a visible gap", () => {

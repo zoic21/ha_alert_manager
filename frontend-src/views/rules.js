@@ -359,7 +359,7 @@ export function nativeRuleNameCell(row, narrow = false) {
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(primary);
-    if (row.labels?.length) content.append(nativeLabelBadges(row.labels));
+    if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
     if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
       secondary.textContent = secondaryColumns

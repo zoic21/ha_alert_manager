@@ -48,6 +48,7 @@ export const ruleEditorStyles = `
     display: flex;
     flex-direction: column;
     overflow: visible;
+    overscroll-behavior: contain;
     border-color: var(--primary-color, #03a9f4);
     border-width: 2px;
     --ha-card-border-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-2xl, 14px));
@@ -64,6 +65,7 @@ export const ruleEditorStyles = `
     flex: 1;
     min-height: 0;
     overflow: auto;
+    overscroll-behavior: contain;
     margin: 0;
     padding: 0;
     background: var(--primary-background-color, #fafafa);
@@ -152,8 +154,7 @@ export const ruleEditorStyles = `
     overflow-wrap: anywhere;
   }
   .side-drawer-actions {
-    position: sticky;
-    bottom: 0;
+    flex: none;
     z-index: 1;
     align-items: center;
     justify-content: flex-start;
@@ -162,6 +163,8 @@ export const ruleEditorStyles = `
     background: var(--card-background-color, #fff);
     border-top: 1px solid var(--divider-color, #ddd);
     box-shadow: 0 -2px 8px rgba(0, 0, 0, .08);
+    border-end-start-radius: var(--ha-card-border-radius);
+    border-end-end-radius: var(--ha-card-border-radius);
   }
   .rule-editor-error {
     flex: 1 0 100%;

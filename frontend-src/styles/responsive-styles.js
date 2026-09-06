@@ -32,6 +32,8 @@ export const responsiveStyles = `
     height: 100%;
     max-width: none;
     border-width: 0;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     --ha-card-border-radius: var(--side-drawer-mobile-border-radius);
     border-start-start-radius: var(--side-drawer-mobile-border-radius);
