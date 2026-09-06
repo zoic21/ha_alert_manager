@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.8 — 6 septembre 2026
+
+### Corrigé
+
+- Sur mobile, les boutons Retirer des seuils d’automatisation et des occurrences
+  de flapping s’alignent avec le champ visible : l’espace vide réservé aux erreurs
+  n’ajoute plus de hauteur. Les messages de validation restent affichés.
+- Les configurations particulières de flapping utilisent le même encadré que
+  les délais par entité. La disposition desktop reste inchangée.
+
 ## 2.2.0-beta.7 — 6 septembre 2026
 
 ### Corrigé
