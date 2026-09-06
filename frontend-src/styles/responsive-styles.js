@@ -1,4 +1,9 @@
 export const responsiveStyles = `
+  /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */
+  :host([narrow]) .settings-fab-positioner ha-button[slot="fab"].dirty {
+    bottom: calc(84px + var(--safe-area-inset-bottom, 0px));
+  }
+
   /* The companion app already provides the panel toolbar. Its native tabs
    * subpage still reserves another one in narrow mode, so only cancel that
    * duplicate in the app. A narrow desktop browser still needs its toolbar. */

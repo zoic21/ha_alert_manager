@@ -2534,6 +2534,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(styles, /\.coherence-actions,\.history-page-actions\{display:grid;flex:none/);
   assert.match(styles, /\.settings-fab-positioner ha-button\[slot="fab"\]\{[^}]*position:fixed[^}]*bottom:calc\(-80px - var\(--safe-area-inset-bottom,0px\)\)[^}]*transition:bottom 0\.3s/);
   assert.match(styles, /\.settings-fab-positioner ha-button\[slot="fab"\]\.dirty\{bottom:calc\(16px \+ var\(--safe-area-inset-bottom,0px\)\)\}/);
+  assert.match(styles, /:host\(\[narrow\]\) \.settings-fab-positioner ha-button\[slot="fab"\]\.dirty\{bottom:calc\(84px \+ var\(--safe-area-inset-bottom,0px\)\)\}/);
   assert.match(styles, /\.field-label\{[^}]*font-weight:var\(--ha-font-weight-normal/);
   assert.doesNotMatch(styles, /input:not\(\[type="checkbox"\]\)|\.input-suffix\{/);
 });
