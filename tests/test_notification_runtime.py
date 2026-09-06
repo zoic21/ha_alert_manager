@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -24,7 +26,11 @@ from custom_components.alert_manager.models import (
     AlertRecord,
     AlertStatus,
 )
-from custom_components.alert_manager.notification_runtime import NotificationRuntime
+from custom_components.alert_manager.notification_runtime import (
+    NotificationRuntime,
+    _NotificationItem,
+)
+from custom_components.alert_manager.notifications import NotificationManager
 from custom_components.alert_manager.runtime_phase import RuntimePhase
 from custom_components.alert_manager.validation import validate_config
 
@@ -93,6 +99,51 @@ def _active_record(now: datetime) -> AlertRecord:
         delay=0,
         active_since=now,
     )
+
+
+@pytest.mark.parametrize(
+    ("kind", "icon"), [("started", "🚨"), ("reminder", "🔔"), ("resolved", "✅")]
+)
+@pytest.mark.parametrize("language", [None, "en", "fr"])
+@pytest.mark.parametrize("count", [1, 2])
+def test_notification_title_prefix(hass, entry, kind, icon, language, count) -> None:
+    """Prefix translated and fallback titles for individual and grouped alerts."""
+    delivery = NotificationManager(hass, lambda: [])
+    if language:
+        path = (
+            Path(__file__).parents[1]
+            / "custom_components/alert_manager/translations"
+            / f"{language}.json"
+        )
+        catalog = json.loads(path.read_text())["config_panel"]["notifications"]
+        delivery.set_translations(
+            {
+                f"component.alert_manager.config_panel.notifications.{key}": value
+                for key, value in catalog.items()
+            }
+        )
+    runtime = NotificationRuntime(hass, entry, lambda: {}, lambda: {}, delivery)
+    items = [
+        _NotificationItem.from_event(
+            _event_data(
+                f"unavailable:sensor.test_{index}",
+                entity_id=f"sensor.test_{index}",
+                device_id=None,
+            )
+        )
+        for index in range(count)
+    ]
+
+    title, message = runtime._render_batch(kind, items)
+
+    assert title.startswith(f"{icon} Alert Manager — {count} ")
+    assert title.count(icon) == 1
+    assert "{count}" not in title
+    if language:
+        assert title == f"{icon} " + catalog[f"{kind}_title"].replace(
+            "{count}", str(count)
+        )
+    assert len(message.splitlines()) == count
 
 
 def test_start_resolved_inside_batch_window_is_cancelled(hass, entry) -> None:
