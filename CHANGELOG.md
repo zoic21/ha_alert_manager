@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-beta.9 — 6 septembre 2026
+
+### Corrigé
+
+- Les retraits de lignes dans les volets de configuration utilisent une icône
+  poubelle commune avec une infobulle et un libellé accessible : seuils des packs,
+  configurations de flapping, délais par entité, exceptions de notification et
+  listes de valeurs des règles.
+- Sur mobile, le champ Appareil des configurations particulières de flapping
+  occupe toute la largeur de l’encadré. Sa disposition desktop est conservée.
+
 ## 2.2.0-beta.8 — 6 septembre 2026
 
 ### Corrigé
