@@ -7155,17 +7155,13 @@ const settingsStyles = `
     --side-drawer-width: var(--configuration-editor-width, 560px);
   }
   @media (min-width: 1001px) {
-    /* Main already includes the drawer's 24px outer margin. Reserve only
-       the drawer width and the gap, and let every section fill that space. */
+    /* Preserve the closed page's centered left edge. Only its right edge
+       follows the drawer; the existing maximum prevents any expansion. */
     .settings-page.has-editor {
-      width: calc(100% - var(--configuration-editor-width, 560px) - 16px);
-      margin-inline-start: 0;
+      --settings-page-left-offset: max(0px, calc((100% - 1120px) / 2));
+      width: calc(100% - var(--settings-page-left-offset) - var(--configuration-editor-width, 560px) - 16px);
+      margin-inline-start: var(--settings-page-left-offset);
       margin-inline-end: auto;
-    }
-    .settings-page.has-editor,
-    .settings-page.has-editor .settings-form,
-    .settings-page.has-editor .automatic-section {
-      max-width: none;
     }
   }
   .settings-card {

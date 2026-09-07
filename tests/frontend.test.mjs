@@ -5297,9 +5297,10 @@ test("configuration drawers share pointer, keyboard and reset sizing with rules"
 });
 
 
-test("open configuration fills the space up to the drawer on wide screens", () => {
+test("open configuration preserves its initial left edge and cannot grow", () => {
   const panel = new (customElements.get("alert-manager-panel"))();
   const styles = compactCss(panel._styles());
-  assert.match(styles, /@media\(min-width:1001px\)\{\.settings-page\.has-editor\{width:calc\(100% - var\(--configuration-editor-width,560px\) - 16px\)/);
-  assert.match(styles, /\.settings-page\.has-editor,\.settings-page\.has-editor \.settings-form,\.settings-page\.has-editor \.automatic-section\{max-width:none\}/);
+  assert.match(styles, /\.settings-page,\.settings-form,\.automatic-section\{[^}]*max-width:1120px/);
+  assert.match(styles, /@media\(min-width:1001px\)\{\.settings-page\.has-editor\{--settings-page-left-offset:max\(0px,calc\(\(100% - 1120px\) \/ 2\)\);width:calc\(100% - var\(--settings-page-left-offset\) - var\(--configuration-editor-width,560px\) - 16px\);margin-inline-start:var\(--settings-page-left-offset\);margin-inline-end:auto;?\}/);
+  assert.doesNotMatch(styles, /\.settings-page\.has-editor[^{}]*\{[^}]*max-width:none/);
 });

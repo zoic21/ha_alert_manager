@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.13 — 7 septembre 2026
+
+### Corrigé
+
+- Le bord gauche du contenu de configuration conserve la position de la page
+  centrée lors de l’ouverture et du redimensionnement d’un volet. Seul le bord
+  droit se réduit si nécessaire pour laisser la place au volet et à son espacement.
+- Le contenu ne peut plus s’agrandir à l’ouverture du volet. Sa position
+  s’adapte naturellement au redimensionnement du navigateur.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.12 — 7 septembre 2026
 
 ### Corrigé
