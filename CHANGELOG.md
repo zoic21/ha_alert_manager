@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.3 — 7 septembre 2026
+
+### Corrigé
+
+- Flapping : interrupteur sans libellé visible, avec nom accessible et infobulle,
+  et actions regroupées près de l’entité, y compris lorsque l’analyse est inactive.
+- Les durées utilisent toute la largeur de l’encadré et ne passent sur deux
+  colonnes que lorsque la place disponible le permet.
+- Alignement des champs et poubelles des packs batterie et automatisations ;
+  suppression du libellé « Seuil global » incorrect sur les seuils particuliers.
+- Conservation de la sélection d’entité en pleine largeur sur mobile.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-beta.10 — 6 septembre 2026
 
 ### Corrigé

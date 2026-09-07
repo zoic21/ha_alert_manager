@@ -4999,19 +4999,19 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   const Panel = customElements.get("alert-manager-panel");
   const styles = compactCss(new Panel()._styles());
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
-  assert.match(mobile, /\.delay-row,\.pack-map-row\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\);align-items:center/);
-  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:grid;grid-column:1/);
-  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:2;grid-row:3;align-self:end;margin-bottom:4px/);
-  assert.match(mobile, /@container\(min-width:390px\)/);
-  assert.match(mobile, /\.fields\.configuration-drawer-fields \.pack-settings-row>\.pack-target-field\{grid-column:1\s*\/\s*-1;min-width:0/);
+  assert.match(mobile, /\.pack-map-row\.pack-number-row\{grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{grid-row:3/);
+  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:2;align-self:center;margin:0/);
+  assert.match(styles, /@container\(min-width:420px\)/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-target-field\{grid-column:1\s*\/\s*-1/);
 
   assert.match(mobile, /\.pack-number-row\{[^}]*border:1px solid var\(--divider-color\)/);
-  assert.match(mobile, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
+  assert.match(styles, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
   assert.doesNotMatch(mobile, /ha-input::part\(wa-hint\)[^{]*\{[^}]*(?:display:none|[;{]height:0;)/);
 
   assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
   assert.match(styles, /\.delay-row\{[^}]*border:1px solid var\(--divider-color,#ddd\)/);
-  assert.match(styles, /\.battery-threshold-row\{[^}]*grid-template-columns:minmax\(240px,1fr\) minmax\(96px,130px\) auto/);
+  assert.match(styles, /\.battery-threshold-row\{[^}]*grid-template-columns:minmax\(0,1fr\) 100px auto/);
 });
 
 

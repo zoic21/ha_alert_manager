@@ -159,10 +159,6 @@ export const responsiveStyles = `
     .config-backup-actions ha-button {
       width: auto;
     }
-    .delay-row, .pack-map-row {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      align-items: center;
-    }
     .configuration-drawer .pack-map-heading .field-label {
       display: none;
     }
@@ -172,65 +168,35 @@ export const responsiveStyles = `
       border: 1px solid var(--divider-color);
       border-radius: var(--ha-border-radius-lg, 12px);
     }
-    .pack-number-row > ha-selector,
-    .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
-      grid-column: 1 / -1;
-      min-width: 0;
+    .pack-map-row.pack-number-row {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
-    .pack-setting-toggle {
+    .pack-number-row > ha-selector {
       grid-column: 1 / -1;
-      width: 100%;
-      min-width: 0;
-    }
-    .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
-      align-self: center;
-      width: auto;
-      justify-self: center;
-      margin: 0;
     }
     .delay-row {
-      grid-template-columns: minmax(190px, 1fr) auto;
-    }
-    .pack-map-row.battery-threshold-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .pack-settings-values {
-      grid-column: 1;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
-    .pack-settings-row {
-      container-type: inline-size;
-    }
-    .pack-settings-row > .pack-settings-values {
-      display: grid;
-      grid-column: 1;
-    }
-    .pack-settings-row .pack-setting-field {
-      grid-template-rows: auto auto;
-      align-self: start;
-    }
-    .pack-settings-row .pack-duration-setting {
+    .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
     }
-    .pack-number-row ha-input::part(wa-hint),
-    .pack-settings-row ha-input::part(wa-hint) {
-      min-height: 0;
-    }
-    .battery-threshold-row > .configuration-remove {
-      align-self: end;
-      margin-bottom: 4px;
+    .pack-settings-row > .pack-setting-toggle {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: center;
+      margin: 0;
     }
     .pack-settings-row > .configuration-remove {
-      grid-column: 2;
-      grid-row: 3;
-      align-self: end;
-      margin-bottom: 4px;
+      grid-column: 3;
+      grid-row: 2;
+      align-self: center;
+      margin: 0;
     }
-    @container (min-width: 390px) {
-      .pack-settings-row .pack-duration-setting {
-        grid-column: auto;
-        grid-template-rows: 3.9em auto auto;
-      }
+    .pack-settings-row > .pack-settings-values {
+      grid-row: 3;
     }
     .table-page-top {
       padding: 12px 12px 0;

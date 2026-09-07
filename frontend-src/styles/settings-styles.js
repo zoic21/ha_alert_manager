@@ -520,35 +520,40 @@ export const settingsStyles = `
     width: 100%;
     align-items: start;
   }
-  .pack-number-row {
-    align-items: center;
-  }
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
   .battery-threshold-row {
-    grid-template-columns: minmax(240px, 1fr) minmax(96px, 130px) auto;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) 100px auto;
+    align-items: start;
   }
-  .battery-threshold-value {
+  .pack-number-row > ha-selector,
+  .pack-number-row > ha-input {
     min-width: 0;
+  }
+  .pack-number-row {
+    align-items: start;
+  }
+  .pack-number-row ha-input::part(wa-hint),
+  .pack-settings-row ha-input::part(wa-hint) {
+    min-height: 0;
   }
   .configuration-remove {
     --ha-icon-button-size: 48px;
     color: var(--error-color);
   }
   .pack-number-row > .configuration-remove {
-    align-self: center;
-    margin-bottom: 0;
+    align-self: start;
+    margin: 4px 0 0;
   }
-  .battery-threshold-row > .configuration-remove,
   .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
     color: var(--error-color);
   }
   .pack-settings-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    container-type: inline-size;
     padding: 12px;
     box-sizing: border-box;
     border: 1px solid var(--divider-color, #ddd);
@@ -556,10 +561,13 @@ export const settingsStyles = `
   }
   .pack-settings-row > .pack-target-field {
     grid-column: 1;
+    grid-row: 1;
   }
   .pack-setting-toggle {
+    grid-column: 2;
+    grid-row: 1;
     align-self: end;
-    min-width: 170px;
+    margin-bottom: 14px;
   }
   .pack-settings-values {
     display: grid;
@@ -569,10 +577,22 @@ export const settingsStyles = `
     gap: 10px;
   }
   .pack-settings-row > .configuration-remove {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 3;
+    grid-row: 1;
     align-self: end;
     margin-bottom: 4px;
+  }
+  .pack-settings-row > .pack-settings-values {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @container (min-width: 420px) {
+    .pack-settings-row > .pack-settings-values {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .pack-settings-row .pack-duration-setting > .field-label {
+      min-height: 2.6em;
+    }
   }
   .pack-configuration[hidden],
   .pack-settings-values[hidden] {

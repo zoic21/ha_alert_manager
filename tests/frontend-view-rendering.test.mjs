@@ -330,7 +330,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, /auto-battery-device_thresholds-target-0/);
   assert.match(markup, /class="pack-map-row pack-number-row battery-threshold-row"/);
-  assert.match(markup, /class="battery-threshold-value"><span class="field-label">automatic\.fields\.threshold\.label/);
+  assert.doesNotMatch(markup, /class="battery-threshold-value"/);
   assert.match(markup, /<ha-icon-button class="configuration-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
   assert.doesNotMatch(markup, /<span class="field-label">automatic\.fields\.device_thresholds\.label<\/span>/);
 
@@ -500,6 +500,8 @@ test("flapping renders source packs and entity overrides in separate drawers", (
   assert.match(entityMarkup, /auto-flapping-entity_overrides-target-0/);
   assert.match(entityMarkup, /automatic\.entity/);
   assert.match(entityMarkup, /data-pack-setting-toggle="flapping"[^>]*checked/);
+  assert.match(entityMarkup, /ha-switch class="pack-setting-toggle" aria-label="automatic\.fields\.flapping_enabled\.label" title=/);
+  assert.doesNotMatch(entityMarkup, /<span[^>]*>automatic\.fields\.flapping_enabled\.label<\/span>/);
   assert.match(entityMarkup, /class="pack-setting-field/);
   assert.match(entityMarkup, /data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-setting-id="occurrences"[\s\S]*data-action="remove-pack-map-row"/);
   assert.deepEqual(numberFields.map((field) => field.id), ["occurrences", "window", "recovery"]);

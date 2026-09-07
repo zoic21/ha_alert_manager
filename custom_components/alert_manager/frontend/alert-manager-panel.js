@@ -5648,7 +5648,7 @@ function renderPackField(pack, field, config, context) {
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            ${toggle ? `<label class="pack-setting-toggle switch-field-row"><span class="field-label">${esc(t(`automatic.fields.${toggle.translation_key}.label`))}</span><ha-switch data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch></label>` : ""}
+            ${toggle ? `<ha-switch class="pack-setting-toggle" aria-label="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" title="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch>` : ""}
             <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
@@ -5666,9 +5666,8 @@ function renderPackField(pack, field, config, context) {
       <div class="pack-map-list">
         ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-number-row${batteryThresholds ? " battery-threshold-row" : ""}">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
-          ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${batteryThresholds ? "</label>" : ""}${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
+          ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
@@ -7596,35 +7595,40 @@ const settingsStyles = `
     width: 100%;
     align-items: start;
   }
-  .pack-number-row {
-    align-items: center;
-  }
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
   .battery-threshold-row {
-    grid-template-columns: minmax(240px, 1fr) minmax(96px, 130px) auto;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr) 100px auto;
+    align-items: start;
   }
-  .battery-threshold-value {
+  .pack-number-row > ha-selector,
+  .pack-number-row > ha-input {
     min-width: 0;
+  }
+  .pack-number-row {
+    align-items: start;
+  }
+  .pack-number-row ha-input::part(wa-hint),
+  .pack-settings-row ha-input::part(wa-hint) {
+    min-height: 0;
   }
   .configuration-remove {
     --ha-icon-button-size: 48px;
     color: var(--error-color);
   }
   .pack-number-row > .configuration-remove {
-    align-self: center;
-    margin-bottom: 0;
+    align-self: start;
+    margin: 4px 0 0;
   }
-  .battery-threshold-row > .configuration-remove,
   .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
     color: var(--error-color);
   }
   .pack-settings-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    container-type: inline-size;
     padding: 12px;
     box-sizing: border-box;
     border: 1px solid var(--divider-color, #ddd);
@@ -7632,10 +7636,13 @@ const settingsStyles = `
   }
   .pack-settings-row > .pack-target-field {
     grid-column: 1;
+    grid-row: 1;
   }
   .pack-setting-toggle {
+    grid-column: 2;
+    grid-row: 1;
     align-self: end;
-    min-width: 170px;
+    margin-bottom: 14px;
   }
   .pack-settings-values {
     display: grid;
@@ -7645,10 +7652,22 @@ const settingsStyles = `
     gap: 10px;
   }
   .pack-settings-row > .configuration-remove {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 3;
+    grid-row: 1;
     align-self: end;
     margin-bottom: 4px;
+  }
+  .pack-settings-row > .pack-settings-values {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @container (min-width: 420px) {
+    .pack-settings-row > .pack-settings-values {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .pack-settings-row .pack-duration-setting > .field-label {
+      min-height: 2.6em;
+    }
   }
   .pack-configuration[hidden],
   .pack-settings-values[hidden] {
@@ -8148,10 +8167,6 @@ const responsiveStyles = `
     .config-backup-actions ha-button {
       width: auto;
     }
-    .delay-row, .pack-map-row {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      align-items: center;
-    }
     .configuration-drawer .pack-map-heading .field-label {
       display: none;
     }
@@ -8161,65 +8176,35 @@ const responsiveStyles = `
       border: 1px solid var(--divider-color);
       border-radius: var(--ha-border-radius-lg, 12px);
     }
-    .pack-number-row > ha-selector,
-    .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
-      grid-column: 1 / -1;
-      min-width: 0;
+    .pack-map-row.pack-number-row {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
-    .pack-setting-toggle {
+    .pack-number-row > ha-selector {
       grid-column: 1 / -1;
-      width: 100%;
-      min-width: 0;
-    }
-    .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
-      align-self: center;
-      width: auto;
-      justify-self: center;
-      margin: 0;
     }
     .delay-row {
-      grid-template-columns: minmax(190px, 1fr) auto;
-    }
-    .pack-map-row.battery-threshold-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .pack-settings-values {
-      grid-column: 1;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
-    .pack-settings-row {
-      container-type: inline-size;
-    }
-    .pack-settings-row > .pack-settings-values {
-      display: grid;
-      grid-column: 1;
-    }
-    .pack-settings-row .pack-setting-field {
-      grid-template-rows: auto auto;
-      align-self: start;
-    }
-    .pack-settings-row .pack-duration-setting {
+    .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
     }
-    .pack-number-row ha-input::part(wa-hint),
-    .pack-settings-row ha-input::part(wa-hint) {
-      min-height: 0;
-    }
-    .battery-threshold-row > .configuration-remove {
-      align-self: end;
-      margin-bottom: 4px;
+    .pack-settings-row > .pack-setting-toggle {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: center;
+      margin: 0;
     }
     .pack-settings-row > .configuration-remove {
-      grid-column: 2;
-      grid-row: 3;
-      align-self: end;
-      margin-bottom: 4px;
+      grid-column: 3;
+      grid-row: 2;
+      align-self: center;
+      margin: 0;
     }
-    @container (min-width: 390px) {
-      .pack-settings-row .pack-duration-setting {
-        grid-column: auto;
-        grid-template-rows: 3.9em auto auto;
-      }
+    .pack-settings-row > .pack-settings-values {
+      grid-row: 3;
     }
     .table-page-top {
       padding: 12px 12px 0;

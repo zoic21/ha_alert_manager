@@ -174,7 +174,7 @@ export function renderPackField(pack, field, config, context) {
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
             <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            ${toggle ? `<label class="pack-setting-toggle switch-field-row"><span class="field-label">${esc(t(`automatic.fields.${toggle.translation_key}.label`))}</span><ha-switch data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch></label>` : ""}
+            ${toggle ? `<ha-switch class="pack-setting-toggle" aria-label="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" title="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch>` : ""}
             <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
@@ -192,9 +192,8 @@ export function renderPackField(pack, field, config, context) {
       <div class="pack-map-list">
         ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-number-row${batteryThresholds ? " battery-threshold-row" : ""}">
           <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
-          ${batteryThresholds ? `<label class="battery-threshold-value"><span class="field-label">${esc(t("automatic.fields.threshold.label"))}</span>` : ""}
           <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${batteryThresholds ? "</label>" : ""}${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
+          ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
         </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
       </div>
     </div>`;
