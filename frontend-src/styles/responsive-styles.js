@@ -198,6 +198,29 @@ export const responsiveStyles = `
     .pack-settings-row > .pack-settings-values {
       grid-row: 2;
     }
+    .pack-settings-row > .pack-settings-values:not([hidden]) {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 8px;
+    }
+    .pack-settings-row .pack-setting-field {
+      flex: 0 0 auto;
+      width: max-content;
+    }
+    .pack-settings-row .pack-setting-field > .field-label {
+      min-height: 0;
+    }
+    .pack-settings-row .pack-setting-field:not(.pack-duration-setting) > .field-label {
+      white-space: nowrap;
+    }
+    .pack-settings-row .pack-setting-field > ha-input {
+      /* Size the column from its label, then stretch the input to fit. */
+      width: 0;
+      min-width: 100%;
+    }
+    .pack-settings-row .pack-duration-setting {
+      width: 188px;
+    }
     .table-page-top {
       padding: 12px 12px 0;
     }

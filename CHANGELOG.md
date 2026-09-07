@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.8 — 7 septembre 2026
+
+### Corrigé
+
+- Flapping, configurations particulières sur mobile : largeur du champ
+  d’occurrences ajustée à son libellé, qui reste sur une seule ligne, pour
+  placer la fenêtre de détection à côté lorsque l’espace disponible le permet.
+  Le sélecteur de durée conserve sa largeur native.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.7 — 7 septembre 2026
 
 ### Corrigé

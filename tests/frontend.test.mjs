@@ -5001,6 +5001,11 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
   assert.match(mobile, /\.pack-map-row\.pack-number-row\{grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{grid-row:2/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values:not\(\[hidden\]\)\{display:flex;flex-wrap:wrap;gap:10px 8px/);
+  assert.match(mobile, /\.pack-settings-row \.pack-setting-field\{flex:0 0 auto;width:max-content/);
+  assert.match(mobile, /\.pack-settings-row \.pack-setting-field:not\(\.pack-duration-setting\)>\.field-label\{white-space:nowrap/);
+  assert.match(mobile, /\.pack-settings-row \.pack-setting-field>ha-input\{width:0;min-width:100%/);
+  assert.match(mobile, /\.pack-settings-row \.pack-duration-setting\{width:188px/);
   assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:1;align-self:end;margin:0 0 4px/);
   assert.match(styles, /@container\(min-width:420px\)/);
   assert.doesNotMatch(mobile, /\.notification-exception-grid[^{}]*\{[^}]*grid-template-columns:1fr/);
