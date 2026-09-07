@@ -6,6 +6,7 @@ import {
   handleNotificationProfileAction,
   hydrateNotificationProfileControls,
   newNotificationProfileDraft,
+  moveNotificationException,
   notificationProfileValidationError,
   renderNotificationProfileDrawer,
   renderNotificationProfiles,
@@ -359,4 +360,105 @@ test("cloning exception labels isolates edits and converts legacy single labels"
   const clone = cloneNotificationProfile(legacy);
   clone.exceptions[0].selector_ids.push("important");
   assert.deepEqual(legacy.exceptions[0].selector_ids, ["battery"]);
+});
+
+
+test("moving exceptions preserves edited values and saves their new priority order", async () => {
+  const draft = structuredClone(profile);
+  draft.exceptions = [
+    { selector_type: "label", selector_ids: ["first"], reminder_interval: 300 },
+    { selector_type: "label", selector_ids: ["second"], notify_on_start: false },
+    { selector_type: "label", selector_ids: ["third"], notify_on_resolved: true },
+  ];
+  const original = JSON.stringify(draft);
+  const controls = {
+    "#notification-profile-name": { value: "Edited name" },
+    "#notification-profile-enabled": { checked: true },
+    "#notification-start": { checked: true },
+    "#notification-resolved": { checked: false },
+    "#notification-reminder": { value: "300" },
+    "#notification-exception-reminder-0": { value: "600" },
+  };
+  let refreshes = 0;
+  let saved;
+  const panel = {
+    _notificationProfileDraft: draft,
+    _notificationProfileOriginal: original,
+    _notificationProfileId: draft.id,
+    _configurationDrawer: { kind: "notification" },
+    _settingsDraft: { notification_profiles: [structuredClone(profile)] },
+    shadowRoot: { querySelector: (selector) => controls[selector] ?? null },
+    _refreshSettingsConfigurationDrawer: () => {
+      refreshes += 1;
+      delete controls["#notification-exception-reminder-0"];
+      controls["#notification-exception-reminder-2"] = { value: "600" };
+    },
+    _t: t,
+    _refreshUiState() {},
+    _render() {},
+    _api: { call: async ({ config }) => { saved = config; return config; } },
+  };
+  moveNotificationException(panel, 0, 2);
+  assert.equal(refreshes, 1);
+  assert.deepEqual(draft.exceptions.map((item) => item.selector_ids[0]), ["second", "third", "first"]);
+  assert.equal(draft.exceptions[2].reminder_interval, 600);
+  assert.equal(draft.name, "Edited name");
+  const oldWindow = globalThis.window;
+  let prompts = 0;
+  globalThis.window = { confirm: () => { prompts += 1; return false; } };
+  try {
+    await handleNotificationProfileAction.call(panel, "close-configuration-drawer", {});
+    assert.equal(prompts, 1);
+    assert.equal(panel._notificationProfileDraft, draft);
+  } finally {
+    globalThis.window = oldWindow;
+  }
+  await handleNotificationProfileAction.call(panel, "save-notification-profile", {});
+  assert.deepEqual(saved.notification_profiles[0].exceptions, draft.exceptions);
+});
+
+test("exception reorder ignores invalid moves and works in both directions", () => {
+  const exceptions = [{ selector_ids: ["a"] }, { selector_ids: ["b"] }, { selector_ids: ["c"] }];
+  const panel = {
+    _notificationProfileDraft: { exceptions },
+    shadowRoot: { querySelector: () => null },
+    _refreshSettingsConfigurationDrawer() {},
+  };
+  for (const [from, to] of [[-1, 0], [0, 3], [0, NaN], [0, 0], [0.5, 1]]) {
+    moveNotificationException(panel, from, to);
+  }
+  assert.deepEqual(exceptions.map((item) => item.selector_ids[0]), ["a", "b", "c"]);
+  moveNotificationException(panel, 2, 0);
+  assert.deepEqual(exceptions.map((item) => item.selector_ids[0]), ["c", "a", "b"]);
+  panel._busy = true;
+  moveNotificationException(panel, 0, 2);
+  assert.equal(exceptions[0].selector_ids[0], "c");
+});
+
+test("native sortable binds once, defers reorder until drag end and supports the keyboard", async () => {
+  const previousCustomElements = globalThis.customElements;
+  globalThis.customElements = { get: () => true };
+  const handlers = [];
+  const sortable = { isConnected: true, addEventListener: (name, handler) => handlers.push(handler) };
+  const panel = {
+    _notificationProfileDraft: { ...structuredClone(profile), exceptions: [
+      { selector_ids: ["a"] }, { selector_ids: ["b"] }, { selector_ids: ["c"] },
+    ] },
+    shadowRoot: { querySelector: (selector) => selector === "#notification-exception-sortable" ? sortable : null },
+    _configureSelector() {}, _configureSelect() {}, _t: t,
+    _refreshSettingsConfigurationDrawer() {},
+  };
+  try {
+    hydrateNotificationProfileControls(panel);
+    hydrateNotificationProfileControls(panel);
+    assert.equal(handlers.length, 1);
+    handlers[0]({ detail: { oldIndex: 0, newIndex: 2 }, stopPropagation() {} });
+    assert.equal(panel._notificationProfileDraft.exceptions[0].selector_ids[0], "a");
+    await Promise.resolve();
+    assert.equal(panel._notificationProfileDraft.exceptions[2].selector_ids[0], "a");
+    sortable.onkeydown({ key: "Home", target: { closest: () => ({ dataset: { index: "2" } }) }, preventDefault() {}, stopPropagation() {} });
+    assert.equal(panel._notificationProfileDraft.exceptions[0].selector_ids[0], "a");
+  } finally {
+    globalThis.customElements = previousCustomElements;
+  }
 });

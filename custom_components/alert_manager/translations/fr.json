@@ -243,6 +243,8 @@
       "empty": "Aucun profil de notification configuré.",
       "enabled": "Activé",
       "exception_number": "Exception {count}",
+      "reorder_exception": "Déplacer l’exception {count}",
+      "reorder_help": "Glisser pour déplacer ; au clavier : flèches haut/bas, début/fin",
       "exceptions": "Exceptions",
       "exceptions_help": "La première exception dont l’étiquette correspond s’applique, en complément du comportement par défaut.",
       "grouped_alerts": "{count} alertes",

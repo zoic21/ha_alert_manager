@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.15 — 7 septembre 2026
+
+### Ajouté
+
+- Réordonnancement des exceptions de notification avec une poignée à trois traits
+  devant chaque numéro : glisser-déposer natif Home Assistant sur ordinateur et
+  mobile, et déplacement au clavier avec les flèches haut/bas ou début/fin.
+- Les réglages restent attachés à leur exception et le nouvel ordre est appliqué
+  après enregistrement. La fermeture sans enregistrer demande confirmation.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.14 — 7 septembre 2026
 
 ### Corrigé

@@ -180,6 +180,20 @@ export const settingsStyles = `
   .notification-exceptions-header > div {
     min-width: 0;
   }
+  .notification-exception-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .notification-exception-reorder {
+    flex: none;
+    cursor: grab;
+    touch-action: none;
+  }
+  .notification-exception-reorder:active {
+    cursor: grabbing;
+  }
   .notification-profile-list,
   .notification-profile-summary,
   .notification-exception-list {

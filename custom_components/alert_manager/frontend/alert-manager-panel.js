@@ -2725,8 +2725,8 @@ function useNativeBottomSheet() {
 
 // Home Assistant registers this native component in its lazy automation editor
 // bundle. Load that same route instead of maintaining a local bottom-sheet copy.
-async function loadNativeBottomSheet() {
-  if (!this._narrow || this._useNativeBottomSheet()) return true;
+async function loadNativeBottomSheet(force = false) {
+  if (!force && (!this._narrow || this._useNativeBottomSheet())) return true;
   if (this._nativeBottomSheetLoadPromise) return this._nativeBottomSheetLoadPromise;
   this._nativeBottomSheetLoadPromise = (async () => {
     const homeAssistant = document.querySelector?.("home-assistant");
@@ -3034,9 +3034,9 @@ function renderNotificationProfileDrawer({
   </section>
   <section class="notification-profile-section">
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
-  <div class="notification-exception-list">${draft.exceptions.length
+  <ha-sortable id="notification-exception-sortable" handle-selector=".notification-exception-reorder" draggable-selector=".notification-exception"><div class="notification-exception-list">${draft.exceptions.length
     ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
-    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>
+    : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div></ha-sortable>
   </section>`;
   return renderConfigurationDrawer({
     resizeLabel: t("rules.aria_resize"),
@@ -3063,7 +3063,7 @@ function renderException(exception, index, t) {
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
+    <div class="notification-exception-heading"><div class="notification-exception-title"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong></div>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
@@ -3084,6 +3084,7 @@ function booleanOverrideValue(exception, key) {
 function hydrateNotificationProfileControls(panel) {
   const draft = panel._notificationProfileDraft;
   if (!draft) return;
+  hydrateNotificationExceptionSorting(panel);
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
   panel._configureSelector(
     "notification-targets",
@@ -3138,6 +3139,52 @@ function hydrateNotificationProfileControls(panel) {
       },
     );
   });
+}
+
+// The automation editor registers HA's sortable and bottom-sheet components.
+function hydrateNotificationExceptionSorting(panel) {
+  const sortable = panel.shadowRoot?.querySelector("#notification-exception-sortable");
+  if (!sortable) return;
+  if (!customElements.get("ha-sortable")) void loadNativeBottomSheet.call(panel, true);
+  sortable.disabled = Boolean(panel._busy);
+  sortable.onkeydown = (event) => {
+    const handle = event.target.closest?.(".notification-exception-reorder");
+    if (!handle || !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const oldIndex = Number(handle.dataset.index);
+    const newIndex = event.key === "Home" ? 0
+      : event.key === "End" ? panel._notificationProfileDraft.exceptions.length - 1
+      : oldIndex + (event.key === "ArrowUp" ? -1 : 1);
+    moveNotificationException(panel, oldIndex, newIndex);
+  };
+  // Property callbacks keep repeated hydration idempotent.
+  sortable._notificationItemMoved = (event) => {
+    event.stopPropagation();
+    const { oldIndex, newIndex } = event.detail;
+    // Let HA finish its drag-end rollback before replacing the drawer content.
+    queueMicrotask(() => {
+      if (sortable.isConnected) moveNotificationException(panel, oldIndex, newIndex);
+    });
+  };
+  if (!sortable._notificationSortingBound) {
+    sortable.addEventListener("item-moved", (event) => sortable._notificationItemMoved(event));
+    sortable._notificationSortingBound = true;
+  }
+}
+
+function moveNotificationException(panel, oldIndex, newIndex) {
+  const exceptions = panel._notificationProfileDraft?.exceptions;
+  if (panel._busy || !exceptions || !Number.isInteger(oldIndex)
+    || !Number.isInteger(newIndex) || oldIndex < 0 || newIndex < 0
+    || oldIndex >= exceptions.length || newIndex >= exceptions.length
+    || oldIndex === newIndex) return;
+  captureNotificationProfileDraft(panel);
+  exceptions.splice(newIndex, 0, exceptions.splice(oldIndex, 1)[0]);
+  panel._refreshSettingsConfigurationDrawer();
+  panel.shadowRoot.querySelector(
+    `.notification-exception-reorder[data-index="${newIndex}"]`,
+  )?.focus();
 }
 
 function setBooleanOverride(exception, key, value) {
@@ -7314,6 +7361,20 @@ const settingsStyles = `
   .notification-profile-summary,
   .notification-exceptions-header > div {
     min-width: 0;
+  }
+  .notification-exception-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .notification-exception-reorder {
+    flex: none;
+    cursor: grab;
+    touch-action: none;
+  }
+  .notification-exception-reorder:active {
+    cursor: grabbing;
   }
   .notification-profile-list,
   .notification-profile-summary,

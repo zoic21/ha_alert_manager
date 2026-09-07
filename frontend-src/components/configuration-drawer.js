@@ -32,8 +32,8 @@ export function useNativeBottomSheet() {
 
 // Home Assistant registers this native component in its lazy automation editor
 // bundle. Load that same route instead of maintaining a local bottom-sheet copy.
-export async function loadNativeBottomSheet() {
-  if (!this._narrow || this._useNativeBottomSheet()) return true;
+export async function loadNativeBottomSheet(force = false) {
+  if (!force && (!this._narrow || this._useNativeBottomSheet())) return true;
   if (this._nativeBottomSheetLoadPromise) return this._nativeBottomSheetLoadPromise;
   this._nativeBottomSheetLoadPromise = (async () => {
     const homeAssistant = document.querySelector?.("home-assistant");
