@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.5 — 7 septembre 2026
+
+### Corrigé
+
+- Flapping : nombre d’occurrences et fenêtre de détection côte à côte lorsque
+  la largeur disponible le permet, avec les champs alignés.
+- Exceptions de notification : étiquettes sur toute la largeur, puis nouvelle
+  alerte et retour à la normale côte à côte sur grand écran.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.4 — 7 septembre 2026
 
 ### Corrigé
