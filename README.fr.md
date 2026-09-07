@@ -17,6 +17,7 @@ Il peut aussi rechercher les **références d’entités cassées dans votre con
 Quelques exemples :
 
 - une entité est `unavailable` depuis plus de 15 minutes ;
+- un appareil se déconnecte et se reconnecte à répétition, même si chaque coupure est brève ;
 - une batterie passe sous 15 % ;
 - un capteur de connectivité reste à `off` ;
 - un appareil UniFi reste `not_home` ;
@@ -33,16 +34,18 @@ La différence importante avec une simple notification : le problème **reste vi
 
 - **Un tableau de bord central** pour les alertes actives, à venir et acquittées.
 - **Une surveillance automatique** des problèmes courants : entités indisponibles, connectivité, batteries faibles, appareils UniFi et automatisations ou scripts en erreur.
-- **Des règles personnalisées puissantes** pour les états, attributs, plages de valeurs, absences de changement et conditions Jinja.
+- **La détection du flapping** pour repérer les anomalies brèves mais répétées que les temporisations habituelles pourraient masquer.
+- **Des règles personnalisées puissantes** pour les états, attributs, plages de valeurs, absences de changement et conditions Jinja, avec un **testeur intégré** pour vérifier un brouillon sur les valeurs actuelles des entités.
 - **Une analyse de cohérence de la configuration** pour retrouver les références vers des entités disparues et revenir vers la configuration concernée lorsque c’est possible.
 - **L’acquittement et l’historique** pour suivre un problème sans perdre de vue son état réel.
+- **Des profils de notification facultatifs** pour les nouvelles alertes, rappels et retours à la normale, avec regroupement et exceptions par étiquette.
 - **Recherche, filtres, tri, groupement et colonnes personnalisables**, avec une vue adaptée au mobile.
 - **Des exclusions et temporisations** pour éviter que les situations normales ou les micro-coupures deviennent du bruit.
 - **L’export YAML et des sauvegardes automatiques de la configuration**, avec une récupération guidée si la configuration enregistrée devient invalide.
 - **Des entités et événements Home Assistant** pour alimenter vos propres dashboards et automatisations de notification.
 - **Une interface en français et en anglais**.
 
-Alert Manager ne vous impose **aucun système de notification**. Les notifications restent de simples automatisations Home Assistant : vous choisissez qui notifier, comment et quand.
+Utilisez les profils intégrés pour envoyer des notifications via les entités `notify` natives de Home Assistant sans écrire d’automatisation, ou conservez vos propres automatisations basées sur les événements. Vous choisissez qui notifier, comment et quand.
 
 ## Captures d’écran
 
@@ -117,7 +120,7 @@ Aucune ressource Lovelace et aucune configuration YAML ne sont nécessaires pour
 
 ## Surveillance automatique
 
-Alert Manager peut surveiller automatiquement plusieurs problèmes courants :
+Ouvrez **Configuration → Surveillance automatique** pour activer et configurer les packs qui surveillent les problèmes courants de Home Assistant :
 
 | Surveillance | Condition d’alerte |
 | --- | --- |
@@ -126,10 +129,23 @@ Alert Manager peut surveiller automatiquement plusieurs problèmes courants :
 | Batterie faible | un capteur de batterie atteint le seuil configuré |
 | UniFi | un `device_tracker` UniFi reste absent de `home` |
 | Automatisations et scripts en erreur | une exécution d’`automation` ou de `script` se termine en erreur |
+| Flapping / instabilité | la même anomalie se répète dans une fenêtre de détection |
 
 Chaque surveillance peut être activée indépendamment. Les délais et exclusions se règlent depuis l’interface, et les seuils de batterie peuvent être adaptés lorsque certains appareils ont besoin de limites différentes.
 
+Chaque pack peut porter des étiquettes Home Assistant (`automatic.<pack>.label_ids` en YAML), afin de sélectionner ses alertes dans les profils de notification et les exceptions par étiquette. Modifier les étiquettes d’un pack actualise ses alertes en cours ; l’historique conserve celles enregistrées à la résolution de l’alerte.
+
 La surveillance des erreurs d’automatisation et de script n’a aucun délai par défaut. Une exécution suivante terminée avec succès résout l’alerte. Pour certaines automatisations ou certains scripts, il est possible d’exiger plusieurs cycles d’exécution consécutifs en erreur avant de la déclencher.
+
+### Flapping : anomalies brèves mais répétées
+
+Le pack **Flapping** détecte les anomalies récurrentes séparément pour chaque source et entité. Une occurrence correspond à une nouvelle détection d’anomalie, même si elle disparaît avant la fin du délai habituel de déclenchement de la source. Une condition qui reste anormale en continu n’est pas comptée plusieurs fois.
+
+Le pack est **désactivé par défaut**. Ses réglages par défaut sont **5 occurrences en 1 heure**, avec un retour à la normale après **30 minutes sans nouvelle occurrence**. Les packs Entités indisponibles et Connectivité sont présélectionnés comme sources ; les packs sources sélectionnés doivent également être activés.
+
+Réglez le nombre d’occurrences, la fenêtre de détection et le délai de retour à la normale globalement, avec des réglages facultatifs par pack source et des configurations particulières par entité. Les règles personnalisées peuvent participer en activant leur option de flapping, avec des réglages propres à la règle si nécessaire. Le pack Flapping doit lui aussi être activé.
+
+Lorsque le seuil est atteint, une alerte de flapping distincte devient immédiatement active, sans délai de déclenchement supplémentaire. Chaque nouvelle occurrence relance son délai de retour à la normale. Ce délai mesure le temps écoulé depuis la dernière occurrence, et non la durée pendant laquelle la condition d’origine est restée normale.
 
 ## Règles personnalisées
 
@@ -151,7 +167,19 @@ Cela couvre par exemple les températures anormales, les consommations électriq
 
 Les règles peuvent être éditées visuellement ou en YAML et dupliquées depuis le panneau. Une règle peut surveiller jusqu’à 50 entités et une configuration peut contenir jusqu’à 500 règles. En YAML, les règles entièrement basées sur Jinja utilisent `source: jinja` ; les anciennes règles en `source: none` sont migrées automatiquement.
 
-Les règles peuvent porter des étiquettes Home Assistant (`label_ids` en YAML), affichées dans le tableau. Pour les notifications, elles complètent les étiquettes de l’entité et de l’appareil : elles servent au filtre du profil et aux exceptions par étiquette. Les exceptions ciblent une ou plusieurs étiquettes (`selector_ids` en YAML) : une seule étiquette correspondante suffit. La première exception correspondante dans l’ordre de la liste remplace les paramètres par défaut du profil. Les anciennes exceptions à une étiquette (`selector_id`) restent acceptées.
+Les règles peuvent porter des étiquettes Home Assistant (`label_ids` en YAML), affichées dans le tableau. Pour les notifications, elles complètent les étiquettes de l’entité et de l’appareil : elles servent au filtre du profil et aux exceptions par étiquette.
+
+Les champs de durée du panneau utilisent le sélecteur natif de Home Assistant (heures, minutes et secondes), y compris les réglages particuliers facultatifs et les rappels de notification. La configuration et le YAML conservent les valeurs en secondes ; vider une durée facultative conserve son comportement d’héritage ou de désactivation.
+
+Sur ordinateur, la largeur des volets de règles et de configuration est redimensionnable. Ils s’adaptent aux écrans mobiles et demandent confirmation avant d’abandonner les modifications à la fermeture.
+
+### Testeur de règle et d’expression
+
+Utilisez **Tester** dans l’éditeur visuel pour évaluer le brouillon sur les valeurs actuelles de Home Assistant, y compris une nouvelle règle ou des modifications non enregistrées. Le résultat est détaillé pour chaque entité : valeur lue, résultat de la comparaison et de la condition Jinja, message rendu et éventuelles erreurs d’évaluation.
+
+Ce test est **sans effet sur les alertes** : il n’enregistre pas la règle, ne crée ni ne résout d’alerte, n’envoie aucune notification et ne modifie ni l’historique ni les temporisations en cours. Une condition vérifiée ne simule pas l’écoulement de son délai de déclenchement.
+
+Pour les règles de variation, le testeur peut lire une référence existante compatible, mais ne la crée ni ne la réinitialise. Sans référence, le résultat est indéterminé. Les entités ou attributs manquants et les erreurs de rendu Jinja sont signalés pour corriger l’expression avant l’enregistrement.
 
 ### Exemples
 
@@ -223,11 +251,43 @@ Une alerte peut être :
 
 Les alertes résolues peuvent être conservées dans l’historique, ce qui permet de repérer les problèmes récurrents au lieu de seulement voir ce qui ne va pas à l’instant présent.
 
-Sélectionnez des lignes du tableau Historique pour supprimer les occurrences choisies après confirmation, sans affecter les alertes en cours.
+Sélectionnez des lignes du tableau Historique, ou utilisez **Supprimer** dans le menu du détail d’une occurrence passée, pour les supprimer après confirmation sans affecter les alertes en cours.
 
-Un clic sur une alerte ouvre son détail, notamment la valeur qui l’a déclenchée et sa valeur actuelle, avec un accès contextuel à l’entité Home Assistant concernée lorsqu’il est disponible.
+Un clic sur une alerte ouvre son détail, notamment la valeur qui l’a déclenchée et sa valeur actuelle, avec un accès contextuel à l’entité Home Assistant concernée lorsqu’il est disponible. Les valeurs numériques respectent la précision d’affichage de l’entité et le format numérique de l’utilisateur dans Home Assistant, sans modifier les valeurs enregistrées.
+
+Utilisez **Réévaluer** dans le menu du détail d’une alerte en cours pour vérifier à nouveau l’état actuel de son entité. Cette action réévalue aussi les autres alertes de cette entité, préserve les délais et protections habituels et résout les alertes via le fonctionnement normal de l’historique et des notifications. La surveillance doit être activée et le démarrage terminé.
 
 ## Être notifié sans être spammé
+
+### Profils de notification intégrés
+
+Dans **Configuration → Notifications**, créez un profil nommé, sélectionnez une ou plusieurs **entités `notify`** et choisissez les envois pour les nouvelles alertes et les retours à la normale. Les rappels peuvent être désactivés ou répétés selon un intervalle configurable d’au moins une minute. Chaque profil peut être activé indépendamment.
+
+Enregistrez le profil, puis utilisez **Tester** pour envoyer une vraie notification de test à ses destinataires sans créer d’alerte. Les profils acceptent des entités de notification, pas des actions ou scripts arbitraires ; les canaux disponibles uniquement sous forme d’action restent utilisables dans vos propres automatisations.
+
+### Étiquettes et exceptions
+
+Un profil peut couvrir toutes les alertes ou seulement celles qui correspondent à au moins une étiquette sélectionnée. La sélection combine les étiquettes de l’entité, de son appareil et de la règle personnalisée ou du pack automatique à l’origine de l’alerte.
+
+Les exceptions ciblent une ou plusieurs étiquettes et remplacent les réglages de nouvelle alerte, de retour à la normale ou de rappel. La **première exception correspondante dans l’ordre de la liste** est prioritaire ; les paramètres laissés en héritage conservent les valeurs par défaut du profil. En YAML, les exceptions utilisent `selector_ids` ; les anciennes exceptions à une étiquette utilisant `selector_id` restent acceptées.
+
+### Regroupement, rappels et navigation mobile
+
+Les notifications de nouvelle alerte et de retour à la normale sont regroupées séparément par profil. Le délai global de regroupement est de **30 secondes par défaut**, réglable entre **10 et 300 secondes**. Les nouveaux lots utilisent ce délai ; ceux déjà en attente conservent leur échéance. Si une alerte se résout avant l’envoi de sa notification initiale en attente, cette paire nouvelle alerte/retour à la normale non envoyée est supprimée.
+
+Les rappels arrivés à échéance sont regroupés par profil et s’arrêtent lorsqu’une alerte est acquittée ou résolue. Après un redémarrage, ils attendent la fin de la réconciliation des alertes. Seules les alertes confirmées reprennent leurs rappels ; une échéance déjà dépassée repart sur l’intervalle du profil, sans rattrapage des rappels manqués.
+
+Les titres distinguent les **🚨 nouvelles alertes**, les **🔔 rappels** et les **✅ retours à la normale**. Avec une cible compatible de l’application Home Assistant Companion, toucher une notification ouvre le détail d’une alerte en cours unique, la vue d’ensemble pour plusieurs alertes en cours ou l’**Historique** pour les retours à la normale. L’envoi générique transmet le titre et le message sans ajouter d’URL de navigation brute au texte.
+
+### Suivi des notifications par alerte
+
+Chaque profil affiche ses envois réussis sur les dernières 24 heures. Un envoi groupé compte une seule fois même avec plusieurs destinataires ; les tests et les échecs complets sont exclus.
+
+Les détails d’une alerte affichent les notifications de ses profils intégrés : nombre d’envois (rappels compris), profils correspondants même sans rappel et date du dernier envoi. Un lot compte une fois par profil et par alerte, dès qu’au moins une cible a été notifiée ; les tests et les échecs complets sont exclus. L’historique conserve séparément les envois de retour à la normale, leurs profils et leur dernière date. Ces informations survivent aux redémarrages ; elles sont masquées pour les alertes à venir et les anciens envois ne sont pas reconstitués. Les notifications envoyées par des automatisations externes ne sont pas comptabilisées.
+
+### Utiliser vos propres automatisations de notification
+
+Les profils intégrés sont facultatifs. Les événements Home Assistant existants restent disponibles pour votre propre logique de notification.
 
 Alert Manager émet l’événement `alert_manager_device_alert_started` lorsqu’un appareil passe en alerte. Les alertes qui arrivent à peu d’intervalle pour le même appareil sont regroupées avant l’émission de l’événement, ce qui permet d’envoyer **une notification utile pour l’appareil au lieu d’une notification par règle**.
 
@@ -253,12 +313,6 @@ mode: queued
 ```
 
 `script.notification` n’est qu’un exemple : remplacez-le par votre propre script de notification ou n’importe quelle action de notification Home Assistant.
-
-### Suivi des notifications par alerte
-
-Après un redémarrage, les rappels attendent la fin de la réconciliation des alertes. Seules les alertes confirmées reprennent leurs rappels ; une échéance déjà dépassée repart sur l’intervalle du profil, sans rattrapage des rappels manqués.
-
-Les détails d’une alerte affichent les notifications de ses profils intégrés : nombre d’envois (rappels compris), profils correspondants même sans rappel et date du dernier envoi. Un lot compte une fois par profil et par alerte, dès qu’au moins une cible a été notifiée ; les tests et les échecs complets sont exclus. L’historique conserve séparément les envois de retour à la normale, leurs profils et leur dernière date. Ces informations survivent aux redémarrages ; elles sont masquées pour les alertes à venir et les anciens envois ne sont pas reconstitués. Les notifications envoyées par des automatisations externes ne sont pas comptabilisées.
 
 ## Entités et événements Home Assistant
 
