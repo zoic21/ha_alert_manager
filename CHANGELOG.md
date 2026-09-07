@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.6 — 7 septembre 2026
+
+### Corrigé
+
+- Notifications mobiles : résolution de l’action à partir de la configuration
+  de l’application associée à l’entité, y compris si l’entité a été renommée.
+  Le lien de navigation est transmis dans les données du clic.
+- L’envoi générique de secours n’ajoute plus le lien au texte de la notification.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.5 — 7 septembre 2026
 
 ### Corrigé

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
@@ -34,6 +35,11 @@ homeassistant = _module("homeassistant", package=True)
 components = _module("homeassistant.components", package=True)
 helpers = _module("homeassistant.helpers", package=True)
 util = _module("homeassistant.util", package=True)
+util.slugify = lambda text: re.sub(
+    r"[^a-z0-9_]+",
+    "_",
+    unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower(),
+).strip("_")
 
 frontend_component = _module("homeassistant.components.frontend")
 frontend_component.async_remove_panel = lambda *_args, **_kwargs: None
@@ -722,6 +728,11 @@ class FakeConfigEntries:
         self.entries.append(entry)
         return entry
 
+    def async_get_entry(self, entry_id):
+        return next(
+            (entry for entry in self.entries if entry.entry_id == entry_id), None
+        )
+
     def async_entries(
         self,
         domain=None,
@@ -790,6 +801,7 @@ def registry_entry():
         labels=None,
         area_id=None,
         unique_id=None,
+        config_entry_id=None,
     ):
         item = SimpleNamespace(
             entity_id=entity_id,
@@ -799,6 +811,7 @@ def registry_entry():
             labels=set(labels or ()),
             area_id=area_id,
             unique_id=unique_id,
+            config_entry_id=config_entry_id,
         )
         hass.entity_registry.entries[entity_id] = item
         return item

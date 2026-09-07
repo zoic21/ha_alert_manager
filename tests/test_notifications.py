@@ -391,7 +391,7 @@ def test_test_notification_attempts_all_targets_without_creating_runtime_state(
         "notify.mobile_app_tablet",
     ]
     assert attempted[0][1] == "Alert Manager — Test notification"
-    assert "/alert-manager" in attempted[0][2]
+    assert attempted[0][2] == "This confirms that the notification profile works."
 
 
 def test_profile_test_does_not_increment_recent_usage(hass, entry) -> None:
@@ -415,34 +415,97 @@ def test_profile_test_does_not_increment_recent_usage(hass, entry) -> None:
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("target", ["notify.iphone_de_loic", "notify.renamed_phone"])
+@pytest.mark.parametrize(
+    "click_url",
+    ["/alert-manager?alert=battery%3Asensor.test", "/alert-manager/history"],
+)
 def test_mobile_app_delivery_keeps_click_target_in_transport_layer(
-    hass, registry_entry
+    hass, registry_entry, config_entry, target, click_url
 ) -> None:
-    """Companion targets use their existing service only for click metadata."""
-    registry_entry(hass, "notify.phone", platform="mobile_app")
+    """Resolve the mobile action even when the entity has been renamed."""
+    entry = config_entry(hass, "mobile_app")
+    entry.data = {"device_name": "iPhone de Loïc"}
+    registry_entry(hass, target, platform="mobile_app", config_entry_id=entry.entry_id)
     received = []
 
     async def send(call):
         received.append(call.data)
 
-    hass.services.async_register("notify", "phone", send)
+    hass.services.async_register("notify", "mobile_app_iphone_de_loic", send)
+    # An unrelated action matching the entity must never receive the message.
+    hass.services.async_register("notify", target.partition(".")[2], send)
     manager = NotificationManager(hass, lambda: [])
 
     result = asyncio.run(
         manager.async_send(
-            targets=["notify.phone"],
-            title="Title",
-            message="Message",
-            click_url="/alert-manager?alert=battery%3Asensor.test",
+            targets=[target], title="Title", message="Message", click_url=click_url
         )
     )
 
-    assert result["success"] is True
-    assert hass.services.calls[0]["service"] == "phone"
-    assert received[0]["data"] == {
-        "url": "/alert-manager?alert=battery%3Asensor.test",
-        "clickAction": "/alert-manager?alert=battery%3Asensor.test",
-    }
+    assert result["delivered_targets"] == [target]
+    assert len(hass.services.calls) == 1
+    assert hass.services.calls[0]["service"] == "mobile_app_iphone_de_loic"
+    assert received == [
+        {
+            "title": "Title",
+            "message": "Message",
+            "data": {"url": click_url, "clickAction": click_url},
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "unregistered",
+        "other_platform",
+        "no_config_id",
+        "missing_entry",
+        "wrong_domain",
+        "missing_name",
+        "missing_service",
+    ],
+)
+def test_notification_fallback_preserves_message_without_link(
+    hass, registry_entry, config_entry, case
+) -> None:
+    """Unavailable mobile routing uses the selected entity with plain text only."""
+
+    async def send(_call):
+        pass
+
+    hass.services.async_register("notify", "send_message", send)
+    entry = config_entry(hass, "other" if case == "wrong_domain" else "mobile_app")
+    entry.data = {} if case == "missing_name" else {"device_name": "iPhone de Loïc"}
+    if case != "unregistered":
+        registry_entry(
+            hass,
+            "notify.iphone_de_loic",
+            platform="other" if case == "other_platform" else "mobile_app",
+            config_entry_id=(
+                None
+                if case == "no_config_id"
+                else "missing"
+                if case == "missing_entry"
+                else entry.entry_id
+            ),
+        )
+    manager = NotificationManager(hass, lambda: [])
+    result = asyncio.run(
+        manager.async_send(
+            targets=["notify.iphone_de_loic"],
+            title="Title",
+            message="Message",
+            click_url="/alert-manager/history",
+        )
+    )
+    assert result["delivered_targets"] == ["notify.iphone_de_loic"]
+    assert len(hass.services.calls) == 1
+    call = hass.services.calls[0]
+    assert call["service"] == "send_message"
+    assert call["target"] == {"entity_id": "notify.iphone_de_loic"}
+    assert call["data"] == {"title": "Title", "message": "Message"}
 
 
 def test_unexpected_target_failure_is_isolated(hass) -> None:

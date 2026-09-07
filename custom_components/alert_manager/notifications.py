@@ -19,6 +19,7 @@ from homeassistant.components.notify import (
 from homeassistant.core import valid_entity_id
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import slugify
 
 from .const import (
     DOMAIN,
@@ -160,17 +161,11 @@ class NotificationManager:
     ) -> str | None:
         """Call one native notify entity and return a bounded known error."""
         try:
-            entity_entry = self._entity_registry.async_get(target)
-            legacy_service = target.partition(".")[2]
-            if (
-                click_url is not None
-                and getattr(entity_entry, "platform", None) == "mobile_app"
-                and hasattr(self._hass.services, "has_service")
-                and self._hass.services.has_service(NOTIFY_DOMAIN, legacy_service)
-            ):
+            mobile_service = self._mobile_notify_service(target) if click_url else None
+            if mobile_service is not None:
                 await self._hass.services.async_call(
                     NOTIFY_DOMAIN,
-                    legacy_service,
+                    mobile_service,
                     {
                         ATTR_TITLE: title,
                         ATTR_MESSAGE: message,
@@ -184,9 +179,7 @@ class NotificationManager:
                 SERVICE_SEND_MESSAGE,
                 {
                     ATTR_TITLE: title,
-                    ATTR_MESSAGE: (
-                        f"{message}\n\n{click_url}" if click_url else message
-                    ),
+                    ATTR_MESSAGE: message,
                 },
                 blocking=True,
                 target={"entity_id": target},
@@ -197,6 +190,27 @@ class NotificationManager:
         except Exception as err:  # Delivery must never leak into alert lifecycle tasks.
             _LOGGER.exception("Unexpected notification delivery failure to %s", target)
             return (str(err) or type(err).__name__)[:500]
+        return None
+
+    def _mobile_notify_service(self, target: str) -> str | None:
+        """Resolve the Companion action from its registration, not the entity name."""
+        entity = self._entity_registry.async_get(target)
+        if (
+            entity is None
+            or entity.platform != "mobile_app"
+            or not entity.config_entry_id
+        ):
+            return None
+        entry = self._hass.config_entries.async_get_entry(entity.config_entry_id)
+        if entry is None or entry.domain != "mobile_app":
+            return None
+        device_name = entry.data.get("device_name")
+        if not isinstance(device_name, str) or not device_name.strip():
+            return None
+        # Same naming rule as Home Assistant's legacy notify target registration.
+        service = slugify(f"mobile_app_{device_name}")
+        if self._hass.services.has_service(NOTIFY_DOMAIN, service):
+            return service
         return None
 
 
