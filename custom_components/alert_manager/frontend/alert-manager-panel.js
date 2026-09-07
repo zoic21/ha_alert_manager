@@ -3063,7 +3063,7 @@ function renderException(exception, index, t) {
     ? (exception.reminder_interval === null ? "never" : "custom")
     : "inherit";
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><div class="notification-exception-title"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><strong>${esc(t("notifications.exception_number", { count: index + 1 }))}</strong></div>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
+    <div class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
@@ -7362,12 +7362,6 @@ const settingsStyles = `
   .notification-exceptions-header > div {
     min-width: 0;
   }
-  .notification-exception-title {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-  }
   .notification-exception-reorder {
     flex: none;
     cursor: grab;
@@ -7476,8 +7470,8 @@ const settingsStyles = `
   }
   .notification-exception {
     display: grid;
-    gap: 12px;
-    padding: 12px;
+    gap: 4px;
+    padding: 4px 12px 12px;
   }
   .notification-exception-grid > .field {
     justify-content: flex-end;

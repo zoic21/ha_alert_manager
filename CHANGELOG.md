@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.16 — 7 septembre 2026
+
+### Amélioré
+
+- Suppression du titre numéroté des exceptions de notification pour éviter son
+  changement visuel lors du réordonnancement. Les boutons de déplacement et de
+  suppression restent respectivement en haut à gauche et à droite.
+- Réduction des espaces en haut de chaque exception et avant ses champs pour
+  rendre les encadrés plus compacts, sur ordinateur comme sur mobile.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.15 — 7 septembre 2026
 
 ### Ajouté

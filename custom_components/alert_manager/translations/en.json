@@ -242,7 +242,6 @@
       "disabled": "Disabled",
       "empty": "No notification profile configured.",
       "enabled": "Enabled",
-      "exception_number": "Exception {count}",
       "reorder_exception": "Move exception {count}",
       "reorder_help": "Drag to reorder; keyboard: Up/Down arrows, Home/End",
       "exceptions": "Exceptions",

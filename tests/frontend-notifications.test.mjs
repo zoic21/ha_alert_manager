@@ -85,6 +85,9 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
   assert.equal(markup.match(/id="notification-profile-enabled"/g)?.length, 1);
   assert.doesNotMatch(markup, /notification-profile-enabled-field/);
   assert.match(markup, /data-notification-exception="0"/);
+  assert.doesNotMatch(markup, /notifications\.exception_number|notification-exception-title/);
+  assert.match(markup, /notification-exception-heading"><ha-icon-button class="notification-exception-reorder"/);
+  assert.match(markup, /<\/ha-icon-button><ha-icon-button class="configuration-remove" data-action="remove-notification-exception"/);
   assert.match(markup, /<ha-selector id="notification-exception-selector-0"/);
   assert.match(markup, /<div class="field full"><span class="field-label">[^<]*<\/span><ha-selector id="notification-exception-selector-0"/);
   assert.doesNotMatch(markup, /notification-exception-type/);
