@@ -593,6 +593,7 @@ class _StateMixin:
             source,
             id=alert_id,
             type=pack_id,
+            labels=list(self.config["automatic"][pack_id]["label_ids"]),
             value=generated.value,
             condition=condition,
             condition_key=generated.condition_key,

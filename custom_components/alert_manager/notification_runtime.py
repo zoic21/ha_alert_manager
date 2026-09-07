@@ -156,6 +156,25 @@ class NotificationRuntime:
         self._accept_events = True
         self._events_pause_depth = 0
         self._event_generation = 0
+        self._deferred_events: (
+            list[tuple[str, dict[str, Any], int, frozenset[str]]] | None
+        ) = None
+
+    @contextmanager
+    def events_deferred(self) -> Iterator[None]:
+        """Release configuration-generated notifications only after commit."""
+        previous = self._deferred_events
+        events: list[tuple[str, dict[str, Any], int, frozenset[str]]] = []
+        self._deferred_events = events
+        try:
+            yield
+        finally:
+            self._deferred_events = previous
+        # Exceptions (including cancellation) skip delivery after the finally.
+        for event_type, data, generation, tracked_profile_ids in events:
+            self._queue_lifecycle_event(
+                event_type, data, generation, tracked_profile_ids
+            )
 
     @callback
     def pause_events(self) -> None:
@@ -358,10 +377,30 @@ class NotificationRuntime:
                 )
             )
         generation = self._event_generation
+        self._queue_lifecycle_event(
+            event_type, dict(data), generation, tracked_profile_ids
+        )
+
+    @callback
+    def _queue_lifecycle_event(
+        self,
+        event_type: str,
+        data: dict[str, Any],
+        generation: int,
+        tracked_profile_ids: frozenset[str],
+    ) -> None:
+        """Retain a transaction event or schedule its normal runtime handler."""
+        if self._unloading or generation != self._event_generation:
+            return
+        if self._deferred_events is not None:
+            self._deferred_events.append(
+                (event_type, data, generation, tracked_profile_ids)
+            )
+            return
         self._create_task(
             self._async_handle_event(
                 event_type,
-                dict(data),
+                data,
                 generation=generation,
                 tracked_profile_ids=tracked_profile_ids,
             ),

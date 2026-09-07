@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from homeassistant.core import CoreState, Event
 
 from custom_components.alert_manager import manager_runtime
@@ -121,6 +122,79 @@ def test_threshold_activates_immediately_without_flapping_pending(hass, entry, s
     ]
     assert manager.history == []
     assert len(manager._pack_runtime["flapping"]["unavailable:sensor.test"]) == 3
+
+
+@pytest.mark.parametrize("custom_rule", [False, True])
+def test_flapping_owns_labels_on_creation_refresh_and_restart(
+    hass, entry, set_now, custom_rule
+):
+    """Generated alerts use their pack labels even when the source is a rule."""
+    start = datetime(2026, 9, 7, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=2)
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {"label_ids": ["instability"]},
+                    "unavailable": {"label_ids": ["availability"]},
+                }
+            }
+        )
+    )
+    source_id = "unavailable:sensor.test"
+    bad_state = "unavailable"
+    if custom_rule:
+        rule = run(
+            manager.async_create_rule(
+                {
+                    "name": "Source",
+                    "entity_ids": ["sensor.test"],
+                    "operator": "equals",
+                    "value": "bad",
+                    "duration": 900,
+                    "flapping_enabled": True,
+                    "label_ids": ["source"],
+                }
+            )
+        )
+        source_id = f"rule:{rule['id']}:sensor.test"
+        bad_state = "bad"
+    for offset in (0, 10):
+        set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", bad_state)
+        live_state(manager, hass, "sensor.test", "ok")
+    alert_id = f"flapping:{source_id}"
+    record = manager.records[alert_id]
+    assert record.details.labels == ["instability"]
+    detected_at = record.detected_at
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {"label_ids": ["updated"]},
+                }
+            }
+        )
+    )
+    assert record.details.labels == ["updated"]
+    set_now(start + timedelta(seconds=20))
+    live_state(manager, hass, "sensor.test", bad_state)
+    live_state(manager, hass, "sensor.test", "ok")
+    assert record.details.labels == ["updated"]
+    assert record.detected_at == detected_at
+    # Simulate an occurrence persisted by rc.16 with inherited source labels.
+    record.details.labels = ["legacy_source"]
+    run(manager.async_unload())
+    restored = make_manager(hass, entry)
+    assert restored.records[alert_id].details.labels == ["updated"]
+    assert restored.records[alert_id].detected_at == detected_at
+    assert hass.stores["alert_manager"]["alerts"][alert_id]["details"]["labels"] == [
+        "updated"
+    ]
+    run(restored.async_unload())
 
 
 def test_live_state_batch_observes_once_and_uses_one_store_write(hass, entry, set_now):

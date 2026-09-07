@@ -202,10 +202,11 @@ class AlertManager(
                 history, history_migrated = [], False
         self._variation_baselines = self.storage.variation_baselines
         self._pack_runtime = self.storage.pack_runtime
+        occurrence_pack_ids = {pack.id for pack in OCCURRENCE_PACKS}
         runtime_pack_ids = {
-            pack.id
-            for pack in OCCURRENCE_PACKS
-            if self.config["automatic"][pack.id]["enabled"]
+            pack_id
+            for pack_id in occurrence_pack_ids
+            if self.config["automatic"][pack_id]["enabled"]
         }
         if set(self._pack_runtime) - runtime_pack_ids:
             self._pack_runtime = {
@@ -218,6 +219,13 @@ class AlertManager(
         await self._async_load_condition_translations()
         self.notifications.set_translations(self._condition_translations)
         self.records = records
+        for record in records.values():
+            if record.details.type not in occurrence_pack_ids:
+                continue
+            labels = self.config["automatic"][record.details.type]["label_ids"]
+            if record.details.labels != labels:
+                record.details.labels = list(labels)
+                migrated = True
         self._unverified_restored_alert_ids = set(records)
         self._rebuild_record_index()
         self.history = history

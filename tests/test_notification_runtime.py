@@ -1434,3 +1434,127 @@ def test_pack_label_save_failure_restores_config_and_alert(hass, entry):
         await manager.async_unload()
 
     asyncio.run(scenario())
+
+
+def test_rule_label_edit_discards_only_its_pending_notifications(hass, entry):
+    """Changing routing labels cancels stale batches without losing other rules."""
+
+    async def scenario():
+        hass.states.set("sensor.test", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        profile = _profile(reminder_interval=300)
+        profile["label_ids"] = ["old"]
+        await manager.async_update_config({"notification_profiles": [profile]})
+        delivery = _DeliverySpy()
+        runtime = manager.notification_runtime
+        runtime._delivery = delivery
+        rules = [
+            await manager.async_create_rule(
+                {
+                    "name": name,
+                    "entity_ids": ["sensor.test"],
+                    "operator": "above",
+                    "value": 8,
+                    "duration": 0,
+                    "label_ids": ["old"],
+                }
+            )
+            for name in ("Changed", "Unchanged")
+        ]
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        alert_ids = [f"rule:{rule['id']}:sensor.test" for rule in rules]
+        assert set(runtime._batches[("profile", "started")].items) == set(alert_ids)
+        await manager.async_update_rule(rules[0]["id"], {"label_ids": ["new"]})
+        assert set(runtime._batches[("profile", "started")].items) == {alert_ids[1]}
+        assert alert_ids[0] not in runtime._runtime["profile"]
+        await runtime._async_flush_batch("profile", "started")
+        assert len(delivery.calls) == 1
+        assert (
+            runtime._batch_url(
+                "started",
+                [
+                    _NotificationItem.from_event(
+                        manager.records[alert_ids[1]].as_public_dict()
+                    )
+                ],
+            )
+            == delivery.calls[0]["click_url"]
+        )
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("fail_save", [False, True])
+@pytest.mark.parametrize("cancel_caller", [False, True])
+@pytest.mark.parametrize("mutation", ["create", "update"])
+def test_rule_notifications_wait_for_transaction_commit(
+    hass, entry, fail_save, cancel_caller, mutation
+):
+    """A pending write sends nothing; commit sends once, rollback sends nothing."""
+
+    async def scenario():
+        hass.states.set("sensor.test", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule_data = {
+            "name": "Hot",
+            "entity_ids": ["sensor.test"],
+            "operator": "above",
+            "value": 8,
+            "duration": 0,
+        }
+        if mutation == "update":
+            existing = await manager.async_create_rule({**rule_data, "value": 20})
+        await manager.async_update_config({"notification_profiles": [_profile()]})
+        initial_rules = deepcopy(manager.config["rules"])
+        delivery = _DeliverySpy()
+        runtime = manager.notification_runtime
+        runtime._delivery = delivery
+        original_save = manager.storage.async_save
+        save_started = asyncio.Event()
+        release_save = asyncio.Event()
+
+        async def blocked_save(*args, **kwargs):
+            save_started.set()
+            await release_save.wait()
+            if fail_save:
+                raise OSError("disk full")
+            await original_save(*args, **kwargs)
+
+        manager.storage.async_save = blocked_save
+        task = asyncio.create_task(
+            manager.async_create_rule(rule_data)
+            if mutation == "create"
+            else manager.async_update_rule(existing["id"], {"value": 8})
+        )
+        await save_started.wait()
+        await asyncio.sleep(0)
+        assert not runtime._batches
+        assert not delivery.calls
+        if cancel_caller:
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done()
+        release_save.set()
+        if cancel_caller or fail_save:
+            with pytest.raises(asyncio.CancelledError if cancel_caller else OSError):
+                await task
+        else:
+            await task
+        manager.storage.async_save = original_save
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await runtime._async_flush_batch("profile", "started")
+        assert len(delivery.calls) == (0 if fail_save else 1)
+        assert bool(manager.records) is not fail_save
+        if fail_save:
+            assert manager.config["rules"] == initial_rules
+        else:
+            assert manager.config["rules"][0]["value"] == 8
+        assert runtime._deferred_events is None
+        await manager.async_unload()
+
+    asyncio.run(scenario())

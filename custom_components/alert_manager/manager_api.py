@@ -93,7 +93,12 @@ def _serialize_config_mutation(
                 raise ValueError(
                     "Configuration recovery is required before making changes"
                 )
-            return await async_finish_non_interruptible(method(self, *args, **kwargs))
+
+            async def mutate() -> Any:
+                with self.notification_runtime.events_deferred():
+                    return await method(self, *args, **kwargs)
+
+            return await async_finish_non_interruptible(mutate())
 
     return locked
 
@@ -869,10 +874,7 @@ class _ApiMixin:
                     await self.async_evaluate_all(save=False, publish=False)
                 if labels_changed:
                     for record in self.records.values():
-                        if (
-                            record.details.rule_id is None
-                            and record.details.type in labels_changed
-                        ):
+                        if record.details.type in labels_changed:
                             record.details.labels = list(
                                 candidate["automatic"][record.details.type]["label_ids"]
                             )
@@ -1057,6 +1059,10 @@ class _ApiMixin:
             self._restore_configuration_snapshot(previous)
             raise
         alert_ids_to_discard: set[str] = set()
+        if old_rule.label_ids != rule.label_ids:
+            alert_ids_to_discard.update(
+                f"rule:{rule_id}:{entity_id}" for entity_id in affected_entities
+            )
         for entity_id in removed_entities:
             alert_id = f"rule:{rule_id}:{entity_id}"
             current = self.records.get(alert_id)

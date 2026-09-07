@@ -2,6 +2,21 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.17 — 7 septembre 2026
+
+### Corrigé
+
+- Les alertes de flapping utilisent les étiquettes de leur propre pack, y compris
+  après une nouvelle occurrence, une modification des étiquettes ou un redémarrage.
+  Les identifiants, dates de détection et historiques existants sont préservés.
+- Modifier les étiquettes d’une règle annule ses notifications encore en attente
+  avec l’ancien routage, sans supprimer celles des autres règles.
+- Les notifications déclenchées par une modification de configuration attendent
+  la réussite de sa sauvegarde. Un échec d’écriture ne provoque plus l’envoi d’une
+  notification pour une alerte annulée par le retour à la configuration précédente.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.16 — 7 septembre 2026
 
 ### Amélioré
