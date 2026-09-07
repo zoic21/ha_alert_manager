@@ -19,10 +19,19 @@ export const settingsStyles = `
   .configuration-drawer {
     --side-drawer-width: var(--configuration-editor-width, 560px);
   }
-  .settings-page.has-editor {
-    width: calc(100% - var(--configuration-editor-width, 560px) - 24px - 16px);
-    margin-inline-start: 0;
-    margin-inline-end: auto;
+  @media (min-width: 1001px) {
+    /* Main already includes the drawer's 24px outer margin. Reserve only
+       the drawer width and the gap, and let every section fill that space. */
+    .settings-page.has-editor {
+      width: calc(100% - var(--configuration-editor-width, 560px) - 16px);
+      margin-inline-start: 0;
+      margin-inline-end: auto;
+    }
+    .settings-page.has-editor,
+    .settings-page.has-editor .settings-form,
+    .settings-page.has-editor .automatic-section {
+      max-width: none;
+    }
   }
   .settings-card {
     display: grid;

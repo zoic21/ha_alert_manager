@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.12 — 7 septembre 2026
+
+### Corrigé
+
+- Suppression du grand espace vide entre le contenu de configuration et son
+  volet sur les écrans larges : les sections occupent toute la largeur restante,
+  avec un espacement de 16 px jusqu’au volet redimensionnable.
+- La page retrouve sa largeur limitée et son centrage à la fermeture du volet.
+  Le comportement des écrans étroits reste inchangé.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.11 — 7 septembre 2026
 
 ### Amélioré

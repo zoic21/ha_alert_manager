@@ -5295,3 +5295,11 @@ test("configuration drawers share pointer, keyboard and reset sizing with rules"
     document.removeEventListener = previousRemove;
   }
 });
+
+
+test("open configuration fills the space up to the drawer on wide screens", () => {
+  const panel = new (customElements.get("alert-manager-panel"))();
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /@media\(min-width:1001px\)\{\.settings-page\.has-editor\{width:calc\(100% - var\(--configuration-editor-width,560px\) - 16px\)/);
+  assert.match(styles, /\.settings-page\.has-editor,\.settings-page\.has-editor \.settings-form,\.settings-page\.has-editor \.automatic-section\{max-width:none\}/);
+});
