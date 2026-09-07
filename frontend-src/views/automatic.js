@@ -412,6 +412,7 @@ export function refreshAutomaticConfigurationDrawer() {
   }));
   this._hydrateSelectors();
   this._decorateActionIcons();
+  this._refreshUiState();
 }
 
 export function updateAutomaticConfigurationCount(packId) {

@@ -1,4 +1,4 @@
-import { hydrateDurationFields, renderDurationField, validateDurationFields } from "./components/duration-field.js";
+import { hydrateDurationFields, renderDurationField, reportFormValidity } from "./components/duration-field.js";
 import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
   refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass, syncSensor,
 } from "./api/alert-manager-api.js";
@@ -17,7 +17,7 @@ import {
 } from "./components/alert-table.js";
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
-  handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, mountConfigurationDrawer, SIDE_DRAWER_OPEN_ACTIONS,
+  activeNoticeTarget, refreshActiveNotice, handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, mountConfigurationDrawer, SIDE_DRAWER_OPEN_ACTIONS,
   updateDrawerLayout, useNativeBottomSheet,
 } from "./components/configuration-drawer.js";
 import { captureNotificationProfileDraft, handleNotificationProfileAction } from "./components/notification-profiles.js";
@@ -423,6 +423,7 @@ class AlertManagerPanel extends HTMLElement {
       ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
       ${this._renderBackupRestoreDialog()}`;
     mountConfigurationDrawer(this.shadowRoot);
+    this._refreshActiveNotice();
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
@@ -434,15 +435,30 @@ class AlertManagerPanel extends HTMLElement {
     this._syncNarrowTableHeaderBackgrounds();
   }
 
+  _noticeTarget = activeNoticeTarget;
+  _refreshActiveNotice = refreshActiveNotice;
+
+  get _notice() {
+    const target = this._noticeTarget();
+    return target ? target.notice ?? null : this._pageNotice ?? null;
+  }
+
+  set _notice(notice) {
+    const target = this._noticeTarget();
+    if (target) target.notice = notice;
+    else this._pageNotice = notice;
+  }
+
   _renderPageMessages() {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
   _pageMessagesContent() {
     return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
-      ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
+      ${!this._noticeTarget() && !this._editingRule && this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
   _refreshUiState() {
+    this._refreshActiveNotice();
     const messages = this.shadowRoot?.querySelector?.("[data-page-messages]");
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
@@ -712,27 +728,7 @@ class AlertManagerPanel extends HTMLElement {
       else if (this._reportFormValidity(form)) await this._saveRule(form);
     }
   }
-  _reportFormValidity(form) {
-    let valid = form.reportValidity?.() ?? true;
-    form.querySelectorAll?.("ha-input").forEach((field) => {
-      if (typeof field.reportValidity === "function") {
-        valid = field.reportValidity() && valid;
-      } else if (field.required && String(field.value ?? "") === "") {
-        valid = false;
-      }
-    });
-    if (!validateDurationFields(form, this)) {
-      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
-      this._refreshUiState();
-      valid = false;
-    }
-    const kind = this._configurationDrawer?.kind;
-    if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
-      const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
-      if (drawer) valid = this._reportFormValidity(drawer) && valid;
-    }
-    return valid;
-  }
+  _reportFormValidity = reportFormValidity;
   _styles() {
     return panelStyles();
   }

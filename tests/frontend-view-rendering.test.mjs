@@ -639,7 +639,7 @@ test("all configuration drawers keep save actions outside their scroll area", ()
       title: "Configuration", ariaLabel: "Configuration", content: "Long content",
       saveAction: "save-settings", saveLabel: "Save", busy: false, useBottomSheet,
     });
-    assert.match(markup, /<section class="side-drawer-section">Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);
+    assert.match(markup, /<section class="side-drawer-section"><div data-active-notice><\/div>Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);
   }
 });
 

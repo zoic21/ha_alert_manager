@@ -425,6 +425,12 @@ export async function deleteRule(ruleId) {
       if (this._editingRule?.id === rule.id) this._editingRule = null;
       this._refreshRulesData();
       this._refreshRuleEditor();
+    } else if (this._editingRule?.id === ruleId) {
+      const message = this._notice?.text || this._t("errors.unknown");
+      this._notice = null;
+      if (this._ruleEditorMode === "yaml") this._ruleYamlError = message;
+      else this._ruleEditorError = message;
+      this._refreshRuleEditor();
     }
 }
 

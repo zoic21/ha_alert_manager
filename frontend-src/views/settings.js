@@ -578,7 +578,7 @@ export function refreshSettingsConfigurationDrawer() {
     t: (key, replacements) => this._t(key, replacements),
   }));
   this._hydrateSelectors();
-  this._decorateActionIcons();
+  this._refreshUiState();
 }
 
 export function updateSettingsConfigurationCount(id) {

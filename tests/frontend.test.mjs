@@ -1271,7 +1271,8 @@ test("backup restore is sent only after the native confirmation action", async (
   await panel._handleClick(actionEvent(
     "restore-config-backup", null, { backupId: backup.id },
   ));
-  assert.equal(panel._backupRestoreCandidate, backup);
+  assert.deepEqual(panel._backupRestoreCandidate, backup);
+  assert.notEqual(panel._backupRestoreCandidate, backup, "dialog notices must not mutate the backup list");
   assert.deepEqual(calls, []);
 
   await panel._handleClick(actionEvent(
@@ -4876,6 +4877,10 @@ test("failed reevaluation keeps the dialog and releases busy state", async () =>
   assert.equal(panel._notice.text, "La réévaluation nécessite une surveillance démarrée et activée.");
   assert.equal(panel._alertDetailsDialog, dialog);
   assert.match(dialog.innerHTML, /data-alert-details-notice[^>]*alert-type="error"/);
+  assert.doesNotMatch(panel._pageMessagesContent(), /La réévaluation nécessite/);
+  panel._alertDetailsDialog = null;
+  assert.equal(panel._notice, null);
+  assert.doesNotMatch(panel._pageMessagesContent(), /La réévaluation nécessite/);
 });
 
 for (const partition of ["active", "pending", "acknowledge"]) {
@@ -4938,6 +4943,8 @@ test("reevaluation does not overwrite another dialog opened while awaiting the r
   assert.equal(panel._alertDetailsDialog, replacement);
   assert.equal(replacement.innerHTML, "another dialog");
   assert.equal(original.reevaluating, false);
+  assert.equal(replacement.notice, undefined);
+  assert.equal(panel._notice, null);
 });
 
 test("clear history stays disabled after returning to an empty history tab", () => {
@@ -4986,3 +4993,125 @@ test("mobile configuration pairs inputs with removal actions without changing de
 
   assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
 });
+
+
+for (const kind of ["automatic", "settings", "notification"]) {
+  test(`${kind} drawer displays errors locally and discards them on close`, () => {
+    const panel = tablePanel();
+    const container = { innerHTML: "" };
+    panel._configurationDrawer = { kind };
+    panel.shadowRoot.querySelector = (selector) => selector === ".configuration-drawer"
+      ? { querySelector: () => container } : null;
+    panel._notice = { kind: "error", text: "Invalid <value>" };
+    panel._refreshUiState();
+    assert.match(container.innerHTML, /alert-type="error"/);
+    assert.match(container.innerHTML, /Invalid &lt;value&gt;/);
+    assert.doesNotMatch(panel._pageMessagesContent(), /Invalid/);
+    panel._configurationDrawer = null;
+    assert.equal(panel._notice, null);
+    assert.doesNotMatch(panel._pageMessagesContent(), /Invalid/);
+  });
+}
+
+for (const temporary of [false, true]) {
+  test(`acknowledgement errors stay in the active dialog (temporary=${temporary})`, async () => {
+    const panel = tablePanel();
+    const row = panel._tableRows("overview")[0];
+    const details = { innerHTML: "", alertId: row.id, querySelector: () => container };
+    const container = { innerHTML: "" };
+    panel._alertDetailsDialog = details;
+    if (temporary) panel._timedAcknowledgementDialog = {};
+    panel._hass.callService = panel._hass.callWS = async () => { throw new Error("Ack failed"); };
+    panel._refreshOverviewData = () => {};
+    assert.equal(await panel._updateAlertAcknowledgement("acknowledge", row.id, temporary ? 900 : null), false);
+    assert.equal(panel._notice.kind, "error");
+    assert.doesNotMatch(panel._pageMessagesContent(), /Une erreur inattendue/);
+    if (temporary) {
+      assert.equal(details.notice, undefined);
+      assert.equal(container.innerHTML, "");
+      panel._timedAcknowledgementDialog = null;
+    } else assert.match(container.innerHTML, /Une erreur inattendue/);
+    panel._alertDetailsDialog = null;
+    assert.equal(panel._notice, null);
+  });
+}
+
+test("backup restoration failure keeps the confirmation open with its error", async () => {
+  const panel = tablePanel();
+  const container = { innerHTML: "" };
+  panel._backupRestoreCandidate = { id: "backup-1" };
+  panel.shadowRoot.querySelector = (selector) => selector === "#config-backup-restore-dialog"
+    ? { querySelector: () => container } : null;
+  panel._hass.callWS = async () => { throw new Error("Restore failed"); };
+  await panel._handleClick(actionEvent("confirm-config-backup-restore", null, { backupId: "backup-1" }));
+  assert.equal(panel._backupRestoreCandidate.id, "backup-1");
+  assert.match(container.innerHTML, /Une erreur inattendue/);
+  assert.doesNotMatch(panel._pageMessagesContent(), /Une erreur inattendue/);
+  panel._backupRestoreCandidate = null;
+  assert.equal(panel._notice, null);
+});
+
+for (const mode of ["visual", "yaml"]) {
+  test(`rule deletion failure stays in the ${mode} editor`, async () => {
+    const panel = tablePanel();
+    const rule = { id: "rule-1", name: "Rule" };
+    panel._config.rules = [rule];
+    panel._editingRule = rule;
+    panel._ruleEditorMode = mode;
+    panel._refreshRuleEditor = () => {};
+    panel._hass.callWS = async () => { throw new Error("Delete failed"); };
+    const previousConfirm = window.confirm;
+    window.confirm = () => true;
+    try { await panel._deleteRule(rule.id); }
+    finally { window.confirm = previousConfirm; }
+    assert.equal(panel._editingRule, rule);
+    assert.equal(mode === "yaml" ? panel._ruleYamlError : panel._ruleEditorError, panel._t("errors.unknown"));
+    assert.equal(panel._notice, null);
+    assert.doesNotMatch(panel._pageMessagesContent(), /Une erreur inattendue/);
+  });
+}
+
+
+test("invalid rule duration is reported in the editor without a page error", () => {
+  const panel = tablePanel();
+  panel._editingRule = { id: "rule-1" };
+  panel._captureRuleDraft = () => {};
+  panel._refreshRuleEditor = () => {};
+  const field = {
+    value: { seconds: -1 }, required: true,
+    dataset: { durationMin: "0", durationMax: "60" },
+  };
+  const form = { id: "rule-form", querySelectorAll: (selector) => selector === "[data-duration-value]" ? [field] : [] };
+  assert.equal(panel._reportFormValidity(form), false);
+  assert.equal(panel._ruleEditorError, panel._t("errors.duration_field_range"));
+  assert.equal(panel._notice, null);
+});
+
+for (const outcome of ["success", "partial-failure", "request-failure"]) {
+  test(`notification test feedback stays in the profile drawer: ${outcome}`, async () => {
+    const panel = tablePanel();
+    const container = { innerHTML: "" };
+    panel._configurationDrawer = { kind: "notification", id: "profile-1" };
+    panel.shadowRoot.querySelector = (selector) => selector === ".configuration-drawer"
+      ? { querySelector: () => container } : null;
+    const calls = [];
+    panel._hass.callWS = async (message) => {
+      calls.push(message);
+      if (outcome === "request-failure") throw new Error("Test failed");
+      return { success: outcome === "success", failed_targets: [{ entity_id: "notify.phone" }] };
+    };
+    await panel._handleClick(actionEvent("test-notification-profile", null, { profileId: "profile-1" }));
+    assert.deepEqual(calls, [{ type: "alert_manager/notifications/test", profile_id: "profile-1" }]);
+    const notice = panel._notice;
+    assert.equal(notice.kind, outcome === "success" ? "success" : "error");
+    assert.match(container.innerHTML, new RegExp(`alert-type="${notice.kind}"`));
+    assert.ok(container.innerHTML.includes(notice.text));
+    assert.ok(!panel._pageMessagesContent().includes(notice.text));
+    panel._configurationDrawer = null;
+    assert.equal(panel._notice, null);
+    assert.ok(!panel._pageMessagesContent().includes(notice.text));
+    panel._configurationDrawer = { kind: "notification", id: "profile-2" };
+    panel._refreshUiState();
+    assert.equal(container.innerHTML, "");
+  });
+}

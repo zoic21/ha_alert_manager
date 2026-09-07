@@ -932,8 +932,8 @@ export function alertDetailsItems(kind, row) {
 }
 
 function renderAlertDetailsNotice(notice) {
-    if (!notice) return "";
-    return `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>`;
+    if (!notice) return `<div data-active-notice></div>`;
+    return `<div data-active-notice><ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert></div>`;
 }
 
 export function renderAlertDetails(context) {
@@ -1084,12 +1084,12 @@ export async function handleAlertDetailsSelection(event) {
         const result = await this._api.reevaluateAlert(alertId);
         await this._refreshAlerts();
         const row = this._tableRows("overview").find((item) => item.id === alertId);
-        this._notice = {
+        const notice = {
           kind: "success",
           text: this._t(result.present ? "success.alert_reevaluated_present" : "success.alert_reevaluated_cleared"),
         };
         if (dialog && this._alertDetailsDialog === dialog) {
-          dialog.notice = this._notice;
+          dialog.notice = notice;
           if (!row) dialog.alertKind = "result";
           dialog.innerHTML = row
             ? this._renderAlertDetails("overview", row)
@@ -1097,9 +1097,9 @@ export async function handleAlertDetailsSelection(event) {
           this._hydrateAlertDetailTimestamps(dialog);
         }
       } catch (error) {
-        this._notice = { kind: "error", text: this._errorText(error) };
+        const notice = { kind: "error", text: this._errorText(error) };
         if (dialog && this._alertDetailsDialog === dialog) {
-          dialog.notice = this._notice;
+          dialog.notice = notice;
           dialog.innerHTML = previousRow
             ? this._renderAlertDetails("overview", previousRow)
             : renderAlertDetailsNotice(dialog.notice);

@@ -1040,6 +1040,34 @@ function validateDurationFields(root, panel) {
   return valid;
 }
 
+function reportFormValidity(form) {
+  let valid = form.reportValidity?.() ?? true;
+  form.querySelectorAll?.("ha-input").forEach((field) => {
+    if (typeof field.reportValidity === "function") {
+      valid = field.reportValidity() && valid;
+    } else if (field.required && String(field.value ?? "") === "") {
+      valid = false;
+    }
+  });
+  if (!validateDurationFields(form, this)) {
+    if (this._editingRule) {
+      this._ruleEditorError = this._t("errors.duration_field_range");
+      this._captureRuleDraft(form);
+      this._refreshRuleEditor();
+    } else {
+      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
+    }
+    this._refreshUiState();
+    valid = false;
+  }
+  const kind = this._configurationDrawer?.kind;
+  if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
+    const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
+    if (drawer) valid = this._reportFormValidity(drawer) && valid;
+  }
+  return valid;
+}
+
 // Source: frontend-src/components/alert-table.js
 function refreshAlertTableData(kind, tablePage) {
     const sourceRows = kind === "overview"
@@ -1970,8 +1998,8 @@ function alertDetailsItems(kind, row) {
 }
 
 function renderAlertDetailsNotice(notice) {
-    if (!notice) return "";
-    return `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>`;
+    if (!notice) return `<div data-active-notice></div>`;
+    return `<div data-active-notice><ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert></div>`;
 }
 
 function renderAlertDetails(context) {
@@ -2122,12 +2150,12 @@ async function handleAlertDetailsSelection(event) {
         const result = await this._api.reevaluateAlert(alertId);
         await this._refreshAlerts();
         const row = this._tableRows("overview").find((item) => item.id === alertId);
-        this._notice = {
+        const notice = {
           kind: "success",
           text: this._t(result.present ? "success.alert_reevaluated_present" : "success.alert_reevaluated_cleared"),
         };
         if (dialog && this._alertDetailsDialog === dialog) {
-          dialog.notice = this._notice;
+          dialog.notice = notice;
           if (!row) dialog.alertKind = "result";
           dialog.innerHTML = row
             ? this._renderAlertDetails("overview", row)
@@ -2135,9 +2163,9 @@ async function handleAlertDetailsSelection(event) {
           this._hydrateAlertDetailTimestamps(dialog);
         }
       } catch (error) {
-        this._notice = { kind: "error", text: this._errorText(error) };
+        const notice = { kind: "error", text: this._errorText(error) };
         if (dialog && this._alertDetailsDialog === dialog) {
-          dialog.notice = this._notice;
+          dialog.notice = notice;
           dialog.innerHTML = previousRow
             ? this._renderAlertDetails("overview", previousRow)
             : renderAlertDetailsNotice(dialog.notice);
@@ -2534,6 +2562,7 @@ function renderBackupRestoreDialog(context) {
   const { backup, busy, date, t } = context;
   if (!backup) return "";
   return `<ha-dialog id="config-backup-restore-dialog" type="alert" width="small" header-title="${esc(t("recovery.confirm_title"))}" aria-describedby="config-backup-confirmation">
+    <div data-active-notice></div>
     <div id="config-backup-confirmation" class="config-backup-confirmation">${esc(t("recovery.confirm_message", {
       date: date(backup.created_at),
       rules: backup.rules,
@@ -2619,9 +2648,10 @@ async function handleConfigBackupAction(action, button) {
     return true;
   }
   if (action === "restore-config-backup") {
-    this._backupRestoreCandidate = (this._configRecovery?.backups ?? []).find(
+    const backup = (this._configRecovery?.backups ?? []).find(
       (backup) => backup.id === button.dataset.backupId,
     ) ?? null;
+    this._backupRestoreCandidate = backup ? { ...backup } : null;
     this._render();
     return true;
   }
@@ -2640,9 +2670,12 @@ async function handleConfigBackupAction(action, button) {
       },
       this._t("success.backup_restored"),
     );
-    this._backupRestoreCandidate = null;
-    if (result) await this._applyCompleteConfiguration(result);
-    else this._render();
+    if (result) {
+      const notice = this._notice;
+      this._backupRestoreCandidate = null;
+      this._notice = notice;
+      await this._applyCompleteConfiguration(result);
+    } else this._refreshUiState();
     return true;
   }
   return false;
@@ -2770,7 +2803,7 @@ function renderConfigurationDrawer({
       </ha-dialog-header>
       ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
-        <section class="side-drawer-section">${content}</section>
+        <section class="side-drawer-section"><div data-active-notice></div>${content}</section>
       </div>
       <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
     </ha-card>`;
@@ -2836,6 +2869,25 @@ function replaceConfigurationDrawer(root, markup) {
       ".configuration-drawer .side-drawer-form",
     );
     restoreDrawerScroll(nextScroller, scrollTop);
+  }
+}
+
+function activeNoticeTarget() {
+  return this._timedAcknowledgementDialog || this._alertDetailsDialog
+    || this._backupRestoreCandidate || this._configurationDrawer;
+}
+
+function refreshActiveNotice() {
+  const target = this._noticeTarget();
+  const root = this._timedAcknowledgementDialog || this._alertDetailsDialog
+    || (this._backupRestoreCandidate
+      ? this.shadowRoot?.querySelector?.("#config-backup-restore-dialog")
+      : this.shadowRoot?.querySelector?.(".configuration-drawer"));
+  const container = root?.querySelector?.("[data-active-notice]");
+  if (container) {
+    const notice = target?.notice;
+    container.innerHTML = notice
+      ? `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>` : "";
   }
 }
 
@@ -5332,6 +5384,12 @@ async function deleteRule(ruleId) {
       if (this._editingRule?.id === rule.id) this._editingRule = null;
       this._refreshRulesData();
       this._refreshRuleEditor();
+    } else if (this._editingRule?.id === ruleId) {
+      const message = this._notice?.text || this._t("errors.unknown");
+      this._notice = null;
+      if (this._ruleEditorMode === "yaml") this._ruleYamlError = message;
+      else this._ruleEditorError = message;
+      this._refreshRuleEditor();
     }
 }
 
@@ -5828,6 +5886,7 @@ function refreshAutomaticConfigurationDrawer() {
   }));
   this._hydrateSelectors();
   this._decorateActionIcons();
+  this._refreshUiState();
 }
 
 function updateAutomaticConfigurationCount(packId) {
@@ -6545,7 +6604,7 @@ function refreshSettingsConfigurationDrawer() {
     t: (key, replacements) => this._t(key, replacements),
   }));
   this._hydrateSelectors();
-  this._decorateActionIcons();
+  this._refreshUiState();
 }
 
 function updateSettingsConfigurationCount(id) {
@@ -8544,6 +8603,7 @@ class AlertManagerPanel extends HTMLElement {
       ${this._hass && !nativeTablePage ? `<hass-tabs-subpage id="panel-shell" main-page>${page}</hass-tabs-subpage>` : page}
       ${this._renderBackupRestoreDialog()}`;
     mountConfigurationDrawer(this.shadowRoot);
+    this._refreshActiveNotice();
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
@@ -8555,15 +8615,30 @@ class AlertManagerPanel extends HTMLElement {
     this._syncNarrowTableHeaderBackgrounds();
   }
 
+  _noticeTarget = activeNoticeTarget;
+  _refreshActiveNotice = refreshActiveNotice;
+
+  get _notice() {
+    const target = this._noticeTarget();
+    return target ? target.notice ?? null : this._pageNotice ?? null;
+  }
+
+  set _notice(notice) {
+    const target = this._noticeTarget();
+    if (target) target.notice = notice;
+    else this._pageNotice = notice;
+  }
+
   _renderPageMessages() {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
   _pageMessagesContent() {
     return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
-      ${this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
+      ${!this._noticeTarget() && !this._editingRule && this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
   _refreshUiState() {
+    this._refreshActiveNotice();
     const messages = this.shadowRoot?.querySelector?.("[data-page-messages]");
     if (messages) messages.innerHTML = this._pageMessagesContent();
     const busyActions = new Set([
@@ -8833,27 +8908,7 @@ class AlertManagerPanel extends HTMLElement {
       else if (this._reportFormValidity(form)) await this._saveRule(form);
     }
   }
-  _reportFormValidity(form) {
-    let valid = form.reportValidity?.() ?? true;
-    form.querySelectorAll?.("ha-input").forEach((field) => {
-      if (typeof field.reportValidity === "function") {
-        valid = field.reportValidity() && valid;
-      } else if (field.required && String(field.value ?? "") === "") {
-        valid = false;
-      }
-    });
-    if (!validateDurationFields(form, this)) {
-      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
-      this._refreshUiState();
-      valid = false;
-    }
-    const kind = this._configurationDrawer?.kind;
-    if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
-      const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
-      if (drawer) valid = this._reportFormValidity(drawer) && valid;
-    }
-    return valid;
-  }
+  _reportFormValidity = reportFormValidity;
   _styles() {
     return panelStyles();
   }

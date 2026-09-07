@@ -122,7 +122,7 @@ export function renderConfigurationDrawer({
       </ha-dialog-header>
       ${banner ? `<div class="configuration-drawer-banner">${banner}</div>` : ""}
       <div class="side-drawer-form">
-        <section class="side-drawer-section">${content}</section>
+        <section class="side-drawer-section"><div data-active-notice></div>${content}</section>
       </div>
       <div class="actions side-drawer-actions"><span class="action-spacer"></span><ha-button type="button" appearance="accent" variant="brand" data-action="${esc(saveAction)}" ${busy ? "disabled" : ""}>${esc(saveLabel)}</ha-button></div>
     </ha-card>`;
@@ -188,5 +188,24 @@ export function replaceConfigurationDrawer(root, markup) {
       ".configuration-drawer .side-drawer-form",
     );
     restoreDrawerScroll(nextScroller, scrollTop);
+  }
+}
+
+export function activeNoticeTarget() {
+  return this._timedAcknowledgementDialog || this._alertDetailsDialog
+    || this._backupRestoreCandidate || this._configurationDrawer;
+}
+
+export function refreshActiveNotice() {
+  const target = this._noticeTarget();
+  const root = this._timedAcknowledgementDialog || this._alertDetailsDialog
+    || (this._backupRestoreCandidate
+      ? this.shadowRoot?.querySelector?.("#config-backup-restore-dialog")
+      : this.shadowRoot?.querySelector?.(".configuration-drawer"));
+  const container = root?.querySelector?.("[data-active-notice]");
+  if (container) {
+    const notice = target?.notice;
+    container.innerHTML = notice
+      ? `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>` : "";
   }
 }

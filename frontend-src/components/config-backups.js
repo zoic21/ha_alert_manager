@@ -20,6 +20,7 @@ export function renderBackupRestoreDialog(context) {
   const { backup, busy, date, t } = context;
   if (!backup) return "";
   return `<ha-dialog id="config-backup-restore-dialog" type="alert" width="small" header-title="${esc(t("recovery.confirm_title"))}" aria-describedby="config-backup-confirmation">
+    <div data-active-notice></div>
     <div id="config-backup-confirmation" class="config-backup-confirmation">${esc(t("recovery.confirm_message", {
       date: date(backup.created_at),
       rules: backup.rules,
@@ -105,9 +106,10 @@ export async function handleConfigBackupAction(action, button) {
     return true;
   }
   if (action === "restore-config-backup") {
-    this._backupRestoreCandidate = (this._configRecovery?.backups ?? []).find(
+    const backup = (this._configRecovery?.backups ?? []).find(
       (backup) => backup.id === button.dataset.backupId,
     ) ?? null;
+    this._backupRestoreCandidate = backup ? { ...backup } : null;
     this._render();
     return true;
   }
@@ -126,9 +128,12 @@ export async function handleConfigBackupAction(action, button) {
       },
       this._t("success.backup_restored"),
     );
-    this._backupRestoreCandidate = null;
-    if (result) await this._applyCompleteConfiguration(result);
-    else this._render();
+    if (result) {
+      const notice = this._notice;
+      this._backupRestoreCandidate = null;
+      this._notice = notice;
+      await this._applyCompleteConfiguration(result);
+    } else this._refreshUiState();
     return true;
   }
   return false;
