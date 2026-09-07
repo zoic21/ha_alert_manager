@@ -16,6 +16,14 @@ export const settingsStyles = `
     max-width: 1120px;
     margin-inline: auto;
   }
+  .configuration-drawer {
+    --side-drawer-width: var(--configuration-editor-width, 560px);
+  }
+  .settings-page.has-editor {
+    width: calc(100% - var(--configuration-editor-width, 560px) - 24px - 16px);
+    margin-inline-start: 0;
+    margin-inline-end: auto;
+  }
   .settings-card {
     display: grid;
     gap: 18px;

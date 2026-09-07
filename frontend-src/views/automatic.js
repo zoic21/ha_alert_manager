@@ -123,6 +123,7 @@ export function renderAutomaticConfigurationDrawer(context) {
     { availablePacks, draft, renderNumberField, t },
   )}</div>`;
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title: fieldName,
     ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
     content,

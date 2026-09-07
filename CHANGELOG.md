@@ -2,6 +2,21 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.11 — 7 septembre 2026
+
+### Amélioré
+
+- Tous les volets de configuration reprennent le redimensionnement en largeur
+  des règles personnalisées : poignée, limites de largeur, réglage au clavier
+  et double-clic pour retrouver la largeur initiale.
+- Sur grand écran, le contenu principal se réduit à mesure que le volet
+  s’élargit et retrouve sa largeur à la fermeture, y compris lors des mises
+  à jour ciblées des volets. La largeur est conservée pendant la session.
+- Les seuils responsive et les volets mobiles natifs restent identiques
+  à ceux de l’éditeur de règles.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.10 — 7 septembre 2026
 
 ### Corrigé

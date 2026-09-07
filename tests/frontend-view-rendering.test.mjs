@@ -659,9 +659,10 @@ test("backup restoration uses a native confirmation dialog", () => {
 test("all configuration drawers keep save actions outside their scroll area", () => {
   for (const useBottomSheet of [false, true]) {
     const markup = renderConfigurationDrawer({
-      title: "Configuration", ariaLabel: "Configuration", content: "Long content",
+      title: "Configuration", ariaLabel: "Configuration", resizeLabel: "Resize drawer", content: "Long content",
       saveAction: "save-settings", saveLabel: "Save", busy: false, useBottomSheet,
     });
+    assert.match(markup, /role="separator" aria-orientation="vertical" aria-label="Resize drawer" tabindex="0"/);
     assert.match(markup, /<section class="side-drawer-section"><div data-active-notice><\/div>Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);
   }
 });
@@ -693,11 +694,17 @@ test("a newly opened configuration drawer can be inserted into the panel shadow 
   const template = { content: fragment, innerHTML: "" };
   const appended = [];
   // ShadowRoot supports append, but has no insertAdjacentHTML method.
-  const root = { querySelector: () => null, append: (node) => appended.push(node) };
+  const toggles = [];
+  const root = {
+    querySelector: (selector) => selector === ".settings-page"
+      ? { classList: { toggle: (...args) => toggles.push(args) } } : null,
+    append: (node) => appended.push(node),
+  };
   globalThis.document = { createElement: () => template };
   try {
     replaceConfigurationDrawer(root, '<ha-card class="configuration-drawer"></ha-card>');
     assert.deepEqual(appended, [fragment]);
+    assert.deepEqual(toggles, [["has-editor", true]]);
     assert.match(template.innerHTML, /configuration-drawer/);
   } finally {
     globalThis.document = originalDocument;
@@ -772,3 +779,14 @@ for (const [packId, fieldId, fieldType] of [
     assert.deepEqual(calls, [{ block: "nearest" }]);
   });
 }
+
+
+test("targeted configuration drawer replacement releases the main page on close", () => {
+  const toggles = [];
+  const root = {
+    querySelector: (selector) => selector === ".settings-page"
+      ? { classList: { toggle: (...args) => toggles.push(args) } } : null,
+  };
+  replaceConfigurationDrawer(root, "");
+  assert.deepEqual(toggles, [["has-editor", false]]);
+});

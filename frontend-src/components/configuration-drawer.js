@@ -103,9 +103,14 @@ export function renderSideDrawer({
     ${drawer}`;
 }
 
+export function renderDrawerResizeHandle(label) {
+  return `<div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(label)}" tabindex="0"><div class="resize-indicator"></div></div>`;
+}
+
 export function renderConfigurationDrawer({
   title,
   ariaLabel,
+  resizeLabel,
   headerAction = "",
   banner = "",
   content,
@@ -115,6 +120,7 @@ export function renderConfigurationDrawer({
   useBottomSheet = false,
 }) {
   const drawer = `<ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
+      ${renderDrawerResizeHandle(resizeLabel)}
       <ha-dialog-header show-border>
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
@@ -175,6 +181,7 @@ export function mountConfigurationDrawer(root) {
 }
 
 export function replaceConfigurationDrawer(root, markup, revealSelector) {
+  root?.querySelector?.(".settings-page")?.classList?.toggle("has-editor", Boolean(markup));
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
     ?? root?.querySelector?.(".configuration-drawer");

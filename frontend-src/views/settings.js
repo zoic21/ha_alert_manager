@@ -48,7 +48,7 @@ export function renderSettings(context) {
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
-    return `<div class="stack settings-page">
+    return `<div class="stack settings-page${configurationDrawer ? " has-editor" : ""}">
       ${renderSettingsNavigation(t)}
       ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
@@ -153,6 +153,7 @@ export function renderSettingsConfigurationDrawer(context) {
     return "";
   }
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title,
     ariaLabel: t("settings.close_configuration_aria", { name: title }),
     content,

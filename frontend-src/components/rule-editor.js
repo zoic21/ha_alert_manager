@@ -2,7 +2,7 @@ import { durationFieldValue } from "./duration-field.js";
 import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
-import { renderSideDrawer, renderConfigurationRemove } from "./configuration-drawer.js";
+import { renderSideDrawer, renderConfigurationRemove, renderDrawerResizeHandle } from "./configuration-drawer.js";
 
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -390,7 +390,7 @@ export function renderRuleEditor(context) {
         renderTestResult: context.renderTestResult,
       });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
-      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
+      ${renderDrawerResizeHandle(t("rules.aria_resize"))}
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
@@ -640,7 +640,7 @@ export function startRuleEditorResize(event) {
     const handle = event.target.closest?.(".rule-editor-resize");
     if (!handle || window.innerWidth <= 700) return;
     event.preventDefault();
-    const drawer = this.shadowRoot.querySelector(".rule-editor-drawer");
+    const drawer = handle.closest(".side-drawer");
     this._ruleEditorResize = {
       startX: event.clientX,
       startWidth: drawer?.getBoundingClientRect?.().width ?? this._ruleEditorWidth,
@@ -663,6 +663,9 @@ export function setRuleEditorWidth(width) {
     const viewportWidth = Number(window.innerWidth) || 1400;
     const maximum = Math.max(360, Math.min(800, viewportWidth - 64));
     this._ruleEditorWidth = Math.round(Math.min(maximum, Math.max(360, width)));
+    // Configuration drawers are mounted outside the scrolling page. Keep their
+    // width on the host so replacements and the page reserve share the same value.
+    this.style?.setProperty("--configuration-editor-width", `${this._ruleEditorWidth}px`);
     this.shadowRoot.querySelector(".rules-layout")?.style.setProperty(
       "--rule-editor-width",
       `${this._ruleEditorWidth}px`,

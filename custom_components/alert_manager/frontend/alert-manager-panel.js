@@ -2796,9 +2796,14 @@ function renderSideDrawer({
     ${drawer}`;
 }
 
+function renderDrawerResizeHandle(label) {
+  return `<div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(label)}" tabindex="0"><div class="resize-indicator"></div></div>`;
+}
+
 function renderConfigurationDrawer({
   title,
   ariaLabel,
+  resizeLabel,
   headerAction = "",
   banner = "",
   content,
@@ -2808,6 +2813,7 @@ function renderConfigurationDrawer({
   useBottomSheet = false,
 }) {
   const drawer = `<ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
+      ${renderDrawerResizeHandle(resizeLabel)}
       <ha-dialog-header show-border>
         <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-configuration-drawer" aria-label="${esc(ariaLabel)}"></ha-icon-button>
         <span slot="title">${esc(title)}</span>
@@ -2868,6 +2874,7 @@ function mountConfigurationDrawer(root) {
 }
 
 function replaceConfigurationDrawer(root, markup, revealSelector) {
+  root?.querySelector?.(".settings-page")?.classList?.toggle("has-editor", Boolean(markup));
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
     ?? root?.querySelector?.(".configuration-drawer");
@@ -3032,6 +3039,7 @@ function renderNotificationProfileDrawer({
     : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>
   </section>`;
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
     headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><span>${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div>`,
@@ -3726,7 +3734,7 @@ function renderRuleEditor(context) {
         renderTestResult: context.renderTestResult,
       });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
-      <div class="rule-editor-resize" role="separator" aria-orientation="vertical" aria-label="${esc(t("rules.aria_resize"))}" tabindex="0"><div class="resize-indicator"></div></div>
+      ${renderDrawerResizeHandle(t("rules.aria_resize"))}
       <ha-dialog-header show-border>
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
@@ -3976,7 +3984,7 @@ function startRuleEditorResize(event) {
     const handle = event.target.closest?.(".rule-editor-resize");
     if (!handle || window.innerWidth <= 700) return;
     event.preventDefault();
-    const drawer = this.shadowRoot.querySelector(".rule-editor-drawer");
+    const drawer = handle.closest(".side-drawer");
     this._ruleEditorResize = {
       startX: event.clientX,
       startWidth: drawer?.getBoundingClientRect?.().width ?? this._ruleEditorWidth,
@@ -3999,6 +4007,9 @@ function setRuleEditorWidth(width) {
     const viewportWidth = Number(window.innerWidth) || 1400;
     const maximum = Math.max(360, Math.min(800, viewportWidth - 64));
     this._ruleEditorWidth = Math.round(Math.min(maximum, Math.max(360, width)));
+    // Configuration drawers are mounted outside the scrolling page. Keep their
+    // width on the host so replacements and the page reserve share the same value.
+    this.style?.setProperty("--configuration-editor-width", `${this._ruleEditorWidth}px`);
     this.shadowRoot.querySelector(".rules-layout")?.style.setProperty(
       "--rule-editor-width",
       `${this._ruleEditorWidth}px`,
@@ -5638,6 +5649,7 @@ function renderAutomaticConfigurationDrawer(context) {
     { availablePacks, draft, renderNumberField, t },
   )}</div>`;
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title: fieldName,
     ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
     content,
@@ -6146,7 +6158,7 @@ function renderSettings(context) {
       renderNumberField, t,
     } = context;
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
-    return `<div class="stack settings-page">
+    return `<div class="stack settings-page${configurationDrawer ? " has-editor" : ""}">
       ${renderSettingsNavigation(t)}
       ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
@@ -6251,6 +6263,7 @@ function renderSettingsConfigurationDrawer(context) {
     return "";
   }
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title,
     ariaLabel: t("settings.close_configuration_aria", { name: title }),
     content,
@@ -7137,6 +7150,14 @@ const settingsStyles = `
     width: 100%;
     max-width: 1120px;
     margin-inline: auto;
+  }
+  .configuration-drawer {
+    --side-drawer-width: var(--configuration-editor-width, 560px);
+  }
+  .settings-page.has-editor {
+    width: calc(100% - var(--configuration-editor-width, 560px) - 24px - 16px);
+    margin-inline-start: 0;
+    margin-inline-end: auto;
   }
   .settings-card {
     display: grid;
@@ -8139,6 +8160,10 @@ const responsiveStyles = `
     }
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
+    }
+    .settings-page.has-editor {
+      width: 100%;
+      margin-inline: auto;
     }
     .side-drawer-backdrop {
       display: block;

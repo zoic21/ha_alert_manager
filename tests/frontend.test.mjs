@@ -5252,3 +5252,46 @@ test("value formatting preserves historical units, missing entities and non-nume
     assert.equal(panel._displayValue(value, undefined, "sensor.rack"), expected);
   }
 });
+
+
+test("configuration drawers share pointer, keyboard and reset sizing with rules", () => {
+  const panel = new (customElements.get("alert-manager-panel"))();
+  const properties = new Map();
+  panel.style = { setProperty: (key, value) => properties.set(key, value) };
+  const handle = {
+    closest: () => ({ getBoundingClientRect: () => ({ width: 600 }) }),
+    classList: { add() {}, remove() {} },
+  };
+  const target = { closest: () => handle };
+  const previousWidth = window.innerWidth;
+  const previousAdd = document.addEventListener;
+  const previousRemove = document.removeEventListener;
+  const listeners = new Map();
+  document.addEventListener = (name, callback) => listeners.set(name, callback);
+  document.removeEventListener = (name) => listeners.delete(name);
+  window.innerWidth = 1400;
+  try {
+    panel._startRuleEditorResize({ target, clientX: 800, preventDefault() {} });
+    panel._resizeRuleEditor({ clientX: 700 });
+    assert.equal(panel._ruleEditorWidth, 700);
+    assert.equal(properties.get("--configuration-editor-width"), "700px");
+    panel._handleKeydown({ target, key: "ArrowLeft", preventDefault() {} });
+    assert.equal(panel._ruleEditorWidth, 716);
+    panel._handleKeydown({ target, key: "ArrowRight", preventDefault() {} });
+    assert.equal(panel._ruleEditorWidth, 700);
+    panel._resetRuleEditorWidth({ target, preventDefault() {} });
+    assert.equal(properties.get("--configuration-editor-width"), "560px");
+    panel._setRuleEditorWidth(2000);
+    assert.equal(properties.get("--configuration-editor-width"), "800px");
+    panel._stopRuleEditorResize();
+    assert.equal(listeners.size, 0);
+    assert.equal(panel._ruleEditorResize, null);
+    window.innerWidth = 390;
+    panel._startRuleEditorResize({ target, preventDefault() { assert.fail("mobile resize"); } });
+    assert.equal(panel._ruleEditorResize, null);
+  } finally {
+    window.innerWidth = previousWidth;
+    document.addEventListener = previousAdd;
+    document.removeEventListener = previousRemove;
+  }
+});

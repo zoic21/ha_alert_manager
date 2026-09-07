@@ -70,6 +70,10 @@ export const responsiveStyles = `
     .rules-layout.has-editor [data-rules-table-page] {
       --alert-manager-rule-table-width: 100%;
     }
+    .settings-page.has-editor {
+      width: 100%;
+      margin-inline: auto;
+    }
     .side-drawer-backdrop {
       display: block;
       position: fixed;

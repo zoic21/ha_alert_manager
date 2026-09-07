@@ -118,6 +118,7 @@ export function renderNotificationProfileDrawer({
     : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div>
   </section>`;
   return renderConfigurationDrawer({
+    resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
     headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><span>${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div>`,
