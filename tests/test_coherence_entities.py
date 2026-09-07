@@ -175,7 +175,7 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     assert result["scanned_at"] == "2026-08-24T12:00:00+00:00"
     assert hass.data[DATA_COHERENCE_RESULT] is expected
     assert hass.stores[COHERENCE_STORAGE_KEY] == expected
-    assert hass.stores[COHERENCE_STORAGE_KEY] is not expected
+    assert hass.stores[COHERENCE_STORAGE_KEY] is expected
     assert hass.store_options[COHERENCE_STORAGE_KEY]["serialize_in_event_loop"] is False
     assert hass.store_save_count == 1
     assert sensor.native_value == 2
@@ -184,6 +184,59 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
         "scan_esphome": False,
         "ignored_entity_references": frozenset({"toto.plop"}),
     }
+
+
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_scan_report_stays_private_until_save_returns(hass, monkeypatch, save_fails):
+    """Save the owned report without copying or publishing it during the write."""
+    coherence_module = importlib.import_module(
+        "custom_components.alert_manager.coherence"
+    )
+    previous = {"missing_entity_count": 0, "results": []}
+    report = {
+        "missing_entity_count": 1,
+        "results": [{"entity_id": "sensor.missing"}],
+    }
+    hass.data[DATA_COHERENCE_RESULT] = previous
+    sensor = AlertManagerCoherenceIssueSensor()
+    sensor.hass = hass
+
+    async def scenario():
+        await sensor.async_added_to_hass()
+        initial_writes = sensor.writes
+        saving = asyncio.Event()
+        release = asyncio.Event()
+
+        async def scan(_hass, **_options):
+            return report
+
+        async def save(_store, data):
+            assert data is report
+            assert data["scanned_at"] == "2026-08-24T12:00:00+00:00"
+            saving.set()
+            await release.wait()
+            if save_fails:
+                raise OSError("Save failed")
+
+        monkeypatch.setattr(coherence_module, "async_scan_configuration", scan)
+        monkeypatch.setattr(coherence_module.Store, "async_save", save)
+        task = asyncio.create_task(coherence_module.async_run_coherence_scan(hass))
+        try:
+            await asyncio.wait_for(saving.wait(), timeout=1)
+            assert hass.data[DATA_COHERENCE_RESULT] is previous
+            assert sensor.writes == initial_writes
+        finally:
+            release.set()
+            if save_fails:
+                with pytest.raises(OSError, match="Save failed"):
+                    await task
+            else:
+                assert await task is report
+
+        assert hass.data[DATA_COHERENCE_RESULT] is (previous if save_fails else report)
+        assert sensor.writes == initial_writes + (not save_fails)
+
+    run(scenario())
 
 
 def test_concurrent_scan_requests_share_one_scan_and_one_store_write(hass, monkeypatch):
