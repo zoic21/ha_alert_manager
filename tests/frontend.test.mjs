@@ -5000,10 +5000,12 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   const styles = compactCss(new Panel()._styles());
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
   assert.match(mobile, /\.pack-map-row\.pack-number-row\{grid-template-columns:minmax\(0,1fr\) auto/);
-  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{grid-row:3/);
-  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:2;align-self:center;margin:0/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{grid-row:2/);
+  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:1;align-self:end;margin:0 0 4px/);
   assert.match(styles, /@container\(min-width:420px\)/);
-  assert.match(mobile, /\.pack-settings-row>\.pack-target-field\{grid-column:1\s*\/\s*-1/);
+  assert.doesNotMatch(mobile, /\.notification-exception-grid[^{}]*\{[^}]*grid-template-columns:1fr/);
+  assert.match(styles, /\.notification-profile-fields,\.notification-exception-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-target-field\{grid-column:1;?\}/);
 
   assert.match(mobile, /\.pack-number-row\{[^}]*border:1px solid var\(--divider-color\)/);
   assert.match(styles, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
@@ -5139,3 +5141,57 @@ for (const outcome of ["success", "partial-failure", "request-failure"]) {
     assert.equal(container.innerHTML, "");
   });
 }
+
+
+test("history details delete only their occurrence and close only on success", async () => {
+  const panel = tablePanel();
+  const first = historyEvent();
+  const second = { ...first, event_id: "another-occurrence" };
+  panel._activeTab = "history";
+  panel._history = { events: [first, second] };
+  panel._selectedHistoryIds = new Set([second.event_id]);
+  panel._render = () => {};
+  const dialog = { alertKind: "history", alertId: first.event_id };
+  panel._alertDetailsDialog = dialog;
+  const markup = panel._renderAlertDetails("history", panel._tableRows("history", panel._history.events)[0]);
+  assert.match(markup, /value="delete-history-detail" variant="danger"/);
+  assert.doesNotMatch(markup, /value="(?:acknowledge|unacknowledge|reevaluate)"/);
+  let closed = 0;
+  panel._closeAlertDetailsDialog = () => {
+    closed += 1;
+    panel._alertDetailsDialog = null;
+  };
+  const event = {
+    composedPath: () => [{ dataset: { alertDetailsMenu: "", alertId: first.event_id } }],
+    detail: { value: "delete-history-detail" },
+  };
+  const calls = [];
+  let result = null;
+  panel._call = async (message, successText) => {
+    calls.push(message);
+    assert.equal(successText, "");
+    return result;
+  };
+  const previousConfirm = window.confirm;
+  try {
+    window.confirm = () => false;
+    await panel._handleAlertDetailsSelection(event);
+    assert.equal(calls.length, 0);
+    window.confirm = () => true;
+    await panel._handleAlertDetailsSelection(event);
+    assert.equal(closed, 0);
+    assert.equal(panel._alertDetailsDialog, dialog);
+    assert.deepEqual(calls[0], {
+      type: "alert_manager/history/delete", confirmed: true, event_ids: [first.event_id],
+    });
+    result = { events: [second] };
+    await panel._handleAlertDetailsSelection(event);
+    assert.equal(closed, 1);
+    assert.equal(panel._alertDetailsDialog, null);
+    assert.deepEqual(panel._history.events, [second]);
+    assert.equal(panel._pageNotice.kind, "success");
+    assert.match(panel._renderPageMessages(), /alert-type="success"/);
+  } finally {
+    window.confirm = previousConfirm;
+  }
+});

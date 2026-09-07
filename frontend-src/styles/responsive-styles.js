@@ -181,22 +181,22 @@ export const responsiveStyles = `
       grid-template-columns: minmax(0, 1fr);
     }
     .pack-settings-row > .pack-target-field {
-      grid-column: 1 / -1;
+      grid-column: 1;
     }
     .pack-settings-row > .pack-setting-toggle {
       grid-column: 2;
-      grid-row: 2;
-      align-self: center;
-      margin: 0;
+      grid-row: 1;
+      align-self: end;
+      margin: 0 0 14px;
     }
     .pack-settings-row > .configuration-remove {
       grid-column: 3;
-      grid-row: 2;
-      align-self: center;
-      margin: 0;
+      grid-row: 1;
+      align-self: end;
+      margin: 0 0 4px;
     }
     .pack-settings-row > .pack-settings-values {
-      grid-row: 3;
+      grid-row: 2;
     }
     .table-page-top {
       padding: 12px 12px 0;
@@ -246,8 +246,7 @@ export const responsiveStyles = `
     .notification-profile-actions ha-button {
       width: auto;
     }
-    .notification-policy-card,
-    .notification-exception-grid {
+    .notification-policy-card {
       grid-template-columns: 1fr;
     }
     .fields.configuration-drawer-fields.notification-profile-fields {
@@ -258,6 +257,9 @@ export const responsiveStyles = `
       padding-block-end: 8px;
       border-inline-end: 0;
       border-block-end: 1px solid var(--divider-color, #ddd);
+    }
+    .notification-exception-reminder {
+      grid-column: 1 / -1;
     }
     .notification-exception-reminder.has-custom-value
       .notification-exception-reminder-controls {

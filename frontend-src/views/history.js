@@ -73,11 +73,16 @@ export function historyConditionText(event) {
 }
 
 export async function handleHistoryAction(action) {
-  if (action === "clear-history" || action === "delete-history") {
+  if (["clear-history", "delete-history", "delete-history-detail"].includes(action)) {
     if (this._busy) return true;
-    const deleting = action === "delete-history";
+    const fromDetails = action === "delete-history-detail";
+    const dialog = fromDetails ? this._alertDetailsDialog : null;
+    if (fromDetails && dialog?.alertKind !== "history") return true;
+    const deleting = action !== "clear-history";
     const eventIds = (this._history?.events ?? [])
-      .filter((event) => this._selectedHistoryIds.has(event.event_id))
+      .filter((event) => fromDetails
+        ? event.event_id === dialog.alertId
+        : this._selectedHistoryIds.has(event.event_id))
       .map((event) => event.event_id);
     if (deleting && !eventIds.length) return true;
     if (!window.confirm(this._t(deleting
@@ -89,10 +94,14 @@ export async function handleHistoryAction(action) {
         confirmed: true,
         ...(deleting ? { event_ids: eventIds } : {}),
       },
-      this._t(deleting ? "history.deleted" : "success.history_cleared"),
+      fromDetails ? "" : this._t(deleting ? "history.deleted" : "success.history_cleared"),
     );
     if (result) {
       this._history = result;
+      if (fromDetails) {
+        if (this._alertDetailsDialog === dialog) this._closeAlertDetailsDialog();
+        this._pageNotice = { kind: "success", text: this._t("history.deleted") };
+      }
       const tablePage = this.shadowRoot?.querySelector?.('[data-alert-table-page="history"]');
       tablePage?.shadowRoot?.querySelector?.("ha-data-table")?.select?.([...this._selectedHistoryIds], false);
       this._selectedHistoryIds.clear();

@@ -399,7 +399,9 @@ export async function handleNotificationProfileAction(action, button) {
       selector_type: "label",
       selector_ids: [],
     });
-    this._refreshSettingsConfigurationDrawer();
+    this._refreshSettingsConfigurationDrawer(
+      `[data-notification-exception="${this._notificationProfileDraft.exceptions.length - 1}"]`,
+    );
     return true;
   }
   if (action === "remove-notification-exception") {

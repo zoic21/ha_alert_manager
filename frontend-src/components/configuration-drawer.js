@@ -134,13 +134,18 @@ export function renderConfigurationDrawer({
   });
 }
 
-function restoreDrawerScroll(scroller, scrollTop) {
+function restoreDrawerScroll(scroller, scrollTop, revealSelector) {
   if (!scroller) return;
   scroller.scrollTop = scrollTop;
   if (typeof globalThis.requestAnimationFrame !== "function") return;
   globalThis.requestAnimationFrame(() => {
     scroller.scrollTop = scrollTop;
-    globalThis.requestAnimationFrame(() => { scroller.scrollTop = scrollTop; });
+    globalThis.requestAnimationFrame(() => {
+      scroller.scrollTop = scrollTop;
+      if (revealSelector) {
+        scroller.querySelector?.(revealSelector)?.scrollIntoView?.({ block: "nearest" });
+      }
+    });
   });
 }
 
@@ -156,7 +161,7 @@ export function mountConfigurationDrawer(root) {
   if (overlay.parentNode !== root) root.append(overlay);
 }
 
-export function replaceConfigurationDrawer(root, markup) {
+export function replaceConfigurationDrawer(root, markup, revealSelector) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
     ?? root?.querySelector?.(".configuration-drawer");
@@ -173,7 +178,7 @@ export function replaceConfigurationDrawer(root, markup) {
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
       const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
-      restoreDrawerScroll(nextScroller, scrollTop);
+      restoreDrawerScroll(nextScroller, scrollTop, revealSelector);
       return;
     }
   }
@@ -187,7 +192,7 @@ export function replaceConfigurationDrawer(root, markup) {
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );
-    restoreDrawerScroll(nextScroller, scrollTop);
+    restoreDrawerScroll(nextScroller, scrollTop, revealSelector);
   }
 }
 

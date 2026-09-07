@@ -2009,7 +2009,7 @@ function renderAlertDetails(context) {
     )).join("");
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
-      ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
+      ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"${summary.menuAction === "delete-history-detail" ? ' variant="danger"' : ""}><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
       ${summary.timedAcknowledgeLabel ? `<ha-dropdown-item value="acknowledge-temporarily"><ha-icon slot="icon" icon="mdi:clock-check-outline"></ha-icon>${esc(summary.timedAcknowledgeLabel)}</ha-dropdown-item>` : ""}
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
@@ -2066,7 +2066,7 @@ function renderAlertDetailsPanel(kind, row) {
       ? "acknowledge"
       : kind === "overview" && row.status === "acknowledged"
         ? "unacknowledge"
-        : "";
+        : kind === "history" ? "delete-history-detail" : "";
     return renderAlertDetails({
       notice: this._alertDetailsDialog?.alertId === row.id
         ? this._alertDetailsDialog.notice : null,
@@ -2078,10 +2078,10 @@ function renderAlertDetailsPanel(kind, row) {
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
         reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
-        menuIcon: menuAction === "acknowledge"
+        menuIcon: kind === "history" ? "mdi:delete" : menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
           : "mdi:undo-variant",
-        menuLabel: menuAction
+        menuLabel: kind === "history" ? this._t("buttons.delete") : menuAction
           ? this._t(`overview.${menuAction}`)
           : "",
         status: row.status,
@@ -2133,6 +2133,10 @@ async function handleAlertDetailsSelection(event) {
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
     const service = event.detail?.item?.value ?? event.detail?.value;
+    if (service === "delete-history-detail") {
+      await handleHistoryAction.call(this, service);
+      return true;
+    }
     if (service === "acknowledge-temporarily") {
       if (!this._busy) openTimedAcknowledgement.call(this, menu.dataset.alertId);
       return true;
@@ -2815,13 +2819,18 @@ function renderConfigurationDrawer({
   });
 }
 
-function restoreDrawerScroll(scroller, scrollTop) {
+function restoreDrawerScroll(scroller, scrollTop, revealSelector) {
   if (!scroller) return;
   scroller.scrollTop = scrollTop;
   if (typeof globalThis.requestAnimationFrame !== "function") return;
   globalThis.requestAnimationFrame(() => {
     scroller.scrollTop = scrollTop;
-    globalThis.requestAnimationFrame(() => { scroller.scrollTop = scrollTop; });
+    globalThis.requestAnimationFrame(() => {
+      scroller.scrollTop = scrollTop;
+      if (revealSelector) {
+        scroller.querySelector?.(revealSelector)?.scrollIntoView?.({ block: "nearest" });
+      }
+    });
   });
 }
 
@@ -2837,7 +2846,7 @@ function mountConfigurationDrawer(root) {
   if (overlay.parentNode !== root) root.append(overlay);
 }
 
-function replaceConfigurationDrawer(root, markup) {
+function replaceConfigurationDrawer(root, markup, revealSelector) {
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
     ?? root?.querySelector?.(".configuration-drawer");
@@ -2854,7 +2863,7 @@ function replaceConfigurationDrawer(root, markup) {
     if (currentDrawer && nextDrawer) {
       currentDrawer.replaceWith(nextDrawer);
       const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
-      restoreDrawerScroll(nextScroller, scrollTop);
+      restoreDrawerScroll(nextScroller, scrollTop, revealSelector);
       return;
     }
   }
@@ -2868,7 +2877,7 @@ function replaceConfigurationDrawer(root, markup) {
     const nextScroller = root.querySelector?.(
       ".configuration-drawer .side-drawer-form",
     );
-    restoreDrawerScroll(nextScroller, scrollTop);
+    restoreDrawerScroll(nextScroller, scrollTop, revealSelector);
   }
 }
 
@@ -3283,7 +3292,9 @@ async function handleNotificationProfileAction(action, button) {
       selector_type: "label",
       selector_ids: [],
     });
-    this._refreshSettingsConfigurationDrawer();
+    this._refreshSettingsConfigurationDrawer(
+      `[data-notification-exception="${this._notificationProfileDraft.exceptions.length - 1}"]`,
+    );
     return true;
   }
   if (action === "remove-notification-exception") {
@@ -4556,11 +4567,16 @@ function historyConditionText(event) {
 }
 
 async function handleHistoryAction(action) {
-  if (action === "clear-history" || action === "delete-history") {
+  if (["clear-history", "delete-history", "delete-history-detail"].includes(action)) {
     if (this._busy) return true;
-    const deleting = action === "delete-history";
+    const fromDetails = action === "delete-history-detail";
+    const dialog = fromDetails ? this._alertDetailsDialog : null;
+    if (fromDetails && dialog?.alertKind !== "history") return true;
+    const deleting = action !== "clear-history";
     const eventIds = (this._history?.events ?? [])
-      .filter((event) => this._selectedHistoryIds.has(event.event_id))
+      .filter((event) => fromDetails
+        ? event.event_id === dialog.alertId
+        : this._selectedHistoryIds.has(event.event_id))
       .map((event) => event.event_id);
     if (deleting && !eventIds.length) return true;
     if (!window.confirm(this._t(deleting
@@ -4572,10 +4588,14 @@ async function handleHistoryAction(action) {
         confirmed: true,
         ...(deleting ? { event_ids: eventIds } : {}),
       },
-      this._t(deleting ? "history.deleted" : "success.history_cleared"),
+      fromDetails ? "" : this._t(deleting ? "history.deleted" : "success.history_cleared"),
     );
     if (result) {
       this._history = result;
+      if (fromDetails) {
+        if (this._alertDetailsDialog === dialog) this._closeAlertDetailsDialog();
+        this._pageNotice = { kind: "success", text: this._t("history.deleted") };
+      }
       const tablePage = this.shadowRoot?.querySelector?.('[data-alert-table-page="history"]');
       tablePage?.shadowRoot?.querySelector?.("ha-data-table")?.select?.([...this._selectedHistoryIds], false);
       this._selectedHistoryIds.clear();
@@ -6617,7 +6637,7 @@ function hydrateSettingsControls() {
   hydrateNotificationProfileControls(this);
 }
 
-function refreshSettingsConfigurationDrawer() {
+function refreshSettingsConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#settings-form");
   if (!form) {
     this._render();
@@ -6632,7 +6652,7 @@ function refreshSettingsConfigurationDrawer() {
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
-  }));
+  }), revealSelector);
   this._hydrateSelectors();
   this._refreshUiState();
 }
@@ -7336,6 +7356,9 @@ const settingsStyles = `
     display: grid;
     gap: 12px;
     padding: 12px;
+  }
+  .notification-exception-grid > .field {
+    justify-content: flex-end;
   }
   .notification-exception-reminder.has-custom-value {
     grid-column: 1 / -1;
@@ -8193,22 +8216,22 @@ const responsiveStyles = `
       grid-template-columns: minmax(0, 1fr);
     }
     .pack-settings-row > .pack-target-field {
-      grid-column: 1 / -1;
+      grid-column: 1;
     }
     .pack-settings-row > .pack-setting-toggle {
       grid-column: 2;
-      grid-row: 2;
-      align-self: center;
-      margin: 0;
+      grid-row: 1;
+      align-self: end;
+      margin: 0 0 14px;
     }
     .pack-settings-row > .configuration-remove {
       grid-column: 3;
-      grid-row: 2;
-      align-self: center;
-      margin: 0;
+      grid-row: 1;
+      align-self: end;
+      margin: 0 0 4px;
     }
     .pack-settings-row > .pack-settings-values {
-      grid-row: 3;
+      grid-row: 2;
     }
     .table-page-top {
       padding: 12px 12px 0;
@@ -8258,8 +8281,7 @@ const responsiveStyles = `
     .notification-profile-actions ha-button {
       width: auto;
     }
-    .notification-policy-card,
-    .notification-exception-grid {
+    .notification-policy-card {
       grid-template-columns: 1fr;
     }
     .fields.configuration-drawer-fields.notification-profile-fields {
@@ -8270,6 +8292,9 @@ const responsiveStyles = `
       padding-block-end: 8px;
       border-inline-end: 0;
       border-block-end: 1px solid var(--divider-color, #ddd);
+    }
+    .notification-exception-reminder {
+      grid-column: 1 / -1;
     }
     .notification-exception-reminder.has-custom-value
       .notification-exception-reminder-controls {

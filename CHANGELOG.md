@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.7 — 7 septembre 2026
+
+### Corrigé
+
+- Flapping sur mobile : champ entité, interrupteur et corbeille sur la même
+  ligne, avec les actions centrées verticalement sur le sélecteur.
+- Exceptions de notification sur mobile : nouvelle alerte et retour à la
+  normale côte à côte, avec les sélecteurs alignés.
+- L’ajout d’une exception de notification fait défiler le volet jusqu’à
+  la nouvelle exception lorsqu’elle n’est pas visible.
+- Historique : ajout de l’action Supprimer dans le menu du détail d’une alerte.
+  Après confirmation et suppression réussie, le détail se ferme et le bandeau
+  de confirmation apparaît sur la page d’historique.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.6 — 7 septembre 2026
 
 ### Corrigé

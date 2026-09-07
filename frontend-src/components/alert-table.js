@@ -1,3 +1,4 @@
+import { handleHistoryAction } from "../views/history.js";
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
@@ -943,7 +944,7 @@ export function renderAlertDetails(context) {
     )).join("");
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
-      ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
+      ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"${summary.menuAction === "delete-history-detail" ? ' variant="danger"' : ""}><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
       ${summary.timedAcknowledgeLabel ? `<ha-dropdown-item value="acknowledge-temporarily"><ha-icon slot="icon" icon="mdi:clock-check-outline"></ha-icon>${esc(summary.timedAcknowledgeLabel)}</ha-dropdown-item>` : ""}
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
@@ -1000,7 +1001,7 @@ export function renderAlertDetailsPanel(kind, row) {
       ? "acknowledge"
       : kind === "overview" && row.status === "acknowledged"
         ? "unacknowledge"
-        : "";
+        : kind === "history" ? "delete-history-detail" : "";
     return renderAlertDetails({
       notice: this._alertDetailsDialog?.alertId === row.id
         ? this._alertDetailsDialog.notice : null,
@@ -1012,10 +1013,10 @@ export function renderAlertDetailsPanel(kind, row) {
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
         reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
-        menuIcon: menuAction === "acknowledge"
+        menuIcon: kind === "history" ? "mdi:delete" : menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
           : "mdi:undo-variant",
-        menuLabel: menuAction
+        menuLabel: kind === "history" ? this._t("buttons.delete") : menuAction
           ? this._t(`overview.${menuAction}`)
           : "",
         status: row.status,
@@ -1067,6 +1068,10 @@ export async function handleAlertDetailsSelection(event) {
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
     const service = event.detail?.item?.value ?? event.detail?.value;
+    if (service === "delete-history-detail") {
+      await handleHistoryAction.call(this, service);
+      return true;
+    }
     if (service === "acknowledge-temporarily") {
       if (!this._busy) openTimedAcknowledgement.call(this, menu.dataset.alertId);
       return true;

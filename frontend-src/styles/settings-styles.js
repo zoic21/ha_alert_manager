@@ -263,6 +263,9 @@ export const settingsStyles = `
     gap: 12px;
     padding: 12px;
   }
+  .notification-exception-grid > .field {
+    justify-content: flex-end;
+  }
   .notification-exception-reminder.has-custom-value {
     grid-column: 1 / -1;
   }

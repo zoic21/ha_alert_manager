@@ -561,7 +561,7 @@ export function hydrateSettingsControls() {
   hydrateNotificationProfileControls(this);
 }
 
-export function refreshSettingsConfigurationDrawer() {
+export function refreshSettingsConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#settings-form");
   if (!form) {
     this._render();
@@ -576,7 +576,7 @@ export function refreshSettingsConfigurationDrawer() {
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),
-  }));
+  }), revealSelector);
   this._hydrateSelectors();
   this._refreshUiState();
 }

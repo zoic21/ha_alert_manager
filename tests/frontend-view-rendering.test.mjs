@@ -196,7 +196,13 @@ test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
 });
 
 test("updating a mobile configuration drawer preserves its native bottom sheet", () => {
-  const nextScroller = { scrollTop: 0 };
+  const revealed = [];
+  const nextScroller = {
+    scrollTop: 0,
+    querySelector: (selector) => ({
+      scrollIntoView: (options) => revealed.push({ selector, options }),
+    }),
+  };
   const nextDrawer = {
     querySelector: (selector) => (
       selector === ".side-drawer-form" ? nextScroller : null
@@ -260,6 +266,15 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
     assert.equal(nextScroller.scrollTop, 246);
     nextScroller.scrollTop = 0;
     animationFrames.shift()();
+    assert.deepEqual(revealed, []);
+    replaceConfigurationDrawer(root, template.markup, '[data-notification-exception="1"]');
+    assert.deepEqual(revealed, []);
+    animationFrames.shift()();
+    assert.deepEqual(revealed, []);
+    animationFrames.shift()();
+    assert.deepEqual(revealed, [{
+      selector: '[data-notification-exception="1"]', options: { block: "nearest" },
+    }]);
   } finally {
     globalThis.document = originalDocument;
     globalThis.requestAnimationFrame = originalRequestAnimationFrame;

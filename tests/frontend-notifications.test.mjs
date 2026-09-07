@@ -240,7 +240,10 @@ test("notification exception changes refresh only the settings drawer", async ()
   let drawerRefreshes = 0;
   const panel = {
     _notificationProfileDraft: structuredClone(profile),
-    _refreshSettingsConfigurationDrawer: () => { drawerRefreshes += 1; },
+    _refreshSettingsConfigurationDrawer: (selector) => {
+      drawerRefreshes += 1;
+      assert.equal(selector, '[data-notification-exception="1"]');
+    },
     _render: () => assert.fail("the complete panel should not render"),
     shadowRoot: { querySelector: () => null },
   };
