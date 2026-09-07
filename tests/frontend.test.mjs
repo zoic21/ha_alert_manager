@@ -5304,3 +5304,11 @@ test("open configuration preserves its initial left edge and cannot grow", () =>
   assert.match(styles, /@media\(min-width:1001px\)\{\.settings-page\.has-editor\{--settings-page-left-offset:max\(0px,calc\(\(100% - 1120px\) \/ 2\)\);width:calc\(100% - var\(--settings-page-left-offset\) - var\(--configuration-editor-width,560px\) - 16px\);margin-inline-start:var\(--settings-page-left-offset\);margin-inline-end:auto;?\}/);
   assert.doesNotMatch(styles, /\.settings-page\.has-editor[^{}]*\{[^}]*max-width:none/);
 });
+
+
+test("all side drawers resize immediately while preserving the handle animation", () => {
+  const panel = new (customElements.get("alert-manager-panel"))();
+  const styles = compactCss(panel._styles());
+  assert.match(styles, /ha-card\.side-drawer\{[^}]*transition:none/);
+  assert.match(styles, /\.resize-indicator\{[^}]*transition:opacity 180ms ease-in-out,transform 180ms ease-in-out/);
+});

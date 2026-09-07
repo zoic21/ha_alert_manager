@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.14 — 7 septembre 2026
+
+### Corrigé
+
+- Suppression de la transition de 300 ms héritée de `ha-card` sur tous les
+  volets des règles personnalisées et de la configuration : leur largeur
+  suit immédiatement le déplacement de la poignée, comme le contenu principal.
+- L’animation visuelle de la poignée de redimensionnement est conservée.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.13 — 7 septembre 2026
 
 ### Corrigé

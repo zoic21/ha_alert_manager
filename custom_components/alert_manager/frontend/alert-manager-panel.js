@@ -7832,6 +7832,8 @@ const ruleEditorStyles = `
   }
   ha-card.side-drawer {
     position: fixed;
+    /* Override ha-card's 300ms transition so resizing follows the pointer. */
+    transition: none;
     z-index: 6;
     inset-block-start: calc(var(--header-height, 56px) + 16px);
     inset-block-end: 16px;
