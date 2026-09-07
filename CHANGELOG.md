@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.9 — 7 septembre 2026
+
+### Corrigé
+
+- Flapping sur mobile : marges internes et espacement réduits pour laisser
+  le champ d’occurrences et la fenêtre de détection sur la même ligne,
+  sans couper le libellé du nombre d’occurrences.
+- Exceptions de notification : marge de défilement pour que l’encadré ajouté
+  ne soit plus collé au bord du volet.
+- Valeurs numériques dans les tableaux et détails des alertes : utilisation
+  du formatage natif Home Assistant, avec la précision d’affichage de l’entité
+  et le format numérique de l’utilisateur. Les valeurs enregistrées restent
+  intactes ; les anciennes unités sont conservées dans l’historique.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.8 — 7 septembre 2026
 
 ### Corrigé

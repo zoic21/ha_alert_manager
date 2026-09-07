@@ -180,6 +180,9 @@ export const responsiveStyles = `
     .pack-settings-values {
       grid-template-columns: minmax(0, 1fr);
     }
+    .pack-settings-row {
+      padding-inline: 8px;
+    }
     .pack-settings-row > .pack-target-field {
       grid-column: 1;
     }
@@ -201,7 +204,7 @@ export const responsiveStyles = `
     .pack-settings-row > .pack-settings-values:not([hidden]) {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px 8px;
+      gap: 10px 4px;
     }
     .pack-settings-row .pack-setting-field {
       flex: 0 0 auto;

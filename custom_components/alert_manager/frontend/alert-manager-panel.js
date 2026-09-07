@@ -1324,8 +1324,16 @@ function alertRuleName(alert) {
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (alert.rule_name || alert.type || "—");
 }
 
-function displayValue(value, unit) {
+function displayValue(value, unit, entityId) {
     if (value === undefined || value === null || value === "") return "—";
+    const state = this._hass?.states?.[entityId];
+    const numeric = (typeof value === "number" || typeof value === "string")
+      && String(value).trim() !== "" && Number.isFinite(Number(value));
+    // Use HA's registry precision and locale without relabelling historical units.
+    if (numeric && state && typeof this._hass.formatEntityState === "function"
+      && (unit ?? "") === (state.attributes?.unit_of_measurement ?? "")) {
+      return this._hass.formatEntityState(state, String(value));
+    }
     const rendered = typeof value === "object" ? JSON.stringify(value) : String(value);
     return unit ? `${rendered} ${unit}` : rendered;
 }
@@ -1371,7 +1379,7 @@ function alertCurrentValue(row) {
       value = attribute;
     }
     const unit = state.attributes?.unit_of_measurement ?? row.source?.unit;
-    return this._displayValue(value, unit);
+    return this._displayValue(value, unit, row.entityId);
 }
 
 function entityMetadata(source, labelRegistry) {
@@ -1433,7 +1441,7 @@ function tableRows(kind, historyEvents = []) {
         labels: metadata.labels,
         labelIds: metadata.labels.map((label) => label.id),
         message,
-        value: this._displayValue(value, source.unit),
+        value: this._displayValue(value, source.unit, source.entity_id),
         rawValue: value,
         condition,
         detected: source.detected_at || "",
@@ -7353,6 +7361,7 @@ const settingsStyles = `
     align-items: flex-start;
   }
   .notification-exception {
+    scroll-margin-block: 12px;
     display: grid;
     gap: 12px;
     padding: 12px;
@@ -8215,6 +8224,9 @@ const responsiveStyles = `
     .pack-settings-values {
       grid-template-columns: minmax(0, 1fr);
     }
+    .pack-settings-row {
+      padding-inline: 8px;
+    }
     .pack-settings-row > .pack-target-field {
       grid-column: 1;
     }
@@ -8236,7 +8248,7 @@ const responsiveStyles = `
     .pack-settings-row > .pack-settings-values:not([hidden]) {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px 8px;
+      gap: 10px 4px;
     }
     .pack-settings-row .pack-setting-field {
       flex: 0 0 auto;

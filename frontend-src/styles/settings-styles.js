@@ -259,6 +259,7 @@ export const settingsStyles = `
     align-items: flex-start;
   }
   .notification-exception {
+    scroll-margin-block: 12px;
     display: grid;
     gap: 12px;
     padding: 12px;

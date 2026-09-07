@@ -5001,11 +5001,13 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
   assert.match(mobile, /\.pack-map-row\.pack-number-row\{grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{grid-row:2/);
-  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values:not\(\[hidden\]\)\{display:flex;flex-wrap:wrap;gap:10px 8px/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values:not\(\[hidden\]\)\{display:flex;flex-wrap:wrap;gap:10px 4px/);
   assert.match(mobile, /\.pack-settings-row \.pack-setting-field\{flex:0 0 auto;width:max-content/);
   assert.match(mobile, /\.pack-settings-row \.pack-setting-field:not\(\.pack-duration-setting\)>\.field-label\{white-space:nowrap/);
   assert.match(mobile, /\.pack-settings-row \.pack-setting-field>ha-input\{width:0;min-width:100%/);
   assert.match(mobile, /\.pack-settings-row \.pack-duration-setting\{width:188px/);
+  assert.match(mobile, /\.pack-settings-row\{padding-inline:8px/);
+  assert.match(styles, /\.notification-exception\{scroll-margin-block:12px/);
   assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:1;align-self:end;margin:0 0 4px/);
   assert.match(styles, /@container\(min-width:420px\)/);
   assert.doesNotMatch(mobile, /\.notification-exception-grid[^{}]*\{[^}]*grid-template-columns:1fr/);
@@ -5198,5 +5200,55 @@ test("history details delete only their occurrence and close only on success", a
     assert.match(panel._renderPageMessages(), /alert-type="success"/);
   } finally {
     window.confirm = previousConfirm;
+  }
+});
+
+
+for (const precision of [0, 1, 3]) {
+  test(`numeric alert values use HA entity formatting with precision ${precision}`, () => {
+    const panel = tablePanel();
+    const state = panel._hass.states["sensor.rack"];
+    state.entity_id = "sensor.rack";
+    state.state = "35.67891";
+    state.attributes = { unit_of_measurement: "°C" };
+    panel._hass.entities["sensor.rack"].display_precision = precision;
+    const calls = [];
+    panel._hass.formatEntityState = (entity, value) => {
+      assert.equal(entity, state);
+      calls.push(value);
+      return `${Number(value).toFixed(panel._hass.entities[entity.entity_id].display_precision).replace(".", ",")} °C`;
+    };
+    const alert = currentAlert({ value: 34.56789 });
+    panel._alerts.alerts = [alert];
+    const row = panel._tableRows("overview")[0];
+    const expectedTrigger = `${(34.56789).toFixed(precision).replace(".", ",")} °C`;
+    const expectedCurrent = `${(35.67891).toFixed(precision).replace(".", ",")} °C`;
+    assert.equal(row.value, expectedTrigger);
+    const details = panel._alertDetailsItems("overview", row);
+    assert.equal(details.find(item => item.key === "trigger-value").value, expectedTrigger);
+    assert.equal(details.find(item => item.key === "current-value").value, expectedCurrent);
+    const event = historyEvent({ entity_id: "sensor.rack", trigger_value: 34.56789 });
+    const historyRow = panel._tableRows("history", [event])[0];
+    assert.equal(historyRow.value, expectedTrigger);
+    assert.equal(panel._alertDetailsItems("history", historyRow)
+      .find(item => item.key === "trigger-value").value, expectedTrigger);
+    assert.deepEqual(calls, ["34.56789", "35.67891", "34.56789"]);
+    assert.equal(row.rawValue, 34.56789);
+    assert.equal(event.trigger_value, 34.56789);
+    assert.equal(state.state, "35.67891");
+    // A current unavailable state must not hide a historical numeric value.
+    state.state = "unavailable";
+    assert.equal(panel._tableRows("history", [event])[0].value, expectedTrigger);
+  });
+}
+
+test("value formatting preserves historical units, missing entities and non-numeric values", () => {
+  const panel = tablePanel();
+  panel._hass.states["sensor.rack"].attributes = { unit_of_measurement: "°F" };
+  panel._hass.formatEntityState = () => assert.fail("incompatible values must keep their original representation");
+  assert.equal(panel._displayValue(34.56789, "°C", "sensor.rack"), "34.56789 °C");
+  assert.equal(panel._displayValue(34.56789, "°C", "sensor.deleted"), "34.56789 °C");
+  for (const [value, expected] of [[false, "false"], ["unavailable", "unavailable"], [null, "—"], ["", "—"], [[1, 2], "[1,2]"]]) {
+    assert.equal(panel._displayValue(value, undefined, "sensor.rack"), expected);
   }
 });

@@ -259,8 +259,16 @@ export function alertRuleName(alert) {
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (alert.rule_name || alert.type || "—");
 }
 
-export function displayValue(value, unit) {
+export function displayValue(value, unit, entityId) {
     if (value === undefined || value === null || value === "") return "—";
+    const state = this._hass?.states?.[entityId];
+    const numeric = (typeof value === "number" || typeof value === "string")
+      && String(value).trim() !== "" && Number.isFinite(Number(value));
+    // Use HA's registry precision and locale without relabelling historical units.
+    if (numeric && state && typeof this._hass.formatEntityState === "function"
+      && (unit ?? "") === (state.attributes?.unit_of_measurement ?? "")) {
+      return this._hass.formatEntityState(state, String(value));
+    }
     const rendered = typeof value === "object" ? JSON.stringify(value) : String(value);
     return unit ? `${rendered} ${unit}` : rendered;
 }
@@ -306,7 +314,7 @@ function alertCurrentValue(row) {
       value = attribute;
     }
     const unit = state.attributes?.unit_of_measurement ?? row.source?.unit;
-    return this._displayValue(value, unit);
+    return this._displayValue(value, unit, row.entityId);
 }
 
 export function entityMetadata(source, labelRegistry) {
@@ -368,7 +376,7 @@ export function tableRows(kind, historyEvents = []) {
         labels: metadata.labels,
         labelIds: metadata.labels.map((label) => label.id),
         message,
-        value: this._displayValue(value, source.unit),
+        value: this._displayValue(value, source.unit, source.entity_id),
         rawValue: value,
         condition,
         detected: source.detected_at || "",
