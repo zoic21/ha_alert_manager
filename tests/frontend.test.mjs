@@ -5012,6 +5012,9 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
   assert.match(styles, /\.delay-row\{[^}]*border:1px solid var\(--divider-color,#ddd\)/);
   assert.match(styles, /\.battery-threshold-row\{[^}]*grid-template-columns:minmax\(0,1fr\) 100px auto/);
+  assert.match(styles, /\.pack-number-row\{grid-template-columns:minmax\(0,1fr\) 100px auto/);
+  assert.match(styles, /\.pack-settings-row \.pack-setting-field:not\(\.pack-duration-setting\)\{grid-column:1\s*\/\s*-1/);
+  assert.match(styles, /\.pack-settings-row \.pack-setting-field>ha-input\{width:188px;max-width:100%/);
 });
 
 

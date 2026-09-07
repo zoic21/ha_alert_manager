@@ -532,6 +532,7 @@ export const settingsStyles = `
     min-width: 0;
   }
   .pack-number-row {
+    grid-template-columns: minmax(0, 1fr) 100px auto;
     align-items: start;
   }
   .pack-number-row ha-input::part(wa-hint),
@@ -611,6 +612,13 @@ export const settingsStyles = `
   }
   .pack-setting-field .field-label {
     line-height: 1.3;
+  }
+  .pack-settings-row .pack-setting-field:not(.pack-duration-setting) {
+    grid-column: 1 / -1;
+  }
+  .pack-settings-row .pack-setting-field > ha-input {
+    width: 188px;
+    max-width: 100%;
   }
   .pack-source-list {
     display: grid;

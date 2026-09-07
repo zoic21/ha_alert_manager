@@ -5638,8 +5638,7 @@ function renderPackField(pack, field, config, context) {
     if (isSettingsMapField(field)) {
       const rows = draft[pack.id]?.[field.id] ?? [];
       const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
-      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean")
-        .sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
+      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean");
       return `<div class="field full pack-map-field">
         <div class="configuration-section-heading pack-map-heading">
           <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
@@ -7607,6 +7606,7 @@ const settingsStyles = `
     min-width: 0;
   }
   .pack-number-row {
+    grid-template-columns: minmax(0, 1fr) 100px auto;
     align-items: start;
   }
   .pack-number-row ha-input::part(wa-hint),
@@ -7686,6 +7686,13 @@ const settingsStyles = `
   }
   .pack-setting-field .field-label {
     line-height: 1.3;
+  }
+  .pack-settings-row .pack-setting-field:not(.pack-duration-setting) {
+    grid-column: 1 / -1;
+  }
+  .pack-settings-row .pack-setting-field > ha-input {
+    width: 188px;
+    max-width: 100%;
   }
   .pack-source-list {
     display: grid;

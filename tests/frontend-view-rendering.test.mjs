@@ -503,7 +503,7 @@ test("flapping renders source packs and entity overrides in separate drawers", (
   assert.match(entityMarkup, /ha-switch class="pack-setting-toggle" aria-label="automatic\.fields\.flapping_enabled\.label" title=/);
   assert.doesNotMatch(entityMarkup, /<span[^>]*>automatic\.fields\.flapping_enabled\.label<\/span>/);
   assert.match(entityMarkup, /class="pack-setting-field/);
-  assert.match(entityMarkup, /data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-setting-id="occurrences"[\s\S]*data-action="remove-pack-map-row"/);
+  assert.match(entityMarkup, /data-setting-id="occurrences"[\s\S]*data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-action="remove-pack-map-row"/);
   assert.deepEqual(numberFields.map((field) => field.id), ["occurrences", "window", "recovery"]);
   assert.doesNotMatch(entityMarkup, /data-pack-source-toggle/);
 });

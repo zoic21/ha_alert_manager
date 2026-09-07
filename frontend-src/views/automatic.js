@@ -164,8 +164,7 @@ export function renderPackField(pack, field, config, context) {
     if (isSettingsMapField(field)) {
       const rows = draft[pack.id]?.[field.id] ?? [];
       const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
-      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean")
-        .sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
+      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean");
       return `<div class="field full pack-map-field">
         <div class="configuration-section-heading pack-map-heading">
           <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
