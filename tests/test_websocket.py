@@ -202,6 +202,20 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
             "entity_domains": ["automation", "script"],
         }
     ]
+    flapping = next(pack for pack in packs if pack["id"] == "flapping")
+    entity_overrides = next(
+        field
+        for field in flapping["config_fields"]
+        if field["id"] == "entity_overrides"
+    )
+    assert entity_overrides["type"] == "entity_settings_map"
+    assert entity_overrides["fields"][0] == {
+        "id": "enabled",
+        "type": "boolean",
+        "translation_key": "flapping_enabled",
+        "default": True,
+        "step": "any",
+    }
 
 
 def test_websocket_rule_actions_create_update_and_delete(hass, entry):

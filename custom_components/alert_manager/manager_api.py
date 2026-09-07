@@ -29,6 +29,7 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CATEGORY_FLAPPING,
     DOMAIN,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
@@ -843,6 +844,20 @@ class _ApiMixin:
                     self._clear_variation_baselines()
                 if detection_changed:
                     self._rebuild_rule_index()
+                    disabled_flapping_entities = {
+                        entity_id
+                        for entity_id, settings in candidate["automatic"][
+                            CATEGORY_FLAPPING
+                        ]["entity_overrides"].items()
+                        if not settings["enabled"]
+                    }
+                    flapping_runtime = self._pack_runtime.get(CATEGORY_FLAPPING, {})
+                    disabled_suffixes = tuple(
+                        f":{entity_id}" for entity_id in disabled_flapping_entities
+                    )
+                    for source_id in tuple(flapping_runtime):
+                        if source_id.endswith(disabled_suffixes):
+                            flapping_runtime.pop(source_id, None)
                 for pack_id in disabled_pack_ids:
                     self._pack_runtime.pop(pack_id, None)
                 if reset_all_pack_runtimes:

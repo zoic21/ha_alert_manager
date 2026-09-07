@@ -384,7 +384,7 @@ test("automatic rendering uses prepared configuration and draft data", () => {
   assert.match(automationErrors, /value="3"/);
 });
 
-test("flapping renders source packs and device overrides in separate drawers", () => {
+test("flapping renders source packs and entity overrides in separate drawers", () => {
   const numberFields = [
     { id: "occurrences", type: "number", translation_key: "flapping_occurrences", default: 5, minimum: 2, maximum: 100, step: 1 },
     { id: "window", type: "number", translation_key: "flapping_window", default: 3600, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
@@ -404,10 +404,13 @@ test("flapping renders source packs and device overrides in separate drawers", (
         fields: numberFields.map((field) => ({ ...field, default: undefined })),
       },
       {
-        id: "device_overrides",
-        type: "device_settings_map",
-        translation_key: "flapping_device_overrides",
-        fields: numberFields,
+        id: "entity_overrides",
+        type: "entity_settings_map",
+        translation_key: "flapping_entity_overrides",
+        fields: [
+          { id: "enabled", type: "boolean", translation_key: "flapping_enabled", default: true },
+          ...numberFields,
+        ],
       },
     ],
   };
@@ -425,8 +428,8 @@ test("flapping renders source packs and device overrides in separate drawers", (
           unavailable: { occurrences: null, window: null, recovery: null },
           connectivity: { occurrences: null, window: null, recovery: null },
         },
-        device_overrides: {
-          "device-1": { occurrences: 3, window: 600, recovery: 120 },
+        entity_overrides: {
+          "sensor.test": { enabled: true, occurrences: 3, window: 600, recovery: 120 },
         },
       },
     },
@@ -442,8 +445,8 @@ test("flapping renders source packs and device overrides in separate drawers", (
         unavailable: { occurrences: null, window: null, recovery: null },
         connectivity: { occurrences: null, window: null, recovery: null },
       },
-      device_overrides: [{
-        target_id: "device-1", occurrences: 3, window: 600, recovery: 120,
+      entity_overrides: [{
+        target_id: "sensor.test", enabled: true, occurrences: 3, window: 600, recovery: 120,
       }],
     },
   };
@@ -467,7 +470,7 @@ test("flapping renders source packs and device overrides in separate drawers", (
   assert.match(markup, /auto-flapping-window/);
   assert.match(markup, /auto-flapping-recovery/);
   assert.match(markup, /auto-flapping-source_packs-configuration/);
-  assert.match(markup, /auto-flapping-device_overrides-configuration/);
+  assert.match(markup, /auto-flapping-entity_overrides-configuration/);
   assert.match(markup, /automatic-configuration-entry has-multiple-configurations/);
   assert.match(markup, /data-setting-id="occurrences"/);
   assert.match(markup, /data-setting-id="window"/);
@@ -476,9 +479,9 @@ test("flapping renders source packs and device overrides in separate drawers", (
   assert.match(markup, /data-source-pack-id="connectivity"[^>]*checked/);
   assert.match(markup, /data-source-pack-id="battery"/);
   assert.match(markup, /data-pack-source-values="battery" hidden/);
-  assert.doesNotMatch(markup, /auto-flapping-device_overrides-target-0/);
+  assert.doesNotMatch(markup, /auto-flapping-entity_overrides-target-0/);
 
-  const deviceMarkup = renderAutomatic({
+  const entityMarkup = renderAutomatic({
     availablePacks: [
       pack,
       { id: "unavailable", available: true, translation_key: "unavailable" },
@@ -488,18 +491,19 @@ test("flapping renders source packs and device overrides in separate drawers", (
     config,
     draft,
     configurationDrawer: {
-      kind: "automatic", id: "flapping", fieldId: "device_overrides",
+      kind: "automatic", id: "flapping", fieldId: "entity_overrides",
     },
     busy: false,
     renderNumberField: (id) => `<number id="${id}"></number>`,
     t,
   });
-  assert.match(deviceMarkup, /auto-flapping-device_overrides-target-0/);
-  assert.match(deviceMarkup, /automatic\.device/);
-  assert.match(deviceMarkup, /class="pack-setting-field"/);
-  assert.match(deviceMarkup, /data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-setting-id="occurrences"[\s\S]*data-action="remove-pack-map-row"/);
+  assert.match(entityMarkup, /auto-flapping-entity_overrides-target-0/);
+  assert.match(entityMarkup, /automatic\.entity/);
+  assert.match(entityMarkup, /data-pack-setting-toggle="flapping"[^>]*checked/);
+  assert.match(entityMarkup, /class="pack-setting-field/);
+  assert.match(entityMarkup, /data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-setting-id="occurrences"[\s\S]*data-action="remove-pack-map-row"/);
   assert.deepEqual(numberFields.map((field) => field.id), ["occurrences", "window", "recovery"]);
-  assert.doesNotMatch(deviceMarkup, /data-pack-source-toggle/);
+  assert.doesNotMatch(entityMarkup, /data-pack-source-toggle/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {

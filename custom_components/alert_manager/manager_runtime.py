@@ -22,6 +22,7 @@ from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CATEGORY_FLAPPING,
     CATEGORY_UNAVAILABLE,
     DOMAIN,
     STARTUP_RECONCILIATION_DELAY_SECONDS,
@@ -904,6 +905,18 @@ class _RuntimeMixin:
                 entity_delays.pop(old_entity_id)
                 changed = True
 
+            flapping_overrides = (
+                self.config.get("automatic", {})
+                .get("flapping", {})
+                .get("entity_overrides", {})
+            )
+            if old_entity_id in flapping_overrides:
+                flapping_overrides.setdefault(
+                    new_entity_id, flapping_overrides[old_entity_id]
+                )
+                flapping_overrides.pop(old_entity_id)
+                changed = True
+
             excluded_entities = self.config.get("excluded_entities", [])
             if old_entity_id in excluded_entities:
                 self.config["excluded_entities"] = list(
@@ -1386,6 +1399,15 @@ class _RuntimeMixin:
                     and self._pack_is_available(record.details.type)
                     and self._is_base_eligible(entity_id)
                     and self._is_automatic_eligible(entity_id)
+                    and not (
+                        record.details.type == CATEGORY_FLAPPING
+                        and self.config["automatic"][CATEGORY_FLAPPING][
+                            "entity_overrides"
+                        ]
+                        .get(entity_id, {})
+                        .get("enabled")
+                        is False
+                    )
                 ):
                     continue
             record = self._pop_record(alert_id)

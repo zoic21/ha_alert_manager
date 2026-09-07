@@ -174,7 +174,7 @@ DEFAULT_CONFIG: Final = {
                     "recovery": None,
                 },
             },
-            "device_overrides": {},
+            "entity_overrides": {},
         },
     },
     "rules": [],

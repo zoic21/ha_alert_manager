@@ -363,7 +363,7 @@ def test_older_export_without_flapping_pack_uses_disabled_default() -> None:
         "          occurrences: null\n"
         "          window: null\n"
         "          recovery: null\n"
-        "      device_overrides: {}\n",
+        "      entity_overrides: {}\n",
         "",
     )
 

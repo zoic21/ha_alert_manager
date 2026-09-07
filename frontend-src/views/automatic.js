@@ -9,14 +9,22 @@ import {
 } from "../components/configuration-drawer.js";
 
 const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
+const SETTINGS_MAP_FIELD_TYPES = new Set([
+  "device_settings_map",
+  "entity_settings_map",
+]);
 const MAP_FIELD_TYPES = new Set([
   ...NUMBER_MAP_FIELD_TYPES,
-  "device_settings_map",
+  ...SETTINGS_MAP_FIELD_TYPES,
   "pack_settings_map",
 ]);
 
 function isNumberMapField(field) {
   return NUMBER_MAP_FIELD_TYPES.has(field.type);
+}
+
+function isSettingsMapField(field) {
+  return SETTINGS_MAP_FIELD_TYPES.has(field.type);
 }
 
 function drawerFields(pack) {
@@ -153,9 +161,11 @@ export function renderPackField(pack, field, config, context) {
         }).join("")}</div>
       </div>`;
     }
-    if (field.type === "device_settings_map") {
+    if (isSettingsMapField(field)) {
       const rows = draft[pack.id]?.[field.id] ?? [];
-      const settings = [...(field.fields ?? [])].sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
+      const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
+      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean")
+        .sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
       return `<div class="field full pack-map-field">
         <div class="configuration-section-heading pack-map-heading">
           <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
@@ -163,8 +173,9 @@ export function renderPackField(pack, field, config, context) {
         </div>
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
-            <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            <div class="pack-settings-values">${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
+            <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
+            ${toggle ? `<label class="pack-setting-toggle switch-field-row"><span class="field-label">${esc(t(`automatic.fields.${toggle.translation_key}.label`))}</span><ha-switch data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch></label>` : ""}
+            <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -220,12 +231,14 @@ export function collectAutomaticChanges() {
           );
           continue;
         }
-        if (field.type === "device_settings_map") {
+        if (isSettingsMapField(field)) {
           const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
           const values = {};
           for (const row of rows) {
             const settingsValid = (field.fields ?? []).every(
-              (setting) => Number.isFinite(row[setting.id]),
+              (setting) => setting.type === "boolean"
+                ? typeof row[setting.id] === "boolean"
+                : Number.isFinite(row[setting.id]),
             );
             if (!row.target_id || !settingsValid || Object.hasOwn(values, row.target_id)) {
               this._notice = {
@@ -336,7 +349,7 @@ export function ensureAutomaticDraft() {
           ? Object.fromEntries(Object.entries(configured ?? {}).map(
             ([sourcePackId, settings]) => [sourcePackId, { ...settings }],
           ))
-          : field.type === "device_settings_map"
+          : isSettingsMapField(field)
           ? Object.entries(configured ?? {}).map(
             ([target_id, settings]) => ({ target_id, ...settings }),
           )
@@ -363,6 +376,12 @@ export function captureAutomaticMapValues() {
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
       if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
+    });
+    this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((input) => {
+      const row = this._automaticMapDraft[input.dataset.packSettingToggle]?.[
+        input.dataset.packField
+      ]?.[Number(input.dataset.packIndex)];
+      if (row) row[input.dataset.settingId] = input.checked;
     });
     this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
       const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
@@ -466,7 +485,7 @@ export function hydrateAutomaticControls() {
       rows.forEach((row, index) => {
         this._configureSelector(
           `auto-${pack.id}-${field.id}-target-${index}`,
-          field.type === "entity_number_map"
+          field.type === "entity_number_map" || field.type === "entity_settings_map"
             ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
             : { device: pack.id === "battery" && field.id === "device_thresholds"
               ? { entity: { domain: "sensor", device_class: "battery" } }
@@ -496,6 +515,19 @@ export function hydrateAutomaticControls() {
       }
       const values = toggle.closest?.(".pack-source-row")?.querySelector?.(
         "[data-pack-source-values]",
+      );
+      if (values) values.hidden = !toggle.checked;
+    };
+  });
+  this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((toggle) => {
+    toggle.onchange = () => {
+      const row = this._automaticMapDraft[toggle.dataset.packSettingToggle]?.[
+        toggle.dataset.packField
+      ]?.[Number(toggle.dataset.packIndex)];
+      if (!row) return;
+      row[toggle.dataset.settingId] = toggle.checked;
+      const values = toggle.closest?.(".pack-settings-row")?.querySelector?.(
+        ".pack-settings-values",
       );
       if (values) values.hidden = !toggle.checked;
     };
@@ -546,7 +578,7 @@ export async function handleAutomaticAction(action, button) {
     const field = this._packs.find((pack) => pack.id === button.dataset.packId)
       ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
     if (rows) {
-      if (field?.type === "device_settings_map") {
+      if (field && isSettingsMapField(field)) {
         rows.push({
           target_id: "",
           ...Object.fromEntries((field.fields ?? []).map(

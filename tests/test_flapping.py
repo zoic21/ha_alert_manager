@@ -55,7 +55,7 @@ def configure(
         "occurrences": occurrences,
         "window": window,
         "recovery": recovery,
-        "device_overrides": overrides or {},
+        "entity_overrides": overrides or {},
     }
     if source_packs is not None:
         flapping_config["source_packs"] = source_packs
@@ -471,7 +471,7 @@ def test_occurrence_memory_keeps_only_the_newest_sources(hass, set_now, monkeypa
                     "occurrences": 5,
                     "window": 60,
                     "recovery": 60,
-                    "device_overrides": {},
+                    "entity_overrides": {},
                     "source_packs": {
                         "unavailable": {
                             "occurrences": None,
@@ -551,48 +551,60 @@ def test_active_alert_and_occurrences_survive_restart(hass, entry, set_now):
     )
 
 
-def test_device_override_and_device_less_global_settings(
-    hass, entry, set_now, registry_entry, device_entry
-):
-    """Device overrides win while unregistered entities use global values."""
+def test_entity_override_and_disabled_entity(hass, entry, set_now):
+    """Entity overrides win and can disable flapping for one entity."""
     start = datetime(2026, 9, 3, 8, tzinfo=UTC)
-    device = device_entry(hass, device_id="a" * 32)
-    registry_entry(hass, "sensor.device", device_id=device.id)
     set_now(start)
-    hass.states.set("sensor.device", "ok")
-    hass.states.set("sensor.no_device", "ok")
+    hass.states.set("sensor.custom", "ok")
+    hass.states.set("sensor.disabled", "ok")
+    hass.states.set("sensor.global", "ok")
     manager = make_manager(hass, entry)
     configure(
         manager,
         occurrences=3,
         window=3600,
         recovery=1800,
-        overrides={device.id: {"occurrences": 2, "window": 120, "recovery": 30}},
+        overrides={
+            "sensor.custom": {
+                "enabled": True,
+                "occurrences": 2,
+                "window": 120,
+                "recovery": 30,
+            },
+            "sensor.disabled": {
+                "enabled": False,
+                "occurrences": 2,
+                "window": 120,
+                "recovery": 30,
+            },
+        },
     )
 
-    for entity_id in ("sensor.device", "sensor.no_device"):
+    for entity_id in ("sensor.custom", "sensor.disabled", "sensor.global"):
         occurrence(manager, hass, set_now, start, entity_id)
         occurrence(manager, hass, set_now, start + timedelta(seconds=10), entity_id)
-    device_alert = manager.records["flapping:unavailable:sensor.device"]
-    assert device_alert.expires_at == start + timedelta(seconds=40)
-    assert "flapping:unavailable:sensor.no_device" not in manager.records
+    custom_alert = manager.records["flapping:unavailable:sensor.custom"]
+    assert custom_alert.expires_at == start + timedelta(seconds=40)
+    assert "flapping:unavailable:sensor.disabled" not in manager.records
+    assert "unavailable:sensor.disabled" not in manager._pack_runtime["flapping"]
+    assert "flapping:unavailable:sensor.global" not in manager.records
 
     occurrence(
         manager,
         hass,
         set_now,
         start + timedelta(seconds=20),
-        "sensor.no_device",
+        "sensor.global",
     )
-    global_alert = manager.records["flapping:unavailable:sensor.no_device"]
+    global_alert = manager.records["flapping:unavailable:sensor.global"]
     assert global_alert.expires_at == start + timedelta(seconds=1820)
 
     run(
         manager.async_update_config(
-            {"automatic": {"flapping": {"device_overrides": {}}}}
+            {"automatic": {"flapping": {"entity_overrides": {}}}}
         )
     )
-    assert manager.config["automatic"]["flapping"]["device_overrides"] == {}
+    assert manager.config["automatic"]["flapping"]["entity_overrides"] == {}
 
 
 def test_disabling_pack_cancels_alert_timer_and_keeps_history(hass, entry, set_now):
@@ -616,6 +628,44 @@ def test_disabling_pack_cancels_alert_timer_and_keeps_history(hass, entry, set_n
         for timer in hass.timers
         if timer["point"] == start + timedelta(seconds=130) and not timer["cancelled"]
     ]
+
+
+def test_disabling_one_entity_resolves_alert_and_discards_occurrences(
+    hass, entry, set_now
+):
+    """An entity override stops both current and future flapping analysis."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=2, recovery=120)
+    occurrence(manager, hass, set_now, start)
+    occurrence(manager, hass, set_now, start + timedelta(seconds=10))
+    alert_id = "flapping:unavailable:sensor.test"
+    assert alert_id in manager.records
+
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "entity_overrides": {
+                            "sensor.test": {
+                                "enabled": False,
+                                "occurrences": 2,
+                                "window": 60,
+                                "recovery": 120,
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    )
+
+    assert alert_id not in manager.records
+    assert "unavailable:sensor.test" not in manager._pack_runtime["flapping"]
+    assert manager.history[0].id == alert_id
 
 
 def test_excluding_source_resolves_flapping_through_normal_evaluation(
@@ -663,7 +713,7 @@ def test_reconciliation_live_flapping_extension_wins_over_shadow(hass, entry, se
                         "occurrences": 2,
                         "window": 3600,
                         "recovery": 120,
-                        "device_overrides": {},
+                        "entity_overrides": {},
                     }
                 }
             }
@@ -812,7 +862,7 @@ def test_reconciliation_state_churn_does_not_collect_occurrences(
                         "occurrences": 3,
                         "window": 3600,
                         "recovery": 120,
-                        "device_overrides": {},
+                        "entity_overrides": {},
                     }
                 }
             }
@@ -962,7 +1012,14 @@ def test_reconciliation_flapping_compound_id_survives_entity_rename(
                         "occurrences": 2,
                         "window": 3600,
                         "recovery": 300,
-                        "device_overrides": {},
+                        "entity_overrides": {
+                            old_entity_id: {
+                                "enabled": True,
+                                "occurrences": 2,
+                                "window": 3600,
+                                "recovery": 300,
+                            }
+                        },
                     }
                 }
             }
@@ -1051,6 +1108,16 @@ def test_reconciliation_flapping_compound_id_survives_entity_rename(
         assert current.acknowledged is True
         assert current.acknowledged_at == original.acknowledged_at
         assert restarted._record_ids_by_entity[new_entity_id] == {new_alert_id}
+        assert (
+            old_entity_id
+            not in restarted.config["automatic"]["flapping"]["entity_overrides"]
+        )
+        assert (
+            restarted.config["automatic"]["flapping"]["entity_overrides"][
+                new_entity_id
+            ]["occurrences"]
+            == 2
+        )
         persisted = hass.stores["alert_manager"]["alerts"]
         assert old_alert_id not in persisted
         assert new_alert_id in persisted

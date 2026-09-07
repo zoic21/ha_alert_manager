@@ -29,6 +29,7 @@
       "configuration": "Configuration",
       "configure_aria": "Configure {name}",
       "device": "Device",
+      "entity": "Entity",
       "empty_delay_help": "Leave the delay empty to use the global delay.",
       "fields": {
         "device_thresholds": {
@@ -45,12 +46,15 @@
           "label": "Consecutive failure thresholds by automation or script",
           "validation": "Each row must contain an automation or script and a valid whole number."
         },
-        "flapping_device_overrides": {
-          "duplicate": "A device can have only one custom configuration.",
-          "empty": "No device-specific configuration.",
-          "help": "Device values take precedence over the global configuration.",
-          "label": "Device-specific configurations",
-          "validation": "Each row must contain a device and three valid values."
+        "flapping_enabled": {
+          "label": "Analyze flapping"
+        },
+        "flapping_entity_overrides": {
+          "duplicate": "An entity can have only one custom configuration.",
+          "empty": "No entity-specific configuration.",
+          "help": "Entity values take precedence over the global configuration. Turn the switch off to ignore its flapping.",
+          "label": "Entity-specific configurations",
+          "validation": "Each row must contain an entity and valid values."
         },
         "flapping_occurrences": {
           "label": "Number of occurrences"
@@ -60,7 +64,7 @@
           "label": "Delay before returning to normal"
         },
         "flapping_source_packs": {
-          "help": "Enable flapping detection for each automatic source pack. Empty values inherit the device-specific configuration, then the global configuration.",
+          "help": "Enable flapping detection for each automatic source pack. Empty values inherit the entity-specific configuration, then the global configuration.",
           "label": "Monitored packs",
           "validation": "Each override must be empty or contain a valid number."
         },
@@ -419,7 +423,7 @@
       "editor_trigger": "Trigger",
       "editor_trigger_help": "Add a delay and customize the exposed message.",
       "flapping_enabled": "Enable flapping detection",
-      "flapping_help": "Count each new occurrence of this rule. Optional values inherit the device-specific configuration, then the global flapping configuration.",
+      "flapping_help": "Count each new occurrence of this rule. Optional values inherit the entity-specific configuration, then the global flapping configuration.",
       "flapping_inherit_help": "Leave empty to inherit the default value.",
       "flapping_title": "Flapping / Instability",
       "empty": "No custom rules.",

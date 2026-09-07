@@ -254,6 +254,10 @@ def _normalize_pack_field(
         return _validate_pack_number(
             value, path, field.minimum, field.maximum, field.step
         )
+    if field.type == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError(f"{path} must be a boolean")
+        return value
     if field.type in ("device_number_map", "entity_number_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
@@ -285,27 +289,35 @@ def _normalize_pack_field(
                 field.step,
             )
         return normalized
-    if field.type == "device_settings_map":
+    if field.type in ("device_settings_map", "entity_settings_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
-        normalized_settings: dict[str, dict[str, float | int]] = {}
+        normalized_settings: dict[str, dict[str, bool | float | int]] = {}
         allowed = {item.id: item for item in field.fields}
-        for device_id, raw_settings in value.items():
-            if not isinstance(device_id, str) or not _DEVICE_ID_RE.fullmatch(device_id):
-                raise ValueError(f"{path} contains an invalid device id")
+        for target_id, raw_settings in value.items():
+            if field.type == "device_settings_map":
+                if not isinstance(target_id, str) or not _DEVICE_ID_RE.fullmatch(
+                    target_id
+                ):
+                    raise ValueError(f"{path} contains an invalid device id")
+            else:
+                try:
+                    validate_entity_id(target_id)
+                except ValueError as err:
+                    raise ValueError(f"{path} contains an invalid entity id") from err
             if not isinstance(raw_settings, dict):
-                raise ValueError(f"{path}.{device_id} must be an object")
+                raise ValueError(f"{path}.{target_id} must be an object")
             unknown = _unknown_keys(raw_settings, set(allowed))
             if unknown:
                 raise ValueError(
-                    f"Unknown {path}.{device_id} field: {sorted(unknown)[0]}"
+                    f"Unknown {path}.{target_id} field: {sorted(unknown)[0]}"
                 )
             missing = set(allowed) - raw_settings.keys()
             if missing:
                 raise ValueError(
-                    f"Missing {path}.{device_id} field: {sorted(missing)[0]}"
+                    f"Missing {path}.{target_id} field: {sorted(missing)[0]}"
                 )
-            normalized_settings[device_id] = {
+            normalized_settings[target_id] = {
                 setting_id: _normalize_pack_field(
                     pack_id,
                     setting,

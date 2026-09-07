@@ -69,13 +69,15 @@ def _settings(
     config: dict[str, Any],
     rules_by_id: dict[str, dict[str, Any]],
 ) -> tuple[int, int, int] | None:
-    """Resolve source, device and global settings in descending priority."""
+    """Resolve source, entity and global settings in descending priority."""
     source_settings = _source_overrides(occurrence, config, rules_by_id)
     if source_settings is None:
         return None
     pack_config = config["automatic"][PACK_ID]
-    device_id = occurrence.source.device_id
-    defaults = pack_config["device_overrides"].get(device_id, pack_config)
+    entity_settings = pack_config["entity_overrides"].get(occurrence.source.entity_id)
+    if entity_settings is not None and not entity_settings["enabled"]:
+        return None
+    defaults = entity_settings or pack_config
     return (
         source_settings.get("occurrences") or defaults["occurrences"],
         source_settings.get("window") or defaults["window"],
@@ -108,7 +110,14 @@ def _compact_duration(seconds: int) -> str:
 def _largest_limits(config: dict[str, Any]) -> tuple[int, int]:
     """Return conservative retention limits across all possible overrides."""
     pack_config = config["automatic"][PACK_ID]
-    settings = [pack_config, *pack_config["device_overrides"].values()]
+    settings = [
+        pack_config,
+        *(
+            setting
+            for setting in pack_config["entity_overrides"].values()
+            if setting["enabled"]
+        ),
+    ]
     settings.extend(pack_config["source_packs"].values())
     settings.extend(
         {
@@ -268,6 +277,12 @@ _SOURCE_FIELDS = tuple(
     replace(field, default=None)
     for field in (_OCCURRENCES_FIELD, _WINDOW_FIELD, _RECOVERY_FIELD)
 )
+_ENABLED_FIELD = PackConfigField(
+    id="enabled",
+    type="boolean",
+    translation_key="flapping_enabled",
+    default=True,
+)
 
 PACK = AutomaticPack(
     id=PACK_ID,
@@ -293,11 +308,16 @@ PACK = AutomaticPack(
             fields=_SOURCE_FIELDS,
         ),
         PackConfigField(
-            id="device_overrides",
-            type="device_settings_map",
-            translation_key="flapping_device_overrides",
+            id="entity_overrides",
+            type="entity_settings_map",
+            translation_key="flapping_entity_overrides",
             default={},
-            fields=(_OCCURRENCES_FIELD, _WINDOW_FIELD, _RECOVERY_FIELD),
+            fields=(
+                _ENABLED_FIELD,
+                _OCCURRENCES_FIELD,
+                _WINDOW_FIELD,
+                _RECOVERY_FIELD,
+            ),
         ),
     ),
 )

@@ -166,7 +166,7 @@ export const responsiveStyles = `
     .configuration-drawer .pack-map-heading .field-label {
       display: none;
     }
-    .pack-number-row, .pack-settings-row, .delay-row {
+    .pack-number-row {
       padding: 12px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color);
@@ -175,6 +175,11 @@ export const responsiveStyles = `
     .pack-number-row > ha-selector,
     .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
+      min-width: 0;
+    }
+    .pack-setting-toggle {
+      grid-column: 1 / -1;
+      width: 100%;
       min-width: 0;
     }
     .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
@@ -197,7 +202,8 @@ export const responsiveStyles = `
       container-type: inline-size;
     }
     .pack-settings-row > .pack-settings-values {
-      display: contents;
+      display: grid;
+      grid-column: 1;
     }
     .pack-settings-row .pack-setting-field {
       grid-template-rows: auto auto;
@@ -210,8 +216,13 @@ export const responsiveStyles = `
     .pack-settings-row ha-input::part(wa-hint) {
       min-height: 0;
     }
-    .battery-threshold-row > .configuration-remove,
+    .battery-threshold-row > .configuration-remove {
+      align-self: end;
+      margin-bottom: 4px;
+    }
     .pack-settings-row > .configuration-remove {
+      grid-column: 2;
+      grid-row: 3;
       align-self: end;
       margin-bottom: 4px;
     }

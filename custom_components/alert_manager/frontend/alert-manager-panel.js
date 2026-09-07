@@ -5483,14 +5483,22 @@ async function handleRulesAction(action, button) {
 
 // Source: frontend-src/views/automatic.js
 const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
+const SETTINGS_MAP_FIELD_TYPES = new Set([
+  "device_settings_map",
+  "entity_settings_map",
+]);
 const MAP_FIELD_TYPES = new Set([
   ...NUMBER_MAP_FIELD_TYPES,
-  "device_settings_map",
+  ...SETTINGS_MAP_FIELD_TYPES,
   "pack_settings_map",
 ]);
 
 function isNumberMapField(field) {
   return NUMBER_MAP_FIELD_TYPES.has(field.type);
+}
+
+function isSettingsMapField(field) {
+  return SETTINGS_MAP_FIELD_TYPES.has(field.type);
 }
 
 function drawerFields(pack) {
@@ -5627,9 +5635,11 @@ function renderPackField(pack, field, config, context) {
         }).join("")}</div>
       </div>`;
     }
-    if (field.type === "device_settings_map") {
+    if (isSettingsMapField(field)) {
       const rows = draft[pack.id]?.[field.id] ?? [];
-      const settings = [...(field.fields ?? [])].sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
+      const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
+      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean")
+        .sort((a, b) => Number(a.unit !== "s") - Number(b.unit !== "s"));
       return `<div class="field full pack-map-field">
         <div class="configuration-section-heading pack-map-heading">
           <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
@@ -5637,8 +5647,9 @@ function renderPackField(pack, field, config, context) {
         </div>
         <div class="pack-map-list">
           ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
-            <label class="field full pack-target-field"><span class="field-label">${esc(t("automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            <div class="pack-settings-values">${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
+            <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
+            ${toggle ? `<label class="pack-setting-toggle switch-field-row"><span class="field-label">${esc(t(`automatic.fields.${toggle.translation_key}.label`))}</span><ha-switch data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch></label>` : ""}
+            <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
             ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
           </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
         </div>
@@ -5694,12 +5705,14 @@ function collectAutomaticChanges() {
           );
           continue;
         }
-        if (field.type === "device_settings_map") {
+        if (isSettingsMapField(field)) {
           const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
           const values = {};
           for (const row of rows) {
             const settingsValid = (field.fields ?? []).every(
-              (setting) => Number.isFinite(row[setting.id]),
+              (setting) => setting.type === "boolean"
+                ? typeof row[setting.id] === "boolean"
+                : Number.isFinite(row[setting.id]),
             );
             if (!row.target_id || !settingsValid || Object.hasOwn(values, row.target_id)) {
               this._notice = {
@@ -5810,7 +5823,7 @@ function ensureAutomaticDraft() {
           ? Object.fromEntries(Object.entries(configured ?? {}).map(
             ([sourcePackId, settings]) => [sourcePackId, { ...settings }],
           ))
-          : field.type === "device_settings_map"
+          : isSettingsMapField(field)
           ? Object.entries(configured ?? {}).map(
             ([target_id, settings]) => ({ target_id, ...settings }),
           )
@@ -5837,6 +5850,12 @@ function captureAutomaticMapValues() {
         input.dataset.packField
       ]?.[Number(input.dataset.packIndex)];
       if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
+    });
+    this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((input) => {
+      const row = this._automaticMapDraft[input.dataset.packSettingToggle]?.[
+        input.dataset.packField
+      ]?.[Number(input.dataset.packIndex)];
+      if (row) row[input.dataset.settingId] = input.checked;
     });
     this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
       const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
@@ -5940,7 +5959,7 @@ function hydrateAutomaticControls() {
       rows.forEach((row, index) => {
         this._configureSelector(
           `auto-${pack.id}-${field.id}-target-${index}`,
-          field.type === "entity_number_map"
+          field.type === "entity_number_map" || field.type === "entity_settings_map"
             ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
             : { device: pack.id === "battery" && field.id === "device_thresholds"
               ? { entity: { domain: "sensor", device_class: "battery" } }
@@ -5970,6 +5989,19 @@ function hydrateAutomaticControls() {
       }
       const values = toggle.closest?.(".pack-source-row")?.querySelector?.(
         "[data-pack-source-values]",
+      );
+      if (values) values.hidden = !toggle.checked;
+    };
+  });
+  this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((toggle) => {
+    toggle.onchange = () => {
+      const row = this._automaticMapDraft[toggle.dataset.packSettingToggle]?.[
+        toggle.dataset.packField
+      ]?.[Number(toggle.dataset.packIndex)];
+      if (!row) return;
+      row[toggle.dataset.settingId] = toggle.checked;
+      const values = toggle.closest?.(".pack-settings-row")?.querySelector?.(
+        ".pack-settings-values",
       );
       if (values) values.hidden = !toggle.checked;
     };
@@ -6020,7 +6052,7 @@ async function handleAutomaticAction(action, button) {
     const field = this._packs.find((pack) => pack.id === button.dataset.packId)
       ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
     if (rows) {
-      if (field?.type === "device_settings_map") {
+      if (field && isSettingsMapField(field)) {
         rows.push({
           target_id: "",
           ...Object.fromEntries((field.fields ?? []).map(
@@ -7564,10 +7596,14 @@ const settingsStyles = `
     width: 100%;
     align-items: start;
   }
+  .pack-number-row {
+    align-items: center;
+  }
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
   .battery-threshold-row {
+    grid-template-columns: minmax(240px, 1fr) minmax(96px, 130px) auto;
     align-items: end;
   }
   .battery-threshold-value {
@@ -7577,7 +7613,11 @@ const settingsStyles = `
     --ha-icon-button-size: 48px;
     color: var(--error-color);
   }
-  .pack-map-row > .configuration-remove,
+  .pack-number-row > .configuration-remove {
+    align-self: center;
+    margin-bottom: 0;
+  }
+  .battery-threshold-row > .configuration-remove,
   .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
@@ -7585,13 +7625,30 @@ const settingsStyles = `
   }
   .pack-settings-row {
     grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: var(--ha-border-radius-lg, 12px);
+  }
+  .pack-settings-row > .pack-target-field {
+    grid-column: 1;
+  }
+  .pack-setting-toggle {
+    align-self: end;
+    min-width: 170px;
   }
   .pack-settings-values {
     display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
-    align-items: stretch;
+    grid-column: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
     gap: 10px;
+  }
+  .pack-settings-row > .configuration-remove {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    margin-bottom: 4px;
   }
   .pack-configuration[hidden],
   .pack-settings-values[hidden] {
@@ -7604,7 +7661,9 @@ const settingsStyles = `
     min-width: 0;
   }
   .pack-setting-field {
-    grid-template-rows: 1fr auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
   }
   .pack-setting-field .field-label {
     line-height: 1.3;
@@ -7887,6 +7946,10 @@ const ruleEditorStyles = `
     grid-template-columns: minmax(210px, 1fr) auto;
     gap: 10px;
     align-items: start;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: var(--ha-border-radius-lg, 12px);
   }
   .delay-row > ha-selector:not([data-duration-value]) {
     grid-column: 1 / -1;
@@ -8092,7 +8155,7 @@ const responsiveStyles = `
     .configuration-drawer .pack-map-heading .field-label {
       display: none;
     }
-    .pack-number-row, .pack-settings-row, .delay-row {
+    .pack-number-row {
       padding: 12px;
       box-sizing: border-box;
       border: 1px solid var(--divider-color);
@@ -8101,6 +8164,11 @@ const responsiveStyles = `
     .pack-number-row > ha-selector,
     .fields.configuration-drawer-fields .pack-settings-row > .pack-target-field {
       grid-column: 1 / -1;
+      min-width: 0;
+    }
+    .pack-setting-toggle {
+      grid-column: 1 / -1;
+      width: 100%;
       min-width: 0;
     }
     .delay-row > .configuration-remove, .pack-map-row > .configuration-remove {
@@ -8123,7 +8191,8 @@ const responsiveStyles = `
       container-type: inline-size;
     }
     .pack-settings-row > .pack-settings-values {
-      display: contents;
+      display: grid;
+      grid-column: 1;
     }
     .pack-settings-row .pack-setting-field {
       grid-template-rows: auto auto;
@@ -8136,8 +8205,13 @@ const responsiveStyles = `
     .pack-settings-row ha-input::part(wa-hint) {
       min-height: 0;
     }
-    .battery-threshold-row > .configuration-remove,
+    .battery-threshold-row > .configuration-remove {
+      align-self: end;
+      margin-bottom: 4px;
+    }
     .pack-settings-row > .configuration-remove {
+      grid-column: 2;
+      grid-row: 3;
       align-self: end;
       margin-bottom: 4px;
     }

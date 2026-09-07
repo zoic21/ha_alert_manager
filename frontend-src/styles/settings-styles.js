@@ -520,10 +520,14 @@ export const settingsStyles = `
     width: 100%;
     align-items: start;
   }
+  .pack-number-row {
+    align-items: center;
+  }
   .pack-map-row > ha-button {
     margin-top: 8px;
   }
   .battery-threshold-row {
+    grid-template-columns: minmax(240px, 1fr) minmax(96px, 130px) auto;
     align-items: end;
   }
   .battery-threshold-value {
@@ -533,7 +537,11 @@ export const settingsStyles = `
     --ha-icon-button-size: 48px;
     color: var(--error-color);
   }
-  .pack-map-row > .configuration-remove,
+  .pack-number-row > .configuration-remove {
+    align-self: center;
+    margin-bottom: 0;
+  }
+  .battery-threshold-row > .configuration-remove,
   .delay-row > .configuration-remove {
     align-self: end;
     margin-bottom: 4px;
@@ -541,13 +549,30 @@ export const settingsStyles = `
   }
   .pack-settings-row {
     grid-template-columns: minmax(0, 1fr) auto;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: var(--ha-border-radius-lg, 12px);
+  }
+  .pack-settings-row > .pack-target-field {
+    grid-column: 1;
+  }
+  .pack-setting-toggle {
+    align-self: end;
+    min-width: 170px;
   }
   .pack-settings-values {
     display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
-    align-items: stretch;
+    grid-column: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
     gap: 10px;
+  }
+  .pack-settings-row > .configuration-remove {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    margin-bottom: 4px;
   }
   .pack-configuration[hidden],
   .pack-settings-values[hidden] {
@@ -560,7 +585,9 @@ export const settingsStyles = `
     min-width: 0;
   }
   .pack-setting-field {
-    grid-template-rows: 1fr auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
   }
   .pack-setting-field .field-label {
     line-height: 1.3;

@@ -260,6 +260,10 @@ export const ruleEditorStyles = `
     grid-template-columns: minmax(210px, 1fr) auto;
     gap: 10px;
     align-items: start;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--divider-color, #ddd);
+    border-radius: var(--ha-border-radius-lg, 12px);
   }
   .delay-row > ha-selector:not([data-duration-value]) {
     grid-column: 1 / -1;

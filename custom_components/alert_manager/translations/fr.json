@@ -29,6 +29,7 @@
       "configuration": "Configuration",
       "configure_aria": "Configurer {name}",
       "device": "Appareil",
+      "entity": "Entité",
       "empty_delay_help": "Laisser le délai vide pour utiliser le délai global.",
       "fields": {
         "device_thresholds": {
@@ -45,12 +46,15 @@
           "label": "Seuils d’échecs consécutifs par automatisation ou script",
           "validation": "Chaque ligne doit contenir une automatisation ou un script et un nombre entier valide."
         },
-        "flapping_device_overrides": {
-          "duplicate": "Un appareil ne peut avoir qu’une seule configuration particulière.",
-          "empty": "Aucune configuration particulière par appareil.",
-          "help": "Les valeurs de l’appareil sont prioritaires sur la configuration globale.",
-          "label": "Configurations particulières par appareil",
-          "validation": "Chaque ligne doit contenir un appareil et trois valeurs valides."
+        "flapping_enabled": {
+          "label": "Analyser le flapping"
+        },
+        "flapping_entity_overrides": {
+          "duplicate": "Une entité ne peut avoir qu’une seule configuration particulière.",
+          "empty": "Aucune configuration particulière par entité.",
+          "help": "Les valeurs de l’entité sont prioritaires sur la configuration globale. Désactivez l’interrupteur pour ignorer son flapping.",
+          "label": "Configurations particulières par entité",
+          "validation": "Chaque ligne doit contenir une entité et des valeurs valides."
         },
         "flapping_occurrences": {
           "label": "Nombre d’occurrences"
@@ -60,7 +64,7 @@
           "label": "Délai avant retour à la normale"
         },
         "flapping_source_packs": {
-          "help": "Activez la détection de flapping pour chaque pack source. Les valeurs vides héritent de la configuration particulière de l’appareil, puis de la configuration globale.",
+          "help": "Activez la détection de flapping pour chaque pack source. Les valeurs vides héritent de la configuration particulière de l’entité, puis de la configuration globale.",
           "label": "Packs surveillés",
           "validation": "Chaque surcharge doit être vide ou contenir un nombre valide."
         },
@@ -419,7 +423,7 @@
       "editor_trigger": "Déclenchement",
       "editor_trigger_help": "Ajoutez une temporisation et personnalisez le message exposé.",
       "flapping_enabled": "Activer la détection de flapping",
-      "flapping_help": "Compte chaque nouvelle occurrence de cette règle. Les valeurs facultatives héritent de la configuration particulière de l’appareil, puis de la configuration globale du flapping.",
+      "flapping_help": "Compte chaque nouvelle occurrence de cette règle. Les valeurs facultatives héritent de la configuration particulière de l’entité, puis de la configuration globale du flapping.",
       "flapping_inherit_help": "Laissez vide pour hériter de la valeur par défaut.",
       "flapping_title": "Flapping / Instabilité",
       "empty": "Aucune règle personnalisée.",

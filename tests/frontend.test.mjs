@@ -2698,8 +2698,8 @@ test("rule rows and editor use native Home Assistant components", () => {
   const styles = compactCss(panel._styles());
   assert.match(styles, /\.delay-row\{[^}]*align-items:start/);
   assert.match(styles, /\.delay-row>ha-button\{margin-top:8px\}/);
-  assert.match(styles, /\.pack-settings-values\{[^}]*align-items:stretch/);
-  assert.match(styles, /\.pack-setting-field\{[^}]*grid-template-rows:1fr auto/);
+  assert.match(styles, /\.pack-settings-values\{[^}]*align-items:start/);
+  assert.match(styles, /\.pack-setting-field\{[^}]*display:flex;flex-direction:column/);
   assert.doesNotMatch(
     styles,
     /#rules-table\{[^}]*--data-table-row-height/,
@@ -2924,23 +2924,23 @@ test("battery thresholds use the native battery sensor device filter", () => {
   assert.equal(panel._automaticMapDraft.battery.device_thresholds[0].target_id, "battery-device");
 });
 
-test("flapping device overrides hydrate a device selector", () => {
+test("flapping entity overrides hydrate an entity selector", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = { automatic: { flapping: {
     enabled: true,
-    device_overrides: {},
+    entity_overrides: {},
   } } };
   panel._packs = [{
     id: "flapping",
     available: true,
     config_fields: [{
-      id: "device_overrides",
-      type: "device_settings_map",
-      fields: [{ id: "occurrences", default: 5 }],
+      id: "entity_overrides",
+      type: "entity_settings_map",
+      fields: [{ id: "occurrences", type: "number", default: 5 }],
     }],
   }];
-  panel._automaticMapDraft = { flapping: { device_overrides: [{
+  panel._automaticMapDraft = { flapping: { entity_overrides: [{
     target_id: "", occurrences: 5,
   }] } };
   panel.shadowRoot.querySelector = () => null;
@@ -2950,16 +2950,16 @@ test("flapping device overrides hydrate a device selector", () => {
 
   panel._hydrateAutomaticControls();
 
-  assert.equal(selector[0], "auto-flapping-device_overrides-target-0");
-  assert.deepEqual(selector[1], { device: {} });
-  selector[3]("device-id");
+  assert.equal(selector[0], "auto-flapping-entity_overrides-target-0");
+  assert.deepEqual(selector[1], { entity: {} });
+  selector[3]("sensor.test");
   assert.equal(
-    panel._automaticMapDraft.flapping.device_overrides[0].target_id,
-    "device-id",
+    panel._automaticMapDraft.flapping.entity_overrides[0].target_id,
+    "sensor.test",
   );
 });
 
-test("flapping saves global and per-device values without a pack delay", async () => {
+test("flapping saves global and per-entity values without a pack delay", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   const fields = [
@@ -2979,7 +2979,7 @@ test("flapping saves global and per-device values without a pack delay", async (
           unavailable: { occurrences: null, window: null, recovery: null },
           connectivity: { occurrences: null, window: null, recovery: null },
         },
-        device_overrides: {},
+        entity_overrides: {},
       },
     },
   };
@@ -2994,7 +2994,14 @@ test("flapping saves global and per-device values without a pack delay", async (
         type: "pack_settings_map",
         fields: sourceFields,
       },
-      { id: "device_overrides", type: "device_settings_map", fields },
+      {
+        id: "entity_overrides",
+        type: "entity_settings_map",
+        fields: [
+          { id: "enabled", type: "boolean", default: true },
+          ...fields,
+        ],
+      },
     ],
   }];
   panel._automaticMapDraft = {
@@ -3006,8 +3013,9 @@ test("flapping saves global and per-device values without a pack delay", async (
         unavailable: { occurrences: null, window: 120, recovery: null },
         battery: { occurrences: 3, window: 600, recovery: 90 },
       },
-      device_overrides: [{
-        target_id: "a".repeat(32), occurrences: 2, window: 60, recovery: 30,
+      entity_overrides: [{
+        target_id: "sensor.test", enabled: true,
+        occurrences: 2, window: 60, recovery: 30,
       }],
     },
   };
@@ -3019,7 +3027,17 @@ test("flapping saves global and per-device values without a pack delay", async (
     "#auto-flapping-recovery": { value: "300" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
-  panel.shadowRoot.querySelectorAll = () => [];
+  panel.shadowRoot.querySelectorAll = (selector) => selector === "[data-pack-setting-toggle]"
+    ? [{
+      checked: false,
+      dataset: {
+        packSettingToggle: "flapping",
+        packField: "entity_overrides",
+        packIndex: "0",
+        settingId: "enabled",
+      },
+    }]
+    : [];
   let call;
   panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
 
@@ -3035,8 +3053,8 @@ test("flapping saves global and per-device values without a pack delay", async (
       unavailable: { occurrences: null, window: 120, recovery: null },
       battery: { occurrences: 3, window: 600, recovery: 90 },
     },
-    device_overrides: {
-      ["a".repeat(32)]: { occurrences: 2, window: 60, recovery: 30 },
+    entity_overrides: {
+      "sensor.test": { enabled: false, occurrences: 2, window: 60, recovery: 30 },
     },
   });
   assert.equal(Object.hasOwn(call.config.automatic.flapping, "delay"), false);
@@ -4977,21 +4995,23 @@ test("clear history stays disabled after returning to an empty history tab", () 
 });
 
 
-test("mobile configuration pairs inputs with removal actions without changing desktop grids", () => {
+test("configuration rows stay grouped and responsive on mobile", () => {
   const Panel = customElements.get("alert-manager-panel");
   const styles = compactCss(new Panel()._styles());
   const mobile = styles.slice(styles.indexOf("@media(max-width:700px)"));
   assert.match(mobile, /\.delay-row,\.pack-map-row\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\);align-items:center/);
-  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:contents/);
-  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{align-self:end;margin-bottom:4px/);
+  assert.match(mobile, /\.pack-settings-row>\.pack-settings-values\{display:grid;grid-column:1/);
+  assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:2;grid-row:3;align-self:end;margin-bottom:4px/);
   assert.match(mobile, /@container\(min-width:390px\)/);
   assert.match(mobile, /\.fields\.configuration-drawer-fields \.pack-settings-row>\.pack-target-field\{grid-column:1\s*\/\s*-1;min-width:0/);
 
-  assert.match(mobile, /\.pack-number-row,\.pack-settings-row,\.delay-row\{[^}]*border:1px solid var\(--divider-color\)/);
+  assert.match(mobile, /\.pack-number-row\{[^}]*border:1px solid var\(--divider-color\)/);
   assert.match(mobile, /\.pack-number-row ha-input::part\(wa-hint\),\.pack-settings-row ha-input::part\(wa-hint\)\{min-height:0;?\}/);
   assert.doesNotMatch(mobile, /ha-input::part\(wa-hint\)[^{]*\{[^}]*(?:display:none|[;{]height:0;)/);
 
   assert.match(styles, /\.pack-map-row\{[^}]*grid-template-columns:minmax\(180px,1fr\) minmax\(120px,180px\) auto/);
+  assert.match(styles, /\.delay-row\{[^}]*border:1px solid var\(--divider-color,#ddd\)/);
+  assert.match(styles, /\.battery-threshold-row\{[^}]*grid-template-columns:minmax\(240px,1fr\) minmax\(96px,130px\) auto/);
 });
 
 

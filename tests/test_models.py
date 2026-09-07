@@ -761,15 +761,16 @@ def test_pack_declared_device_number_map_is_strictly_validated():
         )
 
 
-def test_pack_declared_device_settings_map_is_strictly_validated():
-    """Structured device overrides require every bounded pack setting."""
-    device_id = "a" * 32
+def test_pack_declared_entity_settings_map_is_strictly_validated():
+    """Structured entity overrides require every declared pack setting."""
+    entity_id = "sensor.test"
     normalized = validate_config(
         {
             "automatic": {
                 "flapping": {
-                    "device_overrides": {
-                        device_id: {
+                    "entity_overrides": {
+                        entity_id: {
+                            "enabled": True,
                             "occurrences": "3",
                             "window": "600",
                             "recovery": "120",
@@ -779,16 +780,42 @@ def test_pack_declared_device_settings_map_is_strictly_validated():
             }
         }
     )
-    assert normalized["automatic"]["flapping"]["device_overrides"] == {
-        device_id: {"occurrences": 3, "window": 600, "recovery": 120}
+    assert normalized["automatic"]["flapping"]["entity_overrides"] == {
+        entity_id: {
+            "enabled": True,
+            "occurrences": 3,
+            "window": 600,
+            "recovery": 120,
+        }
     }
     with pytest.raises(ValueError, match="Missing .* recovery"):
         validate_config(
             {
                 "automatic": {
                     "flapping": {
-                        "device_overrides": {
-                            device_id: {"occurrences": 3, "window": 600}
+                        "entity_overrides": {
+                            entity_id: {
+                                "enabled": True,
+                                "occurrences": 3,
+                                "window": 600,
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    with pytest.raises(ValueError, match="invalid entity id"):
+        validate_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "entity_overrides": {
+                            "invalid": {
+                                "enabled": False,
+                                "occurrences": 3,
+                                "window": 600,
+                                "recovery": 120,
+                            }
                         }
                     }
                 }
