@@ -146,6 +146,33 @@ def test_notification_title_prefix(hass, entry, kind, icon, language, count) -> 
     assert len(message.splitlines()) == count
 
 
+@pytest.mark.parametrize(
+    ("kind", "count", "expected_url"),
+    [
+        ("resolved", 1, "/alert-manager/history"),
+        ("resolved", 2, "/alert-manager/history"),
+        ("started", 1, "/alert-manager?alert=unavailable%3Asensor.test_0"),
+        ("started", 2, "/alert-manager"),
+        ("reminder", 1, "/alert-manager?alert=unavailable%3Asensor.test_0"),
+        ("reminder", 2, "/alert-manager"),
+    ],
+)
+def test_notification_batch_url(kind, count, expected_url) -> None:
+    """Route every resolution to history and preserve live alert deep links."""
+    items = [
+        _NotificationItem.from_event(
+            _event_data(
+                f"unavailable:sensor.test_{index}",
+                entity_id=f"sensor.test_{index}",
+                device_id=None,
+            )
+        )
+        for index in range(count)
+    ]
+
+    assert NotificationRuntime._batch_url(kind, items) == expected_url
+
+
 def test_start_resolved_inside_batch_window_is_cancelled(hass, entry) -> None:
     """A transient condition creates neither a start nor a resolved delivery."""
 

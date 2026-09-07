@@ -837,10 +837,10 @@ class NotificationRuntime:
     @staticmethod
     def _batch_url(kind: str, items: list[_NotificationItem]) -> str:
         """Return a stable panel URL, specializing only unambiguous live alerts."""
-        if kind != "resolved" and len(items) == 1:
-            return f"/alert-manager?alert={quote(items[0].alert_id, safe='')}"
-        if kind == "resolved" and len(items) == 1:
+        if kind == "resolved":
             return "/alert-manager/history"
+        if len(items) == 1:
+            return f"/alert-manager?alert={quote(items[0].alert_id, safe='')}"
         return "/alert-manager"
 
     def _profile(self, profile_id: str) -> dict[str, Any]:

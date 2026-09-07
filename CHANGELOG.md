@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.4 — 7 septembre 2026
+
+### Corrigé
+
+- Les notifications de résolution ouvrent l’historique, y compris lorsqu’elles
+  regroupent plusieurs alertes résolues.
+- Configuration du flapping : nombre d’occurrences placé avant les durées et
+  champs de même largeur ; champ d’occurrences plus compact pour les automatisations.
+- Cohérence : suppression des copies inutiles du rapport dans l’event loop.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.3 — 7 septembre 2026
 
 ### Corrigé
