@@ -17,7 +17,6 @@ It can also look for **broken entity references in your Home Assistant configura
 Typical examples:
 
 - an entity has been `unavailable` for more than 15 minutes;
-- a device repeatedly disconnects and reconnects, even when each outage is brief;
 - a battery drops below 15%;
 - a connectivity sensor stays `off`;
 - a UniFi device stays `not_home`;
@@ -34,8 +33,7 @@ The important difference from a simple notification is that a problem **remains 
 
 - **A central alert dashboard** for active, upcoming and acknowledged problems.
 - **Automatic monitoring** for common Home Assistant failures such as unavailable entities, connectivity, low batteries, UniFi devices, and failed automations or scripts.
-- **Flapping detection** to catch repeated short anomalies that ordinary delays would otherwise filter out.
-- **Powerful custom rules** for states, attributes, ranges, inactivity and Jinja conditions, with a **built-in rule tester** to check a draft against current entity values.
+- **Powerful custom rules** for states, attributes, ranges, inactivity and Jinja conditions.
 - **Configuration coherence checks** to find references to missing entities and jump back to the affected configuration when possible.
 - **Alert acknowledgement and history** so temporary handling does not hide the real state of your installation.
 - **Optional notification profiles** for new alerts, reminders and recoveries, with batching and label-based exceptions.
@@ -137,15 +135,7 @@ Each pack can carry Home Assistant labels (`automatic.<pack>.label_ids` in YAML)
 
 Automation and script errors have no delay by default. A successful completed execution resolves the alert. For selected automations or scripts, you can require several consecutive failed execution cycles before raising it.
 
-### Flapping: repeated short anomalies
-
-The **Flapping** pack detects recurring anomalies separately for each source and entity. An occurrence is a newly detected anomaly, even if it clears before the source’s normal alert delay expires. A condition that stays continuously abnormal is not counted repeatedly.
-
-The pack is **disabled by default**. Its default settings are **5 occurrences within 1 hour**, with recovery after **30 minutes without another occurrence**. Unavailable entities and connectivity are the preselected source packs; the selected source packs must also be enabled.
-
-Configure the occurrence threshold, detection window and recovery delay globally, with optional settings per source pack and overrides per entity. Custom rules can participate by enabling their flapping option, with optional rule-specific settings. The Flapping pack must be enabled as well.
-
-When the threshold is reached, a separate flapping alert becomes active immediately, without an additional trigger delay. Each new occurrence restarts its recovery timer. This timer measures time since the last occurrence, not how long the original condition has remained normal.
+The Flapping pack detects repeated short anomalies per source and entity, even if they clear before the normal trigger delay. It is disabled by default: 5 occurrences within 1 hour trigger a separate alert, which resolves after 30 minutes without another occurrence. These settings can be adjusted globally, per source pack, per entity or per custom rule. Unavailable entities and connectivity are the preselected sources; source packs must be enabled, and custom rules can participate through their flapping option.
 
 ## Custom rules
 
@@ -167,19 +157,13 @@ Example use cases include abnormal temperatures, unexpected power consumption, b
 
 Rules can be edited visually or in YAML and duplicated from the panel. One rule can monitor up to 50 entities, and one configuration can contain up to 500 rules. Jinja-only YAML rules use `source: jinja`; existing `source: none` rules are migrated automatically.
 
+The **Test** button in the visual editor evaluates the draft against current values and shows, for each entity, the value read, comparison and Jinja condition results, rendered message and any errors. It does not save anything, change alerts or their timers, or send notifications. For a variation rule without a compatible baseline, the result remains indeterminate.
+
 Rules can carry Home Assistant labels (`label_ids` in YAML), displayed in the table. For notifications, these complement entity and device labels and apply to both profile filters and label exceptions.
 
 Duration fields throughout the panel use Home Assistant’s native duration selector (hours, minutes and seconds), including optional overrides and notification reminders. Configuration and YAML continue to store seconds; clearing an optional duration retains its inherited/disabled behavior.
 
 On desktop, the rule editor and configuration drawers can be resized in width. They adapt to mobile screens, and closing a modified editor asks for confirmation before discarding changes.
-
-### Rule and expression tester
-
-Use **Test** in the visual rule editor to evaluate the current draft against live Home Assistant values, including a new rule or unsaved changes. The result is shown for each entity: the value read, comparison and Jinja results, rendered message, and any evaluation error.
-
-This is a **dry run**: it does not save the rule, create or resolve alerts, send notifications, alter history, or change running timers. A matching condition is not a simulation of its trigger delay elapsing.
-
-For variation rules, the tester can read an existing compatible baseline but never creates or resets one. Without a baseline, the result is indeterminate. Missing entities or attributes and Jinja rendering errors are reported so the expression can be corrected before saving.
 
 ### Examples
 

@@ -17,7 +17,6 @@ Il peut aussi rechercher les **références d’entités cassées dans votre con
 Quelques exemples :
 
 - une entité est `unavailable` depuis plus de 15 minutes ;
-- un appareil se déconnecte et se reconnecte à répétition, même si chaque coupure est brève ;
 - une batterie passe sous 15 % ;
 - un capteur de connectivité reste à `off` ;
 - un appareil UniFi reste `not_home` ;
@@ -34,8 +33,7 @@ La différence importante avec une simple notification : le problème **reste vi
 
 - **Un tableau de bord central** pour les alertes actives, à venir et acquittées.
 - **Une surveillance automatique** des problèmes courants : entités indisponibles, connectivité, batteries faibles, appareils UniFi et automatisations ou scripts en erreur.
-- **La détection du flapping** pour repérer les anomalies brèves mais répétées que les temporisations habituelles pourraient masquer.
-- **Des règles personnalisées puissantes** pour les états, attributs, plages de valeurs, absences de changement et conditions Jinja, avec un **testeur intégré** pour vérifier un brouillon sur les valeurs actuelles des entités.
+- **Des règles personnalisées puissantes** pour les états, attributs, plages de valeurs, absences de changement et conditions Jinja.
 - **Une analyse de cohérence de la configuration** pour retrouver les références vers des entités disparues et revenir vers la configuration concernée lorsque c’est possible.
 - **L’acquittement et l’historique** pour suivre un problème sans perdre de vue son état réel.
 - **Des profils de notification facultatifs** pour les nouvelles alertes, rappels et retours à la normale, avec regroupement et exceptions par étiquette.
@@ -137,15 +135,7 @@ Chaque pack peut porter des étiquettes Home Assistant (`automatic.<pack>.label_
 
 La surveillance des erreurs d’automatisation et de script n’a aucun délai par défaut. Une exécution suivante terminée avec succès résout l’alerte. Pour certaines automatisations ou certains scripts, il est possible d’exiger plusieurs cycles d’exécution consécutifs en erreur avant de la déclencher.
 
-### Flapping : anomalies brèves mais répétées
-
-Le pack **Flapping** détecte les anomalies récurrentes séparément pour chaque source et entité. Une occurrence correspond à une nouvelle détection d’anomalie, même si elle disparaît avant la fin du délai habituel de déclenchement de la source. Une condition qui reste anormale en continu n’est pas comptée plusieurs fois.
-
-Le pack est **désactivé par défaut**. Ses réglages par défaut sont **5 occurrences en 1 heure**, avec un retour à la normale après **30 minutes sans nouvelle occurrence**. Les packs Entités indisponibles et Connectivité sont présélectionnés comme sources ; les packs sources sélectionnés doivent également être activés.
-
-Réglez le nombre d’occurrences, la fenêtre de détection et le délai de retour à la normale globalement, avec des réglages facultatifs par pack source et des configurations particulières par entité. Les règles personnalisées peuvent participer en activant leur option de flapping, avec des réglages propres à la règle si nécessaire. Le pack Flapping doit lui aussi être activé.
-
-Lorsque le seuil est atteint, une alerte de flapping distincte devient immédiatement active, sans délai de déclenchement supplémentaire. Chaque nouvelle occurrence relance son délai de retour à la normale. Ce délai mesure le temps écoulé depuis la dernière occurrence, et non la durée pendant laquelle la condition d’origine est restée normale.
+Le pack Flapping détecte les anomalies brèves mais répétées par source et entité, même si elles disparaissent avant le délai de déclenchement habituel. Il est désactivé par défaut : 5 occurrences en 1 heure déclenchent une alerte distincte, résolue après 30 minutes sans nouvelle occurrence. Ces réglages sont ajustables globalement, par pack source, par entité ou par règle personnalisée. Les packs Entités indisponibles et Connectivité sont présélectionnés comme sources ; les packs sources doivent être activés et les règles personnalisées peuvent participer via leur option de flapping.
 
 ## Règles personnalisées
 
@@ -167,19 +157,13 @@ Cela couvre par exemple les températures anormales, les consommations électriq
 
 Les règles peuvent être éditées visuellement ou en YAML et dupliquées depuis le panneau. Une règle peut surveiller jusqu’à 50 entités et une configuration peut contenir jusqu’à 500 règles. En YAML, les règles entièrement basées sur Jinja utilisent `source: jinja` ; les anciennes règles en `source: none` sont migrées automatiquement.
 
+Le bouton **Tester** de l’éditeur visuel évalue le brouillon sur les valeurs actuelles et affiche, pour chaque entité, la valeur lue, les résultats de comparaison et de condition Jinja, le message rendu et les erreurs éventuelles. Le test n’enregistre rien, ne modifie pas les alertes ou leurs temporisations et n’envoie pas de notification. Pour une règle de variation sans référence compatible, le résultat reste indéterminé.
+
 Les règles peuvent porter des étiquettes Home Assistant (`label_ids` en YAML), affichées dans le tableau. Pour les notifications, elles complètent les étiquettes de l’entité et de l’appareil : elles servent au filtre du profil et aux exceptions par étiquette.
 
 Les champs de durée du panneau utilisent le sélecteur natif de Home Assistant (heures, minutes et secondes), y compris les réglages particuliers facultatifs et les rappels de notification. La configuration et le YAML conservent les valeurs en secondes ; vider une durée facultative conserve son comportement d’héritage ou de désactivation.
 
 Sur ordinateur, la largeur des volets de règles et de configuration est redimensionnable. Ils s’adaptent aux écrans mobiles et demandent confirmation avant d’abandonner les modifications à la fermeture.
-
-### Testeur de règle et d’expression
-
-Utilisez **Tester** dans l’éditeur visuel pour évaluer le brouillon sur les valeurs actuelles de Home Assistant, y compris une nouvelle règle ou des modifications non enregistrées. Le résultat est détaillé pour chaque entité : valeur lue, résultat de la comparaison et de la condition Jinja, message rendu et éventuelles erreurs d’évaluation.
-
-Ce test est **sans effet sur les alertes** : il n’enregistre pas la règle, ne crée ni ne résout d’alerte, n’envoie aucune notification et ne modifie ni l’historique ni les temporisations en cours. Une condition vérifiée ne simule pas l’écoulement de son délai de déclenchement.
-
-Pour les règles de variation, le testeur peut lire une référence existante compatible, mais ne la crée ni ne la réinitialise. Sans référence, le résultat est indéterminé. Les entités ou attributs manquants et les erreurs de rendu Jinja sont signalés pour corriger l’expression avant l’enregistrement.
 
 ### Exemples
 
