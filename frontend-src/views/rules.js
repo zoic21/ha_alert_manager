@@ -1,3 +1,4 @@
+import { revealAddedRow } from "../components/configuration-drawer.js";
 import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
 import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
@@ -482,6 +483,7 @@ export async function handleRulesAction(action, button) {
     this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleConditionSection();
+    revealAddedRow(this.shadowRoot, ".rule-value-row:last-child");
     return true;
   }
   if (action === "remove-rule-value") {

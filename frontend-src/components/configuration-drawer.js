@@ -134,17 +134,30 @@ export function renderConfigurationDrawer({
   });
 }
 
+export function revealAddedRow(root, selector) {
+  if (!selector) return;
+  const row = root?.querySelector?.(selector);
+  if (!row) return;
+  const reveal = () => {
+    if (row.isConnected !== false) row.scrollIntoView?.({ block: "nearest" });
+  };
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame(reveal);
+  } else reveal();
+}
+
 function restoreDrawerScroll(scroller, scrollTop, revealSelector) {
   if (!scroller) return;
   scroller.scrollTop = scrollTop;
-  if (typeof globalThis.requestAnimationFrame !== "function") return;
+  if (typeof globalThis.requestAnimationFrame !== "function") {
+    revealAddedRow(scroller, revealSelector);
+    return;
+  }
   globalThis.requestAnimationFrame(() => {
     scroller.scrollTop = scrollTop;
     globalThis.requestAnimationFrame(() => {
       scroller.scrollTop = scrollTop;
-      if (revealSelector) {
-        scroller.querySelector?.(revealSelector)?.scrollIntoView?.({ block: "nearest" });
-      }
+      revealAddedRow(scroller, revealSelector);
     });
   });
 }

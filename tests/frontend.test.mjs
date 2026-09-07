@@ -5007,7 +5007,7 @@ test("configuration rows stay grouped and responsive on mobile", () => {
   assert.match(mobile, /\.pack-settings-row \.pack-setting-field>ha-input\{width:0;min-width:100%/);
   assert.match(mobile, /\.pack-settings-row \.pack-duration-setting\{width:188px/);
   assert.match(mobile, /\.pack-settings-row\{padding-inline:8px/);
-  assert.match(styles, /\.notification-exception\{scroll-margin-block:12px/);
+  assert.match(styles, /\.notification-exception,\.pack-map-row,\.delay-row,\.rule-value-row,\.ignored-reference-chips>:last-child\{scroll-margin-block:12px/);
   assert.match(mobile, /\.pack-settings-row>\.configuration-remove\{grid-column:3;grid-row:1;align-self:end;margin:0 0 4px/);
   assert.match(styles, /@container\(min-width:420px\)/);
   assert.doesNotMatch(mobile, /\.notification-exception-grid[^{}]*\{[^}]*grid-template-columns:1fr/);

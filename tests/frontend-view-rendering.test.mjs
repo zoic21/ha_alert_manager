@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderAutomatic } from "../frontend-src/views/automatic.js";
+import { handleAutomaticAction, renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
 import {
   mountConfigurationDrawer, renderConfigurationDrawer, renderConfigurationRemove,
-  replaceConfigurationDrawer,
+  replaceConfigurationDrawer, revealAddedRow,
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
@@ -268,6 +268,8 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
     animationFrames.shift()();
     assert.deepEqual(revealed, []);
     replaceConfigurationDrawer(root, template.markup, '[data-notification-exception="1"]');
+    assert.deepEqual(revealed, []);
+    animationFrames.shift()();
     assert.deepEqual(revealed, []);
     animationFrames.shift()();
     assert.deepEqual(revealed, []);
@@ -710,3 +712,63 @@ test("configuration row removal uses an accessible shared trash icon", () => {
   assert.match(markup, /<ha-icon icon="mdi:delete-outline"><\/ha-icon>/);
   assert.doesNotMatch(markup, /<ha-button/);
 });
+
+
+test("added rows reveal after rendering and ignore rows removed before the frame", () => {
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const frames = [];
+  const calls = [];
+  const row = { isConnected: true, scrollIntoView: options => calls.push(options) };
+  const root = { querySelector: selector => selector === ".new-row" ? row : null };
+  globalThis.requestAnimationFrame = callback => frames.push(callback);
+  try {
+    revealAddedRow(root, ".new-row");
+    assert.deepEqual(calls, []);
+    frames.shift()();
+    assert.deepEqual(calls, [{ block: "nearest" }]);
+    revealAddedRow(root, ".new-row");
+    row.isConnected = false;
+    frames.shift()();
+    assert.equal(calls.length, 1);
+    revealAddedRow(root, ".missing");
+    revealAddedRow(root);
+    assert.equal(frames.length, 0);
+  } finally {
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  }
+});
+
+
+for (const [packId, fieldId, fieldType] of [
+  ["battery", "device_thresholds", "device_number_map"],
+  ["execution_errors", "failure_thresholds", "entity_number_map"],
+  ["flapping", "entity_overrides", "entity_settings_map"],
+]) {
+  test(`${packId} adding a configuration reveals the newly appended row`, async () => {
+    const rows = [{ target_id: "existing", value: 4 }];
+    const calls = [];
+    const addedRow = { scrollIntoView: options => calls.push(options) };
+    const drawer = { querySelector: selector => {
+      assert.equal(selector, ".pack-map-row:last-child");
+      assert.equal(rows.length, 2);
+      return addedRow;
+    } };
+    const panel = {
+      _packs: [{ id: packId, config_fields: [{ id: fieldId, type: fieldType, fields: [] }] }],
+      _automaticMapDraft: { [packId]: { [fieldId]: rows } },
+      _ensureAutomaticDraft() {},
+      _markConfigurationDirty() {},
+      _render() {},
+      shadowRoot: {
+        querySelector: selector => selector === ".configuration-drawer" ? drawer : null,
+        querySelectorAll: () => [],
+      },
+    };
+    await handleAutomaticAction.call(panel, "add-pack-map-row", {
+      dataset: { packId, fieldId },
+    });
+    assert.equal(rows[0].target_id, "existing");
+    assert.equal(rows[1].target_id, "");
+    assert.deepEqual(calls, [{ block: "nearest" }]);
+  });
+}

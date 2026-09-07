@@ -2,6 +2,20 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.10 — 7 septembre 2026
+
+### Corrigé
+
+- Défilement automatique vers les nouvelles lignes de configuration : seuils
+  de batterie, seuils d’erreur des automatisations et scripts, configurations
+  de flapping et délais particuliers par entité.
+- Même comportement pour l’ajout de valeurs multiples aux règles et de
+  références ignorées de cohérence, en complément des exceptions de notification.
+- Marge de 12 px autour des éléments révélés et défilement après restauration
+  de la position du volet, sur mobile comme sur ordinateur.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.9 — 7 septembre 2026
 
 ### Corrigé

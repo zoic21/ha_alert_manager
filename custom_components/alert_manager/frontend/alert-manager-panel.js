@@ -2827,17 +2827,30 @@ function renderConfigurationDrawer({
   });
 }
 
+function revealAddedRow(root, selector) {
+  if (!selector) return;
+  const row = root?.querySelector?.(selector);
+  if (!row) return;
+  const reveal = () => {
+    if (row.isConnected !== false) row.scrollIntoView?.({ block: "nearest" });
+  };
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame(reveal);
+  } else reveal();
+}
+
 function restoreDrawerScroll(scroller, scrollTop, revealSelector) {
   if (!scroller) return;
   scroller.scrollTop = scrollTop;
-  if (typeof globalThis.requestAnimationFrame !== "function") return;
+  if (typeof globalThis.requestAnimationFrame !== "function") {
+    revealAddedRow(scroller, revealSelector);
+    return;
+  }
   globalThis.requestAnimationFrame(() => {
     scroller.scrollTop = scrollTop;
     globalThis.requestAnimationFrame(() => {
       scroller.scrollTop = scrollTop;
-      if (revealSelector) {
-        scroller.querySelector?.(revealSelector)?.scrollIntoView?.({ block: "nearest" });
-      }
+      revealAddedRow(scroller, revealSelector);
     });
   });
 }
@@ -5469,6 +5482,7 @@ async function handleRulesAction(action, button) {
     this._clearRuleTestResult();
     this._ruleDirty = true;
     this._refreshRuleConditionSection();
+    revealAddedRow(this.shadowRoot, ".rule-value-row:last-child");
     return true;
   }
   if (action === "remove-rule-value") {
@@ -5913,10 +5927,11 @@ function captureAutomaticConfigurationValues() {
   }
 }
 
-function refreshAutomaticConfigurationDrawer() {
+function refreshAutomaticConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#automatic-form");
   if (!form) {
     this._render();
+    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
     return;
   }
   replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
@@ -5928,7 +5943,7 @@ function refreshAutomaticConfigurationDrawer() {
     useBottomSheet: this._useNativeBottomSheet(),
     renderNumberField: (...args) => this._numberField(...args),
     t: (key, replacements) => this._t(key, replacements),
-  }));
+  }), revealSelector);
   this._hydrateSelectors();
   this._decorateActionIcons();
   this._refreshUiState();
@@ -6092,7 +6107,7 @@ async function handleAutomaticAction(action, button) {
       }
       this._markConfigurationDirty("automatic");
     }
-    refreshAutomaticConfigurationDrawer.call(this);
+    refreshAutomaticConfigurationDrawer.call(this, rows ? ".pack-map-row:last-child" : undefined);
     return true;
   }
   if (action === "remove-pack-map-row") {
@@ -6649,6 +6664,7 @@ function refreshSettingsConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#settings-form");
   if (!form) {
     this._render();
+    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
     return;
   }
   replaceConfigurationDrawer(this.shadowRoot, renderSettingsConfigurationDrawer({
@@ -6729,8 +6745,12 @@ async function handleSettingsAction(action, button) {
     return true;
   }
   if (action === "add-ignored-reference") {
+    const previousCount = this._settingsDraft?.coherence_ignored_entity_references?.length ?? 0;
     if (this._commitIgnoredReferenceInput()) this._notice = null;
     this._render();
+    if ((this._settingsDraft?.coherence_ignored_entity_references?.length ?? 0) > previousCount) {
+      revealAddedRow(this.shadowRoot, ".ignored-reference-chips > :last-child");
+    }
     return true;
   }
   if (action === "export-config") {
@@ -6746,7 +6766,7 @@ async function handleSettingsAction(action, button) {
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
     this._markConfigurationDirty("settings");
-    refreshSettingsConfigurationDrawer.call(this);
+    refreshSettingsConfigurationDrawer.call(this, ".delay-row:last-child");
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }
@@ -7360,8 +7380,14 @@ const settingsStyles = `
   .notification-exceptions-header {
     align-items: flex-start;
   }
-  .notification-exception {
+  .notification-exception,
+  .pack-map-row,
+  .delay-row,
+  .rule-value-row,
+  .ignored-reference-chips > :last-child {
     scroll-margin-block: 12px;
+  }
+  .notification-exception {
     display: grid;
     gap: 12px;
     padding: 12px;

@@ -258,8 +258,14 @@ export const settingsStyles = `
   .notification-exceptions-header {
     align-items: flex-start;
   }
-  .notification-exception {
+  .notification-exception,
+  .pack-map-row,
+  .delay-row,
+  .rule-value-row,
+  .ignored-reference-chips > :last-child {
     scroll-margin-block: 12px;
+  }
+  .notification-exception {
     display: grid;
     gap: 12px;
     padding: 12px;

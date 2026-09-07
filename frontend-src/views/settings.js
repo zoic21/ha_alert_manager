@@ -14,6 +14,7 @@ import {
   renderConfigurationDrawer,
   renderConfigurationRemove,
   replaceConfigurationDrawer,
+  revealAddedRow,
 } from "../components/configuration-drawer.js";
 import {
   cloneNotificationProfile,
@@ -565,6 +566,7 @@ export function refreshSettingsConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#settings-form");
   if (!form) {
     this._render();
+    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
     return;
   }
   replaceConfigurationDrawer(this.shadowRoot, renderSettingsConfigurationDrawer({
@@ -645,8 +647,12 @@ export async function handleSettingsAction(action, button) {
     return true;
   }
   if (action === "add-ignored-reference") {
+    const previousCount = this._settingsDraft?.coherence_ignored_entity_references?.length ?? 0;
     if (this._commitIgnoredReferenceInput()) this._notice = null;
     this._render();
+    if ((this._settingsDraft?.coherence_ignored_entity_references?.length ?? 0) > previousCount) {
+      revealAddedRow(this.shadowRoot, ".ignored-reference-chips > :last-child");
+    }
     return true;
   }
   if (action === "export-config") {
@@ -662,7 +668,7 @@ export async function handleSettingsAction(action, button) {
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
     this._markConfigurationDirty("settings");
-    refreshSettingsConfigurationDrawer.call(this);
+    refreshSettingsConfigurationDrawer.call(this, ".delay-row:last-child");
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
   }

@@ -6,6 +6,7 @@ import {
   renderConfigurationDrawer,
   renderConfigurationRemove,
   replaceConfigurationDrawer,
+  revealAddedRow,
 } from "../components/configuration-drawer.js";
 
 const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
@@ -411,10 +412,11 @@ export function captureAutomaticConfigurationValues() {
   }
 }
 
-export function refreshAutomaticConfigurationDrawer() {
+export function refreshAutomaticConfigurationDrawer(revealSelector) {
   const form = this.shadowRoot?.querySelector?.("#automatic-form");
   if (!form) {
     this._render();
+    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
     return;
   }
   replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
@@ -426,7 +428,7 @@ export function refreshAutomaticConfigurationDrawer() {
     useBottomSheet: this._useNativeBottomSheet(),
     renderNumberField: (...args) => this._numberField(...args),
     t: (key, replacements) => this._t(key, replacements),
-  }));
+  }), revealSelector);
   this._hydrateSelectors();
   this._decorateActionIcons();
   this._refreshUiState();
@@ -590,7 +592,7 @@ export async function handleAutomaticAction(action, button) {
       }
       this._markConfigurationDirty("automatic");
     }
-    refreshAutomaticConfigurationDrawer.call(this);
+    refreshAutomaticConfigurationDrawer.call(this, rows ? ".pack-map-row:last-child" : undefined);
     return true;
   }
   if (action === "remove-pack-map-row") {
