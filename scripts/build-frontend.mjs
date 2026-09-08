@@ -13,6 +13,7 @@ const sourceNames = [
   "components/alert-table.js",
   "components/config-backups.js",
   "components/configuration-drawer.js",
+  "components/configuration-yaml.js",
   "components/notification-profiles.js",
   "components/rule-editor.js",
   "views/overview.js",

@@ -22,6 +22,7 @@ from custom_components.alert_manager.websocket import (
     websocket_config_import_validate,
     websocket_config_recovery_get,
     websocket_config_update,
+    websocket_configuration_field_yaml_validate,
     websocket_deleted_entities_list,
     websocket_history_clear,
     websocket_history_config_get,
@@ -331,6 +332,10 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_rules_list, {"id": 9}),
         (websocket_notification_stats_get, {"id": 27}),
         (
+            websocket_configuration_field_yaml_validate,
+            {"id": 99, "yaml": "entity_delays: {}", "field_id": "entity_delays"},
+        ),
+        (
             websocket_notification_yaml_validate,
             {"id": 29, "yaml": "[]", "profile_id": "draft"},
         ),
@@ -371,7 +376,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 23
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 24
     assert connection.results == []
 
 
@@ -711,3 +716,28 @@ def test_history_statistics_are_explicitly_requested(hass, entry, monkeypatch):
     )
     assert calls == [30]
     assert connection.results[-1][1]["statistics"]["days"] == 30
+
+
+def test_configuration_field_yaml_websocket_validates_without_saving(hass, entry):
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    for raw in ["entity_delays: {sensor.test: 120}", "entity_delays: ["]:
+        asyncio.run(
+            websocket_configuration_field_yaml_validate(
+                hass, connection, {"id": 99, "yaml": raw, "field_id": "entity_delays"}
+            )
+        )
+    assert connection.results == [(99, {"value": {"sensor.test": 120}})]
+    assert connection.errors[0][0:2] == (99, "invalid_format")
+    assert manager.config["entity_delays"] == {}
+    unauthorized = Connection(admin=False)
+    asyncio.run(
+        websocket_configuration_field_yaml_validate(
+            hass,
+            unauthorized,
+            {"id": 99, "yaml": "entity_delays: {}", "field_id": "entity_delays"},
+        )
+    )
+    assert unauthorized.errors[0][1] == "unauthorized"

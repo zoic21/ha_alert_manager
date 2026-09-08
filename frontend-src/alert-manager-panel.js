@@ -54,7 +54,8 @@ import {
   nativeRuleNameCell, nativeRuleToggleCell, openRuleEditor, refreshRulesData, renderRulesPanel,
   replaceRule, ruleTableRows, syncRuleTableEditingHighlight, toggleRule,
 } from "./views/rules.js";
-import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
+import { captureAutomaticConfigurationValues, captureAutomaticMapValues, ensureAutomaticDraft, handleAutomaticAction, hydrateAutomaticControls, refreshAutomaticConfigurationDrawer, renderAutomaticPanel, resetAutomaticDraft, saveAutomatic } from "./views/automatic.js";
+import { configurationDrawerForTab } from "./components/configuration-yaml.js";
 import {
   captureEntityDelayValues, commitIgnoredReferenceInput, ensureSettingsDraft, exportConfiguration,
   handleImportSelection, handleSettingsAction, handleSettingsInput, hydrateSettingsControls, removeIgnoredReference,
@@ -135,6 +136,7 @@ class AlertManagerPanel extends HTMLElement {
   _captureEntityDelayValues = captureEntityDelayValues; _refreshNotificationProfileUsage = refreshNotificationProfileUsage;
   _captureNotificationProfileDraft() { captureNotificationProfileDraft(this); }
   _refreshSettingsConfigurationDrawer = refreshSettingsConfigurationDrawer;
+  _refreshAutomaticConfigurationDrawer = refreshAutomaticConfigurationDrawer;
   _setEntityDelayEntity = setEntityDelayEntity;
   _refreshAlertTableData = refreshAlertTableData;
   _loadNativeDateRangePicker = loadNativeDateRangePicker;
@@ -331,7 +333,7 @@ class AlertManagerPanel extends HTMLElement {
     const activeTab = this._tabFromRoute(value);
     if (activeTab !== this._activeTab) {
       this._activeTab = activeTab;
-      this._configurationDrawer = null;
+      this._configurationDrawer = configurationDrawerForTab(this, activeTab);
       this._notice = null;
       if (this.isConnected) this._render();
       this._refreshTabData(activeTab);
@@ -648,12 +650,20 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (SIDE_DRAWER_OPEN_ACTIONS.has(action)
+      && ["settings", "automatic"].includes(this._configurationDrawer?.kind)
+      && this._configurationDrawer.mode === "yaml") {
+      for (const handler of ACTION_HANDLERS) {
+        if (await handler.call(this, "close-configuration-drawer", button, event)) break;
+      }
+      if (this._configurationDrawer) return;
+    }
     if (this._narrow && SIDE_DRAWER_OPEN_ACTIONS.has(action)) {
       await this._loadNativeBottomSheet();
     }
     if (action === "tab") {
       this._activeTab = button.dataset.tab;
-      this._configurationDrawer = null;
+      this._configurationDrawer = configurationDrawerForTab(this, this._activeTab);
       this._notice = null;
       this._render();
       this._refreshTabData(this._activeTab);

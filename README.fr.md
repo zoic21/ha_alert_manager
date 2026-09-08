@@ -220,6 +220,8 @@ Cette page donne également accès aux 50 dernières entités supprimées encore
 
 ## Export et récupération de la configuration
 
+Chaque volet de configuration propose aussi un **mode YAML** dans son menu à trois points : réglages particuliers des packs (seuils de batterie, erreurs d’exécution et instabilité), exclusions d’entités ou d’appareils et délais par entité. Le YAML contient uniquement le champ édité dans ce volet, avec les mêmes clés que les exports de configuration et des durées en secondes. Le changement d’éditeur conserve les valeurs non enregistrées et l’ordre des listes. Un YAML invalide, des champs inconnus ou des réglages invalides bloquent l’enregistrement et le retour au mode visuel ; fermer un volet modifié demande confirmation. Utilisez **Enregistrer** pour appliquer les changements. Les volets de détail et de diagnostic en lecture seule ne sont pas modifiables.
+
 La configuration complète peut être exportée et importée en YAML. Alert Manager conserve également les trois derniers exports quotidiens valides de la configuration. Ils peuvent être téléchargés ou restaurés depuis la page Configuration.
 
 Si la configuration enregistrée ne peut pas être chargée au démarrage, Alert Manager démarre de façon sûre avec les valeurs par défaut, affiche un avertissement persistant et laisse un administrateur choisir une sauvegarde. Aucune restauration n’est effectuée silencieusement. La restauration d’une sauvegarde complète remplace la configuration actuelle, les alertes en cours et l’historique.

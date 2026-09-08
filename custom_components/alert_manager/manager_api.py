@@ -56,6 +56,7 @@ from .yaml_io import (
     dump_rule_yaml,
     import_summary,
     parse_config_yaml,
+    parse_configuration_field_yaml,
     parse_notification_profile_yaml,
     parse_rule_yaml,
     rule_to_yaml_data,
@@ -604,6 +605,14 @@ class _ApiMixin:
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
         return rule_to_yaml_data(rule)
+
+    async def async_validate_configuration_field_yaml(
+        self, raw_yaml: str, field_id: str, pack_id: str | None = None
+    ) -> Any:
+        """Validate a scoped drawer draft off the event loop; do not save it."""
+        return await self.hass.async_add_executor_job(
+            parse_configuration_field_yaml, raw_yaml, field_id, pack_id
+        )
 
     async def async_validate_notification_profile_yaml(
         self, raw_yaml: str, profile_id: str

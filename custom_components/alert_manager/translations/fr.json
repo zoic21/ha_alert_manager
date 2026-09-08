@@ -619,7 +619,10 @@
       "export": "Exporter en YAML",
       "import": "Importer un YAML",
       "import_confirm": "La configuration actuelle sera entièrement remplacée.\n\nRègles : {rules}\nPacks activés : {packs}\nDélais particuliers : {delays}\n\nContinuer ?",
-      "import_read_error": "Impossible de lire le fichier sélectionné."
+      "import_read_error": "Impossible de lire le fichier sélectionné.",
+      "yaml_help": "Seuls les réglages de ce volet sont modifiés. Les durées sont en secondes. Utilisez Enregistrer pour appliquer les changements.",
+      "yaml_invalid": "Configuration invalide : {error}",
+      "yaml_rows_invalid": "Complétez chaque ligne et supprimez les doublons avant de passer en YAML."
     },
     "success": {
       "alert_acknowledged": "Alerte acquittée",

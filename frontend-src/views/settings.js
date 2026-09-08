@@ -1,3 +1,4 @@
+import { hydrateConfigurationYaml, renderConfigurationYamlMenu, renderConfigurationYamlContent, validateConfigurationYaml } from "../components/configuration-yaml.js";
 import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { collectAutomaticChanges } from "./automatic.js";
 import {
@@ -185,7 +186,8 @@ export function renderSettingsConfigurationDrawer(context) {
     resizeLabel: t("rules.aria_resize"),
     title,
     ariaLabel: t("settings.close_configuration_aria", { name: title }),
-    content,
+    headerAction: renderConfigurationYamlMenu(configurationDrawer, t),
+    content: renderConfigurationYamlContent(configurationDrawer, content, t),
     saveAction: "save-settings",
     saveLabel: t("buttons.save"),
     busy,
@@ -280,6 +282,8 @@ export async function saveConfiguration() {
     ) return false;
 
     if (!saveSettingsChanges) return this._saveAutomatic();
+    if (saveAutomaticChanges && this._configurationDrawer?.kind === "automatic"
+      && !await validateConfigurationYaml(this)) return false;
     const automaticChanges = saveAutomaticChanges
       ? collectAutomaticChanges.call(this) : {};
     if (!automaticChanges) return false;
@@ -365,6 +369,10 @@ export async function handleImportSelection(event) {
 }
 
 export async function saveSettings(additionalChanges = {}) {
+    // Combined saves already validated the automatic YAML before collecting it.
+    // Do not await a second validation after taking that payload snapshot.
+    if (!(additionalChanges.automatic && this._configurationDrawer?.kind === "automatic")
+      && !await validateConfigurationYaml(this)) return false;
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
       this._refreshUiState();
@@ -533,6 +541,7 @@ export function setEntityDelayEntity(index, value) {
 }
 
 export function hydrateSettingsControls() {
+  hydrateConfigurationYaml(this);
   this._ensureSettingsDraft();
   this._configureSelect(
     "coherence-schedule",
@@ -620,6 +629,9 @@ export function refreshSettingsConfigurationDrawer(revealSelector) {
     t: (key, replacements) => this._t(key, replacements),
   }), revealSelector);
   this._hydrateSelectors();
+  if (this._configurationDrawer?.kind === "settings") {
+    updateSettingsConfigurationCount.call(this, this._configurationDrawer.id);
+  }
   this._refreshUiState();
 }
 

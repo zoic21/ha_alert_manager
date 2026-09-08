@@ -15,10 +15,12 @@ import yaml
 from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG
 from .models import Rule
 from .notifications import validate_notification_profiles
+from .packs import PACKS_BY_ID
 from .validation import validate_config, validate_rule_payload
 
 FORMAT_VERSION = 1
 MAX_YAML_SIZE = 1_000_000
+
 
 _RULE_YAML_KEYS = {
     "id",
@@ -110,6 +112,35 @@ def _reject_unknown(data: Mapping[str, Any], allowed: set[str], *, prefix: str) 
     unknown = set(data) - allowed
     if unknown:
         raise ValueError(f"Unknown {prefix} field: {sorted(unknown)[0]}")
+
+
+def parse_configuration_field_yaml(
+    raw_yaml: str, field_id: str, pack_id: str | None = None
+) -> Any:
+    """Validate only the field owned by a configuration drawer, without mutation."""
+    if pack_id is None:
+        if field_id not in {"excluded_entities", "excluded_devices", "entity_delays"}:
+            raise ValueError("Unsupported configuration panel")
+    else:
+        pack = PACKS_BY_ID.get(pack_id)
+        if pack is None or not any(
+            field.id == field_id and field.type.endswith("_map")
+            for field in pack.config_fields
+        ):
+            raise ValueError("Unsupported configuration panel")
+    data = _load_yaml(raw_yaml, description="Configuration")
+    if not isinstance(data, dict):
+        raise ValueError("Configuration YAML root must be an object")
+    _reject_unknown(data, {field_id}, prefix="configuration panel")
+    if field_id not in data:
+        raise ValueError(f"Missing configuration field: {field_id}")
+    candidate = data if pack_id is None else {"automatic": {pack_id: data}}
+    validated = validate_config(candidate)
+    return (
+        validated[field_id]
+        if pack_id is None
+        else validated["automatic"][pack_id][field_id]
+    )
 
 
 def rule_to_yaml_data(
