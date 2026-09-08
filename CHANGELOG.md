@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.19 — 8 septembre 2026
+
+### Corrigé
+
+- Synchronisation de la constante de version utilisée pour le cache du panneau
+  avec le manifeste et les métadonnées frontend, oubliée dans la RC18.
+- Cette version reprend toutes les corrections de la RC18.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.18 — 8 septembre 2026
 
 ### Corrigé
