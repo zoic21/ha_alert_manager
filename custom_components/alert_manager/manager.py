@@ -25,6 +25,7 @@ from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
 from .manager_state import _StateMixin
 from .manager_templates import DependencyKey, _TemplatesMixin
+from .manager_transitions import TransitionObservation, _TransitionsMixin
 from .models import AlertHistoryEntry, AlertRecord, Rule
 from .notification_runtime import NotificationRuntime
 from .notifications import NotificationManager
@@ -50,7 +51,12 @@ _STOPPING_CORE_STATES = frozenset(
 
 
 class AlertManager(
-    _RuntimeMixin, _TemplatesMixin, _ApiMixin, _RecoveryMixin, _StateMixin
+    _RuntimeMixin,
+    _TemplatesMixin,
+    _ApiMixin,
+    _RecoveryMixin,
+    _StateMixin,
+    _TransitionsMixin,
 ):
     """Own configuration, runtime records, listeners and timers."""
 
@@ -99,6 +105,8 @@ class AlertManager(
         self._pending_history: list[AlertHistoryEntry] = []
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
+        self._transition_observations: dict[str, TransitionObservation] = {}
+        self._transition_confirmed: dict[str, TransitionObservation] = {}
         self._variation_baselines: dict[str, float] = {}
         self._variation_baselines_dirty = False
         self._pack_runtime: dict[str, dict[str, Any]] = {}
@@ -391,4 +399,6 @@ class AlertManager(
                 for cancel in self._timers.values():
                     cancel()
                 self._timers.clear()
+                self._transition_observations.clear()
+                self._transition_confirmed.clear()
                 reset_pack_runtimes(self.hass)

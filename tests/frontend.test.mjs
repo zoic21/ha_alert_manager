@@ -3765,6 +3765,8 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "state", label: "État principal" },
     { value: "attribute", label: "Attribut" },
+    { value: "transition", label: "Transition" },
+    { value: "attribute_transition", label: "Transition attribut" },
     { value: "state_variation", label: "Variation de l’état principal" },
     { value: "attribute_variation", label: "Variation d’un attribut" },
     { value: "unchanged", label: "Aucun changement" },

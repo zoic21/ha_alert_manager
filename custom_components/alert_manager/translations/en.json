@@ -110,7 +110,8 @@
         "generated": "{source} {operator} {expected}{unit}{duration}",
         "jinja": "Jinja condition{duration}",
         "selected_unchanged": "{source} unchanged{duration}",
-        "unchanged": "State and attributes unchanged{duration}"
+        "unchanged": "State and attributes unchanged{duration}",
+        "transition": "{from_value} → {to_value}"
       },
       "sources": {
         "attribute": "Attribute {attribute}",
@@ -207,7 +208,12 @@
       "alert_not_found": "This alert was not found or has already ended.",
       "notification_batch_delay": "The batching delay must be an integer between 10 and 300 seconds.",
       "duration_field_range": "Check the entered durations and their limits.",
-      "duration_field_bounds": "Enter a duration between {min} and {max}."
+      "duration_field_bounds": "Enter a duration between {min} and {max}.",
+      "transition_values": "Use a non-empty text, number or boolean for each transition value.",
+      "transition_finite": "Transition numbers must be finite.",
+      "transition_unavailable": "Unknown and unavailable cannot be transition values.",
+      "transition_distinct": "Departure and arrival must differ.",
+      "transition_expiration": "Automatic resolution must be between 1 second and 365 days."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -534,7 +540,8 @@
           "entity_not_found": "The entity does not exist in Home Assistant.",
           "numeric_source_required": "The value read is not numeric, but this operator requires a number.",
           "state_unavailable": "The entity is unavailable; custom rules are not evaluated in this state.",
-          "state_unknown": "The entity state is unknown; the custom rule does not match."
+          "state_unknown": "The entity state is unknown; the custom rule does not match.",
+          "transition_required": "The current value cannot prove a transition. A real departure → arrival event is required; this test creates no alert or timer."
         },
         "status_error": "Error",
         "status_indeterminate": "Indeterminate",
@@ -560,7 +567,16 @@
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule",
       "labels": "Labels",
-      "labels_help": "Home Assistant labels added to the entity and device labels for notifications."
+      "labels_help": "Home Assistant labels added to the entity and device labels for notifications.",
+      "source_transition": "Transition",
+      "source_attribute_transition": "Transition attribute",
+      "from_value": "Departure value",
+      "to_value": "Arrival value",
+      "auto_resolve": "Automatic resolution",
+      "transition_help": "Requires an observed departure → arrival transition. The trigger delay holds the arrival value; automatic resolution starts at activation. Confirmed repeats extend it without clearing acknowledgment. No recovery notification is sent.",
+      "last_occurrence": "Last transition",
+      "resolution_reason": "Resolution reason",
+      "automatic_resolution": "Automatic expiration"
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",

@@ -110,7 +110,8 @@
         "generated": "{source} {operator} {expected}{unit}{duration}",
         "jinja": "Condition Jinja{duration}",
         "selected_unchanged": "{source} inchangé{duration}",
-        "unchanged": "État et attributs inchangés{duration}"
+        "unchanged": "État et attributs inchangés{duration}",
+        "transition": "{from_value} → {to_value}"
       },
       "sources": {
         "attribute": "Attribut {attribute}",
@@ -207,7 +208,12 @@
       "alert_not_found": "Cette alerte est introuvable ou déjà terminée.",
       "notification_batch_delay": "Le délai de groupement doit être un entier entre 10 et 300 secondes.",
       "duration_field_range": "Vérifiez les durées saisies et leurs limites.",
-      "duration_field_bounds": "Saisissez une durée entre {min} et {max}."
+      "duration_field_bounds": "Saisissez une durée entre {min} et {max}.",
+      "transition_values": "Chaque valeur de transition doit être un texte non vide, un nombre ou un booléen.",
+      "transition_finite": "Les nombres de transition doivent être finis.",
+      "transition_unavailable": "Les valeurs unknown et unavailable ne sont pas acceptées pour une transition.",
+      "transition_distinct": "Le départ et l’arrivée doivent être différents.",
+      "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -534,7 +540,8 @@
           "entity_not_found": "L’entité n’existe pas dans Home Assistant.",
           "numeric_source_required": "La valeur lue n’est pas numérique alors que cet opérateur exige un nombre.",
           "state_unavailable": "L’entité est indisponible ; les règles personnalisées ne sont pas évaluées dans cet état.",
-          "state_unknown": "L’état de l’entité est inconnu ; la règle personnalisée ne correspond pas."
+          "state_unknown": "L’état de l’entité est inconnu ; la règle personnalisée ne correspond pas.",
+          "transition_required": "La valeur actuelle ne prouve pas une transition. Un événement réel départ → arrivée est nécessaire ; ce test ne crée ni alerte ni timer."
         },
         "status_error": "Erreur",
         "status_indeterminate": "Indéterminé",
@@ -560,7 +567,16 @@
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML",
       "labels": "Étiquettes",
-      "labels_help": "Étiquettes Home Assistant ajoutées à celles de l’entité et de l’appareil pour les notifications."
+      "labels_help": "Étiquettes Home Assistant ajoutées à celles de l’entité et de l’appareil pour les notifications.",
+      "source_transition": "Transition",
+      "source_attribute_transition": "Transition attribut",
+      "from_value": "Valeur de départ",
+      "to_value": "Valeur d’arrivée",
+      "auto_resolve": "Résolution automatique",
+      "transition_help": "Nécessite une transition départ → arrivée observée. Le délai de déclenchement impose le maintien à l’arrivée ; la résolution automatique part de l’activation. Les répétitions confirmées la prolongent sans retirer l’acquittement. Aucune notification de retour à la normale.",
+      "last_occurrence": "Dernière transition",
+      "resolution_reason": "Motif de résolution",
+      "automatic_resolution": "Expiration automatique"
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",

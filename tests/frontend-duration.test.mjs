@@ -125,3 +125,20 @@ test("notification reminders serialize native durations and clearing still means
   captureNotificationProfileDraft(panel);
   assert.equal(draft.default_policy.reminder_interval, null);
 });
+
+test("transition editor preserves separate hold and expiration durations", async () => {
+  const { serializeRuleDraft, renderRuleConditionSection } = await import("../frontend-src/components/rule-editor.js");
+  const draft = { source: "attribute_transition", attribute: "mode", name: "Edge", entity_ids: ["sensor.test"], from_value: "A", to_value: "B", duration: 30, auto_resolve: 600 };
+  const form = { querySelector() { return null; }, querySelectorAll() { return []; }, elements: { namedItem(name) { return ({ auto_resolve: { value: { minutes: 10 }, dataset: { durationValue: "600" } }, duration: { value: { seconds: 30 }, dataset: { durationValue: "30" } } })[name]; } } };
+  const payload = serializeRuleDraft(captureRuleDraftFromForm(form, draft));
+  assert.equal(payload.duration, 30);
+  assert.equal(payload.auto_resolve, 600);
+  assert.equal(payload.from_value, "A");
+  assert.equal(payload.to_value, "B");
+  assert.equal(payload.attribute, "mode");
+  const html = renderRuleConditionSection({ rule: draft, t: (key) => key, renderTextField: (key) => `<ha-textfield name="${key}"></ha-textfield>`, renderNumberField: (key, label, value) => renderDurationControl(key, label, value, 1, 31536000) });
+  assert.match(html, /name="from_value"/);
+  assert.match(html, /name="to_value"/);
+  assert.match(html, /data-duration-value="600"/);
+  assert.doesNotMatch(html, /id="rule-operator"/);
+});

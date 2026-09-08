@@ -487,7 +487,10 @@ class NotificationRuntime:
                     self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                     changed = True
                     continue
-                if policy.notify_on_resolved:
+                if policy.notify_on_resolved and data.get("source") not in (
+                    "transition",
+                    "attribute_transition",
+                ):
                     self._queue_batch(profile_id, "resolved", item)
                 self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                 changed = True

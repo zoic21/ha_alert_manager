@@ -1607,3 +1607,32 @@ def test_resolved_notification_omits_old_diagnostic(
     assert message == "• sensor.test — Return to normal"
     assert item.message == old_message
     assert item.condition == "Previous failure"
+
+
+@pytest.mark.parametrize("source", ["transition", "attribute_transition"])
+def test_transition_expiration_cleans_reminders_without_recovery(hass, entry, source):
+    """Expiration stops reminders but must never claim a return to normal."""
+
+    async def scenario():
+        profile = _profile(reminder_interval=300)
+        config = validate_config({"notification_profiles": [profile]})
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, _DeliverySpy()
+        )
+        await runtime.async_setup()
+        event = {
+            **_event_data(
+                "rule:edge:sensor.test", entity_id="sensor.test", device_id=None
+            ),
+            "source": source,
+        }
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        # Model a start already sent, exercising the actual resolution branch.
+        runtime.discard_batches()
+        assert runtime._runtime["profile"]
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+        assert not runtime._runtime.get("profile")
+        assert not runtime._batch_contains("profile", "resolved", event["id"])
+        await runtime.async_unload()
+
+    asyncio.run(scenario())

@@ -43,6 +43,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `manager.py` | `AlertManager` composition root: owns configuration, records, indexes, locks, listeners, stores, and notification components; coordinates setup and shutdown. |
 | `manager_api.py` | Public queries, rule testing, YAML entry points, acknowledgement and reevaluation actions, and serialized configuration/runtime mutations with rollback. |
 | `manager_runtime.py` | Startup reconciliation, event and registry routing, coalesced entity evaluation, variation/inactivity tracking, automatic pack selection, candidate construction, and occurrence-batch dispatch. |
+| `manager_transitions.py` | Indexed custom state/attribute edges, unpersisted hold observations and confirmed repetitions; reuses alert records and lifecycle timers for automatic expiration. |
 | `manager_state.py` | Alert transitions, acknowledgement/expiry timers, pending visibility, persistence scheduling, history archiving, notification delivery facts, lifecycle events, and public snapshots. |
 | `manager_templates.py` | Jinja conditions/messages and dependency tracking, rule/configuration indexes and metadata, and source validation preventing self-monitoring. |
 | `manager_recovery.py` | Invalid-configuration recovery mode, backup scheduling/listing/downloads, and explicit restoration through the manager's import path. |

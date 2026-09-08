@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.core import State
 
-from .const import ATTRIBUTE_SOURCES, VARIATION_SOURCES
+from .const import ATTRIBUTE_SOURCES, TRANSITION_SOURCES, VARIATION_SOURCES
 from .models import Rule, extract_attribute_value, safe_float
 
 type ConditionEvaluator = Callable[[Any], tuple[bool | None, str | None]]
@@ -45,6 +45,8 @@ def evaluate_rule(
     evaluate_all_conditions: bool = False,
 ) -> RuleEvaluation:
     """Evaluate one rule/entity pair without owning any runtime state."""
+    if rule.source in TRANSITION_SOURCES:
+        return RuleEvaluation(error_code="transition_required")
     found, raw_value = rule_current_value(rule, state)
     evaluation = RuleEvaluation(raw_value=raw_value, value=raw_value)
     if not found:

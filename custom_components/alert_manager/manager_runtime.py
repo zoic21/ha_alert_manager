@@ -27,6 +27,7 @@ from .const import (
     CATEGORY_UNAVAILABLE,
     DOMAIN,
     STARTUP_RECONCILIATION_DELAY_SECONDS,
+    TRANSITION_SOURCES,
     VARIATION_SOURCES,
 )
 from .models import (
@@ -491,6 +492,15 @@ class _RuntimeMixin:
             if current is None:
                 if previous.status is not AlertStatus.ACTIVE:
                     continue
+                if (
+                    previous.details.source in TRANSITION_SOURCES
+                    and previous.expires_at is not None
+                    and now >= previous.expires_at
+                ):
+                    previous.details.condition_params = {
+                        **(previous.details.condition_params or {}),
+                        "resolution_reason": "automatic",
+                    }
                 self._pending_history.append(AlertHistoryEntry.resolved(previous, now))
                 self._fire_resolved(previous, now)
             elif (
@@ -577,6 +587,9 @@ class _RuntimeMixin:
         if not entity_id or not self._is_allowed_rule_source(entity_id):
             return
 
+        self._observe_transitions(
+            entity_id, event.data.get("old_state"), event.data.get("new_state")
+        )
         if self._update_tracking_for_state_event(entity_id, event):
             self._queued_public_refresh = True
 
@@ -1294,6 +1307,11 @@ class _RuntimeMixin:
             )
             persisted_changed |= inactivity_changed
             immediate_changed |= inactivity_changed
+        transition_changed = self._evaluate_transitions(
+            entity_id, now, emit_events=emit_events, new_occurrences=_new_occurrences
+        )
+        persisted_changed |= transition_changed
+        immediate_changed |= transition_changed
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         candidates, indeterminate_candidate_ids = (
             self._build_candidates(state) if state is not None else ({}, set())
@@ -1401,6 +1419,8 @@ class _RuntimeMixin:
 
         missing_candidate_ids = existing_ids - candidates.keys() - preserved_ids
         for alert_id in missing_candidate_ids:
+            if self._preserve_transition_record(alert_id):
+                continue
             record = self.records.get(alert_id)
             if record is not None and record.expires_at is not None:
                 pack_config = self.config["automatic"].get(record.details.type)
@@ -1721,7 +1741,7 @@ class _RuntimeMixin:
                     indeterminate_ids.add(f"{pack.id}:{entity_id}")
 
         for rule in self._rules_by_entity.get(entity_id, ()):
-            if not rule.enabled:
+            if not rule.enabled or rule.source in TRANSITION_SOURCES:
                 continue
             evaluation = self._evaluate_custom_rule(rule, state)
             alert_id = f"rule:{rule.id}:{entity_id}"
