@@ -2,6 +2,27 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0 — 8 septembre 2026
+
+### Version stable
+
+- Publication stable de la branche 2.2, intégrant toutes les évolutions et
+  corrections des versions bêta et candidates jusqu’à la RC19.
+- Profils de notification avec regroupement des envois, rappels, exceptions
+  réordonnables et accès direct aux alertes ou à leur historique. Les exceptions
+  exigent toutes les étiquettes sélectionnées ; les retours à la normale ne
+  recopient plus les anciens messages d’erreur.
+- Détection d’instabilité (flapping), testeur de règles et étiquettes sur les
+  règles personnalisées et les packs.
+- Acquittement temporaire, réévaluation et suppression des alertes historiques,
+  avec affichage des valeurs respectant la précision des entités.
+- Volets de configuration redimensionnables, formulaires mobiles plus compacts
+  et défilement automatique lors de l’ajout d’éléments.
+- Fiabilisation du démarrage, de la persistance et des notifications lors des
+  modifications de configuration, avec protection de la boucle événementielle.
+
+Aucun changement fonctionnel supplémentaire par rapport à la RC19.
+
 ## 2.2.0-rc.19 — 8 septembre 2026
 
 ### Corrigé
