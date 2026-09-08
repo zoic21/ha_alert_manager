@@ -674,7 +674,6 @@ def test_notification_yaml_roundtrip_and_executor(hass, entry, monkeypatch):
     asyncio.run(manager.async_setup())
     profile = _profile()
     profile["enabled"] = False
-    profile["notify_on_coherence"] = True
     profile["exceptions"][0]["notify_on_start"] = False
     profile["exceptions"][1]["reminder_interval"] = None
     expected = validate_config(

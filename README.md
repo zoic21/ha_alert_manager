@@ -274,8 +274,6 @@ Due reminders are grouped per profile and stop when an alert is acknowledged or 
 
 Titles distinguish **🚨 new alerts**, **🔔 reminders** and **✅ recoveries**. With a supported Home Assistant Companion target, tapping a notification opens the alert details for a single ongoing alert, the overview for several ongoing alerts, or **History** for recoveries. Generic notification delivery sends the title and message without appending a raw navigation URL.
 
-Each profile can opt into **New coherence issues** (`notify_on_coherence: true` in YAML, disabled by default). Checks started by the coherence button or the automatic schedule send one summary containing only newly detected issues, with a link to Coherence on compatible targets. Profile labels and exceptions do not apply. Checks started from the Coherence page update the comparison report silently. The first scan treats its findings as new; a problem that disappears and later returns is new again. Unreadable or skipped sources retain their previous comparison baseline. Concurrent requests share the first caller’s scan and origin. Successful deliveries count in profile usage; no alert or reminder is created.
-
 ### Per-alert notification details
 
 Each profile shows its successful sends for the current hour and previous 23 hours (an approximate 24-hour window), since integration startup. These counters are kept only in memory and reset on restart/reload. A grouped send counts once even with several targets; tests and complete failures are excluded.

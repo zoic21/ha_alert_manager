@@ -43,4 +43,4 @@ class AlertManagerCoherenceButton(ButtonEntity):
     async def async_press(self) -> None:
         """Run the same scan exposed by the Alert Manager panel."""
         await async_require_admin(self.hass, getattr(self, "_context", None))
-        await async_run_coherence_scan(self.hass, origin="entity")
+        await async_run_coherence_scan(self.hass)
