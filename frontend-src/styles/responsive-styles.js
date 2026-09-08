@@ -1,4 +1,24 @@
 export const responsiveStyles = `
+  :host([narrow]) .history-panel .history-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  :host([narrow]) .history-panel .history-page-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    width: 100%;
+    gap: 8px;
+  }
+  :host([narrow]) .history-panel .history-page-actions ha-button {
+    min-width: 0;
+  }
+  :host([narrow]) .history-panel .history-page-actions ha-button::part(base) {
+    padding-inline: 8px;
+  }
+  :host([narrow]) .history-panel .history-page-actions ha-button::part(label) {
+    white-space: normal;
+  }
+
   :host([narrow]) .history-statistics-banner,
   :host([narrow]) .history-statistics-ranking {
     width: 100%;

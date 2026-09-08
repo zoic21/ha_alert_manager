@@ -86,6 +86,12 @@ test("associated profiles have a single occurrence ranking and stable filter opt
   ]);
 });
 
+test("mobile history actions occupy two columns without affecting statistics cards", async () => {
+  const { responsiveStyles } = await import("../frontend-src/styles/responsive-styles.js");
+  assert.match(responsiveStyles, /:host\(\[narrow\]\) \.history-panel \.history-page-actions \{\s*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1\.4fr\);/);
+  assert.match(responsiveStyles, /\.history-page-actions ha-button::part\(label\) \{\s*white-space: normal;/);
+});
+
 test("statistics toggle returns to occurrences and requests fresh data", async () => {
   const { instance } = panel();
   await handleHistoryAction.call(instance, "toggle-history-statistics");
