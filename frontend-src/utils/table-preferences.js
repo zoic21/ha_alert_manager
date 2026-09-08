@@ -92,6 +92,7 @@ const makeTableState = (kind, preferences = {}) => {
       entity: [],
       detectedFrom: "",
       detectedTo: "",
+      alert: [],
       resolvedFrom: "",
       resolvedTo: "",
     },

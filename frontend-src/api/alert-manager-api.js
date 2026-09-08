@@ -1,3 +1,4 @@
+import { refreshHistoryOccurrenceDetails } from "../components/alert-table.js";
 import { syncRuntimeMetadata } from "../utils/formatting.js";
 
 export class AlertManagerApi {
@@ -91,7 +92,7 @@ export function setHass(value) {
     const historyChanged = historyRevision !== this._historyRevision;
     this._historyRevision = historyRevision;
     this._updateHassReferences();
-    if (this.isConnected && this._config && this._activeTab === "history" && historyChanged) {
+    if (this.isConnected && this._config && (this._activeTab === "history" || this._alertDetailsDialog) && historyChanged) {
       void this._refreshHistory();
     }
     if (this.isConnected && this._config && this._coherenceLoaded && coherenceChanged) {
@@ -200,6 +201,7 @@ async function refreshPanelData(panel, kind) {
           panel[`_${kind}`] = await panel._api.call({ type: `alert_manager/${kind}/list` });
           if (kind === "history") {
             panel._historyLoaded = true;
+            refreshHistoryOccurrenceDetails.call(panel);
             panel._historyConfig = {
               retention_limit: panel._history.retention_limit, enabled: panel._history.enabled,
             };

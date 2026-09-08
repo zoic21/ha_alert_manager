@@ -236,6 +236,8 @@ An alert can be:
 
 Resolved alerts can be kept in history, making it easier to spot recurring problems instead of only seeing what is wrong right now.
 
+When retained occurrences exist, alert details show a clickable history count. Clicking it opens History filtered by the stable alert ID; the filter can be changed or cleared.
+
 Select entries in the History table, or use **Delete** in a history entry’s details menu, to delete individual occurrences after confirmation without affecting current alerts.
 
 Selecting an alert opens its details, including the value that triggered it and the current value, with contextual access to the related Home Assistant entity when available. Numeric values use Home Assistant’s display precision for the entity and the user’s number format, without changing the stored values.

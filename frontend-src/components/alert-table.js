@@ -409,7 +409,7 @@ export function tableRows(kind, historyEvents = []) {
 
 export function filterCount(kind) {
     const filters = this._tableState[kind].filters;
-    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity"]
+    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
@@ -434,11 +434,12 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity"]
+      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
       if (query && !row.search.includes(query)) return false;
+      if (selected.alert.size && !selected.alert.has(row.source.id)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
@@ -591,6 +592,7 @@ export function renderFilterPane(kind, rows) {
     const statuses = ["active", "pending", "acknowledged"]
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
+      ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.source.id).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
@@ -932,6 +934,17 @@ export function alertDetailsItems(kind, row) {
         });
       }
     }
+    const dialog = this._alertDetailsDialog;
+    if (dialog?.alertId === row.id && dialog.historyOccurrenceCount > 0) {
+      items.push({
+        key: "history-occurrences",
+        label: this._t("alert_details.history_occurrences"),
+        value: String(dialog.historyOccurrenceCount),
+        action: "open-alert-history",
+        ariaLabel: `${this._t("alert_details.history_occurrences")}: ${dialog.historyOccurrenceCount}`,
+        data: { alertId: row.source.id },
+      });
+    }
     items.push({
       key: "alert-id",
       label: this._t("alert_details.alert_id"),
@@ -970,7 +983,7 @@ export function renderAlertDetails(context) {
             : item.due
             ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
             : item.action
-            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}>${esc(item.value)}</a>`
+            ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}
       </dl>
@@ -1041,6 +1054,7 @@ export function openAlertDetails(kind, row) {
     dialog.hass = this._hass;
     dialog.alertKind = kind;
     dialog.alertId = row.id;
+    dialog.alertRow = row;
     dialog.headerTitle = row.entityName || row.entityId;
     dialog.heading = row.entityName || row.entityId;
     dialog.width = "medium";
@@ -1056,6 +1070,19 @@ export function openAlertDetails(kind, row) {
     this.shadowRoot.append(dialog);
     this._hydrateAlertDetailTimestamps(dialog);
     dialog.open = true;
+    void this._refreshHistory();
+}
+
+export function refreshHistoryOccurrenceDetails() {
+    const dialog = this._alertDetailsDialog;
+    if (!dialog?.alertRow) return;
+    const id = dialog.alertRow.source.id;
+    const count = id
+      ? (this._history?.events ?? []).reduce((total, entry) => total + Number(entry.id === id), 0) : 0;
+    if (dialog.historyOccurrenceCount === count) return;
+    dialog.historyOccurrenceCount = count;
+    dialog.innerHTML = this._renderAlertDetails(dialog.alertKind, dialog.alertRow);
+    this._hydrateAlertDetailTimestamps(dialog);
 }
 
 export function openAlertDeepLink() {
@@ -1367,6 +1394,24 @@ export function syncNarrowTableHeaderBackgrounds() {
 }
 
 export async function handleAlertTableAction(action, button, event) {
+  if (action === "open-alert-history") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const alertId = button.dataset.alertId;
+    this._closeAlertDetailsDialog(() => {
+      this._resetTableFilters("history");
+      this._tableState.history.filters.alert = [alertId];
+      this._tableState.history.search = "";
+      this._selectedHistoryIds.clear();
+      this._filterPaneKind = "history";
+      this._activeTab = "history";
+      this._notice = null;
+      this._navigate("/alert-manager/history");
+      this._render();
+      void this._refreshHistory();
+    });
+    return true;
+  }
   if (action === "toggle-alert-timestamp") {
     event.preventDefault?.();
     event.stopPropagation?.();

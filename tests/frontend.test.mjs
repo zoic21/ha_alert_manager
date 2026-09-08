@@ -5316,3 +5316,46 @@ test("all side drawers resize immediately while preserving the handle animation"
   assert.match(styles, /ha-card\.side-drawer\{[^}]*transition:none/);
   assert.match(styles, /\.resize-indicator\{[^}]*transition:opacity 180ms ease-in-out,transform 180ms ease-in-out/);
 });
+
+for (const kind of ["active", "pending", "acknowledged", "history"]) {
+  test(`history occurrence count and navigation from ${kind} details use stable identity`, async () => {
+    const { refreshHistoryOccurrenceDetails, handleAlertTableAction } = await import("../frontend-src/components/alert-table.js");
+    const panel = tablePanel();
+    const first = historyEvent({ entity_id: "", id: "rule:template:" });
+    panel._history = { events: [first,
+      historyEvent({ event_id: "second", entity_id: "", id: first.id }),
+      historyEvent({ event_id: "other-rule", entity_id: "", id: "rule:other:" }),
+      historyEvent({ event_id: "other-pack", entity_id: "", id: "flapping:template:" }),
+      historyEvent({ event_id: "other-entity", id: "rule:template:sensor.other" }),
+    ] };
+    const row = panel._tableRows("history", [first])[0];
+    row.status = kind === "history" ? "resolved" : kind;
+    const dialog = { alertId: row.id, alertKind: kind === "history" ? kind : "overview", alertRow: row };
+    panel._alertDetailsDialog = dialog;
+    panel._hydrateAlertDetailTimestamps = () => {};
+    refreshHistoryOccurrenceDetails.call(panel);
+    assert.equal(dialog.historyOccurrenceCount, 2);
+    assert.match(dialog.innerHTML, /data-action="open-alert-history"[^>]*>2<\/a>/);
+    panel._tableState.history.search = "unrelated search";
+    panel._tableState.history.filters.rule = ["unrelated name"];
+    let closed = false;
+    panel._closeAlertDetailsDialog = (callback) => { closed = true; panel._alertDetailsDialog = null; callback(); };
+    panel._navigate = (path) => assert.equal(path, "/alert-manager/history");
+    panel._render = () => {};
+    panel._refreshHistory = async () => {};
+    await handleAlertTableAction.call(panel, "open-alert-history", { dataset: { alertId: first.id } }, {});
+    assert.equal(closed, true);
+    assert.equal(panel._activeTab, "history");
+    assert.equal(panel._filterPaneKind, "history");
+    assert.equal(panel._filterCount("history"), 1);
+    const rows = panel._tableRows("history", panel._history.events);
+    assert.equal(panel._filteredTableRows("history", rows).length, 2);
+    assert.match(panel._renderFilterPane("history", rows), /data-filter-value="rule:template:"/);
+    panel._history.events = [];
+    assert.deepEqual(panel._filteredTableRows("history", []), []);
+    panel._alertDetailsDialog = dialog;
+    refreshHistoryOccurrenceDetails.call(panel);
+    assert.equal(dialog.historyOccurrenceCount, 0);
+    assert.doesNotMatch(dialog.innerHTML, /history-occurrences|open-alert-history/);
+  });
+}
