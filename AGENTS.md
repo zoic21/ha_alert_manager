@@ -95,3 +95,74 @@ python -m compileall -q custom_components
 For frontend changes, follow `frontend-src/AGENTS.md`. Before declaring a code change
 complete, run every relevant command and report failures honestly. Documentation-only
 changes need a careful diff review; CI remains authoritative.
+
+## Release publication
+
+Publish only when explicitly requested, from the branch named by the user. Pushing
+changes to `main` or synchronizing it also requires an explicit request.
+
+### Prepare the release
+
+1. Fetch the target branch and tags, inspect the working tree and branch history,
+   and check the latest GitHub releases. Preserve unrelated local changes. Choose
+   an unused version and confirm that its `v<version>` tag does not already exist.
+   Use `2.2.0-rc.N` for a release candidate, `2.2.0-beta.N` for a beta, and `2.2.0`
+   for the stable release. Never remove the prerelease suffix unless stable
+   publication was requested.
+2. Update all four required files together:
+
+   | File | Required change |
+   | --- | --- |
+   | `custom_components/alert_manager/manifest.json` | Set `version` to the new release version. This file triggers publication. |
+   | `custom_components/alert_manager/const.py` | Set `INTEGRATION_VERSION` to exactly the same version. `FRONTEND_CACHE_VERSION` derives from it; preserve that relationship. Its existing extra suffix does not need a separate bump when `INTEGRATION_VERSION` changes. |
+   | `package.json` | Set `version` to exactly the same version. |
+   | `CHANGELOG.md` | Add a dated entry describing the actual changes and identify beta/RC versions as prereleases. |
+
+   Do not update only the manifest and package: the Python constant is also the
+   frontend cache key and is covered by a version-consistency regression test.
+3. Run `npm run build` and include
+   `custom_components/alert_manager/frontend/alert-manager-panel.js` if the
+   generated bundle changes. Never edit this file manually. Update frontend
+   sources, both translations, and documentation when the release's functional
+   changes require them. README files describe current functionality; they do not
+   need a release changelog or a version-only edit.
+
+### Validate the final release contents
+
+Run these checks **after all version edits and the frontend build**, not just
+before bumping the version:
+
+```sh
+python -m pytest -q tests/test_models.py::test_backend_and_frontend_versions_stay_in_sync
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest -q
+python -m compileall -q custom_components
+npm run lint:frontend
+npm run test:frontend
+git diff --check
+```
+
+Review the complete diff and commit the release contents together. A fresh frontend
+build must reproduce the committed bundle without a diff. Do not push a release
+with failing checks: publication is independent of CI and does not wait for it.
+
+### Publish and verify
+
+- Inspect `.github/workflows/release.yml` before pushing. Currently a push that
+  changes the manifest on `main` or `release/2.2` automatically creates the tag
+  `v<version>` at the pushed commit and a GitHub release with generated notes.
+  Versions containing a hyphen are published with `prerelease: true`.
+- Push the validated commit to the requested branch. Let the workflow create the
+  tag and release; do not also create them manually.
+- Verify the Release workflow, CI (Python, frontend, Home Assistant validation and
+  HACS), the published tag's commit, and the release's draft/prerelease flags.
+  Report failures honestly. Once a tag is published, never move or overwrite it;
+  if a correction is needed, prepare and validate a new version.
+- Synchronize `main` only when requested, preserving any independent commits. If
+  both branches can be fast-forwarded to the same commit, verify that they match.
+  With the current workflow, synchronizing a manifest change also triggers release
+  publication on `main`; it refuses the already existing tag. Verify that this is
+  the cause of that workflow failure and that the original release is correct.
+  Do not overwrite the tag, invent another version solely for branch synchronization,
+  or skip CI to hide the duplicate-publication failure.
