@@ -603,6 +603,38 @@ class NotificationRuntime:
             )
             await self._async_record_delivery(profile, "reminder", items, result)
 
+    async def async_notify_coherence(self, findings: list[dict[str, Any]]) -> None:
+        """Send one independent coherence summary per opted-in profile."""
+        if not findings or self._unloading:
+            return
+        count = len(findings)
+        title = self._delivery.text("coherence_title", "Coherence")
+        message = self._delivery.text(
+            "coherence_message" if count == 1 else "coherence_message_plural",
+            "{count} new coherence issue."
+            if count == 1
+            else "{count} new coherence issues.",
+        ).replace("{count}", str(count))
+        # Bound the summary; the linked report contains full source navigation.
+        message += "\n" + "\n".join(f"• {item['entity_id']}" for item in findings[:5])
+        for profile in self._config_getter().get("notification_profiles", []):
+            if self._unloading:
+                return
+            if not profile.get("enabled") or not profile.get("notify_on_coherence"):
+                continue
+            try:
+                result = await self._delivery.async_send(
+                    targets=profile["targets"],
+                    title=title,
+                    message=message,
+                    click_url="/alert-manager/coherence",
+                )
+                await self._async_record_usage(profile["id"], result)
+            except Exception:  # Isolate delivery from the report and other profiles.
+                _LOGGER.exception(
+                    "Coherence notification failed for profile %s", profile["id"]
+                )
+
     async def _async_record_delivery(
         self,
         profile: dict[str, Any],

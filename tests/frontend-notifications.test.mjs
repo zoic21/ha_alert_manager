@@ -627,6 +627,7 @@ for (const mode of ["visual", "yaml"]) {
     });
     panel._notificationProfileDraft.name = "Edited owner";
     panel._notificationProfileDraft.enabled = false;
+    panel._notificationProfileDraft.notify_on_coherence = true;
     panel._notificationProfileDraft.usage = 123;
     panel._notificationProfileDraft.pending_batches = ["batch"];
     const source = panel._notificationProfileDraft;
@@ -643,6 +644,7 @@ for (const mode of ["visual", "yaml"]) {
     assert.notEqual(copy.id, source.id);
     assert.notEqual(copy.name, source.name);
     assert.equal(copy.enabled, false);
+    assert.equal(copy.notify_on_coherence, true);
     assert.equal(panel._notificationProfileId, null);
     assert.equal(panel._notificationEditorMode, "visual");
     assert.deepEqual(copy.exceptions, expected.exceptions);
@@ -764,3 +766,15 @@ for (const mode of ["visual", "yaml"]) {
     }
   });
 }
+
+
+test("coherence opt-in defaults off and survives cloning and YAML", () => {
+  assert.equal(newNotificationProfileDraft().notify_on_coherence, false);
+  assert.equal(cloneNotificationProfile(profile).notify_on_coherence, false);
+  const draft = cloneNotificationProfile({ ...profile, notify_on_coherence: true });
+  assert.equal(draft.notify_on_coherence, true);
+  assert.match(notificationProfileToYaml(draft), /^notify_on_coherence: true$/m);
+  const markup = renderNotificationProfileDrawer({ draft, busy: false, t });
+  assert.match(markup, /<ha-switch id="notification-coherence"[^>]*checked/);
+  assert.match(markup, /notifications.coherence_help/);
+});

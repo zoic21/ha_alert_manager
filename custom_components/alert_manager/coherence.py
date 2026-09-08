@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 from urllib.parse import quote
 
 import yaml
@@ -157,6 +157,7 @@ class _Context:
     name: str
     link_type: str | None = None
     link_target: str | None = None
+    source_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,6 +311,7 @@ def _derive_context(
                     title,
                     "navigate",
                     f"/config/integrations/integration/{quote(domain, safe='_-')}",
+                    entry_id,
                 ),
                 domain == "template",
             )
@@ -427,6 +429,8 @@ def _record_scalar(
             "source_type": context.kind,
             "source_name": context.name,
         }
+        if context.source_id:
+            result["source_id"] = context.source_id
         if context.link_type and context.link_target:
             result["link"] = {
                 "type": context.link_type,
@@ -510,19 +514,21 @@ def _dashboard_sources(config_dir: Path) -> dict[str, tuple[str, str]]:
     metadata_path = config_dir / ".storage" / "lovelace_dashboards"
     try:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return dashboards
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid Lovelace dashboard metadata")
     data = payload.get("data", {})
-    items = data.get("items", data if isinstance(data, list) else [])
+    items = data.get("items", []) if isinstance(data, dict) else data
     if not isinstance(items, list):
-        return dashboards
+        raise ValueError("Invalid Lovelace dashboard list")
     for item in items:
         if not isinstance(item, dict):
-            continue
+            raise ValueError("Invalid Lovelace dashboard entry")
         dashboard_id = item.get("id")
         url_path = item.get("url_path")
         if not isinstance(dashboard_id, str) or not isinstance(url_path, str):
-            continue
+            raise ValueError("Invalid Lovelace dashboard identity")
         dashboards[f"lovelace.{dashboard_id}"] = (
             str(item.get("title") or url_path),
             f"/{url_path.strip('/')}",
@@ -539,7 +545,14 @@ def _discover_sources(
     """Discover supported configuration files without entering unrelated trees."""
     sources: list[_Source] = []
     dashboard_files = yaml_dashboards or {}
-    for directory, child_directories, filenames in os.walk(config_dir):
+
+    def discovery_failed(error: OSError) -> None:
+        # An unreadable directory is not evidence that its findings disappeared.
+        raise error
+
+    for directory, child_directories, filenames in os.walk(
+        config_dir, onerror=discovery_failed
+    ):
         child_directories[:] = [
             child
             for child in child_directories
@@ -618,8 +631,9 @@ def scan_configuration(
         set(),
     )
     sources = _discover_sources(config_dir, yaml_dashboards, scan_esphome=scan_esphome)
-    skipped_files = 0
+    skipped_sources: list[str] = []
     for source in sources:
+        result_start = len(state.results)
         try:
             content = source.path.read_text(encoding="utf-8")
             documents = yaml.compose_all(content, Loader=yaml.SafeLoader)
@@ -631,7 +645,9 @@ def scan_configuration(
                 if document is not None:
                     _walk(document, root_context, source, state)
         except (OSError, UnicodeError, yaml.YAMLError):
-            skipped_files += 1
+            skipped_sources.append(source.relative_path)
+            # Discard partial multi-document output from a failed source.
+            del state.results[result_start:]
 
     state.results.sort(
         key=lambda result: (
@@ -644,8 +660,9 @@ def scan_configuration(
         "results": state.results,
         "missing_count": len(state.results),
         "missing_entity_count": len({result["entity_id"] for result in state.results}),
-        "files_scanned": len(sources) - skipped_files,
-        "files_skipped": skipped_files,
+        "files_scanned": len(sources) - len(skipped_sources),
+        "files_skipped": len(skipped_sources),
+        "skipped_sources": skipped_sources,
         "references_checked": state.references_checked,
         "duration_ms": round((time.monotonic() - started) * 1000),
     }
@@ -730,18 +747,90 @@ async def async_scan_configuration(
     )
 
 
-async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
+def _finding_identity(finding: dict[str, Any]) -> tuple[str, ...]:
+    """Identify a problem in its source object, independently of presentation."""
+    link = finding.get("link") or {}
+    return (
+        finding.get("scan_category", "references"),
+        finding.get("problem_type", "missing_entity"),
+        finding.get("entity_id", ""),
+        finding.get("file", ""),
+        finding.get("source_type", "file"),
+        finding.get("source_id") or link.get("entity_id") or link.get("path", ""),
+    )
+
+
+def _compare_coherence_report(
+    result: dict[str, Any],
+    previous: dict[str, Any] | None,
+    scan_esphome: bool,
+    ignored: frozenset[str],
+) -> list[dict[str, Any]]:
+    """Compare in the executor and retain only unscanned portions of the baseline.
+
+    Current findings already live in results. Keep unresolved baseline fragments
+    inside that same latest report only while their source cannot be checked.
+    """
+    previous = previous or {}
+    baseline = {
+        _finding_identity(item): item
+        for key in ("results", "unscanned_results")
+        for item in previous.get(key, [])
+        if item.get("entity_id") not in ignored
+    }
+    current = {_finding_identity(item): item for item in result["results"]}
+    skipped = set(result.get("skipped_sources", []))
+    skipped_categories = set(result.get("skipped_categories", []))
+    # Older/integration-provided partial reports may lack per-source coverage.
+    unknown_coverage = (
+        result.get("files_skipped", 0) and "skipped_sources" not in result
+    )
+    result["unscanned_results"] = [
+        item
+        for identity, item in baseline.items()
+        if identity not in current
+        and (
+            unknown_coverage
+            or item.get("file") in skipped
+            or item.get("scan_category", "references") in skipped_categories
+            or (
+                not scan_esphome
+                and str(item.get("file", "")).casefold().startswith("esphome/")
+            )
+        )
+    ]
+    # Reports predating stable integration IDs only had their navigation target.
+    legacy = {
+        identity for identity, item in baseline.items() if not item.get("source_id")
+    }
+    return [
+        item
+        for identity, item in current.items()
+        if identity not in baseline
+        and not (
+            item.get("source_id")
+            and _finding_identity({**item, "source_id": None}) in legacy
+        )
+    ]
+
+
+async def _async_run_coherence_scan(
+    hass: HomeAssistant, origin: Literal["ui", "entity", "schedule"]
+) -> dict[str, Any]:
     """Run and persist one coherence scan."""
     manager = hass.data.get(DATA_MANAGER)
     config = getattr(manager, "config", {})
+    scan_esphome = config.get("coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME)
+    ignored = frozenset(config.get("coherence_ignored_entity_references", []))
     result = await async_scan_configuration(
-        hass,
-        scan_esphome=config.get(
-            "coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME
-        ),
-        ignored_entity_references=frozenset(
-            config.get("coherence_ignored_entity_references", [])
-        ),
+        hass, scan_esphome=scan_esphome, ignored_entity_references=ignored
+    )
+    new_findings = await hass.async_add_executor_job(
+        _compare_coherence_report,
+        result,
+        hass.data.get(DATA_COHERENCE_RESULT),
+        scan_esphome,
+        ignored,
     )
     result["scanned_at"] = dt_util.now().isoformat()
     # Each scan owns its report; consumers must treat it as read-only once published.
@@ -753,15 +842,19 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     ).async_save(result)
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
+    if new_findings and origin in {"entity", "schedule"} and manager is not None:
+        await manager.notification_runtime.async_notify_coherence(new_findings)
     return result
 
 
-async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
-    """Share one in-flight scan across every manual and scheduled caller."""
+async def async_run_coherence_scan(
+    hass: HomeAssistant, *, origin: Literal["ui", "entity", "schedule"] = "ui"
+) -> dict[str, Any]:
+    """Share one scan and delivery; the initiating caller determines its origin."""
     task: asyncio.Task[dict[str, Any]] | None = hass.data.get(DATA_COHERENCE_SCAN_TASK)
     if task is None or task.done():
         task = hass.async_create_task(
-            _async_run_coherence_scan(hass),
+            _async_run_coherence_scan(hass, origin),
             f"{DOMAIN} coherence scan",
         )
         hass.data[DATA_COHERENCE_SCAN_TASK] = task
@@ -808,7 +901,7 @@ def schedule_coherence_scans(
         if frequency == "monthly" and now.day != 1:
             return
         try:
-            await async_run_coherence_scan(hass)
+            await async_run_coherence_scan(hass, origin="schedule")
         except Exception:  # pragma: no cover - Home Assistant reports runtime failures
             _LOGGER.exception("Scheduled coherence scan failed")
 
