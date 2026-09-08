@@ -558,6 +558,11 @@ class _StateMixin:
             record = self._pop_record(alert_id)
             if record is None:
                 continue
+            if record.details.source in ("transition", "attribute_transition"):
+                record.details.condition_params = {
+                    **(record.details.condition_params or {}),
+                    "resolution_reason": "automatic",
+                }
             if archive_resolutions:
                 self._pending_history.append(AlertHistoryEntry.resolved(record, now))
             if emit_events:
@@ -616,13 +621,17 @@ class _StateMixin:
         else:
             return
 
+        observation = self._transition_observations.get(alert_id)
+        if observation is not None and observation.due_at.astimezone(UTC) < when:
+            when = observation.due_at.astimezone(UTC)
+            acknowledgement_due = False
         deadline = record.acknowledged_until
 
         @callback
         def timer_due(_now: datetime) -> None:
+            if self._timers.get(alert_id) is not cancel:
+                return
             if acknowledgement_due:
-                if self._timers.get(alert_id) is not cancel:
-                    return
                 self._timers.pop(alert_id, None)
                 if (
                     self._unloading
@@ -661,7 +670,11 @@ class _StateMixin:
             return
         if record.status is AlertStatus.ACTIVE and record.expires_at is not None:
             self._queued_expired_alert_ids.add(alert_id)
-            self._queue_entity_evaluations(())
+            self._queue_entity_evaluations(
+                (record.details.entity_id,)
+                if record.details.source in ("transition", "attribute_transition")
+                else ()
+            )
             return
         self._queued_public_refresh = True
         self._queue_entity_evaluations((record.details.entity_id,))

@@ -1,4 +1,9 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
+  ["Transition departure and arrival must differ", "transition_distinct"],
+  ["Transition values cannot be unknown or unavailable", "transition_unavailable"],
+  ["Transition values must be finite", "transition_finite"],
+  ["Transition values must be non-empty scalars", "transition_values"],
   ["notification_batch_delay must be an integer between 10 and 300 seconds", "notification_batch_delay"],
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],

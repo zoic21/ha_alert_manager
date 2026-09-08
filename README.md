@@ -94,6 +94,12 @@ Use the built-in profiles to send notifications through Home Assistant’s nativ
 
 </details>
 
+**Transition** (`source: transition`) and **Transition attribute** (`source: attribute_transition`, with `attribute`) observe a specific `from_value` → `to_value` edge. The trigger delay (`duration`, default 0 seconds) requires continuous arrival-value maintenance before activation; leaving that value cancels the hold and requires a new matching edge. Unrelated attribute updates do not restart the hold.
+
+`auto_resolve` (default 600 seconds, minimum 1) starts at activation. Leaving the arrival value afterward does not resolve the alert. Another confirmed transition extends the deadline on the same alert and preserves its acknowledgment. Details/history retain the observed values and last transition; expiration is marked as automatic and sends no recovery notification. Existing start/reminder routing still applies.
+
+Initial discovery, reloads and startup grace never infer a transition. Unknown/unavailable states and missing attributes cannot arm a hold. Pending holds are not restored and a monitoring pause requires a fresh edge; active/acknowledged deadlines survive a restart. The tester reports that a current value cannot prove an edge and has no runtime side effects.
+
 ## Installation
 
 ### HACS

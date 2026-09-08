@@ -387,6 +387,9 @@ export function tableRows(kind, historyEvents = []) {
         condition,
         detected: source.detected_at || "",
         activated: history ? source.active_at : source.active_since,
+        expiresAt: source.expires_at,
+        lastOccurrence: source.condition_params?.last_occurrence,
+        automaticResolution: source.condition_params?.resolution_reason === "automatic",
         resolved: history ? source.resolved_at : "",
         due: history ? "" : source.due_at,
         duration: history ? Number(source.total_duration_seconds ?? 0) : 0,
@@ -860,6 +863,9 @@ export function alertDetailsItems(kind, row) {
     });
     const items = [
       { key: "message", label: this._t("table.columns.message"), value: row.message },
+      ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
+      ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
+      ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
       linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
         entityId: row.entityId,

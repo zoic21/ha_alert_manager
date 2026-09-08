@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG
+from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG, TRANSITION_SOURCES
 from .models import Rule
 from .notifications import validate_notification_profiles
 from .packs import PACKS_BY_ID
@@ -23,6 +23,9 @@ MAX_YAML_SIZE = 1_000_000
 
 
 _RULE_YAML_KEYS = {
+    "from_value",
+    "to_value",
+    "auto_resolve",
     "id",
     "name",
     "enabled",
@@ -162,10 +165,14 @@ def rule_to_yaml_data(
     }
     if result["source"] in ATTRIBUTE_SOURCES:
         result["attribute"] = data.get("attribute")
-    if result["source"] not in ("jinja", "unchanged"):
+    if result["source"] not in ("jinja", "unchanged", *TRANSITION_SOURCES):
         result["operator"] = data.get("operator")
         if result["operator"] != "unchanged":
             result["value"] = data.get("value")
+    if source in TRANSITION_SOURCES:
+        result.update(
+            {key: data.get(key) for key in ("from_value", "to_value", "auto_resolve")}
+        )
     result.update(
         {
             "duration": data.get("duration"),

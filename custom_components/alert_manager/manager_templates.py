@@ -116,6 +116,7 @@ class _TemplatesMixin:
         """Cache enabled rules and rebuild template dependency indexes."""
         self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        self._prune_transition_observations()
         valid_variation_keys = {
             f"{rule.id}:{entity_id}"
             for rule in self._rules
@@ -517,6 +518,10 @@ class _TemplatesMixin:
             current,
             force=True,
         )
+        if rule.source in ("transition", "attribute_transition"):
+            changed = record.details.message != rendered_message
+            record.details.message = rendered_message
+            return changed
         condition = self._rule_condition(rule, state)
         condition_key = (
             "rule.jinja"

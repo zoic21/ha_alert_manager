@@ -20,6 +20,7 @@ from .const import (
     MAX_RULES,
     MIN_DELAY,
     MIN_HISTORY_LIMIT,
+    TRANSITION_SOURCES,
 )
 from .models import Rule, safe_float, validate_label_list
 from .notifications import validate_notification_profiles
@@ -57,6 +58,9 @@ _AUTOMATIC_KEYS = {
 # Accepted only so a cached V1 panel can finish one safe migration update.
 _AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
+    "from_value",
+    "to_value",
+    "auto_resolve",
     "name",
     "entity_ids",
     "label_ids",
@@ -387,6 +391,13 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
     """Validate a rule create/update payload and enforce immutable ids."""
     if not isinstance(data, dict):
         raise ValueError("Rule must be an object")
+    if data.get("source") in TRANSITION_SOURCES:
+        data = {
+            "duration": 0,
+            **data,
+            "operator": "equals",
+            "value": data.get("to_value", ""),
+        }
     missing = _REQUIRED_RULE_KEYS - data.keys()
     if data.get("source", "state") not in ("none", "jinja", "unchanged"):
         missing |= {"operator"} - data.keys()

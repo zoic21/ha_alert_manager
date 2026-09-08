@@ -21,6 +21,7 @@ from .const import (
     MAX_RULE_NAME_LENGTH,
     MIN_DELAY,
     OPERATORS,
+    TRANSITION_SOURCES,
     VALUE_SOURCES,
     VARIATION_SOURCES,
 )
@@ -667,6 +668,9 @@ class Rule:
     flapping_window: int | None = None
     flapping_recovery: int | None = None
     label_ids: list[str] = field(default_factory=list)
+    from_value: str | int | float | bool | None = None
+    to_value: str | int | float | bool | None = None
+    auto_resolve: int = 600
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -688,6 +692,10 @@ class Rule:
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
+        if normalized.get("source") in TRANSITION_SOURCES:
+            normalized.setdefault("duration", 0)
+            normalized["operator"] = "equals"
+            normalized["value"] = normalized.get("to_value", "")
         required = {"id", "name", "entity_ids", "duration"}
         if normalized.get("source", "state") not in ("jinja", "unchanged"):
             required.add("operator")
@@ -758,7 +766,10 @@ class Rule:
                 raise ValueError(
                     "Attribute wildcard paths must use complete .* segments"
                 )
-        if self.source == "attribute_variation" and "*" in self.attribute:
+        if (
+            self.source in ("attribute_variation", "attribute_transition")
+            and "*" in self.attribute
+        ):
             raise ValueError("Attribute variation does not support wildcard paths")
         if self.source not in ATTRIBUTE_SOURCES and self.attribute is not None:
             raise ValueError("Attribute must be empty for non-attribute rules")
@@ -812,6 +823,29 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
+        if self.source in TRANSITION_SOURCES:
+            for value in (self.from_value, self.to_value):
+                if not isinstance(
+                    value, str | int | float | bool
+                ) or not normalize_scalar(value):
+                    raise ValueError("Transition values must be non-empty scalars")
+                if isinstance(value, float) and safe_float(value) is None:
+                    raise ValueError("Transition values must be finite")
+                if normalize_scalar(value) in ("unknown", "unavailable"):
+                    raise ValueError(
+                        "Transition values cannot be unknown or unavailable"
+                    )
+            if normalize_scalar(self.from_value) == normalize_scalar(self.to_value):
+                raise ValueError("Transition departure and arrival must differ")
+            if (
+                isinstance(self.auto_resolve, bool)
+                or not isinstance(self.auto_resolve, int)
+                or not 1 <= self.auto_resolve <= 31_536_000
+            ):
+                raise ValueError(
+                    "Automatic resolution must be between 1 and 31536000 seconds"
+                )
+            return
         if self.source in ("jinja", "unchanged"):
             return
         if self.operator not in OPERATORS:
@@ -862,7 +896,10 @@ class Rule:
         result = asdict(self)
         extra = result.pop("extra", {})
         result.update(extra)
-        if self.source in ("jinja", "unchanged"):
+        if self.source not in TRANSITION_SOURCES:
+            for key in ("from_value", "to_value", "auto_resolve"):
+                result.pop(key, None)
+        if self.source in ("jinja", "unchanged", *TRANSITION_SOURCES):
             result.pop("operator", None)
             result.pop("value", None)
         elif self.operator == "unchanged":

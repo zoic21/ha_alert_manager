@@ -36,6 +36,7 @@ from .const import (
     MONITORING_NOTIFICATION_ID,
     SIGNAL_HISTORY_UPDATED,
     SIGNAL_MONITORING_UPDATED,
+    TRANSITION_SOURCES,
     VARIATION_SOURCES,
 )
 from .history_statistics import aggregate_history
@@ -74,6 +75,8 @@ class _ConfigurationSnapshot:
     config: dict[str, Any]
     records: dict[str, AlertRecord]
     pending_history: list[AlertHistoryEntry]
+    transition_confirmed: dict[str, Any]
+    transition_observations: dict[str, Any]
     variation_baselines: dict[str, float]
     variation_baselines_dirty: bool
     pack_runtime: dict[str, dict[str, Any]]
@@ -283,6 +286,13 @@ class _ApiMixin:
                 else None
             ),
         }
+        if rule.source in TRANSITION_SOURCES:
+            return {
+                **base,
+                "status": "indeterminate",
+                "reason": "transition_required",
+                "notification_resolved_profiles": [],
+            }
         if state is None:
             return {**base, "status": "error", "reason": "entity_not_found"}
         if not self._is_base_eligible(entity_id):
@@ -496,6 +506,8 @@ class _ApiMixin:
                     )
                 else:
                     self._freeze_pending_alerts(dt_util.now())
+                    self._transition_observations.clear()
+                    self._transition_confirmed.clear()
                     self._clear_variation_baselines()
                     self._pack_runtime.clear()
                 await self._async_save_state()
@@ -1164,6 +1176,8 @@ class _ApiMixin:
             config=deepcopy(self.config),
             records=deepcopy(self.records),
             pending_history=list(self._pending_history),
+            transition_confirmed=dict(self._transition_confirmed),
+            transition_observations=dict(self._transition_observations),
             variation_baselines=dict(self._variation_baselines),
             variation_baselines_dirty=self._variation_baselines_dirty,
             pack_runtime=deepcopy(self._pack_runtime),
@@ -1181,6 +1195,8 @@ class _ApiMixin:
         self._cancel_all_timers()
         self.config = snapshot.config
         self._pending_history = snapshot.pending_history
+        self._transition_confirmed = snapshot.transition_confirmed
+        self._transition_observations = snapshot.transition_observations
         self._variation_baselines = snapshot.variation_baselines
         self._variation_baselines_dirty = snapshot.variation_baselines_dirty
         self._pack_runtime = snapshot.pack_runtime

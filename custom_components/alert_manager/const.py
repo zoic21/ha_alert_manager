@@ -200,8 +200,11 @@ VALUE_SOURCES: Final = (
     "attribute",
     "state_variation",
     "attribute_variation",
+    "transition",
+    "attribute_transition",
     "unchanged",
     "jinja",
 )
-ATTRIBUTE_SOURCES: Final = ("attribute", "attribute_variation")
+TRANSITION_SOURCES: Final = ("transition", "attribute_transition")
+ATTRIBUTE_SOURCES: Final = ("attribute", "attribute_variation", "attribute_transition")
 VARIATION_SOURCES: Final = ("state_variation", "attribute_variation")

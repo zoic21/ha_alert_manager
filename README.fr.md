@@ -94,6 +94,12 @@ Utilisez les profils intégrés pour envoyer des notifications via les entités 
 
 </details>
 
+Les sources **Transition** (`source: transition`) et **Transition attribut** (`source: attribute_transition`, avec `attribute`) observent un passage précis `from_value` → `to_value`. Le délai de déclenchement (`duration`, 0 seconde par défaut) impose un maintien continu à la valeur d’arrivée avant activation. Quitter cette valeur annule le maintien et nécessite une nouvelle transition correspondante. Les modifications d’autres attributs ne relancent pas le délai.
+
+`auto_resolve` (600 secondes par défaut, minimum 1) démarre à l’activation. Quitter ensuite la valeur d’arrivée ne résout pas l’alerte. Une nouvelle transition confirmée prolonge l’échéance de la même alerte et conserve son acquittement. Les détails et l’historique conservent les valeurs observées et la dernière transition ; l’expiration est indiquée comme automatique et n’envoie aucune notification de retour à la normale. Le routage des nouvelles alertes et des rappels reste applicable.
+
+La découverte initiale, le rechargement et la période de démarrage ne déduisent aucune transition. Les états unknown/unavailable et les attributs absents ne peuvent pas amorcer un maintien. Les maintiens en cours ne sont pas restaurés et une pause de surveillance nécessite une nouvelle transition ; les échéances actives/acquittées survivent au redémarrage. Le testeur indique qu’une valeur actuelle ne prouve pas un passage et ne modifie pas les alertes.
+
 ## Installation
 
 ### HACS

@@ -1,4 +1,4 @@
-import { ATTRIBUTE_RULE_SOURCES } from "./constants.js";
+import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES } from "./constants.js";
 
 const lines = (value) =>
   String(value ?? "")
@@ -48,13 +48,16 @@ const ruleToYaml = (rule) => {
   if (ATTRIBUTE_RULE_SOURCES.has(source)) {
     lines.push(`attribute: ${yamlValue(rule.attribute)}`);
   }
-  if (!["jinja", "unchanged"].includes(source)) {
+  if (!["jinja", "unchanged"].includes(source) && !TRANSITION_RULE_SOURCES.has(source)) {
     lines.push(`operator: ${yamlValue(rule.operator)}`);
     if (rule.operator !== "unchanged") {
       lines.push(Array.isArray(rule.value)
         ? "value:\n" + rule.value.map((value) => `  - ${yamlValue(value)}`).join("\n")
         : `value: ${yamlValue(rule.value)}`);
     }
+  }
+  if (TRANSITION_RULE_SOURCES.has(source)) {
+    for (const key of ["from_value", "to_value", "auto_resolve"]) lines.push(`${key}: ${yamlValue(rule[key] ?? (key === "auto_resolve" ? 600 : ""))}`);
   }
   lines.push(
     `duration: ${yamlValue(rule.duration)}`,

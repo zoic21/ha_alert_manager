@@ -1,5 +1,5 @@
 import { durationFieldValue } from "./duration-field.js";
-import { ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
+import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, ruleToYaml } from "../utils/formatting.js";
 import { renderSideDrawer, renderConfigurationRemove, renderDrawerResizeHandle } from "./configuration-drawer.js";
@@ -89,6 +89,9 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
       attribute: String(value("attribute") ?? currentRule.attribute ?? ""),
       operator,
       value: ruleValue,
+      from_value: String(value("from_value") ?? currentRule.from_value ?? ""),
+      to_value: String(value("to_value") ?? currentRule.to_value ?? ""),
+      auto_resolve: Number(value("auto_resolve") ?? currentRule.auto_resolve ?? 600),
       duration: Number(value("duration") ?? currentRule.duration ?? 900),
       message: String(selectorValues.message || currentRule.message || ""),
       update_message_when_active: Boolean(
@@ -133,6 +136,7 @@ export function serializeRuleDraft(draft) {
         : null,
       operator,
       value: comparisonValue,
+      ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 600) } : {}),
       duration: Number(draft.duration),
       message: String(draft.message ?? "").trim() || null,
       update_message_when_active: Boolean(draft.update_message_when_active),
@@ -183,6 +187,8 @@ export function refreshRuleConditionSection() {
     }
     section.outerHTML = renderRuleConditionSection({
       rule: normalizeRuleDraft(this._editingRule ?? {}),
+      renderTextField: (...args) => this._textField(...args),
+      renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
     this._hydrateRuleEditorControls();
@@ -436,7 +442,7 @@ export function renderRuleVisualEditor(context) {
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
-        ${renderRuleConditionSection({ rule, t })}
+        ${renderRuleConditionSection({ rule, t, renderTextField, renderNumberField })}
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
@@ -454,16 +460,18 @@ export function renderRuleVisualEditor(context) {
         </section>` : ""}`;
 }
 
-export function renderRuleConditionSection({ rule, t }) {
+export function renderRuleConditionSection({ rule, t, renderTextField, renderNumberField }) {
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
-    const comparisonFree = jinjaOnly || unchanged;
+    const transition = TRANSITION_RULE_SOURCES.has(rule.source);
+    const comparisonFree = jinjaOnly || unchanged || transition;
     return `<div data-rule-condition-section><section class="rule-editor-section">
         <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
         <div class="fields">
           <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
           <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+          ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}${renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
           ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
           <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
         </div>
@@ -501,6 +509,7 @@ export function ruleValueList(value) {
 }
 
 export function ruleSummary(rule) {
+    if (TRANSITION_RULE_SOURCES.has(rule.source)) return this._t("conditions.rule.transition", { from_value: rule.from_value, to_value: rule.to_value });
     if (rule.source === "jinja") return this._t("conditions.rule.jinja", { duration: "" });
     if (rule.source === "unchanged") {
       return this._t("conditions.rule.unchanged", { duration: "" });
@@ -832,6 +841,8 @@ export function hydrateRuleEditorControls() {
     sourceOptions: [
       { value: "state", label: this._t("rules.source_state") },
       { value: "attribute", label: this._t("rules.source_attribute") },
+      { value: "transition", label: this._t("rules.source_transition") },
+      { value: "attribute_transition", label: this._t("rules.source_attribute_transition") },
       { value: "state_variation", label: this._t("rules.source_state_variation") },
       { value: "attribute_variation", label: this._t("rules.source_attribute_variation") },
       { value: "unchanged", label: this._t("rules.source_unchanged") },
@@ -861,10 +872,19 @@ export function hydrateRuleEditorControls() {
       const previousSource = this._editingRule.source ?? "state";
       this._captureRuleDraft();
       this._editingRule.source = value;
+      if (TRANSITION_RULE_SOURCES.has(value) && !TRANSITION_RULE_SOURCES.has(previousSource)) {
+        this._editingRule.duration = 0;
+        this._editingRule.operator = "equals";
+      }
       if (!ATTRIBUTE_RULE_SOURCES.has(value)) this._editingRule.attribute = "";
       if (VARIATION_RULE_SOURCES.has(value) && !VARIATION_RULE_OPERATORS.has(this._editingRule.operator)) {
         this._editingRule.operator = "above";
         this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
+      }
+      if (TRANSITION_RULE_SOURCES.has(value) || TRANSITION_RULE_SOURCES.has(previousSource)) {
+        this._ruleDirty = true;
+        this._refreshRuleEditor();
+        return;
       }
       this._ruleDirty = true;
       if (["jinja", "unchanged"].includes(previousSource)
