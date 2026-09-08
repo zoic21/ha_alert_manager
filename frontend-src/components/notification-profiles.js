@@ -4,6 +4,7 @@ import {
   DEFAULT_NOTIFICATION_REMINDER_SECONDS,
   MAX_DURATION_SECONDS,
   MDI_PLUS,
+  MDI_DOTS_VERTICAL,
   MIN_NOTIFICATION_REMINDER_SECONDS,
 } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
@@ -92,11 +93,13 @@ export function updateNotificationProfileUsage(root, usage, t) {
 }
 
 export function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, validationError = null, t,
+  draft, busy, useBottomSheet, validationError = null, mode = "visual", t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
-  const content = `<div class="fields configuration-drawer-fields notification-profile-fields">
+  const content = mode === "yaml"
+    ? `<section class="yaml-rule-section"><small>${esc(t("notifications.yaml_help"))}</small><ha-code-editor id="notification-yaml-editor" mode="yaml" aria-label="${esc(t("notifications.yaml_title"))}"></ha-code-editor></section>`
+    : `<div class="fields configuration-drawer-fields notification-profile-fields">
     <div class="field full"><span class="field-label">${esc(t("notifications.name"))}</span><ha-input id="notification-profile-name" type="text" value="${esc(draft.name)}" required aria-label="${esc(t("notifications.name"))}"></ha-input></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.targets"))}</span><ha-selector id="notification-targets"></ha-selector><small>${esc(t("notifications.targets_help"))}</small></div>
     <div class="field full"><span class="field-label">${esc(t("notifications.labels"))}</span><ha-selector id="notification-labels"></ha-selector><small>${esc(t("notifications.labels_help"))}</small></div>
@@ -121,7 +124,7 @@ export function renderNotificationProfileDrawer({
     resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
-    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><span>${esc(t("notifications.enabled"))}</span><ha-switch id="notification-profile-enabled" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch></div>`,
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item></ha-dropdown></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",
@@ -163,6 +166,39 @@ function booleanOverrideValue(exception, key) {
 export function hydrateNotificationProfileControls(panel) {
   const draft = panel._notificationProfileDraft;
   if (!draft) return;
+  const menu = panel.shadowRoot?.querySelector("[data-notification-editor-menu]");
+  if (menu && !menu.dataset.configured) {
+    menu.addEventListener("wa-select", (event) => {
+      event.stopPropagation();
+      if (event.detail?.item?.value === "switch-editor") void switchNotificationEditor(panel);
+    });
+    menu.dataset.configured = "true";
+  }
+  if (panel._notificationEditorMode === "yaml") {
+    const editor = panel.shadowRoot?.querySelector("#notification-yaml-editor");
+    if (editor) {
+      editor.hass = panel._hass;
+      editor.value = panel._notificationYaml;
+      editor.lineNumbers = true;
+      if (!editor.dataset.configured) {
+        editor.addEventListener("value-changed", (event) => {
+          panel._notificationYaml = String(event.detail?.value ?? editor.value ?? "");
+        });
+        editor.dataset.configured = "true";
+      }
+    }
+    const toggle = panel.shadowRoot?.querySelector("#notification-profile-enabled");
+    if (toggle) toggle.onchange = async () => {
+      if (panel._busy) return;
+      const enabled = toggle.checked;
+      if (await validateNotificationYaml(panel)) {
+        panel._notificationProfileDraft.enabled = enabled;
+        panel._notificationYaml = notificationProfileToYaml(panel._notificationProfileDraft);
+      }
+      panel._refreshSettingsConfigurationDrawer();
+    };
+    return;
+  }
   hydrateNotificationExceptionSorting(panel);
   const notifySelector = { entity: { multiple: true, filter: { domain: "notify" } } };
   panel._configureSelector(
@@ -357,6 +393,9 @@ function openNotificationProfile(panel, profile = null) {
   panel._notificationProfileDraft = profile
     ? cloneNotificationProfile(profile)
     : newNotificationProfileDraft();
+  panel._notificationEditorMode = "visual";
+  panel._notificationYaml = "";
+  panel._notificationYamlOriginal = "";
   panel._notificationProfileOriginal = JSON.stringify(panel._notificationProfileDraft);
   panel._notificationProfileId = profile?.id ?? null;
   panel._notificationProfileValidationError = null;
@@ -367,7 +406,9 @@ function openNotificationProfile(panel, profile = null) {
 function confirmNotificationDiscard(panel) {
   captureNotificationProfileDraft(panel);
   return !panel._notificationProfileDraft
-    || JSON.stringify(panel._notificationProfileDraft) === panel._notificationProfileOriginal
+    || (JSON.stringify(panel._notificationProfileDraft) === panel._notificationProfileOriginal
+      && (panel._notificationEditorMode !== "yaml"
+        || panel._notificationYaml === panel._notificationYamlOriginal))
     || window.confirm(panel._t("notifications.discard_confirm"));
 }
 
@@ -386,6 +427,11 @@ export async function handleNotificationProfileAction(action, button) {
     return true;
   }
   if (action === "save-notification-profile") {
+    if (this._busy) return true;
+    if (this._notificationEditorMode === "yaml" && !await validateNotificationYaml(this)) {
+      this._refreshSettingsConfigurationDrawer();
+      return true;
+    }
     captureNotificationProfileDraft(this);
     const error = notificationProfileValidationError(
       this._notificationProfileDraft,
@@ -471,4 +517,58 @@ export async function handleNotificationProfileAction(action, button) {
     return true;
   }
   return false;
+}
+
+export function notificationProfileToYaml(profile) {
+  const { id, default_policy: policy, exceptions, ...fields } = cloneNotificationProfile(profile);
+  const entry = ([key, value]) => `${key}: ${JSON.stringify(value)}`;
+  return [
+    ...Object.entries(fields).map(entry),
+    "default_policy:",
+    ...Object.entries(policy).map((item) => `  ${entry(item)}`),
+    exceptions.length ? "exceptions:" : "exceptions: []",
+    ...exceptions.flatMap((exception) => Object.entries(exception).map(
+      (item, index) => `${index === 0 ? "  - " : "    "}${entry(item)}`,
+    )),
+    "",
+  ].join("\n");
+}
+
+async function validateNotificationYaml(panel) {
+  const draft = panel._notificationProfileDraft;
+  const yaml = panel._notificationYaml;
+  panel._busy = true;
+  panel._refreshUiState();
+  try {
+    const validated = await panel._api.call({
+      type: "alert_manager/notifications/yaml/validate",
+      profile_id: draft.id,
+      yaml,
+    });
+    if (panel._notificationProfileDraft !== draft || panel._notificationYaml !== yaml) return false;
+    panel._notificationProfileDraft = cloneNotificationProfile(validated);
+    panel._notificationProfileValidationError = null;
+    return true;
+  } catch (error) {
+    if (panel._notificationProfileDraft !== draft || panel._notificationYaml !== yaml) return false;
+    panel._notificationProfileValidationError = panel._errorText(error);
+    return false;
+  } finally {
+    panel._busy = false;
+    panel._refreshUiState();
+  }
+}
+
+export async function switchNotificationEditor(panel) {
+  if (panel._busy) return;
+  if (panel._notificationEditorMode !== "yaml") {
+    captureNotificationProfileDraft(panel);
+    panel._notificationYaml = notificationProfileToYaml(panel._notificationProfileDraft);
+    panel._notificationYamlOriginal = panel._notificationYaml;
+    panel._notificationEditorMode = "yaml";
+    panel._notificationProfileValidationError = null;
+  } else if (await validateNotificationYaml(panel)) {
+    panel._notificationEditorMode = "visual";
+  }
+  panel._refreshSettingsConfigurationDrawer();
 }

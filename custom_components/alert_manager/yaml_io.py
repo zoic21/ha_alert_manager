@@ -14,6 +14,7 @@ import yaml
 
 from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG
 from .models import Rule
+from .notifications import validate_notification_profiles
 from .validation import validate_config, validate_rule_payload
 
 FORMAT_VERSION = 1
@@ -181,6 +182,16 @@ def parse_rule_yaml(raw_yaml: Any, *, rule_id: str | None = None) -> Rule:
         return validate_rule_payload(data, rule_id=rule_id)
     except TypeError as err:
         raise ValueError(f"Invalid rule: {err}") from err
+
+
+def parse_notification_profile_yaml(raw_yaml: str, profile_id: str) -> dict[str, Any]:
+    """Validate an editable profile without allowing its identity to change."""
+    data = _load_yaml(raw_yaml, description="Notification profile")
+    if not isinstance(data, dict):
+        raise ValueError("Notification profile YAML root must be an object")
+    if data.get("id", profile_id) != profile_id:
+        raise ValueError("Notification profile id is immutable")
+    return validate_notification_profiles([{**data, "id": profile_id}])[0]
 
 
 def dump_config_yaml(config: Mapping[str, Any]) -> str:

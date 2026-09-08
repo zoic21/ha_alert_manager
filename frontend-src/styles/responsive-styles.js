@@ -302,9 +302,4 @@ export const responsiveStyles = `
     }
   }
 
-  @media (max-width: 420px) {
-    .notification-profile-header-toggle span {
-      display: none;
-    }
-  }
 `;

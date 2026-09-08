@@ -248,6 +248,8 @@ Use **Reevaluate** in the details menu of an ongoing alert to check its entity�
 
 In **Configuration → Notifications**, create a named profile, select one or more **`notify` entities**, and choose whether to send new-alert and recovery notifications. Reminders can be disabled or repeated at a configurable interval of at least one minute. Each profile can be enabled independently.
 
+The profile’s three-dot menu switches between the visual editor and **YAML mode**, including ordered exceptions. The unlabeled switch in the header enables or disables the profile. Invalid YAML blocks saving and returning to the visual editor; closing either editor with changes asks for confirmation.
+
 Save the profile, then use **Test** to send a real test notification to its targets without creating an alert. Profiles accept notification entities, not arbitrary actions or scripts; channels exposed only as actions can still be used through your own automations.
 
 ### Labels and exceptions

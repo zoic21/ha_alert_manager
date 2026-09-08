@@ -29,6 +29,7 @@ from custom_components.alert_manager.websocket import (
     websocket_history_delete,
     websocket_history_list,
     websocket_notification_stats_get,
+    websocket_notification_yaml_validate,
     websocket_packs_list,
     websocket_rule_create,
     websocket_rule_delete,
@@ -330,6 +331,10 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_rules_list, {"id": 9}),
         (websocket_notification_stats_get, {"id": 27}),
         (
+            websocket_notification_yaml_validate,
+            {"id": 29, "yaml": "[]", "profile_id": "draft"},
+        ),
+        (
             websocket_rule_test,
             {
                 "id": 26,
@@ -366,7 +371,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 22
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 23
     assert connection.results == []
 
 
@@ -666,3 +671,19 @@ def test_yaml_preview_and_export_use_executor(hass, entry, monkeypatch):
         websocket_config_import_validate(hass, connection, {"id": 3, "yaml": "["})
     )
     assert connection.errors[-1][0] == 3
+
+
+def test_notification_yaml_websocket_returns_validation_error(hass, entry):
+    """Invalid draft YAML produces a handled transport error without mutation."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    asyncio.run(
+        websocket_notification_yaml_validate(
+            hass, connection, {"id": 91, "yaml": "name: [", "profile_id": "draft"}
+        )
+    )
+    assert connection.results == []
+    assert connection.errors[0][0:2] == (91, "invalid_format")
+    assert manager.config["notification_profiles"] == []

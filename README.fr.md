@@ -247,6 +247,8 @@ Utilisez **Réévaluer** dans le menu du détail d’une alerte en cours pour v�
 
 Dans **Configuration → Notifications**, créez un profil nommé, sélectionnez une ou plusieurs **entités `notify`** et choisissez les envois pour les nouvelles alertes et les retours à la normale. Les rappels peuvent être désactivés ou répétés selon un intervalle configurable d’au moins une minute. Chaque profil peut être activé indépendamment.
 
+Le menu à trois points du profil permet de passer entre l’éditeur visuel et le **mode YAML**, exceptions ordonnées comprises. L’interrupteur sans libellé dans l’en-tête active ou désactive le profil. Un YAML invalide bloque l’enregistrement et le retour à l’éditeur visuel ; fermer un éditeur modifié demande confirmation.
+
 Enregistrez le profil, puis utilisez **Tester** pour envoyer une vraie notification de test à ses destinataires sans créer d’alerte. Les profils acceptent des entités de notification, pas des actions ou scripts arbitraires ; les canaux disponibles uniquement sous forme d’action restent utilisables dans vos propres automatisations.
 
 ### Étiquettes et exceptions

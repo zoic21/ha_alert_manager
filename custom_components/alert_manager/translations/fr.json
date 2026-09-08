@@ -297,7 +297,9 @@
       },
       "yes": "Oui",
       "batch_delay": "Délai de groupement",
-      "batch_delay_help": "De 10 à 300 secondes, 30 par défaut. S’applique aux prochains lots ; les lots en attente conservent leur échéance."
+      "batch_delay_help": "De 10 à 300 secondes, 30 par défaut. S’applique aux prochains lots ; les lots en attente conservent leur échéance.",
+      "yaml_help": "Modifiez le profil et ses exceptions ordonnées. Les durées sont en secondes.",
+      "yaml_title": "YAML du profil de notification"
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

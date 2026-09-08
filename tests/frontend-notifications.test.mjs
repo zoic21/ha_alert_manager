@@ -465,3 +465,139 @@ test("native sortable binds once, defers reorder until drag end and supports the
     globalThis.customElements = previousCustomElements;
   }
 });
+
+// Exercise the editor against a controlled backend boundary, including pending calls.
+const { cloneNotificationProfile, notificationProfileToYaml, switchNotificationEditor } =
+  await import("../frontend-src/components/notification-profiles.js");
+
+function yamlPanel() {
+  const draft = cloneNotificationProfile(profile);
+  return {
+    _notificationProfileDraft: draft,
+    _notificationProfileOriginal: JSON.stringify(draft),
+    _notificationProfileId: draft.id,
+    _configurationDrawer: { kind: "notification" },
+    _settingsDraft: { notification_profiles: [draft] },
+    _t: t,
+    _errorText: (error) => error.message,
+    shadowRoot: { querySelector: () => null },
+    _refreshSettingsConfigurationDrawer() {},
+    _refreshUiState() {},
+    _api: { call: async () => cloneNotificationProfile(profile) },
+  };
+}
+
+test("YAML menu and accessible unlabeled switch render in both modes", () => {
+  for (const mode of ["visual", "yaml"]) {
+    const markup = renderNotificationProfileDrawer({ draft: profile, mode, t });
+    assert.match(markup, /data-notification-editor-menu/);
+    assert.match(markup, /notification-profile-enabled[^>]*aria-label="notifications.enabled"/);
+    assert.doesNotMatch(markup, /<span>notifications.enabled<\/span>/);
+    if (mode === "yaml") {
+      assert.match(markup, /<ha-code-editor id="notification-yaml-editor"/);
+      assert.doesNotMatch(markup, /id="notification-profile-name"/);
+    }
+  }
+});
+
+test("visual/YAML round trip retains disabled state and ordered partial exceptions", async () => {
+  const panel = yamlPanel();
+  panel._notificationProfileDraft.enabled = false;
+  const expected = cloneNotificationProfile(panel._notificationProfileDraft);
+  panel._api.call = async (message) => {
+    assert.equal(message.type, "alert_manager/notifications/yaml/validate");
+    assert.equal(message.profile_id, profile.id);
+    assert.match(message.yaml, /enabled: false/);
+    assert.match(message.yaml, /selector_ids: \["battery"\]/);
+    assert.doesNotMatch(message.yaml, /^id:/m);
+    return expected;
+  };
+  await switchNotificationEditor(panel);
+  assert.equal(panel._notificationEditorMode, "yaml");
+  await switchNotificationEditor(panel);
+  assert.equal(panel._notificationEditorMode, "visual");
+  assert.deepEqual(panel._notificationProfileDraft, expected);
+});
+
+test("invalid YAML blocks both saving and returning, keeping the draft and local error", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  const draft = panel._notificationProfileDraft;
+  panel._notificationYaml = "name: [";
+  panel._api.call = async () => { throw new Error("Invalid YAML"); };
+  await switchNotificationEditor(panel);
+  await handleNotificationProfileAction.call(panel, "save-notification-profile", {});
+  assert.equal(panel._notificationEditorMode, "yaml");
+  assert.equal(panel._notificationYaml, "name: [");
+  assert.equal(panel._notificationProfileDraft, draft);
+  assert.equal(panel._notificationProfileValidationError, "Invalid YAML");
+  assert.equal(panel._notice, undefined);
+  assert.equal(panel._busy, false);
+});
+
+test("closing changed YAML asks for confirmation and cancellation preserves it", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  panel._notificationYaml += "# unsaved comment\n";
+  const originalWindow = globalThis.window;
+  let confirmations = 0;
+  globalThis.window = { confirm: () => { confirmations++; return false; } };
+  try {
+    await handleNotificationProfileAction.call(panel, "close-configuration-drawer", {});
+    assert.equal(confirmations, 1);
+    assert.ok(panel._notificationProfileDraft);
+    assert.match(panel._notificationYaml, /unsaved comment/);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("late validation never overwrites a newer YAML draft", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  let complete;
+  panel._api.call = () => new Promise((resolve) => { complete = resolve; });
+  const pending = switchNotificationEditor(panel);
+  panel._notificationYaml += "# newer\n";
+  complete(cloneNotificationProfile(profile));
+  await pending;
+  assert.equal(panel._notificationEditorMode, "yaml");
+  assert.match(panel._notificationYaml, /newer/);
+});
+
+test("YAML enabled control validates and updates the YAML while preserving exceptions", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  const toggle = { checked: false };
+  const editor = { dataset: {}, addEventListener() {} };
+  panel.shadowRoot.querySelector = (selector) => ({
+    "#notification-yaml-editor": editor,
+    "#notification-profile-enabled": toggle,
+  })[selector] ?? null;
+  hydrateNotificationProfileControls(panel);
+  await toggle.onchange();
+  assert.equal(panel._notificationProfileDraft.enabled, false);
+  assert.match(panel._notificationYaml, /enabled: false/);
+  assert.match(panel._notificationYaml, /selector_ids: \["battery"\]/);
+});
+
+test("saving YAML validates before using the existing configuration save path", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  const updated = cloneNotificationProfile(profile);
+  updated.enabled = false;
+  updated.name = "Updated";
+  panel._notificationYaml = notificationProfileToYaml(updated);
+  const calls = [];
+  panel._api.call = async (message) => {
+    calls.push(message.type);
+    if (message.type.endsWith("/validate")) return updated;
+    assert.deepEqual(message.config.notification_profiles, [updated]);
+    return message.config;
+  };
+  panel._render = () => {};
+  await handleNotificationProfileAction.call(panel, "save-notification-profile", {});
+  assert.deepEqual(calls, ["alert_manager/notifications/yaml/validate", "alert_manager/config/update"]);
+  assert.equal(panel._notificationProfileDraft, null);
+  assert.equal(panel._configurationDrawer, null);
+});

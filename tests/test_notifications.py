@@ -6,6 +6,7 @@ import asyncio
 from copy import deepcopy
 
 import pytest
+import yaml
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.alert_manager.const import (
@@ -21,7 +22,11 @@ from custom_components.alert_manager.notifications import (
     resolve_notification_policy,
 )
 from custom_components.alert_manager.validation import validate_config
-from custom_components.alert_manager.yaml_io import dump_config_yaml, parse_config_yaml
+from custom_components.alert_manager.yaml_io import (
+    dump_config_yaml,
+    parse_config_yaml,
+    parse_notification_profile_yaml,
+)
 
 
 def _profile() -> dict:
@@ -660,4 +665,70 @@ def test_exception_labels_deduplicate_and_reject_overlaps_or_ambiguous_legacy_in
     with pytest.raises(ValueError, match="duplicate selector"):
         validate_config(
             {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+
+
+def test_notification_yaml_roundtrip_and_executor(hass, entry, monkeypatch):
+    """The complete profile uses the shared validator, off the event loop."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    profile = _profile()
+    profile["enabled"] = False
+    profile["exceptions"][0]["notify_on_start"] = False
+    profile["exceptions"][1]["reminder_interval"] = None
+    expected = validate_config(
+        {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+    )["notification_profiles"][0]
+    del profile["id"]
+    original = hass.async_add_executor_job
+    calls = []
+
+    async def executor(target, *args):
+        calls.append(target)
+        return await original(target, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    result = asyncio.run(
+        manager.async_validate_notification_profile_yaml(
+            yaml.safe_dump(profile), "loic"
+        )
+    )
+    assert result == expected
+    assert calls == [parse_notification_profile_yaml]
+    assert manager.config["notification_profiles"] == []
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "[]",
+        "name: [",
+        "name: A\nname: B",
+        "id: other",
+        "name: !!python/object:builtins.object {}",
+        "enabled: true\nenabled: false",
+    ],
+)
+def test_notification_yaml_rejects_invalid_documents(raw):
+    """Unsafe, malformed, duplicate and identity-changing YAML cannot be saved."""
+    with pytest.raises(ValueError):
+        parse_notification_profile_yaml(raw, "loic")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"enabled": "false"},
+        {"targets": ["light.test"]},
+        {"unexpected": True},
+        {"default_policy": {"notify_on_start": True, "unexpected": True}},
+        {"exceptions": [{"selector_type": "label", "selector_ids": ["test"]}]},
+    ],
+)
+def test_notification_yaml_uses_complete_profile_validation(change):
+    """YAML must satisfy the same nested constraints as visual configuration."""
+    with pytest.raises(ValueError):
+        parse_notification_profile_yaml(
+            yaml.safe_dump({**_profile(), **change}), "loic"
         )

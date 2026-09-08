@@ -40,7 +40,7 @@ export function renderSettings(context) {
     const {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
-      notificationProfileValidationError,
+      notificationProfileValidationError, notificationEditorMode,
       notificationUsage = {}, statistics = null, date = (value) => value,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
@@ -100,7 +100,7 @@ export function renderSettings(context) {
       <ha-card id="settings-section-diagnostics" outlined class="panel settings-card settings-scroll-section">${renderRuntimeStatistics({ statistics, date, t })}</ha-card>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
-        notificationProfileDraft, notificationProfileValidationError,
+        notificationProfileDraft, notificationProfileValidationError, notificationEditorMode,
         busy, useBottomSheet, t,
       })}
       </form>
@@ -150,6 +150,7 @@ export function renderSettingsConfigurationDrawer(context) {
       busy,
       useBottomSheet,
       validationError: context.notificationProfileValidationError,
+      mode: context.notificationEditorMode,
       t,
     });
   }
@@ -200,6 +201,7 @@ export function renderSettingsPanel() {
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
       notificationProfileValidationError: this._notificationProfileValidationError,
+      notificationEditorMode: this._notificationEditorMode,
       notificationUsage: this._notificationStats.last_24h,
       statistics: this._notificationStats.diagnostics,
       date: (value) => this._date(value),
@@ -609,6 +611,7 @@ export function refreshSettingsConfigurationDrawer(revealSelector) {
     configurationDrawer: this._configurationDrawer,
     notificationProfileDraft: this._notificationProfileDraft,
     notificationProfileValidationError: this._notificationProfileValidationError,
+    notificationEditorMode: this._notificationEditorMode,
     busy: this._busy,
     useBottomSheet: this._useNativeBottomSheet(),
     t: (key, replacements) => this._t(key, replacements),

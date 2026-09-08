@@ -297,7 +297,9 @@
       },
       "yes": "Yes",
       "batch_delay": "Batching delay",
-      "batch_delay_help": "10–300 seconds, default 30. Applies to new batches; pending batches keep their deadline."
+      "batch_delay_help": "10–300 seconds, default 30. Applies to new batches; pending batches keep their deadline.",
+      "yaml_help": "Edit the profile and its ordered exceptions. Durations are in seconds.",
+      "yaml_title": "Notification profile YAML"
     },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",

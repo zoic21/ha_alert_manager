@@ -378,6 +378,31 @@ async def websocket_rule_update(
 @websocket_api.async_response
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "alert_manager/notifications/yaml/validate",
+        vol.Required("yaml"): str,
+        vol.Required("profile_id"): str,
+    }
+)
+async def websocket_notification_yaml_validate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Validate a profile draft without changing the saved configuration."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        profile = await manager.async_validate_notification_profile_yaml(
+            msg["yaml"], msg["profile_id"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], profile)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "alert_manager/rules/yaml/validate",
         vol.Required("yaml"): str,
         vol.Optional("rule_id"): str,
@@ -608,6 +633,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_rule_create,
         websocket_rule_update,
         websocket_rule_yaml_validate,
+        websocket_notification_yaml_validate,
         websocket_rule_yaml_create,
         websocket_rule_yaml_update,
         websocket_rule_delete,

@@ -55,6 +55,7 @@ from .yaml_io import (
     dump_rule_yaml,
     import_summary,
     parse_config_yaml,
+    parse_notification_profile_yaml,
     parse_rule_yaml,
     rule_to_yaml_data,
 )
@@ -592,6 +593,14 @@ class _ApiMixin:
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
         return rule_to_yaml_data(rule)
+
+    async def async_validate_notification_profile_yaml(
+        self, raw_yaml: str, profile_id: str
+    ) -> dict[str, Any]:
+        """Parse and validate a profile off the event loop without mutations."""
+        return await self.hass.async_add_executor_job(
+            parse_notification_profile_yaml, raw_yaml, profile_id
+        )
 
     async def async_export_config_yaml(self) -> str:
         """Return a deterministic, runtime-free YAML configuration export."""
