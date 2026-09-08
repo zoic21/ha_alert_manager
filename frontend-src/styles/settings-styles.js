@@ -375,12 +375,23 @@ export const settingsStyles = `
   .coherence-panel, .history-panel {
     padding: 20px;
   }
+  .history-statistics-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .history-statistics-toolbar > ha-button {
+    flex: none;
+    margin-inline-start: auto;
+  }
   .history-statistics-period {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 12px;
+    margin: 0;
   }
   .history-statistics-cards, .history-statistics-leaders {
     display: flex;
@@ -394,7 +405,11 @@ export const settingsStyles = `
   .history-statistics-leaders {
     display: contents;
   }
-  .history-statistics-summary, .history-statistics-ranking {
+  .history-statistics-summary {
+    width: 100%;
+    margin-top: 24px;
+  }
+  .history-statistics-ranking {
     width: 360px;
     max-width: 100%;
     padding: 20px;
@@ -454,8 +469,7 @@ export const settingsStyles = `
     color: var(--primary-text-color);
     font-variant-numeric: tabular-nums;
   }
-  /* Keep the mobile cards independent; desktop combines the controls and
-   * summary visually, then aligns ranking sections with shared grid tracks. */
+  /* Shared desktop grid tracks align the ranking sections to their content. */
   :host(:not([narrow])) [data-history-statistics-page] {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -466,37 +480,8 @@ export const settingsStyles = `
   :host(:not([narrow])) .history-statistics-cards {
     display: contents;
   }
-  :host(:not([narrow])) [data-history-statistics-page] .history-panel {
+  :host(:not([narrow])) .history-statistics-banner {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 24px;
-    border-bottom: 0;
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-header {
-    display: contents;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-header h2 {
-    margin: 0;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-page-actions {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  :host(:not([narrow])) .history-statistics-period {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
-  }
-  :host(:not([narrow])) .history-statistics-summary {
-    grid-column: 1 / -1;
-    width: 100%;
-    border-top: 0;
-    border-start-start-radius: 0;
-    border-start-end-radius: 0;
   }
   :host(:not([narrow])) .history-statistics-summary dl {
     grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -187,3 +187,16 @@ test("desktop statistics center the dashboard and align ranking sections without
   assert.match(desktop(".history-statistics-ranking"), /grid-row: span 3/);
   assert.doesNotMatch(desktop(".history-statistics-ranking"), /height:/);
 });
+
+test("period controls and summary share one card on desktop and mobile without a visible statistics title", async () => {
+  const { renderHistory } = await import("../frontend-src/views/history.js");
+  const html = renderHistory({ limit: 100, rows: [], pageMessages: "", statisticsOpen: true, t: (key) => key });
+  const banner = html.match(/<ha-card[^>]*history-statistics-banner[^>]*>(.*?)<\/ha-card>/s)?.[1];
+  assert.ok(banner);
+  assert.match(banner, /history-statistics-period/);
+  assert.match(banner, /history.statistics.back/);
+  assert.match(banner, /data-history-statistics-summary/);
+  assert.ok(banner.indexOf("history-statistics-period") < banner.indexOf("history.statistics.back"));
+  assert.doesNotMatch(banner, /<h2>|history.statistics.title/);
+  assert.equal((html.match(/data-history-statistics-summary/g) ?? []).length, 1);
+});

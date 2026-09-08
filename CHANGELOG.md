@@ -2,6 +2,15 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.9 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Remove the visible statistics title and place period controls at the left of the history action.
+- Keep period controls and all four summary metrics in one card on desktop and mobile, retaining two metric columns on mobile.
+
 ## 2.3.0-dev.8 — September 8, 2026
 
 This is a development prerelease.

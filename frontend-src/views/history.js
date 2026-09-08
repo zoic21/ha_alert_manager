@@ -32,23 +32,27 @@ export function renderHistory(context) {
         <span>${esc(t("history.statistics.period"))}</span>
         ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
       </div>` : "";
-    const header = `${statisticsOpen ? "" : pageMessages}<ha-card outlined class="panel history-panel">
-      <div class="history-header">
-        <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
-        <div class="history-page-actions">
-          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t(statisticsOpen ? "history.statistics.back" : "history.statistics.title"))}</ha-button>
-          ${statisticsOpen ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
+    if (statisticsOpen) return `<section data-history-statistics-page aria-label="${esc(t("history.statistics.title"))}">
+      <ha-card outlined class="panel history-statistics-banner">
+        <div class="history-statistics-toolbar">
+          ${statisticsControls}
+          <ha-button size="s" appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.back"))}</ha-button>
         </div>
-      </div>
-      ${statisticsControls}
-    </ha-card>`;
-    if (statisticsOpen) return `<section data-history-statistics-page>
-      ${header}
+        <div class="history-statistics-summary" data-history-statistics-summary></div>
+      </ha-card>
       <div class="history-statistics-cards">
-        <ha-card outlined class="history-statistics-summary" data-history-statistics-summary></ha-card>
         <div class="history-statistics-leaders" data-history-statistics-leaders></div>
       </div>
     </section>`;
+    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+      <div class="history-header">
+        <div><h2>${esc(t("history.title"))}</h2></div>
+        <div class="history-page-actions">
+          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
+          <ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>
+        </div>
+      </div>
+    </ha-card>`;
     return renderAlertTable(
       "history",
       rows,

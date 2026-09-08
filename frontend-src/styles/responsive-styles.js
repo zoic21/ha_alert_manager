@@ -1,16 +1,15 @@
 export const responsiveStyles = `
-  :host([narrow]) .history-statistics-summary,
+  :host([narrow]) .history-statistics-banner,
   :host([narrow]) .history-statistics-ranking {
     width: 100%;
     padding: 16px;
   }
-  :host([narrow]) [data-history-statistics-page] .history-header {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
+  :host([narrow]) .history-statistics-period {
+    gap: 4px;
+    font-size: 14px;
   }
-  :host([narrow]) [data-history-statistics-page] .history-header ha-button {
-    width: auto;
+  :host([narrow]) .history-statistics-toolbar ha-button::part(base) {
+    padding-inline: 8px;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */

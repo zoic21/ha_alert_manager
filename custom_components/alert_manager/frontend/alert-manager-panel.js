@@ -4838,23 +4838,27 @@ function renderHistory(context) {
         <span>${esc(t("history.statistics.period"))}</span>
         ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
       </div>` : "";
-    const header = `${statisticsOpen ? "" : pageMessages}<ha-card outlined class="panel history-panel">
-      <div class="history-header">
-        <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
-        <div class="history-page-actions">
-          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t(statisticsOpen ? "history.statistics.back" : "history.statistics.title"))}</ha-button>
-          ${statisticsOpen ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
+    if (statisticsOpen) return `<section data-history-statistics-page aria-label="${esc(t("history.statistics.title"))}">
+      <ha-card outlined class="panel history-statistics-banner">
+        <div class="history-statistics-toolbar">
+          ${statisticsControls}
+          <ha-button size="s" appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.back"))}</ha-button>
         </div>
-      </div>
-      ${statisticsControls}
-    </ha-card>`;
-    if (statisticsOpen) return `<section data-history-statistics-page>
-      ${header}
+        <div class="history-statistics-summary" data-history-statistics-summary></div>
+      </ha-card>
       <div class="history-statistics-cards">
-        <ha-card outlined class="history-statistics-summary" data-history-statistics-summary></ha-card>
         <div class="history-statistics-leaders" data-history-statistics-leaders></div>
       </div>
     </section>`;
+    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+      <div class="history-header">
+        <div><h2>${esc(t("history.title"))}</h2></div>
+        <div class="history-page-actions">
+          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
+          <ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>
+        </div>
+      </div>
+    </ha-card>`;
     return renderAlertTable(
       "history",
       rows,
@@ -7948,12 +7952,23 @@ const settingsStyles = `
   .coherence-panel, .history-panel {
     padding: 20px;
   }
+  .history-statistics-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .history-statistics-toolbar > ha-button {
+    flex: none;
+    margin-inline-start: auto;
+  }
   .history-statistics-period {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 12px;
+    margin: 0;
   }
   .history-statistics-cards, .history-statistics-leaders {
     display: flex;
@@ -7967,7 +7982,11 @@ const settingsStyles = `
   .history-statistics-leaders {
     display: contents;
   }
-  .history-statistics-summary, .history-statistics-ranking {
+  .history-statistics-summary {
+    width: 100%;
+    margin-top: 24px;
+  }
+  .history-statistics-ranking {
     width: 360px;
     max-width: 100%;
     padding: 20px;
@@ -8027,8 +8046,7 @@ const settingsStyles = `
     color: var(--primary-text-color);
     font-variant-numeric: tabular-nums;
   }
-  /* Keep the mobile cards independent; desktop combines the controls and
-   * summary visually, then aligns ranking sections with shared grid tracks. */
+  /* Shared desktop grid tracks align the ranking sections to their content. */
   :host(:not([narrow])) [data-history-statistics-page] {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -8039,37 +8057,8 @@ const settingsStyles = `
   :host(:not([narrow])) .history-statistics-cards {
     display: contents;
   }
-  :host(:not([narrow])) [data-history-statistics-page] .history-panel {
+  :host(:not([narrow])) .history-statistics-banner {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 24px;
-    border-bottom: 0;
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-header {
-    display: contents;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-header h2 {
-    margin: 0;
-  }
-  :host(:not([narrow])) [data-history-statistics-page] .history-page-actions {
-    grid-column: 3;
-    grid-row: 1;
-  }
-  :host(:not([narrow])) .history-statistics-period {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
-  }
-  :host(:not([narrow])) .history-statistics-summary {
-    grid-column: 1 / -1;
-    width: 100%;
-    border-top: 0;
-    border-start-start-radius: 0;
-    border-start-end-radius: 0;
   }
   :host(:not([narrow])) .history-statistics-summary dl {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -8699,18 +8688,17 @@ const stateStyles = `
 
 // Source: frontend-src/styles/responsive-styles.js
 const responsiveStyles = `
-  :host([narrow]) .history-statistics-summary,
+  :host([narrow]) .history-statistics-banner,
   :host([narrow]) .history-statistics-ranking {
     width: 100%;
     padding: 16px;
   }
-  :host([narrow]) [data-history-statistics-page] .history-header {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
+  :host([narrow]) .history-statistics-period {
+    gap: 4px;
+    font-size: 14px;
   }
-  :host([narrow]) [data-history-statistics-page] .history-header ha-button {
-    width: auto;
+  :host([narrow]) .history-statistics-toolbar ha-button::part(base) {
+    padding-inline: 8px;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */
