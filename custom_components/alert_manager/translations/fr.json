@@ -12,7 +12,7 @@
   },
   "config_panel": {
     "alert_details": {
-      "history_occurrences": "Occurrences dans l’historique",
+      "history_occurrences": "Historique",
       "alert_id": "ID de l’alerte",
       "aria_menu": "Actions de l’alerte",
       "current_value": "Valeur actuelle",
