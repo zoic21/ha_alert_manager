@@ -95,6 +95,8 @@ const makeTableState = (kind, preferences = {}) => {
       alert: [],
       resolvedFrom: "",
       resolvedTo: "",
+      activeFrom: "",
+      activeTo: "",
     },
     columns,
     groupBy: ["none", "device", "area", "rule", "status"].includes(storedPreferences.groupBy)

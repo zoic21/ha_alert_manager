@@ -844,6 +844,7 @@ test("history statistics replace the table only when explicitly opened", () => {
   assert.match(markup, /slot="top-header"/);
   assert.match(markup, /history-statistics-period/);
   assert.match(markup, /history-statistics-group/);
-  assert.match(markup, /history.statistics.help/);
+  assert.match(markup, /data-history-statistics-leaders/);
+  assert.doesNotMatch(markup, /history.statistics.help|history-statistics-help|history-statistics-note|history-statistics-drilldown/);
   assert.doesNotMatch(renderHistory({ ...context, statisticsOpen: true, limit: 0 }), /data-history-statistics-page/);
 });

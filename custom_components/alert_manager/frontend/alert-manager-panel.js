@@ -197,6 +197,8 @@ const makeTableState = (kind, preferences = {}) => {
       alert: [],
       resolvedFrom: "",
       resolvedTo: "",
+      activeFrom: "",
+      activeTo: "",
     },
     columns,
     groupBy: ["none", "device", "area", "rule", "status"].includes(storedPreferences.groupBy)
@@ -1494,7 +1496,8 @@ function filterCount(kind) {
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
-    return facets + detected + resolved + (kind === "history" && this._historyStatisticsFilter ? 1 : 0);
+    const active = kind === "history" && (filters.activeFrom || filters.activeTo) ? 1 : 0;
+    return facets + detected + resolved + active;
 }
 
 function filterValues(value) {
@@ -1503,9 +1506,8 @@ function filterValues(value) {
 }
 
 function resetTableFilters(kind) {
-    if (kind === "history") this._historyStatisticsFilter = null;
     Object.keys(this._tableState[kind].filters).forEach((key) => {
-      this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(key)
+      this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo", "activeFrom", "activeTo"].includes(key)
         ? ""
         : [];
     });
@@ -1520,17 +1522,21 @@ function filteredTableRows(kind, rows, includeSearch = true) {
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
-      if (kind === "history" && !matchesHistoryStatisticsFilter(row.source, this._historyStatisticsFilter)) return false;
+      if (kind === "history" && !activePeriodMatches(row.activated, row.resolved, filters.activeFrom, filters.activeTo)) return false;
       if (query && !row.search.includes(query)) return false;
       if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
-      if (selected.device.size && !selected.device.has(row.device)) return false;
+      if (selected.device.size && !selected.device.has(row.device)
+        && !(kind === "history" && selected.device.has(historyFacetValue(row, "device")))) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
-      if (selected.rule.size && !selected.rule.has(row.rule)) return false;
-      if (selected.integration.size && !selected.integration.has(row.integration)) return false;
+      if (selected.rule.size && !selected.rule.has(row.rule)
+        && !(kind === "history" && selected.rule.has(historyFacetValue(row, "rule")))) return false;
+      if (selected.integration.size && !selected.integration.has(row.integration)
+        && !(kind === "history" && selected.integration.has(historyFacetValue(row, "integration")))) return false;
       if (selected.labels.size && !row.labelIds.some((label) => selected.labels.has(label))) return false;
       if (selected.domain.size && !selected.domain.has(row.domain)) return false;
-      if (selected.entity.size && !selected.entity.has(row.entityId)) return false;
+      if (selected.entity.size && !selected.entity.has(row.entityId)
+        && !(kind === "history" && selected.entity.has(historyFacetValue(row, "entity")))) return false;
       if (!this._dateMatches(row.detected, filters.detectedFrom, filters.detectedTo)) return false;
       if (kind === "history" && !this._dateMatches(row.resolved, filters.resolvedFrom, filters.resolvedTo)) return false;
       return true;
@@ -1539,20 +1545,45 @@ function filteredTableRows(kind, rows, includeSearch = true) {
     return filtered.sort((left, right) => direction * this._compareTableRows(left, right, state.sortBy));
 }
 
+function dateFilterBoundary(date, endOfDay) {
+    if (!date) return undefined;
+    const value = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? `${date}T${endOfDay ? "23:59:59.999" : "00:00:00"}` : date;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function activePeriodMatches(activeAt, resolvedAt, from, to) {
+    if (!from && !to) return true;
+    const active = Date.parse(activeAt);
+    const resolved = Date.parse(resolvedAt);
+    if (!Number.isFinite(active) || !Number.isFinite(resolved)) return false;
+    const start = dateFilterBoundary(from, false);
+    const end = dateFilterBoundary(to, true);
+    // Same half-open active overlap as the history statistics calculation.
+    if (start !== undefined && (resolved < start || (resolved === start && active < start))) return false;
+    return end === undefined || active < end;
+}
+
+function historyFacetValue(row, key) {
+    const field = { device: "device_id", rule: "rule_id", entity: "entity_id", integration: "integration" }[key];
+    return `id:${row.source[field] || ""}`;
+}
+
+function historyFacetOptions(rows, key, t) {
+    const labelKey = { device: "device", rule: "rule", entity: "entityName", integration: "integrationLabel" }[key];
+    return [...new Map(rows.map((row) => {
+      const value = historyFacetValue(row, key);
+      return [value, { value, label: value === "id:" ? t("history.statistics.unknown") : row[labelKey] || value.slice(3) }];
+    })).values()];
+}
+
 function dateMatches(value, from, to) {
     if (!from && !to) return true;
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp)) return false;
-    const boundary = (date, endOfDay) => {
-      if (!date) return undefined;
-      const valueToParse = /^\d{4}-\d{2}-\d{2}$/.test(date)
-        ? `${date}T${endOfDay ? "23:59:59.999" : "00:00:00"}`
-        : date;
-      const parsed = Date.parse(valueToParse);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    };
-    const start = boundary(from, false);
-    const end = boundary(to, true);
+    const start = dateFilterBoundary(from, false);
+    const end = dateFilterBoundary(to, true);
     if (start !== undefined && timestamp < start) return false;
     if (end !== undefined && timestamp > end) return false;
     return true;
@@ -1634,7 +1665,7 @@ function renderFacetFilter(kind, key, label, options) {
 function dateRangeDefaults(rows, prefix) {
     const property = prefix === "resolved" ? "resolved" : "detected";
     const timestamps = rows
-      .map((row) => Date.parse(row[property]))
+      .flatMap((row) => prefix === "active" ? [Date.parse(row.activated), Date.parse(row.resolved)] : [Date.parse(row[property])])
       .filter(Number.isFinite);
     if (timestamps.length) {
       return {
@@ -1673,13 +1704,14 @@ function renderFilterPane(kind, rows) {
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
-      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
-      ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
-      ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
+      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), kind === "history" ? historyFacetOptions(rows, "device", (key) => this._t(key)) : this._facetOptions(rows, "device"))}
+      ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
+      ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
       ${this._renderFacetFilter(kind, "labels", this._t("table.filters.labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()])}
       ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
       ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
-      ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), kind === "history" ? historyFacetOptions(rows, "entity", (key) => this._t(key)) : this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${kind === "history" ? this._renderDateFilter(kind, "active", this._t("history.statistics.active_period"), rows) : ""}
       ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"), rows)}
       ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved"), rows) : ""}`;
 }
@@ -4797,7 +4829,7 @@ function refreshHistoryData() {
 }
 
 function renderHistory(context) {
-    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7, statisticsFilter = null } = context;
+    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
     if (limit === 0) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
@@ -4811,15 +4843,7 @@ function renderHistory(context) {
       </div>
       <div class="history-statistics-summary" data-history-statistics-summary></div>
       </div>
-      <div class="history-statistics-note">
-        <span>${esc(t("history.statistics.retained"))}</span>
-        <ha-icon-button data-action="history-statistics-help" label="${esc(t("history.statistics.about"))}" aria-label="${esc(t("history.statistics.about"))}" title="${esc(t("history.statistics.help"))}" aria-expanded="false"><ha-icon icon="mdi:information-outline"></ha-icon></ha-icon-button>
-      </div>
-      <ha-alert alert-type="info" data-history-statistics-help hidden>${esc(t("history.statistics.help"))}</ha-alert>` : "";
-    const drilldown = !statisticsOpen && statisticsFilter ? `<div class="history-statistics-drilldown">
-      <span>${esc(t("history.statistics.selection", { name: statisticsFilter.name, days: statisticsFilter.days }))}</span>
-      <ha-button appearance="plain" data-action="clear-history-statistics-filter">${esc(t("table.filters.reset"))}</ha-button>
-    </div>` : "";
+      <div data-history-statistics-leaders></div>` : "";
     const header = `${pageMessages}<ha-card outlined class="panel history-panel">
       <div class="history-header">
         <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
@@ -4828,7 +4852,7 @@ function renderHistory(context) {
           ${statisticsOpen ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
-      ${statisticsControls}${drilldown}
+      ${statisticsControls}
     </ha-card>`;
     if (statisticsOpen) return `<hass-tabs-subpage-data-table id="panel-shell" data-history-statistics-page main-page clickable>
       <div slot="top-header" class="table-page-top">${header}</div>
@@ -4848,7 +4872,6 @@ function renderHistoryPanel() {
       busy: this._busy,
       statisticsOpen: this._historyStatisticsOpen,
       statisticsDays: this._historyStatisticsDays ?? 7,
-      statisticsFilter: this._historyStatisticsFilter,
       limit,
       pageMessages: this._renderPageMessages(),
       rows: this._tableRows("history", events),
@@ -4891,17 +4914,8 @@ async function handleHistoryAction(action, button) {
     void this._refreshHistory();
     return true;
   }
-  if (action === "history-statistics-help") {
-    const help = this.shadowRoot.querySelector("[data-history-statistics-help]");
-    if (help) {
-      help.hidden = !help.hidden;
-      button.setAttribute("aria-expanded", String(!help.hidden));
-    }
-    return true;
-  }
-  if (action === "clear-history-statistics-filter") {
-    this._historyStatisticsFilter = null;
-    this._render();
+  if (action === "history-statistics-leader") {
+    openHistoryStatisticsGroup(this, button?.dataset.kind, button?.dataset.id);
     return true;
   }
   if (action === "toggle-history-statistics") {
@@ -5030,20 +5044,14 @@ function hydrateHistoryStatistics(root, context) {
     duration: (seconds) => compactDurationText.call(context, seconds),
     exactDuration: (seconds) => context._historyDurationText(seconds),
   });
+  const leaders = root.querySelector("[data-history-statistics-leaders]");
+  if (leaders) leaders.innerHTML = renderHistoryStatisticsLeaders({
+    statistics: ready ? statistics : null,
+    t: (key, values) => context._t(key, values),
+    integrationLabel: (id) => context._integrationLabel(id),
+  });
   // Keep one native row listener across data refreshes and regrouping.
-  table._historyStatisticsOpenRow = (id) => {
-    const row = table.data.find((item) => String(item.id) === String(id));
-    if (!row || !ready) return;
-    context._resetTableFilters("history");
-    context._tableState.history.search = "";
-    context._selectedHistoryIds.clear();
-    context._historyStatisticsFilter = {
-      kind, id: row.id, name: row.name, days,
-      from: statistics.from, to: statistics.to,
-    };
-    context._historyStatisticsOpen = false;
-    context._render();
-  };
+  table._historyStatisticsOpenRow = (id) => openHistoryStatisticsGroup(context, kind, id);
   if (!table._historyStatisticsRowListener) {
     table.addEventListener("row-click", (event) => table._historyStatisticsOpenRow(event.detail?.id));
     table._historyStatisticsRowListener = true;
@@ -5054,6 +5062,7 @@ function renderHistoryStatisticsSummary({ statistics, t, duration, exactDuration
   const devices = statistics?.groups.device?.filter((row) => row.id).length ?? 0;
   const items = [
     ["occurrences", statistics?.occurrences ?? 0],
+    ["entities", statistics?.groups.entity?.filter((row) => row.id).length ?? 0],
     ["devices", devices],
     ["cumulative", statistics ? duration(statistics.total_duration_seconds) : "—"],
   ];
@@ -5100,16 +5109,35 @@ function historyStatisticsNameCell(row, narrow, t) {
   return cell;
 }
 
-function matchesHistoryStatisticsFilter(entry, filter) {
-  if (!filter) return true;
-  const field = { alert: "id", entity: "entity_id", device: "device_id", integration: "integration", rule: "rule_id" }[filter.kind];
-  if (!field || (entry[field] || "") !== filter.id) return false;
-  const start = Date.parse(filter.from);
-  const end = Date.parse(filter.to);
-  const active = Date.parse(entry.active_at);
-  const resolved = Date.parse(entry.resolved_at);
-  return [start, end, active, resolved].every(Number.isFinite)
-    && active < end && resolved >= start && !(resolved === start && active < start);
+function openHistoryStatisticsGroup(context, kind, id) {
+  if (!["alert", "entity", "device", "integration", "rule"].includes(kind)) return;
+  const statistics = context._history?.statistics;
+  if (statistics?.days !== (context._historyStatisticsDays ?? 7)) return;
+  const row = statistics.groups[kind]?.find((item) => String(item.id) === String(id));
+  if (!row) return;
+  context._resetTableFilters("history");
+  const state = context._tableState.history;
+  state.search = "";
+  state.filters[kind] = [kind === "alert" ? row.id : `id:${row.id}`];
+  state.filters.activeFrom = statistics.from;
+  state.filters.activeTo = statistics.to;
+  context._selectedHistoryIds.clear();
+  context._historyStatisticsOpen = false;
+  context._render();
+}
+
+function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel }) {
+  return `<div class="history-statistics-leaders">${["entity", "device", "integration"].map((kind) => {
+    const rows = (statistics?.groups[kind] ?? []).filter((row) => row.id);
+    const leader = rows[0];
+    const ties = leader ? rows.filter((row) => row.occurrences === leader.occurrences).length - 1 : 0;
+    const name = leader ? (kind === "integration" ? integrationLabel(leader.id) : leader.name || leader.id) : "—";
+    return `<div class="history-statistics-leader">
+      <span>${esc(t(`history.statistics.top_${kind}`))}</span>
+      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)}">${esc(name)}</ha-button>
+        <small>${esc(t(leader.occurrences === 1 ? "history.statistics.leader_count_one" : "history.statistics.leader_count", { count: leader.occurrences }))}${ties ? ` · ${esc(t("history.statistics.ties", { count: ties }))}` : ""}</small>` : "<strong>—</strong>"}
+    </div>`;
+  }).join("")}</div>`;
 }
 
 // Source: frontend-src/views/coherence.js
@@ -8056,23 +8084,34 @@ const settingsStyles = `
     font-weight: var(--ha-font-weight-medium, 500);
     font-variant-numeric: tabular-nums;
   }
-  .history-statistics-note, .history-statistics-drilldown {
+  .history-statistics-leaders {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    max-width: 960px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--divider-color);
+  }
+  .history-statistics-leader {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    gap: 4px;
+  }
+  .history-statistics-leader > span, .history-statistics-leader > small {
     color: var(--secondary-text-color);
     font-size: 12px;
   }
-  [data-history-statistics-help][hidden] {
-    display: none;
+  .history-statistics-leader ha-button {
+    max-width: 100%;
+    margin-inline-start: -8px;
   }
-  .history-statistics-note ha-icon-button {
-    --mdc-icon-button-size: 32px;
-    --mdc-icon-size: 18px;
-  }
-  .history-statistics-drilldown {
-    flex-wrap: wrap;
-    margin-top: 8px;
+  .history-statistics-leader ha-button::part(label) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .coherence-header, .history-header {
     display: flex;
@@ -8706,12 +8745,32 @@ const responsiveStyles = `
   }
   :host([narrow]) .history-statistics-summary dl {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     margin-top: 0;
   }
   :host([narrow]) .history-statistics-summary dd {
     font-size: 20px;
+  }
+
+  :host([narrow]) .history-statistics-leaders {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  :host([narrow]) .history-statistics-leader {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 8px;
+  }
+  :host([narrow]) .history-statistics-leader ha-button {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+  :host([narrow]) .history-statistics-leader > small {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */

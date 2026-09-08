@@ -5386,19 +5386,26 @@ for (const kind of ["active", "pending", "acknowledged", "history"]) {
 test("statistics drilldown integrates with native history filtering and reset", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
-  panel._historyStatisticsFilter = {
-    kind: "device", id: "device-a", name: "Identical name", days: 7,
-    from: "2026-09-01T12:00:00Z", to: "2026-09-08T12:00:00Z",
-  };
+  panel._tableState.history.filters.device = ["id:device-a"];
+  panel._tableState.history.filters.activeFrom = "2026-09-01T12:00:00Z";
+  panel._tableState.history.filters.activeTo = "2026-09-08T12:00:00Z";
   const rows = panel._tableRows("history", [
     historyEvent({ event_id: "included", device_id: "device-a", device_name: "Identical name", active_at: "2026-08-30T12:00:00Z", resolved_at: "2026-09-02T12:00:00Z" }),
     historyEvent({ event_id: "other-device", device_id: "device-b", device_name: "Identical name", active_at: "2026-08-30T12:00:00Z", resolved_at: "2026-09-02T12:00:00Z" }),
     historyEvent({ event_id: "outside", device_id: "device-a", active_at: "2026-08-30T12:00:00Z", resolved_at: "2026-08-31T12:00:00Z" }),
   ]);
   assert.deepEqual(panel._filteredTableRows("history", rows).map((row) => row.id), ["included"]);
+  assert.equal(panel._filterCount("history"), 2);
+  const pane = panel._renderFilterPane("history", rows);
+  assert.match(pane, /data-filter-value="id:device-a"/);
+  assert.match(pane, /data-table-date-range="active"/);
+  assert.match(pane, /data-table-range-start="2026-09-01T12:00:00Z"/);
+  panel._tableState.history.filters.activeFrom = "";
+  panel._tableState.history.filters.activeTo = "";
   assert.equal(panel._filterCount("history"), 1);
+  assert.equal(panel._filteredTableRows("history", rows).length, 2);
   panel._resetTableFilters("history");
-  assert.equal(panel._historyStatisticsFilter, null);
+  assert.equal(panel._tableState.history.filters.activeFrom, "");
   assert.equal(panel._filterCount("history"), 0);
   assert.equal(panel._filteredTableRows("history", rows).length, 3);
 });

@@ -1,4 +1,4 @@
-import { handleHistoryAction, matchesHistoryStatisticsFilter } from "../views/history.js";
+import { handleHistoryAction } from "../views/history.js";
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
@@ -419,7 +419,8 @@ export function filterCount(kind) {
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
-    return facets + detected + resolved + (kind === "history" && this._historyStatisticsFilter ? 1 : 0);
+    const active = kind === "history" && (filters.activeFrom || filters.activeTo) ? 1 : 0;
+    return facets + detected + resolved + active;
 }
 
 export function filterValues(value) {
@@ -428,9 +429,8 @@ export function filterValues(value) {
 }
 
 export function resetTableFilters(kind) {
-    if (kind === "history") this._historyStatisticsFilter = null;
     Object.keys(this._tableState[kind].filters).forEach((key) => {
-      this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(key)
+      this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo", "activeFrom", "activeTo"].includes(key)
         ? ""
         : [];
     });
@@ -445,17 +445,21 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
-      if (kind === "history" && !matchesHistoryStatisticsFilter(row.source, this._historyStatisticsFilter)) return false;
+      if (kind === "history" && !activePeriodMatches(row.activated, row.resolved, filters.activeFrom, filters.activeTo)) return false;
       if (query && !row.search.includes(query)) return false;
       if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
-      if (selected.device.size && !selected.device.has(row.device)) return false;
+      if (selected.device.size && !selected.device.has(row.device)
+        && !(kind === "history" && selected.device.has(historyFacetValue(row, "device")))) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
-      if (selected.rule.size && !selected.rule.has(row.rule)) return false;
-      if (selected.integration.size && !selected.integration.has(row.integration)) return false;
+      if (selected.rule.size && !selected.rule.has(row.rule)
+        && !(kind === "history" && selected.rule.has(historyFacetValue(row, "rule")))) return false;
+      if (selected.integration.size && !selected.integration.has(row.integration)
+        && !(kind === "history" && selected.integration.has(historyFacetValue(row, "integration")))) return false;
       if (selected.labels.size && !row.labelIds.some((label) => selected.labels.has(label))) return false;
       if (selected.domain.size && !selected.domain.has(row.domain)) return false;
-      if (selected.entity.size && !selected.entity.has(row.entityId)) return false;
+      if (selected.entity.size && !selected.entity.has(row.entityId)
+        && !(kind === "history" && selected.entity.has(historyFacetValue(row, "entity")))) return false;
       if (!this._dateMatches(row.detected, filters.detectedFrom, filters.detectedTo)) return false;
       if (kind === "history" && !this._dateMatches(row.resolved, filters.resolvedFrom, filters.resolvedTo)) return false;
       return true;
@@ -464,20 +468,45 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
     return filtered.sort((left, right) => direction * this._compareTableRows(left, right, state.sortBy));
 }
 
+function dateFilterBoundary(date, endOfDay) {
+    if (!date) return undefined;
+    const value = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? `${date}T${endOfDay ? "23:59:59.999" : "00:00:00"}` : date;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function activePeriodMatches(activeAt, resolvedAt, from, to) {
+    if (!from && !to) return true;
+    const active = Date.parse(activeAt);
+    const resolved = Date.parse(resolvedAt);
+    if (!Number.isFinite(active) || !Number.isFinite(resolved)) return false;
+    const start = dateFilterBoundary(from, false);
+    const end = dateFilterBoundary(to, true);
+    // Same half-open active overlap as the history statistics calculation.
+    if (start !== undefined && (resolved < start || (resolved === start && active < start))) return false;
+    return end === undefined || active < end;
+}
+
+function historyFacetValue(row, key) {
+    const field = { device: "device_id", rule: "rule_id", entity: "entity_id", integration: "integration" }[key];
+    return `id:${row.source[field] || ""}`;
+}
+
+export function historyFacetOptions(rows, key, t) {
+    const labelKey = { device: "device", rule: "rule", entity: "entityName", integration: "integrationLabel" }[key];
+    return [...new Map(rows.map((row) => {
+      const value = historyFacetValue(row, key);
+      return [value, { value, label: value === "id:" ? t("history.statistics.unknown") : row[labelKey] || value.slice(3) }];
+    })).values()];
+}
+
 export function dateMatches(value, from, to) {
     if (!from && !to) return true;
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp)) return false;
-    const boundary = (date, endOfDay) => {
-      if (!date) return undefined;
-      const valueToParse = /^\d{4}-\d{2}-\d{2}$/.test(date)
-        ? `${date}T${endOfDay ? "23:59:59.999" : "00:00:00"}`
-        : date;
-      const parsed = Date.parse(valueToParse);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    };
-    const start = boundary(from, false);
-    const end = boundary(to, true);
+    const start = dateFilterBoundary(from, false);
+    const end = dateFilterBoundary(to, true);
     if (start !== undefined && timestamp < start) return false;
     if (end !== undefined && timestamp > end) return false;
     return true;
@@ -559,7 +588,7 @@ export function renderFacetFilter(kind, key, label, options) {
 export function dateRangeDefaults(rows, prefix) {
     const property = prefix === "resolved" ? "resolved" : "detected";
     const timestamps = rows
-      .map((row) => Date.parse(row[property]))
+      .flatMap((row) => prefix === "active" ? [Date.parse(row.activated), Date.parse(row.resolved)] : [Date.parse(row[property])])
       .filter(Number.isFinite);
     if (timestamps.length) {
       return {
@@ -598,13 +627,14 @@ export function renderFilterPane(kind, rows) {
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
-      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
-      ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
-      ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
+      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), kind === "history" ? historyFacetOptions(rows, "device", (key) => this._t(key)) : this._facetOptions(rows, "device"))}
+      ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
+      ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
       ${this._renderFacetFilter(kind, "labels", this._t("table.filters.labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()])}
       ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
       ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
-      ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), kind === "history" ? historyFacetOptions(rows, "entity", (key) => this._t(key)) : this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
+      ${kind === "history" ? this._renderDateFilter(kind, "active", this._t("history.statistics.active_period"), rows) : ""}
       ${this._renderDateFilter(kind, "detected", this._t("table.columns.detected"), rows)}
       ${kind === "history" ? this._renderDateFilter(kind, "resolved", this._t("table.columns.resolved"), rows) : ""}`;
 }

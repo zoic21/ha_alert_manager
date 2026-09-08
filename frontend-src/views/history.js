@@ -23,7 +23,7 @@ export function refreshHistoryData() {
 }
 
 export function renderHistory(context) {
-    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7, statisticsFilter = null } = context;
+    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
     if (limit === 0) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
@@ -37,15 +37,7 @@ export function renderHistory(context) {
       </div>
       <div class="history-statistics-summary" data-history-statistics-summary></div>
       </div>
-      <div class="history-statistics-note">
-        <span>${esc(t("history.statistics.retained"))}</span>
-        <ha-icon-button data-action="history-statistics-help" label="${esc(t("history.statistics.about"))}" aria-label="${esc(t("history.statistics.about"))}" title="${esc(t("history.statistics.help"))}" aria-expanded="false"><ha-icon icon="mdi:information-outline"></ha-icon></ha-icon-button>
-      </div>
-      <ha-alert alert-type="info" data-history-statistics-help hidden>${esc(t("history.statistics.help"))}</ha-alert>` : "";
-    const drilldown = !statisticsOpen && statisticsFilter ? `<div class="history-statistics-drilldown">
-      <span>${esc(t("history.statistics.selection", { name: statisticsFilter.name, days: statisticsFilter.days }))}</span>
-      <ha-button appearance="plain" data-action="clear-history-statistics-filter">${esc(t("table.filters.reset"))}</ha-button>
-    </div>` : "";
+      <div data-history-statistics-leaders></div>` : "";
     const header = `${pageMessages}<ha-card outlined class="panel history-panel">
       <div class="history-header">
         <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
@@ -54,7 +46,7 @@ export function renderHistory(context) {
           ${statisticsOpen ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
-      ${statisticsControls}${drilldown}
+      ${statisticsControls}
     </ha-card>`;
     if (statisticsOpen) return `<hass-tabs-subpage-data-table id="panel-shell" data-history-statistics-page main-page clickable>
       <div slot="top-header" class="table-page-top">${header}</div>
@@ -74,7 +66,6 @@ export function renderHistoryPanel() {
       busy: this._busy,
       statisticsOpen: this._historyStatisticsOpen,
       statisticsDays: this._historyStatisticsDays ?? 7,
-      statisticsFilter: this._historyStatisticsFilter,
       limit,
       pageMessages: this._renderPageMessages(),
       rows: this._tableRows("history", events),
@@ -117,17 +108,8 @@ export async function handleHistoryAction(action, button) {
     void this._refreshHistory();
     return true;
   }
-  if (action === "history-statistics-help") {
-    const help = this.shadowRoot.querySelector("[data-history-statistics-help]");
-    if (help) {
-      help.hidden = !help.hidden;
-      button.setAttribute("aria-expanded", String(!help.hidden));
-    }
-    return true;
-  }
-  if (action === "clear-history-statistics-filter") {
-    this._historyStatisticsFilter = null;
-    this._render();
+  if (action === "history-statistics-leader") {
+    openHistoryStatisticsGroup(this, button?.dataset.kind, button?.dataset.id);
     return true;
   }
   if (action === "toggle-history-statistics") {
@@ -256,20 +238,14 @@ export function hydrateHistoryStatistics(root, context) {
     duration: (seconds) => compactDurationText.call(context, seconds),
     exactDuration: (seconds) => context._historyDurationText(seconds),
   });
+  const leaders = root.querySelector("[data-history-statistics-leaders]");
+  if (leaders) leaders.innerHTML = renderHistoryStatisticsLeaders({
+    statistics: ready ? statistics : null,
+    t: (key, values) => context._t(key, values),
+    integrationLabel: (id) => context._integrationLabel(id),
+  });
   // Keep one native row listener across data refreshes and regrouping.
-  table._historyStatisticsOpenRow = (id) => {
-    const row = table.data.find((item) => String(item.id) === String(id));
-    if (!row || !ready) return;
-    context._resetTableFilters("history");
-    context._tableState.history.search = "";
-    context._selectedHistoryIds.clear();
-    context._historyStatisticsFilter = {
-      kind, id: row.id, name: row.name, days,
-      from: statistics.from, to: statistics.to,
-    };
-    context._historyStatisticsOpen = false;
-    context._render();
-  };
+  table._historyStatisticsOpenRow = (id) => openHistoryStatisticsGroup(context, kind, id);
   if (!table._historyStatisticsRowListener) {
     table.addEventListener("row-click", (event) => table._historyStatisticsOpenRow(event.detail?.id));
     table._historyStatisticsRowListener = true;
@@ -280,6 +256,7 @@ export function renderHistoryStatisticsSummary({ statistics, t, duration, exactD
   const devices = statistics?.groups.device?.filter((row) => row.id).length ?? 0;
   const items = [
     ["occurrences", statistics?.occurrences ?? 0],
+    ["entities", statistics?.groups.entity?.filter((row) => row.id).length ?? 0],
     ["devices", devices],
     ["cumulative", statistics ? duration(statistics.total_duration_seconds) : "—"],
   ];
@@ -326,14 +303,33 @@ export function historyStatisticsNameCell(row, narrow, t) {
   return cell;
 }
 
-export function matchesHistoryStatisticsFilter(entry, filter) {
-  if (!filter) return true;
-  const field = { alert: "id", entity: "entity_id", device: "device_id", integration: "integration", rule: "rule_id" }[filter.kind];
-  if (!field || (entry[field] || "") !== filter.id) return false;
-  const start = Date.parse(filter.from);
-  const end = Date.parse(filter.to);
-  const active = Date.parse(entry.active_at);
-  const resolved = Date.parse(entry.resolved_at);
-  return [start, end, active, resolved].every(Number.isFinite)
-    && active < end && resolved >= start && !(resolved === start && active < start);
+export function openHistoryStatisticsGroup(context, kind, id) {
+  if (!["alert", "entity", "device", "integration", "rule"].includes(kind)) return;
+  const statistics = context._history?.statistics;
+  if (statistics?.days !== (context._historyStatisticsDays ?? 7)) return;
+  const row = statistics.groups[kind]?.find((item) => String(item.id) === String(id));
+  if (!row) return;
+  context._resetTableFilters("history");
+  const state = context._tableState.history;
+  state.search = "";
+  state.filters[kind] = [kind === "alert" ? row.id : `id:${row.id}`];
+  state.filters.activeFrom = statistics.from;
+  state.filters.activeTo = statistics.to;
+  context._selectedHistoryIds.clear();
+  context._historyStatisticsOpen = false;
+  context._render();
+}
+
+export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel }) {
+  return `<div class="history-statistics-leaders">${["entity", "device", "integration"].map((kind) => {
+    const rows = (statistics?.groups[kind] ?? []).filter((row) => row.id);
+    const leader = rows[0];
+    const ties = leader ? rows.filter((row) => row.occurrences === leader.occurrences).length - 1 : 0;
+    const name = leader ? (kind === "integration" ? integrationLabel(leader.id) : leader.name || leader.id) : "—";
+    return `<div class="history-statistics-leader">
+      <span>${esc(t(`history.statistics.top_${kind}`))}</span>
+      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)}">${esc(name)}</ha-button>
+        <small>${esc(t(leader.occurrences === 1 ? "history.statistics.leader_count_one" : "history.statistics.leader_count", { count: leader.occurrences }))}${ties ? ` · ${esc(t("history.statistics.ties", { count: ties }))}` : ""}</small>` : "<strong>—</strong>"}
+    </div>`;
+  }).join("")}</div>`;
 }

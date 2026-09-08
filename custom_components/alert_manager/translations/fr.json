@@ -241,16 +241,20 @@
         "total": "Durée totale",
         "average": "Durée moyenne",
         "unknown": "Non renseigné",
-        "help": "Calculées uniquement sur les occurrences résolues conservées qui recoupent la période, indépendamment des filtres du tableau historique. La durée active est limitée à la période et inclut le temps acquitté. Les durées sont cumulées par occurrence : les alertes simultanées ne mesurent pas l’indisponibilité d’un appareil. Les alertes en cours et l’historique supprimé ou expiré sont exclus.",
         "back": "Historique",
         "short_days": "{days} jours",
-        "retained": "Basé sur l’historique résolu conservé.",
-        "about": "Comprendre ces statistiques",
         "devices": "Appareils concernés",
         "cumulative": "Durée cumulée",
         "search": "Rechercher dans le classement",
         "empty": "Aucune occurrence sur cette période dans l’historique conservé.",
-        "selection": "{name} · {days} jours"
+        "entities": "Entités concernées",
+        "top_entity": "Top entité",
+        "top_device": "Top appareil",
+        "top_integration": "Top intégration",
+        "leader_count": "{count} occurrences",
+        "ties": "+{count} ex æquo",
+        "active_period": "Période d’activité",
+        "leader_count_one": "1 occurrence"
       }
     },
     "monitoring": {

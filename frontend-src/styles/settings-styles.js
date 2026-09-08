@@ -416,23 +416,34 @@ export const settingsStyles = `
     font-weight: var(--ha-font-weight-medium, 500);
     font-variant-numeric: tabular-nums;
   }
-  .history-statistics-note, .history-statistics-drilldown {
+  .history-statistics-leaders {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    max-width: 960px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--divider-color);
+  }
+  .history-statistics-leader {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    gap: 4px;
+  }
+  .history-statistics-leader > span, .history-statistics-leader > small {
     color: var(--secondary-text-color);
     font-size: 12px;
   }
-  [data-history-statistics-help][hidden] {
-    display: none;
+  .history-statistics-leader ha-button {
+    max-width: 100%;
+    margin-inline-start: -8px;
   }
-  .history-statistics-note ha-icon-button {
-    --mdc-icon-button-size: 32px;
-    --mdc-icon-size: 18px;
-  }
-  .history-statistics-drilldown {
-    flex-wrap: wrap;
-    margin-top: 8px;
+  .history-statistics-leader ha-button::part(label) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .coherence-header, .history-header {
     display: flex;

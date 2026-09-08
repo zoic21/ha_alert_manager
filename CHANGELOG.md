@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.4 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Add affected entity counts and top entity, device, and integration highlights to history statistics, including tied occurrence counts.
+- Remove the retained-history note and its help control from the statistics header.
+- Use the history table’s native facets and active-period date filter for statistics navigation, replacing the separate filter banner.
+- Keep history facet selections tied to stable identifiers so identically named devices and rules remain distinct.
+
 ## 2.3.0-dev.3 — September 8, 2026
 
 This is a development prerelease.
