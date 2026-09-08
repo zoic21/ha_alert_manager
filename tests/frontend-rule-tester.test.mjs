@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 globalThis.HTMLElement = class {
@@ -223,3 +224,47 @@ test("editing any functional field invalidates the previous result", () => {
   assert.equal(panel._ruleTestResult, null);
   assert.equal(resultContainer.innerHTML, "");
 });
+
+for (const language of ["en", "fr"]) {
+  test(`notification preview lists all profiles safely and keeps delivery conditional (${language})`, () => {
+    const translations = JSON.parse(readFileSync(new URL(
+      `../custom_components/alert_manager/translations/${language}.json`, import.meta.url,
+    ), "utf8"));
+    const strings = translations.config_panel.rules.test;
+    const markup = renderRuleTestResult({
+      enabled: false,
+      total: 2,
+      matched_count: 1,
+      not_matched_count: 1,
+      error_count: 0,
+      indeterminate_count: 0,
+      results: [
+        {
+          entity_id: "sensor.one", status: "match", duration: 600,
+          notification_profiles: [{ id: "one", name: "Phone <test>" }, { id: "two", name: "Tablet & family" }],
+        },
+        {
+          entity_id: "sensor.two", status: "no_match", duration: 600,
+          notification_profiles: [],
+        },
+      ],
+    }, {
+      t(key, replacements = {}) {
+        let value = key.split(".").reduce((obj, part) => obj?.[part], translations.config_panel) ?? key;
+        for (const [name, replacement] of Object.entries(replacements)) {
+          value = value.replaceAll(`{${name}}`, replacement);
+        }
+        return value;
+      },
+      formatDuration(value) { return `${value}s`; },
+    });
+    assert.ok(markup.includes(strings.notification_profiles));
+    assert.ok(markup.includes(strings.notification_none));
+    assert.ok(markup.includes(strings.notification_preview));
+    assert.ok(markup.includes(strings.disabled_notice));
+    assert.match(markup, /Phone &lt;test&gt;, Tablet &amp; family/);
+    assert.doesNotMatch(markup, /Phone <test>/);
+    assert.match(markup, /600s/);
+    assert.equal((markup.match(/<ha-expansion-panel/g) ?? []).length, 2);
+  });
+}

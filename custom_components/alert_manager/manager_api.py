@@ -248,6 +248,9 @@ class _ApiMixin:
         state = self.hass.states.get(entity_id)
         base = {
             "entity_id": entity_id,
+            "notification_profiles": self.notification_runtime.preview_start_profiles(
+                entity_id, rule.label_ids
+            ),
             "name": (
                 state.attributes.get(ATTR_FRIENDLY_NAME, entity_id)
                 if state is not None

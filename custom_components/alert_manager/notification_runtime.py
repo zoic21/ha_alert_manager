@@ -33,6 +33,7 @@ from .models import AlertRecord, AlertStatus
 from .notifications import (
     NotificationManager,
     NotificationPolicy,
+    matching_notification_policy,
     profile_matches_labels,
     resolve_notification_policy,
 )
@@ -453,7 +454,7 @@ class NotificationRuntime:
             if not profile.get("enabled"):
                 continue
             profile_id = profile["id"]
-            matches_labels = profile_matches_labels(profile, labels)
+            policy = matching_notification_policy(profile, label_ids=labels)
             tracks_alert = profile_id in tracked_profile_ids or (
                 item.alert_id in self._runtime.get(profile_id, {})
             )
@@ -461,14 +462,10 @@ class NotificationRuntime:
                 tracks_alert = tracks_alert or self._batch_contains(
                     profile_id, "started", item.alert_id
                 )
-            if not matches_labels and not (
-                event_type == EVENT_ALERT_RESOLVED and tracks_alert
-            ):
-                continue
-            policy = resolve_notification_policy(
-                profile,
-                label_ids=labels,
-            )
+            if policy is None:
+                if event_type != EVENT_ALERT_RESOLVED or not tracks_alert:
+                    continue
+                policy = resolve_notification_policy(profile, label_ids=labels)
             if event_type == EVENT_ALERT_STARTED:
                 runtime = self._runtime.setdefault(profile_id, {}).setdefault(
                     item.alert_id, _RuntimeEntry()
@@ -867,11 +864,25 @@ class NotificationRuntime:
                 return profile
         raise ValueError(f"Unknown notification profile id: {profile_id}")
 
+    def preview_start_profiles(
+        self, entity_id: str, rule_labels: list[str]
+    ) -> list[dict[str, str]]:
+        """Preview new-alert recipients without changing notification runtime."""
+        labels = self._labels_for(entity_id, None, rule_labels, cache=False)
+        profiles = []
+        for profile in self._config_getter().get("notification_profiles", []):
+            policy = matching_notification_policy(profile, label_ids=labels)
+            if policy is not None and policy.notify_on_start:
+                profiles.append({"id": profile["id"], "name": profile["name"]})
+        return profiles
+
     def _labels_for(
         self,
         entity_id: str,
         device_id: str | None,
         rule_labels: list[str] | tuple[str, ...] = (),
+        *,
+        cache: bool = True,
     ) -> frozenset[str]:
         """Cache the union of native entity and device labels without scans."""
         cache_key = f"{entity_id}|{device_id or ''}"
@@ -885,7 +896,8 @@ class NotificationRuntime:
             device = self._device_registry.async_get(resolved_device_id)
             labels.update(getattr(device, "labels", ()) or ())
         result = frozenset(labels)
-        self._label_cache[cache_key] = result
+        if cache:
+            self._label_cache[cache_key] = result
         return result.union(rule_labels)
 
     @callback

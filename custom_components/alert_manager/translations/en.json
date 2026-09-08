@@ -463,6 +463,9 @@
       "status_inactive": "Inactive",
       "title": "Custom rules",
       "test": {
+        "notification_profiles": "New-alert profiles (if activated)",
+        "notification_none": "No profile would notify a new alert.",
+        "notification_preview": "Preview only: nothing is sent. The profiles below would notify a new alert if the rule is enabled and its conditions are met, after any trigger delay and notification batching.",
         "baseline": "Reference value",
         "attribute": "Configured attribute",
         "comparison_result": "Comparison result",

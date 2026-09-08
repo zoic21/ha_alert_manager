@@ -463,6 +463,9 @@
       "status_inactive": "Inactif",
       "title": "Règles personnalisées",
       "test": {
+        "notification_profiles": "Profils de nouvelle alerte (si activation)",
+        "notification_none": "Aucun profil ne notifierait une nouvelle alerte.",
+        "notification_preview": "Simulation uniquement : aucun envoi. Les profils ci-dessous notifieraient une nouvelle alerte si la règle est activée et ses conditions remplies, après le délai de déclenchement éventuel et le regroupement des notifications.",
         "baseline": "Valeur de référence",
         "attribute": "Attribut configuré",
         "comparison_result": "Résultat de la comparaison",

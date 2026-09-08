@@ -244,6 +244,15 @@ def profile_matches_labels(
     return not configured or any(label_id in label_ids for label_id in configured)
 
 
+def matching_notification_policy(
+    profile: dict[str, Any], *, label_ids: set[str] | frozenset[str]
+) -> NotificationPolicy | None:
+    """Resolve routing for an enabled profile accepting the alert labels."""
+    if not profile.get("enabled") or not profile_matches_labels(profile, label_ids):
+        return None
+    return resolve_notification_policy(profile, label_ids=label_ids)
+
+
 def resolve_notification_policy(
     profile: dict[str, Any],
     *,

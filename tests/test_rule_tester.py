@@ -10,7 +10,9 @@ import pytest
 from homeassistant.exceptions import TemplateError
 
 from custom_components.alert_manager import manager_templates
+from custom_components.alert_manager.const import EVENT_ALERT_STARTED
 from custom_components.alert_manager.manager import AlertManager
+from custom_components.alert_manager.notifications import validate_notification_profiles
 
 
 def run(coroutine):
@@ -55,6 +57,12 @@ def runtime_snapshot(manager, hass):
         "hass_timers": len(hass.timers),
         "events": deepcopy(hass.bus.fired),
         "store_saves": hass.store_save_count,
+        "notification_runtime": deepcopy(manager.notification_runtime._runtime),
+        "notification_batches": deepcopy(manager.notification_runtime._batches),
+        "notification_labels": deepcopy(manager.notification_runtime._label_cache),
+        "notification_tasks": set(manager.notification_runtime._tasks),
+        "service_calls": deepcopy(hass.services.calls),
+        "statistics": deepcopy(manager.statistics._buckets),
         "snapshot": deepcopy(manager._last_public_snapshot),
         "rule_templates": {
             key: id(value) for key, value in manager._rule_templates.items()
@@ -427,3 +435,123 @@ def test_unsaved_variation_definition_change_does_not_reuse_old_baseline(hass, e
 
     assert result["status"] == "indeterminate"
     assert result["baseline"] is None
+
+
+@pytest.mark.parametrize("reverse_exceptions", [False, True])
+def test_notification_preview_matches_live_routing_and_unsaved_labels(
+    hass, entry, registry_entry, device_entry, reverse_exceptions
+):
+    """Preview all recipients per entity using the same ordered policy as delivery."""
+    hass.states.set("sensor.source", "on")
+    hass.states.set("sensor.other", "off")
+    device = device_entry(hass, labels=["device"])
+    registry_entry(hass, "sensor.source", device_id=device.id, labels=["entity"])
+    manager = make_manager(hass, entry)
+    created = run(manager.async_create_rule(rule(label_ids=["saved"], enabled=False)))
+
+    def profile(profile_id, **changes):
+        return {
+            "id": profile_id,
+            "name": f"Profile {profile_id}",
+            "enabled": True,
+            "targets": ["notify.phone"],
+            "label_ids": [],
+            "default_policy": {
+                "notify_on_start": True,
+                "notify_on_resolved": True,
+                "reminder_interval": 300,
+            },
+            "exceptions": [],
+            **changes,
+        }
+
+    exceptions = [
+        {
+            "selector_type": "label",
+            "selector_ids": ["draft", "entity"],
+            "notify_on_start": False,
+        },
+        {
+            "selector_type": "label",
+            "selector_ids": ["fallback"],
+            "notify_on_start": True,
+        },
+    ]
+    if reverse_exceptions:
+        exceptions.reverse()
+    manager.config["notification_profiles"] = validate_notification_profiles(
+        [
+            profile("all"),
+            profile("draft", label_ids=["draft"]),
+            profile("entity", label_ids=["entity"]),
+            profile("device", label_ids=["device"]),
+            profile("saved", label_ids=["saved"]),
+            profile("disabled", enabled=False),
+            profile(
+                "resolved_only",
+                default_policy={
+                    "notify_on_start": False,
+                    "notify_on_resolved": True,
+                    "reminder_interval": 300,
+                },
+            ),
+            profile("ordered", exceptions=exceptions),
+        ]
+    )
+    before = runtime_snapshot(manager, hass)
+    result = run(
+        manager.async_test_rule(
+            rule(
+                entity_ids=["sensor.source", "sensor.other"],
+                label_ids=["draft", "fallback"],
+            ),
+            rule_id=created["id"],
+        )
+    )
+    expected_source = ["all", "draft", "entity", "device"]
+    if reverse_exceptions:
+        expected_source.append("ordered")
+    assert result["duration"] == 600
+    assert result["enabled"] is True
+    for item, expected in zip(
+        result["results"], [expected_source, ["all", "draft", "ordered"]], strict=True
+    ):
+        assert item["notification_profiles"] == [
+            {"id": pid, "name": f"Profile {pid}"} for pid in expected
+        ]
+    assert result["results"][1]["status"] == "no_match"
+    assert runtime_snapshot(manager, hass) == before
+
+    async def check_live_routing():
+        for item in result["results"]:
+            await manager.notification_runtime._async_handle_event(
+                EVENT_ALERT_STARTED,
+                {
+                    "id": f"rule:{created['id']}:{item['entity_id']}",
+                    "entity_id": item["entity_id"],
+                    "labels": ["draft", "fallback"],
+                },
+            )
+            actual = [
+                pid
+                for (pid, kind), batch in manager.notification_runtime._batches.items()
+                if kind == "started"
+                and any(
+                    event.entity_id == item["entity_id"]
+                    for event in batch.items.values()
+                )
+            ]
+            assert set(actual) == {p["id"] for p in item["notification_profiles"]}
+        await manager.async_unload()
+
+    run(check_live_routing())
+
+
+def test_notification_preview_reports_no_profiles_without_side_effects(hass, entry):
+    """Missing recipients are explicit, including when evaluation cannot run."""
+    manager = make_manager(hass, entry)
+    before = runtime_snapshot(manager, hass)
+    result = run(manager.async_test_rule(rule()))
+    assert result["results"][0]["notification_profiles"] == []
+    assert result["results"][0]["status"] == "error"
+    assert runtime_snapshot(manager, hass) == before
