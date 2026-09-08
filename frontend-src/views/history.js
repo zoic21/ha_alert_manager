@@ -28,17 +28,11 @@ export function renderHistory(context) {
       return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
     }
     const statisticsControls = statisticsOpen ? `
-      <div class="history-statistics-dashboard">
-      <div class="history-statistics-controls">
-        <ha-select id="history-statistics-group" label="${esc(t("history.statistics.group"))}"></ha-select>
-        <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
-          ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
-        </div>
-      </div>
-      <div class="history-statistics-summary" data-history-statistics-summary></div>
-      <div data-history-statistics-leaders></div>
+      <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
+        <span>${esc(t("history.statistics.period"))}</span>
+        ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
       </div>` : "";
-    const header = `${pageMessages}<ha-card outlined class="panel history-panel">
+    const header = `${statisticsOpen ? "" : pageMessages}<ha-card outlined class="panel history-panel">
       <div class="history-header">
         <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
         <div class="history-page-actions">
@@ -48,9 +42,13 @@ export function renderHistory(context) {
       </div>
       ${statisticsControls}
     </ha-card>`;
-    if (statisticsOpen) return `<hass-tabs-subpage-data-table id="panel-shell" data-history-statistics-page main-page clickable>
-      <div slot="top-header" class="table-page-top" tabindex="0" role="region" aria-label="${esc(t("history.statistics.title"))}">${header}</div>
-    </hass-tabs-subpage-data-table>`;
+    if (statisticsOpen) return `<section data-history-statistics-page>
+      ${header}
+      <div class="history-statistics-cards">
+        <ha-card outlined class="history-statistics-summary" data-history-statistics-summary></ha-card>
+        <div class="history-statistics-leaders" data-history-statistics-leaders></div>
+      </div>
+    </section>`;
     return renderAlertTable(
       "history",
       rows,
@@ -166,71 +164,15 @@ export async function handleHistoryAction(action, button) {
 }
 
 export function hydrateHistoryStatistics(root, context) {
-  const table = root?.querySelector?.("[data-history-statistics-page]");
-  if (!table) return;
+  if (!root?.querySelector?.("[data-history-statistics-page]")) return;
   const days = context._historyStatisticsDays ?? 7;
-  const kind = context._historyStatisticsGroup ?? "alert";
   for (const button of root.querySelectorAll?.('[data-action="history-statistics-period"]') ?? []) {
     const selected = Number(button.dataset.days) === days;
     button.setAttribute("aria-pressed", String(selected));
     button.setAttribute("appearance", selected ? "accent" : "plain");
   }
-  context._configureSelect("history-statistics-group", ["alert", "entity", "device", "integration", "rule"].map((value) => ({
-    value, label: context._t(`history.statistics.${value}`),
-  })), kind, (value) => {
-    if (!["alert", "entity", "device", "integration", "rule"].includes(value)
-      || value === (context._historyStatisticsGroup ?? "alert")) return;
-    context._historyStatisticsGroup = value;
-    hydrateHistoryStatistics(root, context);
-  });
-  table.hass = context._hass;
-  table.narrow = Boolean(context._narrow);
-  table.tabs = context._tabs();
-  table.route = { prefix: "", path: "/alert-manager/history" };
-  table.mainPage = true;
-  table.id = "id";
-  table.searchLabel = context._t("history.statistics.search");
-  table.clickable = true;
-  table.columnOrder = ["name", "occurrences", "total", "average"];
-  if (!table.initialSorting) table.initialSorting = { column: "occurrences", direction: "desc" };
-  table.columns = {
-    name: {
-      title: context._t(`history.statistics.${kind}`), main: true,
-      sortable: true, filterable: true, minWidth: "220px", maxWidth: context._narrow ? undefined : "440px", flex: 1,
-      template: (row) => historyStatisticsNameCell(row, context._narrow, (key) => context._t(key)),
-    },
-    occurrences: {
-      title: context._t("history.statistics.occurrences"), type: "numeric",
-      sortable: true, minWidth: "100px", maxWidth: "150px", flex: 0.5,
-    },
-    total: {
-      title: context._t("history.statistics.total"), sortable: true,
-      valueColumn: "total_duration_seconds", minWidth: "130px", maxWidth: "190px", flex: 0.6,
-      template: (row) => historyStatisticsDurationCell(row.total, row.totalExact),
-    },
-    average: {
-      title: context._t("history.statistics.average"), sortable: true,
-      valueColumn: "average_duration_seconds", minWidth: "130px", maxWidth: "190px", flex: 0.6,
-      template: (row) => historyStatisticsDurationCell(row.average, row.averageExact),
-    },
-  };
   const statistics = context._history?.statistics;
   const ready = statistics?.days === days;
-  table.data = ready ? (statistics.groups[kind] ?? []).map((row) => {
-    let name = row.name || row.id || context._t("history.statistics.unknown");
-    if (kind === "rule") name = context._historyRuleName({ ...row, rule_name: row.name });
-    const subtitle = kind === "alert" ? context._historyRuleName(row) : "";
-    const icon = { alert: "mdi:alert-circle-outline", entity: "mdi:format-list-bulleted", device: "mdi:devices", integration: "mdi:puzzle-outline", rule: "mdi:format-list-checks" }[kind];
-    return {
-      ...row, name, subtitle, icon, search: `${name} ${subtitle} ${row.id}`,
-      total: compactDurationText.call(context, row.total_duration_seconds),
-      average: compactDurationText.call(context, row.average_duration_seconds),
-      totalExact: context._historyDurationText(row.total_duration_seconds),
-      averageExact: context._historyDurationText(row.average_duration_seconds),
-    };
-  }) : [];
-  table.columns.search = { title: "", hidden: true, filterable: true };
-  table.noDataText = context._t(ready ? "history.statistics.empty" : "loading");
   const summary = root.querySelector("[data-history-statistics-summary]");
   if (summary) summary.innerHTML = renderHistoryStatisticsSummary({
     statistics: ready ? statistics : null,
@@ -243,13 +185,9 @@ export function hydrateHistoryStatistics(root, context) {
     statistics: ready ? statistics : null,
     t: (key, values) => context._t(key, values),
     integrationLabel: (id) => context._integrationLabel(id),
+    duration: (seconds) => compactDurationText.call(context, seconds),
+    exactDuration: (seconds) => context._historyDurationText(seconds),
   });
-  // Keep one native row listener across data refreshes and regrouping.
-  table._historyStatisticsOpenRow = (id) => openHistoryStatisticsGroup(context, kind, id);
-  if (!table._historyStatisticsRowListener) {
-    table.addEventListener("row-click", (event) => table._historyStatisticsOpenRow(event.detail?.id));
-    table._historyStatisticsRowListener = true;
-  }
 }
 
 export function renderHistoryStatisticsSummary({ statistics, t, duration, exactDuration }) {
@@ -261,46 +199,6 @@ export function renderHistoryStatisticsSummary({ statistics, t, duration, exactD
     ["cumulative", statistics ? duration(statistics.total_duration_seconds) : "—"],
   ];
   return `<dl>${items.map(([key, value]) => `<div><dt>${esc(t(`history.statistics.${key}`))}</dt><dd${key === "cumulative" && statistics ? ` title="${esc(exactDuration(statistics.total_duration_seconds))}"` : ""}>${statistics ? esc(value) : "—"}</dd></div>`).join("")}</dl>`;
-}
-
-export function historyStatisticsDurationCell(value, exact) {
-  if (!globalThis.document?.createElement) return value;
-  const cell = document.createElement("span");
-  cell.textContent = value;
-  cell.title = exact;
-  cell.style.cssText = "font-variant-numeric:tabular-nums";
-  return cell;
-}
-
-export function historyStatisticsNameCell(row, narrow, t) {
-  if (!globalThis.document?.createElement) return row.name;
-  const cell = document.createElement("div");
-  cell.style.cssText = "display:flex;align-items:center;gap:12px;min-width:0";
-  const icon = document.createElement("ha-icon");
-  icon.icon = row.icon;
-  icon.style.cssText = "flex:none;color:var(--secondary-text-color);--mdc-icon-size:24px";
-  const content = document.createElement("div");
-  content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
-  const name = document.createElement("span");
-  name.textContent = row.name;
-  name.title = row.name;
-  name.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500";
-  content.append(name);
-  if (row.subtitle) {
-    const subtitle = document.createElement("small");
-    subtitle.textContent = row.subtitle;
-    subtitle.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--secondary-text-color)";
-    content.append(subtitle);
-  }
-  if (narrow) {
-    const metrics = document.createElement("small");
-    metrics.textContent = `${row.occurrences} ${t("history.statistics.occurrences").toLocaleLowerCase()} · ${row.total}`;
-    metrics.title = `${t("history.statistics.average")}: ${row.averageExact}`;
-    metrics.style.cssText = "color:var(--secondary-text-color)";
-    content.append(metrics);
-  }
-  cell.append(icon, content);
-  return cell;
 }
 
 export function openHistoryStatisticsGroup(context, kind, id) {
@@ -320,16 +218,23 @@ export function openHistoryStatisticsGroup(context, kind, id) {
   context._render();
 }
 
-export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel }) {
-  return `<div class="history-statistics-leaders">${["entity", "device", "integration"].map((kind) => {
+export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, duration, exactDuration }) {
+  return ["entity", "device", "integration"].map((kind) => {
     const rows = (statistics?.groups[kind] ?? []).filter((row) => row.id);
-    const leader = rows[0];
-    const ties = leader ? rows.filter((row) => row.occurrences === leader.occurrences).length - 1 : 0;
-    const name = leader ? (kind === "integration" ? integrationLabel(leader.id) : leader.name || leader.id) : "—";
-    return `<div class="history-statistics-leader">
-      <span>${esc(t(`history.statistics.top_${kind}`))}</span>
-      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)} (${leader.occurrences})"><span class="history-statistics-leader-name">${esc(name)}</span><span>(${leader.occurrences})</span></ha-button>
-        ${ties ? `<small>${esc(t("history.statistics.ties", { count: ties }))}</small>` : ""}` : "<strong>—</strong>"}
-    </div>`;
-  }).join("")}</div>`;
+    return `<ha-card outlined class="history-statistics-ranking">
+      <h2>${esc(t(`history.statistics.top_${kind}`))}</h2>
+      ${[["frequent", "occurrences"], ["longest", "total_duration_seconds"]].map(([label, metric]) => {
+        const ranked = [...rows].sort((a, b) => b[metric] - a[metric]
+          || String(a.id).localeCompare(String(b.id))).slice(0, 5);
+        return `<section><h3>${esc(t(`history.statistics.${label}`))}</h3>
+          ${ranked.length ? `<ol>${ranked.map((row) => {
+            const name = kind === "integration" ? integrationLabel(row.id) : row.name || row.id;
+            const value = metric === "occurrences" ? row.occurrences : duration(row.total_duration_seconds);
+            const exact = metric === "occurrences" ? value : exactDuration(row.total_duration_seconds);
+            return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;
+          }).join("")}</ol>` : `<p>${esc(t(statistics ? "history.statistics.empty" : "loading"))}</p>`}
+        </section>`;
+      }).join("")}
+    </ha-card>`;
+  }).join("");
 }

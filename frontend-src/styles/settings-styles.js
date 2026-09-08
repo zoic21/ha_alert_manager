@@ -375,39 +375,34 @@ export const settingsStyles = `
   .coherence-panel, .history-panel {
     padding: 20px;
   }
-  .history-statistics-dashboard {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 20px 24px;
-    margin-top: 12px;
-  }
-  .history-statistics-dashboard > div {
-    max-width: 100%;
-  }
-  .history-statistics-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
   .history-statistics-period {
     display: flex;
     align-items: center;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
   }
-  .history-statistics-controls ha-select {
-    width: 200px;
+  .history-statistics-cards, .history-statistics-leaders {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .history-statistics-cards {
+    margin-top: 16px;
+  }
+  .history-statistics-leaders {
+    display: contents;
+  }
+  .history-statistics-summary, .history-statistics-ranking {
+    width: 360px;
     max-width: 100%;
+    padding: 20px;
   }
   .history-statistics-summary dl {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    text-align: center;
-    gap: 16px 24px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
     margin: 0;
   }
   .history-statistics-summary dt {
@@ -421,34 +416,32 @@ export const settingsStyles = `
     font-weight: var(--ha-font-weight-medium, 500);
     font-variant-numeric: tabular-nums;
   }
-  .history-statistics-leaders {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 12px 16px;
-  }
-  .history-statistics-leader {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    width: 180px;
-    max-width: 100%;
-    min-width: 0;
-    gap: 4px;
-  }
-  .history-statistics-leader > span, .history-statistics-leader > small {
+  .history-statistics-ranking h3 {
+    font-size: 14px;
+    font-weight: var(--ha-font-weight-medium, 500);
     color: var(--secondary-text-color);
-    font-size: 12px;
+    margin: 20px 0 4px;
   }
-  .history-statistics-leader ha-button {
-    max-width: 100%;
+  .history-statistics-ranking ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
   }
-  .history-statistics-leader ha-button::part(label) {
+  .history-statistics-ranking ha-button {
+    display: block;
+    width: 100%;
+  }
+  .history-statistics-ranking ha-button::part(base) {
+    width: 100%;
+    padding-inline: 0;
+  }
+  .history-statistics-ranking ha-button::part(label) {
     display: flex;
-    gap: 4px;
+    width: 100%;
     min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
   .history-statistics-leader-name {
     overflow: hidden;
@@ -456,8 +449,10 @@ export const settingsStyles = `
     white-space: nowrap;
     min-width: 0;
   }
-  .history-statistics-leader-name + span {
+  .history-statistics-leader-value {
     flex: none;
+    color: var(--primary-text-color);
+    font-variant-numeric: tabular-nums;
   }
   .coherence-header, .history-header {
     display: flex;

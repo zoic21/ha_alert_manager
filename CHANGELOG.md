@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.7 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Replace the statistics table with a single scrolling dashboard: period controls, summary, and compact entity, device, and integration cards.
+- Show separate top-five rankings by occurrence count and cumulative alert duration, with links to the filtered history.
+- Arrange cards side by side on desktop and at full width on mobile, without internal scroll areas.
+
 ## 2.3.0-dev.6 — September 8, 2026
 
 This is a development prerelease.

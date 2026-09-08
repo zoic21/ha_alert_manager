@@ -248,11 +248,13 @@
         "search": "Search the ranking",
         "empty": "No retained occurrences in this period.",
         "entities": "Affected entities",
-        "top_entity": "Top entity",
-        "top_device": "Top device",
-        "top_integration": "Top integration",
+        "top_entity": "Top 5 entities",
+        "top_device": "Top 5 devices",
+        "top_integration": "Top 5 integrations",
         "ties": "+{count} tied",
-        "active_period": "Active period"
+        "active_period": "Active period",
+        "frequent": "Most frequent",
+        "longest": "Longest · cumulative duration"
       }
     },
     "monitoring": {

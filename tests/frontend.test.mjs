@@ -5409,3 +5409,23 @@ test("statistics drilldown integrates with native history filtering and reset", 
   assert.equal(panel._filterCount("history"), 0);
   assert.equal(panel._filteredTableRows("history", rows).length, 3);
 });
+
+test("statistics use the standard scrolling page while history keeps its native table", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = completeConfig();
+  panel._packs = completePacks();
+  panel._loading = false;
+  panel._hass = { states: {} };
+  panel._activeTab = "history";
+  panel._historyLoaded = true;
+  panel._historyStatisticsOpen = true;
+  panel._render();
+  const content = panel.shadowRoot.innerHTML.split("</style>")[1];
+  assert.match(content, /<hass-tabs-subpage id="panel-shell" main-page><main>/);
+  assert.match(content, /data-history-statistics-page/);
+  assert.doesNotMatch(content, /hass-tabs-subpage-data-table|top-header/);
+  panel._historyStatisticsOpen = false;
+  panel._render();
+  assert.match(panel.shadowRoot.innerHTML.split("</style>")[1], /hass-tabs-subpage-data-table/);
+});

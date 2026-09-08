@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hydrateHistoryStatistics, handleHistoryAction, historyStatisticsNameCell, renderHistoryStatisticsLeaders, openHistoryStatisticsGroup, renderHistoryStatisticsSummary } from "../frontend-src/views/history.js";
+import { hydrateHistoryStatistics, handleHistoryAction, renderHistoryStatisticsLeaders, openHistoryStatisticsGroup, renderHistoryStatisticsSummary } from "../frontend-src/views/history.js";
 import { activePeriodMatches, historyFacetOptions } from "../frontend-src/components/alert-table.js";
 import { compactDurationText } from "../frontend-src/utils/formatting.js";
 import { refreshHistory } from "../frontend-src/api/alert-manager-api.js";
@@ -8,47 +8,44 @@ import { refreshHistory } from "../frontend-src/api/alert-manager-api.js";
 function panel() {
   const table = { listeners: new Map(), addEventListener(name, callback) { this.listeners.set(name, callback); } };
   const controls = new Map();
+  const summary = {};
+  const leaders = {};
   const instance = {
     _activeTab: "history", _historyStatisticsOpen: true, isConnected: true,
     _hass: {}, _tabs: () => [], _t: (key, values) => key.startsWith("duration.") ? `${values.count}${({ days: "d", hours: "h", minutes: "m", seconds: "s" })[key.split(".")[1]]}` : key,
+    _integrationLabel: (id) => id,
     _historyRuleName: (row) => row.rule_name || row.type,
     _historyDurationText: (value) => `${value}s`,
     _configureSelect: (id, options, value, changed) => { if (!controls.has(id)) controls.set(id, { options, value, changed }); },
     _refreshHistory: () => { instance.requests++; }, requests: 0,
     _refreshHistoryData() {}, _render() {},
-    shadowRoot: { querySelector: (selector) => selector === "[data-history-statistics-page]" ? table : null },
+    shadowRoot: { querySelector: (selector) => selector === "[data-history-statistics-page]" ? table : selector === "[data-history-statistics-summary]" ? summary : selector === "[data-history-statistics-leaders]" ? leaders : null },
     _history: { statistics: { days: 7, from: "2026-09-01T12:00:00Z", to: "2026-09-08T12:00:00Z", groups: {
       alert: [{ id: "a", name: "<unsafe>", rule_name: "Temperature", occurrences: 2, total_duration_seconds: 60, average_duration_seconds: 30 }],
       entity: [{ id: "sensor.a", name: "Probe", occurrences: 2, total_duration_seconds: 60, average_duration_seconds: 30 }],
     } } },
   };
-  return { instance, controls, table };
+  return { instance, controls, table, summary, leaders };
 }
 
-test("statistics hydrate native numeric sorting, regroup locally and reject stale periods", () => {
-  const { instance, controls, table } = panel();
+test("statistics refresh cards in place and reject stale periods", () => {
+  const { instance, summary, leaders } = panel();
   hydrateHistoryStatistics(instance.shadowRoot, instance);
+  const original = leaders.innerHTML;
+  assert.match(original, /Probe/);
   hydrateHistoryStatistics(instance.shadowRoot, instance);
-  assert.equal(controls.size, 1);
-  assert.deepEqual(table.initialSorting, { column: "occurrences", direction: "desc" });
-  assert.equal(table.listeners.size, 1);
-  assert.equal(table.data[0].name, "<unsafe>");
-  assert.equal(table.data[0].subtitle, "Temperature");
-  assert.equal(table.columns.total.valueColumn, "total_duration_seconds");
-  assert.equal(table.columns.average.valueColumn, "average_duration_seconds");
-  assert.equal(table.data[0].average, "30s");
-  controls.get("history-statistics-group").changed("entity");
-  assert.equal(table.data[0].name, "Probe");
-  assert.equal(instance.requests, 0);
+  assert.equal(leaders.innerHTML, original);
   handleHistoryAction.call(instance, "history-statistics-period", { dataset: { days: "30" } });
   assert.equal(instance.requests, 1);
-  assert.deepEqual(table.data, []);
+  assert.doesNotMatch(leaders.innerHTML, /Probe/);
+  assert.match(leaders.innerHTML, /loading/);
+  assert.match(summary.innerHTML, /—/);
   handleHistoryAction.call(instance, "history-statistics-period", { dataset: { days: "30" } });
   handleHistoryAction.call(instance, "history-statistics-period", { dataset: { days: "365" } });
   assert.equal(instance.requests, 1);
   handleHistoryAction.call(instance, "history-statistics-period", { dataset: { days: "7" } });
   assert.equal(instance.requests, 2);
-  assert.equal(table.data[0].name, "Probe");
+  assert.equal(leaders.innerHTML, original);
 });
 
 test("history requests ask for statistics only in the open History statistics view", async () => {
@@ -69,20 +66,6 @@ test("statistics toggle returns to occurrences and requests fresh data", async (
   await handleHistoryAction.call(instance, "toggle-history-statistics");
   assert.equal(instance._historyStatisticsOpen, false);
   assert.equal(instance.requests, 1);
-});
-
-test("mobile statistics show compact metrics and preserve exact duration help", () => {
-  const original = globalThis.document;
-  globalThis.document = { createElement: (tag) => ({ tag, style: {}, children: [], append(...children) { this.children.push(...children); } }) };
-  try {
-    const cell = historyStatisticsNameCell({ name: "<script>", subtitle: "Temperature", icon: "mdi:alert", occurrences: 2, total: "1h", averageExact: "30m" }, true, (key) => key);
-    assert.equal(cell.children[0].tag, "ha-icon");
-    const lines = cell.children[1].children;
-    assert.equal(lines[0].textContent, "<script>");
-    assert.equal(lines[1].textContent, "Temperature");
-    assert.match(lines[2].textContent, /2.*1h/);
-    assert.match(lines[2].title, /30m/);
-  } finally { globalThis.document = original; }
 });
 
 test("durations use two significant components without losing full precision elsewhere", () => {
@@ -129,13 +112,13 @@ test("clicking a ranking clears old filters and sets native facets and active pe
   let reset = false;
   instance._resetTableFilters = () => { reset = true; };
   hydrateHistoryStatistics(instance.shadowRoot, instance);
-  table.listeners.get("row-click")({ detail: { id: "a" } });
+  handleHistoryAction.call(instance, "history-statistics-leader", { dataset: { kind: "entity", id: "sensor.a" } });
   assert.equal(reset, true);
   assert.equal(instance._tableState.history.search, "");
   assert.equal(instance._selectedHistoryIds.size, 0);
   assert.equal(instance._historyStatisticsOpen, false);
   assert.deepEqual(instance._tableState.history.filters, {
-    alert: ["a"], activeFrom: "2026-09-01T12:00:00Z", activeTo: "2026-09-08T12:00:00Z",
+    entity: ["id:sensor.a"], activeFrom: "2026-09-01T12:00:00Z", activeTo: "2026-09-08T12:00:00Z",
   });
 });
 
@@ -155,42 +138,38 @@ test("all ranking categories use native stable-identity facets, including missin
   }
 });
 
-test("leaders are compact, ignore missing IDs, escape names and report tied occurrence counts", () => {
-  const args = { t: (key, values) => `${key}:${values?.count ?? ""}`, integrationLabel: () => "MQTT" };
-  const html = renderHistoryStatisticsLeaders({ ...args, statistics: { groups: {
-    entity: [{ id: "", occurrences: 50 }, { id: "a", name: "<Probe>", occurrences: 3 }, { id: "b", occurrences: 3 }],
-    device: [], integration: [{ id: "mqtt", occurrences: 1 }],
-  } } });
-  assert.match(html, /&lt;Probe&gt;/);
-  assert.match(html, /data-kind="entity" data-id="a"/);
-  assert.match(html, /history.statistics.ties:1/);
+test("top fives sort independently without mutating data and escape names", () => {
+  const rows = Array.from({ length: 7 }, (_, i) => ({ id: `id${i}`, name: i === 0 ? "<Probe>" : `Probe${i}`, occurrences: i + 1, total_duration_seconds: (7 - i) * 100 }));
+  const statistics = { groups: { entity: [{ id: "", occurrences: 999 }, ...rows], device: [], integration: [{ id: "mqtt", occurrences: 1, total_duration_seconds: 10 }] } };
+  const before = JSON.stringify(statistics);
+  const args = { t: (key) => key, integrationLabel: () => "MQTT", duration: (n) => `${n}s`, exactDuration: (n) => `${n} seconds` };
+  const html = renderHistoryStatisticsLeaders({ ...args, statistics });
+  assert.equal(JSON.stringify(statistics), before);
+  assert.equal((html.match(/<ha-card/g) ?? []).length, 3);
+  const lists = [...html.matchAll(/<ol>(.*?)<\/ol>/gs)].map((match) => match[1]);
+  assert.equal((lists[0].match(/<li>/g) ?? []).length, 5);
+  assert.ok(lists[0].indexOf('data-id="id6"') < lists[0].indexOf('data-id="id5"'));
+  assert.doesNotMatch(lists[0], /data-id="id0"/);
+  assert.ok(lists[1].indexOf('data-id="id0"') < lists[1].indexOf('data-id="id1"'));
+  assert.match(lists[1], /&lt;Probe&gt;/);
+  assert.match(lists[1], /700 seconds/);
   assert.match(html, /MQTT/);
-  assert.match(html, /&lt;Probe&gt;<\/span><span>\(3\)<\/span>/);
-  assert.match(html, /MQTT<\/span><span>\(1\)<\/span>/);
-  assert.doesNotMatch(html, /leader_count/);
-  assert.match(html, /<strong>—<\/strong>/);
+  assert.match(html, /history.statistics.empty/);
   assert.doesNotMatch(html, /data-id=""/);
-  assert.equal((renderHistoryStatisticsLeaders({ ...args, statistics: null }).match(/<strong>—/g) ?? []).length, 3);
+  assert.match(renderHistoryStatisticsLeaders({ ...args, statistics: null }), /loading/);
 });
 
-// The native ha-data-table subtracts the top-header height from its row viewport.
-// A mobile header must never consume that viewport completely.
-test("mobile statistics preserve a scrollable header and three adjacent tops", async () => {
+test("statistics cards have no internal scroller or native data table", async () => {
   const { responsiveStyles } = await import("../frontend-src/styles/responsive-styles.js");
+  const { settingsStyles } = await import("../frontend-src/styles/settings-styles.js");
   const { renderHistory } = await import("../frontend-src/views/history.js");
-  const rule = (selector) => responsiveStyles.slice(
-    responsiveStyles.indexOf(selector) + selector.length,
-    responsiveStyles.indexOf("}", responsiveStyles.indexOf(selector)),
-  );
-  const header = rule(":host([narrow]) [data-history-statistics-page] .table-page-top {");
-  assert.match(header, /max-height: 45vh;/);
-  assert.match(header, /max-height: 45dvh;/);
-  assert.match(header, /overflow-y: auto;/);
-  const leaders = rule(":host([narrow]) .history-statistics-leaders {");
-  assert.match(leaders, /display: grid;/);
-  assert.match(leaders, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
-  assert.match(rule(":host([narrow]) .history-statistics-leader {"), /width: auto;/);
-  assert.match(rule(":host([narrow]) [data-history-statistics-page] .history-header {"), /flex-direction: row;/);
   const html = renderHistory({ limit: 100, rows: [], pageMessages: "", statisticsOpen: true, t: (key) => key });
-  assert.match(html, /slot="top-header"[^>]*tabindex="0"[^>]*role="region"[^>]*aria-label="history.statistics.title"/);
+  assert.match(html, /data-history-statistics-page/);
+  assert.doesNotMatch(html, /hass-tabs-subpage-data-table|top-header|history-statistics-group/);
+  for (const css of [responsiveStyles, settingsStyles]) {
+    for (const rule of css.matchAll(/[^{}]*history-statistics[^{}]*\{([^}]*)\}/g)) {
+      assert.doesNotMatch(rule[1], /overflow-y:|max-height:|height:/);
+    }
+  }
+  assert.match(responsiveStyles, /history-statistics-ranking \{\s*width: 100%/);
 });

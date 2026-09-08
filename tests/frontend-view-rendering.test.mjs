@@ -840,13 +840,11 @@ test("history statistics replace the table only when explicitly opened", () => {
   const context = { busy: false, limit: 100, rows: [], pageMessages: "", t, renderAlertTable: () => "history-table" };
   assert.equal(renderHistory(context), "history-table");
   const markup = renderHistory({ ...context, statisticsOpen: true });
-  assert.match(markup, /hass-tabs-subpage-data-table/);
-  assert.match(markup, /slot="top-header"/);
+  assert.match(markup, /data-history-statistics-page/);
   assert.match(markup, /history-statistics-period/);
-  assert.match(markup, /history-statistics-group/);
   assert.match(markup, /data-history-statistics-leaders/);
-  assert.ok(markup.indexOf('id="history-statistics-group"') < markup.indexOf('class="history-statistics-period"'));
-  assert.match(markup, /data-history-statistics-summary><\/div>\s*<div data-history-statistics-leaders><\/div>\s*<\/div>/);
+  assert.match(markup, /data-history-statistics-summary/);
+  assert.doesNotMatch(markup, /hass-tabs-subpage-data-table|slot="top-header"|history-statistics-group/);
   assert.doesNotMatch(markup, /history.statistics.help|history-statistics-help|history-statistics-note|history-statistics-drilldown/);
   assert.doesNotMatch(renderHistory({ ...context, statisticsOpen: true, limit: 0 }), /data-history-statistics-page/);
 });

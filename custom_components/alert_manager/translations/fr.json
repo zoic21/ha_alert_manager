@@ -248,11 +248,13 @@
         "search": "Rechercher dans le classement",
         "empty": "Aucune occurrence sur cette période dans l’historique conservé.",
         "entities": "Entités concernées",
-        "top_entity": "Top entité",
-        "top_device": "Top appareil",
-        "top_integration": "Top intégration",
+        "top_entity": "Top 5 entités",
+        "top_device": "Top 5 appareils",
+        "top_integration": "Top 5 intégrations",
         "ties": "+{count} ex æquo",
-        "active_period": "Période d’activité"
+        "active_period": "Période d’activité",
+        "frequent": "Les plus fréquents",
+        "longest": "Les plus longs · durée cumulée"
       }
     },
     "monitoring": {
