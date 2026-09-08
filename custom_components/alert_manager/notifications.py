@@ -37,7 +37,6 @@ _PROFILE_KEYS = {
     "id",
     "name",
     "enabled",
-    "notify_on_coherence",
     "targets",
     "label_ids",
     "default_policy",
@@ -286,10 +285,6 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(enabled, bool):
         raise ValueError(f"{path}.enabled must be a boolean")
 
-    notify_on_coherence = value.get("notify_on_coherence", False)
-    if not isinstance(notify_on_coherence, bool):
-        raise ValueError(f"{path}.notify_on_coherence must be a boolean")
-
     targets = _validate_notify_targets(value.get("targets"), f"{path}.targets")
 
     label_ids = _validate_string_list(
@@ -326,7 +321,6 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
         "id": profile_id,
         "name": name,
         "enabled": enabled,
-        "notify_on_coherence": notify_on_coherence,
         "targets": targets,
         "label_ids": label_ids,
         "default_policy": default_policy,

@@ -3397,7 +3397,6 @@ test("deleting a notification profile saves only profiles", async () => {
     id: "phone",
     name: "Phone",
     enabled: true,
-    notify_on_coherence: false,
     targets: ["notify.phone"],
     label_ids: [],
     default_policy: {

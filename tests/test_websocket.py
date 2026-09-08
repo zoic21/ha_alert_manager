@@ -435,8 +435,7 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
         "duration_ms": 4,
     }
 
-    async def scan(_hass, *, origin):
-        assert origin == "ui"
+    async def scan(_hass):
         return expected
 
     websocket_module = importlib.import_module(

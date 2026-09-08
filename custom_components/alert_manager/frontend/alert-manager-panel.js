@@ -3228,7 +3228,6 @@ function newNotificationProfileDraft() {
     id: generatedId,
     name: "",
     enabled: true,
-    notify_on_coherence: false,
     targets: [],
     label_ids: [],
     default_policy: {
@@ -3245,7 +3244,6 @@ function cloneNotificationProfile(profile) {
     id: profile.id,
     name: profile.name,
     enabled: profile.enabled,
-    notify_on_coherence: profile.notify_on_coherence ?? false,
     targets: [...(profile.targets ?? [])],
     label_ids: [...(profile.label_ids ?? [])],
     default_policy: { ...(profile.default_policy ?? {}) },
@@ -3321,10 +3319,6 @@ function renderNotificationProfileDrawer({
       </div>
       <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl("notification-reminder", t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
     </ha-card>
-  </section>
-  <section class="notification-profile-section">
-    ${renderPolicySwitch("notification-coherence", t("notifications.on_coherence"), draft.notify_on_coherence)}
-    <small>${esc(t("notifications.coherence_help"))}</small>
   </section>
   <section class="notification-profile-section">
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
@@ -3524,7 +3518,6 @@ function captureNotificationProfileDraft(panel) {
   if (!draft || !panel.shadowRoot.querySelector("#notification-profile-name")) return;
   draft.name = String(panel.shadowRoot.querySelector("#notification-profile-name")?.value ?? draft.name).trim();
   draft.enabled = Boolean(panel.shadowRoot.querySelector("#notification-profile-enabled")?.checked);
-  draft.notify_on_coherence = Boolean(panel.shadowRoot.querySelector("#notification-coherence")?.checked);
   draft.default_policy.notify_on_start = Boolean(panel.shadowRoot.querySelector("#notification-start")?.checked);
   draft.default_policy.notify_on_resolved = Boolean(panel.shadowRoot.querySelector("#notification-resolved")?.checked);
   const reminder = String(durationFieldValue(panel.shadowRoot.querySelector("#notification-reminder")) ?? "").trim();
