@@ -4836,14 +4836,14 @@ function renderHistory(context) {
     const statisticsControls = statisticsOpen ? `
       <div class="history-statistics-dashboard">
       <div class="history-statistics-controls">
+        <ha-select id="history-statistics-group" label="${esc(t("history.statistics.group"))}"></ha-select>
         <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
           ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
         </div>
-        <ha-select id="history-statistics-group" label="${esc(t("history.statistics.group"))}"></ha-select>
       </div>
       <div class="history-statistics-summary" data-history-statistics-summary></div>
-      </div>
-      <div data-history-statistics-leaders></div>` : "";
+      <div data-history-statistics-leaders></div>
+      </div>` : "";
     const header = `${pageMessages}<ha-card outlined class="panel history-panel">
       <div class="history-header">
         <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
@@ -5134,8 +5134,8 @@ function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel }) {
     const name = leader ? (kind === "integration" ? integrationLabel(leader.id) : leader.name || leader.id) : "—";
     return `<div class="history-statistics-leader">
       <span>${esc(t(`history.statistics.top_${kind}`))}</span>
-      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)}">${esc(name)}</ha-button>
-        <small>${esc(t(leader.occurrences === 1 ? "history.statistics.leader_count_one" : "history.statistics.leader_count", { count: leader.occurrences }))}${ties ? ` · ${esc(t("history.statistics.ties", { count: ties }))}` : ""}</small>` : "<strong>—</strong>"}
+      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)} (${leader.occurrences})"><span class="history-statistics-leader-name">${esc(name)}</span><span>(${leader.occurrences})</span></ha-button>
+        ${ties ? `<small>${esc(t("history.statistics.ties", { count: ties }))}</small>` : ""}` : "<strong>—</strong>"}
     </div>`;
   }).join("")}</div>`;
 }
@@ -8046,14 +8046,17 @@ const settingsStyles = `
   .history-statistics-dashboard {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     flex-wrap: wrap;
-    gap: 16px;
-    max-width: 960px;
+    gap: 20px 24px;
     margin-top: 12px;
+  }
+  .history-statistics-dashboard > div {
+    max-width: 100%;
   }
   .history-statistics-controls {
     display: flex;
+    justify-content: center;
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
@@ -8064,13 +8067,15 @@ const settingsStyles = `
     gap: 4px;
   }
   .history-statistics-controls ha-select {
-    width: 220px;
+    width: 200px;
     max-width: 100%;
   }
   .history-statistics-summary dl {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px 40px;
+    justify-content: center;
+    text-align: center;
+    gap: 16px 24px;
     margin: 0;
   }
   .history-statistics-summary dt {
@@ -8085,18 +8090,19 @@ const settingsStyles = `
     font-variant-numeric: tabular-nums;
   }
   .history-statistics-leaders {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    max-width: 960px;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--divider-color);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px 16px;
   }
   .history-statistics-leader {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
+    width: 180px;
+    max-width: 100%;
     min-width: 0;
     gap: 4px;
   }
@@ -8106,12 +8112,20 @@ const settingsStyles = `
   }
   .history-statistics-leader ha-button {
     max-width: 100%;
-    margin-inline-start: -8px;
   }
   .history-statistics-leader ha-button::part(label) {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+  }
+  .history-statistics-leader-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+  }
+  .history-statistics-leader-name + span {
+    flex: none;
   }
   .coherence-header, .history-header {
     display: flex;
@@ -8739,8 +8753,8 @@ const responsiveStyles = `
     gap: 8px;
   }
   :host([narrow]) .history-statistics-controls ha-select {
-    flex: 1 1 150px;
-    width: auto;
+    flex: 0 1 200px;
+    width: 200px;
     min-width: 0;
   }
   :host([narrow]) .history-statistics-summary dl {
@@ -8751,26 +8765,6 @@ const responsiveStyles = `
   }
   :host([narrow]) .history-statistics-summary dd {
     font-size: 20px;
-  }
-
-  :host([narrow]) .history-statistics-leaders {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  :host([narrow]) .history-statistics-leader {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0 8px;
-  }
-  :host([narrow]) .history-statistics-leader ha-button {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: start;
-  }
-  :host([narrow]) .history-statistics-leader > small {
-    grid-column: 2;
-    grid-row: 1;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */

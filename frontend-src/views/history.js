@@ -30,14 +30,14 @@ export function renderHistory(context) {
     const statisticsControls = statisticsOpen ? `
       <div class="history-statistics-dashboard">
       <div class="history-statistics-controls">
+        <ha-select id="history-statistics-group" label="${esc(t("history.statistics.group"))}"></ha-select>
         <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
           ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
         </div>
-        <ha-select id="history-statistics-group" label="${esc(t("history.statistics.group"))}"></ha-select>
       </div>
       <div class="history-statistics-summary" data-history-statistics-summary></div>
-      </div>
-      <div data-history-statistics-leaders></div>` : "";
+      <div data-history-statistics-leaders></div>
+      </div>` : "";
     const header = `${pageMessages}<ha-card outlined class="panel history-panel">
       <div class="history-header">
         <div><h2>${esc(t(statisticsOpen ? "history.statistics.title" : "history.title"))}</h2></div>
@@ -328,8 +328,8 @@ export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel
     const name = leader ? (kind === "integration" ? integrationLabel(leader.id) : leader.name || leader.id) : "—";
     return `<div class="history-statistics-leader">
       <span>${esc(t(`history.statistics.top_${kind}`))}</span>
-      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)}">${esc(name)}</ha-button>
-        <small>${esc(t(leader.occurrences === 1 ? "history.statistics.leader_count_one" : "history.statistics.leader_count", { count: leader.occurrences }))}${ties ? ` · ${esc(t("history.statistics.ties", { count: ties }))}` : ""}</small>` : "<strong>—</strong>"}
+      ${leader ? `<ha-button size="s" appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(leader.id)}" title="${esc(name)} (${leader.occurrences})"><span class="history-statistics-leader-name">${esc(name)}</span><span>(${leader.occurrences})</span></ha-button>
+        ${ties ? `<small>${esc(t("history.statistics.ties", { count: ties }))}</small>` : ""}` : "<strong>—</strong>"}
     </div>`;
   }).join("")}</div>`;
 }

@@ -10,8 +10,8 @@ export const responsiveStyles = `
     gap: 8px;
   }
   :host([narrow]) .history-statistics-controls ha-select {
-    flex: 1 1 150px;
-    width: auto;
+    flex: 0 1 200px;
+    width: 200px;
     min-width: 0;
   }
   :host([narrow]) .history-statistics-summary dl {
@@ -22,26 +22,6 @@ export const responsiveStyles = `
   }
   :host([narrow]) .history-statistics-summary dd {
     font-size: 20px;
-  }
-
-  :host([narrow]) .history-statistics-leaders {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  :host([narrow]) .history-statistics-leader {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0 8px;
-  }
-  :host([narrow]) .history-statistics-leader ha-button {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: start;
-  }
-  :host([narrow]) .history-statistics-leader > small {
-    grid-column: 2;
-    grid-row: 1;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */

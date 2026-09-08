@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.5 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Keep statistics controls, summary values, and top items on one row when space allows, with centered wrapping on smaller screens.
+- Show occurrence counts in parentheses beside top item names.
+- Place the grouping selector before the period buttons.
+
 ## 2.3.0-dev.4 — September 8, 2026
 
 This is a development prerelease.

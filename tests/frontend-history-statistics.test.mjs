@@ -165,6 +165,9 @@ test("leaders are compact, ignore missing IDs, escape names and report tied occu
   assert.match(html, /data-kind="entity" data-id="a"/);
   assert.match(html, /history.statistics.ties:1/);
   assert.match(html, /MQTT/);
+  assert.match(html, /&lt;Probe&gt;<\/span><span>\(3\)<\/span>/);
+  assert.match(html, /MQTT<\/span><span>\(1\)<\/span>/);
+  assert.doesNotMatch(html, /leader_count/);
   assert.match(html, /<strong>—<\/strong>/);
   assert.doesNotMatch(html, /data-id=""/);
   assert.equal((renderHistoryStatisticsLeaders({ ...args, statistics: null }).match(/<strong>—/g) ?? []).length, 3);

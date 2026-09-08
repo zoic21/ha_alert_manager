@@ -251,10 +251,8 @@
         "top_entity": "Top entity",
         "top_device": "Top device",
         "top_integration": "Top integration",
-        "leader_count": "{count} occurrences",
         "ties": "+{count} tied",
-        "active_period": "Active period",
-        "leader_count_one": "1 occurrence"
+        "active_period": "Active period"
       }
     },
     "monitoring": {

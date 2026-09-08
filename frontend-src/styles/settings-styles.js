@@ -378,14 +378,17 @@ export const settingsStyles = `
   .history-statistics-dashboard {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     flex-wrap: wrap;
-    gap: 16px;
-    max-width: 960px;
+    gap: 20px 24px;
     margin-top: 12px;
+  }
+  .history-statistics-dashboard > div {
+    max-width: 100%;
   }
   .history-statistics-controls {
     display: flex;
+    justify-content: center;
     align-items: center;
     flex-wrap: wrap;
     gap: 12px;
@@ -396,13 +399,15 @@ export const settingsStyles = `
     gap: 4px;
   }
   .history-statistics-controls ha-select {
-    width: 220px;
+    width: 200px;
     max-width: 100%;
   }
   .history-statistics-summary dl {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px 40px;
+    justify-content: center;
+    text-align: center;
+    gap: 16px 24px;
     margin: 0;
   }
   .history-statistics-summary dt {
@@ -417,18 +422,19 @@ export const settingsStyles = `
     font-variant-numeric: tabular-nums;
   }
   .history-statistics-leaders {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    max-width: 960px;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--divider-color);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px 16px;
   }
   .history-statistics-leader {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
+    width: 180px;
+    max-width: 100%;
     min-width: 0;
     gap: 4px;
   }
@@ -438,12 +444,20 @@ export const settingsStyles = `
   }
   .history-statistics-leader ha-button {
     max-width: 100%;
-    margin-inline-start: -8px;
   }
   .history-statistics-leader ha-button::part(label) {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+  }
+  .history-statistics-leader-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+  }
+  .history-statistics-leader-name + span {
+    flex: none;
   }
   .coherence-header, .history-header {
     display: flex;
