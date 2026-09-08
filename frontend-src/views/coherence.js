@@ -9,7 +9,10 @@ export function coherenceStatsMarkup() {
     const scannedAt = result.scanned_at ? new Date(result.scanned_at).getTime() : NaN;
     const scanIsStale = Number.isFinite(scannedAt)
       && Date.now() - scannedAt > COHERENCE_STALE_MS;
-    return `${result.scanned_at ? `<span class="coherence-scan-date${scanIsStale ? " stale" : ""}">${esc(this._t("coherence.stats.scanned_at", { date: this._date(result.scanned_at) }))}</span>` : ""}
+    const zhaStatus = result.checks?.zha_device_ieee;
+    const zhaSkipped = ["not_loaded", "metadata_error"].includes(zhaStatus);
+    return `${zhaSkipped ? `<span class="warning">${esc(this._t(`coherence.zha_status.${zhaStatus}`))}</span>` : ""}
+      ${result.scanned_at ? `<span class="coherence-scan-date${scanIsStale ? " stale" : ""}">${esc(this._t("coherence.stats.scanned_at", { date: this._date(result.scanned_at) }))}</span>` : ""}
       <span>${esc(this._t("coherence.stats.missing", { count: result.missing_count ?? 0 }))}</span>
       <span>${esc(this._t("coherence.stats.files", { count: result.files_scanned ?? 0 }))}</span>
       <span>${esc(this._t("coherence.stats.references", { count: result.references_checked ?? 0 }))}</span>
@@ -19,9 +22,12 @@ export function coherenceStatsMarkup() {
 
 export function coherenceTableRows() {
     return (this._coherence?.results ?? []).map((result, index) => {
+      const reference = result.reference ?? result.entity_id;
       const row = {
-        id: `${result.entity_id}:${result.file}:${result.line}:${index}`,
-        entity: result.entity_id,
+        id: `${reference}:${result.file}:${result.line}:${index}`,
+        entity: reference,
+        message: result.reference_type === "zha_device_ieee"
+          ? this._t("coherence.zha_missing") : "",
         type: this._t(`coherence.types.${result.source_type}`),
         source: result.source_name || "—",
         file: result.file,
@@ -170,7 +176,13 @@ export function hydrateCoherenceTable() {
 }
 
 export function nativeCoherenceEntityCell(row, narrow = false) {
-    if (!narrow || !globalThis.document?.createElement) return row.entity;
+    if (!globalThis.document?.createElement) return row.entity;
+    if (!narrow) {
+      const content = document.createElement("span");
+      content.textContent = row.entity;
+      if (row.message) content.title = row.message;
+      return content;
+    }
     const state = this._ensureCoherenceTableState();
     const hiddenColumns = new Set(state.hiddenColumns);
     const secondaryColumns = state.columnOrder.filter((column) => (
@@ -180,8 +192,14 @@ export function nativeCoherenceEntityCell(row, narrow = false) {
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
     const primary = document.createElement("span");
     primary.textContent = row.entity;
+    if (row.message) content.title = row.message;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     content.append(primary);
+    if (row.message) {
+      const message = document.createElement("span");
+      message.textContent = row.message;
+      content.append(message);
+    }
     if (secondaryColumns.length) {
       const secondary = document.createElement("span");
       secondary.textContent = secondaryColumns

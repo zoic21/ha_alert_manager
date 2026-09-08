@@ -296,7 +296,8 @@ export function commitIgnoredReferenceInput() {
     this._ignoredReferenceDraft = rawReference;
     const reference = rawReference.trim().toLowerCase();
     if (!reference) return true;
-    if (!/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(reference)) {
+    if (!/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(reference)
+      && !/^(?:[0-9a-f]{2}:){7}[0-9a-f]{2}$/.test(reference)) {
       this._notice = {
         kind: "error",
         text: this._t("settings.coherence_ignored_entity_reference_validation"),

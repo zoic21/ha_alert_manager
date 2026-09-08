@@ -193,3 +193,27 @@ test("coherence row click opens the exact Home Assistant target", () => {
   tablePage.listeners["row-click"]({ detail: { id: tablePage.data[0].id } });
   assert.equal(moreInfo, "sensor.template_result");
 });
+
+test("coherence keeps legacy entity reports and renders IEEE references with their source link", async () => {
+  const { coherenceTableRows, coherenceStatsMarkup } = await import("../frontend-src/views/coherence.js");
+  const context = {
+    _coherence: {
+      results: [
+        { entity_id: "sensor.old", file: "a.yaml", line: 1, source_type: "automation" },
+        { reference_type: "zha_device_ieee", reference: "5c:02:72:ff:fe:d9:be:ec", file: "a.yaml", line: 2,
+          source_type: "automation", link: { type: "navigate", path: "/config/automation/edit/remote" } },
+      ],
+      checks: { zha_device_ieee: "not_loaded" },
+    },
+    _t: (key) => key,
+  };
+  const rows = coherenceTableRows.call(context);
+  assert.equal(rows[0].entity, "sensor.old");
+  assert.equal(rows[0].message, "");
+  assert.equal(rows[1].entity, "5c:02:72:ff:fe:d9:be:ec");
+  assert.equal(rows[1].message, "coherence.zha_missing");
+  assert.equal(rows[1].link.type, "navigate");
+  assert.match(coherenceStatsMarkup.call(context), /coherence.zha_status.not_loaded/);
+  delete context._coherence.checks;
+  assert.doesNotMatch(coherenceStatsMarkup.call(context), /coherence.zha_status/);
+});

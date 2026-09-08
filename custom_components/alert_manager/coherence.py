@@ -21,7 +21,9 @@ from typing import Any, Final
 from urllib.parse import quote
 
 import yaml
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_change
@@ -183,6 +185,7 @@ class _ScanState:
     template_by_config_entry: dict[str, str]
     results: list[dict[str, Any]]
     seen: set[tuple[str, str, int]]
+    zha_ieees: frozenset[str] | None = None
     references_checked: int = 0
 
 
@@ -437,6 +440,96 @@ def _record_scalar(
         state.results.append(result)
 
 
+def _literal(node: Node | None) -> str | None:
+    """Accept only ordinary YAML strings, never custom tags or inputs."""
+    if (
+        isinstance(node, ScalarNode)
+        and node.tag == "tag:yaml.org,2002:str"
+        and "{{" not in node.value
+        and "{%" not in node.value
+    ):
+        return node.value
+    return None
+
+
+def _record_zha_trigger(
+    node: MappingNode, context: _Context, source: _Source, state: _ScanState
+) -> None:
+    """Check a static event subscription against the scan's registry snapshot."""
+    if state.zha_ieees is None:
+        return
+    values = _mapping(node)
+    if _literal(values.get("trigger", values.get("platform"))) != "event":
+        return
+    event_type = values.get("event_type")
+    if (
+        isinstance(event_type, SequenceNode)
+        and event_type.tag != "tag:yaml.org,2002:seq"
+    ):
+        return
+    event_types = (
+        event_type.value if isinstance(event_type, SequenceNode) else [event_type]
+    )
+    if not event_types or any(_literal(item) is None for item in event_types):
+        return
+    if "zha_event" not in [_literal(item) for item in event_types]:
+        return
+    data = values.get("event_data")
+    if not isinstance(data, MappingNode) or data.tag != "tag:yaml.org,2002:map":
+        return
+    ieee_node = _mapping(data).get("device_ieee")
+    ieee = _literal(ieee_node)
+    if ieee is None or not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){7}[0-9a-fA-F]{2}", ieee):
+        return
+    normalized = ieee.lower()
+    if normalized in state.ignored_entity_references:
+        return
+    state.references_checked += 1
+    if normalized in state.zha_ieees:
+        return
+    line = ieee_node.start_mark.line + 1
+    column = ieee_node.start_mark.column + 1
+    signature = (f"zha:{normalized}:{column}", source.relative_path, line)
+    if signature in state.seen:
+        return
+    state.seen.add(signature)
+    result = {
+        "reference_type": "zha_device_ieee",
+        "reference": ieee,
+        "file": source.relative_path,
+        "line": line,
+        "column": column,
+        "source_type": context.kind,
+        "source_name": context.name,
+    }
+    if context.link_type == "navigate" and context.link_target:
+        result["link"] = {"type": "navigate", "path": context.link_target}
+    state.results.append(result)
+
+
+def _zha_snapshot(hass: HomeAssistant) -> tuple[frozenset[str] | None, str]:
+    """Copy registry metadata on the event loop; isolate integration failures."""
+    try:
+        entries = hass.config_entries.async_entries("zha")
+        if not entries:
+            return None, "not_applicable"
+        if any(entry.state is not ConfigEntryState.LOADED for entry in entries):
+            return None, "not_loaded"
+        entry_ids = {entry.entry_id for entry in entries}
+        registry = dr.async_get(hass)
+        ieees = frozenset(
+            identifier.lower()
+            for device in registry.devices.values()
+            if entry_ids.intersection(device.config_entries)
+            for domain, identifier in device.identifiers
+            if domain == "zha"
+        )
+        return ieees, "executed"
+    except Exception:
+        _LOGGER.exception("Unable to collect ZHA metadata for coherence scan")
+        return None, "metadata_error"
+
+
 def _walk(
     node: Node,
     context: _Context,
@@ -446,6 +539,8 @@ def _walk(
     parent_key: str | None = None,
     sequence_index: int | None = None,
     in_template: bool = False,
+    trigger_scope: bool = False,
+    action_scope: bool = False,
 ) -> None:
     """Walk YAML/JSON nodes while retaining source locations and object context."""
     if isinstance(node, MappingNode):
@@ -458,6 +553,9 @@ def _walk(
             sequence_index=sequence_index,
             in_template=in_template,
         )
+        if trigger_scope and node.tag == "tag:yaml.org,2002:map":
+            _record_zha_trigger(node, current, source, state)
+        object_root = current is not context
         for key_node, value_node in node.value:
             key = _scalar(key_node)
             if isinstance(key_node, ScalarNode):
@@ -484,6 +582,40 @@ def _walk(
                     state,
                     parent_key=key,
                     in_template=child_template_scope,
+                    trigger_scope=(
+                        (
+                            object_root
+                            and current.kind == "automation"
+                            and key in {"trigger", "triggers"}
+                        )
+                        or (action_scope and key == "wait_for_trigger")
+                        or (trigger_scope and key == "triggers")
+                    ),
+                    action_scope=(
+                        (
+                            object_root
+                            and current.kind == "automation"
+                            and key in {"action", "actions"}
+                        )
+                        or (
+                            object_root
+                            and current.kind == "script"
+                            and key == "sequence"
+                        )
+                        or (
+                            action_scope
+                            and key
+                            in {
+                                "sequence",
+                                "choose",
+                                "default",
+                                "repeat",
+                                "then",
+                                "else",
+                                "parallel",
+                            }
+                        )
+                    ),
                 )
         return
 
@@ -497,6 +629,8 @@ def _walk(
                 parent_key=parent_key,
                 sequence_index=index,
                 in_template=in_template,
+                trigger_scope=trigger_scope,
+                action_scope=action_scope,
             )
         return
 
@@ -603,6 +737,8 @@ def scan_configuration(
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
     scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
     ignored_entity_references: frozenset[str] = frozenset(),
+    zha_ieees: frozenset[str] | None = None,
+    zha_status: str = "not_applicable",
 ) -> dict[str, Any]:
     """Synchronously scan configuration files; intended for an executor thread."""
     started = time.monotonic()
@@ -616,6 +752,7 @@ def scan_configuration(
         template_by_config_entry or {},
         [],
         set(),
+        zha_ieees,
     )
     sources = _discover_sources(config_dir, yaml_dashboards, scan_esphome=scan_esphome)
     skipped_files = 0
@@ -635,7 +772,7 @@ def scan_configuration(
 
     state.results.sort(
         key=lambda result: (
-            result["entity_id"],
+            result.get("entity_id", result.get("reference", "")).lower(),
             result["file"],
             result["line"],
         )
@@ -643,7 +780,21 @@ def scan_configuration(
     return {
         "results": state.results,
         "missing_count": len(state.results),
-        "missing_entity_count": len({result["entity_id"] for result in state.results}),
+        "missing_reference_count": len(
+            {
+                (
+                    result.get("reference_type", "entity_id"),
+                    result.get("entity_id", result.get("reference", "")).lower(),
+                )
+                for result in state.results
+            }
+        ),
+        "missing_entity_count": len(
+            {result["entity_id"] for result in state.results if "entity_id" in result}
+        ),
+        "checks": {
+            "zha_device_ieee": "executed" if zha_ieees is not None else zha_status
+        },
         "files_scanned": len(sources) - skipped_files,
         "files_skipped": skipped_files,
         "references_checked": state.references_checked,
@@ -716,6 +867,7 @@ async def async_scan_configuration(
             f"/{str(url_path or 'lovelace').strip('/')}",
         )
 
+    zha_ieees, zha_status = _zha_snapshot(hass)
     return await hass.async_add_executor_job(
         scan_configuration,
         Path(hass.config.path()),
@@ -727,6 +879,8 @@ async def async_scan_configuration(
         yaml_dashboards,
         scan_esphome,
         ignored_entity_references,
+        zha_ieees,
+        zha_status,
     )
 
 
