@@ -271,32 +271,7 @@ Les détails d’une alerte affichent les notifications de ses profils intégré
 
 ### Utiliser vos propres automatisations de notification
 
-Les profils intégrés sont facultatifs. Les événements Home Assistant existants restent disponibles pour votre propre logique de notification.
-
-Alert Manager émet l’événement `alert_manager_device_alert_started` lorsqu’un appareil passe en alerte. Les alertes qui arrivent à peu d’intervalle pour le même appareil sont regroupées avant l’émission de l’événement, ce qui permet d’envoyer **une notification utile pour l’appareil au lieu d’une notification par règle**.
-
-Exemple :
-
-```yaml
-alias: Notification Alert Manager
-triggers:
-  - trigger: event
-    event_type: alert_manager_device_alert_started
-actions:
-  - action: script.notification
-    metadata: {}
-    data:
-      title: '{{ trigger.event.data.device_name }} en alerte'
-      message: |-
-        {% for message in trigger.event.data.messages | default([], true) %}
-        - {{ message }}
-        {% endfor %}
-      recipients:
-        - loic
-mode: queued
-```
-
-`script.notification` n’est qu’un exemple : remplacez-le par votre propre script de notification ou n’importe quelle action de notification Home Assistant.
+Les profils intégrés sont facultatifs. Les événements Home Assistant par alerte restent disponibles pour vos propres automatisations de notification.
 
 ## Entités et événements Home Assistant
 
@@ -306,14 +281,12 @@ Alert Manager expose plusieurs entités afin que son état puisse aussi être ut
 - `sensor.alert_manager_main_active`
 - `sensor.alert_manager_main_pending`
 - `sensor.alert_manager_main_acknowledge`
-- `sensor.alert_manager_device_main_active`
 - `sensor.alert_manager_coherence_issue`
 
 Événements utiles :
 
 - `alert_manager_alert_started`
 - `alert_manager_alert_resolved`
-- `alert_manager_device_alert_started`
 - `alert_manager_alert_acknowledged`
 - `alert_manager_alert_unacknowledged`
 

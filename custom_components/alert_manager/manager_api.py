@@ -159,7 +159,7 @@ class _ApiMixin:
             and self._last_public_snapshot is not None
         ):
             return deepcopy(self._last_public_snapshot)
-        return self._build_public_snapshot()[0]
+        return self._build_public_snapshot()
 
     def history_snapshot(self) -> dict[str, Any]:
         """Return newest-first immutable history for the administrator panel."""
@@ -497,7 +497,6 @@ class _ApiMixin:
                 reset_pack_runtimes(self.hass)
                 self._cancel_all_pack_rechecks()
                 self._cancel_all_timers()
-                self._cancel_all_device_event_timers()
             self._refresh_tracking()
             await self._async_refresh_notification_runtime(reset_reminders=True)
         self._publish_if_changed(force=True)
@@ -910,7 +909,6 @@ class _ApiMixin:
 
         with self.notification_runtime.events_paused():
             self._cancel_all_timers()
-            self._cancel_all_device_event_timers()
             reset_pack_runtimes(self.hass)
             try:
                 self._recovery_active = False
@@ -962,7 +960,6 @@ class _ApiMixin:
                     self._emit_resume_events(previous.records)
                 else:
                     self._cancel_all_timers()
-                    self._cancel_all_device_event_timers()
                 async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
             await self._async_refresh_notification_runtime(reset_reminders=True)
         if coherence_schedule_changed or previous_recovery_active:

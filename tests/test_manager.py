@@ -19,7 +19,6 @@ from custom_components.alert_manager.const import (
     DATA_MANAGER,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
-    EVENT_DEVICE_ALERT_STARTED,
     MAX_RULES,
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
@@ -107,16 +106,6 @@ def published_alert_state(manager):
         snapshot["startup"]["in_progress"],
         statuses,
     )
-
-
-def fire_device_event_timers(hass):
-    """Run every pending 10-second device-event debounce timer."""
-    for timer in list(hass.timers):
-        if timer["cancelled"]:
-            continue
-        if "_schedule_device_event_timer" not in timer["action"].__qualname__:
-            continue
-        timer["action"](timer["point"])
 
 
 def fire_startup_reconciliation(hass):
@@ -362,7 +351,7 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     hass.data[DATA_MANAGER] = manager
     entities = []
     run(async_setup_sensor(hass, entry, entities.extend))
-    assert len(entities) == 5
+    assert len(entities) == 4
     partition_sensors = [
         entity for entity in entities if isinstance(entity, AlertManagerSensor)
     ]
@@ -371,20 +360,18 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         for entity in entities
         if isinstance(entity, AlertManagerCoherenceIssueSensor)
     )
-    assert len(partition_sensors) == 4
+    assert len(partition_sensors) == 3
     assert {entity.entity_id for entity in entities} == {
         "sensor.alert_manager_coherence_issue",
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
-        "sensor.alert_manager_device_main_active",
     }
     assert {entity._attr_unique_id for entity in entities} == {
         "alert_manager_coherence_issue",
         "alert_manager_main_active",
         "alert_manager_main_pending",
         "alert_manager_main_acknowledge",
-        "alert_manager_device_main_active",
     }
     assert all(entity.native_value == 0 for entity in partition_sensors)
     assert coherence_sensor.native_value is None
@@ -405,13 +392,45 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         },
         "sensor.alert_manager_main_pending": {"alerts": [], "alerts_revision": 0},
         "sensor.alert_manager_main_acknowledge": {"alerts": [], "alerts_revision": 0},
-        "sensor.alert_manager_device_main_active": {"devices": []},
     }
     assert all(
         entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
         for entity in entities
     )
     assert "sensor.legacy_alerts" not in hass.entity_registry.entries
+
+
+@pytest.mark.parametrize(
+    "entity_id", ["sensor.alert_manager_device_main_active", "sensor.renamed_devices"]
+)
+def test_removed_device_sensor_registry_cleanup(hass, entry, registry_entry, entity_id):
+    """Remove the owned unique ID, including renames, without touching other sensors."""
+    registry_entry(
+        hass,
+        entity_id,
+        platform="alert_manager",
+        unique_id="alert_manager_device_main_active",
+    )
+    registry_entry(
+        hass,
+        "sensor.other_devices",
+        platform="other_integration",
+        unique_id="alert_manager_device_main_active",
+    )
+    registry_entry(
+        hass,
+        "sensor.kept_active",
+        platform="alert_manager",
+        unique_id="alert_manager_main_active",
+    )
+    hass.data[DATA_MANAGER] = make_manager(hass, entry)
+    for _ in range(2):
+        entities = []
+        run(async_setup_sensor(hass, entry, entities.extend))
+        assert len(entities) == 4
+        assert entity_id not in hass.entity_registry.entries
+        assert "sensor.other_devices" in hass.entity_registry.entries
+        assert "sensor.kept_active" in hass.entity_registry.entries
 
 
 def test_normal_to_pending_and_no_duplicate(hass, entry):
@@ -520,9 +539,6 @@ def test_pending_alert_is_exposed_after_configured_display_delay(
     run(manager.async_evaluate_entity("sensor.ups"))
     assert manager.public_snapshot()["active_count"] == 0
     assert manager.public_snapshot()["pending_count"] == 1
-    assert not [
-        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
 
     set_now(start + timedelta(seconds=30))
     run(manager.async_evaluate_entity("sensor.ups"))
@@ -531,16 +547,8 @@ def test_pending_alert_is_exposed_after_configured_display_delay(
     assert record.visible_at is None
     assert snapshot["active_count"] == 1
     assert snapshot["pending_count"] == 0
-    assert snapshot["device_active_count"] == 1
-    assert snapshot["active_devices"][0]["device_name"] == "Onduleur"
-    assert snapshot["active_devices"][0]["alert_ids"] == ["unavailable:sensor.ups"]
-    fire_device_event_timers(hass)
-    events = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert len(events) == 1
-    assert events[0]["device_ids"] == [device.id]
-    assert "device_id" not in events[0]
+    assert snapshot["alerts"][0]["device_id"] == device.id
+    assert snapshot["alerts"][0]["device_name"] == "Onduleur"
 
 
 def test_short_rule_delay_skips_pending_display_before_active(hass, entry, set_now):
@@ -589,10 +597,6 @@ def test_transient_pending_alert_never_reaches_public_lists(hass, entry, set_now
             set_now(start + timedelta(seconds=4))
             hass.states.set("sensor.test", "unavailable")
             run(manager.async_evaluate_entity("sensor.test"))
-
-    assert not [
-        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
 
 
 def test_pending_timer_runs_on_home_assistant_event_loop(hass, entry, set_now):
@@ -685,10 +689,8 @@ def test_shutdown_discards_queued_unavailable_transition(hass, entry, delay):
     run(scenario())
 
 
-def test_shutdown_cancels_registry_and_device_callbacks(
-    hass, entry, registry_entry, device_entry
-):
-    """Registry and debounce callbacks are inert once shutdown has begun."""
+def test_shutdown_ignores_registry_callbacks(hass, entry, registry_entry, device_entry):
+    """Registry callbacks are inert once shutdown has begun."""
 
     async def scenario():
         device = device_entry(hass, name="Baby")
@@ -699,12 +701,6 @@ def test_shutdown_cancels_registry_and_device_callbacks(
         await manager.async_update_config({"entity_delays": {"sensor.old": 0}})
         alert_id = "unavailable:sensor.old"
         assert manager.records[alert_id].status is AlertStatus.ACTIVE
-        device_timer = next(
-            timer
-            for timer in hass.timers
-            if not timer["cancelled"]
-            and "_schedule_device_event_timer" in timer["action"].__qualname__
-        )
 
         begin_shutdown(hass)
         hass.state = CoreState.stopping
@@ -717,17 +713,10 @@ def test_shutdown_cancels_registry_and_device_callbacks(
                 }
             )
         )
-        device_timer["action"](device_timer["point"])
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
         assert set(manager.records) == {alert_id}
-        assert device_timer["cancelled"] is True
-        assert not [
-            event
-            for event, _data in hass.bus.fired
-            if event == EVENT_DEVICE_ALERT_STARTED
-        ]
 
     run(scenario())
 
@@ -3437,7 +3426,7 @@ def test_settled_startup_unavailable_starts_normal_delay_after_grace(
         assert pending.detected_at == reconciled_at
         assert pending.visible_at == reconciled_at + timedelta(seconds=10)
         assert pending.due_at == reconciled_at + timedelta(minutes=15)
-        snapshot, _device_groups = restarted._build_public_snapshot()
+        snapshot = restarted._build_public_snapshot()
         assert snapshot["pending_count"] == 0
         assert alert_id not in {item["id"] for item in snapshot["pending"]}
 
@@ -3706,12 +3695,6 @@ def test_automatic_pack_messages_follow_home_assistant_language(hass, entry):
         "State is unavailable",
         "Battery less than or equal to 15%",
     }
-    device_messages = {
-        message
-        for device in manager.public_snapshot()["active_devices"]
-        for message in device["messages"]
-    }
-    assert device_messages == started_messages
 
 
 def test_battery_ignores_low_battery_level_attribute(hass, entry):
@@ -4469,23 +4452,6 @@ def test_unchanged_global_evaluation_does_not_publish(hass, entry):
     assert notifications == []
 
 
-def test_publication_groups_active_devices_once(hass, entry, monkeypatch):
-    """One publication reuses device groups for the snapshot and event debounce."""
-    manager = make_manager(hass, entry)
-    original = manager._active_device_groups
-    calls = 0
-
-    def count_groups(active_records=None):
-        nonlocal calls
-        calls += 1
-        return original(active_records)
-
-    monkeypatch.setattr(manager, "_active_device_groups", count_groups)
-    manager._publish_if_changed(force=True)
-
-    assert calls == 1
-
-
 def test_unavailable_monitors_every_domain_but_not_alert_manager(
     hass, entry, registry_entry
 ):
@@ -4869,127 +4835,11 @@ def test_same_entity_can_belong_to_multiple_rules(hass, entry):
     assert set(manager.records) == {f"rule:{rule['id']}:sensor.test" for rule in rules}
     snapshot = manager.public_snapshot()
     assert snapshot["active_count"] == 2
-    assert snapshot["active_devices"][0]["messages"] == [
+    assert [alert["message"] for alert in snapshot["alerts"]] == [
         "First message",
         "Second message",
     ]
-    assert snapshot["active_devices"][0]["rules"] == ["First", "Second"]
-
-
-def test_device_event_debounces_new_alerts_and_includes_rule_message_arrays(
-    hass, entry, registry_entry, device_entry
-):
-    """The device event waits for ten quiet seconds and emits the final group."""
-    device = device_entry(hass, name="Baie")
-    registry_entry(hass, "sensor.rack", device_id=device.id)
-    hass.states.set("sensor.rack", "hot")
-    manager = make_manager(hass, entry)
-
-    first = run(
-        manager.async_create_rule(
-            {
-                "name": "Temperature",
-                "entity_ids": ["sensor.rack"],
-                "operator": "equals",
-                "value": "hot",
-                "duration": 0,
-                "message": "Rack hot",
-            }
-        )
-    )
-    first_timer = next(
-        timer
-        for timer in reversed(hass.timers)
-        if not timer["cancelled"]
-        and "_schedule_device_event_timer" in timer["action"].__qualname__
-    )
-    assert not [
-        event for event, _data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-
-    second = run(
-        manager.async_create_rule(
-            {
-                "name": "Ventilation",
-                "entity_ids": ["sensor.rack"],
-                "operator": "equals",
-                "value": "hot",
-                "duration": 0,
-                "message": "Fan stopped",
-            }
-        )
-    )
-    assert first_timer["cancelled"] is True
-    fire_device_event_timers(hass)
-    events = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert len(events) == 1
-    assert set(events[0]["alert_ids"]) == {
-        f"rule:{first['id']}:sensor.rack",
-        f"rule:{second['id']}:sensor.rack",
-    }
-    assert events[0]["messages"] == ["Rack hot", "Fan stopped"]
-    assert events[0]["rules"] == ["Temperature", "Ventilation"]
-
-
-def test_device_sensor_keeps_messages_and_rules_inside_each_device():
-    """The device sensor exposes no misleading global message/rule arrays."""
-    devices = [
-        {
-            "device_id": "one",
-            "device_ids": ["one"],
-            "device_name": "UPS one",
-            "area": "Garage",
-            "alert_count": 2,
-            "messages": ["Battery low", "Offline"],
-            "rules": ["Battery", "Unavailable"],
-        },
-        {
-            "device_id": "two",
-            "device_ids": ["two"],
-            "device_name": "UPS two",
-            "area": "Office",
-            "alert_count": 2,
-            "messages": ["Offline", "Temperature high"],
-            "rules": ["Unavailable", "Temperature"],
-        },
-    ]
-    manager = SimpleNamespace(
-        monitoring_enabled=True,
-        public_snapshot=lambda: {
-            "device_active_count": 2,
-            "active_devices": devices,
-        },
-    )
-    sensor = AlertManagerSensor(
-        manager,
-        "device_main_active",
-        "alert_manager_device_main_active",
-        "mdi:devices",
-        "device_active_count",
-        "active_devices",
-        "devices",
-    )
-
-    assert sensor.extra_state_attributes == {
-        "devices": [
-            {
-                "device_ids": ["one"],
-                "device_name": "UPS one",
-                "alert_count": 2,
-                "messages": ["Battery low", "Offline"],
-                "rules": ["Battery", "Unavailable"],
-            },
-            {
-                "device_ids": ["two"],
-                "device_name": "UPS two",
-                "alert_count": 2,
-                "messages": ["Offline", "Temperature high"],
-                "rules": ["Unavailable", "Temperature"],
-            },
-        ]
-    }
+    assert [alert["rule_name"] for alert in snapshot["alerts"]] == ["First", "Second"]
 
 
 def test_lifecycle_sensor_attributes_are_compact_and_recorder_safe():
@@ -5381,18 +5231,16 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
     }
-    fire_device_event_timers(hass)
-    device_started = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert len(device_started) == 1
-    assert device_started[0]["device_ids"] == [device.id]
-    assert "device_id" not in device_started[0]
-    assert set(device_started[0]["alert_ids"]) <= {
-        "unavailable:sensor.ups_status",
-        "unavailable:sensor.ups_battery",
-    }
     assert manager.public_snapshot()["active_count"] == 2
+
+    assert "active_devices" not in manager.public_snapshot()
+    assert "device_active_count" not in manager.public_snapshot()
+    assert not any(
+        "device_event" in timer["action"].__qualname__ for timer in hass.timers
+    )
+    run(manager.async_acknowledge("unavailable:sensor.ups_status", "Loïc"))
+    assert manager.public_snapshot()["active_count"] == 1
+    assert manager.public_snapshot()["acknowledge_count"] == 1
 
     hass.states.set("sensor.ups_status", "ok")
     hass.states.set("sensor.ups_battery", "ok")
@@ -5403,124 +5251,13 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
         "unavailable:sensor.ups_status",
         "unavailable:sensor.ups_battery",
     }
-
-
-def test_devices_with_the_same_name_share_one_active_group(
-    hass, entry, registry_entry, device_entry
-):
-    """Duplicate registry devices keep one counter and one lifecycle event."""
-    first_device = device_entry(hass, "a" * 32, name="Onduleur")
-    second_device = device_entry(hass, "b" * 32, name=" onduleur ")
-    registry_entry(hass, "sensor.ups_one", device_id=first_device.id)
-    registry_entry(hass, "sensor.ups_two", device_id=second_device.id)
-    hass.states.set("sensor.ups_one", "unavailable")
-    hass.states.set("sensor.ups_two", "ok")
-    manager = make_manager(hass, entry)
-    run(
-        manager.async_update_config(
-            {
-                "entity_delays": {"sensor.ups_one": 0, "sensor.ups_two": 0},
-                "pending_display_delay": 0,
-            }
-        )
+    assert not any(
+        event.startswith("alert_manager_device_alert_") for event, _ in hass.bus.fired
     )
-
-    initial = manager.public_snapshot()
-    assert initial["device_active_count"] == 1
-    assert initial["active_devices"][0]["device_ids"] == [first_device.id]
-    fire_device_event_timers(hass)
-    device_events = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert len(device_events) == 1
-    assert device_events[0]["device_ids"] == [first_device.id]
-    assert "device_id" not in device_events[0]
-
-    hass.states.set("sensor.ups_two", "unavailable")
-    run(manager.async_evaluate_entity("sensor.ups_two"))
-    snapshot = manager.public_snapshot()
-    assert snapshot["device_active_count"] == 1
-    device = snapshot["active_devices"][0]
-    assert device["device_id"] == first_device.id
-    assert device["device_ids"] == [first_device.id, second_device.id]
-    assert device["device_name"] == "Onduleur"
-    assert device["alert_count"] == 2
-    assert set(device["alert_ids"]) == {
-        "unavailable:sensor.ups_one",
-        "unavailable:sensor.ups_two",
+    assert {record.id for record in manager.history} == {
+        "unavailable:sensor.ups_status",
+        "unavailable:sensor.ups_battery",
     }
-    assert device["messages"] == ["État indisponible"]
-    assert device["rules"] == ["unavailable"]
-    device_events = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert len(device_events) == 1
-
-    hass.states.set("sensor.ups_one", "ok")
-    run(manager.async_evaluate_entity("sensor.ups_one"))
-    remaining = manager.public_snapshot()["active_devices"][0]
-    assert remaining["device_id"] == second_device.id
-    assert remaining["device_ids"] == [second_device.id]
-    assert (
-        len(
-            [
-                event
-                for event, _data in hass.bus.fired
-                if event == EVENT_DEVICE_ALERT_STARTED
-            ]
-        )
-        == 1
-    )
-
-
-def test_entities_without_devices_are_counted_individually(hass, entry):
-    """Each device-less entity acts as one stable fallback device."""
-    hass.states.set("sensor.one", "unavailable", {"friendly_name": "Capteur un"})
-    hass.states.set("sensor.two", "unavailable")
-    manager = make_manager(hass, entry)
-    run(
-        manager.async_update_config(
-            {
-                "entity_delays": {"sensor.one": 0, "sensor.two": 0},
-                "pending_display_delay": 0,
-            }
-        )
-    )
-
-    snapshot = manager.public_snapshot()
-    assert snapshot["device_active_count"] == 2
-    assert {
-        (device["device_id"], device["device_name"])
-        for device in snapshot["active_devices"]
-    } == {
-        ("sensor.one", "Capteur un"),
-        ("sensor.two", "sensor.two"),
-    }
-    assert all(
-        device["device_ids"] == [device["device_id"]]
-        for device in snapshot["active_devices"]
-    )
-    fire_device_event_timers(hass)
-    events = [
-        data for event, data in hass.bus.fired if event == EVENT_DEVICE_ALERT_STARTED
-    ]
-    assert {tuple(event["device_ids"]) for event in events} == {
-        ("sensor.one",),
-        ("sensor.two",),
-    }
-    assert all("device_id" not in event for event in events)
-
-    run(manager.async_evaluate_entity("sensor.one"))
-    assert (
-        len(
-            [
-                event
-                for event, _data in hass.bus.fired
-                if event == EVENT_DEVICE_ALERT_STARTED
-            ]
-        )
-        == 2
-    )
 
 
 def test_rule_configuration_cleanup_is_silent(hass, entry):

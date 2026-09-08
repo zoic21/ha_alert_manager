@@ -33,8 +33,8 @@ def event_data(hass, event_type):
     return [data for event, data in hass.bus.fired if event == event_type]
 
 
-def test_main_device_groups_all_seven_entities(hass, entry):
-    """The five sensors, switch and button use one deterministic service device."""
+def test_main_device_groups_all_six_entities(hass, entry):
+    """The four sensors, switch and button use one deterministic service device."""
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
@@ -43,7 +43,7 @@ def test_main_device_groups_all_seven_entities(hass, entry):
     run(setup_switch(hass, entry, entities.extend))
     run(setup_button(hass, entry, entities.extend))
 
-    assert len(entities) == 7
+    assert len(entities) == 6
     for entity in entities:
         assert entity._attr_device_info == {
             "identifiers": {("alert_manager", "main")},
@@ -311,15 +311,7 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
         assert {alert["id"] for alert in alerts} == ids
         all_ids.extend(alert["id"] for alert in alerts)
     assert len(all_ids) == len(set(all_ids))
-    device_sensor = by_id["sensor.alert_manager_device_main_active"]
-    assert device_sensor.native_value == 2
-    devices = device_sensor.extra_state_attributes["devices"]
-    assert {tuple(device["device_ids"]) for device in devices} == {
-        ("sensor.active",),
-        ("sensor.other",),
-    }
-    assert all("device_id" not in device for device in devices)
-    assert set(device_sensor.extra_state_attributes) == {"devices"}
+    assert "sensor.alert_manager_device_main_active" not in by_id
 
     run(manager.async_set_monitoring(False))
     assert len(manager.records) == 3
@@ -328,9 +320,7 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
             assert sensor.native_value is None
             continue
         assert sensor.native_value == 0
-        if sensor is device_sensor:
-            assert sensor.extra_state_attributes == {"devices": []}
-        elif sensor.entity_id == "sensor.alert_manager_main_active":
+        if sensor.entity_id == "sensor.alert_manager_main_active":
             assert sensor.extra_state_attributes == {
                 "alerts": [],
                 "history_revision": 0,

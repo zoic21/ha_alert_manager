@@ -18,8 +18,6 @@ EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
 EVENT_ALERT_RESOLVED: Final = "alert_manager_alert_resolved"
 EVENT_ALERT_ACKNOWLEDGED: Final = "alert_manager_alert_acknowledged"
 EVENT_ALERT_UNACKNOWLEDGED: Final = "alert_manager_alert_unacknowledged"
-EVENT_DEVICE_ALERT_STARTED: Final = "alert_manager_device_alert_started"
-DEVICE_EVENT_DEBOUNCE_SECONDS: Final = 10
 LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS: Final = 30
 STARTUP_RECONCILIATION_DELAY_SECONDS: Final = 60
 PENDING_PERSISTENCE_DELAY_SECONDS: Final = 5 * 60
@@ -40,7 +38,6 @@ ALERT_MANAGER_ENTITY_IDS: Final = frozenset(
         "sensor.alert_manager_main_active",
         "sensor.alert_manager_main_pending",
         "sensor.alert_manager_main_acknowledge",
-        "sensor.alert_manager_device_main_active",
         "sensor.alert_manager_coherence_issue",
         "button.alert_manager_check_coherence",
         "switch.alert_manager_main_monitoring",

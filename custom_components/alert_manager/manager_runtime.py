@@ -547,7 +547,6 @@ class _RuntimeMixin:
         self._cancel_startup_reconciliation()
         self._cancel_all_timers()
         self._cancel_all_pack_rechecks()
-        self._cancel_all_device_event_timers()
         self._cancel_template_dependency_timers()
         self._cancel_pending_persistence_timer()
         self._cancel_live_message_flush()

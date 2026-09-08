@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3 — En cours de développement
+
+### Suppression incompatible
+
+- Suppression de `sensor.alert_manager_device_main_active` et de l’événement
+  `alert_manager_device_alert_started`, ainsi que de leur agrégation et de leurs
+  temporisations dédiées. Les automatisations externes qui les utilisent doivent
+  être adaptées aux profils de notification intégrés ou aux événements par alerte.
+- L’ancienne entrée du capteur est retirée du registre, même si elle a été renommée.
+  Aucun alias ni mécanisme de compatibilité n’est conservé. Les notifications
+  intégrées, les compteurs par alerte, le regroupement par appareil de l’interface
+  et l’historique restent inchangés.
+
 ## 2.2.0-rc.19 — 8 septembre 2026
 
 ### Corrigé

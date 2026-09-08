@@ -74,7 +74,6 @@ const ALERT_MANAGER_ENTITY_IDS = [
   "sensor.alert_manager_main_active",
   "sensor.alert_manager_main_pending",
   "sensor.alert_manager_main_acknowledge",
-  "sensor.alert_manager_device_main_active",
   "switch.alert_manager_main_monitoring",
 ];
 

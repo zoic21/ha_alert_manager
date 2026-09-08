@@ -123,9 +123,6 @@ class AlertManager(
         self._excluded_entities: frozenset[str] = frozenset()
         self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
-        self._active_device_group_ids: set[str] = set()
-        self._device_event_timers: dict[str, Callable[[], None]] = {}
-        self._device_event_alert_ids: dict[str, frozenset[str]] = {}
         self._rule_templates: dict[str, Template] = {}
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
         self._rule_message_templates: dict[str, Template] = {}
@@ -251,7 +248,6 @@ class AlertManager(
         self._refresh_pack_entry_listeners()
         self._pack_availability = self._current_pack_availability()
         self._refresh_tracking()
-        self._active_device_group_ids = set(self._active_device_groups())
         if not self.monitoring_enabled and self._freeze_pending_alerts(dt_util.now()):
             migrated = True
         if self.hass.state is CoreState.running and (
@@ -392,5 +388,4 @@ class AlertManager(
                 for cancel in self._timers.values():
                     cancel()
                 self._timers.clear()
-                self._cancel_all_device_event_timers()
                 reset_pack_runtimes(self.hass)

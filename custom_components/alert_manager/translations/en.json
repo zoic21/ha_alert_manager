@@ -730,9 +730,6 @@
       "coherence_issue": {
         "name": "Missing entities"
       },
-      "device_main_active": {
-        "name": "Devices in alert"
-      },
       "main_acknowledge": {
         "name": "Acknowledged alerts"
       },

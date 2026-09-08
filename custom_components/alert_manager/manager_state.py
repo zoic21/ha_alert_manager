@@ -15,12 +15,10 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CATEGORY_UNAVAILABLE,
-    DEVICE_EVENT_DEBOUNCE_SECONDS,
     EVENT_ALERT_ACKNOWLEDGED,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,
-    EVENT_DEVICE_ALERT_STARTED,
     LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS,
     PENDING_PERSISTENCE_DELAY_SECONDS,
     PENDING_PERSISTENCE_RETRY_SECONDS,
@@ -140,10 +138,8 @@ class _StateMixin:
         if not record_ids:
             self._record_ids_by_entity.pop(entity_id, None)
 
-    def _build_public_snapshot(
-        self,
-    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-        """Build one public snapshot and its already-grouped active devices."""
+    def _build_public_snapshot(self) -> dict[str, Any]:
+        """Build the public alert partitions and runtime status."""
         now = dt_util.now()
         active_records = sorted(
             (
@@ -172,36 +168,23 @@ class _StateMixin:
             target = acknowledged if record.acknowledged else unacknowledged
             target.append(record.as_public_dict())
         pending = [record.as_public_dict() for record in pending_records]
-        device_groups = self._active_device_groups(active_records)
-        active_devices = sorted(
-            device_groups.values(),
-            key=lambda device: (
-                str(device["device_name"]).casefold(),
-                device["device_id"],
-            ),
-        )
-        return (
-            {
-                "active_count": len(unacknowledged),
-                "acknowledge_count": len(acknowledged),
-                "pending_count": len(pending),
-                "tracked_count": self._tracked_count(),
-                "alerts": unacknowledged,
-                "acknowledge": acknowledged,
-                "pending": pending,
-                "device_active_count": len(active_devices),
-                "active_devices": active_devices,
-                "startup": {
-                    "in_progress": self._runtime_phase.is_startup,
-                    "stabilization_until": (
-                        self._startup_reconciliation_deadline.isoformat()
-                        if self._startup_reconciliation_deadline is not None
-                        else None
-                    ),
-                },
+        return {
+            "active_count": len(unacknowledged),
+            "acknowledge_count": len(acknowledged),
+            "pending_count": len(pending),
+            "tracked_count": self._tracked_count(),
+            "alerts": unacknowledged,
+            "acknowledge": acknowledged,
+            "pending": pending,
+            "startup": {
+                "in_progress": self._runtime_phase.is_startup,
+                "stabilization_until": (
+                    self._startup_reconciliation_deadline.isoformat()
+                    if self._startup_reconciliation_deadline is not None
+                    else None
+                ),
             },
-            device_groups,
-        )
+        }
 
     def _pending_is_visible(
         self, record: AlertRecord, now: datetime | None = None
@@ -226,79 +209,6 @@ class _StateMixin:
             record.detected_at,
             min(self.config["pending_display_delay"], record.delay),
         ) + timedelta(seconds=record.paused_seconds)
-
-    def _active_device_groups(
-        self, active_records: list[AlertRecord] | None = None
-    ) -> dict[str, dict[str, Any]]:
-        """Group registry devices by name and device-less sources by entity."""
-        records = active_records
-        if records is None:
-            records = sorted(
-                (
-                    record
-                    for record in self.records.values()
-                    if record.status is AlertStatus.ACTIVE
-                ),
-                key=lambda record: (record.active_since or record.due_at).astimezone(
-                    UTC
-                ),
-            )
-        grouped: dict[str, list[AlertRecord]] = {}
-        for record in records:
-            if record.details.device_id:
-                device_name = (
-                    record.details.device_name or record.details.device_id
-                ).strip()
-                group_id = f"device-name:{device_name.casefold()}"
-            else:
-                group_id = f"entity:{record.details.entity_id}"
-            grouped.setdefault(group_id, []).append(record)
-
-        devices: dict[str, dict[str, Any]] = {}
-        for group_id, device_records in grouped.items():
-            ordered = device_records
-            first = ordered[0]
-            device_ids = sorted(
-                {
-                    record.details.device_id or record.details.entity_id
-                    for record in ordered
-                }
-            )
-            device_id = device_ids[0]
-            device_name = (
-                first.details.device_name
-                or first.details.name
-                or first.details.entity_id
-            ).strip()
-            alert_ids = [record.details.id for record in ordered]
-            messages = list(
-                dict.fromkeys(
-                    record.details.message
-                    for record in ordered
-                    if record.details.message
-                )
-            )
-            rules = list(
-                dict.fromkeys(
-                    record.details.rule_name or record.details.type
-                    for record in ordered
-                )
-            )
-            acknowledged = sum(record.acknowledged for record in ordered)
-            devices[group_id] = {
-                "device_id": device_id,
-                "device_ids": device_ids,
-                "device_name": device_name,
-                "area": first.details.area,
-                "started_at": (first.active_since or first.due_at).isoformat(),
-                "alert_count": len(ordered),
-                "unacknowledged_alert_count": len(ordered) - acknowledged,
-                "acknowledged_alert_count": acknowledged,
-                "alert_ids": alert_ids,
-                "messages": messages,
-                "rules": rules,
-            }
-        return devices
 
     def _cancel_all_timers(self) -> None:
         """Cancel each scheduled due transition before a full rebuild."""
@@ -812,78 +722,6 @@ class _StateMixin:
         )
         self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
 
-    def _schedule_new_device_alerts(self, devices: dict[str, dict[str, Any]]) -> None:
-        """Debounce the first device event until its alert set is quiet."""
-        current_group_ids = set(devices)
-        for group_id in self._active_device_group_ids - current_group_ids:
-            self._cancel_device_event_timer(group_id)
-        for group_id, device in devices.items():
-            current_alert_ids = frozenset(device["alert_ids"])
-            is_new_group = group_id not in self._active_device_group_ids
-            pending_alert_ids = self._device_event_alert_ids.get(group_id)
-            has_new_pending_alert = bool(
-                pending_alert_ids is not None and current_alert_ids - pending_alert_ids
-            )
-            if is_new_group or has_new_pending_alert:
-                self._schedule_device_event_timer(group_id, current_alert_ids)
-        self._active_device_group_ids = set(devices)
-
-    def _schedule_device_event_timer(
-        self, group_id: str, alert_ids: frozenset[str]
-    ) -> None:
-        """Restart one per-device quiet-period timer."""
-        if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
-            return
-        self._cancel_device_event_timer(group_id)
-        self._device_event_alert_ids[group_id] = alert_ids
-
-        @callback
-        def timer_due(_now: datetime) -> None:
-            self._device_event_timers.pop(group_id, None)
-            self._device_event_alert_ids.pop(group_id, None)
-            if (
-                self._unloading
-                or not self.monitoring_enabled
-                or self._runtime_phase is RuntimePhase.STOPPING
-            ):
-                return
-            device = self._active_device_groups().get(group_id)
-            if device is not None:
-                event_data = {
-                    key: value for key, value in device.items() if key != "device_id"
-                }
-                event_data["messages"] = list(
-                    dict.fromkeys(
-                        record.details.message
-                        or record.details.rule_name
-                        or record.details.type
-                        for alert_id in device["alert_ids"]
-                        if (record := self.records.get(alert_id)) is not None
-                    )
-                )
-                self.hass.bus.async_fire(EVENT_DEVICE_ALERT_STARTED, event_data)
-
-        self._device_event_timers[group_id] = async_track_point_in_utc_time(
-            self.hass,
-            timer_due,
-            (
-                dt_util.now() + timedelta(seconds=DEVICE_EVENT_DEBOUNCE_SECONDS)
-            ).astimezone(UTC),
-        )
-
-    def _cancel_device_event_timer(self, group_id: str) -> None:
-        """Cancel one pending device event and forget its debounce snapshot."""
-        if cancel := self._device_event_timers.pop(group_id, None):
-            cancel()
-        self._device_event_alert_ids.pop(group_id, None)
-
-    def _cancel_all_device_event_timers(self) -> None:
-        """Cancel every pending device event during unload or suspension."""
-        for cancel in self._device_event_timers.values():
-            cancel()
-        self._device_event_timers.clear()
-        self._device_event_alert_ids.clear()
-
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""
         if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
@@ -904,9 +742,8 @@ class _StateMixin:
                 continue
             self._rule_message_render_info.pop(pair, None)
             self._remove_dependency_key(("message", pair[0], pair[1]))
-        snapshot, device_groups = self._build_public_snapshot()
+        snapshot = self._build_public_snapshot()
         if not force and snapshot == self._last_public_snapshot:
             return
-        self._schedule_new_device_alerts(device_groups)
         self._last_public_snapshot = snapshot
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)

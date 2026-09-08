@@ -730,9 +730,6 @@
       "coherence_issue": {
         "name": "Entités inexistantes"
       },
-      "device_main_active": {
-        "name": "Appareils en alerte"
-      },
       "main_acknowledge": {
         "name": "Alertes acquittées"
       },

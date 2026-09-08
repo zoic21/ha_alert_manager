@@ -53,14 +53,6 @@ _SENSORS = (
         "acknowledge",
         "alerts",
     ),
-    (
-        "device_main_active",
-        "alert_manager_device_main_active",
-        "mdi:devices",
-        "device_active_count",
-        "active_devices",
-        "devices",
-    ),
 )
 
 
@@ -69,13 +61,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Replace the legacy aggregate sensor with lifecycle and device sensors."""
+    """Remove obsolete sensors and set up lifecycle and coherence sensors."""
     entity_registry = er.async_get(hass)
-    legacy_entity_id = entity_registry.async_get_entity_id(
-        "sensor", DOMAIN, "alert_manager"
-    )
-    if legacy_entity_id is not None:
-        entity_registry.async_remove(legacy_entity_id)
+    for unique_id in ("alert_manager", "alert_manager_device_main_active"):
+        legacy_entity_id = entity_registry.async_get_entity_id(
+            "sensor", DOMAIN, unique_id
+        )
+        if legacy_entity_id is not None:
+            entity_registry.async_remove(legacy_entity_id)
 
     manager: AlertManager = hass.data[DATA_MANAGER]
     sensors = [AlertManagerSensor(manager, *description) for description in _SENSORS]
@@ -179,16 +172,10 @@ class AlertManagerSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return compact, Recorder-safe data for this lifecycle partition."""
         if not self.manager.monitoring_enabled:
-            if self._attribute_key == "devices":
-                attributes = {"devices": []}
-            else:
-                attributes = {self._attribute_key: []}
+            attributes = {self._attribute_key: []}
         else:
             items = self._snapshot[self._items_key]
-            compactor = (
-                _compact_device if self._attribute_key == "devices" else _compact_alert
-            )
-            attributes = _bounded_attributes(self._attribute_key, items, compactor)
+            attributes = _bounded_attributes(self._attribute_key, items, _compact_alert)
         if self._attribute_key == "alerts":
             attributes["alerts_revision"] = self._alerts_revision
         if self._publishes_runtime:
@@ -273,22 +260,6 @@ def _compact_alert(alert: dict[str, Any]) -> dict[str, Any]:
         "acknowledged_by": alert.get("acknowledged_by"),
     }
     return {key: value for key, value in compact.items() if value is not None}
-
-
-def _compact_device(device: dict[str, Any]) -> dict[str, Any]:
-    """Remove the singular device id and registry-derived area information."""
-    fields = (
-        "device_ids",
-        "device_name",
-        "started_at",
-        "alert_count",
-        "unacknowledged_alert_count",
-        "acknowledged_alert_count",
-        "alert_ids",
-        "messages",
-        "rules",
-    )
-    return {key: device[key] for key in fields if device.get(key) is not None}
 
 
 def _bounded_attributes(
