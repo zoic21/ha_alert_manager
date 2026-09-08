@@ -151,6 +151,9 @@ export function renderSettingsConfigurationDrawer(context) {
       useBottomSheet,
       validationError: context.notificationProfileValidationError,
       mode: context.notificationEditorMode,
+      savedProfile: settingsDraft?.notification_profiles?.find(
+        (profile) => profile.id === notificationProfileDraft?.id,
+      ),
       t,
     });
   }

@@ -299,7 +299,10 @@
       "batch_delay": "Délai de groupement",
       "batch_delay_help": "De 10 à 300 secondes, 30 par défaut. S’applique aux prochains lots ; les lots en attente conservent leur échéance.",
       "yaml_help": "Modifiez le profil et ses exceptions ordonnées. Les durées sont en secondes.",
-      "yaml_title": "YAML du profil de notification"
+      "yaml_title": "YAML du profil de notification",
+      "duplicate": "Dupliquer",
+      "copy": "copie",
+      "test_saved_help": "Teste le profil enregistré. Enregistrez les nouveaux profils et les changements de destinataires avant de tester."
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

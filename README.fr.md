@@ -249,7 +249,9 @@ Dans **Configuration → Notifications**, créez un profil nommé, sélectionnez
 
 Le menu à trois points du profil permet de passer entre l’éditeur visuel et le **mode YAML**, exceptions ordonnées comprises. L’interrupteur sans libellé dans l’en-tête active ou désactive le profil. Un YAML invalide bloque l’enregistrement et le retour à l’éditeur visuel ; fermer un éditeur modifié demande confirmation.
 
-Enregistrez le profil, puis utilisez **Tester** pour envoyer une vraie notification de test à ses destinataires sans créer d’alerte. Les profils acceptent des entités de notification, pas des actions ou scripts arbitraires ; les canaux disponibles uniquement sous forme d’action restent utilisables dans vos propres automatisations.
+Le même menu propose **Dupliquer** pour préparer une copie indépendante avec un nom suggéré, en conservant les destinataires, les réglages et l’ordre des exceptions. La copie n’est créée qu’à l’enregistrement ; les compteurs d’utilisation et l’état des notifications en cours ne sont pas copiés.
+
+Enregistrez le profil, puis utilisez **Tester** dans son menu à trois points pour envoyer une vraie notification de test à ses destinataires sans créer d’alerte. Les profils acceptent des entités de notification, pas des actions ou scripts arbitraires ; les canaux disponibles uniquement sous forme d’action restent utilisables dans vos propres automatisations.
 
 ### Étiquettes et exceptions
 

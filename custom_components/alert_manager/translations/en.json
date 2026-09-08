@@ -299,7 +299,10 @@
       "batch_delay": "Batching delay",
       "batch_delay_help": "10–300 seconds, default 30. Applies to new batches; pending batches keep their deadline.",
       "yaml_help": "Edit the profile and its ordered exceptions. Durations are in seconds.",
-      "yaml_title": "Notification profile YAML"
+      "yaml_title": "Notification profile YAML",
+      "duplicate": "Duplicate",
+      "copy": "copy",
+      "test_saved_help": "Tests the saved profile. Save new profiles and recipient changes before testing."
     },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",

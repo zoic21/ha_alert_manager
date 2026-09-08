@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { handleNotificationProfileMenuSelection } from "../frontend-src/components/notification-profiles.js";
+
 import { compactCss } from "./frontend-test-helpers.mjs";
 
 const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
@@ -5131,7 +5133,11 @@ for (const outcome of ["success", "partial-failure", "request-failure"]) {
       if (outcome === "request-failure") throw new Error("Test failed");
       return { success: outcome === "success", failed_targets: [{ entity_id: "notify.phone" }] };
     };
-    await panel._handleClick(actionEvent("test-notification-profile", null, { profileId: "profile-1" }));
+    panel._notificationProfileId = "profile-1";
+    panel._settingsDraft = { notification_profiles: [{ id: "profile-1", enabled: true }] };
+    await handleNotificationProfileMenuSelection(panel, {
+      detail: { item: { value: "test-notification-profile" } },
+    });
     assert.deepEqual(calls, [{ type: "alert_manager/notifications/test", profile_id: "profile-1" }]);
     const notice = panel._notice;
     assert.equal(notice.kind, outcome === "success" ? "success" : "error");

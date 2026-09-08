@@ -36,16 +36,16 @@ const profile = {
   }],
 };
 
-test("notification profile list exposes native edit, test and delete actions", () => {
+test("notification profile list exposes edit and delete without a standalone test action", () => {
   const markup = renderNotificationProfiles({
     profiles: [profile], usage: { owner: 12 }, busy: false, t,
   });
 
   assert.match(markup, /<ha-card/);
-  assert.match(markup, /data-action="test-notification-profile"/);
+  assert.doesNotMatch(markup, /data-action="test-notification-profile"/);
   assert.match(markup, /data-action="edit-notification-profile"/);
   assert.match(markup, /data-action="delete-notification-profile"/);
-  assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 3);
+  assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 2);
   assert.doesNotMatch(markup, /data-index=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
   assert.match(markup, /notification-profile-name"><strong>Owner<\/strong><\/div>\s*<div class="notification-profile-meta">/);
@@ -600,4 +600,126 @@ test("saving YAML validates before using the existing configuration save path", 
   assert.deepEqual(calls, ["alert_manager/notifications/yaml/validate", "alert_manager/config/update"]);
   assert.equal(panel._notificationProfileDraft, null);
   assert.equal(panel._configurationDrawer, null);
+});
+
+const { handleNotificationProfileMenuSelection } =
+  await import("../frontend-src/components/notification-profiles.js");
+const profileMenuEvent = (value) => ({ detail: { item: { value } } });
+
+for (const mode of ["visual", "yaml"]) {
+  test(`profile ${mode} menu offers duplicate and tests only a saved enabled profile`, () => {
+    for (const savedProfile of [null, profile, { ...profile, enabled: false }]) {
+      const markup = renderNotificationProfileDrawer({ draft: profile, savedProfile, mode, t });
+      assert.match(markup, /value="duplicate-notification-profile"/);
+      const testItem = markup.match(/<ha-dropdown-item value="test-notification-profile"[^>]*>/)[0];
+      assert.equal(testItem.includes("disabled"), !savedProfile?.enabled);
+    }
+  });
+
+  test(`duplicating a ${mode} draft creates an isolated unsaved copy and saves a new profile`, async () => {
+    const panel = yamlPanel();
+    const saved = structuredClone(panel._settingsDraft.notification_profiles);
+    panel._notificationProfileDraft = cloneNotificationProfile(profile);
+    panel._notificationProfileDraft.exceptions.push({
+      selector_type: "label", selector_ids: ["second"], reminder_interval: null,
+    });
+    panel._notificationProfileDraft.name = "Edited owner";
+    panel._notificationProfileDraft.enabled = false;
+    panel._notificationProfileDraft.usage = 123;
+    panel._notificationProfileDraft.pending_batches = ["batch"];
+    const source = panel._notificationProfileDraft;
+    const expected = cloneNotificationProfile(source);
+    const calls = [];
+    panel._api.call = async (message) => {
+      calls.push(message.type);
+      if (message.type.endsWith("/validate")) return expected;
+      return message.config;
+    };
+    if (mode === "yaml") await switchNotificationEditor(panel);
+    await handleNotificationProfileMenuSelection(panel, profileMenuEvent("duplicate-notification-profile"));
+    const copy = panel._notificationProfileDraft;
+    assert.notEqual(copy.id, source.id);
+    assert.notEqual(copy.name, source.name);
+    assert.equal(copy.enabled, false);
+    assert.equal(panel._notificationProfileId, null);
+    assert.equal(panel._notificationEditorMode, "visual");
+    assert.deepEqual(copy.exceptions, expected.exceptions);
+    assert.equal(copy.usage, undefined);
+    assert.equal(copy.pending_batches, undefined);
+    assert.deepEqual(panel._settingsDraft.notification_profiles, saved);
+    assert.deepEqual(calls, mode === "yaml" ? ["alert_manager/notifications/yaml/validate"] : []);
+    copy.targets.push("notify.other");
+    copy.label_ids.push("other");
+    copy.default_policy.notify_on_start = false;
+    copy.exceptions[0].selector_ids.push("extra");
+    assert.deepEqual(cloneNotificationProfile(source), expected);
+    panel._render = () => {};
+    await handleNotificationProfileAction.call(panel, "save-notification-profile", {});
+    assert.equal(panel._settingsDraft.notification_profiles.length, 2);
+    assert.deepEqual(panel._settingsDraft.notification_profiles[0], saved[0]);
+    assert.deepEqual(panel._settingsDraft.notification_profiles[1], copy);
+  });
+}
+
+test("duplicate cancellation prompts and leaves saved profiles unchanged without sending", async () => {
+  const panel = yamlPanel();
+  const original = structuredClone(panel._settingsDraft.notification_profiles);
+  panel._api.call = () => assert.fail("Cancellation must not call the backend");
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("duplicate-notification-profile"));
+  const previousWindow = globalThis.window;
+  let prompts = 0;
+  globalThis.window = { confirm: () => { prompts++; return true; } };
+  try {
+    await handleNotificationProfileAction.call(panel, "close-configuration-drawer", {});
+    assert.equal(prompts, 1);
+    assert.equal(panel._notificationProfileDraft, null);
+    assert.deepEqual(panel._settingsDraft.notification_profiles, original);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("duplicate names avoid existing copies and stay within the backend Unicode length limit", async () => {
+  const panel = yamlPanel();
+  panel._t = (key) => key === "notifications.copy" ? "copie" : key;
+  panel._notificationProfileDraft.name = "😀".repeat(255);
+  const firstName = "😀".repeat(247) + " (copie)";
+  panel._settingsDraft.notification_profiles.push({ ...profile, id: "existing-copy", name: firstName });
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("duplicate-notification-profile"));
+  assert.equal(Array.from(panel._notificationProfileDraft.name).length, 255);
+  assert.match(panel._notificationProfileDraft.name, / \(copie 2\)$/);
+});
+
+test("invalid YAML blocks duplication and preserves its editor error", async () => {
+  const panel = yamlPanel();
+  await switchNotificationEditor(panel);
+  panel._notificationYaml = "name: [";
+  const original = panel._notificationProfileDraft;
+  panel._api.call = async () => { throw new Error("Invalid YAML"); };
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("duplicate-notification-profile"));
+  assert.equal(panel._notificationProfileDraft, original);
+  assert.equal(panel._notificationProfileId, original.id);
+  assert.equal(panel._notificationEditorMode, "yaml");
+  assert.equal(panel._notificationProfileValidationError, "Invalid YAML");
+});
+
+test("menu testing uses the saved identity and is blocked for new, disabled or busy profiles", async () => {
+  const panel = yamlPanel();
+  let calls = 0;
+  panel._call = async (message) => {
+    calls++;
+    assert.deepEqual(message, { type: "alert_manager/notifications/test", profile_id: profile.id });
+    return { success: true, failed_targets: [] };
+  };
+  panel._notificationProfileDraft = { ...profile, targets: ["notify.unsaved"] };
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("test-notification-profile"));
+  assert.equal(calls, 1);
+  panel._busy = true;
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("test-notification-profile"));
+  panel._busy = false;
+  panel._settingsDraft.notification_profiles[0].enabled = false;
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("test-notification-profile"));
+  panel._notificationProfileId = null;
+  await handleNotificationProfileMenuSelection(panel, profileMenuEvent("test-notification-profile"));
+  assert.equal(calls, 1);
 });

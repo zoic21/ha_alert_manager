@@ -2987,7 +2987,6 @@ function renderProfileRow(profile, usage, busy, t) {
       <div class="notification-profile-meta"><span class="notification-profile-status">${esc(t(profile.enabled ? "notifications.enabled" : "notifications.disabled"))}</span><span aria-hidden="true">·</span><span class="notification-profile-usage" data-notification-profile-usage="${esc(profile.id)}">${esc(notificationUsageText(usage[profile.id] ?? 0, t))}</span></div>
     </div>
     <div class="actions notification-profile-actions">
-      <ha-button type="button" appearance="plain" data-action="test-notification-profile" data-profile-id="${esc(profile.id)}" ${busy || !profile.enabled ? "disabled" : ""}>${esc(t("notifications.test"))}</ha-button>
       <ha-button type="button" appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
       <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
@@ -3012,7 +3011,7 @@ function updateNotificationProfileUsage(root, usage, t) {
 }
 
 function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, validationError = null, mode = "visual", t,
+  draft, busy, useBottomSheet, validationError = null, mode = "visual", savedProfile = null, t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
@@ -3043,7 +3042,7 @@ function renderNotificationProfileDrawer({
     resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
-    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item></ha-dropdown></div>`,
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item><ha-dropdown-item value="duplicate-notification-profile" ${busy ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(t("notifications.duplicate"))}</ha-dropdown-item><ha-dropdown-item value="test-notification-profile" title="${esc(t("notifications.test_saved_help"))}" ${busy || !savedProfile?.enabled ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:send-check-outline"></ha-icon>${esc(t("notifications.test"))}</ha-dropdown-item></ha-dropdown></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",
@@ -3089,7 +3088,7 @@ function hydrateNotificationProfileControls(panel) {
   if (menu && !menu.dataset.configured) {
     menu.addEventListener("wa-select", (event) => {
       event.stopPropagation();
-      if (event.detail?.item?.value === "switch-editor") void switchNotificationEditor(panel);
+      void handleNotificationProfileMenuSelection(panel, event);
     });
     menu.dataset.configured = "true";
   }
@@ -3309,17 +3308,49 @@ function openNotificationProfile(panel, profile = null) {
     return;
   }
   if (!confirmNotificationDiscard(panel)) return;
-  panel._notificationProfileDraft = profile
-    ? cloneNotificationProfile(profile)
-    : newNotificationProfileDraft();
+  setNotificationProfileDraft(panel,
+    profile ? cloneNotificationProfile(profile) : newNotificationProfileDraft(),
+    profile?.id ?? null,
+  );
+}
+
+function setNotificationProfileDraft(panel, draft, profileId) {
+  panel._notificationProfileDraft = draft;
   panel._notificationEditorMode = "visual";
   panel._notificationYaml = "";
   panel._notificationYamlOriginal = "";
-  panel._notificationProfileOriginal = JSON.stringify(panel._notificationProfileDraft);
-  panel._notificationProfileId = profile?.id ?? null;
+  panel._notificationProfileOriginal = JSON.stringify(draft);
+  panel._notificationProfileId = profileId;
   panel._notificationProfileValidationError = null;
+  panel._notice = null;
   panel._configurationDrawer = { kind: "notification" };
   panel._refreshSettingsConfigurationDrawer();
+}
+
+async function handleNotificationProfileMenuSelection(panel, event) {
+  if (panel._busy) return;
+  const action = event.detail?.item?.value;
+  if (action === "switch-editor") return switchNotificationEditor(panel);
+  if (action === "test-notification-profile") {
+    const saved = panel._settingsDraft.notification_profiles.find(
+      (profile) => profile.id === panel._notificationProfileId,
+    );
+    if (!saved?.enabled) return;
+  } else if (action !== "duplicate-notification-profile") return;
+  return handleNotificationProfileAction.call(panel, action, {
+    dataset: { profileId: panel._notificationProfileId },
+  });
+}
+
+function notificationCopyName(panel, sourceName) {
+  const names = new Set(panel._settingsDraft.notification_profiles.map((profile) => profile.name));
+  names.add(sourceName);
+  for (let number = 1; ; number++) {
+    const suffix = ` (${panel._t("notifications.copy")}${number === 1 ? "" : ` ${number}`})`;
+    // Match the backend's 255-character limit, including Unicode code points.
+    const name = Array.from(sourceName).slice(0, 255 - Array.from(suffix).length).join("") + suffix;
+    if (!names.has(name)) return name;
+  }
 }
 
 function confirmNotificationDiscard(panel) {
@@ -3343,6 +3374,22 @@ async function handleNotificationProfileAction(action, button) {
       (item) => item.id === button.dataset.profileId,
     );
     if (profile) openNotificationProfile(this, profile);
+    return true;
+  }
+  if (action === "duplicate-notification-profile") {
+    if (this._busy || !this._notificationProfileDraft) return true;
+    if (this._notificationEditorMode === "yaml") {
+      if (!await validateNotificationYaml(this)) {
+        this._refreshSettingsConfigurationDrawer();
+        return true;
+      }
+    } else captureNotificationProfileDraft(this);
+    const copy = cloneNotificationProfile(this._notificationProfileDraft);
+    copy.id = newNotificationProfileDraft().id;
+    copy.name = notificationCopyName(this, copy.name);
+    setNotificationProfileDraft(this, copy, null);
+    // A newly duplicated configuration is unsaved even before another edit.
+    this._notificationProfileOriginal = null;
     return true;
   }
   if (action === "save-notification-profile") {
@@ -6406,6 +6453,9 @@ function renderSettingsConfigurationDrawer(context) {
       useBottomSheet,
       validationError: context.notificationProfileValidationError,
       mode: context.notificationEditorMode,
+      savedProfile: settingsDraft?.notification_profiles?.find(
+        (profile) => profile.id === notificationProfileDraft?.id,
+      ),
       t,
     });
   }

@@ -250,7 +250,9 @@ In **Configuration → Notifications**, create a named profile, select one or mo
 
 The profile’s three-dot menu switches between the visual editor and **YAML mode**, including ordered exceptions. The unlabeled switch in the header enables or disables the profile. Invalid YAML blocks saving and returning to the visual editor; closing either editor with changes asks for confirmation.
 
-Save the profile, then use **Test** to send a real test notification to its targets without creating an alert. Profiles accept notification entities, not arbitrary actions or scripts; channels exposed only as actions can still be used through your own automations.
+The same menu offers **Duplicate** to prepare an independent copy with a suggested name, preserving recipients, settings and exception order. The copy is created only when saved; usage counters and notification runtime state are not copied.
+
+Save the profile, then use **Test** in its three-dot menu to send a real test notification to its targets without creating an alert. Profiles accept notification entities, not arbitrary actions or scripts; channels exposed only as actions can still be used through your own automations.
 
 ### Labels and exceptions
 
