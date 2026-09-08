@@ -241,6 +241,8 @@ for (const language of ["en", "fr"]) {
       results: [
         {
           entity_id: "sensor.one", status: "match", duration: 600,
+          notification_reminder_profiles: [{ id: "reminder", name: "Reminder <phone>" }],
+          notification_resolved_profiles: [{ id: "resolved", name: "Resolved & done" }],
           notification_profiles: [{ id: "one", name: "Phone <test>" }, { id: "two", name: "Tablet & family" }],
         },
         {
@@ -259,10 +261,15 @@ for (const language of ["en", "fr"]) {
       formatDuration(value) { return `${value}s`; },
     });
     assert.ok(markup.includes(strings.notification_profiles));
-    assert.ok(markup.includes(strings.notification_none));
-    assert.ok(markup.includes(strings.notification_preview));
-    assert.ok(markup.includes(strings.disabled_notice));
+    assert.ok(markup.includes(strings.notification_reminder_profiles));
+    assert.ok(markup.includes(strings.notification_resolved_profiles));
+    assert.match(markup, />-<\/dd>/);
+    assert.doesNotMatch(markup, /rules.test.notification_preview/);
+    const summary = markup.slice(0, markup.indexOf('<div class="rule-test-entities">'));
+    assert.equal(summary, `<ha-alert class="rule-test-summary" alert-type="success" role="status">${strings.summary.replace("{matched}", "1").replace("{total}", "2")}</ha-alert>`);
     assert.match(markup, /Phone &lt;test&gt;, Tablet &amp; family/);
+    assert.match(markup, /Reminder &lt;phone&gt;/);
+    assert.match(markup, /Resolved &amp; done/);
     assert.doesNotMatch(markup, /Phone <test>/);
     assert.match(markup, /600s/);
     assert.equal((markup.match(/<ha-expansion-panel/g) ?? []).length, 2);

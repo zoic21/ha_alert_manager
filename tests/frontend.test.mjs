@@ -2231,8 +2231,8 @@ test("filter pane uses native Home Assistant filters with reset controls in head
   assert.match(html, /data-table-filter-option="area"/);
   assert.doesNotMatch(html, /data-table-filter-option="acknowledged"/);
   assert.match(html, /filter-badge">1<\/span><ha-icon-button data-action="clear-filter-section"/);
-  assert.match(html, /<ha-date-range-picker[\s\S]*data-table-date-range="detected"/);
-  assert.match(html, /extended-presets[\s\S]*time-picker[\s\S]*backdrop/);
+  assert.match(html, /<div class="date-filter-fields"[\s\S]*data-table-date-range="detected"/);
+  assert.doesNotMatch(html, /<ha-date-range-picker/); // Created with dates before connection.
   assert.doesNotMatch(html, /data-table-date-filter|<ha-selector/);
   assert.doesNotMatch(html, /<ha-input type="date"/);
   assert.doesNotMatch(html, /native-filter-actions|data-action="reset-filters"|class="table-toolbar"/);
@@ -2277,7 +2277,21 @@ test("date filters use the native Home Assistant date range picker", () => {
   panel._tableState.overview.filters.detectedTo = "2026-08-27T11:00:00.000Z";
   panel._render = () => {};
   const listeners = {};
-  const datePicker = {
+  const datePicker = { addEventListener(name, callback) { listeners[name] = callback; } };
+  const previousCreate = document.createElement;
+  document.createElement = (tag) => {
+    assert.equal(tag, "ha-date-range-picker");
+    return datePicker;
+  };
+  let connected = false;
+  const container = {
+    querySelector() { return connected ? datePicker : null; },
+    replaceChildren(picker) {
+      assert.equal(picker, datePicker);
+      assert.ok(Number.isFinite(picker.startDate.getTime()));
+      assert.ok(Number.isFinite(picker.endDate.getTime()));
+      connected = true;
+    },
     dataset: {
       tableDateRange: "detected",
       tableRangeStart: "2026-08-26T08:00:00.000Z",
@@ -2290,7 +2304,7 @@ test("date filters use the native Home Assistant date range picker", () => {
     dataset: {},
     addEventListener() {},
     querySelectorAll(selector) {
-      if (selector === "ha-date-range-picker[data-table-date-range]") return [datePicker];
+      if (selector === "[data-table-date-range]") return [container];
       return [];
     },
   };
@@ -2298,7 +2312,12 @@ test("date filters use the native Home Assistant date range picker", () => {
     selector === '[data-alert-table-page="overview"]' ? table : null
   );
 
-  panel._hydrateDataTables();
+  try {
+    panel._hydrateDataTables();
+    panel._hydrateDataTables();
+  } finally {
+    document.createElement = previousCreate;
+  }
 
   assert.equal(datePicker.startDate.toISOString(), "2026-08-26T08:00:00.000Z");
   assert.equal(datePicker.endDate.toISOString(), "2026-08-27T11:00:00.000Z");
@@ -2684,7 +2703,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /class="field full"[\s\S]*data-field="name"/);
   assert.match(editor, /class="field full rule-message-field"[\s\S]*<ha-selector id="rule-message-template"><\/ha-selector>/);
   assert.match(editor, /Condition Jinja supplémentaire/);
-  assert.match(editor, /Toutes les fonctions Jinja et entités de Home Assistant sont accessibles/);
+  assert.match(editor, /Jinja Home Assistant ; variables : entity_id, state, value/);
   assert.match(editor, /le message reste figé à l’activation/);
   assert.match(editor, /id="rule-update-message-when-active"/);
   assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
@@ -3865,7 +3884,7 @@ test("Jinja-only rule editor hides comparison fields and requires its template",
   assert.doesNotMatch(editor, /id="rule-operator"/);
   assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
   assert.match(editor, /<span class="field-label">Condition Jinja<\/span><ha-selector id="rule-condition-template" required aria-required="true">/);
-  assert.match(editor, /aucune autre comparaison n’est évaluée/);
+  assert.match(editor, /Obligatoire : true déclenche l’alerte/);
   assert.match(editor, /id="rule-update-message-when-active"[^>]+checked/);
 
   const calls = [];
@@ -3919,7 +3938,7 @@ test("attribute variation requires its attribute and starting Jinja condition", 
   const editor = panel._renderRuleEditor();
   assert.match(editor, /Condition Jinja de début/);
   assert.match(editor, /rule-condition-template" required aria-required="true"/);
-  assert.match(editor, /capturée lorsque cette condition passe à true/);
+  assert.match(editor, /Capture la référence au passage à true/);
   assert.match(editor, /<ha-selector id="rule-attribute" data-field="attribute"><\/ha-selector>/);
   assert.match(editor, /pas les jokers/);
 
@@ -3995,7 +4014,7 @@ test("unchanged rule hides comparison fields and keeps Jinja optional", async ()
   assert.doesNotMatch(editor, /id="rule-operator"/);
   assert.doesNotMatch(editor, /data-rule-value-index|data-field="value"/);
   assert.match(editor, /Condition Jinja supplémentaire/);
-  assert.match(editor, /absence de changement de l’état et des attributs/);
+  assert.match(editor, /absence de changement d’état et d’attributs/);
   assert.doesNotMatch(editor, /rule-condition-template" required/);
 
   const calls = [];
@@ -5328,7 +5347,9 @@ for (const kind of ["active", "pending", "acknowledged", "history"]) {
       historyEvent({ event_id: "other-pack", entity_id: "", id: "flapping:template:" }),
       historyEvent({ event_id: "other-entity", id: "rule:template:sensor.other" }),
     ] };
-    const row = panel._tableRows("history", [first])[0];
+    const row = panel._nativeTableData("history", panel._tableRows("history", [first]))[0];
+    assert.equal(row.source, undefined);
+    assert.equal(row.alertId, first.id);
     row.status = kind === "history" ? "resolved" : kind;
     const dialog = { alertId: row.id, alertKind: kind === "history" ? kind : "overview", alertRow: row };
     panel._alertDetailsDialog = dialog;

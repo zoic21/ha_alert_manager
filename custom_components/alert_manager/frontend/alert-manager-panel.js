@@ -1110,13 +1110,17 @@ function loadNativeDateRangePicker() {
     return this._dateRangePickerPromise;
 }
 
-function configureDateRangePicker(kind, picker) {
-    const prefix = picker.dataset.tableDateRange;
+function configureDateRangePicker(kind, container) {
+    if (container.querySelector("ha-date-range-picker")) return;
+    const prefix = container.dataset.tableDateRange;
     if (!prefix) return;
     const fromKey = `${prefix}From`;
     const toKey = `${prefix}To`;
-    picker.startDate = new Date(picker.dataset.tableRangeStart);
-    picker.endDate = new Date(picker.dataset.tableRangeEnd);
+    // Set required dates before connecting the native element: lazy upgrades
+    // can render immediately, before a promise callback hydrates their properties.
+    const picker = document.createElement("ha-date-range-picker");
+    picker.startDate = new Date(container.dataset.tableRangeStart);
+    picker.endDate = new Date(container.dataset.tableRangeEnd);
     picker.extendedPresets = true;
     picker.timePicker = true;
     picker.backdrop = true;
@@ -1130,6 +1134,7 @@ function configureDateRangePicker(kind, picker) {
       this._filterPaneKind = kind;
       this._render();
     });
+    container.replaceChildren(picker);
 }
 
 function hydrateDataTables() {
@@ -1254,7 +1259,7 @@ function hydrateDataTables() {
           this._render();
         });
       });
-      tablePage.querySelectorAll("ha-date-range-picker[data-table-date-range]").forEach((picker) => {
+      tablePage.querySelectorAll("[data-table-date-range]").forEach((picker) => {
         if (customElements.get("ha-date-range-picker") || typeof customElements.whenDefined !== "function") {
           this._configureDateRangePicker(kind, picker);
           return;
@@ -1429,6 +1434,7 @@ function tableRows(kind, historyEvents = []) {
         : this._t(`table.status.${status}`);
       const row = {
         id: history ? source.event_id : source.id,
+        alertId: source.id,
         source,
         status,
         statusLabel: finalLabel,
@@ -1509,7 +1515,7 @@ function filteredTableRows(kind, rows, includeSearch = true) {
     );
     const filtered = rows.filter((row) => {
       if (query && !row.search.includes(query)) return false;
-      if (selected.alert.size && !selected.alert.has(row.source.id)) return false;
+      if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
@@ -1646,15 +1652,12 @@ function renderDateFilter(kind, prefix, label, rows) {
         <span>${esc(label)}</span>
         ${active ? `<span class="filter-badge">${active}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${fromKey},${toKey}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
       </div>
-      <div class="date-filter-fields"><ha-date-range-picker
+      <div class="date-filter-fields"
         data-table-date-range="${prefix}"
         data-table-range-start="${esc(filters[fromKey] || defaults.start)}"
         data-table-range-end="${esc(filters[toKey] || defaults.end)}"
         data-table-kind="${kind}"
-        extended-presets
-        time-picker
-        backdrop
-      ></ha-date-range-picker></div>
+      ></div>
     </ha-expansion-panel>`;
 }
 
@@ -1662,7 +1665,7 @@ function renderFilterPane(kind, rows) {
     const statuses = ["active", "pending", "acknowledged"]
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
-      ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.source.id).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
+      ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
@@ -2012,7 +2015,7 @@ function alertDetailsItems(kind, row) {
         value: String(dialog.historyOccurrenceCount),
         action: "open-alert-history",
         ariaLabel: `${this._t("alert_details.history_occurrences")}: ${dialog.historyOccurrenceCount}`,
-        data: { alertId: row.source.id },
+        data: { alertId: row.alertId },
       });
     }
     items.push({
@@ -2146,7 +2149,7 @@ function openAlertDetails(kind, row) {
 function refreshHistoryOccurrenceDetails() {
     const dialog = this._alertDetailsDialog;
     if (!dialog?.alertRow) return;
-    const id = dialog.alertRow.source.id;
+    const id = dialog.alertRow.alertId;
     const count = id
       ? (this._history?.events ?? []).reduce((total, entry) => total + Number(entry.id === id), 0) : 0;
     if (dialog.historyOccurrenceCount === count) return;
@@ -3040,7 +3043,6 @@ function renderProfileRow(profile, usage, busy, t) {
     </div>
     <div class="actions notification-profile-actions">
       <ha-button type="button" appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
-      <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
 }
@@ -3094,7 +3096,7 @@ function renderNotificationProfileDrawer({
     resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
-    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item><ha-dropdown-item value="duplicate-notification-profile" ${busy ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(t("notifications.duplicate"))}</ha-dropdown-item><ha-dropdown-item value="test-notification-profile" title="${esc(t("notifications.test_saved_help"))}" ${busy || !savedProfile?.enabled ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:send-check-outline"></ha-icon>${esc(t("notifications.test"))}</ha-dropdown-item></ha-dropdown></div>`,
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item><ha-dropdown-item value="duplicate-notification-profile" ${busy ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(t("notifications.duplicate"))}</ha-dropdown-item><ha-dropdown-item value="test-notification-profile" title="${esc(t("notifications.test_saved_help"))}" ${busy || !savedProfile?.enabled ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:send-check-outline"></ha-icon>${esc(t("notifications.test"))}</ha-dropdown-item><ha-dropdown-item value="delete-notification-profile" variant="danger" ${busy || !savedProfile ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item></ha-dropdown></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",
@@ -3388,7 +3390,7 @@ async function handleNotificationProfileMenuSelection(panel, event) {
       (profile) => profile.id === panel._notificationProfileId,
     );
     if (!saved?.enabled) return;
-  } else if (action !== "duplicate-notification-profile") return;
+  } else if (!["duplicate-notification-profile", "delete-notification-profile"].includes(action)) return;
   return handleNotificationProfileAction.call(panel, action, {
     dataset: { profileId: panel._notificationProfileId },
   });
@@ -3484,6 +3486,7 @@ async function handleNotificationProfileAction(action, button) {
       this._settingsDraft.notification_profiles.filter(
         (item) => item.id !== profile.id,
       ),
+      true,
     );
     return true;
   }
@@ -3839,17 +3842,6 @@ function renderRuleTestResult(result, context) {
       matched: result.matched_count,
       total: result.total,
     });
-    const notices = [
-      result.indeterminate_count
-        ? t("rules.test.summary_indeterminate", { count: result.indeterminate_count })
-        : "",
-      result.error_count
-        ? t("rules.test.summary_errors", { count: result.error_count })
-        : "",
-      result.enabled === false ? t("rules.test.disabled_notice") : "",
-      result.results?.some((item) => Array.isArray(item.notification_profiles))
-        ? t("rules.test.notification_preview") : "",
-    ].filter(Boolean);
     const items = (result.results ?? []).map((item) => {
       const variation = VARIATION_RULE_SOURCES.has(item.source);
       const statusIcon = item.status === "match"
@@ -3890,12 +3882,10 @@ function renderRuleTestResult(result, context) {
           ${ruleTestDetail(t("rules.test.final_result"), ruleTestBoolean(item.final_result, t))}
           ${ruleTestDetail(t("rules.test.delay"), formatDuration(item.duration))}
           ${ruleTestDetail(t("rules.test.reason"), reason)}
-          ${Array.isArray(item.notification_profiles) ? ruleTestDetail(
-            t("rules.test.notification_profiles"),
-            item.notification_profiles.length
-              ? item.notification_profiles.map((profile) => profile.name).join(", ")
-              : t("rules.test.notification_none"),
-          ) : ""}
+          ${["notification_profiles", "notification_reminder_profiles", "notification_resolved_profiles"].map((key) => ruleTestDetail(
+            t(`rules.test.${key}`),
+            item[key]?.length ? item[key].map((profile) => profile.name).join(", ") : "-",
+          )).join("")}
           </dl>
           ${item.message ? `<ha-alert class="rule-test-message" alert-type="info"><strong>${esc(t("rules.test.generated_message"))}</strong><div>${esc(item.message)}</div></ha-alert>` : ""}
           ${messageError ? `<ha-alert class="rule-test-message" alert-type="error">${esc(messageError)}</ha-alert>` : ""}
@@ -3903,7 +3893,7 @@ function renderRuleTestResult(result, context) {
         </div>
       </ha-expansion-panel>`;
     }).join("");
-    return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status"><strong>${esc(t("rules.test.title"))}</strong><div>${esc(summary)}</div>${notices.map((notice) => `<div>${esc(notice)}</div>`).join("")}</ha-alert><div class="rule-test-entities">${items}</div>`;
+    return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status">${esc(summary)}</ha-alert><div class="rule-test-entities">${items}</div>`;
 }
 
 function renderRuleTestResultPanel(result = this._ruleTestResult) {

@@ -470,6 +470,8 @@ def test_notification_preview_matches_live_routing_and_unsaved_labels(
             "selector_type": "label",
             "selector_ids": ["draft", "entity"],
             "notify_on_start": False,
+            "notify_on_resolved": False,
+            "reminder_interval": None,
         },
         {
             "selector_type": "label",
@@ -519,6 +521,19 @@ def test_notification_preview_matches_live_routing_and_unsaved_labels(
         assert item["notification_profiles"] == [
             {"id": pid, "name": f"Profile {pid}"} for pid in expected
         ]
+    for item, expected in zip(
+        result["results"],
+        [
+            ["all", "draft", "entity", "device", "resolved_only"]
+            + (["ordered"] if reverse_exceptions else []),
+            ["all", "draft", "resolved_only", "ordered"],
+        ],
+        strict=True,
+    ):
+        for key in ("notification_reminder_profiles", "notification_resolved_profiles"):
+            assert item[key] == [
+                {"id": pid, "name": f"Profile {pid}"} for pid in expected
+            ]
     assert result["results"][1]["status"] == "no_match"
     assert runtime_snapshot(manager, hass) == before
 
@@ -553,5 +568,7 @@ def test_notification_preview_reports_no_profiles_without_side_effects(hass, ent
     before = runtime_snapshot(manager, hass)
     result = run(manager.async_test_rule(rule()))
     assert result["results"][0]["notification_profiles"] == []
+    assert result["results"][0]["notification_reminder_profiles"] == []
+    assert result["results"][0]["notification_resolved_profiles"] == []
     assert result["results"][0]["status"] == "error"
     assert runtime_snapshot(manager, hass) == before

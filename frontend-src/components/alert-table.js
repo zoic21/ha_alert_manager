@@ -40,13 +40,17 @@ export function loadNativeDateRangePicker() {
     return this._dateRangePickerPromise;
 }
 
-export function configureDateRangePicker(kind, picker) {
-    const prefix = picker.dataset.tableDateRange;
+export function configureDateRangePicker(kind, container) {
+    if (container.querySelector("ha-date-range-picker")) return;
+    const prefix = container.dataset.tableDateRange;
     if (!prefix) return;
     const fromKey = `${prefix}From`;
     const toKey = `${prefix}To`;
-    picker.startDate = new Date(picker.dataset.tableRangeStart);
-    picker.endDate = new Date(picker.dataset.tableRangeEnd);
+    // Set required dates before connecting the native element: lazy upgrades
+    // can render immediately, before a promise callback hydrates their properties.
+    const picker = document.createElement("ha-date-range-picker");
+    picker.startDate = new Date(container.dataset.tableRangeStart);
+    picker.endDate = new Date(container.dataset.tableRangeEnd);
     picker.extendedPresets = true;
     picker.timePicker = true;
     picker.backdrop = true;
@@ -60,6 +64,7 @@ export function configureDateRangePicker(kind, picker) {
       this._filterPaneKind = kind;
       this._render();
     });
+    container.replaceChildren(picker);
 }
 
 export function hydrateDataTables() {
@@ -184,7 +189,7 @@ export function hydrateDataTables() {
           this._render();
         });
       });
-      tablePage.querySelectorAll("ha-date-range-picker[data-table-date-range]").forEach((picker) => {
+      tablePage.querySelectorAll("[data-table-date-range]").forEach((picker) => {
         if (customElements.get("ha-date-range-picker") || typeof customElements.whenDefined !== "function") {
           this._configureDateRangePicker(kind, picker);
           return;
@@ -359,6 +364,7 @@ export function tableRows(kind, historyEvents = []) {
         : this._t(`table.status.${status}`);
       const row = {
         id: history ? source.event_id : source.id,
+        alertId: source.id,
         source,
         status,
         statusLabel: finalLabel,
@@ -439,7 +445,7 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
     );
     const filtered = rows.filter((row) => {
       if (query && !row.search.includes(query)) return false;
-      if (selected.alert.size && !selected.alert.has(row.source.id)) return false;
+      if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
@@ -576,15 +582,12 @@ export function renderDateFilter(kind, prefix, label, rows) {
         <span>${esc(label)}</span>
         ${active ? `<span class="filter-badge">${active}</span><ha-icon-button data-action="clear-filter-section" data-table-kind="${kind}" data-filter-keys="${fromKey},${toKey}" aria-label="${esc(this._t("table.filters.reset"))}"><ha-svg-icon path="${MDI_FILTER_VARIANT_REMOVE}"></ha-svg-icon></ha-icon-button>` : ""}
       </div>
-      <div class="date-filter-fields"><ha-date-range-picker
+      <div class="date-filter-fields"
         data-table-date-range="${prefix}"
         data-table-range-start="${esc(filters[fromKey] || defaults.start)}"
         data-table-range-end="${esc(filters[toKey] || defaults.end)}"
         data-table-kind="${kind}"
-        extended-presets
-        time-picker
-        backdrop
-      ></ha-date-range-picker></div>
+      ></div>
     </ha-expansion-panel>`;
 }
 
@@ -592,7 +595,7 @@ export function renderFilterPane(kind, rows) {
     const statuses = ["active", "pending", "acknowledged"]
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
-      ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.source.id).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
+      ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
@@ -942,7 +945,7 @@ export function alertDetailsItems(kind, row) {
         value: String(dialog.historyOccurrenceCount),
         action: "open-alert-history",
         ariaLabel: `${this._t("alert_details.history_occurrences")}: ${dialog.historyOccurrenceCount}`,
-        data: { alertId: row.source.id },
+        data: { alertId: row.alertId },
       });
     }
     items.push({
@@ -1076,7 +1079,7 @@ export function openAlertDetails(kind, row) {
 export function refreshHistoryOccurrenceDetails() {
     const dialog = this._alertDetailsDialog;
     if (!dialog?.alertRow) return;
-    const id = dialog.alertRow.source.id;
+    const id = dialog.alertRow.alertId;
     const count = id
       ? (this._history?.events ?? []).reduce((total, entry) => total + Number(entry.id === id), 0) : 0;
     if (dialog.historyOccurrenceCount === count) return;

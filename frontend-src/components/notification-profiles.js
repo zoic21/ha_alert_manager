@@ -69,7 +69,6 @@ function renderProfileRow(profile, usage, busy, t) {
     </div>
     <div class="actions notification-profile-actions">
       <ha-button type="button" appearance="plain" data-action="edit-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("rules.modify"))}</ha-button>
-      <ha-button type="button" appearance="plain" variant="danger" data-action="delete-notification-profile" data-profile-id="${esc(profile.id)}" ${busy ? "disabled" : ""}>${esc(t("buttons.delete"))}</ha-button>
     </div>
   </div>`;
 }
@@ -123,7 +122,7 @@ export function renderNotificationProfileDrawer({
     resizeLabel: t("rules.aria_resize"),
     title: draft.name || t("notifications.new"),
     ariaLabel: t("notifications.close_aria"),
-    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item><ha-dropdown-item value="duplicate-notification-profile" ${busy ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(t("notifications.duplicate"))}</ha-dropdown-item><ha-dropdown-item value="test-notification-profile" title="${esc(t("notifications.test_saved_help"))}" ${busy || !savedProfile?.enabled ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:send-check-outline"></ha-icon>${esc(t("notifications.test"))}</ha-dropdown-item></ha-dropdown></div>`,
+    headerAction: `<div slot="actionItems" class="notification-profile-header-toggle"><ha-switch id="notification-profile-enabled" title="${esc(t(draft.enabled ? "notifications.enabled" : "notifications.disabled"))}" aria-label="${esc(t("notifications.enabled"))}" ${draft.enabled ? "checked" : ""}></ha-switch><ha-dropdown data-notification-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(mode === "yaml" ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item><ha-dropdown-item value="duplicate-notification-profile" ${busy ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(t("notifications.duplicate"))}</ha-dropdown-item><ha-dropdown-item value="test-notification-profile" title="${esc(t("notifications.test_saved_help"))}" ${busy || !savedProfile?.enabled ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:send-check-outline"></ha-icon>${esc(t("notifications.test"))}</ha-dropdown-item><ha-dropdown-item value="delete-notification-profile" variant="danger" ${busy || !savedProfile ? "disabled" : ""}><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item></ha-dropdown></div>`,
     banner: validationError
       ? `<ha-alert class="notification-profile-error" alert-type="error">${esc(validationError)}</ha-alert>`
       : "",
@@ -417,7 +416,7 @@ export async function handleNotificationProfileMenuSelection(panel, event) {
       (profile) => profile.id === panel._notificationProfileId,
     );
     if (!saved?.enabled) return;
-  } else if (action !== "duplicate-notification-profile") return;
+  } else if (!["duplicate-notification-profile", "delete-notification-profile"].includes(action)) return;
   return handleNotificationProfileAction.call(panel, action, {
     dataset: { profileId: panel._notificationProfileId },
   });
@@ -513,6 +512,7 @@ export async function handleNotificationProfileAction(action, button) {
       this._settingsDraft.notification_profiles.filter(
         (item) => item.id !== profile.id,
       ),
+      true,
     );
     return true;
   }

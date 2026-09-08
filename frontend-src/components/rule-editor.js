@@ -251,17 +251,6 @@ export function renderRuleTestResult(result, context) {
       matched: result.matched_count,
       total: result.total,
     });
-    const notices = [
-      result.indeterminate_count
-        ? t("rules.test.summary_indeterminate", { count: result.indeterminate_count })
-        : "",
-      result.error_count
-        ? t("rules.test.summary_errors", { count: result.error_count })
-        : "",
-      result.enabled === false ? t("rules.test.disabled_notice") : "",
-      result.results?.some((item) => Array.isArray(item.notification_profiles))
-        ? t("rules.test.notification_preview") : "",
-    ].filter(Boolean);
     const items = (result.results ?? []).map((item) => {
       const variation = VARIATION_RULE_SOURCES.has(item.source);
       const statusIcon = item.status === "match"
@@ -302,12 +291,10 @@ export function renderRuleTestResult(result, context) {
           ${ruleTestDetail(t("rules.test.final_result"), ruleTestBoolean(item.final_result, t))}
           ${ruleTestDetail(t("rules.test.delay"), formatDuration(item.duration))}
           ${ruleTestDetail(t("rules.test.reason"), reason)}
-          ${Array.isArray(item.notification_profiles) ? ruleTestDetail(
-            t("rules.test.notification_profiles"),
-            item.notification_profiles.length
-              ? item.notification_profiles.map((profile) => profile.name).join(", ")
-              : t("rules.test.notification_none"),
-          ) : ""}
+          ${["notification_profiles", "notification_reminder_profiles", "notification_resolved_profiles"].map((key) => ruleTestDetail(
+            t(`rules.test.${key}`),
+            item[key]?.length ? item[key].map((profile) => profile.name).join(", ") : "-",
+          )).join("")}
           </dl>
           ${item.message ? `<ha-alert class="rule-test-message" alert-type="info"><strong>${esc(t("rules.test.generated_message"))}</strong><div>${esc(item.message)}</div></ha-alert>` : ""}
           ${messageError ? `<ha-alert class="rule-test-message" alert-type="error">${esc(messageError)}</ha-alert>` : ""}
@@ -315,7 +302,7 @@ export function renderRuleTestResult(result, context) {
         </div>
       </ha-expansion-panel>`;
     }).join("");
-    return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status"><strong>${esc(t("rules.test.title"))}</strong><div>${esc(summary)}</div>${notices.map((notice) => `<div>${esc(notice)}</div>`).join("")}</ha-alert><div class="rule-test-entities">${items}</div>`;
+    return `<ha-alert class="rule-test-summary" alert-type="${alertType}" role="status">${esc(summary)}</ha-alert><div class="rule-test-entities">${items}</div>`;
 }
 
 export function renderRuleTestResultPanel(result = this._ruleTestResult) {

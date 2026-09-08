@@ -860,16 +860,29 @@ class NotificationRuntime:
                 return profile
         raise ValueError(f"Unknown notification profile id: {profile_id}")
 
-    def preview_start_profiles(
+    def preview_profiles(
         self, entity_id: str, rule_labels: list[str]
-    ) -> list[dict[str, str]]:
-        """Preview new-alert recipients without changing notification runtime."""
+    ) -> dict[str, list[dict[str, str]]]:
+        """Resolve recipients for each lifecycle event without side effects."""
         labels = self._labels_for(entity_id, None, rule_labels, cache=False)
-        profiles = []
+        profiles: dict[str, list[dict[str, str]]] = {
+            "started": [],
+            "reminder": [],
+            "resolved": [],
+        }
         for profile in self._config_getter().get("notification_profiles", []):
             policy = matching_notification_policy(profile, label_ids=labels)
-            if policy is not None and policy.notify_on_start:
-                profiles.append({"id": profile["id"], "name": profile["name"]})
+            if policy is None:
+                continue
+            for kind, enabled in (
+                ("started", policy.notify_on_start),
+                ("reminder", policy.reminder_interval is not None),
+                ("resolved", policy.notify_on_resolved),
+            ):
+                if enabled:
+                    profiles[kind].append(
+                        {"id": profile["id"], "name": profile["name"]}
+                    )
         return profiles
 
     def _labels_for(

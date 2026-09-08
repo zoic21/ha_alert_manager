@@ -36,7 +36,7 @@ const profile = {
   }],
 };
 
-test("notification profile list exposes edit and delete without a standalone test action", () => {
+test("notification profile list exposes edit without standalone test or delete actions", () => {
   const markup = renderNotificationProfiles({
     profiles: [profile], usage: { owner: 12 }, busy: false, t,
   });
@@ -44,8 +44,8 @@ test("notification profile list exposes edit and delete without a standalone tes
   assert.match(markup, /<ha-card/);
   assert.doesNotMatch(markup, /data-action="test-notification-profile"/);
   assert.match(markup, /data-action="edit-notification-profile"/);
-  assert.match(markup, /data-action="delete-notification-profile"/);
-  assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 2);
+  assert.doesNotMatch(markup, /data-action="delete-notification-profile"/);
+  assert.equal(markup.match(/data-profile-id="owner"/g)?.length, 1);
   assert.doesNotMatch(markup, /data-index=/);
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
   assert.match(markup, /notification-profile-name"><strong>Owner<\/strong><\/div>\s*<div class="notification-profile-meta">/);
@@ -611,6 +611,8 @@ for (const mode of ["visual", "yaml"]) {
     for (const savedProfile of [null, profile, { ...profile, enabled: false }]) {
       const markup = renderNotificationProfileDrawer({ draft: profile, savedProfile, mode, t });
       assert.match(markup, /value="duplicate-notification-profile"/);
+      const deleteItem = markup.match(/<ha-dropdown-item value="delete-notification-profile"[^>]*>/)[0];
+      assert.equal(deleteItem.includes("disabled"), !savedProfile);
       const testItem = markup.match(/<ha-dropdown-item value="test-notification-profile"[^>]*>/)[0];
       assert.equal(testItem.includes("disabled"), !savedProfile?.enabled);
     }
@@ -723,3 +725,42 @@ test("menu testing uses the saved identity and is blocked for new, disabled or b
   await handleNotificationProfileMenuSelection(panel, profileMenuEvent("test-notification-profile"));
   assert.equal(calls, 1);
 });
+
+for (const mode of ["visual", "yaml"]) {
+  test(`deleting from the ${mode} profile menu confirms and clears the editor only after saving`, async () => {
+    const panel = yamlPanel();
+    panel._notificationEditorMode = mode;
+    panel._ensureSettingsDraft = () => {};
+    panel._render = () => {};
+    const previousWindow = globalThis.window;
+    let confirmed = false;
+    let fail = false;
+    let calls = 0;
+    globalThis.window = { confirm: () => confirmed };
+    panel._api.call = async (message) => {
+      calls++;
+      assert.deepEqual(message, {
+        type: "alert_manager/config/update", config: { notification_profiles: [] },
+      });
+      if (fail) throw new Error("Save failed");
+      return message.config;
+    };
+    try {
+      await handleNotificationProfileMenuSelection(panel, profileMenuEvent("delete-notification-profile"));
+      assert.equal(calls, 0);
+      confirmed = true;
+      fail = true;
+      await handleNotificationProfileMenuSelection(panel, profileMenuEvent("delete-notification-profile"));
+      assert.equal(panel._notificationProfileId, profile.id);
+      assert.equal(panel._settingsDraft.notification_profiles.length, 1);
+      assert.equal(panel._notificationProfileValidationError, "Save failed");
+      fail = false;
+      await handleNotificationProfileMenuSelection(panel, profileMenuEvent("delete-notification-profile"));
+      assert.deepEqual(panel._settingsDraft.notification_profiles, []);
+      assert.equal(panel._notificationProfileDraft, null);
+      assert.equal(panel._configurationDrawer, null);
+    } finally {
+      globalThis.window = previousWindow;
+    }
+  });
+}

@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.2 — September 8, 2026
+
+This is a development prerelease.
+
+### Fixes
+
+- Fix the history occurrence counter when opening alert details from native tables.
+- Initialize the native date range picker before mounting it, preventing an undefined-date error during lazy loading.
+
+### Improvements
+
+- Move notification profile deletion into the profile editor menu.
+- Show only the current match count in the custom rule test summary.
+- List activation, reminder, and resolution profiles separately, with `-` when none match.
+- Shorten French and English help text while preserving configuration semantics.
+
 ## 2.3.0-dev.1 — 8 septembre 2026
 
 Cette version est une prérelease de développement.
