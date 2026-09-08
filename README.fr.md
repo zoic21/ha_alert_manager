@@ -265,7 +265,7 @@ Les titres distinguent les **🚨 nouvelles alertes**, les **🔔 rappels** et l
 
 ### Suivi des notifications par alerte
 
-Chaque profil affiche ses envois réussis sur les dernières 24 heures. Un envoi groupé compte une seule fois même avec plusieurs destinataires ; les tests et les échecs complets sont exclus.
+Chaque profil affiche ses envois réussis pour l’heure courante et les 23 heures précédentes (fenêtre d’environ 24 heures), depuis le démarrage de l’intégration. Ces compteurs restent uniquement en mémoire et sont remis à zéro au redémarrage/rechargement. Un envoi groupé compte une seule fois même avec plusieurs destinataires ; les tests et les échecs complets sont exclus.
 
 Les détails d’une alerte affichent les notifications de ses profils intégrés : nombre d’envois (rappels compris), profils correspondants même sans rappel et date du dernier envoi. Un lot compte une fois par profil et par alerte, dès qu’au moins une cible a été notifiée ; les tests et les échecs complets sont exclus. L’historique conserve séparément les envois de retour à la normale, leurs profils et leur dernière date. Ces informations survivent aux redémarrages ; elles sont masquées pour les alertes à venir et les anciens envois ne sont pas reconstitués. Les notifications envoyées par des automatisations externes ne sont pas comptabilisées.
 
@@ -295,6 +295,10 @@ L’acquittement est également disponible via `alert_manager.acknowledge` et `a
 Le menu ⋮ de la fiche d’une alerte active propose aussi **Acquitter temporairement…** : 15 min, 30 min, 1 h, 24 h ou une durée personnalisée en minutes, heures ou jours (maximum un an). La fiche reste ouverte et affiche le temps restant, avec la date exacte au clic. L’acquittement normal reste sans limite de durée.
 
 À l’échéance, une alerte toujours en cours redevient active sans changer d’identité ni de date de début. Les profils autorisant l’envoi des nouvelles alertes sont notifiés à nouveau, même sans rappel configuré. Une résolution ou un désacquittement manuel annule l’échéance. Celle-ci survit au redémarrage et est traitée après la réconciliation de démarrage ; si la surveillance est désactivée, elle attend sa réactivation sans décaler la date prévue.
+
+### Diagnostic de fonctionnement
+
+La configuration propose un bloc compact indiquant le nombre d’évaluations des règles personnalisées, leurs temps moyen/maximal/total, les transitions d’alertes et les envois de profils réussis. Une évaluation mesurée correspond à un couple règle/entité, condition comprise, sans attente asynchrone. Les tests, packs automatiques et scans de cohérence sont exclus des temps ; ce n’est pas une mesure de la charge de la boucle événementielle de Home Assistant. L’activité compte les transitions réelles (y compris les occurrences répétées), pas les alertes présentes ; les activations immédiates ne comptent pas comme passages à venir et les alertes restaurées ne sont pas recomptées. Exactement 24 agrégats horaires restent en mémoire, sans échantillons, persistance ni timer de rotation. La période affichée commence au démarrage de l’intégration ou au début de la plus ancienne heure conservée, selon la date la plus récente.
 
 ## Prérequis
 

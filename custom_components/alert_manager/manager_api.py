@@ -95,7 +95,10 @@ def _serialize_config_mutation(
                 )
 
             async def mutate() -> Any:
-                with self.notification_runtime.events_deferred():
+                with (
+                    self.notification_runtime.events_deferred(),
+                    self.statistics.activity_transaction(),
+                ):
                     return await method(self, *args, **kwargs)
 
             return await async_finish_non_interruptible(mutate())
@@ -537,26 +540,41 @@ class _ApiMixin:
             notification_id=MONITORING_NOTIFICATION_ID,
         )
 
-    def _emit_resume_events(self, previous_records: dict[str, AlertRecord]) -> None:
-        """Emit only lifecycle transitions caused by the resume evaluation."""
+    def _emit_resume_events(
+        self, previous_records: dict[str, AlertRecord], *, emit_events: bool = True
+    ) -> None:
+        """Count committed transitions; an ordinary import keeps events silent."""
         now = dt_util.now()
         for alert_id, previous in previous_records.items():
             current = self.records.get(alert_id)
             if current is None:
                 if previous.status is AlertStatus.ACTIVE:
-                    self._fire_resolved(previous, now)
+                    if emit_events:
+                        self._fire_resolved(previous, now)
+                    else:
+                        self.statistics.record_activity("resolutions")
                 continue
             if (
                 previous.status is AlertStatus.PENDING
                 and current.status is AlertStatus.ACTIVE
             ):
-                self._fire_started(current)
+                if emit_events:
+                    self._fire_started(current)
+                else:
+                    self.statistics.record_activity("activations")
         for alert_id, current in self.records.items():
+            previous = previous_records.get(alert_id)
+            self._count_pending_transition(
+                current, previous.status if previous is not None else None
+            )
             if (
                 alert_id not in previous_records
                 and current.status is AlertStatus.ACTIVE
             ):
-                self._fire_started(current)
+                if emit_events:
+                    self._fire_started(current)
+                else:
+                    self.statistics.record_activity("activations")
 
     def get_packs(self) -> list[dict[str, Any]]:
         """Return backend-owned pack metadata with current availability."""
@@ -695,13 +713,15 @@ class _ApiMixin:
         self._publish_if_changed()
         for (
             record,
-            _was_acknowledged,
+            was_acknowledged,
             previous_at,
             previous_by,
             _previous_until,
         ) in previous:
             self._schedule_timer(record)
             if acknowledged:
+                if not was_acknowledged:
+                    self.statistics.record_activity("acknowledgments")
                 self._fire_acknowledged(record)
             else:
                 self._fire_unacknowledged(
@@ -961,6 +981,8 @@ class _ApiMixin:
                 else:
                     self._cancel_all_timers()
                 async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
+            if self.monitoring_enabled and not monitoring_changed:
+                self._emit_resume_events(previous.records, emit_events=False)
             await self._async_refresh_notification_runtime(reset_reminders=True)
         if coherence_schedule_changed or previous_recovery_active:
             self._refresh_coherence_schedule()

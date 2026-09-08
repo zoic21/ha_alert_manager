@@ -405,7 +405,9 @@ def test_profile_test_does_not_increment_recent_usage(hass, entry) -> None:
         await manager.async_setup()
         await manager.async_update_config({"notification_profiles": [profile]})
 
+        before = manager.statistics.snapshot()
         await manager.async_test_notification_profile("loic")
+        assert manager.statistics.snapshot() == before
 
         assert manager.notification_runtime.usage_snapshot() == {
             "last_24h": {"loic": 0}

@@ -7,6 +7,7 @@ import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from time import perf_counter_ns
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryChange
@@ -498,6 +499,10 @@ class _RuntimeMixin:
             ):
                 self._fire_started(current)
         for alert_id, current in self.records.items():
+            previous = previous_records.get(alert_id)
+            self._count_pending_transition(
+                current, previous.status if previous is not None else None
+            )
             if (
                 alert_id not in previous_records
                 and current.status is AlertStatus.ACTIVE
@@ -1308,6 +1313,7 @@ class _RuntimeMixin:
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
+            previous_status = record.status if record is not None else None
             if record is None:
                 detected_at = (
                     self._inactivity_detected_at(details.rule_id, state, now)
@@ -1363,6 +1369,8 @@ class _RuntimeMixin:
                     immediate_changed = True
 
             became_active = advance_record(record, now)
+            if emit_events:
+                self._count_pending_transition(record, previous_status)
             if became_active:
                 persisted_changed = True
                 immediate_changed = True
@@ -1664,6 +1672,7 @@ class _RuntimeMixin:
             else None
         )
 
+        started_ns = perf_counter_ns()
         evaluation = evaluate_rule(
             rule,
             state,
@@ -1672,6 +1681,8 @@ class _RuntimeMixin:
             use_current_as_baseline=not dry_run and allow_runtime_baseline,
             evaluate_all_conditions=dry_run,
         )
+        if not dry_run:
+            self.statistics.record_evaluation(perf_counter_ns() - started_ns)
         if not dry_run and variation:
             # An indeterminate render neither starts nor resets a variation window.
             if evaluation.jinja_result is False:

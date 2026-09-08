@@ -30,6 +30,7 @@ from .notification_runtime import NotificationRuntime
 from .notifications import NotificationManager
 from .packs import OCCURRENCE_PACKS, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
+from .statistics import RuntimeStatistics
 from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
@@ -61,6 +62,7 @@ class AlertManager(
         self.history_storage = AlertManagerHistoryStorage(hass)
         self.config_backup_storage = AlertManagerConfigBackupStorage(hass)
         self._startup_reconciliation_snapshot = None
+        self.statistics = RuntimeStatistics()
         self.notifications = NotificationManager(
             hass, lambda: self.config.get("notification_profiles", [])
         )
@@ -79,6 +81,7 @@ class AlertManager(
             ),
             self.notifications,
             self._async_record_notification,
+            statistics=self.statistics,
             reminders_ready=lambda: (
                 self._runtime_phase is RuntimePhase.RUNNING
                 and self.hass.state is CoreState.running

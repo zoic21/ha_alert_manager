@@ -20,6 +20,9 @@ import {
 import {
   handleSettingsAction,
   renderSettings,
+  renderRuntimeStatistics,
+  formatStatisticsTime,
+  refreshNotificationProfileUsage,
 } from "../frontend-src/views/settings.js";
 
 const t = (key) => key;
@@ -550,9 +553,9 @@ test("settings rendering consumes prepared drafts without initializing them", ()
 
   assert.match(markup, /id="global-delay"/);
   assert.match(markup, /class="panel settings-navigation"/);
-  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 8);
-  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 8);
-  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 8);
+  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 9);
+  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 9);
+  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 9);
   assert.match(markup, /data-section-id="automatic"><ha-icon slot="start" icon="mdi:radar"/);
   assert.match(markup, /data-section-id="transfer"><ha-icon slot="start" icon="mdi:file-swap-outline"/);
   assert.ok(markup.includes(automaticMarkup));
@@ -789,4 +792,46 @@ test("targeted configuration drawer replacement releases the main page on close"
   };
   replaceConfigurationDrawer(root, "");
   assert.deepEqual(toggles, [["has-editor", false]]);
+});
+
+
+test("runtime diagnostics render scope, period and aggregates with escaped values", () => {
+  const markup = renderRuntimeStatistics({
+    statistics: {
+      evaluation_count: 4, evaluation_average_ms: 0.5,
+      evaluation_max_ms: 2, evaluation_total_ms: 2000,
+      pending: 1, activations: 2, acknowledgments: 3, resolutions: 4,
+      notifications: 5, observed_from: "<start>", observed_until: "<end>",
+    },
+    date: (value) => value,
+    t: (key, values) => values ? `${key}: ${values.start} / ${values.end}` : key,
+  });
+  assert.equal(markup.match(/<dt>/g).length, 9);
+  assert.match(markup, /statistics.scope/);
+  assert.match(markup, /statistics.window/);
+  assert.match(markup, /&lt;start&gt; \/ &lt;end&gt;/);
+  assert.match(markup, /500.00 µs/);
+  assert.match(markup, /2.00 ms/);
+  assert.match(markup, /2.00 s/);
+  assert.equal(formatStatisticsTime(0), "0 ms");
+  assert.equal(formatStatisticsTime(1000), "1.00 s");
+});
+
+test("statistics refresh replaces only the diagnostic content and profile counts", () => {
+  const diagnostic = {};
+  const profile = { dataset: { notificationProfileUsage: "phone" } };
+  refreshNotificationProfileUsage.call({
+    shadowRoot: {
+      querySelector: (selector) => selector === "#settings-section-diagnostics" ? diagnostic : null,
+      querySelectorAll: () => [profile],
+    },
+    _notificationStats: {
+      last_24h: { phone: 1 },
+      diagnostics: { evaluation_count: 42, observed_from: "start", observed_until: "end" },
+    },
+    _date: (value) => value,
+    _t: t,
+  });
+  assert.match(diagnostic.innerHTML, /<dd>42<\/dd>/);
+  assert.equal(profile.textContent, "notifications.usage_last_24h_one");
 });

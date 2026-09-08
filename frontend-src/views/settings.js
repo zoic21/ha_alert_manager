@@ -33,6 +33,7 @@ const SETTINGS_SECTIONS = [
   ["history", "settings.history_settings", "mdi:history"],
   ["entity-delay", "settings.entity_delay", "mdi:timer-cog-outline"],
   ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
+  ["diagnostics", "statistics.title", "mdi:speedometer"],
 ];
 
 export function renderSettings(context) {
@@ -40,7 +41,7 @@ export function renderSettings(context) {
       config, settingsDraft, historyConfig, entityDelayDraft,
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
       notificationProfileValidationError,
-      notificationUsage = {},
+      notificationUsage = {}, statistics = null, date = (value) => value,
       busy, useBottomSheet,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
@@ -96,6 +97,7 @@ export function renderSettings(context) {
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>
         ${configBackupsMarkup}
       </ha-card>
+      <ha-card id="settings-section-diagnostics" outlined class="panel settings-card settings-scroll-section">${renderRuntimeStatistics({ statistics, date, t })}</ha-card>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError,
@@ -104,6 +106,29 @@ export function renderSettings(context) {
       </form>
       <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </div>`;
+}
+
+export function formatStatisticsTime(milliseconds) {
+  if (milliseconds === 0) return "0 ms";
+  if (milliseconds < 1) return `${(milliseconds * 1000).toFixed(2)} µs`;
+  if (milliseconds < 1000) return `${milliseconds.toFixed(2)} ms`;
+  return `${(milliseconds / 1000).toFixed(2)} s`;
+}
+
+export function renderRuntimeStatistics({ statistics, date, t }) {
+  const title = `<h2>${esc(t("statistics.title"))}</h2>`;
+  if (!statistics) return title;
+  const metrics = [
+    "evaluation_count", "evaluation_average_ms", "evaluation_max_ms", "evaluation_total_ms",
+    "pending", "activations", "acknowledgments", "resolutions", "notifications",
+  ];
+  return `${title}<small>${esc(t("statistics.scope"))}</small>
+    <dl class="statistics-grid">${metrics.map((key) => {
+      const value = statistics[key] ?? 0;
+      return `<div><dt>${esc(t(`statistics.${key}`))}</dt><dd>${esc(key.endsWith("_ms") ? formatStatisticsTime(value) : value)}</dd></div>`;
+    }).join("")}</dl>
+    <small>${esc(t("statistics.period", { start: date(statistics.observed_from), end: date(statistics.observed_until) }))}</small>
+    <small>${esc(t("statistics.window"))}</small>`;
 }
 
 export function renderSettingsNavigation(t) {
@@ -176,6 +201,8 @@ export function renderSettingsPanel() {
       notificationProfileDraft: this._notificationProfileDraft,
       notificationProfileValidationError: this._notificationProfileValidationError,
       notificationUsage: this._notificationStats.last_24h,
+      statistics: this._notificationStats.diagnostics,
+      date: (value) => this._date(value),
       busy: this._busy,
       useBottomSheet: this._useNativeBottomSheet(),
       recoveryActive: this._configRecovery?.active === true,
@@ -193,6 +220,12 @@ export function renderSettingsPanel() {
 }
 
 export function refreshNotificationProfileUsage() {
+  const diagnostics = this.shadowRoot?.querySelector?.("#settings-section-diagnostics");
+  if (diagnostics) diagnostics.innerHTML = renderRuntimeStatistics({
+    statistics: this._notificationStats.diagnostics,
+    date: (value) => this._date(value),
+    t: (key, replacements) => this._t(key, replacements),
+  });
   updateNotificationProfileUsage(
     this.shadowRoot,
     this._notificationStats.last_24h,

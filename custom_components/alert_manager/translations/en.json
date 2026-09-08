@@ -286,8 +286,8 @@
       "test_success": "Test notification sent.",
       "test_title": "Alert Manager — Test notification",
       "title": "Notifications",
-      "usage_last_24h": "Used {count} times in the last 24 hours",
-      "usage_last_24h_one": "Used once in the last 24 hours",
+      "usage_last_24h": "Used {count} times (≈24 h, since startup)",
+      "usage_last_24h_one": "Used once (≈24 h, since startup)",
       "validation": {
         "name": "Enter a profile name.",
         "override": "Each exception must override at least one setting.",
@@ -696,6 +696,21 @@
       "until": "Acknowledgement ends",
       "unlimited": "No time limit",
       "failed": "Unable to acknowledge this alert. It may have changed or resolved."
+    },
+    "statistics": {
+      "title": "Runtime diagnostics",
+      "scope": "Custom rules: one evaluation per rule/entity pair, including its condition. Synchronous processing only; excludes tests, automatic packs, coherence scans and asynchronous waits. This is not Home Assistant event-loop load.",
+      "evaluation_count": "Rule evaluations",
+      "evaluation_average_ms": "Average per evaluation",
+      "evaluation_max_ms": "Maximum per evaluation",
+      "evaluation_total_ms": "Total evaluation time",
+      "pending": "Transitions to pending",
+      "activations": "Activations",
+      "acknowledgments": "Acknowledgments",
+      "resolutions": "Resolutions",
+      "notifications": "Successful profile sends",
+      "period": "Observed from {start} to {end}.",
+      "window": "Current hour and previous 23 hours (approximate 24 h window). Counters start at integration startup and reset on restart/reload. Activity counts transitions, not current alerts. Immediate activations do not count as pending."
     }
   },
   "services": {

@@ -266,7 +266,7 @@ Titles distinguish **🚨 new alerts**, **🔔 reminders** and **✅ recoveries*
 
 ### Per-alert notification details
 
-Each profile shows its successful sends over the last 24 hours. A grouped send counts once even with several targets; tests and complete failures are excluded.
+Each profile shows its successful sends for the current hour and previous 23 hours (an approximate 24-hour window), since integration startup. These counters are kept only in memory and reset on restart/reload. A grouped send counts once even with several targets; tests and complete failures are excluded.
 
 Alert details show notifications from the built-in profiles: delivery count (including reminders), matching profiles even without reminders, and last delivery time. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History keeps recovery deliveries, their profiles and last delivery time separately. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
 
@@ -296,6 +296,10 @@ Alert acknowledgement is also available through `alert_manager.acknowledge` and 
 The active alert details ⋮ menu also offers **Acknowledge temporarily…**: 15 min, 30 min, 1 h, 24 h or a custom duration in minutes, hours or days (up to one year). The details stay open and show the remaining time; click it for the exact deadline. Regular acknowledgement remains unlimited.
 
 At expiry, an ongoing alert becomes active again without changing its identity or start time. Profiles allowing new-alert notifications are notified again, even without reminders configured. Resolution or manual unacknowledgement cancels the deadline. It survives restarts and is processed after startup reconciliation; while monitoring is disabled, expiry waits for monitoring to resume without shifting the deadline.
+
+### Runtime diagnostics
+
+Configuration includes a compact diagnostic block for custom-rule evaluation count, average/maximum/total processing time, alert transitions and successful profile sends. One measured evaluation is one rule/entity pair, including its condition, with no asynchronous waiting. Tests, automatic packs and coherence scans are excluded from timing; this does not measure Home Assistant event-loop load. Activity counts actual transitions (including repeated occurrences), not current alert totals; immediate activations are not counted as pending and restored alerts are not counted again. Exactly 24 hourly aggregate buckets are held in memory, with no samples, persistence or rotation timer. The displayed observation period starts at integration startup or the oldest retained hour, whichever is later.
 
 ## Requirements
 

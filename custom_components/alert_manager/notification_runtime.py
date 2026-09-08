@@ -36,11 +36,11 @@ from .notifications import (
     profile_matches_labels,
     resolve_notification_policy,
 )
+from .statistics import RuntimeStatistics
 
 _LOGGER = logging.getLogger(__name__)
 
 _RUNTIME_SAVE_DELAY_SECONDS = 1
-_USAGE_WINDOW_HOURS = 24
 
 
 @dataclass(slots=True)
@@ -120,6 +120,7 @@ class NotificationRuntime:
         delivery: NotificationManager,
         record_notification: Callable[..., Awaitable[None]] | None = None,
         *,
+        statistics: RuntimeStatistics | None = None,
         reminders_ready: Callable[[], bool] | None = None,
     ) -> None:
         """Initialize the independent notification component."""
@@ -146,8 +147,8 @@ class NotificationRuntime:
         self._runtime_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._runtime: dict[str, dict[str, _RuntimeEntry]] = {}
-        self._usage: dict[str, dict[int, int]] = {}
-        self._persisted_runtime: dict[str, Any] = {"profiles": {}, "usage": {}}
+        self.statistics = statistics if statistics is not None else RuntimeStatistics()
+        self._persisted_runtime: dict[str, Any] = {"profiles": {}}
         self._label_cache: dict[str, frozenset[str]] = {}
         self._batches: dict[tuple[str, str], _PendingBatch] = {}
         self._unsubscribe: list[Callable[[], None]] = []
@@ -298,7 +299,9 @@ class NotificationRuntime:
         """Reconcile notification state while holding the runtime lock."""
         now = dt_util.now().astimezone(UTC)
         config = self._config_getter()
-        self._prune_usage(now)
+        self.statistics.retain_profiles(
+            {profile["id"] for profile in config.get("notification_profiles", [])}
+        )
         if not config.get("monitoring_enabled", True):
             self.discard_batches()
         profiles = {
@@ -635,54 +638,18 @@ class NotificationRuntime:
             }
             if profile_id not in configured_ids:
                 return
-            now = dt_util.now().astimezone(UTC)
-            self._prune_usage(now)
-            bucket = _usage_bucket(now)
-            buckets = self._usage.setdefault(profile_id, {})
-            buckets[bucket] = buckets.get(bucket, 0) + 1
-            self._schedule_runtime_save()
+            self.statistics.record_notification(profile_id)
 
     @callback
     def usage_snapshot(self) -> dict[str, dict[str, int]]:
-        """Return current per-profile usage without exposing stored buckets."""
-        if self._prune_usage(dt_util.now().astimezone(UTC)):
-            self._schedule_runtime_save()
-        profile_ids = sorted(
-            profile["id"]
-            for profile in self._config_getter().get("notification_profiles", [])
-        )
+        """Read shared, non-persistent per-profile hourly aggregates."""
+        counts = self.statistics.snapshot()["notification_profiles"]
         return {
             "last_24h": {
-                profile_id: sum(self._usage.get(profile_id, {}).values())
-                for profile_id in profile_ids
+                profile["id"]: counts.get(profile["id"], 0)
+                for profile in self._config_getter().get("notification_profiles", [])
             }
         }
-
-    @callback
-    def _prune_usage(self, now: datetime) -> bool:
-        """Keep only configured profiles and the current 24 hourly buckets."""
-        newest = _usage_bucket(now)
-        oldest = newest - _USAGE_WINDOW_HOURS + 1
-        configured_ids = {
-            profile["id"]
-            for profile in self._config_getter().get("notification_profiles", [])
-        }
-        retained = {
-            profile_id: {
-                bucket: count
-                for bucket, count in buckets.items()
-                if oldest <= bucket <= newest
-            }
-            for profile_id, buckets in self._usage.items()
-            if profile_id in configured_ids
-        }
-        retained = {
-            profile_id: buckets for profile_id, buckets in retained.items() if buckets
-        }
-        if retained == self._usage:
-            return False
-        self._usage = retained
-        return True
 
     async def _async_collect_due_reminders_locked(
         self,
@@ -937,11 +904,6 @@ class NotificationRuntime:
             return
         self._persisted_runtime = raw
         raw_profiles = raw.get("profiles", {})
-        raw_usage = raw.get("usage", {})
-        configured_profile_ids = {
-            profile["id"]
-            for profile in self._config_getter().get("notification_profiles", [])
-        }
         profile_ids = {
             profile["id"]
             for profile in self._config_getter().get("notification_profiles", [])
@@ -965,29 +927,6 @@ class NotificationRuntime:
                 entries[alert_id] = _RuntimeEntry(next_reminder=next_reminder)
             if entries:
                 self._runtime[profile_id] = entries
-        if isinstance(raw_usage, dict):
-            newest = _usage_bucket(dt_util.now().astimezone(UTC))
-            oldest = newest - _USAGE_WINDOW_HOURS + 1
-            for profile_id in configured_profile_ids:
-                raw_buckets = raw_usage.get(profile_id)
-                if not isinstance(raw_buckets, dict):
-                    continue
-                buckets: dict[int, int] = {}
-                for raw_bucket, count in raw_buckets.items():
-                    try:
-                        bucket = int(raw_bucket)
-                    except (TypeError, ValueError):
-                        continue
-                    if (
-                        isinstance(count, bool)
-                        or not isinstance(count, int)
-                        or count <= 0
-                        or not oldest <= bucket <= newest
-                    ):
-                        continue
-                    buckets[bucket] = count
-                if buckets:
-                    self._usage[profile_id] = buckets
 
     async def _async_save_runtime(self) -> None:
         """Persist minimal recipient state without touching AlertRecord."""
@@ -1011,13 +950,6 @@ class NotificationRuntime:
                 }
                 for profile_id, entries in sorted(self._runtime.items())
                 if entries
-            },
-            "usage": {
-                profile_id: {
-                    str(bucket): count for bucket, count in sorted(buckets.items())
-                }
-                for profile_id, buckets in sorted(self._usage.items())
-                if buckets
             },
         }
 
@@ -1049,11 +981,6 @@ def _parse_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return None
     return parsed.astimezone(UTC)
-
-
-def _usage_bucket(value: datetime) -> int:
-    """Return a stable UTC hour number for compact persisted aggregation."""
-    return int(value.astimezone(UTC).timestamp()) // 3600
 
 
 def _optional_text(value: Any) -> str | None:

@@ -1085,8 +1085,8 @@ def test_runtime_load_prunes_unknown_profiles_and_alerts(hass, entry) -> None:
     asyncio.run(scenario())
 
 
-def test_usage_restore_keeps_only_current_24_hour_buckets(hass, entry, set_now) -> None:
-    """Stored profile usage is restored, validated and strictly bounded."""
+def test_usage_is_not_restored_or_persisted(hass, entry, set_now) -> None:
+    """Legacy usage is ignored and removed; new statistics never reach storage."""
 
     async def scenario() -> None:
         now = datetime(2026, 9, 4, 12, 30, tzinfo=UTC)
@@ -1114,13 +1114,16 @@ def test_usage_restore_keeps_only_current_24_hour_buckets(hass, entry, set_now) 
 
         await runtime.async_setup()
 
-        assert runtime.usage_snapshot() == {"last_24h": {"profile": 5}}
-        assert hass.stores["alert_manager.notifications"]["usage"] == {
-            "profile": {
-                str(current_bucket - 23): 3,
-                str(current_bucket): 2,
-            }
-        }
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 0}}
+        assert "usage" not in hass.stores["alert_manager.notifications"]
+        saves = hass.store_save_count
+        await runtime._async_record_usage(
+            "profile", {"delivered_targets": ["notify.phone"]}
+        )
+        assert runtime.statistics.snapshot()["notifications"] == 1
+        assert runtime.usage_snapshot() == {"last_24h": {"profile": 1}}
+        assert runtime._runtime_save_cancel is None
+        assert hass.store_save_count == saves
         await runtime.async_unload()
 
     asyncio.run(scenario())

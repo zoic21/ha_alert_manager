@@ -320,7 +320,13 @@ async def websocket_notification_stats_get(
 ) -> None:
     """Return recent per-profile delivery counts without configuration data."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(msg["id"], manager.notification_runtime.usage_snapshot())
+        connection.send_result(
+            msg["id"],
+            {
+                **manager.notification_runtime.usage_snapshot(),
+                "diagnostics": manager.statistics.snapshot(),
+            },
+        )
 
 
 @websocket_api.require_admin

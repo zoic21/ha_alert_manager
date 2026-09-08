@@ -1,4 +1,24 @@
 export const settingsStyles = `
+  .statistics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px 24px;
+    margin: 12px 0;
+  }
+  .statistics-grid dt {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+  }
+  .statistics-grid dd {
+    margin: 4px 0 0;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  #settings-section-diagnostics small {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
   /* History and settings */
   .history-empty {
     margin-bottom: 20px;

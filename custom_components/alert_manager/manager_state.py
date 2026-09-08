@@ -671,8 +671,19 @@ class _StateMixin:
         if cancel := self._timers.pop(alert_id, None):
             cancel()
 
+    def _count_pending_transition(
+        self, record: AlertRecord, previous_status: AlertStatus | None
+    ) -> None:
+        """Count a new pending state, excluding immediate activation."""
+        if (
+            record.status is AlertStatus.PENDING
+            and previous_status is not AlertStatus.PENDING
+        ):
+            self.statistics.record_activity("pending")
+
     def _fire_started(self, record: AlertRecord) -> None:
         """Emit the documented start event exactly on activation."""
+        self.statistics.record_activity("activations")
         data = record.as_public_dict()
         async_dispatcher_send(
             self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_STARTED, data
@@ -681,6 +692,7 @@ class _StateMixin:
 
     def _fire_resolved(self, record: AlertRecord, now: datetime) -> None:
         """Emit resolution information without retaining history."""
+        self.statistics.record_activity("resolutions")
         data = record.as_public_dict()
         data["resolved_at"] = now.isoformat()
         async_dispatcher_send(

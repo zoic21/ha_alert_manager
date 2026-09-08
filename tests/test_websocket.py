@@ -7,8 +7,6 @@ import importlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from homeassistant.util import dt as dt_util
-
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
@@ -390,15 +388,25 @@ def test_notification_stats_websocket_is_separate_from_configuration(hass, entry
         "exceptions": [],
     }
     asyncio.run(manager.async_update_config({"notification_profiles": [profile]}))
-    bucket = int(dt_util.now().timestamp()) // 3600
-    manager.notification_runtime._usage = {"profile": {bucket: 2}}
+    manager.statistics.record_notification("profile")
+    manager.statistics.record_notification("profile")
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=True)
 
     asyncio.run(websocket_notification_stats_get(hass, connection, {"id": 28}))
 
     assert connection.errors == []
-    assert connection.results == [(28, {"last_24h": {"profile": 2}})]
+    assert connection.results == [
+        (
+            28,
+            {
+                "last_24h": {"profile": 2},
+                "diagnostics": manager.statistics.snapshot(),
+            },
+        )
+    ]
+    assert connection.results[0][1]["diagnostics"]["notifications"] == 2
+    assert manager.notification_runtime.statistics is manager.statistics
     assert "usage" not in manager.get_config()
 
 
