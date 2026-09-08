@@ -341,7 +341,12 @@
       "yaml_title": "YAML du profil de notification",
       "duplicate": "Dupliquer",
       "copy": "copie",
-      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test."
+      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test.",
+      "on_coherence": "Nouveaux soucis de cohérence",
+      "coherence_help": "Contrôles via le bouton ou la planification uniquement. Indépendant des étiquettes et exceptions.",
+      "coherence_title": "Cohérence",
+      "coherence_message": "{count} nouveau souci de cohérence.",
+      "coherence_message_plural": "{count} nouveaux soucis de cohérence."
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

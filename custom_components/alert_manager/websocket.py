@@ -156,7 +156,7 @@ async def websocket_coherence_scan(
     """Scan Home Assistant configuration for missing entity references."""
     if _manager(hass, connection, msg["id"]) is None:
         return
-    connection.send_result(msg["id"], await async_run_coherence_scan(hass))
+    connection.send_result(msg["id"], await async_run_coherence_scan(hass, origin="ui"))
 
 
 @websocket_api.require_admin

@@ -43,7 +43,8 @@ def test_button_platform_exposes_stable_entity_and_runs_scan(hass, entry, monkey
     button.hass = hass
     calls = []
 
-    async def scan(scan_hass):
+    async def scan(scan_hass, *, origin):
+        assert origin == "entity"
         calls.append(scan_hass)
         return {"missing_entity_count": 0, "results": []}
 
@@ -64,7 +65,8 @@ def test_button_rejects_non_admin_users_but_allows_internal_calls(
     button.hass = hass
     calls = []
 
-    async def scan(scan_hass):
+    async def scan(scan_hass, *, origin):
+        assert origin == "entity"
         calls.append(scan_hass)
         return {"missing_entity_count": 0, "results": []}
 
@@ -325,7 +327,8 @@ def test_optional_coherence_schedules_run_only_on_their_due_date(hass, monkeypat
     )
     calls = []
 
-    async def scan(_hass):
+    async def scan(_hass, *, origin):
+        assert origin == "schedule"
         calls.append(True)
         return {"results": [], "missing_entity_count": 0}
 
