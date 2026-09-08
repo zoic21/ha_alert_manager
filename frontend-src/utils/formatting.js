@@ -86,7 +86,7 @@ export function remaining(value) {
     return seconds === 0 ? this._t("duration.activation") : this._durationText(seconds);
 }
 
-export function durationText(seconds) {
+export function durationText(seconds, maxParts = Infinity) {
     const value = Math.max(0, Number(seconds) || 0);
     const parts = [
       [86400, "days"],
@@ -100,8 +100,13 @@ export function durationText(seconds) {
       const count = unit === 1 ? rest : Math.floor(rest / unit);
       if (count) result.push(this._t(`duration.${key}`, { count }));
       rest %= unit;
+      if (result.length >= maxParts) break;
     }
     return result.join(" ") || this._t("duration.seconds", { count: 0 });
+}
+
+export function compactDurationText(seconds) {
+    return durationText.call(this, Math.max(0, Math.round(Number(seconds) || 0)), 2);
 }
 
 export function historyDurationText(seconds) {

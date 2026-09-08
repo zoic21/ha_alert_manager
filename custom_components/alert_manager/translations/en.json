@@ -228,7 +228,7 @@
       "status": "Final status",
       "title": "Alert history",
       "statistics": {
-        "title": "Recurrence statistics",
+        "title": "Statistics",
         "period": "Period",
         "days": "Last {days} days",
         "group": "Group by",
@@ -238,10 +238,19 @@
         "integration": "Integration",
         "rule": "Rule / pack",
         "occurrences": "Occurrences",
-        "total": "Total active time",
-        "average": "Average active time",
+        "total": "Total duration",
+        "average": "Average duration",
         "unknown": "Not specified",
-        "help": "Based only on retained, resolved occurrences overlapping the period, independently of history table filters. Active time is clipped to the period and includes acknowledged time. Durations are summed per occurrence: overlapping alerts do not represent device downtime. Current alerts and deleted or expired history are excluded."
+        "help": "Based only on retained, resolved occurrences overlapping the period, independently of history table filters. Active time is clipped to the period and includes acknowledged time. Durations are summed per occurrence: overlapping alerts do not represent device downtime. Current alerts and deleted or expired history are excluded.",
+        "back": "History",
+        "short_days": "{days} days",
+        "retained": "Based on retained, resolved history.",
+        "about": "About these statistics",
+        "devices": "Affected devices",
+        "cumulative": "Cumulative duration",
+        "search": "Search the ranking",
+        "empty": "No retained occurrences in this period.",
+        "selection": "{name} · {days} days"
       }
     },
     "monitoring": {

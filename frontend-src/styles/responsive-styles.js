@@ -1,6 +1,27 @@
 export const responsiveStyles = `
   :host([narrow]) [data-history-statistics-page] {
-    --data-table-row-height: 84px;
+    --data-table-row-height: 76px;
+  }
+
+  :host([narrow]) .history-statistics-dashboard > div {
+    width: 100%;
+  }
+  :host([narrow]) .history-statistics-controls {
+    gap: 8px;
+  }
+  :host([narrow]) .history-statistics-controls ha-select {
+    flex: 1 1 150px;
+    width: auto;
+    min-width: 0;
+  }
+  :host([narrow]) .history-statistics-summary dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 0;
+  }
+  :host([narrow]) .history-statistics-summary dd {
+    font-size: 20px;
   }
 
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */

@@ -1,4 +1,4 @@
-import { handleHistoryAction } from "../views/history.js";
+import { handleHistoryAction, matchesHistoryStatisticsFilter } from "../views/history.js";
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
@@ -419,7 +419,7 @@ export function filterCount(kind) {
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
-    return facets + detected + resolved;
+    return facets + detected + resolved + (kind === "history" && this._historyStatisticsFilter ? 1 : 0);
 }
 
 export function filterValues(value) {
@@ -428,6 +428,7 @@ export function filterValues(value) {
 }
 
 export function resetTableFilters(kind) {
+    if (kind === "history") this._historyStatisticsFilter = null;
     Object.keys(this._tableState[kind].filters).forEach((key) => {
       this._tableState[kind].filters[key] = ["detectedFrom", "detectedTo", "resolvedFrom", "resolvedTo"].includes(key)
         ? ""
@@ -444,6 +445,7 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
+      if (kind === "history" && !matchesHistoryStatisticsFilter(row.source, this._historyStatisticsFilter)) return false;
       if (query && !row.search.includes(query)) return false;
       if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;

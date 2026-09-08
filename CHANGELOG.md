@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.3 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Redesign history statistics with compact 7/30-day controls and a summary of occurrences, affected devices, and cumulative alert duration.
+- Show entity names and rules separately, with native icons, compact duration labels, and exact durations on hover.
+- Open the matching history when clicking a ranking row, preserving the selected time window and providing a visible, removable filter.
+- Keep mobile rows compact and move calculation details behind an information button.
+- Shorten the alert detail history label to “History”.
+
 ## 2.3.0-dev.2 — September 8, 2026
 
 This is a development prerelease.

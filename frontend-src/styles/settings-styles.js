@@ -375,15 +375,64 @@ export const settingsStyles = `
   .coherence-panel, .history-panel {
     padding: 20px;
   }
-  .history-statistics-controls {
-    margin-top: 12px;
+  .history-statistics-dashboard {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    max-width: 960px;
+    margin-top: 12px;
+  }
+  .history-statistics-controls {
+    display: flex;
+    align-items: center;
     flex-wrap: wrap;
     gap: 12px;
   }
+  .history-statistics-period {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
   .history-statistics-controls ha-select {
-    flex: 1 1 150px;
-    min-width: 0;
+    width: 220px;
+    max-width: 100%;
+  }
+  .history-statistics-summary dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 40px;
+    margin: 0;
+  }
+  .history-statistics-summary dt {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .history-statistics-summary dd {
+    margin: 0;
+    font-size: 24px;
+    font-weight: var(--ha-font-weight-medium, 500);
+    font-variant-numeric: tabular-nums;
+  }
+  .history-statistics-note, .history-statistics-drilldown {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--secondary-text-color);
+    font-size: 12px;
+  }
+  [data-history-statistics-help][hidden] {
+    display: none;
+  }
+  .history-statistics-note ha-icon-button {
+    --mdc-icon-button-size: 32px;
+    --mdc-icon-size: 18px;
+  }
+  .history-statistics-drilldown {
+    flex-wrap: wrap;
+    margin-top: 8px;
   }
   .coherence-header, .history-header {
     display: flex;
