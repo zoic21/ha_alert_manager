@@ -686,11 +686,14 @@ class _StateMixin:
         self._cancel_timer(alert_id)
         acknowledgement_due = False
         if record.status is AlertStatus.ACTIVE:
-            deadline = acknowledgement_retry_at or record.acknowledged_until
-            if deadline is not None and (
-                record.expires_at is None or deadline < record.expires_at
+            acknowledgement_check_at = (
+                acknowledgement_retry_at or record.acknowledged_until
+            )
+            if acknowledgement_check_at is not None and (
+                record.expires_at is None
+                or acknowledgement_check_at < record.expires_at
             ):
-                when = deadline.astimezone(UTC)
+                when = acknowledgement_check_at.astimezone(UTC)
                 acknowledgement_due = True
             elif record.expires_at is not None:
                 when = record.expires_at.astimezone(UTC)

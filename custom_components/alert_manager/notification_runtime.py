@@ -139,6 +139,10 @@ class NotificationRuntime:
         )
         self._entity_registry = er.async_get(hass)
         self._device_registry = dr.async_get(hass)
+        # Lock order: manager._config_mutation_lock before _runtime_lock.
+        # Never acquire the configuration lock from this lock or callbacks
+        # awaited under it (including _record_notification): configuration
+        # mutations await async_config_updated() while holding their lock.
         self._runtime_lock = asyncio.Lock()
         self._lifecycle_lock = asyncio.Lock()
         self._runtime: dict[str, dict[str, _RuntimeEntry]] = {}
@@ -866,8 +870,13 @@ class NotificationRuntime:
             name = first.device_name or first.name
             if len(grouped_items) > 1:
                 summary = self._delivery.text(
-                    "grouped_alerts", "{count} alerts"
+                    "grouped_resolved" if kind == "resolved" else "grouped_alerts",
+                    "{count} alerts resolved"
+                    if kind == "resolved"
+                    else "{count} alerts",
                 ).replace("{count}", str(len(grouped_items)))
+            elif kind == "resolved":
+                summary = self._delivery.text("on_resolved", "Return to normal")
             else:
                 summary = first.message or first.condition or first.alert_type
             lines.append(f"• {name} — {summary}")

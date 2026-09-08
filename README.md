@@ -254,7 +254,7 @@ Save the profile, then use **Test** to send a real test notification to its targ
 
 A profile can cover all alerts or only alerts matching at least one selected label. Matching combines the labels of the entity, its device, and the custom rule or automatic pack that produced the alert.
 
-Exceptions target one or more labels and override new-alert, recovery or reminder settings. The **first matching exception in list order** takes precedence; settings left inherited keep the profile defaults. In YAML, exceptions use `selector_ids`; existing single-label exceptions using `selector_id` remain accepted.
+Exceptions require **all selected labels to match (AND)** and override new-alert, recovery or reminder settings. The **first matching exception in list order** takes precedence; settings left inherited keep the profile defaults. In YAML, exceptions use `selector_ids`; existing single-label exceptions using `selector_id` remain accepted.
 
 ### Batching, reminders and mobile navigation
 

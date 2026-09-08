@@ -280,6 +280,12 @@ def test_occurrence_pack_runs_once_after_every_entity_in_batch(
 
     run(transition_burst())
     assert len(calls) == 1
+    snapshot = calls[0][0].active_alert_ids
+    assert isinstance(snapshot, frozenset)
+    assert snapshot == frozenset(manager.records)
+    assert all(item.active_alert_ids is snapshot for item in calls[0])
+    manager.records.clear()
+    assert snapshot == {"unavailable:sensor.one", "unavailable:sensor.two"}
     assert {item.source.id for item in calls[0]} == {
         "unavailable:sensor.one",
         "unavailable:sensor.two",
@@ -869,7 +875,7 @@ def test_reconciliation_live_flapping_extension_wins_over_shadow(hass, entry, se
         occurrence_item = PackOccurrence(
             source=source,
             occurred_at=occurrence_at,
-            active_alert_ids=restarted.records.keys(),
+            active_alert_ids=frozenset(restarted.records),
         )
         generated = PACK.occurrence_batch_handler(
             hass,

@@ -106,7 +106,10 @@ def _active_record(now: datetime) -> AlertRecord:
 )
 @pytest.mark.parametrize("language", [None, "en", "fr"])
 @pytest.mark.parametrize("count", [1, 2])
-def test_notification_title_prefix(hass, entry, kind, icon, language, count) -> None:
+@pytest.mark.parametrize("grouped", [False, True])
+def test_notification_title_prefix(
+    hass, entry, kind, icon, language, count, grouped
+) -> None:
     """Prefix translated and fallback titles for individual and grouped alerts."""
     delivery = NotificationManager(hass, lambda: [])
     if language:
@@ -128,8 +131,9 @@ def test_notification_title_prefix(hass, entry, kind, icon, language, count) -> 
             _event_data(
                 f"unavailable:sensor.test_{index}",
                 entity_id=f"sensor.test_{index}",
-                device_id=None,
+                device_id="thermostat" if grouped else None,
             )
+            | {"message": "Previous error"}
         )
         for index in range(count)
     ]
@@ -143,7 +147,21 @@ def test_notification_title_prefix(hass, entry, kind, icon, language, count) -> 
         assert title == f"{icon} " + catalog[f"{kind}_title"].replace(
             "{count}", str(count)
         )
-    assert len(message.splitlines()) == count
+    assert len(message.splitlines()) == (1 if grouped else count)
+    if kind == "resolved":
+        assert "Previous error" not in message
+        assert "Unavailable" not in message
+        assert "unavailable" not in message
+        if grouped and count > 1:
+            expected = (
+                catalog["grouped_resolved"] if language else "{count} alerts resolved"
+            )
+            expected = expected.replace("{count}", str(count))
+        else:
+            expected = catalog["on_resolved"] if language else "Return to normal"
+        assert expected in message
+    elif not grouped or count == 1:
+        assert "Previous error" in message
 
 
 @pytest.mark.parametrize(
@@ -1558,3 +1576,23 @@ def test_rule_notifications_wait_for_transaction_commit(
         await manager.async_unload()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "alert_type",
+    ["execution_errors", "unavailable", "connectivity", "flapping", "rule"],
+)
+@pytest.mark.parametrize("old_message", [None, "Previous execution failed"])
+def test_resolved_notification_omits_old_diagnostic(
+    hass, entry, alert_type, old_message
+):
+    runtime = NotificationRuntime(hass, entry, lambda: {}, lambda: {}, _DeliverySpy())
+    data = _event_data("test:sensor.test", entity_id="sensor.test", device_id=None)
+    data.update(type=alert_type, message=old_message, condition="Previous failure")
+    item = _NotificationItem.from_event(data)
+
+    _, message = runtime._render_batch("resolved", [item])
+
+    assert message == "• sensor.test — Return to normal"
+    assert item.message == old_message
+    assert item.condition == "Previous failure"

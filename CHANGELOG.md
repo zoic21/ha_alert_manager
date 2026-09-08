@@ -2,6 +2,27 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.2.0-rc.18 — 8 septembre 2026
+
+### Corrigé
+
+- Les exceptions de notification exigent désormais toutes les étiquettes
+  sélectionnées (ET). La première exception correspondante reste prioritaire ;
+  le filtre d’étiquettes du profil conserve son fonctionnement en OU.
+- Les notifications de retour à la normale ne recopient plus l’ancien message
+  d’erreur ni la condition de déclenchement, pour les automatisations, les scripts
+  et les autres alertes. Les diagnostics restent disponibles dans l’historique.
+- Les packs consommateurs d’occurrences reçoivent un instantané immuable des
+  identifiants d’alertes, partagé par tout le lot après l’évaluation des sources.
+
+### Maintenance
+
+- Documentation de l’ordre des verrous de configuration et de notifications.
+- Clarification de la date de vérification des acquittements et du calcul des
+  identifiants lors des renommages, sans changement du comportement.
+
+Cette version reste une prérelease.
+
 ## 2.2.0-rc.17 — 7 septembre 2026
 
 ### Corrigé

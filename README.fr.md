@@ -253,7 +253,7 @@ Enregistrez le profil, puis utilisez **Tester** pour envoyer une vraie notificat
 
 Un profil peut couvrir toutes les alertes ou seulement celles qui correspondent à au moins une étiquette sélectionnée. La sélection combine les étiquettes de l’entité, de son appareil et de la règle personnalisée ou du pack automatique à l’origine de l’alerte.
 
-Les exceptions ciblent une ou plusieurs étiquettes et remplacent les réglages de nouvelle alerte, de retour à la normale ou de rappel. La **première exception correspondante dans l’ordre de la liste** est prioritaire ; les paramètres laissés en héritage conservent les valeurs par défaut du profil. En YAML, les exceptions utilisent `selector_ids` ; les anciennes exceptions à une étiquette utilisant `selector_id` restent acceptées.
+Les exceptions exigent que **toutes les étiquettes sélectionnées correspondent (ET)** et remplacent les réglages de nouvelle alerte, de retour à la normale ou de rappel. La **première exception correspondante dans l’ordre de la liste** est prioritaire ; les paramètres laissés en héritage conservent les valeurs par défaut du profil. En YAML, les exceptions utilisent `selector_ids` ; les anciennes exceptions à une étiquette utilisant `selector_id` restent acceptées.
 
 ### Regroupement, rappels et navigation mobile
 

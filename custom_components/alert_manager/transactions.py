@@ -230,7 +230,7 @@ class StartupReconciliationTransaction:
             if target_entity_id != entity_id:
                 continue
             candidate = deepcopy(original)
-            candidate.details.id = self._alert_id(candidate, target_entity_id)
+            candidate.details.id = self._alert_id(original, target_entity_id)
             candidate.details.entity_id = target_entity_id
             existing = retained.get(candidate.details.id)
             if existing is None:
@@ -260,8 +260,8 @@ class StartupReconciliationTransaction:
     @staticmethod
     def _alert_id(record: AlertRecord, entity_id: str) -> str:
         """Map the entity suffix while retaining compound pack identity."""
-        previous_entity_id = record.details.entity_id
         alert_id = record.details.id
+        previous_entity_id = record.details.entity_id
         if alert_id.endswith(f":{previous_entity_id}"):
             return f"{alert_id[: -len(previous_entity_id)]}{entity_id}"
         if record.details.type == "rule" and record.details.rule_id:

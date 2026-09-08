@@ -594,15 +594,17 @@ def test_notification_batch_delay_default_and_yaml_roundtrip():
 @pytest.mark.parametrize(
     ("labels", "interval"),
     [
-        ({"important"}, 1800),
-        ({"cold"}, 1800),
-        ({"cold", "secondary"}, 1800),
+        ({"important", "cold"}, 1800),
+        ({"important", "cold", "secondary"}, 1800),
+        ({"important"}, None),
+        ({"cold"}, None),
+        ({"cold", "secondary"}, 3600),
         ({"secondary"}, 3600),
         ({"unrelated"}, None),
         (set(), None),
     ],
 )
-def test_exception_matches_any_selected_label(labels, interval):
+def test_exception_requires_all_selected_labels(labels, interval):
     profile = _profile()
     first = profile["exceptions"][0]
     del first["selector_id"]

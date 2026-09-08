@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -86,7 +86,8 @@ class PackOccurrence:
 
     source: AlertDetails
     occurred_at: datetime
-    active_alert_ids: Collection[str] = frozenset()
+    # Shared immutable snapshot at the end of the source evaluation batch.
+    active_alert_ids: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)

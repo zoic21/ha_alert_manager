@@ -782,7 +782,12 @@ class _RuntimeMixin:
                 ):
                     return
         if new_occurrences:
-            batch = tuple(new_occurrences)
+            # Freeze once after source evaluation, before any pack adds records.
+            active_alert_ids = frozenset(self.records)
+            batch = tuple(
+                replace(occurrence, active_alert_ids=active_alert_ids)
+                for occurrence in new_occurrences
+            )
             for pack in occurrence_packs:
                 for generated in pack.occurrence_batch_handler(
                     self.hass,
@@ -1323,7 +1328,6 @@ class _RuntimeMixin:
                         PackOccurrence(
                             source=details,
                             occurred_at=now,
-                            active_alert_ids=self.records.keys(),
                         )
                     )
             else:

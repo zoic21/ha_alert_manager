@@ -252,7 +252,7 @@ def resolve_notification_policy(
     """Apply the first matching label exception over the profile defaults."""
     effective = dict(profile["default_policy"])
     for exception in profile["exceptions"]:
-        if any(label_id in label_ids for label_id in exception["selector_ids"]):
+        if all(label_id in label_ids for label_id in exception["selector_ids"]):
             effective.update(
                 {key: exception[key] for key in _POLICY_KEYS if key in exception}
             )
