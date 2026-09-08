@@ -226,7 +226,23 @@
       "resolved_acknowledged": "Résolue après acquittement",
       "resolved_at": "Résolue le",
       "status": "État final",
-      "title": "Historique des alertes"
+      "title": "Historique des alertes",
+      "statistics": {
+        "title": "Statistiques de récurrence",
+        "period": "Période",
+        "days": "{days} derniers jours",
+        "group": "Regrouper par",
+        "alert": "Alerte",
+        "entity": "Entité",
+        "device": "Appareil",
+        "integration": "Intégration",
+        "rule": "Règle / pack",
+        "occurrences": "Occurrences",
+        "total": "Durée active totale",
+        "average": "Durée active moyenne",
+        "unknown": "Non renseigné",
+        "help": "Calculées uniquement sur les occurrences résolues conservées qui recoupent la période, indépendamment des filtres du tableau historique. La durée active est limitée à la période et inclut le temps acquitté. Les durées sont cumulées par occurrence : les alertes simultanées ne mesurent pas l’indisponibilité d’un appareil. Les alertes en cours et l’historique supprimé ou expiré sont exclus."
+      }
     },
     "monitoring": {
       "disabled": "La surveillance Alert Manager est désactivée. Les alertes existantes sont conservées, mais aucune nouvelle alerte ne sera détectée.",

@@ -687,3 +687,26 @@ def test_notification_yaml_websocket_returns_validation_error(hass, entry):
     assert connection.results == []
     assert connection.errors[0][0:2] == (91, "invalid_format")
     assert manager.config["notification_profiles"] == []
+
+
+def test_history_statistics_are_explicitly_requested(hass, entry, monkeypatch):
+    """Existing history consumers do not trigger aggregation."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    calls = []
+
+    async def statistics(days):
+        calls.append(days)
+        return {"days": days, "groups": {}}
+
+    monkeypatch.setattr(manager, "async_history_statistics_snapshot", statistics)
+    asyncio.run(websocket_history_list(hass, connection, {"id": 1}))
+    assert calls == []
+    assert "statistics" not in connection.results[-1][1]
+    asyncio.run(
+        websocket_history_list(hass, connection, {"id": 2, "statistics_days": 30})
+    )
+    assert calls == [30]
+    assert connection.results[-1][1]["statistics"]["days"] == 30

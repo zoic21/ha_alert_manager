@@ -128,13 +128,23 @@ async def websocket_alert_reevaluate(
 
 @websocket_api.require_admin
 @websocket_api.async_response
-@websocket_api.websocket_command({vol.Required("type"): "alert_manager/history/list"})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/history/list",
+        vol.Optional("statistics_days"): vol.All(int, vol.In([7, 30])),
+    }
+)
 async def websocket_history_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Return the newest-first completed history to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(msg["id"], manager.history_snapshot())
+        result = manager.history_snapshot()
+        if "statistics_days" in msg:
+            result["statistics"] = await manager.async_history_statistics_snapshot(
+                msg["statistics_days"]
+            )
+        connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin

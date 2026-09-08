@@ -50,6 +50,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `transactions.py` | Cancellation-safe admitted operations, startup reconciliation snapshots, and deterministic identity/collision handling during entity renames. |
 | `models.py` | Rule, alert and history models; pure comparison and lifecycle helpers; serialization of model data. |
 | `rule_evaluation.py` | Shared rule/entity evaluator and diagnostic result used by live detection and the rule tester; owns no runtime state. |
+| `history_statistics.py` | Pure on-demand recurrence aggregation of retained resolved history, run in the executor when requested from History. No runtime counters or additional storage. |
 | `statistics.py` | Shared in-memory diagnostics: 24 UTC hourly aggregate buckets for synchronous custom-rule evaluation, committed alert transitions, and profile sends; never persisted. |
 | `notifications.py` | Profile validation, label filters and ordered exception policies, plus native notify delivery and profile testing. |
 | `notification_runtime.py` | Lifecycle-event routing into profile batches, reminders, label cache, grouped messages/links, delivery accounting, and its own persisted reminder state. Defers configuration-generated notifications until commit. |

@@ -43,7 +43,7 @@ import {
   refreshOverviewData, refreshStartupBanner, renderOverviewPanel,
   updateAlertAcknowledgement,
 } from "./views/overview.js";
-import { handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
+import { hydrateHistoryStatistics, handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
 import {
   coherenceStatsMarkup, coherenceTableRows, handleCoherenceAction, hydrateCoherenceTable,
   nativeCoherenceActionCell, nativeCoherenceEntityCell, openCoherenceLink,
@@ -428,6 +428,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateDataTables();
     this._hydrateRuleTable();
     this._hydrateCoherenceTable();
+    hydrateHistoryStatistics(this.shadowRoot, this);
     this._hydrateYamlEditor();
     this._hydrateConfigBackups();
     this._updateCountdowns();
@@ -555,7 +556,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _updateHassReferences() {
-    this.shadowRoot?.querySelectorAll("ha-selector, #panel-shell, [data-alert-table-page], [data-rules-table-page], [data-coherence-table-page], ha-code-editor").forEach((element) => {
+    this.shadowRoot?.querySelectorAll("ha-selector, #panel-shell, [data-alert-table-page], [data-rules-table-page], [data-coherence-table-page], [data-history-statistics-page], ha-code-editor").forEach((element) => {
       element.hass = this._hass;
     });
   }

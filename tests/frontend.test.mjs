@@ -5343,8 +5343,10 @@ for (const kind of ["active", "pending", "acknowledged", "history"]) {
     panel._navigate = (path) => assert.equal(path, "/alert-manager/history");
     panel._render = () => {};
     panel._refreshHistory = async () => {};
+    panel._historyStatisticsOpen = true;
     await handleAlertTableAction.call(panel, "open-alert-history", { dataset: { alertId: first.id } }, {});
     assert.equal(closed, true);
+    assert.equal(panel._historyStatisticsOpen, false);
     assert.equal(panel._activeTab, "history");
     assert.equal(panel._filterPaneKind, "history");
     assert.equal(panel._filterCount("history"), 1);

@@ -835,3 +835,15 @@ test("statistics refresh replaces only the diagnostic content and profile counts
   assert.match(diagnostic.innerHTML, /<dd>42<\/dd>/);
   assert.equal(profile.textContent, "notifications.usage_last_24h_one");
 });
+
+test("history statistics replace the table only when explicitly opened", () => {
+  const context = { busy: false, limit: 100, rows: [], pageMessages: "", t, renderAlertTable: () => "history-table" };
+  assert.equal(renderHistory(context), "history-table");
+  const markup = renderHistory({ ...context, statisticsOpen: true });
+  assert.match(markup, /hass-tabs-subpage-data-table/);
+  assert.match(markup, /slot="top-header"/);
+  assert.match(markup, /history-statistics-period/);
+  assert.match(markup, /history-statistics-group/);
+  assert.match(markup, /history.statistics.help/);
+  assert.doesNotMatch(renderHistory({ ...context, statisticsOpen: true, limit: 0 }), /data-history-statistics-page/);
+});

@@ -236,6 +236,8 @@ An alert can be:
 
 Resolved alerts can be kept in history, making it easier to spot recurring problems instead of only seeing what is wrong right now.
 
+Use **Recurrence statistics** in History to rank alerts, entities, devices, integrations or rules over the last **7 or 30 days**, with occurrence counts and total/average active time. Calculations run on demand from retained resolved history only, independently of the history table filters; durations are clipped to the period and include acknowledged time. Concurrent alerts contribute separately, so the totals do not measure device downtime. Deleted/expired history and ongoing alerts are excluded.
+
 When retained occurrences exist, alert details show a clickable history count. Clicking it opens History filtered by the stable alert ID; the filter can be changed or cleared.
 
 Select entries in the History table, or use **Delete** in a history entry’s details menu, to delete individual occurrences after confirmation without affecting current alerts.

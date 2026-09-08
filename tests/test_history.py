@@ -387,3 +387,84 @@ def test_delete_history_serializes_with_new_archive(hass, entry):
         assert manager._pending_history == []
 
     run(scenario())
+
+
+def test_recurrence_statistics_period_overlap_and_group_identity(hass, entry, set_now):
+    """Clip active time, count instantaneous events, and group by stable IDs."""
+    from dataclasses import replace
+
+    from custom_components.alert_manager.history_statistics import aggregate_history
+
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    start = now - timedelta(days=7)
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    _resolve_unavailable(manager, hass, set_now, now - timedelta(hours=1))
+    base = manager.history[0]
+    events = (
+        replace(
+            base,
+            active_at=start - timedelta(days=2),
+            resolved_at=start + timedelta(hours=1),
+        ),
+        replace(
+            base, active_at=now - timedelta(hours=1), resolved_at=now, acknowledged=True
+        ),
+        replace(base, active_at=start, resolved_at=start),
+        replace(base, active_at=start - timedelta(days=1), resolved_at=start),
+        replace(base, active_at=now, resolved_at=now),
+        replace(
+            base,
+            id="other",
+            entity_id="sensor.other",
+            rule_id="other-rule",
+            device_id="other-device",
+            integration="mqtt",
+            active_at=start,
+            resolved_at=start + timedelta(seconds=60),
+        ),
+    )
+    result = aggregate_history(events, 7, now)
+    assert result["occurrences"] == 4
+    assert result["total_duration_seconds"] == 7260
+    row = result["groups"]["alert"][0]
+    assert row["id"] == base.id
+    assert row["occurrences"] == 3
+    assert row["total_duration_seconds"] == 7200
+    assert row["average_duration_seconds"] == 2400
+    for kind in ("alert", "entity", "device", "integration", "rule"):
+        assert len(result["groups"][kind]) == 2
+        assert sum(row["occurrences"] for row in result["groups"][kind]) == 4
+    assert aggregate_history(events, 30, now)["occurrences"] == 5
+    assert aggregate_history((), 7, now)["groups"]["entity"] == []
+    assert events[0].active_at == start - timedelta(days=2)
+
+
+def test_recurrence_statistics_snapshot_uses_executor_and_retained_history(
+    hass, entry, set_now, monkeypatch
+):
+    """No second store: deletion is immediately reflected in the next request."""
+    import pytest
+
+    from custom_components.alert_manager.history_statistics import aggregate_history
+
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    _resolve_unavailable(manager, hass, set_now, now - timedelta(hours=1))
+    calls = []
+    original = hass.async_add_executor_job
+
+    async def executor(function, *args):
+        calls.append((function, args))
+        return await original(function, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    result = run(manager.async_history_statistics_snapshot(7))
+    assert calls[0][0] is aggregate_history
+    assert isinstance(calls[0][1][0], tuple)
+    assert result["occurrences"] == 1
+    run(manager.async_clear_history())
+    assert run(manager.async_history_statistics_snapshot(7))["occurrences"] == 0
+    with pytest.raises(ValueError):
+        run(manager.async_history_statistics_snapshot(365))

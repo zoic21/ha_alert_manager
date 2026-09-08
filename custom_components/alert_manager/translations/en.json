@@ -226,7 +226,23 @@
       "resolved_acknowledged": "Resolved after acknowledgement",
       "resolved_at": "Resolved",
       "status": "Final status",
-      "title": "Alert history"
+      "title": "Alert history",
+      "statistics": {
+        "title": "Recurrence statistics",
+        "period": "Period",
+        "days": "Last {days} days",
+        "group": "Group by",
+        "alert": "Alert",
+        "entity": "Entity",
+        "device": "Device",
+        "integration": "Integration",
+        "rule": "Rule / pack",
+        "occurrences": "Occurrences",
+        "total": "Total active time",
+        "average": "Average active time",
+        "unknown": "Not specified",
+        "help": "Based only on retained, resolved occurrences overlapping the period, independently of history table filters. Active time is clipped to the period and includes acknowledged time. Durations are summed per occurrence: overlapping alerts do not represent device downtime. Current alerts and deleted or expired history are excluded."
+      }
     },
     "monitoring": {
       "disabled": "Alert Manager monitoring is disabled. Existing alerts are preserved, but no new alerts will be detected.",

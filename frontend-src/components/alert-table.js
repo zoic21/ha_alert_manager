@@ -1405,6 +1405,7 @@ export async function handleAlertTableAction(action, button, event) {
       this._selectedHistoryIds.clear();
       this._filterPaneKind = "history";
       this._activeTab = "history";
+      this._historyStatisticsOpen = false;
       this._notice = null;
       this._navigate("/alert-manager/history");
       this._render();

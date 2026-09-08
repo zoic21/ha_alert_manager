@@ -1,4 +1,8 @@
 export const responsiveStyles = `
+  :host([narrow]) [data-history-statistics-page] {
+    --data-table-row-height: 84px;
+  }
+
   /* Match hass-tabs-subpage's native FAB offset above mobile navigation. */
   :host([narrow]) .settings-fab-positioner ha-button[slot="fab"].dirty {
     bottom: calc(84px + var(--safe-area-inset-bottom, 0px));

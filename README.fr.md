@@ -237,6 +237,8 @@ Les alertes résolues peuvent être conservées dans l’historique, ce qui perm
 
 Lorsque des occurrences sont conservées, le détail d’une alerte affiche leur nombre cliquable. Un clic ouvre l’historique filtré par l’identifiant stable de l’alerte ; ce filtre peut être modifié ou supprimé.
 
+Le bouton **Statistiques de récurrence** dans Historique classe les alertes, entités, appareils, intégrations ou règles sur les **7 ou 30 derniers jours**, avec le nombre d’occurrences et les durées actives totale et moyenne. Le calcul est réalisé à la demande à partir de l’historique résolu conservé, indépendamment des filtres du tableau historique ; les durées sont limitées à la période et incluent le temps acquitté. Les alertes simultanées sont cumulées séparément : le total ne mesure pas l’indisponibilité d’un appareil. L’historique supprimé ou expiré et les alertes en cours sont exclus.
+
 Sélectionnez des lignes du tableau Historique, ou utilisez **Supprimer** dans le menu du détail d’une occurrence passée, pour les supprimer après confirmation sans affecter les alertes en cours.
 
 Un clic sur une alerte ouvre son détail, notamment la valeur qui l’a déclenchée et sa valeur actuelle, avec un accès contextuel à l’entité Home Assistant concernée lorsqu’il est disponible. Les valeurs numériques respectent la précision d’affichage de l’entité et le format numérique de l’utilisateur dans Home Assistant, sans modifier les valeurs enregistrées.

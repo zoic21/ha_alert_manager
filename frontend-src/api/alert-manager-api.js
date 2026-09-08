@@ -198,7 +198,11 @@ async function refreshPanelData(panel, kind) {
         if (!panel.isConnected) break;
         panel[`_${kind}Fetching`] = true;
         try {
-          panel[`_${kind}`] = await panel._api.call({ type: `alert_manager/${kind}/list` });
+          panel[`_${kind}`] = await panel._api.call({
+            type: `alert_manager/${kind}/list`,
+            ...(kind === "history" && panel._activeTab === "history" && panel._historyStatisticsOpen
+              ? { statistics_days: panel._historyStatisticsDays ?? 7 } : {}),
+          });
           if (kind === "history") {
             panel._historyLoaded = true;
             refreshHistoryOccurrenceDetails.call(panel);

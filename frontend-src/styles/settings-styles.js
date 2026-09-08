@@ -375,6 +375,16 @@ export const settingsStyles = `
   .coherence-panel, .history-panel {
     padding: 20px;
   }
+  .history-statistics-controls {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .history-statistics-controls ha-select {
+    flex: 1 1 150px;
+    min-width: 0;
+  }
   .coherence-header, .history-header {
     display: flex;
     align-items: flex-start;

@@ -38,6 +38,7 @@ from .const import (
     SIGNAL_MONITORING_UPDATED,
     VARIATION_SOURCES,
 )
+from .history_statistics import aggregate_history
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
@@ -164,6 +165,12 @@ class _ApiMixin:
         ):
             return deepcopy(self._last_public_snapshot)
         return self._build_public_snapshot()
+
+    async def async_history_statistics_snapshot(self, days: int) -> dict[str, Any]:
+        """Aggregate an immutable history snapshot outside the event loop."""
+        return await self.hass.async_add_executor_job(
+            aggregate_history, tuple(self.history), days, dt_util.now().astimezone(UTC)
+        )
 
     def history_snapshot(self) -> dict[str, Any]:
         """Return newest-first immutable history for the administrator panel."""
