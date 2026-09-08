@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.6 — September 8, 2026
+
+This is a development prerelease.
+
+### Fixes
+
+- Keep the three statistics top items side by side on mobile, with compact spacing and truncated long names.
+- Keep the statistics title and history action on one row on mobile.
+- Limit the mobile statistics header to 45% of the visible viewport and allow it to scroll independently, preserving access to the native table even on short screens.
+
 ## 2.3.0-dev.5 — September 8, 2026
 
 This is a development prerelease.

@@ -49,7 +49,7 @@ export function renderHistory(context) {
       ${statisticsControls}
     </ha-card>`;
     if (statisticsOpen) return `<hass-tabs-subpage-data-table id="panel-shell" data-history-statistics-page main-page clickable>
-      <div slot="top-header" class="table-page-top">${header}</div>
+      <div slot="top-header" class="table-page-top" tabindex="0" role="region" aria-label="${esc(t("history.statistics.title"))}">${header}</div>
     </hass-tabs-subpage-data-table>`;
     return renderAlertTable(
       "history",

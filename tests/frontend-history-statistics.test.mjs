@@ -172,3 +172,25 @@ test("leaders are compact, ignore missing IDs, escape names and report tied occu
   assert.doesNotMatch(html, /data-id=""/);
   assert.equal((renderHistoryStatisticsLeaders({ ...args, statistics: null }).match(/<strong>—/g) ?? []).length, 3);
 });
+
+// The native ha-data-table subtracts the top-header height from its row viewport.
+// A mobile header must never consume that viewport completely.
+test("mobile statistics preserve a scrollable header and three adjacent tops", async () => {
+  const { responsiveStyles } = await import("../frontend-src/styles/responsive-styles.js");
+  const { renderHistory } = await import("../frontend-src/views/history.js");
+  const rule = (selector) => responsiveStyles.slice(
+    responsiveStyles.indexOf(selector) + selector.length,
+    responsiveStyles.indexOf("}", responsiveStyles.indexOf(selector)),
+  );
+  const header = rule(":host([narrow]) [data-history-statistics-page] .table-page-top {");
+  assert.match(header, /max-height: 45vh;/);
+  assert.match(header, /max-height: 45dvh;/);
+  assert.match(header, /overflow-y: auto;/);
+  const leaders = rule(":host([narrow]) .history-statistics-leaders {");
+  assert.match(leaders, /display: grid;/);
+  assert.match(leaders, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(rule(":host([narrow]) .history-statistics-leader {"), /width: auto;/);
+  assert.match(rule(":host([narrow]) [data-history-statistics-page] .history-header {"), /flex-direction: row;/);
+  const html = renderHistory({ limit: 100, rows: [], pageMessages: "", statisticsOpen: true, t: (key) => key });
+  assert.match(html, /slot="top-header"[^>]*tabindex="0"[^>]*role="region"[^>]*aria-label="history.statistics.title"/);
+});

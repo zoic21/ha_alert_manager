@@ -3,6 +3,43 @@ export const responsiveStyles = `
     --data-table-row-height: 76px;
   }
 
+  /* Native table headers sit outside its row scroller. Bound this header so
+   * rows remain reachable, including short landscape viewports and zoom. */
+  :host([narrow]) [data-history-statistics-page] .table-page-top {
+    max-height: 45vh;
+    max-height: 45dvh;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  :host([narrow]) [data-history-statistics-page] .history-panel {
+    padding: 12px;
+  }
+  :host([narrow]) [data-history-statistics-page] .history-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  :host([narrow]) [data-history-statistics-page] .history-header h2 {
+    margin: 0;
+    font-size: 20px;
+  }
+  :host([narrow]) [data-history-statistics-page] .history-header ha-button {
+    width: auto;
+  }
+  :host([narrow]) .history-statistics-dashboard {
+    gap: 12px;
+  }
+  :host([narrow]) .history-statistics-leaders {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+  :host([narrow]) .history-statistics-leader {
+    width: auto;
+  }
+  :host([narrow]) .history-statistics-leader ha-button::part(base) {
+    padding-inline: 4px;
+  }
   :host([narrow]) .history-statistics-dashboard > div {
     width: 100%;
   }
