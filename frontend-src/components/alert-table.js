@@ -415,7 +415,7 @@ export function tableRows(kind, historyEvents = []) {
 
 export function filterCount(kind) {
     const filters = this._tableState[kind].filters;
-    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
+    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
@@ -441,13 +441,15 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
+      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
       if (kind === "history" && !activePeriodMatches(row.activated, row.resolved, filters.activeFrom, filters.activeTo)) return false;
       if (query && !row.search.includes(query)) return false;
       if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
+      if (kind === "history" && selected.profile.size
+        && !Object.keys(historyAssociatedProfiles(row)).some((id) => selected.profile.has(`id:${id}`))) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)
         && !(kind === "history" && selected.device.has(historyFacetValue(row, "device")))) return false;
@@ -493,7 +495,15 @@ function historyFacetValue(row, key) {
     return `id:${row.source[field] || ""}`;
 }
 
+function historyAssociatedProfiles(row) {
+    const notifications = row.source?.notifications;
+    return { ...notifications?.alert?.profiles, ...notifications?.resolved?.profiles };
+}
+
 export function historyFacetOptions(rows, key, t) {
+    if (key === "profile") return [...new Map(rows.flatMap((row) =>
+      Object.entries(historyAssociatedProfiles(row)).filter(([id]) => id).map(([id, name]) =>
+        [id, { value: `id:${id}`, label: name || id }]))).values()];
     const labelKey = { device: "device", rule: "rule", entity: "entityName", integration: "integrationLabel" }[key];
     return [...new Map(rows.map((row) => {
       const value = historyFacetValue(row, key);
@@ -627,6 +637,7 @@ export function renderFilterPane(kind, rows) {
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
+      ${kind === "history" ? this._renderFacetFilter(kind, "profile", this._t("history.statistics.profiles"), historyFacetOptions(rows, "profile", (key) => this._t(key))) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), kind === "history" ? historyFacetOptions(rows, "device", (key) => this._t(key)) : this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}

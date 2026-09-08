@@ -20,7 +20,17 @@ def aggregate_history(
         raise ValueError("Unsupported history statistics period")
     start = now - timedelta(days=days)
     groups: dict[str, dict[str, dict[str, Any]]] = {
-        key: {} for key in ("alert", "entity", "device", "integration", "rule")
+        key: {}
+        for key in (
+            "alert",
+            "entity",
+            "device",
+            "integration",
+            "rule",
+            "pack",
+            "custom_rule",
+            "profile",
+        )
     }
     count = 0
     total = 0.0
@@ -43,6 +53,11 @@ def aggregate_history(
             "integration": (entry.integration or "", entry.integration, None),
             "rule": (entry.rule_id, entry.rule_name, None),
         }
+        identities["custom_rule" if entry.type == "rule" else "pack"] = (
+            entry.rule_id,
+            entry.rule_name,
+            None,
+        )
         for kind, (key, name, rule_name) in identities.items():
             row = groups[kind].setdefault(
                 key,
@@ -57,17 +72,33 @@ def aggregate_history(
             )
             row["occurrences"] += 1
             row["total_duration_seconds"] += duration
+        # Association facts include matched-but-unsent profiles. Union both
+        # lifecycle categories: this counts occurrences, never deliveries.
+        profiles = {}
+        for category in ("alert", "resolved"):
+            profiles.update(
+                (entry.notifications or {}).get(category, {}).get("profiles", {})
+            )
+        for profile_id, name in profiles.items():
+            if not profile_id:
+                continue
+            row = groups["profile"].setdefault(
+                profile_id,
+                {"id": profile_id, "name": name, "occurrences": 0},
+            )
+            row["occurrences"] += 1
     result = {}
     for kind, rows in groups.items():
-        for row in rows.values():
-            row["average_duration_seconds"] = (
-                row["total_duration_seconds"] / row["occurrences"]
-            )
+        if kind != "profile":
+            for row in rows.values():
+                row["average_duration_seconds"] = (
+                    row["total_duration_seconds"] / row["occurrences"]
+                )
         result[kind] = sorted(
             rows.values(),
             key=lambda row: (
                 -row["occurrences"],
-                -row["total_duration_seconds"],
+                -row.get("total_duration_seconds", 0),
                 row["id"],
             ),
         )

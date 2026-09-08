@@ -389,6 +389,36 @@ def test_delete_history_serializes_with_new_archive(hass, entry):
     run(scenario())
 
 
+def test_statistics_pack_rule_and_profile_associations(hass, entry, set_now):
+    """Separate detectors and deduplicate associated profiles, even unsent ones."""
+    from dataclasses import replace
+
+    from custom_components.alert_manager.history_statistics import aggregate_history
+
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    manager = make_manager(hass, entry)
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 0}}}))
+    _resolve_unavailable(manager, hass, set_now, now - timedelta(hours=1))
+    base = manager.history[0]
+    notifications = {
+        "alert": {"count": 0, "profiles": {"p1": "Matched only"}},
+        "resolved": {"count": 8, "profiles": {"p1": "Matched only", "p2": "Other"}},
+    }
+    events = (
+        replace(base, notifications=notifications),
+        replace(base, type="rule", rule_id="custom", rule_name="Custom"),
+        replace(base, active_at=now, resolved_at=now, notifications=notifications),
+    )
+    groups = aggregate_history(events, 7, now)["groups"]
+    assert [row["id"] for row in groups["pack"]] == [base.rule_id]
+    assert [row["id"] for row in groups["custom_rule"]] == ["custom"]
+    assert groups["profile"] == [
+        {"id": "p1", "name": "Matched only", "occurrences": 1},
+        {"id": "p2", "name": "Other", "occurrences": 1},
+    ]
+    assert notifications["resolved"]["count"] == 8
+
+
 def test_recurrence_statistics_period_overlap_and_group_identity(hass, entry, set_now):
     """Clip active time, count instantaneous events, and group by stable IDs."""
     from dataclasses import replace

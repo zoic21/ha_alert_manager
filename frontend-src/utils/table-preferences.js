@@ -93,6 +93,7 @@ const makeTableState = (kind, preferences = {}) => {
       detectedFrom: "",
       detectedTo: "",
       alert: [],
+      profile: [],
       resolvedFrom: "",
       resolvedTo: "",
       activeFrom: "",

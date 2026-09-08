@@ -189,6 +189,7 @@ export function hydrateHistoryStatistics(root, context) {
     statistics: ready ? statistics : null,
     t: (key, values) => context._t(key, values),
     integrationLabel: (id) => context._integrationLabel(id),
+    ruleLabel: (row) => context._historyRuleName({ ...row, rule_name: row.name }),
     duration: (seconds) => compactDurationText.call(context, seconds),
     exactDuration: (seconds) => context._historyDurationText(seconds),
   });
@@ -206,7 +207,7 @@ export function renderHistoryStatisticsSummary({ statistics, t, duration, exactD
 }
 
 export function openHistoryStatisticsGroup(context, kind, id) {
-  if (!["alert", "entity", "device", "integration", "rule"].includes(kind)) return;
+  if (!["alert", "entity", "device", "integration", "rule", "pack", "custom_rule", "profile"].includes(kind)) return;
   const statistics = context._history?.statistics;
   if (statistics?.days !== (context._historyStatisticsDays ?? 7)) return;
   const row = statistics.groups[kind]?.find((item) => String(item.id) === String(id));
@@ -214,7 +215,8 @@ export function openHistoryStatisticsGroup(context, kind, id) {
   context._resetTableFilters("history");
   const state = context._tableState.history;
   state.search = "";
-  state.filters[kind] = [kind === "alert" ? row.id : `id:${row.id}`];
+  const facet = ["pack", "custom_rule"].includes(kind) ? "rule" : kind;
+  state.filters[facet] = [kind === "alert" ? row.id : `id:${row.id}`];
   state.filters.activeFrom = statistics.from;
   state.filters.activeTo = statistics.to;
   context._selectedHistoryIds.clear();
@@ -222,17 +224,17 @@ export function openHistoryStatisticsGroup(context, kind, id) {
   context._render();
 }
 
-export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, duration, exactDuration }) {
-  return ["entity", "device", "integration"].map((kind) => {
+export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleLabel = (row) => row.name || row.id, duration, exactDuration }) {
+  return ["entity", "device", "integration", "pack", "custom_rule", "profile"].map((kind) => {
     const rows = (statistics?.groups[kind] ?? []).filter((row) => row.id);
     return `<ha-card outlined class="history-statistics-ranking">
       <h2>${esc(t(`history.statistics.top_${kind}`))}</h2>
-      ${[["frequent", "occurrences"], ["longest", "total_duration_seconds"]].map(([label, metric]) => {
+      ${(kind === "profile" ? [["associated", "occurrences"]] : [["frequent", "occurrences"], ["longest", "total_duration_seconds"]]).map(([label, metric]) => {
         const ranked = [...rows].sort((a, b) => b[metric] - a[metric]
           || String(a.id).localeCompare(String(b.id))).slice(0, 5);
         return `<section><h3>${esc(t(`history.statistics.${label}`))}</h3>
           ${ranked.length ? `<ol>${ranked.map((row) => {
-            const name = kind === "integration" ? integrationLabel(row.id) : row.name || row.id;
+            const name = kind === "integration" ? integrationLabel(row.id) : kind === "pack" ? ruleLabel(row) : row.name || row.id;
             const value = metric === "occurrences" ? row.occurrences : duration(row.total_duration_seconds);
             const exact = metric === "occurrences" ? value : exactDuration(row.total_duration_seconds);
             return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;

@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.10 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Add separate top-five pack and custom-rule rankings by occurrence count and cumulative duration.
+- Add a top-five associated notification profile ranking using retained history, counting each profile once per occurrence across activation/reminder and resolution associations. This is not a delivery count.
+- Open the native filtered history from all new rankings, including a new associated-profile facet.
+
 ## 2.3.0-dev.9 — September 8, 2026
 
 This is a development prerelease.

@@ -195,6 +195,7 @@ const makeTableState = (kind, preferences = {}) => {
       detectedFrom: "",
       detectedTo: "",
       alert: [],
+      profile: [],
       resolvedFrom: "",
       resolvedTo: "",
       activeFrom: "",
@@ -1492,7 +1493,7 @@ function tableRows(kind, historyEvents = []) {
 
 function filterCount(kind) {
     const filters = this._tableState[kind].filters;
-    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
+    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
@@ -1518,13 +1519,15 @@ function filteredTableRows(kind, rows, includeSearch = true) {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert"]
+      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
       if (kind === "history" && !activePeriodMatches(row.activated, row.resolved, filters.activeFrom, filters.activeTo)) return false;
       if (query && !row.search.includes(query)) return false;
       if (selected.alert.size && !selected.alert.has(row.alertId)) return false;
+      if (kind === "history" && selected.profile.size
+        && !Object.keys(historyAssociatedProfiles(row)).some((id) => selected.profile.has(`id:${id}`))) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)
         && !(kind === "history" && selected.device.has(historyFacetValue(row, "device")))) return false;
@@ -1570,7 +1573,15 @@ function historyFacetValue(row, key) {
     return `id:${row.source[field] || ""}`;
 }
 
+function historyAssociatedProfiles(row) {
+    const notifications = row.source?.notifications;
+    return { ...notifications?.alert?.profiles, ...notifications?.resolved?.profiles };
+}
+
 function historyFacetOptions(rows, key, t) {
+    if (key === "profile") return [...new Map(rows.flatMap((row) =>
+      Object.entries(historyAssociatedProfiles(row)).filter(([id]) => id).map(([id, name]) =>
+        [id, { value: `id:${id}`, label: name || id }]))).values()];
     const labelKey = { device: "device", rule: "rule", entity: "entityName", integration: "integrationLabel" }[key];
     return [...new Map(rows.map((row) => {
       const value = historyFacetValue(row, key);
@@ -1704,6 +1715,7 @@ function renderFilterPane(kind, rows) {
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
+      ${kind === "history" ? this._renderFacetFilter(kind, "profile", this._t("history.statistics.profiles"), historyFacetOptions(rows, "profile", (key) => this._t(key))) : ""}
       ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), kind === "history" ? historyFacetOptions(rows, "device", (key) => this._t(key)) : this._facetOptions(rows, "device"))}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
@@ -4995,6 +5007,7 @@ function hydrateHistoryStatistics(root, context) {
     statistics: ready ? statistics : null,
     t: (key, values) => context._t(key, values),
     integrationLabel: (id) => context._integrationLabel(id),
+    ruleLabel: (row) => context._historyRuleName({ ...row, rule_name: row.name }),
     duration: (seconds) => compactDurationText.call(context, seconds),
     exactDuration: (seconds) => context._historyDurationText(seconds),
   });
@@ -5012,7 +5025,7 @@ function renderHistoryStatisticsSummary({ statistics, t, duration, exactDuration
 }
 
 function openHistoryStatisticsGroup(context, kind, id) {
-  if (!["alert", "entity", "device", "integration", "rule"].includes(kind)) return;
+  if (!["alert", "entity", "device", "integration", "rule", "pack", "custom_rule", "profile"].includes(kind)) return;
   const statistics = context._history?.statistics;
   if (statistics?.days !== (context._historyStatisticsDays ?? 7)) return;
   const row = statistics.groups[kind]?.find((item) => String(item.id) === String(id));
@@ -5020,7 +5033,8 @@ function openHistoryStatisticsGroup(context, kind, id) {
   context._resetTableFilters("history");
   const state = context._tableState.history;
   state.search = "";
-  state.filters[kind] = [kind === "alert" ? row.id : `id:${row.id}`];
+  const facet = ["pack", "custom_rule"].includes(kind) ? "rule" : kind;
+  state.filters[facet] = [kind === "alert" ? row.id : `id:${row.id}`];
   state.filters.activeFrom = statistics.from;
   state.filters.activeTo = statistics.to;
   context._selectedHistoryIds.clear();
@@ -5028,17 +5042,17 @@ function openHistoryStatisticsGroup(context, kind, id) {
   context._render();
 }
 
-function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, duration, exactDuration }) {
-  return ["entity", "device", "integration"].map((kind) => {
+function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleLabel = (row) => row.name || row.id, duration, exactDuration }) {
+  return ["entity", "device", "integration", "pack", "custom_rule", "profile"].map((kind) => {
     const rows = (statistics?.groups[kind] ?? []).filter((row) => row.id);
     return `<ha-card outlined class="history-statistics-ranking">
       <h2>${esc(t(`history.statistics.top_${kind}`))}</h2>
-      ${[["frequent", "occurrences"], ["longest", "total_duration_seconds"]].map(([label, metric]) => {
+      ${(kind === "profile" ? [["associated", "occurrences"]] : [["frequent", "occurrences"], ["longest", "total_duration_seconds"]]).map(([label, metric]) => {
         const ranked = [...rows].sort((a, b) => b[metric] - a[metric]
           || String(a.id).localeCompare(String(b.id))).slice(0, 5);
         return `<section><h3>${esc(t(`history.statistics.${label}`))}</h3>
           ${ranked.length ? `<ol>${ranked.map((row) => {
-            const name = kind === "integration" ? integrationLabel(row.id) : row.name || row.id;
+            const name = kind === "integration" ? integrationLabel(row.id) : kind === "pack" ? ruleLabel(row) : row.name || row.id;
             const value = metric === "occurrences" ? row.occurrences : duration(row.total_duration_seconds);
             const exact = metric === "occurrences" ? value : exactDuration(row.total_duration_seconds);
             return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;

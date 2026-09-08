@@ -61,6 +61,31 @@ test("history requests ask for statistics only in the open History statistics vi
   }
 });
 
+test("new ranking cards use the matching native history facets", () => {
+  const { instance } = panel();
+  instance._tableState = { history: { filters: {} } };
+  instance._selectedHistoryIds = new Set();
+  instance._resetTableFilters = () => { instance._tableState.history.filters = {}; };
+  for (const [kind, facet] of [["pack", "rule"], ["custom_rule", "rule"], ["profile", "profile"]]) {
+    instance._history.statistics.groups[kind] = [{ id: "stable", name: "Name" }];
+    openHistoryStatisticsGroup(instance, kind, "stable");
+    assert.deepEqual(instance._tableState.history.filters[facet], ["id:stable"]);
+  }
+});
+
+test("associated profiles have a single occurrence ranking and stable filter options", () => {
+  const statistics = { groups: { profile: [{ id: "p1", name: "<Profile>", occurrences: 3 }] } };
+  const html = renderHistoryStatisticsLeaders({ statistics, t: (key) => key });
+  const card = html.slice(html.indexOf("history.statistics.top_profile"));
+  assert.match(card, /history.statistics.associated/);
+  assert.match(card, /&lt;Profile&gt;/);
+  assert.doesNotMatch(card, /history.statistics.longest/);
+  const rows = [{ source: { notifications: { alert: { profiles: { p1: "Same" } }, resolved: { profiles: { p1: "Same", p2: "Same" } } } } }];
+  assert.deepEqual(historyFacetOptions(rows, "profile", (key) => key), [
+    { value: "id:p1", label: "Same" }, { value: "id:p2", label: "Same" },
+  ]);
+});
+
 test("statistics toggle returns to occurrences and requests fresh data", async () => {
   const { instance } = panel();
   await handleHistoryAction.call(instance, "toggle-history-statistics");
@@ -145,7 +170,7 @@ test("top fives sort independently without mutating data and escape names", () =
   const args = { t: (key) => key, integrationLabel: () => "MQTT", duration: (n) => `${n}s`, exactDuration: (n) => `${n} seconds` };
   const html = renderHistoryStatisticsLeaders({ ...args, statistics });
   assert.equal(JSON.stringify(statistics), before);
-  assert.equal((html.match(/<ha-card/g) ?? []).length, 3);
+  assert.equal((html.match(/<ha-card/g) ?? []).length, 6);
   const lists = [...html.matchAll(/<ol>(.*?)<\/ol>/gs)].map((match) => match[1]);
   assert.equal((lists[0].match(/<li>/g) ?? []).length, 5);
   assert.ok(lists[0].indexOf('data-id="id6"') < lists[0].indexOf('data-id="id5"'));

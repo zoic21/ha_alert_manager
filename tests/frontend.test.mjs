@@ -5383,6 +5383,23 @@ for (const kind of ["active", "pending", "acknowledged", "history"]) {
   });
 }
 
+test("associated notification profile filters use history facts, including unmatched delivery counts", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._tableState.history.filters.profile = ["id:p1"];
+  const rows = panel._tableRows("history", [
+    historyEvent({ event_id: "matched", notifications: { alert: { count: 0, profiles: { p1: "Same" } } } }),
+    historyEvent({ event_id: "resolved", notifications: { resolved: { count: 1, profiles: { p1: "Same" } } } }),
+    historyEvent({ event_id: "other", notifications: { alert: { count: 2, profiles: { p2: "Same" } } } }),
+    historyEvent({ event_id: "legacy" }),
+  ]);
+  assert.deepEqual(new Set(panel._filteredTableRows("history", rows).map((row) => row.id)), new Set(["matched", "resolved"]));
+  assert.equal(panel._filterCount("history"), 1);
+  assert.match(panel._renderFilterPane("history", rows), /data-filter-value="id:p1"/);
+  panel._resetTableFilters("history");
+  assert.equal(panel._filteredTableRows("history", rows).length, 4);
+});
+
 test("statistics drilldown integrates with native history filtering and reset", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
