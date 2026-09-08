@@ -33,25 +33,71 @@ unless the task explicitly requires it.
 
 ## Architecture
 
+### Backend
+
+Paths in this table are relative to `custom_components/alert_manager/`.
+
 | Area | Responsibility |
 | --- | --- |
-| `custom_components/alert_manager/__init__.py` | Integration lifecycle, services, platforms, WebSocket registration, and panel registration. |
-| `manager.py` | `AlertManager` composition root: owned state, listeners, setup, and unload. |
-| `manager_api.py` | Public queries and serialized configuration mutations used by transports and entities. |
-| `manager_recovery.py` | Valid configuration backups, recovery state, scheduling, downloads, and explicit restoration. |
-| `manager_runtime.py` | Event routing, dependency-aware evaluation, automatic packs, and candidate construction. |
-| `manager_state.py` | Alert lifecycle, timers, persistence scheduling, history, events, and public snapshots. |
-| `manager_templates.py` | Jinja rendering, dependency tracking, rule indexing, and source protection. |
-| `models.py` | Data models and pure alert state-machine behavior. |
-| `validation.py` | Authoritative validation and normalization boundary. |
-| `storage.py` | Versioned storage and idempotent migrations. |
-| `websocket.py`, `services.py` | Thin Home Assistant transport adapters; business logic stays in the manager. |
-| `packs/` | Isolated automatic detectors implementing the shared pack contract. |
-| `coherence.py` | Explicit or low-frequency configuration scan, with file work off the event loop. |
-| `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters over manager state. |
-| `frontend-src/` | Editable panel sources; see its local `AGENTS.md`. |
-| `custom_components/alert_manager/frontend/` | Generated distribution bundle. Never edit it directly. |
-| `tests/` | Python behavior tests and Node panel regression tests. |
+| `__init__.py`, `config_flow.py` | Single-entry integration setup, platform/service/WebSocket registration, panel registration, and unload delegation. |
+| `manager.py` | `AlertManager` composition root: owns configuration, records, indexes, locks, listeners, stores, and notification components; coordinates setup and shutdown. |
+| `manager_api.py` | Public queries, rule testing, YAML entry points, acknowledgement and reevaluation actions, and serialized configuration/runtime mutations with rollback. |
+| `manager_runtime.py` | Startup reconciliation, event and registry routing, coalesced entity evaluation, variation/inactivity tracking, automatic pack selection, candidate construction, and occurrence-batch dispatch. |
+| `manager_state.py` | Alert transitions, acknowledgement/expiry timers, pending visibility, persistence scheduling, history archiving, notification delivery facts, lifecycle events, and public snapshots. |
+| `manager_templates.py` | Jinja conditions/messages and dependency tracking, rule/configuration indexes and metadata, and source validation preventing self-monitoring. |
+| `manager_recovery.py` | Invalid-configuration recovery mode, backup scheduling/listing/downloads, and explicit restoration through the manager's import path. |
+| `runtime_phase.py` | Explicit startup, grace, reconciliation, running, and stopping phases that gate runtime evaluation and mutations. |
+| `transactions.py` | Cancellation-safe admitted operations, startup reconciliation snapshots, and deterministic identity/collision handling during entity renames. |
+| `models.py` | Rule, alert and history models; pure comparison and lifecycle helpers; serialization of model data. |
+| `rule_evaluation.py` | Shared rule/entity evaluator and diagnostic result used by live detection and the rule tester; owns no runtime state. |
+| `notifications.py` | Profile validation, label filters and ordered exception policies, plus native notify delivery and profile testing. |
+| `notification_runtime.py` | Lifecycle-event routing into profile batches, reminders, label cache, grouped messages/links, delivery accounting, and its own persisted reminder/usage state. Defers configuration-generated notifications until commit. |
+| `packs/base.py`, `packs/__init__.py` | Shared pack contracts, configuration metadata, pack registry, and occurrence-consumer registration. |
+| `packs/unavailable.py`, `packs/connectivity.py`, `packs/battery.py`, `packs/unifi.py` | Isolated automatic state detectors using the shared pack contract. |
+| `packs/execution_errors.py` | Automation/script execution-error detection from execution transitions and trace results. |
+| `packs/flapping.py` | Occurrence-driven instability detection and recovery deadlines; consumes source occurrence batches rather than polling entity states. |
+| `validation.py`, `yaml_io.py` | Authoritative configuration/rule validation and strict versioned YAML interchange. Manager entry points offload YAML parsing to the executor. |
+| `storage.py` | Separate configuration/runtime, history, and valid-configuration backup stores, with migrations and durability helpers. Notification runtime persistence remains in `notification_runtime.py`. |
+| `websocket.py`, `services.py`, `permissions.py` | Thin admin-restricted transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
+| `coherence.py` | Explicit or scheduled reference scans, exclusions and reports, with filesystem work off the event loop. |
+| `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters for counts/status, monitoring control, and actions. |
+| `const.py`, `manifest.json` | Shared constants/defaults, version/cache identity, and Home Assistant integration metadata. |
+| `translations/en.json`, `translations/fr.json`, `services.yaml`, `icons.json` | English/French UI and condition text, service descriptions, and native entity icon metadata. |
+
+### Frontend and tooling
+
+See `frontend-src/AGENTS.md` for frontend implementation rules.
+
+| Area | Responsibility |
+| --- | --- |
+| `frontend-src/alert-manager-panel.js` | Panel lifecycle, subscriptions, navigation/deep links, shared state, and orchestration. |
+| `frontend-src/api/alert-manager-api.js` | Single frontend WebSocket boundary and data loading/refresh coordination. |
+| `frontend-src/views/` | Overview, history, rules, coherence, and configuration rendering/actions. `automatic.js` supplies the automatic-pack section within Configuration. |
+| `frontend-src/components/alert-table.js` | Shared live/history table, filtering, selection, grouping, and alert details/actions. |
+| `frontend-src/components/rule-editor.js` | Visual/YAML rule editor, drafts, validation, and rule tester presentation. |
+| `frontend-src/components/notification-profiles.js` | Notification profile editor, ordered label exceptions, draft handling, and test actions. |
+| `frontend-src/components/configuration-drawer.js` | Shared drawer/bottom-sheet presentation, discard helpers, resize markup, added-row scrolling, and notices in the active surface. |
+| `frontend-src/components/duration-field.js` | Native Home Assistant duration selectors and conversion to/from stored seconds. |
+| `frontend-src/components/config-backups.js` | Backup list, download, and restore confirmation UI. |
+| `frontend-src/utils/`, `frontend-src/styles/` | Shared escaping, formatting, translations, table preferences, constants, and responsive styles. |
+| `scripts/build-frontend.mjs`, `scripts/lint-frontend.mjs` | Deterministic standalone bundle generation and frontend architecture/syntax checks. |
+| `custom_components/alert_manager/frontend/alert-manager-panel.js` | Generated distribution bundle; never edit directly. |
+| `tests/` | Python behavior/regression tests and Node frontend tests, including version consistency and bundle verification. |
+| `.github/workflows/ci.yml`, `.github/workflows/release.yml` | CI validation and manifest-triggered immutable tag/release publication; see the release procedure below. |
+
+### Runtime boundaries
+
+- Home Assistant events enter the manager's indexed, coalesced evaluation path.
+  Candidates pass through the shared state lifecycle; occurrence packs receive one
+  batch after source evaluation, with a shared immutable alert-ID snapshot.
+- Lifecycle signals feed `NotificationRuntime`, which resolves policies and groups
+  deliveries; `NotificationManager` handles native notify calls. Delivery facts
+  return to the manager for live/history records. Configuration transactions defer
+  their notification events until successful commit.
+- Configuration mutations acquire `_config_mutation_lock` before notification
+  `_runtime_lock`. Callbacks awaited under the notification lock must never
+  acquire the configuration lock; preserve the guard comment in
+  `notification_runtime.py`.
 
 A change to a public data shape normally requires coordinated updates to its model,
 validation, storage migration, manager behavior, WebSocket serialization, frontend,
