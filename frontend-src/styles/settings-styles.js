@@ -454,6 +454,63 @@ export const settingsStyles = `
     color: var(--primary-text-color);
     font-variant-numeric: tabular-nums;
   }
+  /* Keep the mobile cards independent; desktop combines the controls and
+   * summary visually, then aligns ranking sections with shared grid tracks. */
+  :host(:not([narrow])) [data-history-statistics-page] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 16px;
+    max-width: 1400px;
+    margin-inline: auto;
+  }
+  :host(:not([narrow])) .history-statistics-cards {
+    display: contents;
+  }
+  :host(:not([narrow])) [data-history-statistics-page] .history-panel {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 24px;
+    border-bottom: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  :host(:not([narrow])) [data-history-statistics-page] .history-header {
+    display: contents;
+  }
+  :host(:not([narrow])) [data-history-statistics-page] .history-header h2 {
+    margin: 0;
+  }
+  :host(:not([narrow])) [data-history-statistics-page] .history-page-actions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  :host(:not([narrow])) .history-statistics-period {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+  }
+  :host(:not([narrow])) .history-statistics-summary {
+    grid-column: 1 / -1;
+    width: 100%;
+    border-top: 0;
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+  }
+  :host(:not([narrow])) .history-statistics-summary dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    text-align: center;
+  }
+  :host(:not([narrow])) .history-statistics-ranking {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    row-gap: 0;
+    width: 100%;
+    min-width: 0;
+    margin-top: 16px;
+  }
   .coherence-header, .history-header {
     display: flex;
     align-items: flex-start;

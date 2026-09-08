@@ -173,3 +173,17 @@ test("statistics cards have no internal scroller or native data table", async ()
   }
   assert.match(responsiveStyles, /history-statistics-ranking \{\s*width: 100%/);
 });
+
+test("desktop statistics center the dashboard and align ranking sections without fixed row heights", async () => {
+  const { settingsStyles } = await import("../frontend-src/styles/settings-styles.js");
+  const rules = [...settingsStyles.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+  const desktop = (selector) => rules.find(([, name]) => name.replace(/\/\*[\s\S]*?\*\//g, "").trim() === `:host(:not([narrow])) ${selector}`)?.[2] ?? "";
+  assert.match(desktop("[data-history-statistics-page]"), /max-width: 1400px/);
+  assert.match(desktop("[data-history-statistics-page]"), /margin-inline: auto/);
+  assert.match(desktop("[data-history-statistics-page]"), /repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(desktop(".history-statistics-summary dl"), /repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(desktop(".history-statistics-cards"), /display: contents/);
+  assert.match(desktop(".history-statistics-ranking"), /grid-template-rows: subgrid/);
+  assert.match(desktop(".history-statistics-ranking"), /grid-row: span 3/);
+  assert.doesNotMatch(desktop(".history-statistics-ranking"), /height:/);
+});

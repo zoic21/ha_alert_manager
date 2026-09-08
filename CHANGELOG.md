@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.8 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Center the desktop statistics dashboard within 1,400 pixels, combining period controls and the four summary values into one visual banner.
+- Give the three ranking cards equal widths and align their sections using content-sized shared grid rows.
+- Preserve the existing mobile layout and single page scroll.
+
 ## 2.3.0-dev.7 — September 8, 2026
 
 This is a development prerelease.
