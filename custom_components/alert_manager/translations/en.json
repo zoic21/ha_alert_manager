@@ -619,7 +619,10 @@
       "export": "Export YAML",
       "import": "Import YAML",
       "import_confirm": "The current configuration will be completely replaced.\n\nRules: {rules}\nEnabled packs: {packs}\nEntity-specific delays: {delays}\n\nContinue?",
-      "import_read_error": "Unable to read the selected file."
+      "import_read_error": "Unable to read the selected file.",
+      "yaml_help": "Only this panel’s settings are edited. Durations are in seconds. Changes are saved with Save.",
+      "yaml_invalid": "Invalid configuration: {error}",
+      "yaml_rows_invalid": "Complete each row and remove duplicate entries before switching to YAML."
     },
     "success": {
       "alert_acknowledged": "Alert acknowledged",

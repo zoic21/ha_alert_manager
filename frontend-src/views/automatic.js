@@ -1,3 +1,4 @@
+import { configurationValueToDraft, hydrateConfigurationYaml, renderConfigurationYamlMenu, renderConfigurationYamlContent, validateConfigurationYaml } from "../components/configuration-yaml.js";
 import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
@@ -126,7 +127,8 @@ export function renderAutomaticConfigurationDrawer(context) {
     resizeLabel: t("rules.aria_resize"),
     title: fieldName,
     ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
-    content,
+    headerAction: renderConfigurationYamlMenu(configurationDrawer, t),
+    content: renderConfigurationYamlContent(configurationDrawer, content, t),
     saveAction: "save-automatic",
     saveLabel: t("buttons.save"),
     busy,
@@ -310,6 +312,7 @@ export function collectAutomaticChanges() {
 }
 
 export async function saveAutomatic() {
+    if (!await validateConfigurationYaml(this)) return false;
     const changes = collectAutomaticChanges.call(this);
     if (!changes) return false;
     const config = await this._call(
@@ -345,19 +348,7 @@ export function ensureAutomaticDraft() {
       for (const field of pack.config_fields ?? []) {
         const configured = this._config.automatic?.[pack.id]?.[field.id]
           ?? field.default;
-        fields[field.id] = field.type === "pack_settings_map"
-          ? Object.fromEntries(Object.entries(configured ?? {}).map(
-            ([sourcePackId, settings]) => [sourcePackId, { ...settings }],
-          ))
-          : isSettingsMapField(field)
-          ? Object.entries(configured ?? {}).map(
-            ([target_id, settings]) => ({ target_id, ...settings }),
-          )
-          : isNumberMapField(field)
-          ? Object.entries(configured ?? {}).map(
-            ([target_id, value]) => ({ target_id, value }),
-          )
-          : configured;
+        fields[field.id] = configurationValueToDraft(configured, field.type);
       }
       this._automaticMapDraft[pack.id] = fields;
     }
@@ -431,6 +422,9 @@ export function refreshAutomaticConfigurationDrawer(revealSelector) {
     t: (key, replacements) => this._t(key, replacements),
   }), revealSelector);
   this._hydrateSelectors();
+  if (this._configurationDrawer?.kind === "automatic") {
+    updateAutomaticConfigurationCount.call(this, this._configurationDrawer.id);
+  }
   this._decorateActionIcons();
   this._refreshUiState();
 }
@@ -456,6 +450,7 @@ export function updateAutomaticConfigurationCount(packId) {
 }
 
 export function hydrateAutomaticControls() {
+  hydrateConfigurationYaml(this);
   this._ensureAutomaticDraft();
   for (const pack of this._packs.filter((item) => item.available)) {
     const draft = this._automaticMapDraft[pack.id];

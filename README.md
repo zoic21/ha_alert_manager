@@ -221,6 +221,8 @@ The same page also provides the 50 latest deleted entities still retained by Hom
 
 ## Configuration export and recovery
 
+Every configuration side panel also offers **YAML mode** in its three-dot menu: pack overrides (battery thresholds, execution errors and flapping), entity/device exclusions and per-entity delays. The YAML contains only the field edited in that panel, using the same keys as configuration exports and durations in seconds. Switching editors preserves unsaved values and list order. Invalid YAML, unknown fields and invalid settings block saving and returning to the visual editor; closing a changed panel asks for confirmation. Use **Save** to apply changes. Read-only detail and diagnostic panels are not editable.
+
 The complete configuration can be exported and imported as YAML. Alert Manager also keeps the three latest valid daily configuration exports. They can be downloaded or restored from the settings page.
 
 If the stored configuration cannot be loaded at startup, Alert Manager starts safely with defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently. Restoring a complete backup replaces the current configuration, runtime alerts and history.

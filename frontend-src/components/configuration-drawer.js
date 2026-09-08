@@ -2,7 +2,9 @@ import { esc } from "../utils/escaping.js";
 import { MDI_CLOSE } from "../utils/constants.js";
 
 export function confirmConfigurationDiscard(panel, value, original) {
-  return original === undefined || JSON.stringify(value) === original
+  const drawer = panel._configurationDrawer;
+  const yamlDirty = drawer?.mode === "yaml" && drawer.yaml !== drawer.yamlOriginal;
+  return (!yamlDirty && (original === undefined || JSON.stringify(value) === original))
     || window.confirm(panel._t("settings.discard_confirm"));
 }
 
