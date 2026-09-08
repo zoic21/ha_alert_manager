@@ -2,6 +2,15 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.11 — September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Show the notification usage counting period once below the profile list and keep mobile Edit actions beside their profile.
+- Keep the mobile history title and clear-history action on the same row.
+
 ## 2.3.0-dev.10 — September 8, 2026
 
 This is a development prerelease.

@@ -294,7 +294,6 @@ export const responsiveStyles = `
       align-items: center;
     }
     .notification-section-header,
-    .notification-profile-row,
     .notification-exceptions-header {
       align-items: stretch;
       flex-direction: column;

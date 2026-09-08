@@ -58,6 +58,7 @@ export function renderNotificationProfiles({ profiles, usage = {}, busy, t, batc
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>
+    ${profiles.length ? `<small>${esc(t("notifications.usage_period"))}</small>` : ""}
   </ha-card>`;
 }
 

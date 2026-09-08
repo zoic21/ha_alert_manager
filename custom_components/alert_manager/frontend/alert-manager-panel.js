@@ -3083,6 +3083,7 @@ function renderNotificationProfiles({ profiles, usage = {}, busy, t, batchDelayF
     <div class="notification-profile-list">
       ${profiles.length ? profiles.map((profile) => renderProfileRow(profile, usage, busy, t)).join("") : `<div class="empty compact">${esc(t("notifications.empty"))}</div>`}
     </div>
+    ${profiles.length ? `<small>${esc(t("notifications.usage_period"))}</small>` : ""}
   </ha-card>`;
 }
 
@@ -8997,7 +8998,6 @@ const responsiveStyles = `
       align-items: center;
     }
     .notification-section-header,
-    .notification-profile-row,
     .notification-exceptions-header {
       align-items: stretch;
       flex-direction: column;

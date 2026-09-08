@@ -324,8 +324,9 @@
       "test_success": "Test notification sent.",
       "test_title": "Alert Manager — Test notification",
       "title": "Notifications",
-      "usage_last_24h": "Used {count} times (≈24 h, since startup)",
-      "usage_last_24h_one": "Used once (≈24 h, since startup)",
+      "usage_last_24h": "Used {count} times",
+      "usage_last_24h_one": "Used once",
+      "usage_period": "Counts cover approximately the last 24 hours, limited to the time since startup.",
       "validation": {
         "name": "Enter a profile name.",
         "override": "Each exception must override at least one setting.",
