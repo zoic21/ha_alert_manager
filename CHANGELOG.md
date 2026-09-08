@@ -2,7 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
-## 2.3 — En cours de développement
+## 2.3.0-dev.1 — 8 septembre 2026
+
+Cette version est une prérelease de développement.
+
+### Améliorations
+
+- Titres des notifications raccourcis, sans préfixe « Alert Manager », avec des
+  libellés adaptés au singulier et au pluriel en français et en anglais.
+- Édition YAML des profils de notification et actions Dupliquer et Tester dans
+  leur menu ; affichage des profils correspondants dans le testeur de règle.
+- Compteur cliquable des occurrences conservées dans les détails d’une alerte.
+- Statistiques de récurrence et de fiabilité calculées à la demande dans l’historique.
+- Statistiques légères de performance et d’activité sur 24 heures, en mémoire.
 
 ### Suppression incompatible
 

@@ -807,15 +807,11 @@ class NotificationRuntime:
     ) -> tuple[str, str]:
         """Render compact device-grouped notification text."""
         count = len(items)
-        title_key = {
-            "started": "started_title",
-            "resolved": "resolved_title",
-            "reminder": "reminder_title",
-        }[kind]
+        title_key = f"{kind}_title" if count == 1 else f"{kind}_title_plural"
         fallback = {
-            "started": f"Alert Manager — {count} new alert(s)",
-            "resolved": f"Alert Manager — {count} back to normal",
-            "reminder": f"Alert Manager — {count} active alert(s)",
+            "started": "New alert" if count == 1 else "{count} new alerts",
+            "resolved": "Back to normal" if count == 1 else "{count} alerts resolved",
+            "reminder": "Alert reminder" if count == 1 else "Reminder: {count} alerts",
         }[kind]
         title = self._delivery.text(title_key, fallback).replace("{count}", str(count))
         icon = {"started": "🚨", "reminder": "🔔", "resolved": "✅"}[kind]

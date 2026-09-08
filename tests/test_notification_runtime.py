@@ -107,10 +107,10 @@ def _active_record(now: datetime) -> AlertRecord:
 @pytest.mark.parametrize("language", [None, "en", "fr"])
 @pytest.mark.parametrize("count", [1, 2])
 @pytest.mark.parametrize("grouped", [False, True])
-def test_notification_title_prefix(
+def test_notification_compact_titles(
     hass, entry, kind, icon, language, count, grouped
 ) -> None:
-    """Prefix translated and fallback titles for individual and grouped alerts."""
+    """Render concise singular/plural titles for individual and grouped alerts."""
     delivery = NotificationManager(hass, lambda: [])
     if language:
         path = (
@@ -140,13 +140,21 @@ def test_notification_title_prefix(
 
     title, message = runtime._render_batch(kind, items)
 
-    assert title.startswith(f"{icon} Alert Manager — {count} ")
+    expected_titles = {
+        "fr": {
+            "started": ("Nouvelle alerte", "2 nouvelles alertes"),
+            "resolved": ("Retour à la normale", "2 alertes résolues"),
+            "reminder": ("Rappel d\u2019alerte", "Rappel : 2 alertes"),
+        },
+        "en": {
+            "started": ("New alert", "2 new alerts"),
+            "resolved": ("Back to normal", "2 alerts resolved"),
+            "reminder": ("Alert reminder", "Reminder: 2 alerts"),
+        },
+    }
+    assert title == f"{icon} {expected_titles[language or 'en'][kind][count - 1]}"
     assert title.count(icon) == 1
     assert "{count}" not in title
-    if language:
-        assert title == f"{icon} " + catalog[f"{kind}_title"].replace(
-            "{count}", str(count)
-        )
     assert len(message.splitlines()) == (1 if grouped else count)
     if kind == "resolved":
         assert "Previous error" not in message
