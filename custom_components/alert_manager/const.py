@@ -215,6 +215,5 @@ LEGACY_ATTRIBUTE_SOURCES: Final = (
 )
 ATTRIBUTE_SOURCES: Final = ("value", "value_variation", "value_transition")
 VALUE_SOURCES: Final = (*ATTRIBUTE_SOURCES, "unchanged", "jinja")
-# Retain old transition names for persisted alert/history lifecycle consumers.
-TRANSITION_SOURCES: Final = ("value_transition", "transition", "attribute_transition")
+TRANSITION_SOURCES: Final = ("value_transition",)
 VARIATION_SOURCES: Final = ("value_variation",)

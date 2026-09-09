@@ -11,7 +11,10 @@ from custom_components.alert_manager.rule_evaluation import (
     evaluate_rule,
     rule_current_value,
 )
-from custom_components.alert_manager.storage import _migrate_config_shape
+from custom_components.alert_manager.storage import (
+    _migrate_alert_value_sources,
+    _migrate_config_shape,
+)
 from custom_components.alert_manager.validation import validate_rule_payload
 from custom_components.alert_manager.yaml_io import (
     dump_config_yaml,
@@ -138,3 +141,61 @@ def test_missing_attribute_is_diagnostic_error_not_state_fallback(source):
     )
     assert result.error_code == "attribute_not_found"
     assert result.result is None
+
+
+@pytest.mark.parametrize(
+    ("legacy", "unified", "attribute"),
+    [
+        ("state", "value", None),
+        ("attribute", "value", "mode"),
+        ("variation", "value_variation", None),
+        ("state_variation", "value_variation", None),
+        ("attribute_variation", "value_variation", "mode"),
+        ("transition", "value_transition", None),
+        ("attribute_transition", "value_transition", "mode"),
+        ("none", "jinja", None),
+    ],
+)
+def test_active_metadata_migration_only_changes_target(legacy, unified, attribute):
+    """Loading rewrites both target descriptions without touching the episode."""
+    record = {
+        "details": {
+            "id": "rule:stable:sensor.test",
+            "source": legacy,
+            "attribute": "mode",
+            "value": "B",
+            "condition_params": {
+                "source": legacy,
+                "attribute": "mode",
+                "duration": 30,
+                "expected": "B",
+            },
+        },
+        "status": "active",
+        "acknowledged": True,
+        "acknowledged_by": "admin",
+        "detected_at": "2026-09-09T12:00:00+00:00",
+        "expires_at": "2026-09-09T12:10:00+00:00",
+        "notifications": {"alert": {"count": 1}},
+    }
+    expected = deepcopy(record)
+    for target in (expected["details"], expected["details"]["condition_params"]):
+        target.update(source=unified, attribute=attribute)
+    alerts = {"stable": record}
+    assert _migrate_alert_value_sources(alerts)
+    assert record == expected
+    assert not _migrate_alert_value_sources(alerts)
+
+
+def test_alert_target_migration_tolerates_missing_and_invalid_metadata():
+    alerts = {
+        "invalid_record": None,
+        "invalid_details": {"details": []},
+        "no_source": {"details": {"name": "Automatic"}},
+        "invalid_source": {"details": {"source": []}},
+        "missing_attribute": {"details": {"source": "attribute"}},
+        "unknown_source": {"details": {"source": "future", "attribute": " raw "}},
+    }
+    original = deepcopy(alerts)
+    assert not _migrate_alert_value_sources(alerts)
+    assert alerts == original

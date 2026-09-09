@@ -27,6 +27,7 @@ from .const import (
     DEFAULT_HISTORY_LIMIT,
     HISTORY_STORAGE_KEY,
     HISTORY_STORAGE_VERSION,
+    LEGACY_RULE_SOURCES,
     MAX_RULES,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
@@ -692,11 +693,22 @@ def _migrate_alert_value_sources(stored: Any) -> bool:
         if not isinstance(record, dict):
             continue
         details = record.get("details")
-        if isinstance(details, dict):
-            if details.get("source") == "none":
-                details["source"] = "jinja"
-                changed = True
-            elif details.get("source") == "variation":
-                details["source"] = "state_variation"
+        if not isinstance(details, dict):
+            continue
+        # Normalize before AlertRecord deserialization and startup reconciliation.
+        # Display parameters must agree with the target on the active record too.
+        for target in (details, details.get("condition_params")):
+            if not isinstance(target, dict) or "source" not in target:
+                continue
+            source = target["source"]
+            if not isinstance(source, str) or source not in LEGACY_RULE_SOURCES:
+                continue
+            try:
+                normalized = normalize_rule_source(target)
+            except ValueError:
+                # Malformed legacy metadata must not prevent loading other records.
+                continue
+            if normalized != target:
+                target.update(normalized)
                 changed = True
     return changed

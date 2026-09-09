@@ -304,9 +304,12 @@ def test_legacy_active_transition_survives_migration(hass, entry, set_now, attri
     manager.config["rules"][0]["source"] = legacy_source
     if not attribute:
         manager.config["rules"][0]["attribute"] = "stale"
+        record.details.attribute = "stale"
     run(manager.async_unload())
     restored = AlertManager(hass, entry)
     run(restored.async_setup())
+    assert restored.records[key].details.source == "value_transition"
+    assert restored.records[key].details.attribute == ("mode" if attribute else None)
     run(restored._async_finish_startup_reconciliation())
     assert restored.records[key].expires_at == deadline
     assert restored.records[key].detected_at == detected_at

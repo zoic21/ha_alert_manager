@@ -429,7 +429,7 @@ def test_storage_migration_renames_legacy_sources_idempotently() -> None:
     assert _migrate_alert_value_sources(alerts) is True
     assert alerts["rule:test:sensor.test"]["details"]["source"] == "jinja"
     assert (
-        alerts["rule:variation:sensor.power"]["details"]["source"] == "state_variation"
+        alerts["rule:variation:sensor.power"]["details"]["source"] == "value_variation"
     )
     assert _migrate_alert_value_sources(alerts) is False
 
