@@ -1,14 +1,1 @@
-{
-  "name": "ha-alert-manager",
-  "private": true,
-  "version": "2.3.0-dev.11",
-  "type": "module",
-  "scripts": {
-    "build": "node scripts/build-frontend.mjs",
-    "lint:frontend": "node scripts/lint-frontend.mjs",
-    "test:frontend": "node --test tests/frontend-configuration-yaml.test.mjs tests/frontend-history-statistics.test.mjs tests/frontend-duration.test.mjs tests/frontend-drafts.test.mjs tests/frontend.test.mjs tests/frontend-bundle.test.mjs tests/frontend-coherence-mobile.test.mjs tests/frontend-notifications.test.mjs tests/frontend-rule-duplicate.test.mjs tests/frontend-rule-tester.test.mjs tests/frontend-rule-validation-error.test.mjs tests/frontend-rules-separation.test.mjs tests/frontend-rules-table.test.mjs tests/frontend-view-rendering.test.mjs"
-  },
-  "engines": {
-    "node": ">=20"
-  }
-}
+ewogICJuYW1lIjogImhhLWFsZXJ0LW1hbmFnZXIiLAogICJwcml2YXRlIjogdHJ1ZSwKICAidmVyc2lvbiI6ICIyLjMuMC1kZXYuMTIiLAogICJ0eXBlIjogIm1vZHVsZSIsCiAgInNjcmlwdHMiOiB7CiAgICAiYnVpbGQiOiAibm9kZSBzY3JpcHRzL2J1aWxkLWZyb250ZW5kLm1qcyIsCiAgICAibGludDpmcm9udGVuZCI6ICJub2RlIHNjcmlwdHMvbGludC1mcm9udGVuZC5tanMiLAogICAgInRlc3Q6ZnJvbnRlbmQiOiAibm9kZSAtLXRlc3QgdGVzdHMvZnJvbnRlbmQtY29uZmlndXJhdGlvbi15YW1sLnRlc3QubWpzIHRlc3RzL2Zyb250ZW5kLWhpc3Rvcnktc3RhdGlzdGljcy50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1kdXJhdGlvbi50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1kcmFmdHMudGVzdC5tanMgdGVzdHMvZnJvbnRlbmQudGVzdC5tanMgdGVzdHMvZnJvbnRlbmQtYnVuZGxlLnRlc3QubWpzIHRlc3RzL2Zyb250ZW5kLWNvaGVyZW5jZS1tb2JpbGUudGVzdC5tanMgdGVzdHMvZnJvbnRlbmQtbm90aWZpY2F0aW9ucy50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1ydWxlLWR1cGxpY2F0ZS50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1ydWxlLXRlc3Rlci50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1ydWxlLXZhbGlkYXRpb24tZXJyb3IudGVzdC5tanMgdGVzdHMvZnJvbnRlbmQtcnVsZXMtc2VwYXJhdGlvbi50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC1ydWxlcy10YWJsZS50ZXN0Lm1qcyB0ZXN0cy9mcm9udGVuZC12aWV3LXJlbmRlcmluZy50ZXN0Lm1qcyIKICB9LAogICJlbmdpbmVzIjogewogICAgIm5vZGUiOiAiPj0yMCIKICB9Cn0K
