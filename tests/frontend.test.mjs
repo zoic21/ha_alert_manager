@@ -5473,3 +5473,17 @@ test("coherence alert setting preserves its draft across renders and reloads sav
   panel._ensureSettingsDraft();
   assert.equal(panel._settingsDraft.coherence_alert_enabled, true);
 });
+
+
+test("returning from a dashboard can reopen the same alert or device deep link", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._handledAlertDeepLink = "battery:sensor.test";
+  panel._handledDashboardDeepLink = "?device=test";
+  panel._stopRuleEditorResize = () => {};
+  panel._cancelMoreInfoScrollRestore = () => {};
+  panel._closeAlertDetailsDialog = () => {};
+  panel.disconnectedCallback();
+  assert.equal(panel._handledAlertDeepLink, null);
+  assert.equal(panel._handledDashboardDeepLink, null);
+});

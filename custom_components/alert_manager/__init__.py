@@ -30,6 +30,8 @@ from .manager import AlertManager
 from .services import async_setup_services
 from .websocket import async_register_websocket_commands
 
+CARD_MODULE_URL = f"{PANEL_STATIC_URL}/alert-manager-card.js?v={FRONTEND_CACHE_VERSION}"
+
 
 async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Register actions at domain load so automations can always validate."""
@@ -41,6 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Alert Manager from its single config entry."""
     manager = AlertManager(hass, entry)
     panel_registered = False
+    card_registered = False
     try:
         await async_load_coherence_result(hass)
         if not await manager.async_setup():
@@ -59,6 +62,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async_register_websocket_commands(hass)
             hass.data[DATA_WEBSOCKET_REGISTERED] = True
 
+        frontend.add_extra_js_url(hass, CARD_MODULE_URL)
+        card_registered = True
+
         await panel_custom.async_register_panel(
             hass,
             frontend_url_path=PANEL_URL,
@@ -74,6 +80,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         panel_registered = True
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except BaseException:
+        if card_registered:
+            frontend.remove_extra_js_url(hass, CARD_MODULE_URL)
         if panel_registered:
             frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
         if hass.data.get(DATA_MANAGER) is manager:
@@ -90,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
+    frontend.remove_extra_js_url(hass, CARD_MODULE_URL)
     manager: AlertManager | None = hass.data.pop(DATA_MANAGER, None)
     hass.data.pop(DATA_COHERENCE_RESULT, None)
     if manager is not None:

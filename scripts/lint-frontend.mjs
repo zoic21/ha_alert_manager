@@ -3,6 +3,15 @@ import { spawnSync } from "node:child_process";
 
 const filenames = [
   "alert-manager-panel.js",
+  "api/transport.js",
+  "api/dashboard.js",
+  "utils/alert-labels.js",
+  "utils/navigation.js",
+  "dashboard/translations.js",
+  "dashboard/groups.js",
+  "dashboard/editor.js",
+  "dashboard/card.js",
+  "styles/dashboard-styles.js",
   "api/alert-manager-api.js",
   "components/duration-field.js",
   "components/alert-table.js",
@@ -62,7 +71,7 @@ if (/\.prototype\s*=|Object\.assign\([^\n]*\.prototype/.test(source)) {
   throw new Error("Frontend responsibilities must use explicit composition");
 }
 for (const [filename, content] of sources) {
-  if (filename !== "api/alert-manager-api.js" && content.includes(".callWS(")) {
+  if (filename !== "api/transport.js" && content.includes(".callWS(")) {
     throw new Error(`WebSocket access must go through the API module: ${filename}`);
   }
 }

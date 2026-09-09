@@ -340,8 +340,8 @@ class AlertManagerPanel extends HTMLElement {
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
+    if (this.isConnected && this._config) this._openAlertDeepLink();
   }
-
   set narrow(value) {
     const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
@@ -362,7 +362,6 @@ class AlertManagerPanel extends HTMLElement {
     delete this[name];
     this[name] = value;
   }
-
   connectedCallback() {
     // On a direct page load Home Assistant can set panel properties before this
     // custom element is defined. Replay those values through their setters once
@@ -384,10 +383,11 @@ class AlertManagerPanel extends HTMLElement {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
   }
-
   disconnectedCallback() {
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
+    this._handledAlertDeepLink = null;
+    this._handledDashboardDeepLink = null;
     this._stopRuleEditorResize();
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();

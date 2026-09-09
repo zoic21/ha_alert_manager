@@ -1,3 +1,6 @@
+import { navigate } from "../utils/navigation.js";
+export { navigate };
+import { alertLabelIds } from "../utils/alert-labels.js";
 import { handleHistoryAction } from "../views/history.js";
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
@@ -328,10 +331,7 @@ export function entityMetadata(source, labelRegistry) {
     const entity = this._hass?.entities?.[entityId];
     const domain = entityId.includes(".") ? entityId.split(".", 1)[0] : "";
     const integration = source.integration || entity?.platform || "";
-    const labelIds = [...new Set([
-      ...(Array.isArray(source.labels) ? source.labels : []),
-      ...(Array.isArray(entity?.labels) ? entity.labels : []),
-    ].map(String).filter(Boolean))];
+    const labelIds = alertLabelIds(source, this._hass);
     const labels = labelMetadata(labelIds, labelRegistry);
     return { domain, integration, labels };
 }
@@ -1141,7 +1141,21 @@ export function refreshHistoryOccurrenceDetails() {
 
 export function openAlertDeepLink() {
     const search = globalThis.window?.location?.search ?? "";
-    const alertId = new URLSearchParams(search).get("alert");
+    const params = new URLSearchParams(search);
+    const deviceId = params.get("device");
+    const dashboard = params.get("dashboard") === "1";
+    if ((deviceId || dashboard) && this._handledDashboardDeepLink !== search) {
+      this._handledDashboardDeepLink = search;
+      this._resetTableFilters("overview");
+      this._tableState.overview.search = "";
+      this._tableState.overview.filters.device = deviceId ? [deviceId] : [];
+      this._tableState.overview.filters.labels = params.get("label") ? [params.get("label")] : [];
+      this._activeTab = "overview";
+      this._render();
+    }
+    if (!deviceId && !dashboard) this._handledDashboardDeepLink = null;
+    const alertId = params.get("alert");
+    if (!alertId) this._handledAlertDeepLink = null;
     if (!alertId || this._handledAlertDeepLink === alertId) return;
     const row = this._tableRows("overview").find(
       (candidate) => candidate.id === alertId && candidate.status !== "pending",
@@ -1404,23 +1418,6 @@ export function preserveOverviewScrollAfterMoreInfo() {
     };
     this._moreInfoScrollRestore = { target, listener };
     target.addEventListener("dialog-closed", listener, true);
-}
-
-export function navigate(path, newTabInBrowser = false) {
-    if (!path) return;
-    const inCompanionApp = Boolean(
-      globalThis.window?.externalApp
-      || globalThis.window?.externalAppV2
-      || globalThis.window?.webkit?.messageHandlers?.externalBus
-    );
-    if (newTabInBrowser && !inCompanionApp && typeof window.open === "function") {
-      window.open(path, "_blank", "noopener,noreferrer");
-      return;
-    }
-    window.history?.pushState?.(null, "", path);
-    window.dispatchEvent?.(new CustomEvent("location-changed", {
-      detail: { replace: false },
-    }));
 }
 
 export function syncNarrowTableHeaderBackgrounds() {
