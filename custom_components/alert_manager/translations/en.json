@@ -118,6 +118,10 @@
         "attribute_variation": "Variation of attribute {attribute}",
         "state": "State",
         "state_variation": "State variation"
+      },
+      "coherence": {
+        "name": "Configuration coherence",
+        "issues": "{count} configuration coherence issues"
       }
     },
     "coherence": {
@@ -164,7 +168,9 @@
       "zha_status": {
         "not_loaded": "ZHA check skipped: integration not fully loaded.",
         "metadata_error": "ZHA check skipped: metadata unavailable."
-      }
+      },
+      "alert_enabled": "Create an alert for coherence issues",
+      "alert_help": "One alert remains until a complete check finds no issues. Normal notification profiles apply."
     },
     "duration": {
       "activation": "Activating…",

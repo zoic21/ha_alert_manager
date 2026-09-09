@@ -259,6 +259,7 @@ export function tableColumns(kind) {
 }
 
 export function alertRuleName(alert) {
+    if (alert.type === "coherence") return this._t("coherence.title");
     if (alert.rule_name && alert.rule_name !== alert.type) return alert.rule_name;
     const pack = this._packs.find((item) => item.id === alert.type);
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (alert.rule_name || alert.type || "—");
@@ -862,6 +863,7 @@ export function alertDetailsItems(kind, row) {
       data,
     });
     const items = [
+      ...(row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -1503,6 +1505,12 @@ export async function handleAlertTableAction(action, button, event) {
     event.stopPropagation?.();
     const entityId = button.dataset.entityId;
     this._closeAlertDetailsDialog(() => this._openMoreInfo(entityId));
+    return true;
+  }
+  if (action === "open-alert-coherence") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    this._closeAlertDetailsDialog(() => this._navigate("/alert-manager/coherence"));
     return true;
   }
   if (action === "open-alert-device") {

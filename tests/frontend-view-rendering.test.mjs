@@ -848,3 +848,40 @@ test("history statistics replace the table only when explicitly opened", () => {
   assert.doesNotMatch(markup, /history.statistics.help|history-statistics-help|history-statistics-note|history-statistics-drilldown/);
   assert.doesNotMatch(renderHistory({ ...context, statisticsOpen: true, limit: 0 }), /data-history-statistics-page/);
 });
+
+test("coherence alert switch renders before and after the first scan", () => {
+  for (const result of [null, { results: [] }]) {
+    const markup = renderCoherence({
+      result, loading: false, pageMessages: "", statsMarkup: "",
+      alertEnabled: true, t: (key) => key,
+    });
+    assert.equal((markup.match(/id="coherence-alert-enabled"/g) ?? []).length, 1);
+    assert.match(markup, /ha-switch[^>]+coherence-alert-enabled[^>]+checked/);
+    assert.match(markup, /coherence.alert_help/);
+  }
+});
+
+test("coherence switch persists through the shared API and rolls back on failure", async () => {
+  const { hydrateCoherenceTable } = await import("../frontend-src/views/coherence.js");
+  const control = {};
+  const calls = [];
+  const context = {
+    _config: { coherence_alert_enabled: false },
+    shadowRoot: { querySelector: (selector) => selector === "#coherence-alert-enabled" ? control : null },
+    _api: { call: async (message) => { calls.push(message); return message.config; } },
+    _errorText: (error) => error.message,
+    _render() {},
+  };
+  hydrateCoherenceTable.call(context);
+  control.checked = true;
+  await control.onchange();
+  assert.deepEqual(calls, [{ type: "alert_manager/config/update", config: { coherence_alert_enabled: true } }]);
+  assert.equal(context._config.coherence_alert_enabled, true);
+  assert.equal(control.disabled, false);
+  context._api.call = async () => { throw new Error("save failed"); };
+  hydrateCoherenceTable.call(context);
+  control.checked = false;
+  await control.onchange();
+  assert.equal(control.checked, true);
+  assert.deepEqual(context._notice, { kind: "error", text: "save failed" });
+});

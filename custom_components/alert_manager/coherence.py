@@ -29,6 +29,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
+from .coherence_alert import prepare_alert_report
 from .coherence_checks import CHECKS
 from .const import (
     COHERENCE_SCHEDULE_HOUR,
@@ -577,12 +578,12 @@ def _dashboard_sources(config_dir: Path) -> dict[str, tuple[str, str]]:
     metadata_path = config_dir / ".storage" / "lovelace_dashboards"
     try:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return dashboards
     data = payload.get("data", {})
-    items = data.get("items", data if isinstance(data, list) else [])
+    items = data if isinstance(data, list) else data.get("items", [])
     if not isinstance(items, list):
-        return dashboards
+        raise ValueError("Invalid Lovelace dashboard index")
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -606,7 +607,13 @@ def _discover_sources(
     """Discover supported configuration files without entering unrelated trees."""
     sources: list[_Source] = []
     dashboard_files = yaml_dashboards or {}
-    for directory, child_directories, filenames in os.walk(config_dir):
+
+    def discovery_failed(error: OSError) -> None:
+        raise error
+
+    for directory, child_directories, filenames in os.walk(
+        config_dir, onerror=discovery_failed
+    ):
         child_directories[:] = [
             child
             for child in child_directories
@@ -691,7 +698,7 @@ def scan_configuration(
     for source in sources:
         try:
             content = source.path.read_text(encoding="utf-8")
-            documents = yaml.compose_all(content, Loader=yaml.SafeLoader)
+            documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
             root_context = _Context(
                 source.kind if source.kind != "config_entries" else "file",
                 source.name or source.relative_path,
@@ -831,6 +838,12 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
             config.get("coherence_ignored_entity_references", [])
         ),
     )
+    await hass.async_add_executor_job(
+        prepare_alert_report,
+        result,
+        hass.data.get(DATA_COHERENCE_RESULT),
+        config.get("coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME),
+    )
     result["scanned_at"] = dt_util.now().isoformat()
     # Each scan owns its report; consumers must treat it as read-only once published.
     await Store[dict[str, Any]](
@@ -841,6 +854,8 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     ).async_save(result)
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
+    if manager is not None:
+        await manager.async_reconcile_coherence_alert()
     return result
 
 

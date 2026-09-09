@@ -42,11 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = AlertManager(hass, entry)
     panel_registered = False
     try:
+        await async_load_coherence_result(hass)
         if not await manager.async_setup():
             await manager.async_unload()
             return False
         hass.data[DATA_MANAGER] = manager
-        await async_load_coherence_result(hass)
 
         if not hass.data.get(DATA_STATIC_REGISTERED):
             frontend_dir = Path(__file__).parent / "frontend"
