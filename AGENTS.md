@@ -63,7 +63,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `storage.py` | Separate configuration/runtime, history, and valid-configuration backup stores, with migrations and durability helpers. Notification runtime persistence remains in `notification_runtime.py`. |
 | `websocket.py`, `services.py`, `permissions.py` | Thin admin-restricted transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
 | `coherence.py` | Explicit or scheduled reference scans, shared YAML traversal, exclusions, counts and reports, with filesystem work off the event loop. |
-| `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop, inspect static trigger references in the existing scanner executor. |
+| `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop; each check owns its traversal scopes and node selection in the existing scanner executor. |
 | `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters for counts/status, monitoring control, and actions. |
 | `const.py`, `manifest.json` | Shared constants/defaults, version/cache identity, and Home Assistant integration metadata. |
 | `translations/en.json`, `translations/fr.json`, `services.yaml`, `icons.json` | English/French UI and condition text, service descriptions, and native entity icon metadata. |

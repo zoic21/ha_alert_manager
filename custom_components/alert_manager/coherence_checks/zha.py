@@ -30,8 +30,41 @@ def _literal(node: Node | None) -> str | None:
     return None
 
 
-def references(node: MappingNode) -> tuple[ScalarNode, ...]:
-    """Return valid static IEEE nodes from one structurally identified trigger."""
+def child_scope(
+    scope: str | None,
+    key: str | None,
+    source_kind: str,
+    *,
+    object_root: bool,
+) -> str | None:
+    """Follow only trigger and executable action branches relevant to ZHA.
+
+    Sequence items inherit this scope unchanged. Other mapping branches reset it,
+    so example data and sibling actions cannot become event subscriptions.
+    """
+    if (
+        (object_root and source_kind == "automation" and key in {"trigger", "triggers"})
+        or (scope == "actions" and key == "wait_for_trigger")
+        or (scope == "triggers" and key == "triggers")
+    ):
+        return "triggers"
+    if (
+        (object_root and source_kind == "automation" and key in {"action", "actions"})
+        or (object_root and source_kind == "script" and key == "sequence")
+        or (
+            scope == "actions"
+            and key
+            in {"sequence", "choose", "default", "repeat", "then", "else", "parallel"}
+        )
+    ):
+        return "actions"
+    return None
+
+
+def references(node: MappingNode, scope: str | None) -> tuple[ScalarNode, ...]:
+    """Return valid static IEEE nodes only in actual event trigger contexts."""
+    if scope != "triggers" or node.tag != "tag:yaml.org,2002:map":
+        return ()
     values = {
         key.value: value for key, value in node.value if isinstance(key, ScalarNode)
     }

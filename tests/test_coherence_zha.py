@@ -233,13 +233,58 @@ def test_check_snapshot_and_analysis_use_their_expected_threads(
         calls.append("snapshot")
         return frozenset(), "executed"
 
-    def references(node):
+    def references(node, scope):
         assert get_ident() != event_loop_thread
-        calls.append("references")
-        return original_references(node)
+        result = original_references(node, scope)
+        if result:
+            calls.append("references")
+        return result
 
     monkeypatch.setattr(zha, "snapshot", snapshot)
     monkeypatch.setattr(zha, "references", references)
     report = asyncio.run(async_scan_configuration(hass))
     assert calls == ["snapshot", "references"]
     assert report["missing_reference_count"] == 1
+
+
+@pytest.mark.parametrize("container", ["choose", "repeat", "if", "parallel"])
+def test_zha_scope_stays_in_executable_branches(tmp_path, container):
+    """Nested waits are scanned without leaking their scope into sibling data."""
+    import yaml
+
+    event = {
+        "trigger": "event",
+        "event_type": "zha_event",
+        "event_data": {"device_ieee": IEEE},
+    }
+    wait = {"wait_for_trigger": [event]}
+    nested = {
+        "choose": {"choose": [{"conditions": [], "sequence": [wait]}]},
+        "repeat": {"repeat": {"count": 2, "sequence": [wait]}},
+        "if": {"if": [], "then": [wait], "else": []},
+        "parallel": {"parallel": [{"sequence": [wait]}]},
+    }[container]
+    (tmp_path / "automations.yaml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "id": "remote",
+                    "triggers": [event],
+                    "actions": [
+                        nested,
+                        {"variables": {"wait_for_trigger": [event]}},
+                        {"event": "zha_event", "event_data": {"device_ieee": IEEE}},
+                    ],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report = scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )
+    # safe_dump aliases the shared event: one source location, two real visits.
+    assert report["references_checked"] == 2
+    assert report["missing_count"] == 1

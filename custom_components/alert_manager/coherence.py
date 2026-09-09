@@ -440,7 +440,11 @@ def _record_scalar(
 
 
 def _record_check_references(
-    node: MappingNode, context: _Context, source: _Source, state: _ScanState
+    node: MappingNode,
+    context: _Context,
+    source: _Source,
+    state: _ScanState,
+    check_scopes: dict[str, str | None],
 ) -> None:
     """Aggregate integration checks using the existing report lifecycle."""
     for check in CHECKS:
@@ -449,7 +453,9 @@ def _record_check_references(
         )
         if existing is None:
             continue
-        for reference_node in check.references(node):
+        for reference_node in check.references(
+            node, check_scopes.get(check.REFERENCE_TYPE)
+        ):
             reference = reference_node.value
             normalized = reference.lower()
             if normalized in state.ignored_entity_references:
@@ -490,10 +496,10 @@ def _walk(
     parent_key: str | None = None,
     sequence_index: int | None = None,
     in_template: bool = False,
-    trigger_scope: bool = False,
-    action_scope: bool = False,
+    check_scopes: dict[str, str | None] | None = None,
 ) -> None:
     """Walk YAML/JSON nodes while retaining source locations and object context."""
+    check_scopes = check_scopes or {}
     if isinstance(node, MappingNode):
         current, template_scope = _derive_context(
             node,
@@ -504,9 +510,7 @@ def _walk(
             sequence_index=sequence_index,
             in_template=in_template,
         )
-        if trigger_scope and node.tag == "tag:yaml.org,2002:map":
-            _record_check_references(node, current, source, state)
-        object_root = current is not context
+        _record_check_references(node, current, source, state, check_scopes)
         for key_node, value_node in node.value:
             key = _scalar(key_node)
             if isinstance(key_node, ScalarNode):
@@ -533,40 +537,19 @@ def _walk(
                     state,
                     parent_key=key,
                     in_template=child_template_scope,
-                    trigger_scope=(
-                        (
-                            object_root
-                            and current.kind == "automation"
-                            and key in {"trigger", "triggers"}
+                    check_scopes={
+                        check.REFERENCE_TYPE: check.child_scope(
+                            check_scopes.get(check.REFERENCE_TYPE),
+                            key,
+                            current.kind,
+                            object_root=current is not context,
                         )
-                        or (action_scope and key == "wait_for_trigger")
-                        or (trigger_scope and key == "triggers")
-                    ),
-                    action_scope=(
-                        (
-                            object_root
-                            and current.kind == "automation"
-                            and key in {"action", "actions"}
-                        )
-                        or (
-                            object_root
-                            and current.kind == "script"
-                            and key == "sequence"
-                        )
-                        or (
-                            action_scope
-                            and key
-                            in {
-                                "sequence",
-                                "choose",
-                                "default",
-                                "repeat",
-                                "then",
-                                "else",
-                                "parallel",
-                            }
-                        )
-                    ),
+                        for check in CHECKS
+                        if state.check_snapshots.get(
+                            check.REFERENCE_TYPE, (None, "not_applicable")
+                        )[0]
+                        is not None
+                    },
                 )
         return
 
@@ -580,8 +563,7 @@ def _walk(
                 parent_key=parent_key,
                 sequence_index=index,
                 in_template=in_template,
-                trigger_scope=trigger_scope,
-                action_scope=action_scope,
+                check_scopes=check_scopes,
             )
         return
 
