@@ -21,9 +21,7 @@ from typing import Any, Final
 from urllib.parse import quote
 
 import yaml
-from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_change
@@ -31,6 +29,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
+from .coherence_checks import CHECKS
 from .const import (
     COHERENCE_SCHEDULE_HOUR,
     COHERENCE_SCHEDULE_MINUTE,
@@ -185,7 +184,7 @@ class _ScanState:
     template_by_config_entry: dict[str, str]
     results: list[dict[str, Any]]
     seen: set[tuple[str, str, int]]
-    zha_ieees: frozenset[str] | None = None
+    check_snapshots: dict[str, tuple[frozenset[str] | None, str]]
     references_checked: int = 0
 
 
@@ -440,94 +439,46 @@ def _record_scalar(
         state.results.append(result)
 
 
-def _literal(node: Node | None) -> str | None:
-    """Accept only ordinary YAML strings, never custom tags or inputs."""
-    if (
-        isinstance(node, ScalarNode)
-        and node.tag == "tag:yaml.org,2002:str"
-        and "{{" not in node.value
-        and "{%" not in node.value
-    ):
-        return node.value
-    return None
-
-
-def _record_zha_trigger(
+def _record_check_references(
     node: MappingNode, context: _Context, source: _Source, state: _ScanState
 ) -> None:
-    """Check a static event subscription against the scan's registry snapshot."""
-    if state.zha_ieees is None:
-        return
-    values = _mapping(node)
-    if _literal(values.get("trigger", values.get("platform"))) != "event":
-        return
-    event_type = values.get("event_type")
-    if (
-        isinstance(event_type, SequenceNode)
-        and event_type.tag != "tag:yaml.org,2002:seq"
-    ):
-        return
-    event_types = (
-        event_type.value if isinstance(event_type, SequenceNode) else [event_type]
-    )
-    if not event_types or any(_literal(item) is None for item in event_types):
-        return
-    if "zha_event" not in [_literal(item) for item in event_types]:
-        return
-    data = values.get("event_data")
-    if not isinstance(data, MappingNode) or data.tag != "tag:yaml.org,2002:map":
-        return
-    ieee_node = _mapping(data).get("device_ieee")
-    ieee = _literal(ieee_node)
-    if ieee is None or not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){7}[0-9a-fA-F]{2}", ieee):
-        return
-    normalized = ieee.lower()
-    if normalized in state.ignored_entity_references:
-        return
-    state.references_checked += 1
-    if normalized in state.zha_ieees:
-        return
-    line = ieee_node.start_mark.line + 1
-    column = ieee_node.start_mark.column + 1
-    signature = (f"zha:{normalized}:{column}", source.relative_path, line)
-    if signature in state.seen:
-        return
-    state.seen.add(signature)
-    result = {
-        "reference_type": "zha_device_ieee",
-        "reference": ieee,
-        "file": source.relative_path,
-        "line": line,
-        "column": column,
-        "source_type": context.kind,
-        "source_name": context.name,
-    }
-    if context.link_type == "navigate" and context.link_target:
-        result["link"] = {"type": "navigate", "path": context.link_target}
-    state.results.append(result)
-
-
-def _zha_snapshot(hass: HomeAssistant) -> tuple[frozenset[str] | None, str]:
-    """Copy registry metadata on the event loop; isolate integration failures."""
-    try:
-        entries = hass.config_entries.async_entries("zha")
-        if not entries:
-            return None, "not_applicable"
-        if any(entry.state is not ConfigEntryState.LOADED for entry in entries):
-            return None, "not_loaded"
-        entry_ids = {entry.entry_id for entry in entries}
-        registry = dr.async_get(hass)
-        ieees = frozenset(
-            identifier.lower()
-            for device in registry.devices.values()
-            if entry_ids.intersection(device.config_entries)
-            for domain, identifier in device.identifiers
-            if domain == "zha"
+    """Aggregate integration checks using the existing report lifecycle."""
+    for check in CHECKS:
+        existing, _ = state.check_snapshots.get(
+            check.REFERENCE_TYPE, (None, "not_applicable")
         )
-        return ieees, "executed"
-    except Exception:
-        _LOGGER.exception("Unable to collect ZHA metadata for coherence scan")
-        return None, "metadata_error"
+        if existing is None:
+            continue
+        for reference_node in check.references(node):
+            reference = reference_node.value
+            normalized = reference.lower()
+            if normalized in state.ignored_entity_references:
+                continue
+            state.references_checked += 1
+            if normalized in existing:
+                continue
+            line = reference_node.start_mark.line + 1
+            column = reference_node.start_mark.column + 1
+            signature = (
+                f"{check.REFERENCE_TYPE}:{normalized}:{column}",
+                source.relative_path,
+                line,
+            )
+            if signature in state.seen:
+                continue
+            state.seen.add(signature)
+            result = {
+                "reference_type": check.REFERENCE_TYPE,
+                "reference": reference,
+                "file": source.relative_path,
+                "line": line,
+                "column": column,
+                "source_type": context.kind,
+                "source_name": context.name,
+            }
+            if context.link_type == "navigate" and context.link_target:
+                result["link"] = {"type": "navigate", "path": context.link_target}
+            state.results.append(result)
 
 
 def _walk(
@@ -554,7 +505,7 @@ def _walk(
             in_template=in_template,
         )
         if trigger_scope and node.tag == "tag:yaml.org,2002:map":
-            _record_zha_trigger(node, current, source, state)
+            _record_check_references(node, current, source, state)
         object_root = current is not context
         for key_node, value_node in node.value:
             key = _scalar(key_node)
@@ -737,8 +688,7 @@ def scan_configuration(
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
     scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
     ignored_entity_references: frozenset[str] = frozenset(),
-    zha_ieees: frozenset[str] | None = None,
-    zha_status: str = "not_applicable",
+    check_snapshots: dict[str, tuple[frozenset[str] | None, str]] | None = None,
 ) -> dict[str, Any]:
     """Synchronously scan configuration files; intended for an executor thread."""
     started = time.monotonic()
@@ -752,7 +702,7 @@ def scan_configuration(
         template_by_config_entry or {},
         [],
         set(),
-        zha_ieees,
+        check_snapshots or {},
     )
     sources = _discover_sources(config_dir, yaml_dashboards, scan_esphome=scan_esphome)
     skipped_files = 0
@@ -793,7 +743,10 @@ def scan_configuration(
             {result["entity_id"] for result in state.results if "entity_id" in result}
         ),
         "checks": {
-            "zha_device_ieee": "executed" if zha_ieees is not None else zha_status
+            check.REFERENCE_TYPE: state.check_snapshots.get(
+                check.REFERENCE_TYPE, (None, "not_applicable")
+            )[1]
+            for check in CHECKS
         },
         "files_scanned": len(sources) - skipped_files,
         "files_skipped": skipped_files,
@@ -867,7 +820,7 @@ async def async_scan_configuration(
             f"/{str(url_path or 'lovelace').strip('/')}",
         )
 
-    zha_ieees, zha_status = _zha_snapshot(hass)
+    check_snapshots = {check.REFERENCE_TYPE: check.snapshot(hass) for check in CHECKS}
     return await hass.async_add_executor_job(
         scan_configuration,
         Path(hass.config.path()),
@@ -879,8 +832,7 @@ async def async_scan_configuration(
         yaml_dashboards,
         scan_esphome,
         ignored_entity_references,
-        zha_ieees,
-        zha_status,
+        check_snapshots,
     )
 
 

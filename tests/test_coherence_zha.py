@@ -36,7 +36,11 @@ def test_static_trigger_source_case_exclusions(tmp_path, syntax, event_type, sec
         f'  device_ieee: "{IEEE.upper()}"',
         section,
     )
-    report = scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset())
+    report = scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )
     assert report["missing_count"] == 1
     assert report["missing_entity_count"] == 0
     row = report["results"][0]
@@ -46,13 +50,15 @@ def test_static_trigger_source_case_exclusions(tmp_path, syntax, event_type, sec
     assert row["source_name"] == "Remote"
     assert row["line"] == 7
     assert row["link"]["path"] == "/config/automation/edit/remote"
-    assert not scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset({IEEE}))[
-        "results"
-    ]
     assert not scan_configuration(
         tmp_path,
         frozenset(),
-        zha_ieees=frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset({IEEE}), "executed")},
+    )["results"]
+    assert not scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
         ignored_entity_references=frozenset({IEEE}),
     )["results"]
 
@@ -74,9 +80,11 @@ def test_nonliteral_and_malformed_ieee_ignored(tmp_path, value):
         tmp_path,
         f"trigger: event\nevent_type: zha_event\nevent_data:\n  device_ieee: {value}",
     )
-    assert not scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset())[
-        "results"
-    ]
+    assert not scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )["results"]
 
 
 @pytest.mark.parametrize(
@@ -91,9 +99,11 @@ def test_nonliteral_and_malformed_ieee_ignored(tmp_path, value):
 )
 def test_non_zha_subscriptions_ignored(tmp_path, trigger):
     write_trigger(tmp_path, trigger)
-    assert not scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset())[
-        "results"
-    ]
+    assert not scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )["results"]
 
 
 def test_script_wait_and_distinct_locations_not_actions_or_data(tmp_path):
@@ -119,7 +129,11 @@ def test_script_wait_and_distinct_locations_not_actions_or_data(tmp_path):
 ''',
         encoding="utf-8",
     )
-    report = scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset())
+    report = scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )
     assert len(report["results"]) == 3
     assert [r["line"] for r in report["results"]] == [12, 12, 14]
     assert all(
@@ -186,8 +200,46 @@ def test_zha_counts_reach_existing_sensor(tmp_path):
         tmp_path,
         f'trigger: event\nevent_type: zha_event\nevent_data:\n  device_ieee: "{IEEE}"',
     )
-    report = scan_configuration(tmp_path, frozenset(), zha_ieees=frozenset())
+    report = scan_configuration(
+        tmp_path,
+        frozenset(),
+        check_snapshots={"zha_device_ieee": (frozenset(), "executed")},
+    )
     sensor = AlertManagerCoherenceIssueSensor()
     sensor.async_write_ha_state = lambda: None
     sensor._async_coherence_updated(report)
     assert sensor.native_value == 1
+
+
+def test_check_snapshot_and_analysis_use_their_expected_threads(
+    hass, tmp_path, monkeypatch
+):
+    """Registry access stays on the event loop; reference parsing is offloaded."""
+    from threading import get_ident
+
+    from custom_components.alert_manager.coherence_checks import zha
+
+    write_trigger(
+        tmp_path,
+        f'trigger: event\nevent_type: zha_event\nevent_data:\n  device_ieee: "{IEEE}"',
+    )
+    hass.config.path = lambda: str(tmp_path)
+    event_loop_thread = get_ident()
+    calls = []
+    original_references = zha.references
+
+    def snapshot(_hass):
+        assert get_ident() == event_loop_thread
+        calls.append("snapshot")
+        return frozenset(), "executed"
+
+    def references(node):
+        assert get_ident() != event_loop_thread
+        calls.append("references")
+        return original_references(node)
+
+    monkeypatch.setattr(zha, "snapshot", snapshot)
+    monkeypatch.setattr(zha, "references", references)
+    report = asyncio.run(async_scan_configuration(hass))
+    assert calls == ["snapshot", "references"]
+    assert report["missing_reference_count"] == 1
