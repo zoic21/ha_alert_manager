@@ -5443,7 +5443,7 @@ function hydrateCoherenceTable() {
     tablePage.backPath = undefined;
     tablePage.backCallback = undefined;
     tablePage.id = "id";
-    tablePage.clickable = true;
+    tablePage.clickable = false;
     tablePage.searchLabel = this._t("table.search");
     tablePage.filter = state.search;
     tablePage.columns = {
@@ -5532,12 +5532,6 @@ function hydrateCoherenceTable() {
       state.hiddenColumns = (event.detail?.hiddenColumns ?? [])
         .filter((column) => COHERENCE_COLUMNS.includes(column) && column !== "entity");
       this._saveCoherenceTableState();
-    });
-    tablePage.addEventListener("row-click", (event) => {
-      const row = tablePage._alertManagerRows?.find(
-        (item) => String(item.id) === String(event.detail?.id),
-      );
-      if (row?.link) this._openCoherenceLink(row.link);
     });
 }
 
@@ -5678,7 +5672,6 @@ function renderCoherence(context) {
     return `<hass-tabs-subpage-data-table
       id="panel-shell"
       data-coherence-table-page
-      clickable
       main-page
     >
       <div slot="top-header" class="table-page-top">

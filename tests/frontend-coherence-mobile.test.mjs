@@ -109,6 +109,7 @@ test("coherence result uses the native Home Assistant data-table toolbar without
   assert.match(rendered, /hass-tabs-subpage-data-table/);
   assert.match(rendered, /data-coherence-table-page/);
   assert.doesNotMatch(rendered, /has-filters/);
+  assert.doesNotMatch(rendered, /\bclickable\b/);
 });
 
 test("coherence table exposes search, sorting, grouping and column settings", () => {
@@ -126,7 +127,7 @@ test("coherence table exposes search, sorting, grouping and column settings", ()
   panel._hydrateCoherenceTable();
 
   assert.equal(tablePage.narrow, true);
-  assert.equal(tablePage.clickable, true);
+  assert.equal(tablePage.clickable, false);
   assert.equal(tablePage.columns.entity.main, true);
   assert.equal(tablePage.columns.entity.groupable, true);
   assert.equal(tablePage.columns.entity.hideable, false);
@@ -169,7 +170,7 @@ test("coherence table exposes search, sorting, grouping and column settings", ()
   assert.deepEqual(panel._coherenceTableState.hiddenColumns, ["source"]);
 });
 
-test("coherence row click opens the exact Home Assistant target", () => {
+test("coherence opens the exact Home Assistant target only through the Open button", () => {
   const panel = new Panel();
   const tablePage = {
     listeners: {},
@@ -184,13 +185,16 @@ test("coherence row click opens the exact Home Assistant target", () => {
 
   let navigated = null;
   panel._navigate = (path, newTab) => { navigated = [path, newTab]; };
-  tablePage.listeners["row-click"]({ detail: { id: tablePage.data[0].id } });
+  assert.equal(tablePage.listeners["row-click"], undefined);
+  const button = tablePage.columns.action.template(tablePage.data[0]);
+  button.listeners.click({ stopPropagation() {} });
   assert.deepEqual(navigated, ["/config/automation/edit/123", true]);
 
   let moreInfo = null;
   panel._openMoreInfo = (entityId) => { moreInfo = entityId; };
   tablePage.data[0].link = { type: "more_info", entity_id: "sensor.template_result" };
-  tablePage.listeners["row-click"]({ detail: { id: tablePage.data[0].id } });
+  const moreInfoButton = tablePage.columns.action.template(tablePage.data[0]);
+  moreInfoButton.listeners.click({ stopPropagation() {} });
   assert.equal(moreInfo, "sensor.template_result");
 });
 
