@@ -126,8 +126,10 @@ Aucune ressource Lovelace et aucune configuration YAML ne sont nécessaires pour
 
 L’intégration ajoute **Alert Manager** au sélecteur de cartes du dashboard. Aucune
 installation frontend HACS séparée ni ressource Lovelace manuelle n’est nécessaire.
-Actualisez le navigateur après l’installation ou une mise à jour. La carte nécessite
-un compte administrateur, comme le panneau Alert Manager.
+Actualisez le navigateur après l’installation ou une mise à jour. Tous les utilisateurs connectés peuvent
+consulter la carte, l’Accueil et l’Historique, y compris les détails des alertes et les
+statistiques historiques. Les autres onglets et toutes les actions, dont l’acquittement,
+restent réservés aux administrateurs. La configuration n’est pas chargée pour les autres utilisateurs.
 
 L’éditeur visuel propose un nombre maximal de tuiles (5 par défaut, de 1 à 100) et un
 filtre facultatif par étiquette. Les étiquettes correspondent à celles du pack/de la
@@ -359,7 +361,7 @@ La configuration propose un bloc compact indiquant le nombre d’évaluations de
 
 - Home Assistant **2026.8 ou plus récent**.
 - Une seule instance d’Alert Manager par installation Home Assistant.
-- Un compte administrateur est nécessaire pour accéder au panneau Alert Manager.
+- Un compte administrateur est nécessaire pour la configuration et toutes les actions ; les autres utilisateurs ont accès à l’Accueil et à l’Historique en lecture seule.
 
 Alert Manager est une intégration communautaire non officielle et n’est pas affiliée au projet Home Assistant.
 

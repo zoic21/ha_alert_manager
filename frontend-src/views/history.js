@@ -23,9 +23,9 @@ export function refreshHistoryData() {
 }
 
 export function renderHistory(context) {
-    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
+    const { busy, readOnly = false, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
     if (limit === 0) {
-      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
+      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2>${readOnly ? "" : `<p>${esc(t("history.disabled_help"))}</p>`}${readOnly ? "" : `<ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button>`}</div></ha-card>`;
     }
     const statisticsControls = statisticsOpen ? `
       <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
@@ -49,7 +49,7 @@ export function renderHistory(context) {
         <div><h2>${esc(t("history.title"))}</h2></div>
         <div class="history-page-actions">
           <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
-          <ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>
+          ${readOnly ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
     </ha-card>`;
@@ -66,6 +66,7 @@ export function renderHistoryPanel() {
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
     return renderHistory({
       busy: this._busy,
+      readOnly: this._readOnly,
       statisticsOpen: this._historyStatisticsOpen,
       statisticsDays: this._historyStatisticsDays ?? 7,
       limit,

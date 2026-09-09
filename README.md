@@ -127,8 +127,9 @@ No Lovelace resource and no YAML configuration are required to get started.
 
 The integration includes **Alert Manager** in the dashboard card picker. No separate
 HACS frontend installation or manual Lovelace resource is needed. Refresh your browser
-after installing or updating the integration. The card requires an administrator account,
-just like the Alert Manager panel.
+after installing or updating the integration. All authenticated users can view the card, Overview and History, including alert
+details and history statistics. Other tabs and all actions, including acknowledgement,
+require an administrator. Non-administrators do not load integration configuration.
 
 The visual editor offers a maximum tile count (5 by default, 1–100) and an optional
 label filter. Labels match the alert's pack/rule labels or its entity labels, using
@@ -358,7 +359,7 @@ Configuration includes a compact diagnostic block for custom-rule evaluation cou
 
 - Home Assistant **2026.8 or newer**.
 - One Alert Manager instance per Home Assistant installation.
-- Administrator access is required for the Alert Manager panel.
+- Administrator access is required for configuration and all actions; other users have read-only access to Overview and History.
 
 Alert Manager is an unofficial community integration and is not affiliated with the Home Assistant project.
 

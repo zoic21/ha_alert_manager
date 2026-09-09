@@ -29,6 +29,7 @@ const filenames = [
   "styles/responsive-styles.js",
   "styles/panel-styles.js",
   "utils/constants.js",
+  "utils/permissions.js",
   "utils/escaping.js",
   "utils/formatting.js",
   "utils/table-preferences.js",

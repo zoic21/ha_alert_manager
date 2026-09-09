@@ -16,6 +16,7 @@ export function rememberPanelState() {
     if (!key || !this._config) return;
     PANEL_STATE_CACHE.set(key, {
       language: this._language,
+      readOnly: this._readOnly,
       translations: this._translations,
       englishTranslations: this._englishTranslations,
       config: this._config,
@@ -32,7 +33,7 @@ export function rememberPanelState() {
 export function restorePanelState() {
     const key = panelStateCacheKey(this._hass);
     const cached = key ? PANEL_STATE_CACHE.get(key) : null;
-    if (!cached || cached.language !== this._language) return false;
+    if (!cached || cached.language !== this._language || cached.readOnly !== this._readOnly) return false;
     this._translations = cached.translations;
     this._englishTranslations = cached.englishTranslations;
     this._config = cached.config;
@@ -57,7 +58,20 @@ export function setHass(value) {
       scannedAt && scannedAt !== this._coherenceScannedAt,
     );
     this._coherenceScannedAt = scannedAt;
+    const wasReadOnly = this._readOnly;
     this._hass = value;
+    if (wasReadOnly !== this._readOnly) {
+      this._config = null;
+      this._configRecovery = null;
+      this._backupRestoreCandidate = null;
+      this._coherenceLoaded = false;
+      this._configurationDrawer = null;
+      this._editingRule = null;
+      this._selectedAlertIds?.clear();
+      this._selectedHistoryIds?.clear();
+      this._selectionMode = this._historySelectionMode = false;
+    }
+    if (this._readOnly && !["overview", "history"].includes(this._activeTab)) this._activeTab = "overview";
     this._language = language;
     if (!this._config) this._restorePanelState();
     const alertsChanged = this._syncSensor();
@@ -87,7 +101,7 @@ export function setHass(value) {
 }
 
 export function refreshTabData(tab) {
-    if (!this._hass || !this._config) return;
+    if (!this._hass || !this._config || (this._readOnly && !["overview", "history"].includes(tab))) return;
     if (tab === "history") {
       void this._refreshHistory();
     } else if (tab === "coherence") {
@@ -102,13 +116,14 @@ export function refreshTabData(tab) {
 export async function load() {
     const initialLoad = !this._config;
     this._cachedStateNeedsRefresh = false;
+    const readOnly = this._readOnly;
     this._loadPromise = Promise.all([
-      this._api.call({ type: "alert_manager/config/get" }),
+      readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
-      this._api.call({ type: "alert_manager/packs/list" }),
-      this._api.call({ type: "alert_manager/history/config/get" }),
-      this._api.call({ type: "alert_manager/config/recovery/get" }),
-      this._api.call({ type: "alert_manager/notifications/stats/get" }),
+      readOnly ? Promise.resolve([]) : this._api.call({ type: "alert_manager/packs/list" }),
+      readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/history/config/get" }),
+      readOnly ? Promise.resolve(null) : this._api.call({ type: "alert_manager/config/recovery/get" }),
+      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({ type: "alert_manager/notifications/stats/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -126,10 +141,26 @@ export async function load() {
         this._notificationStats,
         this._labels,
       ] = await this._loadPromise;
+      if (readOnly !== this._readOnly) {
+        this._config = null;
+        this._configRecovery = null;
+        this._cachedStateNeedsRefresh = true;
+        return;
+      }
+      if (readOnly) {
+        this._packs = Object.keys(this._englishTranslations).flatMap((key) => {
+          const match = key.match(/^component\.alert_manager\.config_panel\.packs\.([^.]+)\.name$/);
+          return match ? [{ id: match[1], translation_key: match[1] }] : [];
+        });
+      }
       this._notificationStats ??= { last_24h: {} };
-      this._monitoringEnabled = this._config.monitoring_enabled !== false;
-      this._resetSettingsDraft();
-      this._resetAutomaticDraft();
+      this._monitoringEnabled = readOnly
+        ? this._hass.states?.["switch.alert_manager_main_monitoring"]?.state !== "off"
+        : this._config.monitoring_enabled !== false;
+      if (!readOnly) {
+        this._resetSettingsDraft();
+        this._resetAutomaticDraft();
+      }
       this._syncSensor();
       this._notice = null;
       this._rememberPanelState();
@@ -153,6 +184,7 @@ export async function load() {
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
+      if (this._cachedStateNeedsRefresh && this.isConnected) void this._load();
     }
 }
 
@@ -214,7 +246,7 @@ export function refreshHistory() {
 }
 
 export async function refreshCoherence() {
-    if (!this._hass || this._coherenceLoadPromise) return this._coherenceLoadPromise;
+    if (this._readOnly || !this._hass || this._coherenceLoadPromise) return this._coherenceLoadPromise;
     this._coherenceLoadPromise = this._api.call({
       type: "alert_manager/coherence/get",
     });
@@ -233,7 +265,7 @@ export async function refreshCoherence() {
 }
 
 export async function refreshNotificationStats() {
-    if (!this._hass || this._notificationStatsLoadPromise) {
+    if (this._readOnly || !this._hass || this._notificationStatsLoadPromise) {
       return this._notificationStatsLoadPromise;
     }
     this._notificationStatsLoadPromise = this._api.call({

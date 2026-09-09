@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 
 const sourceNames = [
   "utils/constants.js",
+  "utils/permissions.js",
   "utils/alert-labels.js",
   "utils/navigation.js",
   "api/transport.js",

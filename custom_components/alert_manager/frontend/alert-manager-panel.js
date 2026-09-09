@@ -91,6 +91,28 @@ const ACTION_ICONS = Object.freeze({
   "open-deleted-entities": "mdi:delete-clock-outline",
 });
 
+// Source: frontend-src/utils/permissions.js
+const readOnlyTabs = new Set(["overview", "history"]);
+const readOnlyActions = new Set([
+  "tab", "filter-summary-status", "clear-filter-section", "toggle-filter-option",
+  "open-alert-history", "toggle-alert-timestamp", "close-alert-details",
+  "toggle-history-statistics", "history-statistics-period", "history-statistics-leader",
+]);
+
+function canViewTab(readOnly, tab) {
+  return !readOnly || readOnlyTabs.has(tab);
+}
+
+function canUsePanelAction(readOnly, action, tab) {
+  return !readOnly || (readOnlyActions.has(action) && (action !== "tab" || readOnlyTabs.has(tab)));
+}
+
+function panelTabs() {
+  return TABS.filter((tab) => canViewTab(this._readOnly, tab.id)).map(({ path, translationKey, iconPath }) => ({
+    path, name: this._t(translationKey), iconPath,
+  }));
+}
+
 // Source: frontend-src/utils/alert-labels.js
 function alertLabelIds(source, hass) {
   return [...new Set([
@@ -712,6 +734,7 @@ function rememberPanelState() {
     if (!key || !this._config) return;
     PANEL_STATE_CACHE.set(key, {
       language: this._language,
+      readOnly: this._readOnly,
       translations: this._translations,
       englishTranslations: this._englishTranslations,
       config: this._config,
@@ -728,7 +751,7 @@ function rememberPanelState() {
 function restorePanelState() {
     const key = panelStateCacheKey(this._hass);
     const cached = key ? PANEL_STATE_CACHE.get(key) : null;
-    if (!cached || cached.language !== this._language) return false;
+    if (!cached || cached.language !== this._language || cached.readOnly !== this._readOnly) return false;
     this._translations = cached.translations;
     this._englishTranslations = cached.englishTranslations;
     this._config = cached.config;
@@ -753,7 +776,20 @@ function setHass(value) {
       scannedAt && scannedAt !== this._coherenceScannedAt,
     );
     this._coherenceScannedAt = scannedAt;
+    const wasReadOnly = this._readOnly;
     this._hass = value;
+    if (wasReadOnly !== this._readOnly) {
+      this._config = null;
+      this._configRecovery = null;
+      this._backupRestoreCandidate = null;
+      this._coherenceLoaded = false;
+      this._configurationDrawer = null;
+      this._editingRule = null;
+      this._selectedAlertIds?.clear();
+      this._selectedHistoryIds?.clear();
+      this._selectionMode = this._historySelectionMode = false;
+    }
+    if (this._readOnly && !["overview", "history"].includes(this._activeTab)) this._activeTab = "overview";
     this._language = language;
     if (!this._config) this._restorePanelState();
     const alertsChanged = this._syncSensor();
@@ -783,7 +819,7 @@ function setHass(value) {
 }
 
 function refreshTabData(tab) {
-    if (!this._hass || !this._config) return;
+    if (!this._hass || !this._config || (this._readOnly && !["overview", "history"].includes(tab))) return;
     if (tab === "history") {
       void this._refreshHistory();
     } else if (tab === "coherence") {
@@ -798,13 +834,14 @@ function refreshTabData(tab) {
 async function load() {
     const initialLoad = !this._config;
     this._cachedStateNeedsRefresh = false;
+    const readOnly = this._readOnly;
     this._loadPromise = Promise.all([
-      this._api.call({ type: "alert_manager/config/get" }),
+      readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
-      this._api.call({ type: "alert_manager/packs/list" }),
-      this._api.call({ type: "alert_manager/history/config/get" }),
-      this._api.call({ type: "alert_manager/config/recovery/get" }),
-      this._api.call({ type: "alert_manager/notifications/stats/get" }),
+      readOnly ? Promise.resolve([]) : this._api.call({ type: "alert_manager/packs/list" }),
+      readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/history/config/get" }),
+      readOnly ? Promise.resolve(null) : this._api.call({ type: "alert_manager/config/recovery/get" }),
+      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({ type: "alert_manager/notifications/stats/get" }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -822,10 +859,26 @@ async function load() {
         this._notificationStats,
         this._labels,
       ] = await this._loadPromise;
+      if (readOnly !== this._readOnly) {
+        this._config = null;
+        this._configRecovery = null;
+        this._cachedStateNeedsRefresh = true;
+        return;
+      }
+      if (readOnly) {
+        this._packs = Object.keys(this._englishTranslations).flatMap((key) => {
+          const match = key.match(/^component\.alert_manager\.config_panel\.packs\.([^.]+)\.name$/);
+          return match ? [{ id: match[1], translation_key: match[1] }] : [];
+        });
+      }
       this._notificationStats ??= { last_24h: {} };
-      this._monitoringEnabled = this._config.monitoring_enabled !== false;
-      this._resetSettingsDraft();
-      this._resetAutomaticDraft();
+      this._monitoringEnabled = readOnly
+        ? this._hass.states?.["switch.alert_manager_main_monitoring"]?.state !== "off"
+        : this._config.monitoring_enabled !== false;
+      if (!readOnly) {
+        this._resetSettingsDraft();
+        this._resetAutomaticDraft();
+      }
       this._syncSensor();
       this._notice = null;
       this._rememberPanelState();
@@ -849,6 +902,7 @@ async function load() {
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
+      if (this._cachedStateNeedsRefresh && this.isConnected) void this._load();
     }
 }
 
@@ -910,7 +964,7 @@ function refreshHistory() {
 }
 
 async function refreshCoherence() {
-    if (!this._hass || this._coherenceLoadPromise) return this._coherenceLoadPromise;
+    if (this._readOnly || !this._hass || this._coherenceLoadPromise) return this._coherenceLoadPromise;
     this._coherenceLoadPromise = this._api.call({
       type: "alert_manager/coherence/get",
     });
@@ -929,7 +983,7 @@ async function refreshCoherence() {
 }
 
 async function refreshNotificationStats() {
-    if (!this._hass || this._notificationStatsLoadPromise) {
+    if (this._readOnly || !this._hass || this._notificationStatsLoadPromise) {
       return this._notificationStatsLoadPromise;
     }
     this._notificationStatsLoadPromise = this._api.call({
@@ -1221,10 +1275,10 @@ function hydrateDataTables() {
       tablePage.initialCollapsedGroups = [...this._collapsedTableGroups]
         .filter((key) => key.startsWith(`${kind}:`))
         .map((key) => key.slice(kind.length + 1));
-      tablePage.selectable = true;
+      tablePage.selectable = !this._readOnly;
       tablePage.clickable = true;
       tablePage.showFilters = this._filterPaneKind === kind;
-      if (selectionMode) tablePage._selectMode = true;
+      tablePage._selectMode = !this._readOnly && Boolean(selectionMode);
       tablePage.noDataText = sourceRows.length
         ? this._t("table.empty_filtered")
         : this._t(kind === "history" ? "history.empty" : "table.empty_current");
@@ -1674,13 +1728,13 @@ function renderAlertTable(kind, sourceRows, topHeader = "") {
       id="panel-shell"
       data-alert-table-page="${kind}"
       has-filters
-      selectable
+      ${this._readOnly ? "" : "selectable"}
       clickable
       main-page
     >
       ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
       <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>
-      ${kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
+      ${this._readOnly ? "" : kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
         <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
         <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
       </div>` : `<div slot="selection-bar" class="selection-actions">
@@ -1975,22 +2029,22 @@ function alertDetailsItems(kind, row) {
       data,
     });
     const items = [
-      ...(row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
+      ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
       ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
-      linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
+      this._readOnly ? { key: "entity-id", label: this._t("table.columns.entity_id"), value: row.entityId } : linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
         entityId: row.entityId,
       }),
-      row.deviceId
+      !this._readOnly && row.deviceId
         ? linked("device", this._t("table.columns.device"), row.device || row.deviceId, "open-alert-device", {
           deviceId: row.deviceId,
         })
         : { key: "device", label: this._t("table.columns.device"), value: row.device },
       { key: "area", label: this._t("table.columns.area"), value: row.area },
-      row.customRule && row.ruleId && (this._config?.rules ?? []).some(
+      !this._readOnly && row.customRule && row.ruleId && (this._config?.rules ?? []).some(
         (rule) => String(rule.id) === String(row.ruleId),
       )
         ? linked("rule", this._t("table.columns.rule"), row.rule, "open-alert-rule", {
@@ -2184,7 +2238,7 @@ function renderAlertDetailsPanel(kind, row) {
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
-    const menuAction = kind === "overview" && row.status === "active"
+    const menuAction = this._readOnly ? "" : kind === "overview" && row.status === "active"
       ? "acknowledge"
       : kind === "overview" && row.status === "acknowledged"
         ? "unacknowledge"
@@ -2198,7 +2252,7 @@ function renderAlertDetailsPanel(kind, row) {
         iconPath,
         menuAction,
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
-        reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
+        reevaluateLabel: !this._readOnly && kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
         menuIcon: kind === "history" ? "mdi:delete" : menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
@@ -2279,6 +2333,7 @@ function openAlertDeepLink() {
 }
 
 async function handleAlertDetailsSelection(event) {
+    if (this._readOnly) return true;
     const path = event.composedPath?.() ?? [event.target];
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
@@ -5089,9 +5144,9 @@ function refreshHistoryData() {
 }
 
 function renderHistory(context) {
-    const { busy, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
+    const { busy, readOnly = false, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
     if (limit === 0) {
-      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2><p>${esc(t("history.disabled_help"))}</p><ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button></div></ha-card>`;
+      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2>${readOnly ? "" : `<p>${esc(t("history.disabled_help"))}</p>`}${readOnly ? "" : `<ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button>`}</div></ha-card>`;
     }
     const statisticsControls = statisticsOpen ? `
       <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
@@ -5115,7 +5170,7 @@ function renderHistory(context) {
         <div><h2>${esc(t("history.title"))}</h2></div>
         <div class="history-page-actions">
           <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
-          <ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>
+          ${readOnly ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
     </ha-card>`;
@@ -5132,6 +5187,7 @@ function renderHistoryPanel() {
     const events = Array.isArray(this._history?.events) ? this._history.events : [];
     return renderHistory({
       busy: this._busy,
+      readOnly: this._readOnly,
       statisticsOpen: this._historyStatisticsOpen,
       statisticsDays: this._historyStatisticsDays ?? 7,
       limit,
@@ -9593,10 +9649,12 @@ class AlertManagerPanel extends HTMLElement {
   set hass(value) {
     setHass.call(this, value);
   }
+  get _readOnly() { return this._hass?.user?.is_admin !== true; }
   get hass() {
     return this._hass;
   }
   async _handleMenuSelected(event) {
+    if (this._readOnly) return;
     if (await this._handleAlertDetailsSelection(event)) return;
     await this._handleSelected(event);
   }
@@ -9667,13 +9725,7 @@ class AlertManagerPanel extends HTMLElement {
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();
   }
-  _tabs() {
-    return TABS.map(({ path, translationKey, iconPath }) => ({
-      path,
-      name: this._t(translationKey),
-      iconPath,
-    }));
-  }
+  _tabs = panelTabs;
 
   _syncSensor = syncSensor;
   _render() {
@@ -9731,7 +9783,7 @@ class AlertManagerPanel extends HTMLElement {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
   _pageMessagesContent() {
-    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
+    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span>${!this._readOnly ? `<ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button>` : ""}</ha-alert>` : ""}
       ${!this._noticeTarget() && !this._editingRule && this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
@@ -9881,6 +9933,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderTab() {
+    if (!canViewTab(this._readOnly, this._activeTab)) this._activeTab = "overview";
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
     if (this._activeTab === "history" && !this._historyLoaded) {
       return `<div class="loading">${esc(this._t("loading"))}</div>`;
@@ -9897,6 +9950,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _tabFromRoute(route) {
     const path = `${route?.prefix ?? ""}${route?.path ?? ""}`.replace(/\/$/, "");
+    if (this._readOnly) return path.endsWith("/history") ? "history" : "overview";
     if (path.endsWith("/automatic")) return "settings";
     return TABS.find((tab) => path.endsWith(`/${tab.id}`))?.id ?? "overview";
   }
@@ -9925,6 +9979,7 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (!canUsePanelAction(this._readOnly, action, button.dataset.tab)) return;
     if (SIDE_DRAWER_OPEN_ACTIONS.has(action)
       && ["settings", "automatic"].includes(this._configurationDrawer?.kind)
       && this._configurationDrawer.mode === "yaml") {
@@ -9996,7 +10051,7 @@ class AlertManagerPanel extends HTMLElement {
   }
   async _handleSubmit(event) {
     event.preventDefault();
-    if (this._busy) return;
+    if (this._readOnly || this._busy) return;
     // The save call rerenders the panel. Keep the form reference before the
     // first await because the browser may clear Event.target afterwards.
     const form = event.target;

@@ -74,7 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             module_url=(
                 f"{PANEL_STATIC_URL}/alert-manager-panel.js?v={FRONTEND_CACHE_VERSION}"
             ),
-            require_admin=True,
+            require_admin=False,
             config_panel_domain=DOMAIN,
         )
         panel_registered = True
