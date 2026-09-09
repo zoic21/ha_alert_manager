@@ -107,6 +107,7 @@ export class AlertManagerCard extends HTMLElement {
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
     return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
+      <ha-ripple></ha-ripple>
       ${multiple ? "" : this._icon(alert.type)}
       <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
       <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div>
@@ -116,16 +117,16 @@ export class AlertManagerCard extends HTMLElement {
   _render() {
     if (!this.shadowRoot) return;
     const { status, snapshot } = this._value;
-    let groups = status === "ready"
+    const startup = status === "ready" && snapshot.startup?.in_progress;
+    let groups = status === "ready" && !startup
       ? dashboardGroups(snapshot.alerts, this._config.label, this._hass) : [];
-    this._sample = this._preview && !groups.length;
+    this._sample = this._preview && !startup && !groups.length;
     if (this._sample) {
       groups = dashboardGroups([{
         id: "preview", type: "battery", name: this._t("dashboard.preview_device"),
         condition: this._t("dashboard.preview_message"), active_since: "2026-01-01T00:00:00Z",
       }]);
     }
-    const startup = status === "ready" && snapshot.startup?.in_progress;
     const hidden = status === "ready" && !startup && !groups.length && !this._preview;
     if (this.hidden !== hidden) {
       this.hidden = hidden;
@@ -140,12 +141,16 @@ export class AlertManagerCard extends HTMLElement {
       const label = esc(this._t("dashboard.more_count", { count }));
       const target = `/alert-manager/overview?${new URLSearchParams({ dashboard: "1", ...(this._config.label ? { label: this._config.label } : {}) })}`;
       tiles += `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
-        <span aria-hidden="true">+${count}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>
+        <ha-ripple></ha-ripple><span aria-hidden="true">+${count}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>
       </a></ha-card>`;
     }
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
-    else if (status !== "ready" || startup) content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${startup ? "startup" : status}`))}
+    else if (startup) content = `<div class="tiles"><ha-card><div class="tile startup" role="status">
+      <ha-icon icon="mdi:timer-sand" aria-hidden="true"></ha-icon>
+      <div class="content">${esc(this._t("dashboard.startup"))}</div>
+    </div></ha-card></div>`;
+    else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
       ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);

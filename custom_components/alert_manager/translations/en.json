@@ -804,7 +804,7 @@
       "unavailable": "Alert Manager unavailable",
       "admin": "Administrator access required",
       "paused": "Monitoring disabled",
-      "startup": "Home Assistant is starting",
+      "startup": "Starting up…",
       "retry": "Retry",
       "preview": "Example shown only in the editor",
       "preview_device": "Living room sensor",

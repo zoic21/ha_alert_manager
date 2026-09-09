@@ -194,7 +194,7 @@ test("card enforces group limit, escapes names, translates conditions and shows 
   card._value = { status: "ready", snapshot: { alerts: [], startup: { in_progress: true } } };
   card._render();
   assert.equal(card.hidden, false);
-  assert.match(card.shadowRoot.innerHTML, /Home Assistant démarre/);
+  assert.match(card.shadowRoot.innerHTML, /Démarrage en cours/);
   card._value = { status: "unavailable" };
   card._render();
   assert.match(card.shadowRoot.innerHTML, /indisponible/);
@@ -314,4 +314,30 @@ test("compact coherence text keeps full details and custom rule messages intact"
   const customTile = card._tile(dashboardGroups([rule])[0]);
   assert.match(customTile, /title="Mon message &lt;personnalisé&gt;">Mon message &lt;personnalisé&gt;<\/div>/);
   assert.doesNotMatch(customTile, /Status on/);
+});
+
+test("startup replaces restored alerts and overflow until evaluation completes, including in preview", () => {
+  const card = new AlertManagerCard();
+  card.hass = { locale: { language: "fr" } };
+  card.setConfig({ max_tiles: 1, alignment: "right" });
+  const snapshot = { alerts: [alert("restored-a"), alert("restored-b")], startup: { in_progress: true } };
+  card._value = { status: "ready", snapshot };
+  for (const preview of [false, true]) {
+    card.preview = preview;
+    assert.equal(card.hidden, false);
+    assert.match(card.shadowRoot.innerHTML, /<div class="tiles"><ha-card><div class="tile startup" role="status">/);
+    assert.match(card.shadowRoot.innerHTML, /Démarrage en cours/);
+    assert.match(card.shadowRoot.innerHTML, /data-alignment="right"/);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /restored-|class="overflow"|Capteur du salon/);
+  }
+  card.preview = false;
+  snapshot.startup.in_progress = false;
+  card._render();
+  assert.match(card.shadowRoot.innerHTML, /restored-a/);
+  assert.match(card.shadowRoot.innerHTML, /class="overflow"/);
+  assert.match(card.shadowRoot.innerHTML, /<ha-ripple><\/ha-ripple>/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /Démarrage en cours/);
+  snapshot.alerts = [];
+  card._render();
+  assert.equal(card.hidden, true);
 });

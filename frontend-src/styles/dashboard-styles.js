@@ -11,7 +11,11 @@ export const dashboardStyles = `
   ha-card { height: 100%; overflow: hidden; }
   a { color: var(--primary-text-color); text-decoration: none; }
   .tile { display: flex; box-sizing: border-box; align-items: center; gap: 12px; padding: 12px; height: 100%; min-height: 68px; }
-  .tile:hover, .more:hover { background: var(--secondary-background-color); }
+  a.tile, a.more { position: relative; --ha-ripple-color: var(--alert-icon-color);
+    --ha-ripple-hover-opacity: 0.04; --ha-ripple-pressed-opacity: 0.12; }
+  .more ha-ripple { --ha-ripple-color: var(--secondary-text-color); }
+  .startup { color: var(--secondary-text-color); }
+  .startup ha-icon { color: var(--state-inactive-color, var(--secondary-text-color)); background: none; }
   .tile:focus-visible, .more:focus-visible { outline: 2px solid var(--primary-color); outline-offset: -3px; border-radius: var(--ha-card-border-radius, 12px); }
   .content { min-width: 0; flex: 1; }
   .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -24,7 +28,6 @@ export const dashboardStyles = `
     background: transparent; border: none; box-shadow: none; }
   .more { display: flex; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box;
     height: 44px; min-width: 64px; padding: 0 12px; color: var(--secondary-text-color); font-size: 16px; font-weight: 500; }
-  .more:focus-visible { background: var(--secondary-background-color); }
   .more ha-icon { color: inherit; background: none; padding: 0; }
   .status { padding: 12px; color: var(--secondary-text-color); font-size: 14px; }
 `;

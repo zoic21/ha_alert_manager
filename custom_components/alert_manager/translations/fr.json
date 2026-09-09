@@ -804,7 +804,7 @@
       "unavailable": "Alert Manager indisponible",
       "admin": "Accès administrateur requis",
       "paused": "Surveillance désactivée",
-      "startup": "Home Assistant démarre",
+      "startup": "Démarrage en cours…",
       "retry": "Réessayer",
       "preview": "Exemple affiché uniquement dans l’éditeur",
       "preview_device": "Capteur du salon",
