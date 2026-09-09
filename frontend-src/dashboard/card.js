@@ -96,14 +96,20 @@ export class AlertManagerCard extends HTMLElement {
   }
   _tile(group) {
     const alert = group.alerts[0];
-    const name = alert.device_name || alert.name || alert.rule_name || alert.entity_id || this._t("dashboard.alert");
+    const fullName = alert.device_name || alert.name || alert.rule_name || alert.entity_id || this._t("dashboard.alert");
     const multiple = group.alerts.length > 1;
+    const coherence = !multiple && alert.type === "coherence";
+    const name = coherence ? this._t("dashboard.coherence") : fullName;
+    const count = alert.condition_params?.count ?? alert.value;
+    const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
     const message = multiple ? this._t("dashboard.count", { count: group.alerts.length })
-      : (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
+      : coherence && Number.isInteger(count) && count >= 0
+        ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
+        : fullMessage;
     return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
       ${multiple ? "" : this._icon(alert.type)}
-      <div class="content"><div class="name" title="${esc(name)}">${esc(name)}</div>
-      <div class="message">${esc(message)}</div>
+      <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
+      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div>
       ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type)).join("")}</div>` : ""}</div>
     </a></ha-card>`;
   }

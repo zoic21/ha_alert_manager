@@ -299,3 +299,19 @@ test("overflow stays inside the tile row and counts hidden alerts after filterin
   card.setConfig({ max_tiles: 2, label: "a&b" });
   assert.doesNotMatch(card.shadowRoot.innerHTML, /class="overflow"/);
 });
+
+test("compact coherence text keeps full details and custom rule messages intact", () => {
+  const card = new AlertManagerCard();
+  card.hass = { locale: { language: "fr" } };
+  const coherence = alert("coherence", { type: "coherence", name: "Cohérence de la configuration",
+    condition: "3 problèmes de cohérence de configuration", condition_params: { count: 3 } });
+  const tile = card._tile(dashboardGroups([coherence])[0]);
+  assert.match(tile, /title="Cohérence de la configuration">Cohérence<\/div>/);
+  assert.match(tile, /title="3 problèmes de cohérence de configuration">3 problèmes détectés<\/div>/);
+  coherence.condition_params.count = 1;
+  assert.match(card._tile(dashboardGroups([coherence])[0]), />1 problème détecté<\/div>/);
+  const rule = alert("custom", { type: "rule", message: 'Mon message <personnalisé>', condition: "Status on" });
+  const customTile = card._tile(dashboardGroups([rule])[0]);
+  assert.match(customTile, /title="Mon message &lt;personnalisé&gt;">Mon message &lt;personnalisé&gt;<\/div>/);
+  assert.doesNotMatch(customTile, /Status on/);
+});

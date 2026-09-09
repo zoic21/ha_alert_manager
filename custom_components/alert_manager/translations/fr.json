@@ -816,7 +816,10 @@
       "align_right": "Droite",
       "invalid_alignment": "Choisissez left, center ou right pour l’alignement.",
       "invalid_icon_color": "Choisissez une couleur Home Assistant ou une couleur CSS valide.",
-      "more_count": "Voir plus d’alertes : {count} supplémentaires"
+      "more_count": "Voir plus d’alertes : {count} supplémentaires",
+      "coherence": "Cohérence",
+      "coherence_one": "1 problème détecté",
+      "coherence_count": "{count} problèmes détectés"
     }
   },
   "services": {
