@@ -2,6 +2,21 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.15 — September 9, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Include the Alert Manager dashboard card directly in the integration, with automatic module registration and a visual editor.
+- Display active, unacknowledged alerts in compact device groups, with an optional label filter, a configurable tile limit and links to alert details or the filtered overview.
+- Share event-driven refreshes between cards and distinguish loading, startup, disabled monitoring and unavailable data from an empty alert list.
+- Hide empty cards through Home Assistant’s native visibility mechanism and provide an editor-only preview with French and English translations.
+
+### Fixes
+
+- Allow repeated dashboard visits to reopen the same alert detail or device-filtered view.
+
 ## 2.3.0-dev.14 — September 9, 2026
 
 This is a development prerelease.
