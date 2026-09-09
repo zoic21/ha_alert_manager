@@ -2,6 +2,22 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.16 — September 9, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Allow authenticated non-admin users to view the dashboard card, Overview and History, including alert details and historical statistics. All other tabs and every action, including acknowledgement, remain administrator-only and protected on the server.
+- Load read-only panels without fetching configuration or administrative data, and guard direct navigation and cached state by access mode.
+- Limit dashboard tiles to 300 px, add configurable alignment and Home Assistant's native icon color selector, and preserve previously selected RGB colors.
+- Use compact single-line messages, shorter coherence summaries, native tile hover feedback and an unobtrusive +N overflow action.
+- Show only a compact startup tile until startup completes, then restore alerts or hide an empty card.
+
+### Fixes
+
+- Wait for Home Assistant frontend initialization before registering dashboard custom elements, fixing the missing-card error in the card picker.
+
 ## 2.3.0-dev.15 — September 9, 2026
 
 This is a development prerelease.
