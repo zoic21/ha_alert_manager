@@ -1,3 +1,4 @@
+import "./frontend-ready.js";
 import { navigate } from "../utils/navigation.js";
 import { connectDashboard } from "../api/dashboard.js";
 import { esc } from "../utils/escaping.js";

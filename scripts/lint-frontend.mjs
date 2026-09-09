@@ -7,6 +7,7 @@ const filenames = [
   "api/dashboard.js",
   "utils/alert-labels.js",
   "utils/navigation.js",
+  "dashboard/frontend-ready.js",
   "dashboard/translations.js",
   "dashboard/groups.js",
   "dashboard/editor.js",

@@ -14,6 +14,7 @@ globalThis.HTMLElement = class {
 };
 globalThis.customElements = {
   items: new Map(),
+  whenDefined() { return Promise.resolve(); },
   define(name, value) { this.items.set(name, value); },
   get(name) { return this.items.get(name); },
 };

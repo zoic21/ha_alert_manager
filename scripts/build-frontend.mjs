@@ -36,12 +36,14 @@ const sourceNames = [
 ];
 
 const stripModuleSyntax = (source) => source
+  .replace(/^import\s+["'][^"']+["'];\n/gm, "")
   .replace(/^import[\s\S]*?from\s+["'][^"']+["'](?: with \{[^}]+\})?;\n/gm, "")
   .replace(/^export (async function|function|class|const) /gm, "$1 ")
   .replace(/^export \{[^}]+\};\s*$/gm, "")
   .trim();
 
 const dashboardNames = [
+  "dashboard/frontend-ready.js",
   "utils/constants.js", "utils/escaping.js", "utils/alert-labels.js",
   "utils/navigation.js", "utils/formatting.js", "api/transport.js", "api/dashboard.js",
   "dashboard/translations.js", "dashboard/groups.js", "dashboard/editor.js",

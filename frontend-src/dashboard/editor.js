@@ -1,3 +1,4 @@
+import "./frontend-ready.js";
 import { dashboardText } from "./translations.js";
 
 export function validateDashboardConfig(config, language) {

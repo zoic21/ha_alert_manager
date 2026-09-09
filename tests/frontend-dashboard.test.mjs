@@ -145,7 +145,7 @@ class TestElement extends EventTarget {
 }
 globalThis.HTMLElement = TestElement;
 globalThis.window = { customCards: [] };
-globalThis.customElements = { definitions: new Map(), get(name) { return this.definitions.get(name); },
+globalThis.customElements = { definitions: new Map(), whenDefined() { return Promise.resolve(); }, get(name) { return this.definitions.get(name); },
   define(name, value) { this.definitions.set(name, value); } };
 globalThis.document = { createElement: () => new EventTarget() };
 const { AlertManagerCard } = await import("../frontend-src/dashboard/card.js");
