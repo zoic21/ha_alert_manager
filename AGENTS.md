@@ -62,6 +62,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `validation.py`, `yaml_io.py` | Authoritative configuration/rule validation and strict versioned YAML interchange. Manager entry points offload YAML parsing to the executor. |
 | `storage.py` | Separate configuration/runtime, history, and valid-configuration backup stores, with migrations and durability helpers. Notification runtime persistence remains in `notification_runtime.py`. |
 | `websocket.py`, `services.py`, `permissions.py` | Thin admin-restricted transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
+| `coherence_alert.py` | Aggregate coherence alert metadata and conservative report coverage; feeds the ordinary manager candidate lifecycle. |
 | `coherence.py` | Explicit or scheduled reference scans, shared YAML traversal, exclusions, counts and reports, with filesystem work off the event loop. |
 | `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop; each check owns its traversal scopes and node selection in the existing scanner executor. |
 | `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters for counts/status, monitoring control, and actions. |

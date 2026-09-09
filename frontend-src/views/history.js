@@ -77,6 +77,7 @@ export function renderHistoryPanel() {
 }
 
 export function historyRuleName(event) {
+    if (event.type === "coherence") return this._t("coherence.title");
     if (event.rule_name && event.rule_name !== event.type) return event.rule_name;
     const pack = this._packs.find((item) => item.id === event.type);
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (event.rule_name || event.type);

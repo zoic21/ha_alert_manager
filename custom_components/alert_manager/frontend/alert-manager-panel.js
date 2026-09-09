@@ -1346,6 +1346,7 @@ function tableColumns(kind) {
 }
 
 function alertRuleName(alert) {
+    if (alert.type === "coherence") return this._t("coherence.title");
     if (alert.rule_name && alert.rule_name !== alert.type) return alert.rule_name;
     const pack = this._packs.find((item) => item.id === alert.type);
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (alert.rule_name || alert.type || "—");
@@ -1949,6 +1950,7 @@ function alertDetailsItems(kind, row) {
       data,
     });
     const items = [
+      ...(row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -2590,6 +2592,12 @@ async function handleAlertTableAction(action, button, event) {
     event.stopPropagation?.();
     const entityId = button.dataset.entityId;
     this._closeAlertDetailsDialog(() => this._openMoreInfo(entityId));
+    return true;
+  }
+  if (action === "open-alert-coherence") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    this._closeAlertDetailsDialog(() => this._navigate("/alert-manager/coherence"));
     return true;
   }
   if (action === "open-alert-device") {
@@ -5113,6 +5121,7 @@ function renderHistoryPanel() {
 }
 
 function historyRuleName(event) {
+    if (event.type === "coherence") return this._t("coherence.title");
     if (event.rule_name && event.rule_name !== event.type) return event.rule_name;
     const pack = this._packs.find((item) => item.id === event.type);
     return pack ? this._t(`packs.${pack.translation_key}.name`) : (event.rule_name || event.type);
@@ -5345,6 +5354,25 @@ function refreshCoherenceData() {
 }
 
 function hydrateCoherenceTable() {
+    const control = this.shadowRoot?.querySelector?.("#coherence-alert-enabled");
+    if (control) {
+      control.checked = Boolean(this._config?.coherence_alert_enabled);
+      control.onchange = async () => {
+        control.disabled = true;
+        try {
+          this._config = await this._api.call({
+            type: "alert_manager/config/update",
+            config: { coherence_alert_enabled: Boolean(control.checked) },
+          });
+        } catch (error) {
+          control.checked = Boolean(this._config?.coherence_alert_enabled);
+          this._notice = { kind: "error", text: this._errorText(error) };
+          this._render();
+        } finally {
+          control.disabled = false;
+        }
+      };
+    }
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) return;
     const state = this._ensureCoherenceTableState();
@@ -5560,6 +5588,7 @@ function renderCoherence(context) {
       loading,
       pageMessages,
       statsMarkup,
+      alertEnabled = false,
       deletedEntities = null,
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
@@ -5569,6 +5598,7 @@ function renderCoherence(context) {
       t,
     } = context;
     const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
+    const alertControl = `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("coherence.alert_enabled"))}</span><ha-switch id="coherence-alert-enabled" aria-label="${esc(t("coherence.alert_enabled"))}" ${alertEnabled ? "checked" : ""}></ha-switch></div><small>${esc(t("coherence.alert_help"))}</small></div>`;
     const drawer = deletedEntitiesOpen
       ? renderDeletedEntitiesDrawer({
           data: deletedEntities,
@@ -5585,6 +5615,7 @@ function renderCoherence(context) {
           <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
           ${actions}
         </div>
+        ${alertControl}
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
       </ha-card>${drawer}`;
     }
@@ -5601,6 +5632,7 @@ function renderCoherence(context) {
             <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
             ${actions}
           </div>
+          ${alertControl}
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
@@ -5610,6 +5642,7 @@ function renderCoherence(context) {
 function renderCoherencePanel() {
     return renderCoherence({
       result: this._coherence,
+      alertEnabled: Boolean(this._config?.coherence_alert_enabled),
       loading: this._coherenceLoading,
       pageMessages: this._coherence ? this._renderPageMessages() : "",
       statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",

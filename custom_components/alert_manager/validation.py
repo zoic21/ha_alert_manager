@@ -34,6 +34,7 @@ _CONFIG_UPDATE_KEYS = {
     "pending_display_delay",
     "coherence_schedule",
     "coherence_scan_esphome",
+    "coherence_alert_enabled",
     "coherence_ignored_entity_references",
     "excluded_labels",
     # Accepted only so a cached V1 panel can update safely during migration.
@@ -130,11 +131,16 @@ def validate_config(config: Any) -> dict[str, Any]:
         )
     result["coherence_schedule"] = coherence_schedule
     coherence_scan_esphome = config.get(
-        "coherence_scan_esphome", result["coherence_scan_esphome"]
+        "coherence_scan_esphome",
+        result["coherence_scan_esphome"],
     )
     if not isinstance(coherence_scan_esphome, bool):
         raise ValueError("coherence_scan_esphome must be a boolean")
     result["coherence_scan_esphome"] = coherence_scan_esphome
+    coherence_alert_enabled = config.get("coherence_alert_enabled", False)
+    if not isinstance(coherence_alert_enabled, bool):
+        raise ValueError("coherence_alert_enabled must be a boolean")
+    result["coherence_alert_enabled"] = coherence_alert_enabled
     result["coherence_ignored_entity_references"] = (
         validate_coherence_ignored_entity_references(
             config.get("coherence_ignored_entity_references", [])

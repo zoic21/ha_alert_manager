@@ -125,6 +125,7 @@ DEFAULT_CONFIG: Final = {
     "history_limit": DEFAULT_HISTORY_LIMIT,
     "coherence_schedule": DEFAULT_COHERENCE_SCHEDULE,
     "coherence_scan_esphome": DEFAULT_COHERENCE_SCAN_ESPHOME,
+    "coherence_alert_enabled": False,
     "coherence_ignored_entity_references": [],
     "global_delay": DEFAULT_DELAY,
     "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,

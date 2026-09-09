@@ -118,6 +118,10 @@
         "attribute_variation": "Variation de l’attribut {attribute}",
         "state": "État",
         "state_variation": "Variation de l’état"
+      },
+      "coherence": {
+        "name": "Cohérence de la configuration",
+        "issues": "{count} problèmes de cohérence de configuration"
       }
     },
     "coherence": {
@@ -164,7 +168,9 @@
       "zha_status": {
         "not_loaded": "Contrôle ZHA non exécuté : intégration pas entièrement chargée.",
         "metadata_error": "Contrôle ZHA non exécuté : métadonnées indisponibles."
-      }
+      },
+      "alert_enabled": "Créer une alerte en cas d’incohérence",
+      "alert_help": "Une seule alerte reste présente jusqu’à un contrôle complet sans problème. Les profils de notification habituels s’appliquent."
     },
     "duration": {
       "activation": "Activation en cours…",

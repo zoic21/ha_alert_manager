@@ -22,9 +22,16 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
+from .coherence_alert import (
+    COHERENCE_ALERT_ID,
+    COHERENCE_ENTITY_ID,
+    alert_details,
+    report_observation,
+)
 from .const import (
     CATEGORY_FLAPPING,
     CATEGORY_UNAVAILABLE,
+    DATA_COHERENCE_RESULT,
     DOMAIN,
     STARTUP_RECONCILIATION_DELAY_SECONDS,
     TRANSITION_SOURCES,
@@ -64,6 +71,8 @@ _LOGGER = logging.getLogger(__name__)
 _EVALUATION_BATCH_SIZE = 50
 
 _PACK_CONDITION_FALLBACKS = {
+    "coherence.issues": "{count} configuration coherence issues",
+    "coherence.name": "Configuration coherence",
     "automatic.execution_errors": "Execution ended with an error",
     "automatic.execution_errors_detail": ("Execution ended with an error: {error}"),
     "automatic.flapping": (
@@ -490,6 +499,10 @@ class _RuntimeMixin:
         for alert_id, previous in previous_records.items():
             current = self.records.get(alert_id)
             if current is None:
+                if alert_id == COHERENCE_ALERT_ID and not self.config.get(
+                    "coherence_alert_enabled"
+                ):
+                    continue
                 if previous.status is not AlertStatus.ACTIVE:
                     continue
                 if (
@@ -950,6 +963,8 @@ class _RuntimeMixin:
                 changed = True
 
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
+                if alert_id == COHERENCE_ALERT_ID:
+                    continue
                 original_origin = (
                     reconciliation_transaction.live_origin(alert_id)
                     if reconciliation_transaction is not None
@@ -1242,6 +1257,8 @@ class _RuntimeMixin:
                 await asyncio.sleep(0)
                 if self._unloading or not self._runtime_phase.can_evaluate:
                     return False
+        if self.config.get("coherence_alert_enabled"):
+            entity_ids.add(COHERENCE_ENTITY_ID)
         entity_ids.update(self._record_ids_by_entity)
         entity_ids.update(
             entity_id for rule in self.rules for entity_id in rule.entity_ids
@@ -1316,6 +1333,7 @@ class _RuntimeMixin:
         candidates, indeterminate_candidate_ids = (
             self._build_candidates(state) if state is not None else ({}, set())
         )
+        coherence_preserved = self._add_coherence_candidate(entity_id, candidates)
         preserved_ids = self._preserved_record_ids_for_observation(
             entity_id,
             state,
@@ -1323,6 +1341,8 @@ class _RuntimeMixin:
             candidates.keys() - indeterminate_candidate_ids,
             indeterminate_candidate_ids,
         )
+        preserved_ids.discard(COHERENCE_ALERT_ID)
+        preserved_ids.update(coherence_preserved)
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
         collect_occurrences = (
@@ -1354,7 +1374,8 @@ class _RuntimeMixin:
                         )
                     )
             else:
-                details.value = record.details.value
+                if alert_id != COHERENCE_ALERT_ID:
+                    details.value = record.details.value
                 if record.details != details:
                     live_message_only = self._is_live_message_only_change(
                         record, details
@@ -1447,6 +1468,10 @@ class _RuntimeMixin:
             self._cancel_timer(alert_id)
             persisted_changed = True
             immediate_changed = True
+            if alert_id == COHERENCE_ALERT_ID and not self.config.get(
+                "coherence_alert_enabled"
+            ):
+                continue
             if record.status is AlertStatus.ACTIVE:
                 if archive_resolutions:
                     self._pending_history.append(
@@ -1464,6 +1489,26 @@ class _RuntimeMixin:
         ):
             self._publish_if_changed()
         return persisted_changed
+
+    def _add_coherence_candidate(
+        self, entity_id: str, candidates: dict[str, tuple[AlertDetails, int]]
+    ) -> set[str]:
+        """Feed one aggregate source into the shared lifecycle, even without a state."""
+        if entity_id != COHERENCE_ENTITY_ID or not self.config.get(
+            "coherence_alert_enabled"
+        ):
+            return set()
+        observation = report_observation(self.hass.data.get(DATA_COHERENCE_RESULT))
+        if observation is None or (observation[0] == 0 and not observation[1]):
+            return {COHERENCE_ALERT_ID} & self.records.keys()
+        count, _complete = observation
+        if count:
+            message = self._localized_pack_condition(
+                "coherence.issues", {"count": count}
+            )
+            name = self._localized_pack_condition("coherence.name", {})
+            candidates[COHERENCE_ALERT_ID] = (alert_details(count, message, name), 0)
+        return set()
 
     def _inject_restored_entity_for_reconciliation(self, entity_id: str) -> bool:
         """Revive missing restored identities without replacing live records."""

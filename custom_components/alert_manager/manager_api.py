@@ -28,6 +28,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
+from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
     CATEGORY_FLAPPING,
     DOMAIN,
@@ -199,6 +200,18 @@ class _ApiMixin:
             )
         except Exception:
             _LOGGER.exception("Unable to refresh Alert Manager notification runtime")
+
+    @_serialize_config_mutation
+    async def async_reconcile_coherence_alert(self) -> None:
+        """Apply a published scan under the existing mutation/startup gate."""
+        if not self.config.get("coherence_alert_enabled"):
+            return
+        previous = self._configuration_snapshot()
+        try:
+            await self.async_evaluate_entity(COHERENCE_ENTITY_ID)
+        except BaseException:
+            self._restore_configuration_snapshot(previous)
+            raise
 
     async def async_test_rule(
         self, data: dict[str, Any], *, rule_id: str | None = None
@@ -573,6 +586,10 @@ class _ApiMixin:
         for alert_id, previous in previous_records.items():
             current = self.records.get(alert_id)
             if current is None:
+                if alert_id == COHERENCE_ALERT_ID and not self.config.get(
+                    "coherence_alert_enabled"
+                ):
+                    continue
                 if previous.status is AlertStatus.ACTIVE:
                     if emit_events:
                         self._fire_resolved(previous, now)
@@ -863,6 +880,7 @@ class _ApiMixin:
             - {
                 "coherence_schedule",
                 "coherence_scan_esphome",
+                "coherence_alert_enabled",
                 "coherence_ignored_entity_references",
                 "pending_display_delay",
                 "notification_profiles",
@@ -889,6 +907,7 @@ class _ApiMixin:
         notification_profiles_changed = candidate[
             "notification_profiles"
         ] != self.config.get("notification_profiles", [])
+        coherence_alert_changed = "coherence_alert_enabled" in changed_keys
         notification_events_paused = (
             candidate["monitoring_enabled"] != self.monitoring_enabled
             or notification_profiles_changed
@@ -932,6 +951,14 @@ class _ApiMixin:
                     reset_pack_runtimes(self.hass, disabled_pack_ids)
                 if detection_changed:
                     await self.async_evaluate_all(save=False, publish=False)
+                if coherence_alert_changed:
+                    if not candidate["coherence_alert_enabled"]:
+                        self._pop_record(COHERENCE_ALERT_ID)
+                        self._cancel_timer(COHERENCE_ALERT_ID)
+                    else:
+                        await self.async_evaluate_entity(
+                            COHERENCE_ENTITY_ID, save=False, publish=False
+                        )
                 if labels_changed:
                     for record in self.records.values():
                         if record.details.type in labels_changed:
@@ -946,7 +973,16 @@ class _ApiMixin:
                 raise
             if notification_profiles_changed or labels_changed:
                 self.notification_runtime.discard_batches()
-            if detection_changed or notification_profiles_changed or labels_changed:
+            if coherence_alert_changed and not candidate["coherence_alert_enabled"]:
+                await self.notification_runtime.async_discard_alerts(
+                    {COHERENCE_ALERT_ID}
+                )
+            if (
+                detection_changed
+                or notification_profiles_changed
+                or labels_changed
+                or coherence_alert_changed
+            ):
                 await self._async_refresh_notification_runtime(
                     reset_reminders=notification_events_paused
                 )

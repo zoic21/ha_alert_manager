@@ -100,6 +100,7 @@ Use the built-in profiles to send notifications through Home Assistant’s nativ
 
 Initial discovery, reloads and startup grace never infer a transition. Unknown/unavailable states and missing attributes cannot arm a hold. Pending holds are not restored and a monitoring pause requires a fresh edge; active/acknowledged deadlines survive a restart. The tester reports that a current value cannot prove an edge and has no runtime side effects.
 
+
 ## Installation
 
 ### HACS
@@ -226,6 +227,8 @@ When an issue is found, Alert Manager shows where it comes from and, when possib
 Scans can run on demand or automatically on a daily, weekly or monthly schedule. ESPHome scanning can be disabled, and known references can be ignored from the configuration page.
 
 The same page also provides the 50 latest deleted entities still retained by Home Assistant, with their deletion date and integration. This is read directly from Home Assistant's entity registry and does not require Alert Manager to maintain its own deletion history.
+
+Enable **Create an alert for coherence issues** in the Coherence tab to maintain one immediate alert while findings remain. It uses the usual acknowledgment, history and notification profiles. Continuing findings update the same alert; only a complete check confirming recovery resolves it. Failed or incomplete checks cannot clear it. Enabling uses the latest report without starting a scan; disabling removes the alert and reminders without reporting a recovery. The option is off by default and is also available as `coherence_alert_enabled` in configuration YAML.
 
 ## Configuration export and recovery
 

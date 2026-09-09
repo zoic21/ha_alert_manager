@@ -153,6 +153,10 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     )
 
     scan_options = {}
+    reconciliations = []
+
+    async def reconcile():
+        reconciliations.append(hass.data[DATA_COHERENCE_RESULT])
 
     async def scan(_hass, **options):
         scan_options.update(options)
@@ -163,7 +167,8 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
         config={
             "coherence_scan_esphome": False,
             "coherence_ignored_entity_references": ["toto.plop"],
-        }
+        },
+        async_reconcile_coherence_alert=reconcile,
     )
     sensor = AlertManagerCoherenceIssueSensor()
     sensor.hass = hass
@@ -172,6 +177,7 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     result = run(coherence_module.async_run_coherence_scan(hass))
 
     assert result is expected
+    assert reconciliations == [expected]
     assert result["scanned_at"] == "2026-08-24T12:00:00+00:00"
     assert hass.data[DATA_COHERENCE_RESULT] is expected
     assert hass.stores[COHERENCE_STORAGE_KEY] == expected

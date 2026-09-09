@@ -66,6 +66,25 @@ export function refreshCoherenceData() {
 }
 
 export function hydrateCoherenceTable() {
+    const control = this.shadowRoot?.querySelector?.("#coherence-alert-enabled");
+    if (control) {
+      control.checked = Boolean(this._config?.coherence_alert_enabled);
+      control.onchange = async () => {
+        control.disabled = true;
+        try {
+          this._config = await this._api.call({
+            type: "alert_manager/config/update",
+            config: { coherence_alert_enabled: Boolean(control.checked) },
+          });
+        } catch (error) {
+          control.checked = Boolean(this._config?.coherence_alert_enabled);
+          this._notice = { kind: "error", text: this._errorText(error) };
+          this._render();
+        } finally {
+          control.disabled = false;
+        }
+      };
+    }
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) return;
     const state = this._ensureCoherenceTableState();
@@ -281,6 +300,7 @@ export function renderCoherence(context) {
       loading,
       pageMessages,
       statsMarkup,
+      alertEnabled = false,
       deletedEntities = null,
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
@@ -290,6 +310,7 @@ export function renderCoherence(context) {
       t,
     } = context;
     const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
+    const alertControl = `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("coherence.alert_enabled"))}</span><ha-switch id="coherence-alert-enabled" aria-label="${esc(t("coherence.alert_enabled"))}" ${alertEnabled ? "checked" : ""}></ha-switch></div><small>${esc(t("coherence.alert_help"))}</small></div>`;
     const drawer = deletedEntitiesOpen
       ? renderDeletedEntitiesDrawer({
           data: deletedEntities,
@@ -306,6 +327,7 @@ export function renderCoherence(context) {
           <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
           ${actions}
         </div>
+        ${alertControl}
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
       </ha-card>${drawer}`;
     }
@@ -322,6 +344,7 @@ export function renderCoherence(context) {
             <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
             ${actions}
           </div>
+          ${alertControl}
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
@@ -331,6 +354,7 @@ export function renderCoherence(context) {
 export function renderCoherencePanel() {
     return renderCoherence({
       result: this._coherence,
+      alertEnabled: Boolean(this._config?.coherence_alert_enabled),
       loading: this._coherenceLoading,
       pageMessages: this._coherence ? this._renderPageMessages() : "",
       statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",

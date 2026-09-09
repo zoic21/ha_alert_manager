@@ -104,8 +104,7 @@ class StartupReconciliationTransaction:
     def entity_ids(self) -> set[str]:
         """Return every current entity owning a restored occurrence."""
         return {
-            self._final_entity_id(record.details.entity_id)
-            for record in self._restored_records.values()
+            self._record_entity_id(record) for record in self._restored_records.values()
         }
 
     def records_for_entity(self, entity_id: str) -> dict[str, tuple[str, AlertRecord]]:
@@ -118,10 +117,7 @@ class StartupReconciliationTransaction:
             alert_id
             for alert_id, original_id in self._live_original_ids.items()
             if original_id in self._restored_records
-            and self._final_entity_id(
-                self._restored_records[original_id].details.entity_id
-            )
-            == entity_id
+            and self._record_entity_id(self._restored_records[original_id]) == entity_id
             and self._current_alert_id(self._restored_records[original_id]) == alert_id
         }
 
@@ -153,7 +149,7 @@ class StartupReconciliationTransaction:
         original_ids = {
             original_id
             for original_id, record in self._restored_records.items()
-            if self._final_entity_id(record.details.entity_id) == entity_id
+            if self._record_entity_id(record) == entity_id
         }
         self._unverified_original_ids.difference_update(original_ids)
         for alert_id in alert_ids:
@@ -226,7 +222,7 @@ class StartupReconciliationTransaction:
         """Resolve rename collisions deterministically to the oldest occurrence."""
         retained: dict[str, tuple[str, AlertRecord]] = {}
         for original_id, original in self._restored_records.items():
-            target_entity_id = self._final_entity_id(original.details.entity_id)
+            target_entity_id = self._record_entity_id(original)
             if target_entity_id != entity_id:
                 continue
             candidate = deepcopy(original)
@@ -246,8 +242,14 @@ class StartupReconciliationTransaction:
 
     def _current_alert_id(self, record: AlertRecord) -> str:
         """Return a restored record id after every rename seen so far."""
-        entity_id = self._final_entity_id(record.details.entity_id)
+        entity_id = self._record_entity_id(record)
         return self._alert_id(record, entity_id)
+
+    def _record_entity_id(self, record: AlertRecord) -> str:
+        """Aggregate coherence identity is independent of registry renames."""
+        if record.details.source == "coherence":
+            return record.details.entity_id
+        return self._final_entity_id(record.details.entity_id)
 
     def _final_entity_id(self, entity_id: str) -> str:
         """Follow chained renames while remaining safe against malformed cycles."""
@@ -260,6 +262,8 @@ class StartupReconciliationTransaction:
     @staticmethod
     def _alert_id(record: AlertRecord, entity_id: str) -> str:
         """Map the entity suffix while retaining compound pack identity."""
+        if record.details.source == "coherence":
+            return record.details.id
         alert_id = record.details.id
         previous_entity_id = record.details.entity_id
         if alert_id.endswith(f":{previous_entity_id}"):
