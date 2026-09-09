@@ -91,6 +91,63 @@ const ACTION_ICONS = Object.freeze({
   "open-deleted-entities": "mdi:delete-clock-outline",
 });
 
+// Source: frontend-src/utils/alert-labels.js
+function alertLabelIds(source, hass) {
+  return [...new Set([
+    ...(Array.isArray(source.labels) ? source.labels : []),
+    ...(Array.isArray(hass?.entities?.[source.entity_id]?.labels)
+      ? hass.entities[source.entity_id].labels : []),
+  ].map(String).filter(Boolean))];
+}
+
+// Source: frontend-src/utils/navigation.js
+function navigate(path, newTabInBrowser = false) {
+    if (!path) return;
+    const inCompanionApp = Boolean(
+      globalThis.window?.externalApp
+      || globalThis.window?.externalAppV2
+      || globalThis.window?.webkit?.messageHandlers?.externalBus
+    );
+    if (newTabInBrowser && !inCompanionApp && typeof window.open === "function") {
+      window.open(path, "_blank", "noopener,noreferrer");
+      return;
+    }
+    window.history?.pushState?.(null, "", path);
+    window.dispatchEvent?.(new CustomEvent("location-changed", {
+      detail: { replace: false },
+    }));
+}
+
+// Source: frontend-src/api/transport.js
+class AlertManagerApi {
+  constructor(getHass) {
+    this._getHass = getHass;
+  }
+
+  call(message) {
+    return this._getHass().callWS(message);
+  }
+
+  acknowledgeFor(alertId, duration) {
+    return this.call({
+      type: "alert_manager/alerts/acknowledgement/update",
+      alert_ids: [alertId], acknowledged: true, duration,
+    });
+  }
+
+  reevaluateAlert(alertId) {
+    return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
+  }
+
+  testRule(rule, ruleId = "") {
+    return this.call({
+      type: "alert_manager/rules/test",
+      rule,
+      ...(ruleId ? { rule_id: ruleId } : {}),
+    });
+  }
+}
+
 // Source: frontend-src/utils/escaping.js
 const esc = (value) =>
   String(value ?? "")
@@ -643,35 +700,6 @@ function errorText(error) {
 }
 
 // Source: frontend-src/api/alert-manager-api.js
-class AlertManagerApi {
-  constructor(getHass) {
-    this._getHass = getHass;
-  }
-
-  call(message) {
-    return this._getHass().callWS(message);
-  }
-
-  acknowledgeFor(alertId, duration) {
-    return this.call({
-      type: "alert_manager/alerts/acknowledgement/update",
-      alert_ids: [alertId], acknowledged: true, duration,
-    });
-  }
-
-  reevaluateAlert(alertId) {
-    return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
-  }
-
-  testRule(rule, ruleId = "") {
-    return this.call({
-      type: "alert_manager/rules/test",
-      rule,
-      ...(ruleId ? { rule_id: ruleId } : {}),
-    });
-  }
-}
-
 const PANEL_STATE_CACHE = new WeakMap();
 
 function panelStateCacheKey(hass) {
@@ -1415,10 +1443,7 @@ function entityMetadata(source, labelRegistry) {
     const entity = this._hass?.entities?.[entityId];
     const domain = entityId.includes(".") ? entityId.split(".", 1)[0] : "";
     const integration = source.integration || entity?.platform || "";
-    const labelIds = [...new Set([
-      ...(Array.isArray(source.labels) ? source.labels : []),
-      ...(Array.isArray(entity?.labels) ? entity.labels : []),
-    ].map(String).filter(Boolean))];
+    const labelIds = alertLabelIds(source, this._hass);
     const labels = labelMetadata(labelIds, labelRegistry);
     return { domain, integration, labels };
 }
@@ -2228,7 +2253,21 @@ function refreshHistoryOccurrenceDetails() {
 
 function openAlertDeepLink() {
     const search = globalThis.window?.location?.search ?? "";
-    const alertId = new URLSearchParams(search).get("alert");
+    const params = new URLSearchParams(search);
+    const deviceId = params.get("device");
+    const dashboard = params.get("dashboard") === "1";
+    if ((deviceId || dashboard) && this._handledDashboardDeepLink !== search) {
+      this._handledDashboardDeepLink = search;
+      this._resetTableFilters("overview");
+      this._tableState.overview.search = "";
+      this._tableState.overview.filters.device = deviceId ? [deviceId] : [];
+      this._tableState.overview.filters.labels = params.get("label") ? [params.get("label")] : [];
+      this._activeTab = "overview";
+      this._render();
+    }
+    if (!deviceId && !dashboard) this._handledDashboardDeepLink = null;
+    const alertId = params.get("alert");
+    if (!alertId) this._handledAlertDeepLink = null;
     if (!alertId || this._handledAlertDeepLink === alertId) return;
     const row = this._tableRows("overview").find(
       (candidate) => candidate.id === alertId && candidate.status !== "pending",
@@ -2491,23 +2530,6 @@ function preserveOverviewScrollAfterMoreInfo() {
     };
     this._moreInfoScrollRestore = { target, listener };
     target.addEventListener("dialog-closed", listener, true);
-}
-
-function navigate(path, newTabInBrowser = false) {
-    if (!path) return;
-    const inCompanionApp = Boolean(
-      globalThis.window?.externalApp
-      || globalThis.window?.externalAppV2
-      || globalThis.window?.webkit?.messageHandlers?.externalBus
-    );
-    if (newTabInBrowser && !inCompanionApp && typeof window.open === "function") {
-      window.open(path, "_blank", "noopener,noreferrer");
-      return;
-    }
-    window.history?.pushState?.(null, "", path);
-    window.dispatchEvent?.(new CustomEvent("location-changed", {
-      detail: { replace: false },
-    }));
 }
 
 function syncNarrowTableHeaderBackgrounds() {
@@ -9593,8 +9615,8 @@ class AlertManagerPanel extends HTMLElement {
     } else if (this.isConnected) {
       this._hydrateSelectors();
     }
+    if (this.isConnected && this._config) this._openAlertDeepLink();
   }
-
   set narrow(value) {
     const previousNarrow = this._narrow;
     this._narrow = Boolean(value);
@@ -9615,7 +9637,6 @@ class AlertManagerPanel extends HTMLElement {
     delete this[name];
     this[name] = value;
   }
-
   connectedCallback() {
     // On a direct page load Home Assistant can set panel properties before this
     // custom element is defined. Replay those values through their setters once
@@ -9637,10 +9658,11 @@ class AlertManagerPanel extends HTMLElement {
       this._timer = window.setInterval(() => this._updateCountdowns(), 1000);
     }
   }
-
   disconnectedCallback() {
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
+    this._handledAlertDeepLink = null;
+    this._handledDashboardDeepLink = null;
     this._stopRuleEditorResize();
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();

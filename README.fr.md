@@ -122,6 +122,34 @@ Le panneau **Alert Manager** apparaît ensuite dans la barre latérale de Home A
 
 Aucune ressource Lovelace et aucune configuration YAML ne sont nécessaires pour commencer.
 
+## Carte de dashboard
+
+L’intégration ajoute **Alert Manager** au sélecteur de cartes du dashboard. Aucune
+installation frontend HACS séparée ni ressource Lovelace manuelle n’est nécessaire.
+Actualisez le navigateur après l’installation ou une mise à jour. La carte nécessite
+un compte administrateur, comme le panneau Alert Manager.
+
+L’éditeur visuel propose un nombre maximal de tuiles (5 par défaut, de 1 à 100) et un
+filtre facultatif par étiquette. Les étiquettes correspondent à celles du pack/de la
+règle ou de l’entité, comme dans le panneau. Les alertes actives non acquittées sont
+filtrées puis regroupées par équipement avant application de la limite. Une alerte
+ouvre son détail ; une tuile regroupée ouvre la liste filtrée sur l’équipement.
+Le lien de débordement ouvre les alertes correspondant au filtre.
+
+```yaml
+type: custom:alert-manager-card
+max_tiles: 5
+# Identifiant d’étiquette Home Assistant facultatif :
+# label: maintenance
+```
+
+Sans alerte correspondante, la carte se masque via le mécanisme natif Home Assistant,
+y compris son conteneur dans les vues standard Sections et Masonry. Les cartes de mise
+en page personnalisées peuvent gérer la visibilité différemment. Le chargement, le
+démarrage, la surveillance désactivée et l’indisponibilité restent visibles.
+Un exemple sans données réelles apparaît uniquement dans l’éditeur.
+
+
 ## Surveillance automatique
 
 Ouvrez **Configuration → Surveillance automatique** pour activer et configurer les packs qui surveillent les problèmes courants de Home Assistant :

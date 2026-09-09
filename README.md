@@ -123,6 +123,32 @@ The **Alert Manager** panel then appears in the Home Assistant sidebar.
 
 No Lovelace resource and no YAML configuration are required to get started.
 
+## Dashboard card
+
+The integration includes **Alert Manager** in the dashboard card picker. No separate
+HACS frontend installation or manual Lovelace resource is needed. Refresh your browser
+after installing or updating the integration. The card requires an administrator account,
+just like the Alert Manager panel.
+
+The visual editor offers a maximum tile count (5 by default, 1–100) and an optional
+label filter. Labels match the alert's pack/rule labels or its entity labels, using
+the same semantics as the panel. Matching active, unacknowledged alerts are grouped
+by device before applying the limit. A single alert opens its details; a grouped
+tile opens the device-filtered list. The overflow link opens the matching alerts.
+
+```yaml
+type: custom:alert-manager-card
+max_tiles: 5
+# Optional Home Assistant label ID:
+# label: maintenance
+```
+
+With no matching alerts the card hides using Home Assistant's native card visibility
+mechanism, including its wrapper in standard Sections and Masonry views. Custom layout
+cards may handle visibility differently. Loading, startup, disabled monitoring and
+unavailability remain visible. An empty-data example is displayed only in the editor.
+
+
 ## Automatic monitoring
 
 Open **Configuration → Automatic monitoring** to enable and configure the packs that watch common Home Assistant problems:

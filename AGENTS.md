@@ -76,7 +76,8 @@ See `frontend-src/AGENTS.md` for frontend implementation rules.
 | Area | Responsibility |
 | --- | --- |
 | `frontend-src/alert-manager-panel.js` | Panel lifecycle, subscriptions, navigation/deep links, shared state, and orchestration. |
-| `frontend-src/api/alert-manager-api.js` | Single frontend WebSocket boundary and data loading/refresh coordination. |
+| `frontend-src/api/alert-manager-api.js` | Panel data loading/refresh coordination using `api/transport.js`, the single WebSocket boundary. |
+| `frontend-src/dashboard/`, `frontend-src/api/dashboard.js` | Bundled dashboard card/editor and shared revision-driven alert loading. |
 | `frontend-src/views/` | Overview, history, rules, coherence, and configuration rendering/actions. `automatic.js` supplies the automatic-pack section within Configuration. |
 | `frontend-src/components/alert-table.js` | Shared live/history table, filtering, selection, grouping, and alert details/actions. |
 | `frontend-src/components/rule-editor.js` | Visual/YAML rule editor, drafts, validation, and rule tester presentation. |

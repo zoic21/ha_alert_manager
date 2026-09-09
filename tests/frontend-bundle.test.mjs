@@ -37,3 +37,14 @@ test("standalone bundle registers the composed panel", () => {
   assert.equal(typeof panel._saveSettings, "function");
   assert.match(panel._styles(), /hass-tabs-subpage-data-table/);
 });
+
+await import("../custom_components/alert_manager/frontend/alert-manager-card.js");
+
+test("standalone dashboard bundle coexists with the panel and embeds offline translations", () => {
+  const Card = customElements.get("alert-manager-card");
+  const card = new Card();
+  assert.equal(card.connectedWhileHidden, true);
+  assert.equal(card._t("dashboard.max_tiles"), "Maximum number of tiles");
+  assert.ok(customElements.get("alert-manager-card-editor"));
+  assert.equal(window.customCards.filter((item) => item.type === "alert-manager-card").length, 1);
+});

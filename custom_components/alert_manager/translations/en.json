@@ -790,6 +790,25 @@
       "notifications": "Successful profile sends",
       "period": "Observed from {start} to {end}.",
       "window": "Current hour and previous 23 hours (approximate 24 h window). Counters start at integration startup and reset on restart/reload. Activity counts transitions, not current alerts. Immediate activations do not count as pending."
+    },
+    "dashboard": {
+      "description": "Active alerts grouped by device.",
+      "max_tiles": "Maximum number of tiles",
+      "label": "Label (optional)",
+      "invalid_config": "Use 1 to 100 tiles and a label ID.",
+      "custom_rules": "Custom rules",
+      "alert": "Alert",
+      "count": "{count} alerts",
+      "more": "See more alerts",
+      "loading": "Loading alerts…",
+      "unavailable": "Alert Manager unavailable",
+      "admin": "Administrator access required",
+      "paused": "Monitoring disabled",
+      "startup": "Home Assistant is starting",
+      "retry": "Retry",
+      "preview": "Example shown only in the editor",
+      "preview_device": "Living room sensor",
+      "preview_message": "Battery at 10%"
     }
   },
   "services": {

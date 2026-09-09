@@ -79,3 +79,50 @@ def test_cancelled_manager_setup_is_cleaned_before_propagation(
 
     assert instances[0].unloaded is True
     assert DATA_MANAGER not in hass.data
+
+
+@pytest.mark.parametrize("fail_setup", [False, True])
+def test_dashboard_module_follows_entry_lifecycle(hass, entry, monkeypatch, fail_setup):
+    """Register the card once and remove its URL on unload or setup rollback."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from custom_components.alert_manager.const import DATA_STATIC_REGISTERED
+
+    integration = _load_integration_module()
+    modules = set()
+    manager = SimpleNamespace(
+        async_setup=AsyncMock(return_value=True), async_unload=AsyncMock()
+    )
+    monkeypatch.setattr(integration, "AlertManager", lambda *_args: manager)
+    monkeypatch.setattr(
+        integration.frontend,
+        "add_extra_js_url",
+        lambda _hass, url: modules.add(url),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        integration.frontend,
+        "remove_extra_js_url",
+        lambda _hass, url: modules.remove(url),
+        raising=False,
+    )
+    hass.data[DATA_STATIC_REGISTERED] = True
+    hass.config_entries.async_forward_entry_setups = AsyncMock(
+        side_effect=RuntimeError("platform failed") if fail_setup else None
+    )
+    hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
+
+    async def exercise():
+        if fail_setup:
+            with pytest.raises(RuntimeError, match="platform failed"):
+                await integration.async_setup_entry(hass, entry)
+        else:
+            assert await integration.async_setup_entry(hass, entry)
+            assert modules == {integration.CARD_MODULE_URL}
+            assert await integration.async_unload_entry(hass, entry)
+        assert not modules
+        assert DATA_MANAGER not in hass.data
+        manager.async_unload.assert_awaited_once()
+
+    asyncio.run(exercise())

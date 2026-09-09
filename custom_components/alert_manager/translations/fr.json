@@ -790,6 +790,25 @@
       "notifications": "Envois de profils réussis",
       "period": "Observation du {start} au {end}.",
       "window": "Heure courante et 23 heures précédentes (fenêtre d’environ 24 h). Compteurs démarrés avec l’intégration et remis à zéro au redémarrage/rechargement. L’activité compte les transitions, pas les alertes présentes. Les activations immédiates ne comptent pas comme passages à venir."
+    },
+    "dashboard": {
+      "description": "Alertes actives regroupées par équipement.",
+      "max_tiles": "Nombre maximal de tuiles",
+      "label": "Étiquette (facultatif)",
+      "invalid_config": "Utilisez de 1 à 100 tuiles et un identifiant d’étiquette.",
+      "custom_rules": "Règles personnalisées",
+      "alert": "Alerte",
+      "count": "{count} alertes",
+      "more": "Voir plus d’alertes",
+      "loading": "Chargement des alertes…",
+      "unavailable": "Alert Manager indisponible",
+      "admin": "Accès administrateur requis",
+      "paused": "Surveillance désactivée",
+      "startup": "Home Assistant démarre",
+      "retry": "Réessayer",
+      "preview": "Exemple affiché uniquement dans l’éditeur",
+      "preview_device": "Capteur du salon",
+      "preview_message": "Batterie à 10 %"
     }
   },
   "services": {
