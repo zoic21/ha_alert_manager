@@ -1,1 +1,1374 @@
-YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíÛMöÙ:-jZ.¶›­–)Þ³R26†ævVÆöp ¥F÷WFW2ÆW2:—föÇWF–öç2æ÷F&ÆW2N(	”ÆW'BÖævW"6öçBFö7VÖVçL:–W2Fç26Rf–6†–W"à ¢22"ã2ãÖFWbã"(	B6WFVÖ&W"’Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢ÒFBâ÷F–öæÂW'6—7FVBÆW'Bf÷"6öæf–wW&F–öâ6ö†W&Væ6R—77VW2ÂF—6&ÆVB'’FVfVÇBæBf–Æ&ÆR–âF†R6ö†W&Væ6RF"æB6öæf–wW&F–öâ”ÔÂà¢Ò¶VWöæR–ÖÖVF–FRvw&VvFRÆW'Bv†–ÆRf–æF–æw2&VÖ–âÂ&W6W'f–ær6¶æ÷vÆVFvÖVçBÂ†—7F÷'’æBæ÷&ÖÂæ÷F–f–6F–öâ&öf–ÆW2âF†RÆW'BÆ–æ·2F—&V7FÇ’FòF†R6ö†W&Væ6R&W÷'Bà¢Ò&WfVçB–æ6ö×ÆWFR÷"f–ÆVB66ç2g&öÒFV6Æ&–ær&V6÷fW'“²6ö×ÆWFR7V'6WVVçB66âv—F‚æòf–æF–æw2&W6öÇfW2F†RÆW'Bà ¢22"ã2ãÖFWbã(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò6†÷rF†Ræ÷F–f–6F–öâW6vR6÷VçF–ærW&–öBöæ6R&VÆ÷rF†R&öf–ÆRÆ—7BæB¶VWÖö&–ÆRVF—B7F–öç2&W6–FRF†V—"&öf–ÆRà¢Ò¶VWF†RÖö&–ÆR†—7F÷'’F—FÆRæB6ÆV"Ö†—7F÷'’7F–öâöâF†R6ÖR&÷rà ¢22"ã2ãÖFWbã(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢ÒFB6W&FRF÷Öf—fR6²æB7W7FöÒ×'VÆR&æ¶–æw2'’ö67W'&Væ6R6÷VçBæB7V×VÆF—fRGW&F–öâà¢ÒFBF÷Öf—fR76ö6–FVBæ÷F–f–6F–öâ&öf–ÆR&æ¶–ærW6–ær&WF–æVB†—7F÷'’Â6÷VçF–ærV6‚&öf–ÆRöæ6RW"ö67W'&Væ6R7&÷727F—fF–öâ÷&VÖ–æFW"æB&W6öÇWF–öâ76ö6–F–öç2âF†—2—2æ÷BFVÆ—fW'’6÷VçBà¢Ò÷VâF†RæF—fRf–ÇFW&VB†—7F÷'’g&öÒÆÂæWr&æ¶–æw2Â–æ6ÇVF–æræWr76ö6–FVB×&öf–ÆRf6WBà ¢22"ã2ãÖFWbã’(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò&VÖ÷fRF†Rf—6–&ÆR7FF—7F–72F—FÆRæBÆ6RW&–öB6öçG&öÇ2BF†RÆVgBöbF†R†—7F÷'’7F–öâà¢Ò¶VWW&–öB6öçG&öÇ2æBÆÂf÷W"7VÖÖ'’ÖWG&–72–âöæR6&BöâFW6·F÷æBÖö&–ÆRÂ&WF–æ–ærGvòÖWG&–26öÇVÖç2öâÖö&–ÆRà ¢22"ã2ãÖFWbã‚(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò6VçFW"F†RFW6·F÷7FF—7F–72F6†&ö&Bv—F†–âÃC—†VÇ2Â6öÖ&–æ–ærW&–öB6öçG&öÇ2æBF†Rf÷W"7VÖÖ'’fÇVW2–çFòöæRf—7VÂ&ææW"à¢Òv—fRF†RF‡&VR&æ¶–ær6&G2WVÂv–GF‡2æBÆ–vâF†V—"6V7F–öç2W6–ær6öçFVçB×6—¦VB6†&VBw&–B&÷w2à¢Ò&W6W'fRF†RW†—7F–ærÖö&–ÆRÆ–÷WBæB6–ævÆRvR67&öÆÂà ¢22"ã2ãÖFWbãr(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò&WÆ6RF†R7FF—7F–72F&ÆRv—F‚6–ævÆR67&öÆÆ–ærF6†&ö&C¢W&–öB6öçG&öÇ2Â7VÖÖ'’ÂæB6ö×7BVçF—G’ÂFWf–6RÂæB–çFVw&F–öâ6&G2à¢Ò6†÷r6W&FRF÷Öf—fR&æ¶–æw2'’ö67W'&Væ6R6÷VçBæB7V×VÆF—fRÆW'BGW&F–öâÂv—F‚Æ–æ·2FòF†Rf–ÇFW&VB†—7F÷'’à¢Ò'&ævR6&G26–FR'’6–FRöâFW6·F÷æBBgVÆÂv–GF‚öâÖö&–ÆRÂv—F†÷WB–çFW&æÂ67&öÆÂ&V2à ¢22"ã2ãÖFWbãb(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222f—†W0 ¢Ò¶VWF†RF‡&VR7FF—7F–72F÷—FV×26–FR'’6–FRöâÖö&–ÆRÂv—F‚6ö×7B76–æræBG'Væ6FVBÆöæræÖW2à¢Ò¶VWF†R7FF—7F–72F—FÆRæB†—7F÷'’7F–öâöâöæR&÷röâÖö&–ÆRà¢ÒÆ–Ö—BF†RÖö&–ÆR7FF—7F–72†VFW"FòCRRöbF†Rf—6–&ÆRf–Ww÷'BæBÆÆ÷r—BFò67&öÆÂ–æFWVæFVçFÇ’Â&W6W'f–ær66W72FòF†RæF—fRF&ÆRWfVâöâ6†÷'B67&VVç2à ¢22"ã2ãÖFWbãR(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò¶VW7FF—7F–726öçG&öÇ2Â7VÖÖ'’fÇVW2ÂæBF÷—FV×2öâöæR&÷rv†Vâ76RÆÆ÷w2Âv—F‚6VçFW&VBw&–æröâ6ÖÆÆW"67&VVç2à¢Ò6†÷rö67W'&Væ6R6÷VçG2–â&VçF†W6W2&W6–FRF÷—FVÒæÖW2à¢ÒÆ6RF†Rw&÷W–ær6VÆV7F÷"&Vf÷&RF†RW&–öB'WGFöç2à ¢22"ã2ãÖFWbãB(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢ÒFBffV7FVBVçF—G’6÷VçG2æBF÷VçF—G’ÂFWf–6RÂæB–çFVw&F–öâ†–v†Æ–v‡G2Fò†—7F÷'’7FF—7F–72Â–æ6ÇVF–ærF–VBö67W'&Væ6R6÷VçG2à¢Ò&VÖ÷fRF†R&WF–æVBÖ†—7F÷'’æ÷FRæB—G2†VÇ6öçG&öÂg&öÒF†R7FF—7F–72†VFW"à¢ÒW6RF†R†—7F÷'’F&Æ^(	—2æF—fRf6WG2æB7F—fR×W&–öBFFRf–ÇFW"f÷"7FF—7F–72æf–vF–öâÂ&WÆ6–ærF†R6W&FRf–ÇFW"&ææW"à¢Ò¶VW†—7F÷'’f6WB6VÆV7F–öç2F–VBFò7F&ÆR–FVçF–f–W'26ò–FVçF–6ÆÇ’æÖVBFWf–6W2æB'VÆW2&VÖ–âF—7F–æ7Bà ¢22"ã2ãÖFWbã2(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222–×&÷fVÖVçG0 ¢Ò&VFW6–vâ†—7F÷'’7FF—7F–72v—F‚6ö×7Bró3ÖF’6öçG&öÇ2æB7VÖÖ'’öbö67W'&Væ6W2ÂffV7FVBFWf–6W2ÂæB7V×VÆF—fRÆW'BGW&F–öâà¢Ò6†÷rVçF—G’æÖW2æB'VÆW26W&FVÇ’Âv—F‚æF—fR–6öç2Â6ö×7BGW&F–öâÆ&VÇ2ÂæBW†7BGW&F–öç2öâ†÷fW"à¢Ò÷VâF†RÖF6†–ær†—7F÷'’v†Vâ6Æ–6¶–ær&æ¶–ær&÷rÂ&W6W'f–ærF†R6VÆV7FVBF–ÖRv–æF÷ræB&÷f–F–ærf—6–&ÆRÂ&VÖ÷f&ÆRf–ÇFW"à¢Ò¶VWÖö&–ÆR&÷w26ö×7BæBÖ÷fR6Æ7VÆF–öâFWF–Ç2&V†–æBâ–æf÷&ÖF–öâ'WGFöâà¢Ò6†÷'FVâF†RÆW'BFWF–Â†—7F÷'’Æ&VÂFò(	Ä†—7F÷'ž(	Òà ¢22"ã2ãÖFWbã"(	B6WFVÖ&W"‚Â##` ¥F†—2—2FWfVÆ÷ÖVçB&W&VÆV6Rà ¢222f—†W0 ¢Òf—‚F†R†—7F÷'’ö67W'&Væ6R6÷VçFW"v†Vâ÷Væ–ærÆW'BFWF–Ç2g&öÒæF—fRF&ÆW2à¢Ò–æ—F–Æ—¦RF†RæF—fRFFR&ævR–6¶W"&Vf÷&RÖ÷VçF–ær—BÂ&WfVçF–ærâVæFVf–æVBÖFFRW'&÷"GW&–ærÆ§’ÆöF–ærà ¢222–×&÷fVÖVçG0 ¢ÒÖ÷fRæ÷F–f–6F–öâ&öf–ÆRFVÆWF–öâ–çFòF†R&öf–ÆRVF—F÷"ÖVçRà¢Ò6†÷röæÇ’F†R7W'&VçBÖF6‚6÷VçB–âF†R7W7FöÒ'VÆRFW7B7VÖÖ'’à¢ÒÆ—7B7F—fF–öâÂ&VÖ–æFW"ÂæB&W6öÇWF–öâ&öf–ÆW26W&FVÇ’Âv—F‚Öv†VâæöæRÖF6‚à¢Ò6†÷'FVâg&Væ6‚æBVævÆ—6‚†VÇFW‡Bv†–ÆR&W6W'f–ær6öæf–wW&F–öâ6VÖçF–72à ¢22"ã2ãÖFWbã(	B‚6WFVÖ'&R##` ¤6WGFRfW'6–öâW7BVæR,:—&VÆV6RFRL:—fVÆ÷VÖVçBà ¢222Ü:–Æ–÷&F–öç0 ¢ÒF—G&W2FW2æ÷F–f–6F–öç2&66÷W&6—2Â6ç2,:–f—†R*²ÆW'BÖævW"+²ÂfV2FW0¢Æ–&VÆÌ:—2FL:—2R6–æwVÆ–W"WBRÇW&–VÂVâg&ì:v—2WBVâævÆ—2à¢Ò8–F—F–öâ”ÔÂFW2&öf–Ç2FRæ÷F–f–6F–öâWB7F–öç2GWÆ—VW"WBFW7FW"Fç0¢ÆWW"ÖVçR²ff–6†vRFW2&öf–Ç26÷'&W7öæFçG2Fç2ÆRFW7FWW"FR,:†vÆRà¢Ò6ö×FWW"6Æ—V&ÆRFW2ö67W'&Væ6W26öç6W'l:–W2Fç2ÆW2L:—F–Ç2N(	—VæRÆW'FRà¢Ò7FF—7F—VW2FR,:–7W'&Væ6RWBFRf–&–Æ—L:’6Æ7VÌ:–W2:ÆFVÖæFRFç2Î(	–†—7F÷&—VRà¢Ò7FF—7F—VW2Ì:–|:‡&W2FRW&f÷&Öæ6RWBN(	–7F—f—L:’7W"#B†WW&W2ÂVâÜ:–Öö—&Rà ¢2227W&W76–öâ–æ6ö×F–&ÆP ¢Ò7W&W76–öâFR6Vç6÷"æÆW'EöÖævW%öFWf–6UöÖ–åö7F—fVWBFRÎ(	œ:—l:–æVÖVç@¢ÆW'EöÖævW%öFWf–6UöÆW'E÷7F'FVFÂ–ç6’VRFRÆWW"w,:–vF–öâWBFRÆWW'0¢FV×÷&—6F–öç2L:–Fœ:–W2âÆW2WFöÖF—6F–öç2W‡FW&æW2V’ÆW2WF–Æ—6VçBFö—fVç@¢:§G&RFL:–W2W‚&öf–Ç2FRæ÷F–f–6F–öâ–çL:–w,:—2÷RW‚:—l:–æVÖVçG2"ÆW'FRà¢ÒÎ(	–æ6–VææRVçG,:–RGR6FWW"W7B&WF—,:–RGR&Vv—7G&RÂÜ:¦ÖR6’VÆÆR:—L:’&VæöÖÜ:–Rà¢V7VâÆ–2æ’Ü:–6æ—6ÖRFR6ö×F–&–Æ—L:’î(	–W7B6öç6W'l:’âÆW2æ÷F–f–6F–öç0¢–çL:–w,:–W2ÂÆW26ö×FWW'2"ÆW'FRÂÆR&Vw&÷WVÖVçB"&V–ÂFRÎ(	––çFW&f6P¢WBÎ(	–†—7F÷&—VR&W7FVçB–æ6†æ|:—2à ¢22"ã"ã×&2ã’(	B‚6WFVÖ'&R##` ¢2226÷'&–|: ¢Ò7–æ6‡&öæ—6F–öâFRÆ6öç7FçFRFRfW'6–öâWF–Æ—<:–R÷W"ÆR66†RGRææVP¢fV2ÆRÖæ–fW7FRWBÆW2Ü:—FFöæì:–W2g&öçFVæBÂ÷V&Æœ:–RFç2Æ$3‚à¢Ò6WGFRfW'6–öâ&W&VæBF÷WFW2ÆW26÷'&V7F–öç2FRÆ$3‚à ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã‚(	B‚6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒÆW2W†6WF–öç2FRæ÷F–f–6F–öâW†–vVçBL:—6÷&Ö—2F÷WFW2ÆW2:—F—VWGFW0¢<:–ÆV7F–öæì:–W2„UB’âÆ&VÖœ:‡&RW†6WF–öâ6÷'&W7öæFçFR&W7FR&–÷&—F—&R°¢ÆRf–ÇG&RN(	œ:—F—VWGFW2GR&öf–Â6öç6W'fR6öâföæ7F–öææVÖVçBVâõRà¢ÒÆW2æ÷F–f–6F–öç2FR&WF÷W":Ææ÷&ÖÆRæR&V6÷–VçBÇW2Î(	–æ6–VâÖW76vP¢N(	–W'&WW"æ’Æ6öæF—F–öâFRL:–6ÆVæ6†VÖVçBÂ÷W"ÆW2WFöÖF—6F–öç2ÂÆW267&—G0¢WBÆW2WG&W2ÆW'FW2âÆW2F–væ÷7F–72&W7FVçBF—7öæ–&ÆW2Fç2Î(	–†—7F÷&—VRà¢ÒÆW26·26öç6öÖÖFWW'2N(	–ö67W'&Væ6W2&\:vö—fVçBVâ–ç7FçFì:’–Ö×V&ÆRFW0¢–FVçF–f–çG2N(	–ÆW'FW2Â'F|:’"F÷WBÆRÆ÷B,:‡2Î(	œ:—fÇVF–öâFW26÷W&6W2à ¢222Ö–çFVææ6P ¢ÒFö7VÖVçFF–öâFRÎ(	–÷&G&RFW2fW'&÷W2FR6öæf–wW&F–öâWBFRæ÷F–f–6F–öç2à¢Ò6Æ&–f–6F–öâFRÆFFRFRl:—&–f–6F–öâFW27V—GFVÖVçG2WBGR6Æ7VÂFW0¢–FVçF–f–çG2Æ÷'2FW2&VæöÖÖvW2Â6ç26†ævVÖVçBGR6ö×÷'FVÖVçBà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãr(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒÆW2ÆW'FW2FRfÆ–ærWF–Æ—6VçBÆW2:—F—VWGFW2FRÆWW"&÷&R6²Â’6ö×&—0¢,:‡2VæRæ÷WfVÆÆRö67W'&Væ6RÂVæRÖöF–f–6F–öâFW2:—F—VWGFW2÷RVâ&VL:–Ö'&vRà¢ÆW2–FVçF–f–çG2ÂFFW2FRL:—FV7F–öâWB†—7F÷&—VW2W†—7FçG26öçB,:—6W'l:—2à¢ÒÖöF–f–W"ÆW2:—F—VWGFW2N(	—VæR,:†vÆRæçVÆR6W2æ÷F–f–6F–öç2Væ6÷&RVâGFVçFP¢fV2Î(	–æ6–Vâ&÷WFvRÂ6ç27W&–ÖW"6VÆÆW2FW2WG&W2,:†vÆW2à¢ÒÆW2æ÷F–f–6F–öç2L:–6ÆVæ6Œ:–W2"VæRÖöF–f–6F–öâFR6öæf–wW&F–öâGFVæFVç@¢Æ,:—W76—FRFR66WfVv&FRâVâ:–6†V2N(	œ:–7&—GW&RæR&÷f÷VRÇW2Î(	–Vçfö’N(	—VæP¢æ÷F–f–6F–öâ÷W"VæRÆW'FRæçVÌ:–R"ÆR&WF÷W":Æ6öæf–wW&F–öâ,:–<:–FVçFRà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãb(	Br6WFVÖ'&R##` ¢222Ü:–Æ–÷,: ¢Ò7W&W76–öâGRF—G&RçVÜ:—&÷L:’FW2W†6WF–öç2FRæ÷F–f–6F–öâ÷W":—f—FW"6öà¢6†ævVÖVçBf—7VVÂÆ÷'2GR,:–÷&Föæææ6VÖVçBâÆW2&÷WFöç2FRL:—Æ6VÖVçBWBFP¢7W&W76–öâ&W7FVçB&W7V7F—fVÖVçBVâ†WB:vV6†RWB:G&ö—FRà¢Ò,:–GV7F–öâFW2W76W2Vâ†WBFR6†VRW†6WF–öâWBfçB6W26†×2÷W ¢&VæG&RÆW2Væ6G,:—2ÇW26ö×7G2Â7W"÷&F–æFWW"6öÖÖR7W"Öö&–ÆRà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãR(	Br6WFVÖ'&R##` ¢222¦÷WL: ¢Ò,:–÷&Föæææ6VÖVçBFW2W†6WF–öç2FRæ÷F–f–6F–öâfV2VæRö–vì:–R:G&ö—2G&—G0¢FWfçB6†VRçVÜ:—&ò¢vÆ—76W"ÖL:—÷6W"æF–b†öÖR76—7FçB7W"÷&F–æFWW"W@¢Öö&–ÆRÂWBL:—Æ6VÖVçBR6Æf–W"fV2ÆW2fÌ:†6†W2†WBö&2÷RL:–'WBöf–âà¢ÒÆW2,:–vÆvW2&W7FVçBGF6Œ:—2:ÆWW"W†6WF–öâWBÆRæ÷WfVÂ÷&G&RW7BÆ—\:¢,:‡2Vç&Vv—7G&VÖVçBâÆfW&ÖWGW&R6ç2Vç&Vv—7G&W"FVÖæFR6öæf—&ÖF–öâà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãB(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢Ò7W&W76–öâFRÆG&ç6—F–öâFR3×2Œ:—&—L:–RFR†Ö6&F7W"F÷W2ÆW0¢föÆWG2FW2,:†vÆW2W'6öææÆ—<:–W2WBFRÆ6öæf–wW&F–öâ¢ÆWW"Æ&vWW ¢7V—B–ÖÜ:–F–FVÖVçBÆRL:—Æ6VÖVçBFRÆö–vì:–RÂ6öÖÖRÆR6öçFVçR&–æ6—Âà¢ÒÎ(	–æ–ÖF–öâf—7VVÆÆRFRÆö–vì:–RFR&VF–ÖVç6–öææVÖVçBW7B6öç6W'l:–Rà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã2(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒÆR&÷&BvV6†RGR6öçFVçRFR6öæf–wW&F–öâ6öç6W'fRÆ÷6—F–öâFRÆvP¢6VçG,:–RÆ÷'2FRÎ(	–÷WfW'GW&RWBGR&VF–ÖVç6–öææVÖVçBN(	—VâföÆWBâ6WVÂÆR&÷&@¢G&ö—B6R,:–GV—B6’ì:–6W76—&R÷W"Æ—76W"ÆÆ6RRföÆWBWB:6öâW76VÖVçBà¢ÒÆR6öçFVçRæRWWBÇW2>(	–w&æF—":Î(	–÷WfW'GW&RGRföÆWBâ6÷6—F–öà¢>(	–FFRæGW&VÆÆVÖVçBR&VF–ÖVç6–öææVÖVçBGRæf–vFWW"à ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã"(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢Ò7W&W76–öâGRw&æBW76Rf–FRVçG&RÆR6öçFVçRFR6öæf–wW&F–öâWB6öà¢föÆWB7W"ÆW2:–7&ç2Æ&vW2¢ÆW26V7F–öç2ö67WVçBF÷WFRÆÆ&vWW"&W7FçFRÀ¢fV2VâW76VÖVçBFRb‚§W7^(	–RföÆWB&VF–ÖVç6–öææ&ÆRà¢ÒÆvR&WG&÷WfR6Æ&vWW"Æ–Ö—L:–RWB6öâ6VçG&vR:ÆfW&ÖWGW&RGRföÆWBà¢ÆR6ö×÷'FVÖVçBFW2:–7&ç2:—G&ö—G2&W7FR–æ6†æ|:’à ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã(	Br6WFVÖ'&R##` ¢222Ü:–Æ–÷,: ¢ÒF÷W2ÆW2föÆWG2FR6öæf–wW&F–öâ&W&VææVçBÆR&VF–ÖVç6–öææVÖVçBVâÆ&vWW ¢FW2,:†vÆW2W'6öææÆ—<:–W2¢ö–vì:–RÂÆ–Ö—FW2FRÆ&vWW"Â,:–vÆvRR6Æf–W ¢WBF÷V&ÆRÖ6Æ–2÷W"&WG&÷WfW"ÆÆ&vWW"–æ—F–ÆRà¢Ò7W"w&æB:–7&âÂÆR6öçFVçR&–æ6—Â6R,:–GV—B:ÖW7W&RVRÆRföÆW@¢>(	œ:–Æ&v—BWB&WG&÷WfR6Æ&vWW":ÆfW&ÖWGW&RÂ’6ö×&—2Æ÷'2FW2Ö—6W0¢:¦÷W"6–&Ì:–W2FW2föÆWG2âÆÆ&vWW"W7B6öç6W'l:–RVæFçBÆ6W76–öâà¢ÒÆW26WV–Ç2&W7öç6—fRWBÆW2föÆWG2Öö&–ÆW2æF–g2&W7FVçB–FVçF—VW0¢:6WW‚FRÎ(	œ:–F—FWW"FR,:†vÆW2à ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒL:–f–ÆVÖVçBWFöÖF—VRfW'2ÆW2æ÷WfVÆÆW2Æ–væW2FR6öæf–wW&F–öâ¢6WV–Ç0¢FR&GFW&–RÂ6WV–Ç2N(	–W'&WW"FW2WFöÖF—6F–öç2WB67&—G2Â6öæf–wW&F–öç0¢FRfÆ–ærWBL:–Æ—2'F–7VÆ–W'2"VçF—L:’à¢ÒÜ:¦ÖR6ö×÷'FVÖVçB÷W"Î(	–¦÷WBFRfÆWW'2×VÇF—ÆW2W‚,:†vÆW2WBFP¢,:–l:—&Væ6W2–væ÷,:–W2FR6öŒ:—&Væ6RÂVâ6ö×Ì:–ÖVçBFW2W†6WF–öç2FRæ÷F–f–6F–öâà¢ÒÖ&vRFR"‚WF÷W"FW2:–Ì:–ÖVçG2,:—l:–Ì:—2WBL:–f–ÆVÖVçB,:‡2&W7FW&F–öà¢FRÆ÷6—F–öâGRföÆWBÂ7W"Öö&–ÆR6öÖÖR7W"÷&F–æFWW"à ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã’(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒfÆ–ær7W"Öö&–ÆR¢Ö&vW2–çFW&æW2WBW76VÖVçB,:–GV—G2÷W"Æ—76W ¢ÆR6†×N(	–ö67W'&Væ6W2WBÆfVì:§G&RFRL:—FV7F–öâ7W"ÆÜ:¦ÖRÆ–væRÀ¢6ç26÷WW"ÆRÆ–&VÆÌ:’GRæöÖ'&RN(	–ö67W'&Væ6W2à¢ÒW†6WF–öç2FRæ÷F–f–6F–öâ¢Ö&vRFRL:–f–ÆVÖVçB÷W"VRÎ(	–Væ6G,:’¦÷WL:¢æR6ö—BÇW26öÆÌ:’R&÷&BGRföÆWBà¢ÒfÆWW'2çVÜ:—&—VW2Fç2ÆW2F&ÆVW‚WBL:—F–Ç2FW2ÆW'FW2¢WF–Æ—6F–öà¢GRf÷&ÖFvRæF–b†öÖR76—7FçBÂfV2Æ,:–6—6–öâN(	–ff–6†vRFRÎ(	–VçF—L:¢WBÆRf÷&ÖBçVÜ:—&—VRFRÎ(	—WF–Æ—6FWW"âÆW2fÆWW'2Vç&Vv—7G,:–W2&W7FVç@¢–çF7FW2²ÆW2æ6–VææW2Væ—L:—26öçB6öç6W'l:–W2Fç2Î(	–†—7F÷&—VRà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ã‚(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒfÆ–ærÂ6öæf–wW&F–öç2'F–7VÆœ:‡&W27W"Öö&–ÆR¢Æ&vWW"GR6†× ¢N(	–ö67W'&Væ6W2§W7L:–R:6öâÆ–&VÆÌ:’ÂV’&W7FR7W"VæR6WVÆRÆ–væRÂ÷W ¢Æ6W"ÆfVì:§G&RFRL:—FV7F–öâ:<;GL:’Æ÷'7VRÎ(	–W76RF—7öæ–&ÆRÆRW&ÖWBà¢ÆR<:–ÆV7FWW"FRGW,:–R6öç6W'fR6Æ&vWW"æF—fRà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãr(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒfÆ–ær7W"Öö&–ÆR¢6†×VçF—L:’Â–çFW''WFWW"WB6÷&&V–ÆÆR7W"ÆÜ:¦ÖP¢Æ–væRÂfV2ÆW27F–öç26VçG,:–W2fW'F–6ÆVÖVçB7W"ÆR<:–ÆV7FWW"à¢ÒW†6WF–öç2FRæ÷F–f–6F–öâ7W"Öö&–ÆR¢æ÷WfVÆÆRÆW'FRWB&WF÷W":Æ¢æ÷&ÖÆR<;GFR:<;GFRÂfV2ÆW2<:–ÆV7FWW'2Æ–vì:—2à¢ÒÎ(	–¦÷WBN(	—VæRW†6WF–öâFRæ÷F–f–6F–öâf—BL:–f–ÆW"ÆRföÆWB§W7^(	œ: ¢Ææ÷WfVÆÆRW†6WF–öâÆ÷'7^(	–VÆÆRî(	–W7B2f—6–&ÆRà¢Ò†—7F÷&—VR¢¦÷WBFRÎ(	–7F–öâ7W&–ÖW"Fç2ÆRÖVçRGRL:—F–ÂN(	—VæRÆW'FRà¢,:‡26öæf—&ÖF–öâWB7W&W76–öâ,:—W76–RÂÆRL:—F–Â6RfW&ÖRWBÆR&æFVP¢FR6öæf—&ÖF–öâ&:çB7W"ÆvRN(	–†—7F÷&—VRà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãb(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢Òæ÷F–f–6F–öç2Öö&–ÆW2¢,:—6öÇWF–öâFRÎ(	–7F–öâ:'F—"FRÆ6öæf–wW&F–öà¢FRÎ(	–Æ–6F–öâ76ö6œ:–R:Î(	–VçF—L:’Â’6ö×&—26’Î(	–VçF—L:’:—L:’&VæöÖÜ:–Rà¢ÆRÆ–VâFRæf–vF–öâW7BG&ç6Ö—2Fç2ÆW2Föæì:–W2GR6Æ–2à¢ÒÎ(	–Vçfö’|:–ì:—&—VRFR6V6÷W'2î(	–¦÷WFRÇW2ÆRÆ–VâRFW‡FRFRÆæ÷F–f–6F–öâà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãR(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒfÆ–ær¢æöÖ'&RN(	–ö67W'&Væ6W2WBfVì:§G&RFRL:—FV7F–öâ<;GFR:<;GFRÆ÷'7VP¢ÆÆ&vWW"F—7öæ–&ÆRÆRW&ÖWBÂfV2ÆW26†×2Æ–vì:—2à¢ÒW†6WF–öç2FRæ÷F–f–6F–öâ¢:—F—VWGFW27W"F÷WFRÆÆ&vWW"ÂV—2æ÷WfVÆÆP¢ÆW'FRWB&WF÷W":Ææ÷&ÖÆR<;GFR:<;GFR7W"w&æB:–7&âà ¤6WGFRfW'6–öâ&W7FRVæR,:—&VÆV6Rà ¢22"ã"ã×&2ãB(	Br6WFVÖ'&R##` ¢2226÷'&–|: ¢ÒÆW2æ÷F–f–6F–öç2FR,:—6öÇWF–öâ÷Wg&VçBÎ(	–†—7F÷&—VRÂ’6ö×&—2Æ÷'7^(	–VÆÆW0¢&Vw&÷WVçBÇW6–WW'2ÆW'FW2,:—6öÇVW2à¢Ò6öæf–wW&F–öâGRfÆ–ær¢æöÖ'-tßm­¢G§²ÚîÆ­y×WBÂÎ(	–&V–ÂÂÆ,:†vÆRÀ¢Î(	––çL:–w&F–öâÂÆW2:—F—VWGFW2ÂÆRFöÖ–æRWBÆ¦öæRÂVâÇW2FRÎ(	–VçF—L:’ÂFP¢Î(	–7V—GFVÖVçBWBFW2FFW2à¢ÒÆW2:—F—VWGFW2FRÎ(	–VçF—L:’6öçBff–6Œ:–W26÷W26öâæöÒWB'F–6—VçB:Æ¢&V6†W&6†RWBRf–ÇG&vRà¢ÒÆ6öÆöææRVçF—L:’,:–<:†FRL:—6÷&Ö—2Æ6öÆöææR&V–ÂÂ’6ö×&—2Æ÷'2FRÆ¢Ö–w&F–öâFW2,:–l:—&Væ6W2"L:–fWBFRFWcFà¢ÒÆÖ&vR–æ¦V7L:–R"†ÖFF×F&ÆV7W"Æ&VÖœ:‡&R–<;FæRW7BæWWG&Æ—<:–Rf–à¢FR6VçG&W"W†7FVÖVçBÆR–7Föw&ÖÖRFç26öâföæB6—&7VÆ—&Rà ¢222FW7G0 ¢Ò6÷WfW'GW&RFW2æ÷WfVÆÆW2f6WGFW2ÂFW2Ü:—FFöæì:–W2FR&Vv—7G&RÂFW2:—F—VWGFW2À¢FRÆÖ–w&F–öâFRÎ(	–÷&G&RFW26öÆöææW2WBGR6VçG&vRFRÎ(	––<;FæRà ¢22ãrãÖFWcB(	B#rü;·B##` ¢2226÷'&–|: ¢ÒÆRF6†&ö&BWBÎ(	”†—7F÷&—VRWF–Æ—6VçBL:—6÷&Ö—2ÆR6öçFVæWW"æF–b†öÖP¢76—7FçB†72×F'2×7V'vRÖFF×F&ÆVÂWBæöâÇW2VæR&'&RN(	–÷WF–Ç0¢&V6öç7G'V—FRFç2ÆW'BÖævW"à¢ÒÆRföÆWBFRf–ÇG&W2ff–6†RÎ(	–Vff6VÖVçBvÆö&ÂFç26öâVâ×L:§FR–ç6’^(	—Và¢6ö×FWW"WBVæR7F–öâN(	–Vff6VÖVçB7W"6†VR6L:–v÷&–R7F—fRà¢ÒÆW'6öææÆ—6F–öâFW26öÆöææW2÷Wg&RÆRF–ÆöwVRæF–b†öÖR76—7FçBfV0¢f—6–&–Æ—L:’ÂvÆ—76W"ÖL:—÷6W"WB&W7FW&F–öâFW2fÆWW'2"L:–fWBà¢ÒÆRÖöFR<:–ÆV7F–öâ&V×Æ6RÆ&'&R7W:—&–WW&RFRÆ6÷W2×vRâ6öâ&÷WFöâW7@¢Æ<:’VçG&RÆW2f–ÇG&W2WBÆ&V6†W&6†RÂ6öÖÖRFç2ÆÆ—7FRFW2VçF—L:—2à¢ÒÆ&V6†W&6†Rö67WRWFöÖF—VVÖVçBF÷WFRÆÆ&vWW"&W7FçFRà¢ÒVâff–6†vR:—G&ö—BÂ6WVÆW2Î(	––<;FæRFR7FGWBWBÎ(	–VçF—L:’&W7FVçBVâ6öÆöææW2À¢fV2Æ6öæF—F–öâff–6Œ:–RVâ–æf÷&ÖF–öâ6V6öæF—&R6÷W2ÆRæöÒà¢ÒÎ(	–Vâ×L:§FRFRÆ6öÆöææR7FGWBW7Bf–FRWB6öâ–<;FæRW7B6VçG,:–RFç26öâföæ@¢6—&7VÆ—&Rà ¢222FW7G0 ¢Ò6÷WfW'GW&RGR6öçFVæWW"æF–bÂFR6W2:—l:–æVÖVçG2FR&V6†W&6†RÂG&’Âw&÷WVÖVçBÀ¢<:–ÆV7F–öâWBW'6öææÆ—6F–öâÂFW2f–ÇG&W2,:––æ—F–Æ—6&ÆW2WBGR&VæGRÖö&–ÆRà ¢22ãrãÖFWc2(	B#bü;·B##` ¢2226÷'&–|: ¢ÒF÷WFW2ÆW2vW2GRæVÂWF–Æ—6VçBL:—6÷&Ö—2F÷WFRÆÆ&vWW"F—7öæ–&ÆRÀ¢6ç2Æ–Ö—FR6VçG&ÆR:C‚à¢ÒÆ&'&RN(	–÷WF–Ç2FW2F&ÆVW‚&W÷6R7W"ÆW26ö×÷6çG2æF–g2†öÖP¢76—7FçB†Ö76—7BÖ6†—Â†ÖG&÷F÷væÂ†ÖG&÷F÷vâÖ—FVÖÂ†Ö'WGFöæW@¢†Ö–6öâÖ'WGFöæRÆ–WRFR&÷WFöç2WBÖVçW2…DÔÂW'6öææÆ—<:—2à¢ÒÆRf–ÇG&RW7B,:—6VçL:’Fç2VâföÆWBÆL:—&Â6ö×7B6Ç\:’7W"ÆÆ—7FRFW0¢VçF—L:—2ÂfV2†ÖW‡ç6–öâ×æVÆÂ†ÖÆ—7FÂ†Ö6†V6²ÖÆ—7BÖ—FVÖWBÆW0¢6†×2FRFFRæF–g2à¢ÒÆW2ÖVçW2FRw&÷WVÖVçBÂFRG&’WBFR6öÆöææW2Â–ç6’VRÆRÖVçRG&ö—2×ö–çG0¢FRÎ(	œ:–F—FWW"FR,:†vÆRÂWF–Æ—6VçBL:—6÷&Ö—2ÆW2ÖVçW2L:—&÷VÆçG2†öÖP¢76—7FçBà ¢222FW7G0 ¢Ò¦÷WBFR6öçG,;FÆW2g&öçFVæB7W"ÆW26ö×÷6çG2æF–g2ÂÎ(	–÷WfW'GW&RGRföÆW@¢FRf–ÇG&W2ÂÆW2:—l:–æVÖVçG2FW2ÖVçW2WBÆÖ—6RVâvRÆV–æRÆ&vWW"à ¢22ãrãÖFWc"(	B#bü;·B##` ¢2226÷'&–|: ¢Ò&V×Æ6VÖVçBGRF&ÆVR…DÔÂW'6öææÆ—<:’"ÆR6ö×÷6çBæF–b†öÖP¢76—7FçB†ÖFF×F&ÆVÂV’77W&RL:—6÷&Ö—2Æf—'GVÆ—6F–öâFW2Æ–væW2À¢ÆW2w&÷WW2&WÆ–&ÆW2WBÆW266W2FR<:–ÆV7F–öâà¢ÒWF–Æ—6F–öâGR6ö×÷6çBæF–b†Ö–çWB×6V&6†Fç2Æ&'&RN(	–÷WF–Ç2FW0¢F&ÆVW‚à¢ÒÆW2æöÖÆ–W2&WfVçVW2:Ææ÷&ÖÆRVæFçBÆWW"L:–Æ’VæF–ævæR6öçBÇW0¢¦÷WL:–W2:Î(	–†—7F÷&—VRâÆW2:—fVçGVVÆÆW2VçG,:–W2W‡:—&–ÖVçFÆW2FR6RG—P¢Vç&Vv—7G,:–W2"ãrãÖFWf6öçB7W&–Ü:–W2R&ö6†–â6†&vVÖVçBà ¢222FW7G0 ¢ÒFFF–öâFW2FW7G2g&öçFVæBR6öçG&BFR&÷&œ:—L:—2WBN(	œ:—l:–æVÖVçG2FP¢†ÖFF×F&ÆVà¢Òæöâ×,:–w&W76–öâ&6¶VæBl:—&–f–çBW‡Æ–6—FVÖVçB^(	—VæRÆW'FRæçVÌ:–Rfç@¢7F—fF–öâæR&öGV—BV7Vâ:—l:–æVÖVçB†—7F÷&—VRà ¢22ãrãÖFWb(	B#bü;·B##` ¢222¦÷WL: ¢ÒF&ÆVR6ö×7B6öÖ×VâRF6†&ö&BWB:Î(	”†—7F÷&—VRÂ–ç7—,:’FRÆÆ—7FRFW0¢VçF—L:—2†öÖR76—7FçBÂfV26öÆöææW2W'6öææÆ—6&ÆW2WB÷WfW'GW&RæF—fRFP¢*²ÇW2N(	––æf÷&ÖF–öç2+²à¢Ò&V6†W&6†R–ç7FçFì:–R7W"ÆW2Ü:—FFöæì:–W26ö×Ì:‡FW2Âf–ÇG&W27V×VÆ&ÆW2W@¢,:––æ—F–Æ—6&ÆW2Âw&÷WVÖVçB&WÆ–&ÆR"&V–ÂÂ¦öæRÂ,:†vÆR÷R7FGWBW@¢G&’G—:’66VæFçBöL:–7&ö—76çBà¢Ò,:–l:—&Væ6W2Æö6ÆW2F—7F–æ7FW2"F&ÆVR÷W"Î(	–÷&G&RWBÆf—6–&–Æ—L:’FW0¢6öÆöææW2ÂÆRw&÷WVÖVçBÂÆ6Ì:’FRG&’WB6öâ6Vç2à¢ÒÖöFRFR<:–ÆV7F–öâ×VÇF—ÆRGRF6†&ö&BfV2<:–ÆV7F–öâFW2Æ–væW2f—6–&ÆW2W@¢7V—GFVÖVçBöL:—67V—GFVÖVçBFRÖ76RÆ–Ö—L:’W‚ÆW'FW26ö×F–&ÆW2à ¢222ÖöF–fœ: ¢Ò&V×Æ6VÖVçB6ö×ÆWBFW26'FW2N(	–ÆW'FW2WBN(	–†—7F÷&—VR"FW2Æ–væW2FP¢F&ÆVRÂ’6ö×&—27W"Öö&–ÆRü;’ÆRL:–f–ÆVÖVçB†÷&—¦öçFÂ&W7FRF—7öæ–&ÆRà¢Ò6öç6W'fF–öâFRÆfÆWW"–çB–æ—F–ÆVÖVçBL:–6ÆVæ6Œ:’VæRö67W'&Væ6RÂÜ:¦ÖR6¢Æ6÷W&6R&VæBVç7V—FRVæRWG&RfÆWW"F÷V¦÷W'2æ÷&ÖÆRà¢Ò7W7Vç6–öâf—7VVÆÆRGR6ö×FR:&V&÷W'2Æ÷'7VRÆ7W'fV–ÆÆæ6RW7BL:—67F—l:–RÀ¢6ç2&öw&W76–öâ'F–f–6–VÆÆRGRL:–Æ’à ¢222FW7G0 ¢Ò6÷WfW'GW&Rg&öçFVæBGR&VæGRÂFRÆ&V6†W&6†RÂFW2f–ÇG&W2ÂGRw&÷WVÖVçBÂGP¢G&’ÂFW26öÆöææW2ÂFRÆW'6—7Fæ6RÆö6ÆRÂFRÆ<:–ÆV7F–öâÖ—‡FRWBFW0¢7F–öç2FRÖ76Rà¢Ò6÷WfW'GW&R&6¶VæBFRÆfÆWW"FRL:–6ÆVæ6†VÖVçB–Ö×V&ÆRÂVâ6ö×Ì:–ÖVçBFW0¢7V—FW2FRæöâ×,:–w&W76–öâW†—7FçFW2à ¢22ãbã2(	B#bü;·B##` ¢2226÷'&–|: ¢Ò6VçG&vRfW'F–6Â,:–6—2FRÎ(	–7F–öâ¢¤Vff6W"Î(	–†—7F÷&—VR¢¢7W"Æ7W&f6P¢f—6–&ÆRGR6†×FRÆ–Ö—FRFR,:—FVçF–öâà¢ÒÆ–væVÖVçB7W"Æ†WFWW"f—6–&ÆRFRSb†GR6†×†öÖR76—7FçBÂ6ç0¢L:–6ÆW"ÆRÆ–&VÆÌ:’æ’ÆRFW‡FRN(	––FRà ¢22ãbã"(	B#bü;·B##` ¢2226÷'&–|: ¢ÒÆ6VÖVçBFRÎ(	––FRGRL:–Æ’vÆö&ÂF—&V7FVÖVçB6÷W26öâ6†×FR6—6–Rà¢ÒÆ–væVÖVçBfW'F–6ÂW†7BFRÎ(	–7F–öâ¢¤Vff6W"Î(	–†—7F÷&—VR¢¢fV2ÆR6†× ¢FRÆ–Ö—FRFR,:—FVçF–öâà¢Ò6–×Æ–f–6F–öâGR&Æ—6vRWBFW2,:†vÆW2552FRÆ6V7F–öâFW2&Ü:‡G&W0¢|:–ì:—&W‚ÂfV2VæRw&–ÆÆRW‡Æ–6—FRWB&W7öç6—fR÷W"Æ,:—FVçF–öâà ¢22ãbã(	B#bü;·B##` ¢2226÷'&–|: ¢Ò&W7FW&F–öâFRÎ(	–Æ–væVÖVçBGRL:–Æ’vÆö&ÂWBFW2Æ&VÇ2W†6ÇW2FW0¢7W'fV–ÆÆæ6W2WFöÖF—VW2Fç2¢¥&Ü:‡G&W2|:–ì:—&W‚¢¢à¢Ò7W&W76–öâGRF—G&RWBGRFW‡FRFW67&—F–b†—7F÷&—VRFç26WGFR6V7F–öâà¢ÒVç&Vv—7G&VÖVçBFRÆÆ–Ö—FRFR,:—FVçF–öâ"Î(	—Væ—VR&÷WFöâ6öÖ×VâÆ<:’Và¢&2:G&ö—FR²Î(	–Vff6VÖVçB—',:—fW'6–&ÆR&W7FRVæR7F–öâF—7F–æ7FRf6RP¢6†×FR,:—FVçF–öâà ¢22ãbã(	B#bü;·B##` ¢222¦÷WL: ¢Ò†—7F÷&—VRW'6—7FçBWBFöÖ—VRFW2ÆW'FW27F—fW2,:—6öÇVW2Fç2Vâ7Fö6¶vP¢–æL:—VæFçBFW2ÆW'FW2'VçF–ÖRà¢Òæ÷WfVÂöævÆWBFÖ–æ—7G&FWW"¢¤†—7F÷&—VR¢¢ÂfV26'FW2w&—6W2Âw&÷WVÖVçB ¢&V–ÂÂL:—Æ–vR&öw&W76–bWB–æf÷&ÖF–öç2f–|:–W2RÖöÖVçBFRÆ,:—6öÇWF–öâà¢Ò,:—FVçF–öâ6öæf–wW&&ÆRFR::—l:–æVÖVçG2ÂfÆWW""L:–fWBÂ,:–GV7F–öà¢–ÖÜ:–F–FRFW2:—l:–æVÖVçG2ÆW2ÇW2æ6–Vç2WB7F–öâN(	–Vff6VÖVçB—',:—fW'6–&ÆP¢fV26öæf—&ÖF–öâà¢Ò6öÖÖæFW2vV%6ö6¶WBFÖ–æ—7G&FWW"÷W"Æ—&RÎ(	–†—7F÷&—VRÂÆ—&RöÖöF–f–W"6¢6öæf–wW&F–öâWBÎ(	–Vff6W"à¢ÒG&GV7F–öç2g&ì:v—6W2WBævÆ—6W2ÂFö7VÖVçFF–öâWBFW7G2&6¶VæBög&öçFVæBà¢Ò,:–vÆvRFR,:—FVçF–öâÆ<:’Fç2¢¥&Ü:‡G&W2|:–ì:—&W‚¢¢Â6÷W2ÆRL:–Æ’vÆö&ÂÀ¢fV2ÆW27F–öç2N(	–Vç&Vv—7G&VÖVçBWBN(	–Vff6VÖVçBÆ–vì:–W2f6RR6†×à ¢222v&çF–W0 ¢ÒÆW2ÆW'FW2æçVÌ:–W2VæFçBVæF–ævæR6öçB2&6†—l:–W2à¢ÒVæRW'&WW"N(	œ:–7&—GW&RFRÎ(	–†—7F÷&—VRæR&Æ÷VR2Æ,:—6öÇWF–öâN(	—VæRÆW'FP¢WBæRWWB26÷'&ö×&RÆR7Fö6¶vR'VçF–ÖRà¢ÒV7Vâ6†ævVÖVçBFW2VçF—L:—2Â:—l:–æVÖVçG2WB6W'f–6W2W†—7FçG2²V7VæRVçF—L:¢†öÖR76—7FçB7WÌ:–ÖVçF—&Rà¢ÒÎ(	–†—7F÷&—VRWB6Æ–Ö—FRFR,:—FVçF–öâ6öçBW†6ÇW2FRÎ(	––×÷'BöW‡÷'B”ÔÂÂV¢6öç6W'fR6W2Föæì:–W2Æö6ÆW2à ¢22ãRã’ÖFWcR(	B#bü;·B##` ¢2226÷'&–|: ¢ÒÆ–væVÖVçB:vV6†RFW2&Æö72*¼*6öæF—F–öì*+²WB*¼*7F—fRFWV—<*+²Fç2ÆW0¢Æ–væW2N(	–ÆW'FW2w&÷W:–W2Â6öÖÖR7W"ÆW26'FW2æöâw&÷W:–W2à¢Ò'VæFÆRg&öçFVæBF—7G&–'\:’,:–|:–ì:—,:’fV26WGFR6÷'&V7F–öâà ¢22ãRã’ÖFWcB(	B#bü;·B##` ¢222ÖöF–fœ: ¢Òff–6†vRfW'F–6ÂFRÆ6öæF—F–öâWBFRÆFFRN(	–7F—fF–öâFç2ÆW2Æ–væW0¢N(	–ÆW'FW2w&÷W:–W2Â6öÖÖR7W"ÆW26'FW2–æF—f–GVVÆÆW2à¢Ò&÷WFöâN(	–ff–6†vRFW2WG&W2ÆW'FW2,:–GV—B:VâÆ–VâFW‡FR6ö×7BÂÆ<:’Và¢&2:vV6†R6ç2Væ6G&VÖVçBR7W'föÂà¢Ò6÷W&6Rg&öçFVæBWB'VæFÆRF—7G&–'\:’7–æ6‡&öæ—<:—2÷W"6WGFRfW'6–öâà ¢22ãRã’ÖFWc2(	B#bü;·B##` ¢222ÖöF–fœ: ¢Òff–6†vR"L:–fWBFRÆ&VÖœ:‡&RÆW'FRVæ—VVÖVçBFç2ÆW2w&÷WW2ÂfV0¢,:—l:–ÆF–öâ&öw&W76—fRFW2ÆW'FW27V—fçFW2f–Vâ&÷WFöâà¢ÒÆ–væVÖVçB:vV6†RGRFV×2&W7FçBWBFRÆFFRN(	–7F—fF–öâFç2ÆW2Æ–væW0¢N(	–ÆW'FW2w&÷W:–W2à¢Ò¦÷WBFW2G&GV7F–öç2g&ì:v—6W2WBævÆ—6W2GR6öçG,;FÆRN(	–ff–6†vRFW0¢ÆW'FW27WÌ:–ÖVçF—&W2à¢Ò7–æ6‡&öæ—6F–öâFRÆfW'6–öâGRÖæ–fW7BÂGR&6¶VæBWBGRg&öçFVæBVà¢ãRã’ÖFWc6à¢22ãRã‚(	B#bü;·B##` ¢2226÷'&–|: ¢Ò6÷'&V7F–öâGR÷6—F–öææVÖVçB†÷&—¦öçFÂGRföÆWBFR7,:–F–öâ÷RÖöF–f–6F–öà¢N(	—VæR,:†vÆRW'6öææÆ—<:–R7W"ÆW2:–7&ç2Æ&vW2à¢Ò6÷W&6Rg&öçFVæBWB'VæFÆRF—7G&–'\:’,:–|:–ì:—,:—2WB7–æ6‡&öæ—<:—2÷W"v&çF— ¢Vâ'V–ÆB&W&öGV7F–&ÆRFç2Æ4’à ¢22ãRãR(	B#bü;·B##` ¢2226÷'&–|: ¢Ò&&ö6†VÖVçBGRföÆWBFR7,:–F–öâ÷RÖöF–f–6F–öâN(	—VæR,:†vÆRWBFRÆÆ—7FP¢FW2,:†vÆW<*²Î(	–W76RF—7öæ–&ÆRW7BL:—6÷&Ö—26öç6W'l:’VçG&RÆRföÆWBWBÆP¢&÷&BG&ö—BFRÎ(	œ:–7&â7W"ÆW2ff–6†vW2Æ&vW2à¢ÒW†6ÇW6–öâ7—7L:–ÖF—VRFW2VçF—L:—2ÆW'BÖævW"FRÆ7W'fV–ÆÆæ6P¢WFöÖF—VRÂÜ:¦ÖRfçBÆWW"–ç67&—F–öâFç2ÆR&Vv—7G&RFW2VçF—L:—2à¢Ò–çFW&F–7F–öâFR<:–ÆV7F–öææW"÷RN(	–Vç&Vv—7G&W"VæRVçF—L:’ÆW'BÖævW"6öÖÖP¢6÷W&6RN(	—VæR,:†vÆRW'6öææÆ—<:–RÂ’6ö×&—2,:‡2&VæöÖÖvR÷Rf–”ÔÂà¢ÒæWGF÷–vR6ç2VffWBFR&÷&BFW2æ6–VææW2,:†vÆW2–çFW&æW2FWfVçVW2–çfÆ–FW2à ¢22ãRãRÖFWc"(	B#bü;·B##` ¢2226÷'&–|: ¢ÒvVÂ,:–VÂGRFV×2&W7FçBFW2ÆW'FW2VæF–ævVæFçBF÷WFRÆL:—67F—fF–öà¢FRÆ7W'fV–ÆÆæ6RÂ’6ö×&—2,:‡2Vâ&VL:–Ö'&vR÷RVâ&V6†&vVÖVçL*²ÆP¢L:–6ö×FR&W&VæBRÜ:¦ÖRö–çBÆ÷'2FRÆ,:–7F—fF–öâà¢Ò&VÖ—6RFV×÷&—&R:¬:—&òFW2G&ö—26FWW'2N(	–ÆW'FW2WBFRÆWW"GG&–'W@¢ÆW'G6Æ÷'7VRÆ7W'fV–ÆÆæ6RW7BL:—67F—l:–RÂ6ç27W&–ÖW"ÆW2ö67W'&Væ6W0¢–çFW&æW26öç6W'l:–W2÷W"Æ&W&—6Rà¢ÒÆ&vWW"FRÆvR¢¥,:†vÆW2W'6öææÆ—<:–W2¢¢Æ–vì:–R7W"ÆW2WG&W2vW2GP¢ææVRà ¢22ãRãRÖFWb(	B#bü;·B##` ¢222¦÷WL: ¢Ò&V–ÂFR6W'f–6R7F&ÆRÆW'BÖævW"Ò|:–ì:—&ÆÂ,:—gR÷W"67VV–ÆÆ— ¢VÇL:—&–WW&VÖVçBN(	–WG&W26L:–v÷&–W26ç2&VæöÖÖW"Æ6L:–v÷&–RÖ–æà¢Ò7v—F6‚W'6—7FçB7v—F6‚æÆW'EöÖævW%öÖ–åöÖöæ—F÷&–ævÂ7F–b"L:–fWBÀ¢fV27W7Vç6–öâ,:–VÆÆRFW2L:—FV7F–öç2WBF–ÖW'2V—2,:œ:—fÇVF–öâ6ç2F÷V&Æöà¢:Æ&W&—6Rà¢Òæ÷F–f–6F–öâW'6—7FçFRe"ôTâÂ:–FVçF–f–çB7F&ÆRÂÆ÷'7VRÎ(	––çL:–w&F–öâW7@¢6†&|:–RfV2Æ7W'fV–ÆÆæ6RL:—67F—l:–Rà¢ÒÜ:—FFöæì:–W2'VÆUö–FWB'VÆUöæÖVFç2ÆW2GG&–'WG2FW2ÆW'FW2—77VW2FP¢,:†vÆW2W'6öææÆ—<:–W2à ¢222ÖöF–fœ: ¢Ò&V×Æ6VÖVçB676çBFR6Vç6÷"æÆW'EöÖævW&"G&ö—26FWW'2W†6ÇW6–g<* ¢6Vç6÷"æÆW'EöÖævW%öÖ–åö7F—fVÂ6Vç6÷"æÆW'EöÖævW%öÖ–å÷VæF–ævW@¢6Vç6÷"æÆW'EöÖævW%öÖ–åö6¶æ÷vÆVFvVà¢ÒÖ—6R:¦÷W"GRææVRÂFW2G&GV7F–öç2ÂFRÆFö7VÖVçFF–öâe"ôTâÂFW2W†V×ÆW0¢N(	–WFöÖF—6F–öâWBFRÎ(	–W‡÷'Bö–×÷'B”ÔÂà¢Ò–×÷'BF÷V¦÷W'26ö×F–&ÆRfV2ÆW2W‡÷'G2cãR6ç0¢Ööæ—F÷&–æuöVæ&ÆVF*²Æ7W'fV–ÆÆæ6RW7BÆ÷'27F—l:–R"L:–fWBà ¢222v&çF–W26öç6W'l:–W0 ¢ÒÆW'FW2W†—7FçFW26öç6W'l:–W2VæFçBÆ7W7Vç6–öâÂ:—l:–æVÖVçG2FRL:–Ö'&vP¢WB,:—6öÇWF–öâ6ç2,:—:—F—F–öâÂ6W'f–6W2N(	–7V—GFVÖVçBÂ–FVçF–f–çG2Â6·2À¢W†6ÇW6–öç2ÂL:–Æ—2WB7V—f’×VÇF’ÖVçF—L:—2–æ6†æ|:—2à ¢222Æ–Ö—FRföÆöçF—&P ¢ÒÎ(	–æ6–VææRVçF—L:’w,:–|:–RW7B7W&–Ü:–R6ç2VG&œ:†ÖR6FWW"FR6ö×F–&–Æ—L:¢GW&&Æ\*²ÆW26'FW2WBWFöÖF—6F–öç2Fö—fVçBÖ–w&W"fW'2ÆR6FWW"N(	œ:—F@¢6÷'&W7öæFçBà ¢22ãRãÖFWc2(	B#bü;·B##` ¢222ÖöF–fœ: ¢Ò&VæöÖÖvRFRÎ(	–öævÆWB*²W†6ÇW6–öç2WB&Ü:‡G&W2+²Vâ*²6öæf–wW&F–öâ+²à¢Ò7W&W76–öâFW2–FVçF–f–çG2–çFW&æW2FW2,:†vÆW2Fç2Î(	–W‡÷'B”ÔÂ6ö×ÆWB°¢–Ç26öçBL:—6÷&Ö—2&V7,:œ:—2"ÆR&6¶VæBÆ÷'2FRÎ(	––×÷'Bà¢Ò6÷'&V7F–öâGRÖVçRG&ö—2×ö–çG2GRföÆWBFR,:†vÆRfV2ÆR6Æ÷BæF–`¢7F–öä—FV×6FR†öÖR76—7FçBWB7W&W76–öâGRæöÒVâ6÷W2×F—G&RÆ÷'2FP¢ÆÖöF–f–6F–öâN(	—VæR,:†vÆRà ¢22ãRãÖFWc"(	B#Rü;·B##` ¢222÷F–Ö—<: ¢ÒÖ—6RVâ66†RFW2&Vv—7G&W2†öÖR76—7FçBWBFW2Vç6VÖ&ÆW2N(	–W†6ÇW6–öâ7W"ÆP¢6†VÖ–âN(	œ:—fÇVF–öâFW26†ævVÖVçG2N(	œ:—FBÂ6ç2ÖöF–f–W"ÆW2,:†vÆW2FR7V—f’à¢Ò,:—WF–Æ—6F–öâN(	—VâÜ:–6æ—6ÖR6öÖ×VâFR&W7FW&F–öâFRÆ6öæf–wW&F–öâÂFW0¢ÆW'FW2WBFW2F–ÖW'2VâGFVçFRà ¢2226÷'&–|: ¢Ò&W7FW&F–öâ6ö×Ì:‡FRVâÜ:–Öö—&R6’Î(	–Vç&Vv—7G&VÖVçBN(	—Vâ,:–vÆvRÂN(	—VæP¢7,:–F–öâÂN(	—VæRÖöF–f–6F–öâ÷RN(	—VæR7W&W76–öâFR,:†vÆR:–6†÷VRà¢ÒfÆ–FF–öâW‡Æ–6—FRFW2,:†vÆW2–æ6ö×Ì:‡FW2f–âFR&Vçf÷–W"VæRW'&WW"Æ—6–&ÆP¢RÆ–WRN(	—VæRW'&WW"–çFW&æRà¢ÒGW&6—76VÖVçBFW2–×÷'G2”ÔÂf6RW‚6Ì:—2æöâFW‡GVVÆÆW2Â66Æ—&W2æöà¢<:—&–Æ—6&ÆW2Â6†:ææW2Væ–6öFR–çfÆ–FW2WBFö7VÖVçG2æ÷&ÖÆVÖVçBföÇVÖ–æWW‚à¢ÒæWGF÷–vRW'6—7FçBFW26öæf–wW&F–öç2WBÆW'FW26÷'&ö×VW2L:—FV7L:–W2P¢L:–Ö'&vRÂ÷W":—f—FW"FR&WG&—FW"ÆÜ:¦ÖRFöæì:–R–çfÆ–FR:6†VR&VÆæ6Rà¢Ò7W&W76–öâFW26†&vVÖVçG2vV%6ö6¶WBWBF–ÖW'2FR&g&:æ6†—76VÖVçBVâF÷V&ÆP¢Æ÷'2N(	—VæR&V6öææW†–öâG,:‡2&–FRGRææVRà ¢222v&çF–W26öç6W'l:–W0 ¢ÒV7Vâ6†ævVÖVçBGRÖ÷FWW"föæ7F–öææVÂÂFW2–FVçF–f–çG2ÂFW2:—l:–æVÖVçG2ÂFW0¢6W'f–6W2N(	–7V—GFVÖVçB÷RGR7–6ÆRæ÷&ÖÂ(i"VæF–ær(i"7F—fVà ¢22ãRãÖFWc(	B#Rü;·B##` ¢222¦÷WL: ¢Ò8–F—F–öâ”ÔÂFW2,:†vÆW2W'6öææÆ—<:–W2Fç2ÆRföÆWBW†—7FçBÂf–ÆRÖVçP¢G&ö—2×ö–çG2ÂVâ6ö×Ì:–ÖVçBFRÎ(	œ:–F—FWW"f—7VVÂà¢ÒfÆ–FF–öâ&6¶VæB6öÖ×VæR÷W"ÆW2,:†vÆW2f—7VVÆÆW2WB”ÔÂÂfV2&V¦WBFW0¢”ÔÂ–æ6ö×ÆWG2Â7–çF†—VVÖVçB–çfÆ–FW2÷R–æ6öŒ:—&VçG2à¢ÒW‡÷'B”ÔÂ6ö×ÆWBÂL:—FW&Ö–æ—7FRWBfW'6–öæì:’FRÆ6öæf–wW&F–öà¢W'6—7FçFRà¢Ò–×÷'B”ÔÂ6ö×ÆWBfV2W,:wRÂ6öæf—&ÖF–öâW‡Æ–6—FRÂfÆ–FF–öâ7G&–7FRÀ¢&V×Æ6VÖVçBFöÖ—VRWB&V6öç7G'V7F–öâGR7V—f’"VçF—L:’à¢Ò6öÖÖæFW2vV%6ö6¶WBFÖ–æ—7G&FWW"L:–Fœ:–W2:ÆfÆ–FF–öâ”ÔÂÂ:Î(	–W‡÷'BW@¢:Î(	––×÷'Bà¢ÒFö7VÖVçFF–öâe"ôTâÂG&GV7F–öç2WB6÷WfW'GW&RFRFW7G2÷W"6W2fÇW‚à ¢222v&çF–W26öç6W'l:–W0 ¢ÒÆRÖ÷FWW"FR,:†vÆW2ÆW'BÖævW"&W7FR–æL:—VæFçBFW26öæF—F–öç0¢N(	–WFöÖF—6F–öâ†öÖR76—7FçBà¢ÒÆW2”G27F&ÆW2FW2,:†vÆW2WBFW2ÆW'FW2,:†vÆRöVçF—L:’6öçB,:—6W'l:—2: ¢Î(	––×÷'Bà¢ÒÎ(	–W‡÷'BW†6ÇWBföÆöçF—&VÖVçBÆW2ÆW'FW2'VçF–ÖRÂ7V—GFVÖVçG2ÂF–ÖW'2À¢FFW2WB†—7F÷&—VRà¢ÒÆR7–6ÆR–æL:—VæFçBæ÷&ÖÂ(i"VæF–ær(i"7F—fVÂÎ(	–VçF—L:’Væ—VP¢6Vç6÷"æÆW'EöÖævW&WBÆW26W'f–6W2N(	–7V—GFVÖVçB&W7FVçB–æ6†æ|:—2à ¢222Æ–Ö—FW277VÜ:–W0 ¢ÒÆR”ÔÂFR,:†vÆRæR&VæB2Vâ6†&vRÆW2FV×ÆFW2Âw&÷WW2æFö÷&öæ÷F ¢÷R6öæF—F–öç2&&—G&—&W2†öÖR76—7FçBà
+# Changelog
+
+Toutes les Ã©volutions notables dâ€™Alert Manager sont documentÃ©es dans ce fichier.
+
+## 2.3.0-dev.12 â€” September 9, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Add an optional persisted alert for configuration coherence issues, disabled by default and available in the Coherence tab and configuration YAML.
+- Keep one immediate aggregate alert while findings remain, preserving acknowledgment, history and normal notification profiles. The alert links directly to the coherence report.
+- Prevent incomplete or failed scans from declaring recovery; a complete subsequent scan with no findings resolves the alert.
+
+## 2.3.0-dev.11 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Show the notification usage counting period once below the profile list and keep mobile Edit actions beside their profile.
+- Keep the mobile history title and clear-history action on the same row.
+
+## 2.3.0-dev.10 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Add separate top-five pack and custom-rule rankings by occurrence count and cumulative duration.
+- Add a top-five associated notification profile ranking using retained history, counting each profile once per occurrence across activation/reminder and resolution associations. This is not a delivery count.
+- Open the native filtered history from all new rankings, including a new associated-profile facet.
+
+## 2.3.0-dev.9 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Remove the visible statistics title and place period controls at the left of the history action.
+- Keep period controls and all four summary metrics in one card on desktop and mobile, retaining two metric columns on mobile.
+
+## 2.3.0-dev.8 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Center the desktop statistics dashboard within 1,400 pixels, combining period controls and the four summary values into one visual banner.
+- Give the three ranking cards equal widths and align their sections using content-sized shared grid rows.
+- Preserve the existing mobile layout and single page scroll.
+
+## 2.3.0-dev.7 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Replace the statistics table with a single scrolling dashboard: period controls, summary, and compact entity, device, and integration cards.
+- Show separate top-five rankings by occurrence count and cumulative alert duration, with links to the filtered history.
+- Arrange cards side by side on desktop and at full width on mobile, without internal scroll areas.
+
+## 2.3.0-dev.6 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Fixes
+
+- Keep the three statistics top items side by side on mobile, with compact spacing and truncated long names.
+- Keep the statistics title and history action on one row on mobile.
+- Limit the mobile statistics header to 45% of the visible viewport and allow it to scroll independently, preserving access to the native table even on short screens.
+
+## 2.3.0-dev.5 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Keep statistics controls, summary values, and top items on one row when space allows, with centered wrapping on smaller screens.
+- Show occurrence counts in parentheses beside top item names.
+- Place the grouping selector before the period buttons.
+
+## 2.3.0-dev.4 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Add affected entity counts and top entity, device, and integration highlights to history statistics, including tied occurrence counts.
+- Remove the retained-history note and its help control from the statistics header.
+- Use the history tableâ€™s native facets and active-period date filter for statistics navigation, replacing the separate filter banner.
+- Keep history facet selections tied to stable identifiers so identically named devices and rules remain distinct.
+
+## 2.3.0-dev.3 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Redesign history statistics with compact 7/30-day controls and a summary of occurrences, affected devices, and cumulative alert duration.
+- Show entity names and rules separately, with native icons, compact duration labels, and exact durations on hover.
+- Open the matching history when clicking a ranking row, preserving the selected time window and providing a visible, removable filter.
+- Keep mobile rows compact and move calculation details behind an information button.
+- Shorten the alert detail history label to â€œHistoryâ€.
+
+## 2.3.0-dev.2 â€” September 8, 2026
+
+This is a development prerelease.
+
+### Fixes
+
+- Fix the history occurrence counter when opening alert details from native tables.
+- Initialize the native date range picker before mounting it, preventing an undefined-date error during lazy loading.
+
+### Improvements
+
+- Move notification profile deletion into the profile editor menu.
+- Show only the current match count in the custom rule test summary.
+- List activation, reminder, and resolution profiles separately, with `-` when none match.
+- Shorten French and English help text while preserving configuration semantics.
+
+## 2.3.0-dev.1 â€” 8 septembre 2026
+
+Cette version est une prÃ©release de dÃ©veloppement.
+
+### AmÃ©liorations
+
+- Titres des notifications raccourcis, sans prÃ©fixe Â« Alert Manager Â», avec des
+  libellÃ©s adaptÃ©s au singulier et au pluriel en franÃ§ais et en anglais.
+- Ã‰dition YAML des profils de notification et actions Dupliquer et Tester dans
+  leur menu ; affichage des profils correspondants dans le testeur de rÃ¨gle.
+- Compteur cliquable des occurrences conservÃ©es dans les dÃ©tails dâ€™une alerte.
+- Statistiques de rÃ©currence et de fiabilitÃ© calculÃ©es Ã  la demande dans lâ€™historique.
+- Statistiques lÃ©gÃ¨res de performance et dâ€™activitÃ© sur 24 heures, en mÃ©moire.
+
+### Suppression incompatible
+
+- Suppression de `sensor.alert_manager_device_main_active` et de lâ€™Ã©vÃ©nement
+  `alert_manager_device_alert_started`, ainsi que de leur agrÃ©gation et de leurs
+  temporisations dÃ©diÃ©es. Les automatisations externes qui les utilisent doivent
+  Ãªtre adaptÃ©es aux profils de notification intÃ©grÃ©s ou aux Ã©vÃ©nements par alerte.
+- Lâ€™ancienne entrÃ©e du capteur est retirÃ©e du registre, mÃªme si elle a Ã©tÃ© renommÃ©e.
+  Aucun alias ni mÃ©canisme de compatibilitÃ© nâ€™est conservÃ©. Les notifications
+  intÃ©grÃ©es, les compteurs par alerte, le regroupement par appareil de lâ€™interface
+  et lâ€™historique restent inchangÃ©s.
+
+## 2.2.0-rc.19 â€” 8 septembre 2026
+
+### CorrigÃ©
+
+- Synchronisation de la constante de version utilisÃ©e pour le cache du panneau
+  avec le manifeste et les mÃ©tadonnÃ©es frontend, oubliÃ©e dans la RC18.
+- Cette version reprend toutes les corrections de la RC18.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.18 â€” 8 septembre 2026
+
+### CorrigÃ©
+
+- Les exceptions de notification exigent dÃ©sormais toutes les Ã©tiquettes
+  sÃ©lectionnÃ©es (ET). La premiÃ¨re exception correspondante reste prioritaire ;
+  le filtre dâ€™Ã©tiquettes du profil conserve son fonctionnement en OU.
+- Les notifications de retour Ã  la normale ne recopient plus lâ€™ancien message
+  dâ€™erreur ni la condition de dÃ©clenchement, pour les automatisations, les scripts
+  et les autres alertes. Les diagnostics restent disponibles dans lâ€™historique.
+- Les packs consommateurs dâ€™occurrences reÃ§oivent un instantanÃ© immuable des
+  identifiants dâ€™alertes, partagÃ© par tout le lot aprÃ¨s lâ€™Ã©valuation des sources.
+
+### Maintenance
+
+- Documentation de lâ€™ordre des verrous de configuration et de notifications.
+- Clarification de la date de vÃ©rification des acquittements et du calcul des
+  identifiants lors des renommages, sans changement du comportement.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.17 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Les alertes de flapping utilisent les Ã©tiquettes de leur propre pack, y compris
+  aprÃ¨s une nouvelle occurrence, une modification des Ã©tiquettes ou un redÃ©marrage.
+  Les identifiants, dates de dÃ©tection et historiques existants sont prÃ©servÃ©s.
+- Modifier les Ã©tiquettes dâ€™une rÃ¨gle annule ses notifications encore en attente
+  avec lâ€™ancien routage, sans supprimer celles des autres rÃ¨gles.
+- Les notifications dÃ©clenchÃ©es par une modification de configuration attendent
+  la rÃ©ussite de sa sauvegarde. Un Ã©chec dâ€™Ã©criture ne provoque plus lâ€™envoi dâ€™une
+  notification pour une alerte annulÃ©e par le retour Ã  la configuration prÃ©cÃ©dente.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.16 â€” 7 septembre 2026
+
+### AmÃ©liorÃ©
+
+- Suppression du titre numÃ©rotÃ© des exceptions de notification pour Ã©viter son
+  changement visuel lors du rÃ©ordonnancement. Les boutons de dÃ©placement et de
+  suppression restent respectivement en haut Ã  gauche et Ã  droite.
+- RÃ©duction des espaces en haut de chaque exception et avant ses champs pour
+  rendre les encadrÃ©s plus compacts, sur ordinateur comme sur mobile.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.15 â€” 7 septembre 2026
+
+### AjoutÃ©
+
+- RÃ©ordonnancement des exceptions de notification avec une poignÃ©e Ã  trois traits
+  devant chaque numÃ©ro : glisser-dÃ©poser natif Home Assistant sur ordinateur et
+  mobile, et dÃ©placement au clavier avec les flÃ¨ches haut/bas ou dÃ©but/fin.
+- Les rÃ©glages restent attachÃ©s Ã  leur exception et le nouvel ordre est appliquÃ©
+  aprÃ¨s enregistrement. La fermeture sans enregistrer demande confirmation.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.14 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Suppression de la transition de 300 ms hÃ©ritÃ©e de `ha-card` sur tous les
+  volets des rÃ¨gles personnalisÃ©es et de la configuration : leur largeur
+  suit immÃ©diatement le dÃ©placement de la poignÃ©e, comme le contenu principal.
+- Lâ€™animation visuelle de la poignÃ©e de redimensionnement est conservÃ©e.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.13 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Le bord gauche du contenu de configuration conserve la position de la page
+  centrÃ©e lors de lâ€™ouverture et du redimensionnement dâ€™un volet. Seul le bord
+  droit se rÃ©duit si nÃ©cessaire pour laisser la place au volet et Ã  son espacement.
+- Le contenu ne peut plus sâ€™agrandir Ã  lâ€™ouverture du volet. Sa position
+  sâ€™adapte naturellement au redimensionnement du navigateur.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.12 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Suppression du grand espace vide entre le contenu de configuration et son
+  volet sur les Ã©crans larges : les sections occupent toute la largeur restante,
+  avec un espacement de 16 px jusquâ€™au volet redimensionnable.
+- La page retrouve sa largeur limitÃ©e et son centrage Ã  la fermeture du volet.
+  Le comportement des Ã©crans Ã©troits reste inchangÃ©.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.11 â€” 7 septembre 2026
+
+### AmÃ©liorÃ©
+
+- Tous les volets de configuration reprennent le redimensionnement en largeur
+  des rÃ¨gles personnalisÃ©es : poignÃ©e, limites de largeur, rÃ©glage au clavier
+  et double-clic pour retrouver la largeur initiale.
+- Sur grand Ã©cran, le contenu principal se rÃ©duit Ã  mesure que le volet
+  sâ€™Ã©largit et retrouve sa largeur Ã  la fermeture, y compris lors des mises
+  Ã  jour ciblÃ©es des volets. La largeur est conservÃ©e pendant la session.
+- Les seuils responsive et les volets mobiles natifs restent identiques
+  Ã  ceux de lâ€™Ã©diteur de rÃ¨gles.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.10 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- DÃ©filement automatique vers les nouvelles lignes de configuration : seuils
+  de batterie, seuils dâ€™erreur des automatisations et scripts, configurations
+  de flapping et dÃ©lais particuliers par entitÃ©.
+- MÃªme comportement pour lâ€™ajout de valeurs multiples aux rÃ¨gles et de
+  rÃ©fÃ©rences ignorÃ©es de cohÃ©rence, en complÃ©ment des exceptions de notification.
+- Marge de 12 px autour des Ã©lÃ©ments rÃ©vÃ©lÃ©s et dÃ©filement aprÃ¨s restauration
+  de la position du volet, sur mobile comme sur ordinateur.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.9 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Flapping sur mobile : marges internes et espacement rÃ©duits pour laisser
+  le champ dâ€™occurrences et la fenÃªtre de dÃ©tection sur la mÃªme ligne,
+  sans couper le libellÃ© du nombre dâ€™occurrences.
+- Exceptions de notification : marge de dÃ©filement pour que lâ€™encadrÃ© ajoutÃ©
+  ne soit plus collÃ© au bord du volet.
+- Valeurs numÃ©riques dans les tableaux et dÃ©tails des alertes : utilisation
+  du formatage natif Home Assistant, avec la prÃ©cision dâ€™affichage de lâ€™entitÃ©
+  et le format numÃ©rique de lâ€™utilisateur. Les valeurs enregistrÃ©es restent
+  intactes ; les anciennes unitÃ©s sont conservÃ©es dans lâ€™historique.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.8 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Flapping, configurations particuliÃ¨res sur mobile : largeur du champ
+  dâ€™occurrences ajustÃ©e Ã  son libellÃ©, qui reste sur une seule ligne, pour
+  placer la fenÃªtre de dÃ©tection Ã  cÃ´tÃ© lorsque lâ€™espace disponible le permet.
+  Le sÃ©lecteur de durÃ©e conserve sa largeur native.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.7 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Flapping sur mobile : champ entitÃ©, interrupteur et corbeille sur la mÃªme
+  ligne, avec les actions centrÃ©es verticalement sur le sÃ©lecteur.
+- Exceptions de notification sur mobile : nouvelle alerte et retour Ã  la
+  normale cÃ´te Ã  cÃ´te, avec les sÃ©lecteurs alignÃ©s.
+- Lâ€™ajout dâ€™une exception de notification fait dÃ©filer le volet jusquâ€™Ã 
+  la nouvelle exception lorsquâ€™elle nâ€™est pas visible.
+- Historique : ajout de lâ€™action Supprimer dans le menu du dÃ©tail dâ€™une alerte.
+  AprÃ¨s confirmation et suppression rÃ©ussie, le dÃ©tail se ferme et le bandeau
+  de confirmation apparaÃ®t sur la page dâ€™historique.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.6 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Notifications mobiles : rÃ©solution de lâ€™action Ã  partir de la configuration
+  de lâ€™application associÃ©e Ã  lâ€™entitÃ©, y compris si lâ€™entitÃ© a Ã©tÃ© renommÃ©e.
+  Le lien de navigation est transmis dans les donnÃ©es du clic.
+- Lâ€™envoi gÃ©nÃ©rique de secours nâ€™ajoute plus le lien au texte de la notification.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.5 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Flapping : nombre dâ€™occurrences et fenÃªtre de dÃ©tection cÃ´te Ã  cÃ´te lorsque
+  la largeur disponible le permet, avec les champs alignÃ©s.
+- Exceptions de notification : Ã©tiquettes sur toute la largeur, puis nouvelle
+  alerte et retour Ã  la normale cÃ´te Ã  cÃ´te sur grand Ã©cran.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.4 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Les notifications de rÃ©solution ouvrent lâ€™historique, y compris lorsquâ€™elles
+  regroupent plusieurs alertes rÃ©solues.
+- Configuration du flapping : nombre dâ€™occurrences placÃ© avant les durÃ©es et
+  champs de mÃªme largeur ; champ dâ€™occurrences plus compact pour les automatisations.
+- CohÃ©rence : suppression des copies inutiles du rapport dans lâ€™event loop.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-rc.3 â€” 7 septembre 2026
+
+### CorrigÃ©
+
+- Flapping : interrupteur sans libellÃ© visible, avec nom accessible et infobulle,
+  et actions regroupÃ©es prÃ¨s de lâ€™entitÃ©, y compris lorsque lâ€™analyse est inactive.
+- Les durÃ©es utilisent toute la largeur de lâ€™encadrÃ© et ne passent sur deux
+  colonnes que lorsque la place disponible le permet.
+- Alignement des champs et poubelles des packs batterie et automatisations ;
+  suppression du libellÃ© Â« Seuil global Â» incorrect sur les seuils particuliers.
+- Conservation de la sÃ©lection dâ€™entitÃ© en pleine largeur sur mobile.
+
+Cette version reste une prÃ©release.
+
+## 2.2.0-beta.10 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- La fermeture dâ€™un volet de configuration modifiÃ© demande confirmation pour les
+  rÃ©glages des packs, les dÃ©lais par entitÃ© et les exclusions, comme les profils
+  de notification. Confirmer restaure le contenu du volet Ã  son ouverture sans
+  supprimer les autres modifications en attente.
+- Refuser lâ€™abandon aprÃ¨s un geste de fermeture mobile rÃ©affiche le volet avec
+  ses modifications. Les volets inchangÃ©s se ferment sans confirmation.
+
+## 2.2.0-beta.9 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Les retraits de lignes dans les volets de configuration utilisent une icÃ´ne
+  poubelle commune avec une infobulle et un libellÃ© accessible : seuils des packs,
+  configurations de flapping, dÃ©lais par entitÃ©, exceptions de notification et
+  listes de valeurs des rÃ¨gles.
+- Sur mobile, le champ Appareil des configurations particuliÃ¨res de flapping
+  occupe toute la largeur de lâ€™encadrÃ©. Sa disposition desktop est conservÃ©e.
+
+## 2.2.0-beta.8 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Sur mobile, les boutons Retirer des seuils dâ€™automatisation et des occurrences
+  de flapping sâ€™alignent avec le champ visible : lâ€™espace vide rÃ©servÃ© aux erreurs
+  nâ€™ajoute plus de hauteur. Les messages de validation restent affichÃ©s.
+- Les configurations particuliÃ¨res de flapping utilisent le mÃªme encadrÃ© que
+  les dÃ©lais par entitÃ©. La disposition desktop reste inchangÃ©e.
+
+## 2.2.0-beta.7 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Sur mobile, les seuils par automatisation ou script et les dÃ©lais par entitÃ©
+  affichent leur bouton de retrait Ã  cÃ´tÃ© du champ, avec un alignement vertical.
+- Les configurations particuliÃ¨res de flapping prÃ©sentent les durÃ©es avant le
+  nombre dâ€™occurrences. Sur mobile, les durÃ©es sont cÃ´te Ã  cÃ´te lorsque la largeur
+  disponible le permet ; les occurrences et le bouton Retirer partagent une ligne.
+- Le volet batterie est plus compact sur mobile et propose uniquement les
+  appareils ayant un capteur de batterie numÃ©rique.
+- Le texte Â« Calcul en coursâ€¦ Â» du total suivi reste compact au dÃ©marrage.
+- Le dÃ©lai de retour Ã  la normale du flapping dispose dâ€™une explication.
+
+## 2.2.0-beta.6 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Le bouton de suppression de lâ€™historique reste dÃ©sactivÃ© lorsque celui-ci est
+  vide, y compris aprÃ¨s un changement dâ€™onglet et un rafraÃ®chissement de lâ€™interface.
+- La rÃ©Ã©valuation affiche son rÃ©sultat dans les dÃ©tails de lâ€™alerte. La fenÃªtre
+  reste ouverte pour lire le rÃ©sultat si lâ€™alerte nâ€™est plus en cours.
+- Lâ€™icÃ´ne de dÃ©sacquittement utilise une icÃ´ne Home Assistant valide.
+- Le compteur de notifications des dÃ©tails dâ€™alerte est intitulÃ© Â« Notifications Â».
+
+## 2.2.0-beta.5 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Sur mobile, le bouton Enregistrer de la page Configuration utilise le
+  dÃ©calage natif Home Assistant au-dessus des onglets. Sa position desktop
+  reste inchangÃ©e.
+- Les Ã©tiquettes des exceptions de notification utilisent les badges natifs
+  avec couleur et icÃ´ne.
+
+### AjoutÃ©
+
+- Une exception peut sÃ©lectionner plusieurs Ã©tiquettes : une seule correspondance
+  suffit (logique OU). La premiÃ¨re exception correspondante reste prioritaire.
+- Les anciennes exceptions Ã  une seule Ã©tiquette restent acceptÃ©es et sont
+  normalisÃ©es lors de la validation, y compris pour lâ€™import YAML.
+
+## 2.2.0-beta.4 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Les volets de configuration sont montÃ©s hors de la page Ã  onglets, comme
+  lâ€™Ã©diteur de rÃ¨gles : leur barre dâ€™actions passe au-dessus de la navigation
+  mobile au lieu dâ€™Ãªtre masquÃ©e par celle-ci.
+- Ce montage sâ€™applique Ã  lâ€™ouverture, au rafraÃ®chissement et au changement
+  de disposition. La saisie, la validation et la fermeture des volets restent
+  prises en charge aprÃ¨s leur dÃ©placement.
+
+## 2.2.0-beta.3 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- Les actions dâ€™enregistrement restent fixes en bas de tous les volets de
+  configuration, y compris les profils de notification et les rÃ¨gles personnalisÃ©es.
+- Le contenu des volets mobiles dÃ©file dans lâ€™espace disponible sans entraÃ®ner
+  la page sous-jacente en fin de dÃ©filement.
+- Les labels des rÃ¨gles et des alertes affichent leur couleur et leur icÃ´ne
+  avec le composant natif Home Assistant, y compris aprÃ¨s un chargement diffÃ©rÃ©.
+- La carte des dÃ©tails dâ€™une alerte conserve sa hauteur et ne coupe plus sa
+  derniÃ¨re ligne dans les fenÃªtres de faible hauteur.
+
+## 2.2.0-beta.2 â€” 6 septembre 2026
+
+### CorrigÃ©
+
+- RÃ©tablissement des dates de dÃ©tection et dâ€™activation dans les dÃ©tails des
+  alertes : les composants de date natifs reÃ§oivent le contexte Home Assistant.
+- Conservation dâ€™une date lisible tant que le composant natif nâ€™est pas chargÃ©
+  ou ne dispose pas encore du contexte nÃ©cessaire Ã  son rendu. Le correctif
+  couvre aussi les dates dâ€™acquittement, de rÃ©solution et de notification.
+
+## 2.2.0-dev16 â€” 4 septembre 2026
+
+### ModifiÃ©
+
+- Les profils de notification affichent dÃ©sormais leur nom sur une premiÃ¨re ligne,
+  puis leur Ã©tat et leur utilisation sur les derniÃ¨res 24 heures sur une seconde
+  ligne compacte. Les dÃ©tails techniques redondants ont Ã©tÃ© retirÃ©s de la liste.
+- La persistance du runtime Ã©vite les Ã©critures de snapshots inchangÃ©s, sÃ©rialise
+  les donnÃ©es hors de la boucle dâ€™Ã©vÃ©nements et diffÃ¨re la sauvegarde des alertes
+  en attente rÃ©centes.
+
+### Tests
+
+- Ajout et mise Ã  jour des tests couvrant la prÃ©sentation compacte des profils et
+  lâ€™optimisation des Ã©critures de stockage.
+
+## 2.2.0-dev15 â€” 4 septembre 2026
+
+### AjoutÃ©
+
+- Chaque profil de notification affiche dans Configuration son nombre
+  dâ€™utilisations sur les derniÃ¨res 24 heures.
+- Les utilisations rÃ©ussies sont conservÃ©es aprÃ¨s redÃ©marrage dans 24 compteurs
+  horaires bornÃ©s par profil, sans polling ni nouvelle entitÃ© Home Assistant.
+
+### Tests
+
+- Ajout de tests couvrant les nouvelles alertes, rÃ©solutions, rappels, Ã©checs,
+  notifications de test, restauration du stockage et affichage frontend.
+
+## 2.2.0-dev14 â€” 4 septembre 2026
+
+### ModifiÃ©
+
+- La page Configuration utilise dÃ©sormais un seul bouton dâ€™enregistrement
+  flottant, masquÃ© tant quâ€™aucun rÃ©glage gÃ©nÃ©ral ou automatique nâ€™a Ã©tÃ© modifiÃ©,
+  sur le modÃ¨le de lâ€™Ã©diteur dâ€™automatisations de Home Assistant.
+- La surveillance automatique est regroupÃ©e dans une carte unique, alignÃ©e sur
+  les autres sections de Configuration. Les packs sont prÃ©sentÃ©s comme des
+  sections internes sÃ©parÃ©es, sans cartes imbriquÃ©es.
+
+### Tests
+
+- Ajout de tests frontend couvrant lâ€™Ã©tat modifiÃ©, la sauvegarde commune des
+  deux formulaires et la structure sans cartes imbriquÃ©es.
+
+## 2.2.0-dev13 â€” 4 septembre 2026
+
+### ModifiÃ©
+
+- La surveillance automatique est maintenant intÃ©grÃ©e Ã  la page Configuration
+  et nâ€™occupe plus un onglet distinct.
+- Les accÃ¨s rapides de Configuration permettent dâ€™atteindre directement la
+  surveillance automatique et sont rÃ©organisÃ©s en deux rangÃ©es Ã©quilibrÃ©es.
+- Lâ€™ancienne URL de lâ€™onglet Surveillance automatique ouvre dÃ©sormais la page
+  Configuration afin de prÃ©server les favoris existants.
+
+### Tests
+
+- Mise Ã  jour des tests frontend couvrant les onglets, la composition de la page
+  Configuration, ses accÃ¨s rapides et la compatibilitÃ© de lâ€™ancienne URL.
+
+## 2.0.0-dev13 â€” 28 aoÃ»t 2026
+
+### ModifiÃ©
+
+- La page Configuration est maintenant organisÃ©e en blocs distincts pour
+  lâ€™affichage des alertes, lâ€™analyse de cohÃ©rence, les exclusions et
+  lâ€™historique. Sa largeur est plafonnÃ©e sur les grands Ã©crans et la mise en
+  page repasse en une colonne sur mobile.
+- Les rÃ©fÃ©rences ignorÃ©es par lâ€™analyse de cohÃ©rence utilisent les chips
+  natives de Home Assistant. Une rÃ©fÃ©rence peut Ãªtre ajoutÃ©e avec le bouton,
+  la touche EntrÃ©e ou une virgule, puis supprimÃ©e directement depuis sa chip.
+- Les labels, entitÃ©s et appareils exclus sont regroupÃ©s dans le mÃªme bloc afin
+  de ne plus mÃ©langer les rÃ©glages de cohÃ©rence, dâ€™alerte et dâ€™historique.
+
+### Tests
+
+- Ajout de tests frontend couvrant le rendu compact, lâ€™ajout normalisÃ©, la
+  dÃ©duplication, la validation, la suppression et la sÃ©rialisation des
+  rÃ©fÃ©rences ignorÃ©es.
+
+## 1.7.2 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Correction de la sauvegarde des champs **Message** et **Condition Jinja supplÃ©mentaire** des rÃ¨gles personnalisÃ©es. Les `ha-selector` de Home Assistant sont des composants contrÃ´lÃ©s : leur propriÃ©tÃ© `value` ne se met pas Ã  jour automatiquement lorsque lâ€™Ã©diteur Jinja interne Ã©met `value-changed`. Alert Manager rÃ©injecte maintenant explicitement la nouvelle valeur dans le sÃ©lecteur et utilise le brouillon de rÃ¨gle comme source de vÃ©ritÃ© lors de la sauvegarde.
+- La suppression volontaire du contenu de ces champs reste correctement enregistrÃ©e comme valeur vide (`null` cÃ´tÃ© stockage).
+
+### Tests
+
+- Ajout dâ€™un test reproduisant le comportement rÃ©el du sÃ©lecteur Template Home Assistant avec une propriÃ©tÃ© hÃ´te restÃ©e vide aprÃ¨s saisie.
+- Ajout dâ€™un test vÃ©rifiant la synchronisation de la valeur des sÃ©lecteurs contrÃ´lÃ©s.
+
+## 1.7.1 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Lors de la crÃ©ation dâ€™une rÃ¨gle personnalisÃ©e, la condition Jinja supplÃ©mentaire
+  est dÃ©sormais rÃ©cupÃ©rÃ©e depuis le brouillon de lâ€™Ã©diteur lorsque le composant
+  `ha-selector` de Home Assistant nâ€™expose pas encore sa nouvelle valeur via sa
+  propriÃ©tÃ© `.value` au moment de la sauvegarde. Le texte saisi nâ€™est donc plus
+  remplacÃ© par une valeur vide Ã  la crÃ©ation de la rÃ¨gle.
+
+### Tests
+
+- Un test frontend reproduit le cas oÃ¹ le sÃ©lecteur Jinja a dÃ©jÃ  mis Ã  jour le
+  brouillon mais expose encore une propriÃ©tÃ© `.value` indisponible au moment de
+  la sauvegarde.
+
+## 1.7.0-dev27 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les attributs des capteurs de cycle de vie nâ€™embarquent plus les mÃ©tadonnÃ©es
+  rÃ©cupÃ©rables depuis `entity_id` : nom, identifiant et nom dâ€™appareil, zone,
+  intÃ©gration et unitÃ©. Les informations figÃ©es utiles aux automatisations sont
+  conservÃ©es sous une forme compacte.
+- Les attributs des capteurs sont plafonnÃ©s Ã  15 000 octets. Si une quantitÃ©
+  exceptionnelle dâ€™alertes dÃ©passe encore ce budget, la liste est tronquÃ©e et
+  le nombre restant est exposÃ© dans `alerts_omitted` ou `devices_omitted`, sans
+  jamais dÃ©passer la limite Recorder de 16 Kio.
+- Le panneau rÃ©cupÃ¨re dÃ©sormais les lignes complÃ¨tes par WebSocket aprÃ¨s un
+  changement des capteurs. Il ne dÃ©pend donc plus des attributs compacts ou
+  Ã©ventuellement tronquÃ©s pour afficher les alertes.
+- Chaque capteur Ã©crit son Ã©tat uniquement lorsque sa propre partition change ;
+  une modification des alertes actives ne rÃ©Ã©crit plus inutilement les capteurs
+  Ã  venir et acquittÃ©s, et inversement.
+- Un sÃ©lecteur Home Assistant dÃ©jÃ  configurÃ© ne reÃ§oit plus un nouvel objet
+  `hass` Ã  chaque changement dâ€™Ã©tat. Cela empÃªchait la sÃ©lection dâ€™une entitÃ© de
+  rester stable sur les installations de production trÃ¨s actives.
+- Lâ€™Ã©vÃ©nement `alert_manager_device_alert_started` expose uniquement
+  `device_ids` et ne contient plus le champ singulier redondant `device_id`.
+
+### Tests
+
+- Les tests couvrent un capteur contenant 100 alertes avec des messages de
+  1 024 caractÃ¨res, le plafond Recorder, la rÃ©cupÃ©ration WebSocket complÃ¨te,
+  la stabilitÃ© du sÃ©lecteur et lâ€™absence de `device_id` dans les attributs et
+  Ã©vÃ©nements appareil.
+
+## 1.7.0-dev26 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les modifications du sÃ©lecteur EntitÃ©s dâ€™une rÃ¨gle personnalisÃ©e sont
+  dÃ©sormais conservÃ©es, aussi bien Ã  la crÃ©ation quâ€™Ã  lâ€™Ã©dition. Le frontend
+  accepte les deux formats renvoyÃ©s par le composant Home Assistant pour une
+  sÃ©lection unique ou multiple et rÃ©cupÃ¨re la valeur directement depuis le
+  sÃ©lecteur lorsque lâ€™Ã©vÃ©nement ne la fournit pas.
+- La mÃªme normalisation protÃ¨ge les autres sÃ©lecteurs multiples de la page de
+  configuration contre un effacement involontaire.
+
+### Tests
+
+- Deux tests frontend couvrent lâ€™ajout de
+  `binary_sensor.filtration_piscine`, le remplacement dâ€™une ancienne entitÃ©,
+  une sÃ©lection multiple et lâ€™Ã©vÃ©nement sans valeur explicite.
+
+## 1.7.0-dev25 â€” 27 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Le champ Message des rÃ¨gles personnalisÃ©es utilise dÃ©sormais le sÃ©lecteur
+  `template` natif de Home Assistant, comme la condition Jinja supplÃ©mentaire.
+  Il accepte une saisie multiligne et conserve les retours Ã  la ligne lors de
+  lâ€™enregistrement et de la rÃ©ouverture du volet.
+
+### Tests
+
+- Les tests frontend vÃ©rifient la configuration des deux Ã©diteurs Jinja natifs
+  et la sÃ©rialisation dâ€™un message multiligne.
+
+## 1.7.0-dev24 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- La modification explicite du message dâ€™une rÃ¨gle actualise dÃ©sormais les
+  occurrences dÃ©jÃ  actives. Le template Jinja est rendu une fois lors de
+  lâ€™enregistrement, puis reste figÃ© malgrÃ© les changements ultÃ©rieurs des
+  entitÃ©s quâ€™il consulte.
+
+### Tests
+
+- Un test de non-rÃ©gression couvre lâ€™ajout dâ€™un message Jinja Ã  une alerte dÃ©jÃ 
+  active et vÃ©rifie que son rendu reste ensuite figÃ©.
+
+## 1.7.0-dev22 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les packs automatiques ne contiennent plus aucun texte localisÃ© en dur. Ils
+  retournent uniquement une clÃ© de traduction structurÃ©e et ses paramÃ¨tres.
+- Le backend traduit les conditions et messages automatiques dans la langue
+  globale de Home Assistant pour les capteurs et Ã©vÃ©nements, avec un repli
+  anglais si le catalogue est momentanÃ©ment indisponible.
+- La colonne Message affiche maintenant la condition traduite des alertes
+  automatiques au lieu de `â€”`. Le panneau effectue sa propre traduction dans la
+  langue de lâ€™utilisateur, y compris pour lâ€™historique existant.
+
+### Tests
+
+- Les tests couvrent les messages franÃ§ais et anglais dans les enregistrements,
+  capteurs, Ã©vÃ©nements et tableaux, ainsi que lâ€™absence de texte localisÃ© dans
+  les sources des packs.
+
+## 1.7.0-dev21 â€” 27 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Le pack batterie nâ€™utilise plus lâ€™attribut `low_battery_level`. Son seuil
+  effectif suit dÃ©sormais uniquement la prioritÃ© seuil par appareil â†’ seuil
+  global, dans le moteur comme dans les mÃ©tadonnÃ©es et lâ€™interface.
+- Le message Jinja dâ€™une rÃ¨gle reste dynamique pendant lâ€™Ã©tat Ã  venir, puis son
+  dernier rendu est figÃ© au passage en actif. Les changements ultÃ©rieurs des
+  entitÃ©s rÃ©fÃ©rencÃ©es ne modifient plus le message de cette occurrence.
+- Lâ€™aide des champs Jinja prÃ©cise quâ€™ils utilisent lâ€™environnement complet de
+  templates Home Assistant et peuvent consulter toutes les entitÃ©s, sans pour
+  autant permettre lâ€™appel de services ou lâ€™exÃ©cution de code Python.
+
+### Tests
+
+- Les tests couvrent lâ€™absence de prise en compte de `low_battery_level`, la mise
+  Ã  jour du message Ã  venir et son immutabilitÃ© aprÃ¨s activation.
+
+## 1.7.0-dev20 â€” 27 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Le champ `message` des rÃ¨gles personnalisÃ©es accepte dÃ©sormais les templates
+  Jinja Home Assistant. Le rendu fournit `entity_id`, `state` et `value`, est
+  validÃ© avant enregistrement et se rÃ©actualise lorsquâ€™une entitÃ© rÃ©fÃ©rencÃ©e
+  change. Les messages simples restent compatibles sans modification.
+
+### CorrigÃ©
+
+- Les libellÃ©s et lâ€™aide de la condition Jinja sâ€™affichent correctement dans le
+  volet dâ€™ajout et dâ€™Ã©dition au lieu de montrer leurs clÃ©s de traduction.
+- Lâ€™aide Â« Laisser le dÃ©lai vide pour utiliser le dÃ©lai global. Â» est maintenant
+  attachÃ©e au champ Â« DÃ©lai propre au pack Â» et sâ€™affiche immÃ©diatement sous son
+  input, y compris lorsque le pack expose dâ€™autres options.
+
+### Tests
+
+- 156 tests backend et 69 tests frontend couvrent notamment le rendu Jinja du
+  message, ses dÃ©pendances et sa validation, les traductions de lâ€™Ã©diteur et le
+  placement de lâ€™aide du dÃ©lai.
+
+## 1.7.0-dev19 â€” 27 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Les rÃ¨gles personnalisÃ©es acceptent une `condition_template` Jinja facultative.
+  Lorsquâ€™elle est dÃ©finie, elle doit rendre `true` en plus de la comparaison
+  existante pour crÃ©er ou maintenir lâ€™alerte. Le backend valide sa syntaxe,
+  fournit `entity_id`, `state` et `value`, et rÃ©Ã©value la rÃ¨gle quand une entitÃ©
+  rÃ©fÃ©rencÃ©e par le template change.
+- Le pack batteries dÃ©clare dÃ©sormais lui-mÃªme ses champs supplÃ©mentaires dans
+  ses mÃ©tadonnÃ©es. Il expose notamment `device_thresholds`, une table
+  appareil â†’ seuil Ã©ditable avec les sÃ©lecteurs Home Assistant. Le seuil propre
+  Ã  lâ€™appareil est prioritaire sur `low_battery_level`, puis sur le seuil global.
+
+### ModifiÃ©
+
+- `sensor.alert_manager_device_main_active` nâ€™expose plus les tableaux globaux
+  `messages` et `rules`. Chaque entrÃ©e de `devices` conserve ses propres tableaux,
+  correspondant exactement aux alertes de ce groupe.
+- `alert_manager_device_alert_started` attend dÃ©sormais 10 secondes sans nouvelle
+  alerte pour le mÃªme groupe avant son Ã©mission. Toute alerte supplÃ©mentaire
+  pendant ce dÃ©lai redÃ©marre la temporisation ; lâ€™Ã©vÃ©nement final contient les
+  tableaux stabilisÃ©s `messages` et `rules` du groupe.
+
+### Tests
+
+- 154 tests backend et 69 tests frontend couvrent les seuils batterie par
+  appareil, les mÃ©tadonnÃ©es dÃ©claratives du pack, la condition Jinja et ses
+  dÃ©pendances, le debounce dâ€™Ã©vÃ©nement ainsi que la nouvelle forme du capteur.
+
+## 1.7.0-dev18 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Le bouton retour et son lien de secours figÃ© vers les intÃ©grations sont
+  supprimÃ©s. Toutes les pages du panneau sont maintenant dÃ©clarÃ©es comme pages
+  principales et affichent le bouton menu natif de Home Assistant.
+- La clÃ© de cache du bundle frontend est renouvelÃ©e pour garantir le chargement
+  de ce correctif lors dâ€™une rÃ©installation de la release dev18 republiÃ©e.
+
+### AjoutÃ©
+
+- `sensor.alert_manager_device_main_active` expose les attributs globaux
+  `messages` et `rules`, sous forme de tableaux uniques pour toutes les alertes
+  appareil actives. Chaque entrÃ©e de `devices` contient Ã©galement ses propres
+  tableaux `messages` et `rules` afin de conserver le dÃ©tail par appareil.
+
+### Tests
+
+- 147 tests backend et 69 tests frontend couvrent lâ€™absence complÃ¨te de lien de
+  retour, lâ€™affichage du menu natif et les nouveaux tableaux dâ€™attributs,
+  notamment lorsque plusieurs identifiants dâ€™appareil partagent le mÃªme nom.
+
+## 1.7.0-dev17 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Sur mobile, la seconde ligne de chaque alerte reprend dÃ©sormais toutes les
+  colonnes secondaires choisies dans Â«Â Personnaliser la vueÂ Â», dans leur ordre
+  dâ€™affichage et sÃ©parÃ©es par un point mÃ©dian. Cela sâ€™applique Ã  la vue
+  dâ€™ensemble comme Ã  lâ€™historique, y compris au compte Ã  rebours dynamique.
+- Le bouton retour utilise systÃ©matiquement lâ€™historique rÃ©el du navigateur. Il
+  revient donc Ã  la page Home Assistant prÃ©cÃ©demment consultÃ©e mÃªme lorsque
+  celle-ci nâ€™est pas renseignÃ©e dans `history.state`.
+
+### Tests
+
+- 146 tests backend et 69 tests frontend couvrent la composition mobile selon
+  les colonnes visibles et le retour sans mÃ©tadonnÃ©e de navigation Home
+  Assistant.
+
+## 1.7.0-dev16 â€” 27 aoÃ»t 2026
+
+### ModifiÃ©
+
+- `sensor.alert_manager_device_main_active` regroupe dÃ©sormais les appareils
+  portant le mÃªme nom dans une seule entrÃ©e `devices`. Le champ compatible
+  `device_id` conserve le premier identifiant triÃ© et le nouveau champ
+  `device_ids` expose tous les appareils regroupÃ©s.
+- `alert_manager_device_alert_started` suit le mÃªme groupe nominalÂ : lâ€™arrivÃ©e
+  dâ€™une alerte sur un second appareil de mÃªme nom ne rÃ©Ã©met pas lâ€™Ã©vÃ©nement tant
+  que le groupe reste actif.
+- Le tri initial de la vue dâ€™ensemble utilise le statut en ordre ascendant afin
+  dâ€™afficher les alertes actives avant les alertes Ã  venir et acquittÃ©es.
+  Lâ€™ancien tri par dÃ©faut Â«Â dÃ©tectÃ©e le, dÃ©croissantÂ Â» est migrÃ© vers ce nouvel
+  ordreÂ ; les autres tris personnalisÃ©s restent conservÃ©s localement.
+
+### Tests
+
+- 146 tests backend et 69 tests frontend couvrent le regroupement de plusieurs
+  identifiants dâ€™appareil sous un mÃªme nom et le nouvel ordre initial.
+
+## 1.7.0-dev15 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Le dÃ©lai de 10 secondes concerne maintenant uniquement lâ€™affichage des alertes
+  **Ã  venir**. Une condition transitoire qui disparaÃ®t avant cette Ã©chÃ©ance ne
+  fait plus clignoter la liste pending, tandis quâ€™une alerte arrivÃ©e Ã  Ã©chÃ©ance
+  est affichÃ©e immÃ©diatement comme active.
+- Le rÃ©glage est renommÃ© `pending_display_delay` et les configurations
+  `active_display_delay` crÃ©Ã©es par la dev14 sont migrÃ©es automatiquement, y
+  compris dans les imports YAML.
+- Les entitÃ©s sans appareil sont dÃ©sormais comptÃ©es individuellement par
+  `sensor.alert_manager_device_main_active`. Leur identifiant et leur nom
+  dâ€™entitÃ© servent de repli dans `devices` et dans lâ€™Ã©vÃ©nement
+  `alert_manager_device_alert_started`.
+- La derniÃ¨re ligne des rÃ¨gles personnalisÃ©es conserve la mÃªme hauteur que les
+  autres. La surcharge locale de 60 px, incompatible avec le calcul natif
+  `autoHeight` de Home Assistant, a Ã©tÃ© retirÃ©e.
+
+### Tests
+
+- 145 tests backend et 69 tests frontend couvrent notamment les conditions
+  transitoires, la migration dev14, les entitÃ©s sans appareil et la hauteur
+  native du tableau.
+
+## 1.7.0-dev14 â€” 27 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Le nouveau rÃ©glage persistant `active_display_delay`, fixÃ© Ã  10 secondes par
+  dÃ©faut, retarde lâ€™exposition dâ€™une alerte dÃ©jÃ  active dans le Dashboard et
+  `sensor.alert_manager_main_active`. Le dÃ©lai ajoutÃ© est plafonnÃ© par le dÃ©lai
+  propre de lâ€™alerte ; une rÃ¨gle sans temporisation reste donc immÃ©diate.
+- Le capteur `sensor.alert_manager_device_main_active` compte les appareils du
+  registre possÃ©dant au moins une alerte active affichÃ©e. Son attribut `devices`
+  fournit les identifiants, noms, zones, compteurs et alertes de chaque appareil.
+- Lâ€™Ã©vÃ©nement `alert_manager_device_alert_started` est Ã©mis uniquement lorsquâ€™un
+  appareil entre dans lâ€™ensemble actif. Une alerte supplÃ©mentaire sur le mÃªme
+  appareil ne crÃ©e aucun doublon. La documentation inclut une automatisation de
+  notification mobile basÃ©e sur cet Ã©vÃ©nement.
+
+### CorrigÃ© et optimisÃ©
+
+- Le Dashboard met dÃ©sormais Ã  jour les compteurs et les donnÃ©es du composant
+  natif en place lors de lâ€™ajout ou du retrait dâ€™une ligne, sans reconstruire la
+  page et faire clignoter le tableau.
+- Lâ€™ouverture et la fermeture du volet dâ€™une rÃ¨gle personnalisÃ©e conservent
+  lâ€™instance existante de `ha-data-table`, son tri et sa position de dÃ©filement.
+- La table des rÃ¨gles active le mode natif `autoHeight` de Home Assistant, ce qui
+  supprime la ligne vide rÃ©siduelle aprÃ¨s la derniÃ¨re rÃ¨gle sans rÃ¨gle CSS
+  spÃ©cifique.
+- Les nouvelles Ã©chÃ©ances `visible_at` sont persistÃ©es, restaurÃ©es et
+  replanifiÃ©es aprÃ¨s redÃ©marrage ou import de configuration. Une alerte rÃ©solue
+  avant son exposition ne gÃ©nÃ¨re ni ligne active ni Ã©vÃ©nement dâ€™appareil.
+
+### Tests
+
+- 142 tests backend et 69 tests frontend couvrent le dÃ©lai dâ€™exposition, sa
+  compatibilitÃ© avec les anciens exports, le compteur dâ€™appareils, la
+  dÃ©duplication des Ã©vÃ©nements et les mises Ã  jour natives des tableaux.
+
+## 1.7.0-dev12 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Lâ€™intÃ©gration source est dÃ©sormais conservÃ©e dans lâ€™historique lors de la
+  rÃ©solution dâ€™une alerte et reste donc disponible aprÃ¨s la disparition de
+  lâ€™entitÃ©.
+- Une correction dâ€™horloge NTP vers le passÃ© aprÃ¨s un acquittement ne produit
+  plus dâ€™entrÃ©e dâ€™historique temporellement incohÃ©rente et illisible au
+  redÃ©marrage.
+- Les rÃ¨gles refusent strictement les types invalides pour leur activation,
+  leur version, leur nom, leur attribut et leur message ; la chaÃ®ne `"false"`
+  ne peut notamment plus activer une rÃ¨gle par effet de vÃ©ritÃ© implicite.
+- Des prÃ©fÃ©rences de tableau locales absentes ou corrompues ne bloquent plus le
+  dÃ©marrage du panel.
+- Une pÃ©riode contenant une date JavaScript invalide est ignorÃ©e sans
+  exception ni perte du filtre prÃ©cÃ©dent.
+- La soumission dâ€™un formulaire au clavier respecte maintenant la validation
+  native Home Assistant, comme le clic sur son bouton dâ€™enregistrement.
+- Un changement de langue pendant le chargement des traductions dÃ©clenche bien
+  le chargement de la derniÃ¨re langue demandÃ©e.
+
+### Interface et optimisation
+
+- Les messages dâ€™Ã©tat utilisent `ha-alert`, les panneaux et compteurs utilisent
+  `ha-card`, et la liste des rÃ¨gles utilise dÃ©sormais `ha-data-table` avec tri,
+  navigation au clavier et interrupteurs Home Assistant natifs.
+- Lâ€™ancien tableau HTML, les styles personnalisÃ©s de cartes et de messages,
+  les sÃ©lecteurs inutilisÃ©s et les rÃ¨gles mobiles redondantes ont Ã©tÃ© retirÃ©s.
+- Le contrÃ´le statique du frontend interdit dÃ©sormais le retour des principaux
+  contrÃ´les HTML personnalisÃ©s et des anciennes rÃ¨gles CSS remplacÃ©es par les
+  composants Home Assistant.
+
+### Tests
+
+- 139 tests backend et 68 tests frontend couvrent notamment les nouvelles
+  validations, lâ€™historique, les dates invalides, les prÃ©fÃ©rences corrompues,
+  les changements rapides de langue et les composants natifs.
+
+## 1.7.0-dev11 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Le compte Ã  rebours des alertes en cours dâ€™activation est de nouveau actualisÃ©
+  automatiquement chaque seconde dans le tableau natif Home Assistant.
+- La mise Ã  jour traverse maintenant les Shadow DOM de
+  `hass-tabs-subpage-data-table` et `ha-data-table` pour atteindre les cellules
+  virtualisÃ©es portant `data-due`.
+- Seul le texte du compte Ã  rebours est modifiÃ© chaque seconde : le tableau
+  complet nâ€™est pas recalculÃ© ni rerendu.
+
+### Tests
+
+- Couverture dâ€™une cellule `pending` imbriquÃ©e dans les deux composants natifs et
+  de lâ€™absence de progression lorsque la surveillance est dÃ©sactivÃ©e.
+
+## 1.7.0-dev10 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les colonnes du composant natif `ha-data-table` ne sont plus limitÃ©es par des
+  largeurs maximales fixes.
+- Les colonnes visibles se rÃ©partissent maintenant sur toute la largeur
+  disponible selon leur poids, aussi bien dans le Dashboard que dans
+  lâ€™Historique.
+- Les largeurs minimales sont conservÃ©es pour garantir la lisibilitÃ© et le
+  dÃ©filement horizontal lorsque lâ€™Ã©cran est Ã©troit ou que de nombreuses colonnes
+  sont activÃ©es.
+
+### Tests
+
+- Couverture de la rÃ©partition flexible sans `maxWidth`, des largeurs minimales
+  et des proportions particuliÃ¨res des colonnes EntitÃ© et chronologiques.
+
+## 1.7.0-dev9 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les colonnes optionnelles dÃ©clarent maintenant leur Ã©tat Home Assistant natif
+  `defaultHidden` pour le Dashboard et lâ€™Historique.
+- Â« RÃ©tablir les valeurs par dÃ©faut Â» applique immÃ©diatement les six colonnes
+  prÃ©vues, sans afficher temporairement toutes les colonnes jusquâ€™au rechargement
+  de la page.
+- Lâ€™ordre natif sans prÃ©fÃ©rence reste identique Ã  lâ€™ordre par dÃ©faut Alert
+  Manager.
+
+### Tests
+
+- Couverture des colonnes visibles et masquÃ©es nativement aprÃ¨s restauration,
+  sÃ©parÃ©ment pour le Dashboard et lâ€™Historique.
+
+## 1.7.0-dev8 â€” 27 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Les colonnes par dÃ©faut du Dashboard sont dÃ©sormais Statut, EntitÃ©, Appareil,
+  RÃ¨gle, IntÃ©gration et Active depuis/Temps restant.
+- Les colonnes par dÃ©faut de lâ€™Historique sont Statut, EntitÃ©, Appareil, RÃ¨gle,
+  IntÃ©gration et DÃ©tectÃ©e le.
+- La colonne IntÃ©gration est ajoutÃ©e au tableau et au dialogue natif de
+  personnalisation des colonnes.
+- Lâ€™action Â« Restaurer les colonnes par dÃ©faut Â» et la migration des anciens
+  dÃ©fauts utilisent cette nouvelle configuration sans Ã©craser les prÃ©fÃ©rences
+  rÃ©ellement personnalisÃ©es.
+- Les compteurs Alertes actives, Alertes Ã  venir et Alertes acquittÃ©es du
+  Dashboard sont cliquables et appliquent immÃ©diatement le filtre Statut
+  correspondant.
+
+### Tests
+
+- Couverture des nouveaux dÃ©fauts, de leur restauration, de la migration des
+  prÃ©fÃ©rences, de la colonne IntÃ©gration et du filtrage depuis les compteurs.
+
+## 1.7.0-dev7 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Chaque filtre de date utilise dÃ©sormais un unique `ha-date-range-picker`, le
+  composant natif de la page Historique Home Assistant.
+- Le sÃ©lecteur propose les pÃ©riodes rapides Home Assistant, un calendrier et les
+  heures de dÃ©but et de fin dans la mÃªme fenÃªtre.
+- Une pÃ©riode dÃ©but/fin compte comme un seul filtre actif et conserve la
+  prÃ©cision horaire choisie.
+- Le composant natif est chargÃ© Ã  la demande lorsque le panel est ouvert sans
+  passage prÃ©alable par la page Historique.
+
+### Tests
+
+- Couverture du rendu, de lâ€™hydratation et des Ã©vÃ©nements du sÃ©lecteur de pÃ©riode
+  natif, du comptage unitaire et des limites horaires.
+
+## 1.7.0-dev6 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Le filtre dâ€™Ã©tat dâ€™acquittement est retirÃ© du Dashboard car il faisait doublon
+  avec les statuts Active et AcquittÃ©e.
+- Lâ€™Historique ne propose plus les filtres Statut et Ã‰tat dâ€™acquittement, qui
+  nâ€™apportaient aucune distinction utile sur des Ã©vÃ©nements tous rÃ©solus.
+- Les bornes des filtres de dates utilisent dÃ©sormais le sÃ©lecteur natif Home
+  Assistant `{ date: {} }`, qui charge `ha-date-input` et son dialogue calendrier
+  standard.
+
+### Tests
+
+- Couverture de lâ€™absence des filtres redondants et de lâ€™hydratation du sÃ©lecteur
+  de date natif.
+
+## 1.7.0-dev5 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Les filtres Ã  choix multiples sâ€™affichent dÃ©sormais dans tous les contextes du
+  panel Ã  partir de composants Home Assistant dÃ©jÃ  chargÃ©s, sans dÃ©pendre des
+  filtres internes propres Ã  la page EntitÃ©s.
+- Les filtres couvrent en prioritÃ© le statut, lâ€™appareil, la rÃ¨gle,
+  lâ€™intÃ©gration, les Ã©tiquettes, le domaine et la zone, en plus de lâ€™entitÃ©, de
+  lâ€™acquittement et des dates.
+- Les Ã©tiquettes de lâ€™entitÃ© sont affichÃ©es sous son nom et participent Ã  la
+  recherche et au filtrage.
+- La colonne EntitÃ© prÃ©cÃ¨de dÃ©sormais la colonne Appareil, y compris lors de la
+  migration des prÃ©fÃ©rences par dÃ©faut de `dev4`.
+- La marge injectÃ©e par `ha-data-table` sur la premiÃ¨re icÃ´ne est neutralisÃ©e afin
+  de centrer exactement le pictogramme dans son fond circulaire.
+
+### Tests
+
+- Couverture des nouvelles facettes, des mÃ©tadonnÃ©es de registre, des Ã©tiquettes,
+  de la migration de lâ€™ordre des colonnes et du centrage de lâ€™icÃ´ne.
+
+## 1.7.0-dev4 â€” 27 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Le Dashboard et lâ€™Historique utilisent dÃ©sormais le conteneur natif Home
+  Assistant `hass-tabs-subpage-data-table`, et non plus une barre dâ€™outils
+  reconstruite dans Alert Manager.
+- Le volet de filtres affiche lâ€™effacement global dans son en-tÃªte ainsi quâ€™un
+  compteur et une action dâ€™effacement sur chaque catÃ©gorie active.
+- La personnalisation des colonnes ouvre le dialogue natif Home Assistant avec
+  visibilitÃ©, glisser-dÃ©poser et restauration des valeurs par dÃ©faut.
+- Le mode sÃ©lection remplace la barre supÃ©rieure de la sous-page. Son bouton est
+  placÃ© entre les filtres et la recherche, comme dans la liste des entitÃ©s.
+- La recherche occupe automatiquement toute la largeur restante.
+- En affichage Ã©troit, seules lâ€™icÃ´ne de statut et lâ€™entitÃ© restent en colonnes,
+  avec la condition affichÃ©e en information secondaire sous le nom.
+- Lâ€™en-tÃªte de la colonne Statut est vide et son icÃ´ne est centrÃ©e dans son fond
+  circulaire.
+
+### Tests
+
+- Couverture du conteneur natif, de ses Ã©vÃ©nements de recherche, tri, groupement,
+  sÃ©lection et personnalisation, des filtres rÃ©initialisables et du rendu mobile.
+
+## 1.7.0-dev3 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Toutes les pages du panel utilisent dÃ©sormais toute la largeur disponible,
+  sans limite centrale Ã  1400 px.
+- La barre dâ€™outils des tableaux repose sur les composants natifs Home
+  Assistant `ha-assist-chip`, `ha-dropdown`, `ha-dropdown-item`, `ha-button` et
+  `ha-icon-button` au lieu de boutons et menus HTML personnalisÃ©s.
+- Le filtre est prÃ©sentÃ© dans un volet latÃ©ral compact calquÃ© sur la liste des
+  entitÃ©s, avec `ha-expansion-panel`, `ha-list`, `ha-check-list-item` et les
+  champs de date natifs.
+- Les menus de groupement, de tri et de colonnes, ainsi que le menu trois-points
+  de lâ€™Ã©diteur de rÃ¨gle, utilisent dÃ©sormais les menus dÃ©roulants Home
+  Assistant.
+
+### Tests
+
+- Ajout de contrÃ´les frontend sur les composants natifs, lâ€™ouverture du volet
+  de filtres, les Ã©vÃ©nements des menus et la mise en page pleine largeur.
+
+## 1.7.0-dev2 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Remplacement du tableau HTML personnalisÃ© par le composant natif Home
+  Assistant `ha-data-table`, qui assure dÃ©sormais la virtualisation des lignes,
+  les groupes repliables et les cases de sÃ©lection.
+- Utilisation du composant natif `ha-input-search` dans la barre dâ€™outils des
+  tableaux.
+- Les anomalies revenues Ã  la normale pendant leur dÃ©lai `pending` ne sont plus
+  ajoutÃ©es Ã  lâ€™historique. Les Ã©ventuelles entrÃ©es expÃ©rimentales de ce type
+  enregistrÃ©es par `1.7.0-dev` sont supprimÃ©es au prochain chargement.
+
+### Tests
+
+- Adaptation des tests frontend au contrat de propriÃ©tÃ©s et dâ€™Ã©vÃ©nements de
+  `ha-data-table`.
+- Non-rÃ©gression backend vÃ©rifiant explicitement quâ€™une alerte annulÃ©e avant
+  activation ne produit aucun Ã©vÃ©nement historique.
+
+## 1.7.0-dev â€” 26 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Tableau compact commun au Dashboard et Ã  lâ€™Historique, inspirÃ© de la liste des
+  entitÃ©s Home Assistant, avec colonnes personnalisables et ouverture native de
+  Â« Plus dâ€™informations Â».
+- Recherche instantanÃ©e sur les mÃ©tadonnÃ©es complÃ¨tes, filtres cumulables et
+  rÃ©initialisables, groupement repliable par appareil, zone, rÃ¨gle ou statut et
+  tri typÃ© ascendant/dÃ©croissant.
+- PrÃ©fÃ©rences locales distinctes par tableau pour lâ€™ordre et la visibilitÃ© des
+  colonnes, le groupement, la clÃ© de tri et son sens.
+- Mode de sÃ©lection multiple du Dashboard avec sÃ©lection des lignes visibles et
+  acquittement/dÃ©sacquittement de masse limitÃ© aux alertes compatibles.
+
+### ModifiÃ©
+
+- Remplacement complet des cartes dâ€™alertes et dâ€™historique par des lignes de
+  tableau, y compris sur mobile oÃ¹ le dÃ©filement horizontal reste disponible.
+- Conservation de la valeur ayant initialement dÃ©clenchÃ© une occurrence, mÃªme si
+  la source prend ensuite une autre valeur toujours anormale.
+- Suspension visuelle du compte Ã  rebours lorsque la surveillance est dÃ©sactivÃ©e,
+  sans progression artificielle du dÃ©lai.
+
+### Tests
+
+- Couverture frontend du rendu, de la recherche, des filtres, du groupement, du
+  tri, des colonnes, de la persistance locale, de la sÃ©lection mixte et des
+  actions de masse.
+- Couverture backend de la valeur de dÃ©clenchement immuable, en complÃ©ment des
+  suites de non-rÃ©gression existantes.
+
+## 1.6.3 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Centrage vertical prÃ©cis de lâ€™action **Effacer lâ€™historique** sur la surface
+  visible du champ de limite de rÃ©tention.
+- Alignement sur la hauteur visible de `56 px` du champ Home Assistant, sans
+  dÃ©caler le libellÃ© ni le texte dâ€™aide.
+
+## 1.6.2 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Placement de lâ€™aide du dÃ©lai global directement sous son champ de saisie.
+- Alignement vertical exact de lâ€™action **Effacer lâ€™historique** avec le champ
+  de limite de rÃ©tention.
+- Simplification du balisage et des rÃ¨gles CSS de la section des paramÃ¨tres
+  gÃ©nÃ©raux, avec une grille explicite et responsive pour la rÃ©tention.
+
+## 1.6.1 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Restauration de lâ€™alignement du dÃ©lai global et des labels exclus des
+  surveillances automatiques dans **ParamÃ¨tres gÃ©nÃ©raux**.
+- Suppression du titre et du texte descriptif Historique dans cette section.
+- Enregistrement de la limite de rÃ©tention par lâ€™unique bouton commun placÃ© en
+  bas Ã  droite ; lâ€™effacement irrÃ©versible reste une action distincte face au
+  champ de rÃ©tention.
+
+## 1.6.0 â€” 26 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Historique persistant et atomique des alertes actives rÃ©solues dans un stockage
+  indÃ©pendant des alertes runtime.
+- Nouvel onglet administrateur **Historique**, avec cartes grises, groupement par
+  appareil, dÃ©pliage progressif et informations figÃ©es au moment de la rÃ©solution.
+- RÃ©tention configurable de 0 Ã  1000 Ã©vÃ©nements, valeur par dÃ©faut 100, rÃ©duction
+  immÃ©diate des Ã©vÃ©nements les plus anciens et action dâ€™effacement irrÃ©versible
+  avec confirmation.
+- Commandes WebSocket administrateur pour lire lâ€™historique, lire/modifier sa
+  configuration et lâ€™effacer.
+- Traductions franÃ§aises et anglaises, documentation et tests backend/frontend.
+- RÃ©glage de rÃ©tention placÃ© dans **ParamÃ¨tres gÃ©nÃ©raux**, sous le dÃ©lai global,
+  avec les actions dâ€™enregistrement et dâ€™effacement alignÃ©es face au champ.
+
+### Garanties
+
+- Les alertes annulÃ©es pendant `pending` ne sont pas archivÃ©es.
+- Une erreur dâ€™Ã©criture de lâ€™historique ne bloque pas la rÃ©solution dâ€™une alerte
+  et ne peut pas corrompre le stockage runtime.
+- Aucun changement des entitÃ©s, Ã©vÃ©nements et services existants ; aucune entitÃ©
+  Home Assistant supplÃ©mentaire.
+- Lâ€™historique et sa limite de rÃ©tention sont exclus de lâ€™import/export YAML, qui
+  conserve ces donnÃ©es locales.
+
+## 1.5.9-dev5 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Alignement Ã  gauche des blocs Â«Â ConditionÂ Â» et Â«Â Active depuisÂ Â» dans les
+  lignes dâ€™alertes groupÃ©es, comme sur les cartes non groupÃ©es.
+- Bundle frontend distribuÃ© rÃ©gÃ©nÃ©rÃ© avec cette correction.
+
+## 1.5.9-dev4 â€” 26 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Affichage vertical de la condition et de la date dâ€™activation dans les lignes
+  dâ€™alertes groupÃ©es, comme sur les cartes individuelles.
+- Bouton dâ€™affichage des autres alertes rÃ©duit Ã  un lien texte compact, placÃ© en
+  bas Ã  gauche sans encadrement au survol.
+- Source frontend et bundle distribuÃ© synchronisÃ©s pour cette version.
+
+## 1.5.9-dev3 â€” 26 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Affichage par dÃ©faut de la premiÃ¨re alerte uniquement dans les groupes, avec
+  rÃ©vÃ©lation progressive des alertes suivantes via un bouton.
+- Alignement Ã  gauche du temps restant et de la date dâ€™activation dans les lignes
+  dâ€™alertes groupÃ©es.
+- Ajout des traductions franÃ§aises et anglaises du contrÃ´le dâ€™affichage des
+  alertes supplÃ©mentaires.
+- Synchronisation de la version du manifest, du backend et du frontend en
+  `1.5.9-dev3`.
+## 1.5.8 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Correction du positionnement horizontal du volet de crÃ©ation ou modification
+  dâ€™une rÃ¨gle personnalisÃ©e sur les Ã©crans larges.
+- Source frontend et bundle distribuÃ© rÃ©gÃ©nÃ©rÃ©s et synchronisÃ©s pour garantir
+  un build reproductible dans la CI.
+
+## 1.5.5 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Rapprochement du volet de crÃ©ation ou modification dâ€™une rÃ¨gle et de la liste
+  des rÃ¨glesÂ ; lâ€™espace disponible est dÃ©sormais conservÃ© entre le volet et le
+  bord droit de lâ€™Ã©cran sur les affichages larges.
+- Exclusion systÃ©matique des entitÃ©s Alert Manager de la surveillance
+  automatique, mÃªme avant leur inscription dans le registre des entitÃ©s.
+- Interdiction de sÃ©lectionner ou dâ€™enregistrer une entitÃ© Alert Manager comme
+  source dâ€™une rÃ¨gle personnalisÃ©e, y compris aprÃ¨s renommage ou via YAML.
+- Nettoyage sans effet de bord des anciennes rÃ¨gles internes devenues invalides.
+
+## 1.5.5-dev2 â€” 26 aoÃ»t 2026
+
+### CorrigÃ©
+
+- Gel rÃ©el du temps restant des alertes `pending` pendant toute la dÃ©sactivation
+  de la surveillance, y compris aprÃ¨s un redÃ©marrage ou un rechargementÂ ; le
+  dÃ©compte reprend au mÃªme point lors de la rÃ©activation.
+- Remise temporaire Ã  zÃ©ro des trois capteurs dâ€™alertes et de leur attribut
+  `alerts` lorsque la surveillance est dÃ©sactivÃ©e, sans supprimer les occurrences
+  internes conservÃ©es pour la reprise.
+- Largeur de la page **RÃ¨gles personnalisÃ©es** alignÃ©e sur les autres pages du
+  panneau.
+
+## 1.5.5-dev â€” 26 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Appareil de service stable `Alert Manager - GÃ©nÃ©ral`, prÃ©vu pour accueillir
+  ultÃ©rieurement dâ€™autres catÃ©gories sans renommer la catÃ©gorie `main`.
+- Switch persistant `switch.alert_manager_main_monitoring`, actif par dÃ©faut,
+  avec suspension rÃ©elle des dÃ©tections et timers puis rÃ©Ã©valuation sans doublon
+  Ã  la reprise.
+- Notification persistante FR/EN, Ã  identifiant stable, lorsque lâ€™intÃ©gration est
+  chargÃ©e avec la surveillance dÃ©sactivÃ©e.
+- MÃ©tadonnÃ©es `rule_id` et `rule_name` dans les attributs des alertes issues de
+  rÃ¨gles personnalisÃ©es.
+
+### ModifiÃ©
+
+- Remplacement cassant de `sensor.alert_manager` par trois capteurs exclusifsÂ :
+  `sensor.alert_manager_main_active`, `sensor.alert_manager_main_pending` et
+  `sensor.alert_manager_main_acknowledge`.
+- Mise Ã  jour du panneau, des traductions, de la documentation FR/EN, des exemples
+  dâ€™automatisation et de lâ€™export/import YAML.
+- Import toujours compatible avec les exports V1.5 sans
+  `monitoring_enabled`Â ; la surveillance est alors activÃ©e par dÃ©faut.
+
+### Garanties conservÃ©es
+
+- Alertes existantes conservÃ©es pendant la suspension, Ã©vÃ©nements de dÃ©marrage
+  et rÃ©solution sans rÃ©pÃ©tition, services dâ€™acquittement, identifiants, packs,
+  exclusions, dÃ©lais et suivi multi-entitÃ©s inchangÃ©s.
+
+### Limite volontaire
+
+- Lâ€™ancienne entitÃ© agrÃ©gÃ©e est supprimÃ©e sans quatriÃ¨me capteur de compatibilitÃ©
+  durableÂ ; les cartes et automatisations doivent migrer vers le capteur dâ€™Ã©tat
+  correspondant.
+
+## 1.5.0-dev3 â€” 26 aoÃ»t 2026
+
+### ModifiÃ©
+
+- Renommage de lâ€™onglet Â« Exclusions et paramÃ¨tres Â» en Â« Configuration Â».
+- Suppression des identifiants internes des rÃ¨gles dans lâ€™export YAML complet ;
+  ils sont dÃ©sormais recrÃ©Ã©s par le backend lors de lâ€™import.
+- Correction du menu trois-points du volet de rÃ¨gle avec le slot natif
+  `actionItems` de Home Assistant et suppression du nom en sous-titre lors de
+  la modification dâ€™une rÃ¨gle.
+
+## 1.5.0-dev2 â€” 25 aoÃ»t 2026
+
+### OptimisÃ©
+
+- Mise en cache des registres Home Assistant et des ensembles dâ€™exclusion sur le
+  chemin dâ€™Ã©valuation des changements dâ€™Ã©tat, sans modifier les rÃ¨gles de suivi.
+- RÃ©utilisation dâ€™un mÃ©canisme commun de restauration de la configuration, des
+  alertes et des timers en attente.
+
+### CorrigÃ©
+
+- Restauration complÃ¨te en mÃ©moire si lâ€™enregistrement dâ€™un rÃ©glage, dâ€™une
+  crÃ©ation, dâ€™une modification ou dâ€™une suppression de rÃ¨gle Ã©choue.
+- Validation explicite des rÃ¨gles incomplÃ¨tes afin de renvoyer une erreur lisible
+  au lieu dâ€™une erreur interne.
+- Durcissement des imports YAML face aux clÃ©s non textuelles, scalaires non
+  sÃ©rialisables, chaÃ®nes Unicode invalides et documents anormalement volumineux.
+- Nettoyage persistant des configurations et alertes corrompues dÃ©tectÃ©es au
+  dÃ©marrage, pour Ã©viter de retraiter la mÃªme donnÃ©e invalide Ã  chaque relance.
+- Suppression des chargements WebSocket et timers de rafraÃ®chissement en double
+  lors dâ€™une reconnexion trÃ¨s rapide du panneau.
+
+### Garanties conservÃ©es
+
+- Aucun changement du moteur fonctionnel, des identifiants, des Ã©vÃ©nements, des
+  services dâ€™acquittement ou du cycle `normal â†’ pending â†’ active`.
+
+## 1.5.0-dev1 â€” 25 aoÃ»t 2026
+
+### AjoutÃ©
+
+- Ã‰dition YAML des rÃ¨gles personnalisÃ©es dans le volet existant, via le menu
+  trois-points, en complÃ©ment de lâ€™Ã©diteur visuel.
+- Validation backend commune pour les rÃ¨gles visuelles et YAML, avec rejet des
+  YAML incomplets, syntaxiquement invalides ou incohÃ©rents.
+- Export YAML complet, dÃ©terministe et versionnÃ© de la configuration
+  persistante.
+- Import YAML complet avec aperÃ§u, confirmation explicite, validation stricte,
+  remplacement atomique et reconstruction du suivi par entitÃ©.
+- Commandes WebSocket administrateur dÃ©diÃ©es Ã  la validation YAML, Ã  lâ€™export et
+  Ã  lâ€™import.
+- Documentation FR/EN, traductions et couverture de tests pour ces flux.
+
+### Garanties conservÃ©es
+
+- Le moteur de rÃ¨gles Alert Manager reste indÃ©pendant des conditions
+  dâ€™automatisation Home Assistant.
+- Les IDs stables des rÃ¨gles et des alertes rÃ¨gle/entitÃ© sont prÃ©servÃ©s Ã 
+  lâ€™import.
+- Lâ€™export exclut volontairement les alertes runtime, acquittements, timers,
+  dates et historique.
+- Le cycle indÃ©pendant `normal â†’ pending â†’ active`, lâ€™entitÃ© unique
+  `sensor.alert_manager` et les services dâ€™acquittement restent inchangÃ©s.
+
+### Limites assumÃ©es
+
+- Le YAML de rÃ¨gle ne prend pas en charge les templates, groupes `and`/`or`/`not`
+  ou conditions arbitraires Home Assistant.
