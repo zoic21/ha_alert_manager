@@ -114,15 +114,13 @@ test("disconnect, reload, failure and disabled monitoring never imply no alerts"
   assert.equal(requests.length, 3);
 });
 
-test("non-admin cards do not fetch and closed subscriptions never receive stale responses", async () => {
+test("non-admin cards fetch alerts and closed subscriptions never receive stale responses", async () => {
   const { hass, requests } = fixture();
   hass.user.is_admin = false;
   const values = [];
   const subscription = connectDashboard(hass, (value) => values.push(value));
-  assert.equal(values.at(-1).status, "admin");
-  assert.equal(requests.length, 0);
-  hass.user.is_admin = true;
-  subscription.update(hass);
+  assert.equal(values.at(-1).status, "loading");
+  assert.equal(requests.length, 1);
   const length = values.length;
   subscription.disconnect();
   requests[0].resolve({ alerts: [] });

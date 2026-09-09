@@ -11,7 +11,10 @@ unless the task explicitly requires it.
 
 ## Product invariants
 
-- Alert Manager is a single-entry, admin-only Home Assistant integration.
+- Alert Manager is a single-entry Home Assistant integration. Authenticated users
+  may read the dashboard card, Overview and History. Configuration, other tabs and
+  every mutation (including acknowledgement) require an administrator. Internal HA
+  calls without a user context remain supported.
 - Detection is event driven. Prefer state, registry, dispatcher, and config-entry
   listeners; use timers only for real deadlines. Do not add broad periodic polling.
 - One anomaly has one stable alert instance. Custom rules create an independent
@@ -29,7 +32,7 @@ unless the task explicitly requires it.
 - User-visible text must be translated in both French and English. Do not hard-code
   interface strings in Python or JavaScript.
 - Treat configuration, YAML imports, templates, and WebSocket payloads as untrusted.
-  Validate on the backend and keep the panel restricted to administrators.
+  Validate on the backend and enforce read-only versus administrator access on the server.
 
 ## Architecture
 
@@ -61,7 +64,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `packs/flapping.py` | Occurrence-driven instability detection and recovery deadlines; consumes source occurrence batches rather than polling entity states. |
 | `validation.py`, `yaml_io.py` | Authoritative configuration/rule validation and strict versioned YAML interchange. Manager entry points offload YAML parsing to the executor. |
 | `storage.py` | Separate configuration/runtime, history, and valid-configuration backup stores, with migrations and durability helpers. Notification runtime persistence remains in `notification_runtime.py`. |
-| `websocket.py`, `services.py`, `permissions.py` | Thin admin-restricted transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
+| `websocket.py`, `services.py`, `permissions.py` | Thin permission-checked transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
 | `coherence_alert.py` | Aggregate coherence alert metadata and conservative report coverage; feeds the ordinary manager candidate lifecycle. |
 | `coherence.py` | Explicit or scheduled reference scans, shared YAML traversal, exclusions, counts and reports, with filesystem work off the event loop. |
 | `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop; each check owns its traversal scopes and node selection in the existing scanner executor. |

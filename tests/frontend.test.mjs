@@ -69,8 +69,12 @@ globalThis.customElements = {
   _items: new Map(),
   define(name, value) {
     this._items.set(name, class extends value {
+      get _hass() { return this._testHass; }
+      // Existing UI scenarios run as an administrator unless a role is specified.
+      set _hass(hass) { if (hass) hass.user ??= { is_admin: true }; this._testHass = hass; }
       constructor() {
         super();
+        this._hass ??= { user: { is_admin: true } };
         this._language = "fr";
         this._translations = TRANSLATIONS.fr;
         this._englishTranslations = TRANSLATIONS.en;
@@ -2473,6 +2477,7 @@ test("native panel routes select the matching tab", () => {
   panel._config = completeConfig();
   panel._loading = false;
   panel._render = () => {};
+  panel._refreshTabData = () => {};
 
   panel.route = { prefix: "/alert-manager", path: "/rules" };
   assert.equal(panel._activeTab, "rules");
@@ -5486,4 +5491,81 @@ test("returning from a dashboard can reopen the same alert or device deep link",
   panel.disconnectedCallback();
   assert.equal(panel._handledAlertDeepLink, null);
   assert.equal(panel._handledDashboardDeepLink, null);
+});
+
+test("non-admin panel has only read-only tabs and no alert or history mutation controls", async () => {
+  const panel = tablePanel();
+  panel._hass.user = { is_admin: false };
+  panel._monitoringEnabled = false;
+  assert.deepEqual(panel._tabs().map((tab) => tab.path), ["/alert-manager/overview", "/alert-manager/history"]);
+  for (const path of ["settings", "rules", "coherence", "automatic"]) {
+    assert.equal(panel._tabFromRoute({ prefix: "/alert-manager", path: `/${path}` }), "overview");
+  }
+  assert.equal(panel._tabFromRoute({ prefix: "/alert-manager", path: "/history" }), "history");
+  const overview = panel._renderOverview();
+  assert.doesNotMatch(overview, /\bselectable\b|bulk-acknowledge|bulk-unacknowledge|enable-monitoring/);
+  assert.match(overview, /filter-summary-status/);
+  const row = panel._tableRows("overview")[0];
+  const details = panel._renderAlertDetails("overview", row);
+  assert.doesNotMatch(details, /data-alert-details-menu|open-alert-rule|open-alert-device|data-action="more-info"/);
+  assert.match(details, /data-detail-key="condition"/);
+  assert.doesNotMatch(panel._renderHistory(), /clear-history|delete-history|\bselectable\b/);
+  panel._historyConfig = { retention_limit: 0 };
+  assert.doesNotMatch(panel._renderHistory(), /open-history-settings/);
+  let calls = 0;
+  panel._api.call = async () => { calls += 1; };
+  for (const action of ["bulk-acknowledge", "bulk-unacknowledge", "clear-history", "enable-monitoring", "open-alert-coherence", "open-alert-rule"]) {
+    const button = { dataset: { action }, closest() { return this; } };
+    await panel._handleClick({ target: button });
+  }
+  await panel._handleMenuSelected({ detail: { value: "reevaluate" } });
+  await panel._handleSubmit({ preventDefault() {}, target: { id: "settings-form" } });
+  assert.equal(calls, 0);
+});
+
+test("non-admin bootstrap loads only public alerts, labels and translations, then history on demand", async () => {
+  const panel = tablePanel();
+  const alerts = panel._alerts;
+  panel._config = null;
+  panel._render = () => {};
+  const calls = [];
+  panel._hass = {
+    user: { is_admin: false }, states: { "switch.alert_manager_main_monitoring": { state: "off" } },
+    callWS: async (message) => {
+      calls.push(message.type);
+      if (message.type === "alert_manager/alerts/list") return alerts;
+      if (message.type === "alert_manager/history/list") return { events: [], retention_limit: 0, enabled: false };
+      if (message.type === "frontend/get_translations") return { resources: TRANSLATIONS[message.language] };
+      if (message.type === "config/label_registry/list") return [];
+      throw new Error(`Unexpected request: ${message.type}`);
+    },
+  };
+  await panel._load();
+  assert.equal(panel._notice, null);
+  assert.deepEqual(panel._config, {});
+  assert.equal(panel._monitoringEnabled, false);
+  assert.equal(panel._configRecovery, null);
+  assert.ok(panel._packs.some((pack) => pack.id === "battery"));
+  assert.deepEqual(calls.filter((type) => type.startsWith("alert_manager/")), ["alert_manager/alerts/list"]);
+  panel._activeTab = "history";
+  await panel._refreshHistory();
+  assert.equal(panel._historyConfig.retention_limit, 0);
+  await panel._refreshCoherence();
+  await panel._refreshNotificationStats();
+  assert.deepEqual(calls.filter((type) => type.startsWith("alert_manager/")), ["alert_manager/alerts/list", "alert_manager/history/list"]);
+});
+
+test("non-admin sessions cannot restore an administrator cache or follow a private tab action", async () => {
+  const admin = tablePanel();
+  const connection = {};
+  admin._hass.connection = connection;
+  admin._rememberPanelState();
+  const reader = tablePanel();
+  reader._config = null;
+  reader._hass = { connection, user: { is_admin: false } };
+  assert.equal(reader._restorePanelState(), false);
+  reader._activeTab = "overview";
+  const button = { dataset: { action: "tab", tab: "settings" }, closest() { return this; } };
+  await reader._handleClick({ target: button });
+  assert.equal(reader._activeTab, "overview");
 });

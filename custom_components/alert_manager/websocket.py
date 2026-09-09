@@ -64,13 +64,12 @@ async def websocket_config_update(
     connection.send_result(msg["id"], result)
 
 
-@websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "alert_manager/alerts/list"})
 async def websocket_alerts_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return active and pending alerts to an administrator."""
+    """Return active and pending alerts to an authenticated user."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.public_snapshot())
 
@@ -126,7 +125,6 @@ async def websocket_alert_reevaluate(
     connection.send_result(msg["id"], {"present": present})
 
 
-@websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
     {
@@ -137,7 +135,7 @@ async def websocket_alert_reevaluate(
 async def websocket_history_list(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Return the newest-first completed history to an administrator."""
+    """Return the newest-first completed history to an authenticated user."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         result = manager.history_snapshot()
         if "statistics_days" in msg:

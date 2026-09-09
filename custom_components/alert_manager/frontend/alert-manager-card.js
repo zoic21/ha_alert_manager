@@ -399,8 +399,7 @@ function connectDashboard(hass, listener) {
       state.hass = next;
       const sensor = next.states?.["sensor.alert_manager_main_active"];
       const monitoring = next.states?.["switch.alert_manager_main_monitoring"];
-      const status = next.user?.is_admin !== true ? "admin"
-        : connection.connected === false || !sensor || !monitoring
+      const status = connection.connected === false || !sensor || !monitoring
           || ["unavailable", "unknown"].includes(sensor.state)
           || ["unavailable", "unknown"].includes(monitoring.state) ? "unavailable"
           : monitoring.state === "off" ? "paused" : null;

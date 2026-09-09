@@ -1,3 +1,4 @@
+import { canUsePanelAction, canViewTab, panelTabs } from "./utils/permissions.js";
 import { hydrateDurationFields, renderDurationField, reportFormValidity } from "./components/duration-field.js";
 import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHistory,
   refreshNotificationStats, refreshTabData, rememberPanelState, restorePanelState, setHass, syncSensor,
@@ -318,10 +319,12 @@ class AlertManagerPanel extends HTMLElement {
   set hass(value) {
     setHass.call(this, value);
   }
+  get _readOnly() { return this._hass?.user?.is_admin !== true; }
   get hass() {
     return this._hass;
   }
   async _handleMenuSelected(event) {
+    if (this._readOnly) return;
     if (await this._handleAlertDetailsSelection(event)) return;
     await this._handleSelected(event);
   }
@@ -392,13 +395,7 @@ class AlertManagerPanel extends HTMLElement {
     this._cancelMoreInfoScrollRestore();
     this._closeAlertDetailsDialog();
   }
-  _tabs() {
-    return TABS.map(({ path, translationKey, iconPath }) => ({
-      path,
-      name: this._t(translationKey),
-      iconPath,
-    }));
-  }
+  _tabs = panelTabs;
 
   _syncSensor = syncSensor;
   _render() {
@@ -456,7 +453,7 @@ class AlertManagerPanel extends HTMLElement {
     return `<div class="page-messages" data-page-messages>${this._pageMessagesContent()}</div>`;
   }
   _pageMessagesContent() {
-    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span><ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button></ha-alert>` : ""}
+    return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span>${!this._readOnly ? `<ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button>` : ""}</ha-alert>` : ""}
       ${!this._noticeTarget() && !this._editingRule && this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
   }
 
@@ -606,6 +603,7 @@ class AlertManagerPanel extends HTMLElement {
   }
 
   _renderTab() {
+    if (!canViewTab(this._readOnly, this._activeTab)) this._activeTab = "overview";
     if (!this._config) return `<div class="empty">${esc(this._t("unavailable"))}</div>`;
     if (this._activeTab === "history" && !this._historyLoaded) {
       return `<div class="loading">${esc(this._t("loading"))}</div>`;
@@ -622,6 +620,7 @@ class AlertManagerPanel extends HTMLElement {
 
   _tabFromRoute(route) {
     const path = `${route?.prefix ?? ""}${route?.path ?? ""}`.replace(/\/$/, "");
+    if (this._readOnly) return path.endsWith("/history") ? "history" : "overview";
     if (path.endsWith("/automatic")) return "settings";
     return TABS.find((tab) => path.endsWith(`/${tab.id}`))?.id ?? "overview";
   }
@@ -650,6 +649,7 @@ class AlertManagerPanel extends HTMLElement {
     const button = event.target.closest("[data-action]");
     if (!button) return;
     const action = button.dataset.action;
+    if (!canUsePanelAction(this._readOnly, action, button.dataset.tab)) return;
     if (SIDE_DRAWER_OPEN_ACTIONS.has(action)
       && ["settings", "automatic"].includes(this._configurationDrawer?.kind)
       && this._configurationDrawer.mode === "yaml") {
@@ -721,7 +721,7 @@ class AlertManagerPanel extends HTMLElement {
   }
   async _handleSubmit(event) {
     event.preventDefault();
-    if (this._busy) return;
+    if (this._readOnly || this._busy) return;
     // The save call rerenders the panel. Keep the form reference before the
     // first await because the browser may clear Event.target afterwards.
     const form = event.target;

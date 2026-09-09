@@ -311,15 +311,14 @@ def test_websocket_rule_test_is_admin_only_and_returns_draft_result(hass, entry)
     assert manager.config["rules"] == []
 
 
-def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entry):
-    """Read, YAML, history and import/export APIs all inherit the admin guard."""
+def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
+    """Configuration, mutations and import/export retain the admin guard."""
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=False)
     for command, message in (
         (websocket_config_get, {"id": 6}),
-        (websocket_alerts_list, {"id": 7}),
         (
             websocket_alert_acknowledgements_update,
             {
@@ -357,7 +356,6 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         (websocket_config_export, {"id": 11}),
         (websocket_config_import_validate, {"id": 12, "yaml": "version: 1"}),
         (websocket_config_import, {"id": 13, "yaml": "version: 1", "confirmed": True}),
-        (websocket_history_list, {"id": 14}),
         (websocket_history_config_get, {"id": 15}),
         (websocket_history_config_update, {"id": 16, "retention_limit": 10}),
         (websocket_history_clear, {"id": 17, "confirmed": True}),
@@ -376,7 +374,7 @@ def test_all_panel_websocket_reads_and_sensitive_paths_are_admin_only(hass, entr
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 24
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 22
     assert connection.results == []
 
 
@@ -740,3 +738,37 @@ def test_configuration_field_yaml_websocket_validates_without_saving(hass, entry
         )
     )
     assert unauthorized.errors[0][1] == "unauthorized"
+
+
+def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
+    """Reading the dashboard/history never grants configuration or mutation access."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=False)
+    asyncio.run(websocket_alerts_list(hass, connection, {"id": 1}))
+    asyncio.run(websocket_history_list(hass, connection, {"id": 2}))
+    asyncio.run(
+        websocket_history_list(hass, connection, {"id": 3, "statistics_days": 7})
+    )
+    assert connection.errors == []
+    assert connection.results[0][1] == manager.public_snapshot()
+    assert connection.results[1][1] == manager.history_snapshot()
+    assert "statistics" in connection.results[2][1]
+    assert all("rules" not in payload for _, payload in connection.results)
+
+    module = importlib.import_module("custom_components.alert_manager.websocket")
+    protected = [
+        command
+        for name, command in vars(module).items()
+        if name.startswith("websocket_")
+        and callable(command)
+        and name not in {"websocket_alerts_list", "websocket_history_list"}
+    ]
+    for index, command in enumerate(protected, start=10):
+        asyncio.run(command(hass, connection, {"id": index}))
+    assert len(protected) > 25
+    assert len(connection.results) == 3
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * len(
+        protected
+    )

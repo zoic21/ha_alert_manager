@@ -109,10 +109,10 @@ export function hydrateDataTables() {
       tablePage.initialCollapsedGroups = [...this._collapsedTableGroups]
         .filter((key) => key.startsWith(`${kind}:`))
         .map((key) => key.slice(kind.length + 1));
-      tablePage.selectable = true;
+      tablePage.selectable = !this._readOnly;
       tablePage.clickable = true;
       tablePage.showFilters = this._filterPaneKind === kind;
-      if (selectionMode) tablePage._selectMode = true;
+      tablePage._selectMode = !this._readOnly && Boolean(selectionMode);
       tablePage.noDataText = sourceRows.length
         ? this._t("table.empty_filtered")
         : this._t(kind === "history" ? "history.empty" : "table.empty_current");
@@ -562,13 +562,13 @@ export function renderAlertTable(kind, sourceRows, topHeader = "") {
       id="panel-shell"
       data-alert-table-page="${kind}"
       has-filters
-      selectable
+      ${this._readOnly ? "" : "selectable"}
       clickable
       main-page
     >
       ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
       <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>
-      ${kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
+      ${this._readOnly ? "" : kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
         <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
         <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
       </div>` : `<div slot="selection-bar" class="selection-actions">
@@ -863,22 +863,22 @@ export function alertDetailsItems(kind, row) {
       data,
     });
     const items = [
-      ...(row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
+      ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
       ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
-      linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
+      this._readOnly ? { key: "entity-id", label: this._t("table.columns.entity_id"), value: row.entityId } : linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
         entityId: row.entityId,
       }),
-      row.deviceId
+      !this._readOnly && row.deviceId
         ? linked("device", this._t("table.columns.device"), row.device || row.deviceId, "open-alert-device", {
           deviceId: row.deviceId,
         })
         : { key: "device", label: this._t("table.columns.device"), value: row.device },
       { key: "area", label: this._t("table.columns.area"), value: row.area },
-      row.customRule && row.ruleId && (this._config?.rules ?? []).some(
+      !this._readOnly && row.customRule && row.ruleId && (this._config?.rules ?? []).some(
         (rule) => String(rule.id) === String(row.ruleId),
       )
         ? linked("rule", this._t("table.columns.rule"), row.rule, "open-alert-rule", {
@@ -1072,7 +1072,7 @@ export function renderAlertDetailsPanel(kind, row) {
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
     }
-    const menuAction = kind === "overview" && row.status === "active"
+    const menuAction = this._readOnly ? "" : kind === "overview" && row.status === "active"
       ? "acknowledge"
       : kind === "overview" && row.status === "acknowledged"
         ? "unacknowledge"
@@ -1086,7 +1086,7 @@ export function renderAlertDetailsPanel(kind, row) {
         iconPath,
         menuAction,
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
-        reevaluateLabel: kind === "overview" ? this._t("overview.reevaluate") : "",
+        reevaluateLabel: !this._readOnly && kind === "overview" ? this._t("overview.reevaluate") : "",
         menuAriaLabel: this._t("alert_details.aria_menu"),
         menuIcon: kind === "history" ? "mdi:delete" : menuAction === "acknowledge"
           ? "mdi:check-circle-outline"
@@ -1167,6 +1167,7 @@ export function openAlertDeepLink() {
 }
 
 export async function handleAlertDetailsSelection(event) {
+    if (this._readOnly) return true;
     const path = event.composedPath?.() ?? [event.target];
     const menu = path.find((node) => node?.dataset?.alertDetailsMenu !== undefined);
     if (!menu) return false;
