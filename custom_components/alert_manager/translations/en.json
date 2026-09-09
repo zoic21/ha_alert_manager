@@ -815,7 +815,8 @@
       "align_center": "Center",
       "align_right": "Right",
       "invalid_alignment": "Choose left, center or right for alignment.",
-      "invalid_icon_color": "Use an RGB color with three integers from 0 to 255."
+      "invalid_icon_color": "Choose a Home Assistant color or a valid CSS color.",
+      "more_count": "View more alerts: {count} additional"
     }
   },
   "services": {

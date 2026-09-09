@@ -6,7 +6,7 @@ import { conditionText, date, durationText } from "../utils/formatting.js";
 import { dashboardStyles } from "../styles/dashboard-styles.js";
 import { dashboardText } from "./translations.js";
 import { DASHBOARD_ICONS, dashboardGroups, dashboardTarget } from "./groups.js";
-import { AlertManagerCardEditor, validateDashboardConfig } from "./editor.js";
+import { AlertManagerCardEditor, dashboardIconColor, validateDashboardConfig } from "./editor.js";
 
 export class AlertManagerCard extends HTMLElement {
   // HA must keep the hidden card connected so a new alert can make it visible.
@@ -128,14 +128,22 @@ export class AlertManagerCard extends HTMLElement {
       }));
     }
     this._tileCount = Math.min(groups.length, this._config.max_tiles);
-    let content = groups.length ? `<div class="tiles">${groups.slice(0, this._config.max_tiles).map((group) => this._tile(group)).join("")}</div>` : "";
-    if (groups.length > this._config.max_tiles) content += `<a class="more" href="${esc(`/alert-manager/overview?${new URLSearchParams({ dashboard: "1", ...(this._config.label ? { label: this._config.label } : {}) })}`)}">${esc(this._t("dashboard.more"))}</a>`;
+    let tiles = groups.slice(0, this._config.max_tiles).map((group) => this._tile(group)).join("");
+    if (groups.length > this._config.max_tiles) {
+      const count = groups.slice(this._config.max_tiles).reduce((total, group) => total + group.alerts.length, 0);
+      const label = esc(this._t("dashboard.more_count", { count }));
+      const target = `/alert-manager/overview?${new URLSearchParams({ dashboard: "1", ...(this._config.label ? { label: this._config.label } : {}) })}`;
+      tiles += `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
+        <span aria-hidden="true">+${count}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>
+      </a></ha-card>`;
+    }
+    let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready" || startup) content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${startup ? "startup" : status}`))}
       ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
-    const color = this._config.icon_color ? `rgb(${this._config.icon_color.join(", ")})` : "var(--state-icon-color)";
-    const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${color}">${content}</div>`;
+    const color = dashboardIconColor(this._config.icon_color);
+    const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;
     if (markup === this._markup) return;
     const focused = this.shadowRoot.activeElement?.dataset?.key;
     this._markup = markup;

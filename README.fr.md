@@ -134,18 +134,18 @@ filtre facultatif par étiquette. Les étiquettes correspondent à celles du pac
 règle ou de l’entité, comme dans le panneau. Les alertes actives non acquittées sont
 filtrées puis regroupées par équipement avant application de la limite. Une alerte
 ouvre son détail ; une tuile regroupée ouvre la liste filtrée sur l’équipement.
-Le lien de débordement ouvre les alertes correspondant au filtre.
+La tuile compacte +N ouvre les alertes correspondant au filtre ; N compte les alertes restantes.
 
 Les tuiles sont limitées à 300 px et passent à la ligne sur les écrans étroits.
 L’éditeur propose aussi un alignement gauche/centre/droite (gauche par défaut) et une
-couleur RVB facultative pour les icônes. Sans couleur personnalisée, le thème Home
+couleur facultative dans la palette native Home Assistant pour les icônes. Sans couleur personnalisée, le thème Home
 Assistant s’applique.
 
 ```yaml
 type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
-# icon_color: [255, 152, 0]
+# icon_color: red
 # Identifiant d’étiquette Home Assistant facultatif :
 # label: maintenance
 ```

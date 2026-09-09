@@ -134,17 +134,17 @@ The visual editor offers a maximum tile count (5 by default, 1–100) and an opt
 label filter. Labels match the alert's pack/rule labels or its entity labels, using
 the same semantics as the panel. Matching active, unacknowledged alerts are grouped
 by device before applying the limit. A single alert opens its details; a grouped
-tile opens the device-filtered list. The overflow link opens the matching alerts.
+tile opens the device-filtered list. The compact +N tile opens the matching alerts; N counts the remaining alerts.
 
 Tiles are capped at 300 px and wrap on narrow screens. The visual editor also offers
-left/center/right alignment (left by default) and an optional RGB icon color. Without
+left/center/right alignment (left by default) and an optional icon color from Home Assistant’s native palette. Without
 a custom color, icons follow the Home Assistant theme.
 
 ```yaml
 type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
-# icon_color: [255, 152, 0]
+# icon_color: red
 # Optional Home Assistant label ID:
 # label: maintenance
 ```

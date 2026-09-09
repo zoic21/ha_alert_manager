@@ -815,7 +815,8 @@
       "align_center": "Centre",
       "align_right": "Droite",
       "invalid_alignment": "Choisissez left, center ou right pour l’alignement.",
-      "invalid_icon_color": "Utilisez une couleur RVB avec trois entiers de 0 à 255."
+      "invalid_icon_color": "Choisissez une couleur Home Assistant ou une couleur CSS valide.",
+      "more_count": "Voir plus d’alertes : {count} supplémentaires"
     }
   },
   "services": {

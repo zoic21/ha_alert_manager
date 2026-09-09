@@ -235,8 +235,8 @@ test("appearance settings reject invalid YAML and preserve existing configuratio
   for (const alignment of [null, "top", '<img src=x>']) {
     assert.throws(() => validateDashboardConfig({ alignment }, "fr"), /alignement/);
   }
-  for (const icon_color of ["red", [], [0, 1], [0, 1, 256], [-1, 0, 0], [0.5, 0, 0], ["0", 0, 0]]) {
-    assert.throws(() => validateDashboardConfig({ icon_color }, "en"), /RGB/);
+  for (const icon_color of ["red; display:none", [], [0, 1], [0, 1, 256], [-1, 0, 0], [0.5, 0, 0], ["0", 0, 0]]) {
+    assert.throws(() => validateDashboardConfig({ icon_color }, "en"), /color/);
   }
   assert.deepEqual(validateDashboardConfig({ max_tiles: 3, label: "home" }), { max_tiles: 3, label: "home" });
   const card = new AlertManagerCard();
@@ -244,7 +244,7 @@ test("appearance settings reject invalid YAML and preserve existing configuratio
   for (const alignment of ["left", "center", "right"]) {
     card.setConfig({ alignment, icon_color: [255, 152, 0] });
     assert.match(card.shadowRoot.innerHTML, new RegExp(`data-alignment="${alignment}" style=`));
-    assert.match(card.shadowRoot.innerHTML, /--alert-icon-color: rgb\(255, 152, 0\)/);
+    assert.match(card.shadowRoot.innerHTML, /--alert-icon-color: #ff9800/);
   }
   card.setConfig({});
   assert.match(card.shadowRoot.innerHTML, /data-alignment="left" style="--alert-icon-color: var\(--state-icon-color\)/);
@@ -260,4 +260,42 @@ test("editor translates appearance controls and allows clearing the custom color
   editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
   editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { icon_color: undefined, alignment: "right" } } }));
   assert.deepEqual(config, { max_tiles: 5, label: "home", alignment: "right" });
+});
+
+test("native palette colors resolve through the theme and previous RGB colors remain editable", () => {
+  const card = new AlertManagerCard();
+  for (const color of ["primary", "accent", "red", "deep-purple", "light-grey"]) {
+    card.setConfig({ icon_color: color });
+    assert.match(card.shadowRoot.innerHTML, new RegExp(`--alert-icon-color: var\\(--${color}-color\\)`));
+  }
+  card.setConfig({ icon_color: "state" });
+  assert.match(card.shadowRoot.innerHTML, /--alert-icon-color: var\(--state-icon-color\)/);
+  const editor = new AlertManagerCardEditor();
+  editor.setConfig({ icon_color: [0, 128, 255] });
+  assert.equal(editor._form.data.icon_color, "#0080ff");
+  assert.deepEqual(editor._form.schema.find((field) => field.name === "icon_color").selector,
+    { ui_color: { include_state: true, default_color: "state" } });
+  for (const icon_color of ['red" onmouseover="bad', "</style><script>bad</script>", "var(--red);display:none"]) {
+    assert.throws(() => card.setConfig({ icon_color }));
+  }
+});
+
+test("overflow stays inside the tile row and counts hidden alerts after filtering and grouping", () => {
+  const card = new AlertManagerCard();
+  card.hass = { locale: { language: "fr" } };
+  card.setConfig({ max_tiles: 1, label: "a&b", alignment: "center" });
+  card._value = { status: "ready", snapshot: { alerts: [
+    alert("first", { labels: ["a&b"], active_since: "2026-09-03T00:00:00Z" }),
+    alert("second", { labels: ["a&b"], device_id: "d" }),
+    alert("third", { labels: ["a&b"], device_id: "d" }),
+    alert("excluded"),
+  ] } };
+  card._render();
+  assert.match(card.shadowRoot.innerHTML, /<ha-card class="overflow">/);
+  assert.match(card.shadowRoot.innerHTML, /aria-label="Voir plus d’alertes : 2 supplémentaires"/);
+  assert.match(card.shadowRoot.innerHTML, /dashboard=1&amp;label=a%26b/);
+  assert.match(card.shadowRoot.innerHTML, /\+2<\/span>/);
+  assert.match(card.shadowRoot.innerHTML, /<\/a><\/ha-card><\/div><\/div>$/);
+  card.setConfig({ max_tiles: 2, label: "a&b" });
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /class="overflow"/);
 });
