@@ -627,6 +627,11 @@ export const settingsStyles = `
     flex-direction: column;
     gap: 6px;
   }
+  .coherence-options {
+    display: grid;
+    align-content: start;
+    gap: 16px;
+  }
   .switch-field-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

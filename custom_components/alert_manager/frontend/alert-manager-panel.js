@@ -5354,25 +5354,6 @@ function refreshCoherenceData() {
 }
 
 function hydrateCoherenceTable() {
-    const control = this.shadowRoot?.querySelector?.("#coherence-alert-enabled");
-    if (control) {
-      control.checked = Boolean(this._config?.coherence_alert_enabled);
-      control.onchange = async () => {
-        control.disabled = true;
-        try {
-          this._config = await this._api.call({
-            type: "alert_manager/config/update",
-            config: { coherence_alert_enabled: Boolean(control.checked) },
-          });
-        } catch (error) {
-          control.checked = Boolean(this._config?.coherence_alert_enabled);
-          this._notice = { kind: "error", text: this._errorText(error) };
-          this._render();
-        } finally {
-          control.disabled = false;
-        }
-      };
-    }
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) return;
     const state = this._ensureCoherenceTableState();
@@ -5588,7 +5569,6 @@ function renderCoherence(context) {
       loading,
       pageMessages,
       statsMarkup,
-      alertEnabled = false,
       deletedEntities = null,
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
@@ -5598,7 +5578,6 @@ function renderCoherence(context) {
       t,
     } = context;
     const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
-    const alertControl = `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("coherence.alert_enabled"))}</span><ha-switch id="coherence-alert-enabled" aria-label="${esc(t("coherence.alert_enabled"))}" ${alertEnabled ? "checked" : ""}></ha-switch></div><small>${esc(t("coherence.alert_help"))}</small></div>`;
     const drawer = deletedEntitiesOpen
       ? renderDeletedEntitiesDrawer({
           data: deletedEntities,
@@ -5615,7 +5594,6 @@ function renderCoherence(context) {
           <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
           ${actions}
         </div>
-        ${alertControl}
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
       </ha-card>${drawer}`;
     }
@@ -5632,7 +5610,6 @@ function renderCoherence(context) {
             <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
             ${actions}
           </div>
-          ${alertControl}
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
@@ -5642,7 +5619,6 @@ function renderCoherence(context) {
 function renderCoherencePanel() {
     return renderCoherence({
       result: this._coherence,
-      alertEnabled: Boolean(this._config?.coherence_alert_enabled),
       loading: this._coherenceLoading,
       pageMessages: this._coherence ? this._renderPageMessages() : "",
       statsMarkup: this._coherence ? this._coherenceStatsMarkup() : "",
@@ -6849,7 +6825,10 @@ function renderSettings(context) {
       </div></ha-card>
       <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
-        <div class="field"><div class="switch-field-row"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div>
+        <div class="coherence-options">
+          <div class="switch-field-row"><div class="field"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div>
+          <div class="switch-field-row"><div class="field"><span class="field-label">${esc(t("coherence.alert_enabled"))}</span><small id="coherence-alert-help">${esc(t("coherence.alert_help"))}</small></div><ha-switch id="coherence-alert-enabled" aria-label="${esc(t("coherence.alert_enabled"))}" aria-describedby="coherence-alert-help" ${settingsDraft.coherence_alert_enabled ? "checked" : ""}></ha-switch></div>
+        </div>
         <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
           ${ignoredReferences.length ? `<ha-chip-set class="ignored-reference-chips">${ignoredReferences.map((reference) => `<ha-input-chip selected label="${esc(reference)}" data-ignored-reference="${esc(reference)}">${esc(reference)}</ha-input-chip>`).join("")}</ha-chip-set>` : ""}
           <div class="ignored-reference-add"><ha-input id="ignored-reference-input" type="text" value="${esc(ignoredReferenceDraft)}" placeholder="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}" aria-label="${esc(t("settings.coherence_ignored_entity_reference_placeholder"))}"></ha-input><ha-button type="button" appearance="plain" data-action="add-ignored-reference"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
@@ -7198,6 +7177,7 @@ async function saveSettings(additionalChanges = {}) {
       pending_display_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#pending-display-delay"))),
       notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
+      coherence_alert_enabled: Boolean(this._settingsDraft.coherence_alert_enabled),
       coherence_scan_esphome: Boolean(
         this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
       ),
@@ -7265,6 +7245,7 @@ function ensureSettingsDraft() {
       global_delay: this._config.global_delay,
       pending_display_delay: this._config.pending_display_delay,
       notification_batch_delay: this._config.notification_batch_delay ?? 30,
+      coherence_alert_enabled: Boolean(this._config.coherence_alert_enabled),
       coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
       history_limit: this._historyConfig.retention_limit,
@@ -7284,6 +7265,10 @@ function ensureSettingsDraft() {
 }
 
 function handleSettingsInput(event) {
+    if (event.target?.id === "coherence-alert-enabled") {
+      this._ensureSettingsDraft();
+      this._settingsDraft.coherence_alert_enabled = Boolean(event.target.checked);
+    }
     if (event.target?.closest?.("#automatic-form")
       || (event.target?.closest?.(".configuration-drawer") && this._configurationDrawer?.kind === "automatic")) {
       this._captureAutomaticConfigurationValues();
@@ -8492,6 +8477,11 @@ const settingsStyles = `
     min-width: 0;
     flex-direction: column;
     gap: 6px;
+  }
+  .coherence-options {
+    display: grid;
+    align-content: start;
+    gap: 16px;
   }
   .switch-field-row {
     display: grid;

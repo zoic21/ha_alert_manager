@@ -228,7 +228,7 @@ Scans can run on demand or automatically on a daily, weekly or monthly schedule.
 
 The same page also provides the 50 latest deleted entities still retained by Home Assistant, with their deletion date and integration. This is read directly from Home Assistant's entity registry and does not require Alert Manager to maintain its own deletion history.
 
-Enable **Create an alert for coherence issues** in the Coherence tab to maintain one immediate alert while findings remain. It uses the usual acknowledgment, history and notification profiles. Continuing findings update the same alert; only a complete check confirming recovery resolves it. Failed or incomplete checks cannot clear it. Enabling uses the latest report without starting a scan; disabling removes the alert and reminders without reporting a recovery. The option is off by default and is also available as `coherence_alert_enabled` in configuration YAML.
+Enable **Create an alert for coherence issues** under **Configuration → Coherence analysis** to maintain one immediate alert while findings remain. It uses the usual acknowledgment, history and notification profiles. Continuing findings update the same alert; only a complete check confirming recovery resolves it. Failed or incomplete checks cannot clear it. Enabling uses the latest report without starting a scan; disabling removes the alert and reminders without reporting a recovery. The option is off by default and is also available as `coherence_alert_enabled` in configuration YAML.
 
 ## Configuration export and recovery
 

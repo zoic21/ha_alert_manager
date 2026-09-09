@@ -534,6 +534,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     config: { global_delay: 900, pending_display_delay: 10 },
     settingsDraft: {
       coherence_scan_esphome: true,
+      coherence_alert_enabled: true,
       coherence_ignored_entity_references: ["sensor.old"],
       excluded_labels: [],
       excluded_entities: [],
@@ -562,6 +563,10 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.ok(markup.indexOf(automaticMarkup) < markup.indexOf("settings-section-alert-display"));
   assert.match(markup, /id="settings-section-notifications"/);
   assert.match(markup, /coherence-scan-esphome[^>]*checked/);
+  const coherenceCard = markup.match(/<ha-card id="settings-section-coherence"[\s\S]*?<\/ha-card>/)[0];
+  assert.match(coherenceCard, /class="coherence-options"/);
+  assert.match(coherenceCard, /id="coherence-alert-enabled"[^>]*checked/);
+  assert.match(coherenceCard, /aria-describedby="coherence-alert-help"/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
   assert.match(markup, /settings-entity_delays-configuration/);
@@ -621,6 +626,7 @@ test("automatic backups stay in settings without a recovery banner", () => {
     config: { global_delay: 900, pending_display_delay: 10 },
     settingsDraft: {
       coherence_scan_esphome: true,
+      coherence_alert_enabled: true,
       coherence_ignored_entity_references: [],
     },
     historyConfig: { retention_limit: 100 },
@@ -849,39 +855,12 @@ test("history statistics replace the table only when explicitly opened", () => {
   assert.doesNotMatch(renderHistory({ ...context, statisticsOpen: true, limit: 0 }), /data-history-statistics-page/);
 });
 
-test("coherence alert switch renders before and after the first scan", () => {
+test("coherence report keeps settings out of its header before and after a scan", () => {
   for (const result of [null, { results: [] }]) {
     const markup = renderCoherence({
-      result, loading: false, pageMessages: "", statsMarkup: "",
-      alertEnabled: true, t: (key) => key,
+      result, loading: false, pageMessages: "", statsMarkup: "", t,
     });
-    assert.equal((markup.match(/id="coherence-alert-enabled"/g) ?? []).length, 1);
-    assert.match(markup, /ha-switch[^>]+coherence-alert-enabled[^>]+checked/);
-    assert.match(markup, /coherence.alert_help/);
+    assert.doesNotMatch(markup, /coherence-alert-enabled|coherence.alert_help/);
+    assert.match(markup, /data-action="scan-coherence"/);
   }
-});
-
-test("coherence switch persists through the shared API and rolls back on failure", async () => {
-  const { hydrateCoherenceTable } = await import("../frontend-src/views/coherence.js");
-  const control = {};
-  const calls = [];
-  const context = {
-    _config: { coherence_alert_enabled: false },
-    shadowRoot: { querySelector: (selector) => selector === "#coherence-alert-enabled" ? control : null },
-    _api: { call: async (message) => { calls.push(message); return message.config; } },
-    _errorText: (error) => error.message,
-    _render() {},
-  };
-  hydrateCoherenceTable.call(context);
-  control.checked = true;
-  await control.onchange();
-  assert.deepEqual(calls, [{ type: "alert_manager/config/update", config: { coherence_alert_enabled: true } }]);
-  assert.equal(context._config.coherence_alert_enabled, true);
-  assert.equal(control.disabled, false);
-  context._api.call = async () => { throw new Error("save failed"); };
-  hydrateCoherenceTable.call(context);
-  control.checked = false;
-  await control.onchange();
-  assert.equal(control.checked, true);
-  assert.deepEqual(context._notice, { kind: "error", text: "save failed" });
 });

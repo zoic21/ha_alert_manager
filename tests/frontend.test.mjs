@@ -3337,6 +3337,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   panel._config = completeConfig();
   panel._render = () => {};
   panel._settingsDraft = {
+    coherence_alert_enabled: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -3376,6 +3377,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       pending_display_delay: 15,
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
+      coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -4588,6 +4590,7 @@ test("combined settings save sends one configuration update and preserves drafts
   panel._reportFormValidity = () => true;
   panel._render = () => {};
   panel._settingsDraft = {
+    coherence_alert_enabled: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -4625,6 +4628,8 @@ test("combined settings save sends one configuration update and preserves drafts
   assert.equal(await panel._saveConfiguration(), false);
   assert.equal(panel._automaticDirty, true);
   assert.equal(panel._settingsDirty, true);
+  assert.equal(panel._settingsDraft.coherence_alert_enabled, true);
+  assert.equal(Boolean(panel._config.coherence_alert_enabled), false);
   panel._hass.callWS = callWS;
   assert.equal(await panel._saveConfiguration(), true);
   assert.equal(panel._automaticDirty, false);
@@ -4638,6 +4643,7 @@ test("combined settings save sends one configuration update and preserves drafts
       pending_display_delay: 15,
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
+      coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -5447,4 +5453,23 @@ test("statistics use the standard scrolling page while history keeps its native 
   panel._historyStatisticsOpen = false;
   panel._render();
   assert.match(panel.shadowRoot.innerHTML.split("</style>")[1], /hass-tabs-subpage-data-table/);
+});
+
+test("coherence alert setting preserves its draft across renders and reloads saved state", () => {
+  const panel = new (customElements.get("alert-manager-panel"))();
+  panel._config = completeConfig();
+  panel._ensureSettingsDraft();
+  assert.equal(panel._settingsDraft.coherence_alert_enabled, false);
+  for (const checked of [true, false]) {
+    panel._handleChange({ target: { id: "coherence-alert-enabled", checked } });
+    panel._ensureSettingsDraft();
+    assert.equal(panel._settingsDraft.coherence_alert_enabled, checked);
+    assert.equal(Boolean(panel._config.coherence_alert_enabled), false);
+    const control = panel._renderSettings().match(/<ha-switch id="coherence-alert-enabled"[^>]*>/)[0];
+    assert.equal(/ checked/.test(control), checked);
+  }
+  panel._config.coherence_alert_enabled = true;
+  panel._resetSettingsDraft();
+  panel._ensureSettingsDraft();
+  assert.equal(panel._settingsDraft.coherence_alert_enabled, true);
 });
