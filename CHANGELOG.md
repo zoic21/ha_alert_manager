@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.14 — September 9, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Move the coherence alert switch to Configuration → Coherence analysis, alongside the ESPHome option in a compact layout.
+- Save the option with the other configuration settings and preserve unsaved changes across renders.
+- Remove the switch and its help text from the coherence report header to reduce empty space.
+
 ## 2.3.0-dev.13 — September 9, 2026
 
 This is a development prerelease.
