@@ -133,7 +133,9 @@ export class AlertManagerCard extends HTMLElement {
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready" || startup) content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${startup ? "startup" : status}`))}
       ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
-    const markup = `<style>${dashboardStyles}</style>${content}`;
+    const alignment = this._config.alignment ?? "left";
+    const color = this._config.icon_color ? `rgb(${this._config.icon_color.join(", ")})` : "var(--state-icon-color)";
+    const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${color}">${content}</div>`;
     if (markup === this._markup) return;
     const focused = this.shadowRoot.activeElement?.dataset?.key;
     this._markup = markup;

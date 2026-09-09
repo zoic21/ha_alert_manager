@@ -808,7 +808,14 @@
       "retry": "Retry",
       "preview": "Example shown only in the editor",
       "preview_device": "Living room sensor",
-      "preview_message": "Battery at 10%"
+      "preview_message": "Battery at 10%",
+      "icon_color": "Icon color (optional)",
+      "alignment": "Tile alignment",
+      "align_left": "Left",
+      "align_center": "Center",
+      "align_right": "Right",
+      "invalid_alignment": "Choose left, center or right for alignment.",
+      "invalid_icon_color": "Use an RGB color with three integers from 0 to 255."
     }
   },
   "services": {

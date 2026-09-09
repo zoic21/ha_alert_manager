@@ -230,3 +230,34 @@ test("device deep links replace stale filters, retain the label and allow anothe
   assert.deepEqual(panel._tableState.overview.filters.device, []);
   assert.deepEqual(panel._tableState.overview.filters.labels, ["home"]);
 });
+
+test("appearance settings reject invalid YAML and preserve existing configurations", () => {
+  for (const alignment of [null, "top", '<img src=x>']) {
+    assert.throws(() => validateDashboardConfig({ alignment }, "fr"), /alignement/);
+  }
+  for (const icon_color of ["red", [], [0, 1], [0, 1, 256], [-1, 0, 0], [0.5, 0, 0], ["0", 0, 0]]) {
+    assert.throws(() => validateDashboardConfig({ icon_color }, "en"), /RGB/);
+  }
+  assert.deepEqual(validateDashboardConfig({ max_tiles: 3, label: "home" }), { max_tiles: 3, label: "home" });
+  const card = new AlertManagerCard();
+  card.preview = true;
+  for (const alignment of ["left", "center", "right"]) {
+    card.setConfig({ alignment, icon_color: [255, 152, 0] });
+    assert.match(card.shadowRoot.innerHTML, new RegExp(`data-alignment="${alignment}" style=`));
+    assert.match(card.shadowRoot.innerHTML, /--alert-icon-color: rgb\(255, 152, 0\)/);
+  }
+  card.setConfig({});
+  assert.match(card.shadowRoot.innerHTML, /data-alignment="left" style="--alert-icon-color: var\(--state-icon-color\)/);
+});
+
+test("editor translates appearance controls and allows clearing the custom color", () => {
+  const editor = new AlertManagerCardEditor();
+  editor.hass = { locale: { language: "fr" } };
+  editor.setConfig({ max_tiles: 5, label: "home", alignment: "center", icon_color: [0, 128, 255] });
+  assert.deepEqual(editor._form.schema.find((field) => field.name === "alignment").selector.select.options,
+    [{ value: "left", label: "Gauche" }, { value: "center", label: "Centre" }, { value: "right", label: "Droite" }]);
+  let config;
+  editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
+  editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { icon_color: undefined, alignment: "right" } } }));
+  assert.deepEqual(config, { max_tiles: 5, label: "home", alignment: "right" });
+});

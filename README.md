@@ -136,9 +136,15 @@ the same semantics as the panel. Matching active, unacknowledged alerts are grou
 by device before applying the limit. A single alert opens its details; a grouped
 tile opens the device-filtered list. The overflow link opens the matching alerts.
 
+Tiles are capped at 300 px and wrap on narrow screens. The visual editor also offers
+left/center/right alignment (left by default) and an optional RGB icon color. Without
+a custom color, icons follow the Home Assistant theme.
+
 ```yaml
 type: custom:alert-manager-card
 max_tiles: 5
+alignment: left
+# icon_color: [255, 152, 0]
 # Optional Home Assistant label ID:
 # label: maintenance
 ```

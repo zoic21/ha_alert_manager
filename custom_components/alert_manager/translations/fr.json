@@ -808,7 +808,14 @@
       "retry": "Réessayer",
       "preview": "Exemple affiché uniquement dans l’éditeur",
       "preview_device": "Capteur du salon",
-      "preview_message": "Batterie à 10 %"
+      "preview_message": "Batterie à 10 %",
+      "icon_color": "Couleur des icônes (facultatif)",
+      "alignment": "Alignement des tuiles",
+      "align_left": "Gauche",
+      "align_center": "Centre",
+      "align_right": "Droite",
+      "invalid_alignment": "Choisissez left, center ou right pour l’alignement.",
+      "invalid_icon_color": "Utilisez une couleur RVB avec trois entiers de 0 à 255."
     }
   },
   "services": {

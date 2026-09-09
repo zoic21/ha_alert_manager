@@ -136,9 +136,16 @@ filtrées puis regroupées par équipement avant application de la limite. Une a
 ouvre son détail ; une tuile regroupée ouvre la liste filtrée sur l’équipement.
 Le lien de débordement ouvre les alertes correspondant au filtre.
 
+Les tuiles sont limitées à 300 px et passent à la ligne sur les écrans étroits.
+L’éditeur propose aussi un alignement gauche/centre/droite (gauche par défaut) et une
+couleur RVB facultative pour les icônes. Sans couleur personnalisée, le thème Home
+Assistant s’applique.
+
 ```yaml
 type: custom:alert-manager-card
 max_tiles: 5
+alignment: left
+# icon_color: [255, 152, 0]
 # Identifiant d’étiquette Home Assistant facultatif :
 # label: maintenance
 ```
