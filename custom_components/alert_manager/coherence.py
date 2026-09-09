@@ -29,6 +29,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
+from .coherence_checks import CHECKS
 from .const import (
     COHERENCE_SCHEDULE_HOUR,
     COHERENCE_SCHEDULE_MINUTE,
@@ -183,6 +184,7 @@ class _ScanState:
     template_by_config_entry: dict[str, str]
     results: list[dict[str, Any]]
     seen: set[tuple[str, str, int]]
+    check_snapshots: dict[str, tuple[frozenset[str] | None, str]]
     references_checked: int = 0
 
 
@@ -437,6 +439,54 @@ def _record_scalar(
         state.results.append(result)
 
 
+def _record_check_references(
+    node: MappingNode,
+    context: _Context,
+    source: _Source,
+    state: _ScanState,
+    check_scopes: dict[str, str | None],
+) -> None:
+    """Aggregate integration checks using the existing report lifecycle."""
+    for check in CHECKS:
+        existing, _ = state.check_snapshots.get(
+            check.REFERENCE_TYPE, (None, "not_applicable")
+        )
+        if existing is None:
+            continue
+        for reference_node in check.references(
+            node, check_scopes.get(check.REFERENCE_TYPE)
+        ):
+            reference = reference_node.value
+            normalized = reference.lower()
+            if normalized in state.ignored_entity_references:
+                continue
+            state.references_checked += 1
+            if normalized in existing:
+                continue
+            line = reference_node.start_mark.line + 1
+            column = reference_node.start_mark.column + 1
+            signature = (
+                f"{check.REFERENCE_TYPE}:{normalized}:{column}",
+                source.relative_path,
+                line,
+            )
+            if signature in state.seen:
+                continue
+            state.seen.add(signature)
+            result = {
+                "reference_type": check.REFERENCE_TYPE,
+                "reference": reference,
+                "file": source.relative_path,
+                "line": line,
+                "column": column,
+                "source_type": context.kind,
+                "source_name": context.name,
+            }
+            if context.link_type == "navigate" and context.link_target:
+                result["link"] = {"type": "navigate", "path": context.link_target}
+            state.results.append(result)
+
+
 def _walk(
     node: Node,
     context: _Context,
@@ -446,8 +496,10 @@ def _walk(
     parent_key: str | None = None,
     sequence_index: int | None = None,
     in_template: bool = False,
+    check_scopes: dict[str, str | None] | None = None,
 ) -> None:
     """Walk YAML/JSON nodes while retaining source locations and object context."""
+    check_scopes = check_scopes or {}
     if isinstance(node, MappingNode):
         current, template_scope = _derive_context(
             node,
@@ -458,6 +510,7 @@ def _walk(
             sequence_index=sequence_index,
             in_template=in_template,
         )
+        _record_check_references(node, current, source, state, check_scopes)
         for key_node, value_node in node.value:
             key = _scalar(key_node)
             if isinstance(key_node, ScalarNode):
@@ -484,6 +537,19 @@ def _walk(
                     state,
                     parent_key=key,
                     in_template=child_template_scope,
+                    check_scopes={
+                        check.REFERENCE_TYPE: check.child_scope(
+                            check_scopes.get(check.REFERENCE_TYPE),
+                            key,
+                            current.kind,
+                            object_root=current is not context,
+                        )
+                        for check in CHECKS
+                        if state.check_snapshots.get(
+                            check.REFERENCE_TYPE, (None, "not_applicable")
+                        )[0]
+                        is not None
+                    },
                 )
         return
 
@@ -497,6 +563,7 @@ def _walk(
                 parent_key=parent_key,
                 sequence_index=index,
                 in_template=in_template,
+                check_scopes=check_scopes,
             )
         return
 
@@ -603,6 +670,7 @@ def scan_configuration(
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
     scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
     ignored_entity_references: frozenset[str] = frozenset(),
+    check_snapshots: dict[str, tuple[frozenset[str] | None, str]] | None = None,
 ) -> dict[str, Any]:
     """Synchronously scan configuration files; intended for an executor thread."""
     started = time.monotonic()
@@ -616,6 +684,7 @@ def scan_configuration(
         template_by_config_entry or {},
         [],
         set(),
+        check_snapshots or {},
     )
     sources = _discover_sources(config_dir, yaml_dashboards, scan_esphome=scan_esphome)
     skipped_files = 0
@@ -635,7 +704,7 @@ def scan_configuration(
 
     state.results.sort(
         key=lambda result: (
-            result["entity_id"],
+            result.get("entity_id", result.get("reference", "")).lower(),
             result["file"],
             result["line"],
         )
@@ -643,7 +712,24 @@ def scan_configuration(
     return {
         "results": state.results,
         "missing_count": len(state.results),
-        "missing_entity_count": len({result["entity_id"] for result in state.results}),
+        "missing_reference_count": len(
+            {
+                (
+                    result.get("reference_type", "entity_id"),
+                    result.get("entity_id", result.get("reference", "")).lower(),
+                )
+                for result in state.results
+            }
+        ),
+        "missing_entity_count": len(
+            {result["entity_id"] for result in state.results if "entity_id" in result}
+        ),
+        "checks": {
+            check.REFERENCE_TYPE: state.check_snapshots.get(
+                check.REFERENCE_TYPE, (None, "not_applicable")
+            )[1]
+            for check in CHECKS
+        },
         "files_scanned": len(sources) - skipped_files,
         "files_skipped": skipped_files,
         "references_checked": state.references_checked,
@@ -716,6 +802,7 @@ async def async_scan_configuration(
             f"/{str(url_path or 'lovelace').strip('/')}",
         )
 
+    check_snapshots = {check.REFERENCE_TYPE: check.snapshot(hass) for check in CHECKS}
     return await hass.async_add_executor_job(
         scan_configuration,
         Path(hass.config.path()),
@@ -727,6 +814,7 @@ async def async_scan_configuration(
         yaml_dashboards,
         scan_esphome,
         ignored_entity_references,
+        check_snapshots,
     )
 
 

@@ -122,13 +122,13 @@
     },
     "coherence": {
       "columns": {
-        "entity": "Missing entity",
+        "entity": "Missing reference",
         "file": "File",
         "line": "Line",
         "source": "Configuration",
         "type": "Type"
       },
-      "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files.",
+      "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability.",
       "deleted_entities": {
         "button": "Deleted entities",
         "close": "Close deleted entities",
@@ -137,7 +137,7 @@
         "loading": "Loading deleted entities…",
         "title": "Deleted entities"
       },
-      "empty": "No references to missing entities.",
+      "empty": "No missing references.",
       "not_scanned": "The scan has not been run yet.",
       "open": "Open",
       "scan": "Run scan",
@@ -159,6 +159,11 @@
         "scene": "Scene",
         "script": "Script",
         "template": "Template"
+      },
+      "zha_missing": "This ZHA event trigger references a device that is not registered in ZHA.",
+      "zha_status": {
+        "not_loaded": "ZHA check skipped: integration not fully loaded.",
+        "metadata_error": "ZHA check skipped: metadata unavailable."
       }
     },
     "duration": {
@@ -586,9 +591,9 @@
       "coherence_scan_esphome": "Scan the ESPHome folder",
       "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
       "coherence_ignored_entity_references": "References ignored by the coherence scan",
-      "coherence_ignored_entity_references_help": "Add exact references to ignore, for example toto.plop.",
+      "coherence_ignored_entity_references_help": "Add an exact entity reference (toto.plop) or ZHA IEEE address (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",
-      "coherence_ignored_entity_reference_validation": "Enter a valid complete reference, for example toto.plop.",
+      "coherence_ignored_entity_reference_validation": "Enter a valid entity reference or ZHA IEEE address.",
       "coherence_settings": "Coherence analysis",
       "close_configuration_aria": "Close {name} configuration",
       "configure_aria": "Configure {name}",

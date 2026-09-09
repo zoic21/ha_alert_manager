@@ -122,13 +122,13 @@
     },
     "coherence": {
       "columns": {
-        "entity": "Entité manquante",
+        "entity": "Référence manquante",
         "file": "Fichier",
         "line": "Ligne",
         "source": "Configuration",
         "type": "Type"
       },
-      "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration.",
+      "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements.",
       "deleted_entities": {
         "button": "Entités supprimées",
         "close": "Fermer les entités supprimées",
@@ -137,7 +137,7 @@
         "loading": "Chargement des entités supprimées…",
         "title": "Entités supprimées"
       },
-      "empty": "Aucune référence vers une entité manquante.",
+      "empty": "Aucune référence manquante.",
       "not_scanned": "L’analyse n’a pas encore été lancée.",
       "open": "Ouvrir",
       "scan": "Lancer l’analyse",
@@ -159,6 +159,11 @@
         "scene": "Scène",
         "script": "Script",
         "template": "Template"
+      },
+      "zha_missing": "Ce déclencheur ZHA référence un équipement non enregistré dans ZHA.",
+      "zha_status": {
+        "not_loaded": "Contrôle ZHA non exécuté : intégration pas entièrement chargée.",
+        "metadata_error": "Contrôle ZHA non exécuté : métadonnées indisponibles."
       }
     },
     "duration": {
@@ -586,9 +591,9 @@
       "coherence_scan_esphome": "Analyser le dossier ESPHome",
       "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
       "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
-      "coherence_ignored_entity_references_help": "Ajoutez les références exactes à ignorer, par exemple toto.plop.",
+      "coherence_ignored_entity_references_help": "Ajoutez une référence exacte d’entité (toto.plop) ou une adresse IEEE ZHA (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Exemple : toto.plop",
-      "coherence_ignored_entity_reference_validation": "Saisissez une référence complète valide, par exemple toto.plop.",
+      "coherence_ignored_entity_reference_validation": "Saisissez une référence d’entité ou une adresse IEEE ZHA valide.",
       "coherence_settings": "Analyse de cohérence",
       "close_configuration_aria": "Fermer la configuration de {name}",
       "configure_aria": "Configurer {name}",

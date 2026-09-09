@@ -474,14 +474,17 @@ def validate_entity_list(value: Any) -> list[str]:
 
 
 def validate_coherence_ignored_entity_references(value: Any) -> list[str]:
-    """Validate exact entity-like references ignored by coherence scans."""
+    """Validate exact entity references or ZHA IEEE addresses ignored by scans."""
     if not isinstance(value, list):
         raise ValueError("coherence_ignored_entity_references must be a list")
     result: list[str] = []
     for item in value:
         reference = item.strip().casefold() if isinstance(item, str) else item
         try:
-            reference = validate_entity_id(reference)
+            if not isinstance(reference, str) or not re.fullmatch(
+                r"(?:[0-9a-f]{2}:){7}[0-9a-f]{2}", reference
+            ):
+                reference = validate_entity_id(reference)
         except ValueError as err:
             raise ValueError(
                 "coherence_ignored_entity_references contains an invalid reference"

@@ -221,8 +221,10 @@ class AlertManagerCoherenceIssueSensor(SensorEntity):
 
     @callback
     def _async_coherence_updated(self, result: dict[str, Any]) -> None:
-        """Publish the count of distinct missing entity ids."""
-        issue_count = result.get("missing_entity_count")
+        """Publish distinct missing references, including legacy entity-only reports."""
+        issue_count = result.get(
+            "missing_reference_count", result.get("missing_entity_count")
+        )
         if issue_count is None:
             issue_count = len({item["entity_id"] for item in result.get("results", [])})
         raw_scanned_at = result.get("scanned_at")
