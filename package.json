@@ -1,7 +1,7 @@
 {
   "name": "ha-alert-manager",
   "private": true,
-  "version": "2.3.0-dev.16",
+  "version": "2.3.0-dev.17",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-frontend.mjs",

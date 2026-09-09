@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.17 — September 9, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Include custom rules, even disabled ones, in coherence scans: selected entities and static references in Jinja conditions and messages are checked from an immutable in-memory snapshot using the existing executor scanner and exclusions.
+- Identify the affected custom rule and field in coherence results, with an Open action leading directly to the rule editor.
+
+### Fixes
+
+- Open coherence targets only through the Open button; clicking a table row no longer navigates away.
+
 ## 2.3.0-dev.16 — September 9, 2026
 
 This is a development prerelease.
