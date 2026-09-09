@@ -11,7 +11,7 @@ const newRuleDefaults = () => ({
   entity_ids: [],
   label_ids: [],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "equals",
   value: [""],
@@ -31,12 +31,26 @@ const yamlValue = (value) => {
   return JSON.stringify(String(value));
 };
 
+export function normalizeRuleTarget(rule) {
+  const source = rule.source ?? "state";
+  const legacy = {
+    state: "value", attribute: "value",
+    variation: "value_variation", state_variation: "value_variation",
+    attribute_variation: "value_variation", transition: "value_transition",
+    attribute_transition: "value_transition", none: "jinja",
+  };
+  // Invalid legacy attribute rules must still reach backend validation as legacy.
+  if (source.startsWith("attribute") && (typeof rule.attribute !== "string" || !rule.attribute.trim())) {
+    return { ...rule };
+  }
+  const attribute = Object.hasOwn(legacy, source) && !source.startsWith("attribute")
+    ? null : rule.attribute;
+  return { ...rule, source: legacy[source] ?? source, attribute };
+}
+
 const ruleToYaml = (rule) => {
-  const source = rule.source === "none"
-    ? "jinja"
-    : rule.source === "variation"
-    ? "state_variation"
-    : (rule.source ?? "state");
+  rule = normalizeRuleTarget(rule);
+  const source = rule.source;
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
@@ -120,11 +134,11 @@ export function conditionText(alert) {
     if (!alert?.condition_key) return alert?.condition ?? "";
     const params = { ...(alert.condition_params ?? {}) };
     if (alert.condition_key === "rule.generated") {
-      const sourceKey = params.source === "attribute"
+      const sourceKey = (params.source === "attribute" || (params.source === "value" && params.attribute))
         ? "conditions.sources.attribute"
-        : params.source === "attribute_variation"
+        : (params.source === "attribute_variation" || (params.source === "value_variation" && params.attribute))
         ? "conditions.sources.attribute_variation"
-        : ["state_variation", "variation"].includes(params.source)
+        : ["value_variation", "state_variation", "variation"].includes(params.source)
         ? "conditions.sources.state_variation"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
@@ -139,7 +153,7 @@ export function conditionText(alert) {
       params.duration = this._durationText(params.duration_seconds ?? params.duration);
       params.last_occurrence = this._date(params.last_occurrence);
     } else if (alert.condition_key === "rule.selected_unchanged") {
-      const sourceKey = params.source === "attribute"
+      const sourceKey = (params.source === "attribute" || (params.source === "value" && params.attribute))
         ? "conditions.sources.attribute"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });

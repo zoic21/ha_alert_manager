@@ -59,10 +59,10 @@ const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_co
 
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
 
-const ATTRIBUTE_RULE_SOURCES = new Set(["attribute", "attribute_variation", "attribute_transition"]);
+const ATTRIBUTE_RULE_SOURCES = new Set(["value", "value_variation", "value_transition"]);
 
-const TRANSITION_RULE_SOURCES = new Set(["transition", "attribute_transition"]);
-const VARIATION_RULE_SOURCES = new Set(["state_variation", "attribute_variation"]);
+const TRANSITION_RULE_SOURCES = new Set(["value_transition", "transition", "attribute_transition"]);
+const VARIATION_RULE_SOURCES = new Set(["value_variation"]);
 
 const VARIATION_RULE_OPERATORS = new Set(["above", "below", "between", "outside"]);
 

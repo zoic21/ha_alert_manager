@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.core import State
 
-from .const import ATTRIBUTE_SOURCES, TRANSITION_SOURCES, VARIATION_SOURCES
+from .const import TRANSITION_SOURCES, VARIATION_SOURCES
 from .models import Rule, extract_attribute_value, safe_float
 
 type ConditionEvaluator = Callable[[Any], tuple[bool | None, str | None]]
@@ -30,7 +30,7 @@ class RuleEvaluation:
 
 def rule_current_value(rule: Rule, state: State) -> tuple[bool, Any]:
     """Read the configured state or attribute source."""
-    if rule.source in ATTRIBUTE_SOURCES:
+    if rule.attribute is not None:
         return extract_attribute_value(state.attributes, rule.attribute or "")
     return True, state.state
 

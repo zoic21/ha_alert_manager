@@ -28,6 +28,7 @@ from .const import (
     NOTIFICATION_STORAGE_KEY,
     NOTIFICATION_STORAGE_VERSION,
     SIGNAL_NOTIFICATION_LIFECYCLE,
+    TRANSITION_SOURCES,
 )
 from .models import AlertRecord, AlertStatus
 from .notifications import (
@@ -487,9 +488,9 @@ class NotificationRuntime:
                     self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                     changed = True
                     continue
-                if policy.notify_on_resolved and data.get("source") not in (
-                    "transition",
-                    "attribute_transition",
+                if (
+                    policy.notify_on_resolved
+                    and data.get("source") not in TRANSITION_SOURCES
                 ):
                     self._queue_batch(profile_id, "resolved", item)
                 self._runtime.get(profile_id, {}).pop(item.alert_id, None)

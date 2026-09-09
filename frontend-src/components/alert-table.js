@@ -314,7 +314,8 @@ function alertCurrentValue(row) {
     if (!state) return "—";
     let value = state.state;
     const source = row.source?.source;
-    if (["attribute", "attribute_variation"].includes(source)) {
+    if (["attribute", "attribute_variation", "attribute_transition"].includes(source)
+      || (["value", "value_variation", "value_transition"].includes(source) && row.source?.attribute)) {
       const [found, attribute] = attributeValue(
         state.attributes,
         row.source?.attribute,

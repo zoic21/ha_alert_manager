@@ -14,6 +14,8 @@ from uuid import uuid4
 
 from .const import (
     ATTRIBUTE_SOURCES,
+    LEGACY_ATTRIBUTE_SOURCES,
+    LEGACY_RULE_SOURCES,
     MAX_DELAY,
     MAX_RULE_CONDITION_TEMPLATE_LENGTH,
     MAX_RULE_ENTITY_IDS,
@@ -647,6 +649,24 @@ class AlertRecord:
         self.acknowledged_until = None
 
 
+def normalize_rule_source(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy targets without reinterpreting unused attributes."""
+    normalized = dict(data)
+    source = normalized.get("source", "state")
+    if not isinstance(source, str):
+        raise ValueError("Unsupported value source")
+    if source in LEGACY_ATTRIBUTE_SOURCES:
+        attribute = normalized.get("attribute")
+        if not isinstance(attribute, str) or not attribute.strip():
+            raise ValueError("Attribute is required for attribute rules")
+    elif source in LEGACY_RULE_SOURCES:
+        normalized["attribute"] = None
+    normalized["source"] = LEGACY_RULE_SOURCES.get(source, source)
+    if isinstance(normalized.get("attribute"), str):
+        normalized["attribute"] = normalized["attribute"].strip() or None
+    return normalized
+
+
 @dataclass(slots=True)
 class Rule:
     """A comparison rule evaluated independently for every source entity."""
@@ -674,6 +694,14 @@ class Rule:
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Also normalize rules constructed directly by internal callers."""
+        target = normalize_rule_source(
+            {"source": self.source, "attribute": self.attribute}
+        )
+        self.source = target["source"]
+        self.attribute = target.get("attribute")
+
     @classmethod
     def create(cls, data: dict[str, Any]) -> Rule:
         """Create a rule with an immutable random identifier."""
@@ -684,11 +712,7 @@ class Rule:
         """Deserialize, migrating the V1 entity_id field idempotently."""
         if not isinstance(data, dict):
             raise ValueError("Rule must be an object")
-        normalized = dict(data)
-        if normalized.get("source") == "none":
-            normalized["source"] = "jinja"
-        elif normalized.get("source") == "variation":
-            normalized["source"] = "state_variation"
+        normalized = normalize_rule_source(data)
         if "entity_ids" not in normalized and "entity_id" in normalized:
             normalized["entity_ids"] = [normalized["entity_id"]]
         normalized.pop("entity_id", None)
@@ -750,13 +774,13 @@ class Rule:
             raise ValueError("An entity cannot be repeated in the same rule")
         if self.source not in VALUE_SOURCES:
             raise ValueError(f"Unsupported value source: {self.source}")
-        if self.source in ATTRIBUTE_SOURCES and (
+        if self.attribute is not None and (
             not isinstance(self.attribute, str)
             or not self.attribute.strip()
             or len(self.attribute) > 255
         ):
             raise ValueError("Attribute is required for attribute rules")
-        if self.source == "attribute" and "*" in self.attribute:
+        if self.source == "value" and self.attribute and "*" in self.attribute:
             segments = self.attribute.split(".")
             if (
                 any(not segment for segment in segments)
@@ -767,7 +791,8 @@ class Rule:
                     "Attribute wildcard paths must use complete .* segments"
                 )
         if (
-            self.source in ("attribute_variation", "attribute_transition")
+            self.source in ("value_variation", "value_transition")
+            and self.attribute
             and "*" in self.attribute
         ):
             raise ValueError("Attribute variation does not support wildcard paths")

@@ -25,7 +25,7 @@ const rule = (changes = {}) => ({
   name: "Temperature",
   entity_ids: ["sensor.temperature"],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "above",
   value: "25",
@@ -44,7 +44,7 @@ test("rule draft normalization is pure and handles legacy sources", () => {
   assert.deepEqual(source, before);
   assert.notEqual(normalized, source);
   assert.notEqual(normalized.entity_ids, source.entity_ids);
-  assert.equal(normalized.source, "state_variation");
+  assert.equal(normalized.source, "value_variation");
   assert.equal(normalized.operator, "above");
   assert.equal(normalized.value, "2");
 });
@@ -190,7 +190,7 @@ test("condition updates replace only their section and preserve the editor scrol
   let editorRefreshes = 0;
   let hydrations = 0;
   const panel = {
-    _editingRule: rule({ source: "state_variation", operator: "between" }),
+    _editingRule: rule({ source: "value_variation", operator: "between" }),
     _t: t,
     _refreshRuleEditor() { editorRefreshes += 1; },
     _hydrateRuleEditorControls() { hydrations += 1; },
@@ -236,7 +236,7 @@ test("structural source and operator changes refresh only the condition section"
   };
 
   hydrateRuleEditorControls.call(panel);
-  onSourceChanged("state_variation");
+  onSourceChanged("value_variation");
   onOperatorChanged("between");
 
   assert.equal(conditionRefreshes, 2);
@@ -265,7 +265,7 @@ test("rule editor uses the native resizable bottom sheet on mobile", () => {
 test("rule draft capture, serialization and validation are independently testable", () => {
   const fields = new Map([
     ["name", { value: "  Presence  " }],
-    ["source", { value: "state" }],
+    ["source", { value: "value" }],
     ["operator", { value: "contains" }],
     ["duration", { value: "30" }],
   ]);
@@ -352,4 +352,30 @@ test("rule labels survive drafts, duplication, serialization and YAML", () => {
   assert.deepEqual(selector[2], serialized.label_ids);
   selector[3]([]);
   assert.deepEqual(changed, []);
+});
+
+test("unified drafts migrate legacy state targets without retaining stale attributes", () => {
+  for (const [legacy, source] of [["state", "value"], ["variation", "value_variation"], ["state_variation", "value_variation"], ["transition", "value_transition"]]) {
+    const migrated = normalizeRuleDraft(rule({ source: legacy, attribute: "stale" }));
+    assert.equal(migrated.source, source);
+    assert.equal(migrated.attribute, null);
+    assert.deepEqual(normalizeRuleDraft(migrated), migrated);
+  }
+  for (const [legacy, source] of [["attribute", "value"], ["attribute_variation", "value_variation"], ["attribute_transition", "value_transition"]]) {
+    const migrated = normalizeRuleDraft(rule({ source: legacy, attribute: "metrics.power" }));
+    assert.equal(migrated.source, source);
+    assert.equal(migrated.attribute, "metrics.power");
+    assert.equal(normalizeRuleDraft(rule({ source: legacy, attribute: "" })).source, legacy);
+  }
+});
+
+test("optional attributes serialize consistently for every unified operation", () => {
+  for (const source of ["value", "value_variation", "value_transition"]) {
+    for (const attribute of [undefined, "", "  ", "metrics.power"]) {
+      const draft = normalizeRuleDraft(rule({ source, attribute }));
+      const serialized = serializeRuleDraft(draft);
+      assert.equal(serialized.source, source);
+      assert.equal(serialized.attribute, attribute?.trim() || null);
+    }
+  }
 });

@@ -10,7 +10,7 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 from homeassistant.util import dt as dt_util
 
-from .const import TRANSITION_SOURCES
+from .const import LEGACY_RULE_SOURCES, TRANSITION_SOURCES
 from .models import AlertRecord, AlertStatus, Rule, advance_record, normalize_scalar
 from .packs.base import PackOccurrence
 from .rule_evaluation import rule_current_value
@@ -133,7 +133,8 @@ class _TransitionsMixin:
             rule is not None
             and rule.enabled
             and record.details.entity_id in rule.entity_ids
-            and rule.source == record.details.source
+            and rule.source
+            == LEGACY_RULE_SOURCES.get(record.details.source, record.details.source)
             and (
                 record.status is AlertStatus.ACTIVE
                 or alert_id in self._transition_observations

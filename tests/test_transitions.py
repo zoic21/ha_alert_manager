@@ -285,3 +285,35 @@ def test_pause_does_not_resume_unobserved_hold(hass, entry, set_now):
     edge(manager, hass, "A")
     edge(manager, hass, "B")
     assert manager.records[key].status is AlertStatus.PENDING
+
+
+@pytest.mark.parametrize("attribute", [False, True])
+def test_legacy_active_transition_survives_migration(hass, entry, set_now, attribute):
+    """Legacy stored sources retain the same acknowledged episode and expiration."""
+    manager, key, rule = setup(
+        hass, entry, source="value_transition", attribute="mode" if attribute else None
+    )
+    edge(manager, hass, "A" if attribute else "B", {"mode": "B"})
+    run(manager.async_acknowledge(key, "admin"))
+    record = manager.records[key]
+    deadline = record.expires_at
+    detected_at = record.detected_at
+    # Simulate a configuration and active record written before this migration.
+    legacy_source = "attribute_transition" if attribute else "transition"
+    record.details.source = legacy_source
+    manager.config["rules"][0]["source"] = legacy_source
+    if not attribute:
+        manager.config["rules"][0]["attribute"] = "stale"
+    run(manager.async_unload())
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    run(restored._async_finish_startup_reconciliation())
+    assert restored.records[key].expires_at == deadline
+    assert restored.records[key].detected_at == detected_at
+    assert restored.records[key].acknowledged
+    assert restored.records[key].details.rule_id == rule["id"]
+    assert not restored.history
+    set_now(deadline + timedelta(seconds=1))
+    expire(restored, key)
+    assert key not in restored.records
+    assert len(restored.history) == 1

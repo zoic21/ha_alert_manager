@@ -91,7 +91,7 @@ def test_active_resolution_preserves_snapshot_acknowledgement_and_persists(
     assert event["area"] == "Server room"
     assert event["message"] == "Cool the rack"
     assert event["trigger_value"] == "34.5"
-    assert event["source"] == "state"
+    assert event["source"] == "value"
     assert event["operator"] == "above"
     assert event["comparison_value"] == 33
     assert event["attribute"] is None

@@ -32,7 +32,7 @@ from .const import (
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus, normalize_rule_source
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -624,11 +624,13 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
             if "entity_id" in rule:
                 rule.pop("entity_id")
                 changed = True
-            if rule.get("source") == "none":
-                rule["source"] = "jinja"
-                changed = True
-            elif rule.get("source") == "variation":
-                rule["source"] = "state_variation"
+            try:
+                normalized_target = normalize_rule_source(rule)
+            except ValueError:
+                # Leave invalid legacy attributes for the existing recovery path.
+                normalized_target = rule
+            if normalized_target != rule:
+                rule.update(normalized_target)
                 changed = True
             if "update_message_when_active" not in rule:
                 rule["update_message_when_active"] = False

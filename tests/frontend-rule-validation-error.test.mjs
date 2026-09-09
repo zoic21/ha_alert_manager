@@ -50,7 +50,7 @@ const rule = () => ({
   name: "Range rule",
   entity_ids: ["sensor.temperature"],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "between",
   value: ["30", "20"],
@@ -62,7 +62,7 @@ const rule = () => ({
 const rangeForm = () => {
   const fields = new Map([
     ["name", { value: "Range rule" }],
-    ["source", { value: "state" }],
+    ["source", { value: "value" }],
     ["operator", { value: "between" }],
     ["lower-bound", { value: "30" }],
     ["upper-bound", { value: "20" }],

@@ -94,7 +94,11 @@ Use the built-in profiles to send notifications through Home Assistant’s nativ
 
 </details>
 
-**Transition** (`source: transition`) and **Transition attribute** (`source: attribute_transition`, with `attribute`) observe a specific `from_value` → `to_value` edge. The trigger delay (`duration`, default 0 seconds) requires continuous arrival-value maintenance before activation; leaving that value cancels the hold and requires a new matching edge. Unrelated attribute updates do not restart the hold.
+The **Value** (`source: value`), **Variation** (`source: value_variation`) and **Transition** (`source: value_transition`) operations share an optional `attribute`: empty or omitted targets the state; filled targets that attribute. A missing entity attribute never falls back to state. Nested paths are supported; wildcard paths are limited to regular comparisons. Jinja and No change keep their existing behavior.
+
+Storage and YAML imports automatically migrate legacy sources: `state`/`attribute` → `value`, `variation`/`state_variation`/`attribute_variation` → `value_variation`, `transition`/`attribute_transition` → `value_transition`. Stale attributes on legacy state sources are cleared; legacy attribute sources without a valid attribute are rejected. Rule identities, alerts and history are preserved.
+
+**Transition** (`source: value_transition`, with optional `attribute`) observes a specific `from_value` → `to_value` edge. The trigger delay (`duration`, default 0 seconds) requires continuous arrival-value maintenance before activation; leaving that value cancels the hold and requires a new matching edge. Unrelated attribute updates do not restart the hold.
 
 `auto_resolve` (default 600 seconds, minimum 1) starts at activation. Leaving the arrival value afterward does not resolve the alert. Another confirmed transition extends the deadline on the same alert and preserves its acknowledgment. Details/history retain the observed values and last transition; expiration is marked as automatic and sends no recovery notification. Existing start/reminder routing still applies.
 

@@ -17,9 +17,9 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
-    ATTRIBUTE_SOURCES,
     CUSTOM_RULE_ALLOWED_ENTITY_IDS,
     DOMAIN,
+    TRANSITION_SOURCES,
     VARIATION_SOURCES,
 )
 from .models import AlertStatus, Rule, extract_attribute_value
@@ -42,11 +42,11 @@ _LEGACY_OPERATOR_LABELS = {
 
 def _legacy_rule_source(rule: Rule) -> str:
     """Return the source label used only by the non-localized fallback text."""
-    if rule.source == "attribute":
+    if rule.source == "value" and rule.attribute:
         return f"Attribut {rule.attribute}"
-    if rule.source == "state_variation":
+    if rule.source == "value_variation" and not rule.attribute:
         return "Variation de l'etat"
-    if rule.source == "attribute_variation":
+    if rule.source == "value_variation" and rule.attribute:
         return f"Variation de l'attribut {rule.attribute}"
     return "État"
 
@@ -504,7 +504,7 @@ class _TemplatesMixin:
         if record is None or record.status is not AlertStatus.ACTIVE or state is None:
             return False
         current = state.state
-        if rule.source in ATTRIBUTE_SOURCES:
+        if rule.attribute is not None:
             _found, current = extract_attribute_value(
                 state.attributes, rule.attribute or ""
             )
@@ -518,7 +518,7 @@ class _TemplatesMixin:
             current,
             force=True,
         )
-        if rule.source in ("transition", "attribute_transition"):
+        if rule.source in TRANSITION_SOURCES:
             changed = record.details.message != rendered_message
             record.details.message = rendered_message
             return changed

@@ -62,10 +62,10 @@ const TEXT_RULE_OPERATORS = new Set(["equals", "not_equals", "contains", "not_co
 
 const RANGE_RULE_OPERATORS = new Set(["between", "outside"]);
 
-const ATTRIBUTE_RULE_SOURCES = new Set(["attribute", "attribute_variation", "attribute_transition"]);
+const ATTRIBUTE_RULE_SOURCES = new Set(["value", "value_variation", "value_transition"]);
 
-const TRANSITION_RULE_SOURCES = new Set(["transition", "attribute_transition"]);
-const VARIATION_RULE_SOURCES = new Set(["state_variation", "attribute_variation"]);
+const TRANSITION_RULE_SOURCES = new Set(["value_transition", "transition", "attribute_transition"]);
+const VARIATION_RULE_SOURCES = new Set(["value_variation"]);
 
 const VARIATION_RULE_OPERATORS = new Set(["above", "below", "between", "outside"]);
 
@@ -439,7 +439,7 @@ const newRuleDefaults = () => ({
   entity_ids: [],
   label_ids: [],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "equals",
   value: [""],
@@ -459,12 +459,26 @@ const yamlValue = (value) => {
   return JSON.stringify(String(value));
 };
 
+function normalizeRuleTarget(rule) {
+  const source = rule.source ?? "state";
+  const legacy = {
+    state: "value", attribute: "value",
+    variation: "value_variation", state_variation: "value_variation",
+    attribute_variation: "value_variation", transition: "value_transition",
+    attribute_transition: "value_transition", none: "jinja",
+  };
+  // Invalid legacy attribute rules must still reach backend validation as legacy.
+  if (source.startsWith("attribute") && (typeof rule.attribute !== "string" || !rule.attribute.trim())) {
+    return { ...rule };
+  }
+  const attribute = Object.hasOwn(legacy, source) && !source.startsWith("attribute")
+    ? null : rule.attribute;
+  return { ...rule, source: legacy[source] ?? source, attribute };
+}
+
 const ruleToYaml = (rule) => {
-  const source = rule.source === "none"
-    ? "jinja"
-    : rule.source === "variation"
-    ? "state_variation"
-    : (rule.source ?? "state");
+  rule = normalizeRuleTarget(rule);
+  const source = rule.source;
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
@@ -548,11 +562,11 @@ function conditionText(alert) {
     if (!alert?.condition_key) return alert?.condition ?? "";
     const params = { ...(alert.condition_params ?? {}) };
     if (alert.condition_key === "rule.generated") {
-      const sourceKey = params.source === "attribute"
+      const sourceKey = (params.source === "attribute" || (params.source === "value" && params.attribute))
         ? "conditions.sources.attribute"
-        : params.source === "attribute_variation"
+        : (params.source === "attribute_variation" || (params.source === "value_variation" && params.attribute))
         ? "conditions.sources.attribute_variation"
-        : ["state_variation", "variation"].includes(params.source)
+        : ["value_variation", "state_variation", "variation"].includes(params.source)
         ? "conditions.sources.state_variation"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
@@ -567,7 +581,7 @@ function conditionText(alert) {
       params.duration = this._durationText(params.duration_seconds ?? params.duration);
       params.last_occurrence = this._date(params.last_occurrence);
     } else if (alert.condition_key === "rule.selected_unchanged") {
-      const sourceKey = params.source === "attribute"
+      const sourceKey = (params.source === "attribute" || (params.source === "value" && params.attribute))
         ? "conditions.sources.attribute"
         : "conditions.sources.state";
       params.source = this._t(sourceKey, { attribute: params.attribute ?? "" });
@@ -1480,7 +1494,8 @@ function alertCurrentValue(row) {
     if (!state) return "—";
     let value = state.state;
     const source = row.source?.source;
-    if (["attribute", "attribute_variation"].includes(source)) {
+    if (["attribute", "attribute_variation", "attribute_transition"].includes(source)
+      || (["value", "value_variation", "value_transition"].includes(source) && row.source?.attribute)) {
       const [found, attribute] = attributeValue(
         state.attributes,
         row.source?.attribute,
@@ -3940,12 +3955,10 @@ function normalizeRuleDraft(rule = {}) {
     const defaults = newRuleDefaults();
     const normalized = {
       ...defaults,
-      ...rule,
+      ...normalizeRuleTarget(rule),
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
       label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
-    if (normalized.source === "none") normalized.source = "jinja";
-    if (normalized.source === "variation") normalized.source = "state_variation";
     if (VARIATION_RULE_SOURCES.has(normalized.source)
       && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
       normalized.operator = "above";
@@ -3977,7 +3990,7 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
         ? currentRule[name] ?? null
         : raw === "" ? null : Number(raw);
     };
-    const source = value("source") ?? currentRule.source ?? "state";
+    const source = value("source") ?? currentRule.source ?? "value";
     const comparisonFree = ["jinja", "unchanged"].includes(source);
     const selectedOperator = value("operator") ?? currentRule.operator ?? "equals";
     const operator = comparisonFree ? "equals" : selectedOperator;
@@ -4057,7 +4070,7 @@ function serializeRuleDraft(draft) {
       enabled: Boolean(draft.enabled ?? true),
       source,
       attribute: ATTRIBUTE_RULE_SOURCES.has(source)
-        ? String(draft.attribute ?? "").trim()
+        ? String(draft.attribute ?? "").trim() || null
         : null,
       operator,
       value: comparisonValue,
@@ -4209,7 +4222,7 @@ function renderRuleTestResult(result, context) {
           ${ruleTestDetail(t("rules.test.entity"), item.name)}
           ${ruleTestDetail(t("rules.test.source"), t(`rules.source_${item.source}`))}
           ${ruleTestDetail(t("rules.test.attribute"), item.attribute)}
-          ${ruleTestDetail(t("rules.test.current_state"), ruleTestValue(item.state, item.source === "state" ? item.unit : null))}
+          ${ruleTestDetail(t("rules.test.current_state"), ruleTestValue(item.state, item.source === "value" && !item.attribute ? item.unit : null))}
           ${variation ? "" : ruleTestDetail(t("rules.test.extracted_value"), ruleTestValue(item.raw_value ?? item.value, item.source !== "jinja" ? item.unit : null))}
           ${ruleTestDetail(t("rules.test.condition"), ruleTestCondition(item, t))}
           ${ruleTestDetail(t("rules.test.comparison_result"), ruleTestBoolean(item.comparison_result, t))}
@@ -4395,7 +4408,7 @@ function renderRuleConditionSection({ rule, t, renderTextField, renderNumberFiel
         <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
         <div class="fields">
           <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-          <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(rule.source === "attribute_variation" ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+          <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(["value_variation", "value_transition"].includes(rule.source) ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
           ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}${renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
           ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
           <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
@@ -4439,11 +4452,11 @@ function ruleSummary(rule) {
     if (rule.source === "unchanged") {
       return this._t("conditions.rule.unchanged", { duration: "" });
     }
-    const source = rule.source === "attribute"
+    const source = (rule.source === "attribute" || (rule.source === "value" && rule.attribute))
       ? this._t("conditions.sources.attribute", { attribute: rule.attribute })
-      : rule.source === "attribute_variation"
+      : (rule.source === "attribute_variation" || (rule.source === "value_variation" && rule.attribute))
       ? this._t("conditions.sources.attribute_variation", { attribute: rule.attribute })
-      : ["state_variation", "variation"].includes(rule.source)
+      : ["value_variation", "state_variation", "variation"].includes(rule.source)
       ? this._t("conditions.sources.state_variation")
       : this._t("conditions.sources.state");
     if (rule.operator === "unchanged") {
@@ -4702,7 +4715,7 @@ function hydrateRuleEditor(root, context) {
   context.configureSelect(
     "rule-source",
     context.sourceOptions,
-    context.draft.source ?? "state",
+    context.draft.source ?? "value",
     context.onSourceChanged,
   );
   context.configureSelect(
@@ -4764,12 +4777,9 @@ function hydrateRuleEditorControls() {
     draft: this._editingRule,
     closeLabel: this._t("rules.aria_close"),
     sourceOptions: [
-      { value: "state", label: this._t("rules.source_state") },
-      { value: "attribute", label: this._t("rules.source_attribute") },
-      { value: "transition", label: this._t("rules.source_transition") },
-      { value: "attribute_transition", label: this._t("rules.source_attribute_transition") },
-      { value: "state_variation", label: this._t("rules.source_state_variation") },
-      { value: "attribute_variation", label: this._t("rules.source_attribute_variation") },
+      { value: "value", label: this._t("rules.source_value") },
+      { value: "value_transition", label: this._t("rules.source_value_transition") },
+      { value: "value_variation", label: this._t("rules.source_value_variation") },
       { value: "unchanged", label: this._t("rules.source_unchanged") },
       { value: "jinja", label: this._t("rules.source_jinja") },
     ],
@@ -4794,7 +4804,7 @@ function hydrateRuleEditorControls() {
     configureSelector: (...args) => this._configureSelector(...args),
     onMenuSelected: (event) => this._handleSelected(event),
     onSourceChanged: (value) => {
-      const previousSource = this._editingRule.source ?? "state";
+      const previousSource = this._editingRule.source ?? "value";
       this._captureRuleDraft();
       this._editingRule.source = value;
       if (TRANSITION_RULE_SOURCES.has(value) && !TRANSITION_RULE_SOURCES.has(previousSource)) {
@@ -5209,11 +5219,11 @@ function historyConditionText(event) {
     if (event.condition_key) return this._conditionText(event);
     if (!event.source || !event.operator) return event.condition ?? "";
     const source = this._t(
-      event.source === "attribute"
+      (event.source === "attribute" || (event.source === "value" && event.attribute))
         ? "conditions.sources.attribute"
-        : event.source === "attribute_variation"
+        : (event.source === "attribute_variation" || (event.source === "value_variation" && event.attribute))
         ? "conditions.sources.attribute_variation"
-        : ["state_variation", "variation"].includes(event.source)
+        : ["value_variation", "state_variation", "variation"].includes(event.source)
         ? "conditions.sources.state_variation"
         : "conditions.sources.state",
       { attribute: event.attribute ?? "" },
