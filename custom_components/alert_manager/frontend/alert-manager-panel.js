@@ -5573,7 +5573,9 @@ function nativeCoherenceEntityCell(row, narrow = false) {
 }
 
 function openCoherenceLink(link) {
-    if (link?.type === "more_info") this._openMoreInfo(link.entity_id);
+    if (link?.type === "custom_rule") {
+      if (!this._readOnly) this._openRuleEditor(link.path, { navigate: true });
+    } else if (link?.type === "more_info") this._openMoreInfo(link.entity_id);
     else if (link?.type === "navigate") this._navigate(link.path, true);
 }
 

@@ -221,3 +221,16 @@ test("coherence keeps legacy entity reports and renders IEEE references with the
   delete context._coherence.checks;
   assert.doesNotMatch(coherenceStatsMarkup.call(context), /coherence.zha_status/);
 });
+
+test("coherence Open uses the rule editor and respects read-only access", () => {
+  const panel = new Panel();
+  panel._hass = { user: { is_admin: true } };
+  const opened = [];
+  panel._openRuleEditor = (...args) => opened.push(args);
+  const row = { link: { type: "custom_rule", path: "rule-1" } };
+  panel._nativeCoherenceActionCell(row).listeners.click({ stopPropagation() {} });
+  assert.deepEqual(opened, [["rule-1", { navigate: true }]]);
+  panel._hass.user.is_admin = false;
+  panel._nativeCoherenceActionCell(row).listeners.click({ stopPropagation() {} });
+  assert.equal(opened.length, 1);
+});

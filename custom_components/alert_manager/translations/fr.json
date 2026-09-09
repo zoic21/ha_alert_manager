@@ -132,7 +132,7 @@
         "source": "Configuration",
         "type": "Type"
       },
-      "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements.",
+      "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements. Les règles personnalisées d’Alert Manager sont également analysées.",
       "deleted_entities": {
         "button": "Entités supprimées",
         "close": "Fermer les entités supprimées",
@@ -156,6 +156,7 @@
       },
       "title": "Cohérence de la configuration",
       "types": {
+        "custom_rule": "Règle personnalisée",
         "automation": "Automatisation",
         "dashboard": "Dashboard",
         "file": "Fichier YAML",

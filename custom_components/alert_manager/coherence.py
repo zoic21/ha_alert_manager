@@ -31,6 +31,7 @@ from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from .coherence_alert import prepare_alert_report
 from .coherence_checks import CHECKS
+from .coherence_rules import RuleSnapshot, reference_nodes, snapshot_rules
 from .const import (
     COHERENCE_SCHEDULE_HOUR,
     COHERENCE_SCHEDULE_MINUTE,
@@ -678,6 +679,7 @@ def scan_configuration(
     scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
     ignored_entity_references: frozenset[str] = frozenset(),
     check_snapshots: dict[str, tuple[frozenset[str] | None, str]] | None = None,
+    custom_rules: tuple[RuleSnapshot, ...] = (),
 ) -> dict[str, Any]:
     """Synchronously scan configuration files; intended for an executor thread."""
     started = time.monotonic()
@@ -708,6 +710,12 @@ def scan_configuration(
                     _walk(document, root_context, source, state)
         except (OSError, UnicodeError, yaml.YAMLError):
             skipped_files += 1
+
+    for rule in custom_rules:
+        context = _Context("custom_rule", rule.name, "custom_rule", rule.id)
+        for field, node in reference_nodes(rule):
+            source = _Source(config_dir, f"alert_manager/rules/{rule.id}/{field}")
+            _walk(node, context, source, state)
 
     state.results.sort(
         key=lambda result: (
@@ -810,6 +818,8 @@ async def async_scan_configuration(
         )
 
     check_snapshots = {check.REFERENCE_TYPE: check.snapshot(hass) for check in CHECKS}
+    manager = hass.data.get(DATA_MANAGER)
+    custom_rules = snapshot_rules(manager.rules if manager is not None else ())
     return await hass.async_add_executor_job(
         scan_configuration,
         Path(hass.config.path()),
@@ -822,6 +832,7 @@ async def async_scan_configuration(
         scan_esphome,
         ignored_entity_references,
         check_snapshots,
+        custom_rules,
     )
 
 

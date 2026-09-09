@@ -253,6 +253,8 @@ condition_template: "{% set flow = states('binary_sensor.bayrol_flow_contact') %
 
 The **Coherence** page checks static entity references found in your Home Assistant configuration against the entities that currently exist.
 
+Custom rules (including disabled rules) are checked from an in-memory snapshot: selected entities and static references in Jinja conditions/messages. Dynamic references and plain message text are skipped. Results identify the rule field and the Open button opens its editor; these inputs do not increase the scanned-file count.
+
 When ZHA is fully loaded, the same scan also checks static `device_ieee` addresses in `zha_event` automation triggers and script/automation `wait_for_trigger` steps (modern and legacy syntax). It checks membership in the Home Assistant device registry for ZHA, not availability or current radio-network membership: disabled devices, remotes without entities and stale registered devices still count as present. Other Zigbee integrations do not satisfy these references. Templates, blueprint inputs and malformed IEEE values are skipped; blueprints are not expanded. If ZHA is absent the check is not applicable; incomplete setup or unavailable metadata is reported as a skipped check without missing-device findings. Ignore an exact IEEE address through the existing reference exclusions in Configuration.
 
 When an issue is found, Alert Manager shows where it comes from and, when possible, lets you open the affected automation, script, dashboard, template or other Home Assistant object directly. Results are stored between restarts and can also be exposed through `sensor.alert_manager_coherence_issue` so a failed coherence check can itself become something you monitor.

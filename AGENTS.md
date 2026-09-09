@@ -67,6 +67,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `websocket.py`, `services.py`, `permissions.py` | Thin permission-checked transport adapters and shared authorization for non-WebSocket actions; business logic stays in the manager. |
 | `coherence_alert.py` | Aggregate coherence alert metadata and conservative report coverage; feeds the ordinary manager candidate lifecycle. |
 | `coherence.py` | Explicit or scheduled reference scans, shared YAML traversal, exclusions, counts and reports, with filesystem work off the event loop. |
+| `coherence_rules.py` | Immutable custom-rule snapshots and reference-bearing fields for the shared coherence scanner. |
 | `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop; each check owns its traversal scopes and node selection in the existing scanner executor. |
 | `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters for counts/status, monitoring control, and actions. |
 | `const.py`, `manifest.json` | Shared constants/defaults, version/cache identity, and Home Assistant integration metadata. |

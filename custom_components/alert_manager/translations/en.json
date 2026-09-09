@@ -132,7 +132,7 @@
         "source": "Configuration",
         "type": "Type"
       },
-      "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability.",
+      "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability. Alert Manager custom rules are also checked.",
       "deleted_entities": {
         "button": "Deleted entities",
         "close": "Close deleted entities",
@@ -156,6 +156,7 @@
       },
       "title": "Configuration coherence",
       "types": {
+        "custom_rule": "Custom rule",
         "automation": "Automation",
         "dashboard": "Dashboard",
         "file": "YAML file",
