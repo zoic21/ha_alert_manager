@@ -2,6 +2,14 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.13 — September 9, 2026
+
+This is a development prerelease.
+
+### Fixes
+
+- Republish the development build from the corrected `main` contents after the automated `2.3.0-dev.12` publication captured an intermediate changelog-repair commit.
+
 ## 2.3.0-dev.12 — September 9, 2026
 
 This is a development prerelease.
