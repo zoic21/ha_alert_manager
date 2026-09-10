@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-beta.1 — September 10, 2026
+
+This is the first beta prerelease of 2.3.0, including all improvements and fixes from the 2.3.0 development releases documented below.
+
+### Improvements
+
+- Make alert details more compact across active, pending, acknowledged and historical alerts, with a smaller status banner and a separate timeline section.
+- Group notification delivery counts, profiles and last-send timestamps into compact activation/reminder and resolution rows, with a responsive mobile layout and no hidden delivery information.
+- Use “Activated at” for historical alerts and retain native absolute/relative timestamp switching and pending countdowns.
+- Move the alert ID into a discreet footer with an accessible copy action and translated success/failure feedback, including for read-only users.
+
 ## 2.3.0-dev.18 — September 10, 2026
 
 This is a development prerelease.
