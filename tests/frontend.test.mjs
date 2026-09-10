@@ -5691,3 +5691,26 @@ test("flapping details expose bounded evidence in live and historical alerts", (
     assert.doesNotMatch(panel._renderAlertDetails(kind, row), /Horaires non disponibles/);
   }
 });
+
+test("flapping evidence is collapsed, grouped by local day and retained on refresh", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const dates = [new Date(2026, 8, 10, 23, 58, 32), new Date(2026, 8, 10, 23, 59, 35), new Date(2026, 8, 11, 0, 1, 36)];
+  const row = { ...base, source: { type: "flapping", condition_params: {
+    count: 3, threshold: 3, occurrences: dates.map(date => date.getTime() / 1000),
+  } } };
+  for (const kind of ["overview", "history"]) {
+    const item = panel._alertDetailsItems(kind, row).find(item => item.key === "flapping-occurrences");
+    assert.deepEqual(item.groups.map(group => group.timestamps.length), [2, 1]);
+    assert.equal(item.groups[0].timestamps[0].value, "23:58:32");
+    const markup = panel._renderAlertDetails(kind, row);
+    assert.match(markup, /Voir les 3 horaires/);
+    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-flapping-occurrences[^>]*>/)[0], /\bexpanded\b/);
+    assert.equal((markup.match(/class="alert-details-occurrence-date"/g) || []).length, 2);
+    assert.ok(markup.indexOf("data-flapping-occurrences") < markup.indexOf(">Chronologie<"));
+  }
+  panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
+  assert.match(panel._renderAlertDetails("overview", row), /data-flapping-occurrences expanded/);
+  panel._alertDetailsDialog.alertId = "another-alert";
+  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-flapping-occurrences expanded/);
+});

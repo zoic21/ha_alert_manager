@@ -2097,12 +2097,20 @@ function alertDetailsItems(kind, row) {
       },
     ];
     if (flapping) {
+      const dateFormat = new Intl.DateTimeFormat(this._language, { dateStyle: "long" });
+      const timeFormat = new Intl.DateTimeFormat(this._language, { timeStyle: "medium" });
+      const groups = new Map();
+      for (const datetime of occurrenceDates) {
+        const date = new Date(datetime);
+        const day = dateFormat.format(date);
+        if (!groups.has(day)) groups.set(day, []);
+        groups.get(day).push({ datetime, value: timeFormat.format(date) });
+      }
       items.push({
         key: "flapping-occurrences",
-        label: this._t("alert_details.flapping_occurrences"),
-        value: occurrenceDates.length ? occurrenceDates.map((value) => this._date(value)).join("\n")
-          : this._t("alert_details.flapping_occurrences_unavailable"),
-        timestamps: occurrenceDates.map((datetime) => ({ datetime, value: this._date(datetime) })),
+        label: this._t("alert_details.flapping_show_times", { count: occurrenceDates.length }),
+        value: this._t("alert_details.flapping_occurrences_unavailable"),
+        groups: [...groups].map(([date, timestamps]) => ({ date, timestamps })),
       });
     }
     if (kind === "history") {
@@ -2216,9 +2224,7 @@ function renderAlertDetails(context) {
     )).join("");
     const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item${item.key === "entity-id" || String(item.value).length > 48 ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
-          <dd>${item.timestamps?.length
-            ? `<ol class="alert-details-occurrences">${item.timestamps.map((timestamp) => `<li><time datetime="${esc(timestamp.datetime)}">${esc(timestamp.value)}</time></li>`).join("")}</ol>`
-            : item.datetime
+          <dd>${item.datetime
             ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="${item.relative ? "relative" : "absolute"}" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
             : item.due
             ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
@@ -2226,13 +2232,14 @@ function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences", "flapping-occurrences"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));
     const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
+    const occurrences = items.find((item) => item.key === "flapping-occurrences");
     const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
-    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier)
+    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences)
       .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
     const section = (entries, title = "") => entries.length ? `<ha-card outlined class="alert-details-card">${title ? `<h3 class="alert-details-section-title">${esc(title)}</h3>` : ""}<dl class="alert-details-list">${renderItems(entries)}</dl></ha-card>` : "";
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
@@ -2247,7 +2254,15 @@ function renderAlertDetails(context) {
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
     ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
-    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
+    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl>
+      ${occurrences ? occurrences.groups.length ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-flapping-occurrences ${summary.occurrencesExpanded ? "expanded" : ""}>
+        <span slot="header">${esc(occurrences.label)}</span>
+        <div class="alert-details-occurrence-groups">${occurrences.groups.map((group) => `<section>
+          <h4 class="alert-details-occurrence-date">${esc(group.date)}</h4>
+          <ol class="alert-details-occurrences">${group.timestamps.map((timestamp) => `<li><time datetime="${esc(timestamp.datetime)}">${esc(timestamp.value)}</time></li>`).join("")}</ol>
+        </section>`).join("")}</div>
+      </ha-expansion-panel>` : `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
+    </ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
     ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
       ${["alert", "reminder", "resolved"].map((kind) => {
@@ -2296,6 +2311,8 @@ function renderAlertDetailsPanel(kind, row) {
         ? this._alertDetailsDialog.notice : null,
       items: this._alertDetailsItems(kind, row),
       summary: {
+        occurrencesExpanded: this._alertDetailsDialog?.alertId === row.id
+          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-flapping-occurrences]")?.expanded),
         alertId: row.id,
         timelineLabel: this._t("alert_details.timeline"),
         notificationsLabel: this._t("alert_details.notifications_title"),
@@ -7940,16 +7957,34 @@ const tableStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
+  .alert-details-occurrence-panel {
+    border-top: 1px solid var(--divider-color);
+    --expansion-panel-content-padding: 0;
+  }
+  .alert-details-occurrence-groups {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0 var(--ha-space-4, 16px) var(--ha-space-4, 16px);
+  }
+  .alert-details-occurrence-date {
+    margin: 8px 0;
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-normal, 400);
+  }
   .alert-details-occurrences {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 12px;
     margin: 0;
     padding: 0;
     list-style: none;
-    max-height: 240px;
-    overflow-y: auto;
     font-variant-numeric: tabular-nums;
   }
-  .alert-details-occurrences li + li {
-    margin-top: var(--ha-space-1, 4px);
+  .alert-details-occurrence-unavailable {
+    margin: 0;
+    padding: 0 16px 16px;
+    color: var(--secondary-text-color);
   }
   .alert-details-list {
     width: 100%;
@@ -9492,6 +9527,9 @@ const responsiveStyles = `
     .selection-actions {
       max-width: 44vw;
       overflow-x: auto;
+    }
+    .alert-details-occurrences {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .alert-details-list {
       width: 100%;

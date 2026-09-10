@@ -18,6 +18,7 @@
       "current_value": "Valeur actuelle",
       "trigger_value": "Valeur de déclenchement",
       "flapping_occurrences": "Occurrences",
+      "flapping_show_times": "Voir les {count} horaires",
       "flapping_occurrences_unavailable": "Horaires non disponibles pour cette alerte.",
       "title": "Détails de l’alerte",
       "notifications_alert": "Activation",

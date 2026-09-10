@@ -202,16 +202,34 @@ export const tableStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
+  .alert-details-occurrence-panel {
+    border-top: 1px solid var(--divider-color);
+    --expansion-panel-content-padding: 0;
+  }
+  .alert-details-occurrence-groups {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0 var(--ha-space-4, 16px) var(--ha-space-4, 16px);
+  }
+  .alert-details-occurrence-date {
+    margin: 8px 0;
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-normal, 400);
+  }
   .alert-details-occurrences {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 12px;
     margin: 0;
     padding: 0;
     list-style: none;
-    max-height: 240px;
-    overflow-y: auto;
     font-variant-numeric: tabular-nums;
   }
-  .alert-details-occurrences li + li {
-    margin-top: var(--ha-space-1, 4px);
+  .alert-details-occurrence-unavailable {
+    margin: 0;
+    padding: 0 16px 16px;
+    color: var(--secondary-text-color);
   }
   .alert-details-list {
     width: 100%;

@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-beta.5 — September 10, 2026
+
+This is a beta prerelease.
+
+### Improvements
+
+- Keep flapping occurrence counts visible while collapsing the timestamp evidence by default beneath the alert details.
+- Group occurrence times by local date and display seconds in a compact responsive grid, with bounded scrolling for long lists.
+- Preserve the expanded state when the same alert detail is refreshed.
+
 ## 2.3.0-beta.4 — September 10, 2026
 
 This is a beta prerelease.

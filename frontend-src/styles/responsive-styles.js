@@ -267,6 +267,9 @@ export const responsiveStyles = `
       max-width: 44vw;
       overflow-x: auto;
     }
+    .alert-details-occurrences {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .alert-details-list {
       width: 100%;
       min-width: 0;

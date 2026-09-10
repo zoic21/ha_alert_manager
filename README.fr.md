@@ -184,7 +184,7 @@ La surveillance des erreurs d’automatisation et de script n’a aucun délai p
 
 Le pack Flapping détecte les anomalies brèves mais répétées par source et entité, même si elles disparaissent avant le délai de déclenchement habituel. Il est désactivé par défaut : 5 occurrences en 1 heure déclenchent une alerte distincte, résolue après 30 minutes sans nouvelle occurrence. Ces réglages sont ajustables globalement, par pack source, par entité ou par règle personnalisée. Les packs Entités indisponibles et Connectivité sont présélectionnés comme sources ; les packs sources doivent être activés et les règles personnalisées peuvent participer via leur option de flapping.
 
-Le détail des alertes de flapping affiche les horaires des occurrences retenues et le nombre / seuil. Ces preuves suivent la fenêtre glissante bornée du détecteur, survivent aux redémarrages et sont conservées dans l’historique résolu ; les anciennes alertes sans ces données indiquent explicitement que les horaires sont indisponibles.
+Le détail des alertes de flapping garde le nombre / seuil visible. Une section repliée permet d’afficher les horaires des occurrences retenues, regroupés par date locale dans une grille compacte. Ces preuves suivent la fenêtre glissante bornée du détecteur, survivent aux redémarrages et sont conservées dans l’historique résolu ; les anciennes alertes sans ces données indiquent explicitement que les horaires sont indisponibles.
 
 ## Règles personnalisées
 
