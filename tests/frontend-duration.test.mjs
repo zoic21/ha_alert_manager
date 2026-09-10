@@ -128,7 +128,7 @@ test("notification reminders serialize native durations and clearing still means
 
 test("transition editor preserves separate hold and expiration durations", async () => {
   const { serializeRuleDraft, renderRuleConditionSection } = await import("../frontend-src/components/rule-editor.js");
-  const draft = { source: "attribute_transition", attribute: "mode", name: "Edge", entity_ids: ["sensor.test"], from_value: "A", to_value: "B", duration: 30, auto_resolve: 600 };
+  const draft = { source: "value_transition", attribute: "mode", name: "Edge", entity_ids: ["sensor.test"], from_value: "A", to_value: "B", duration: 30, auto_resolve: 600 };
   const form = { querySelector() { return null; }, querySelectorAll() { return []; }, elements: { namedItem(name) { return ({ auto_resolve: { value: { minutes: 10 }, dataset: { durationValue: "600" } }, duration: { value: { seconds: 30 }, dataset: { durationValue: "30" } } })[name]; } } };
   const payload = serializeRuleDraft(captureRuleDraftFromForm(form, draft));
   assert.equal(payload.duration, 30);

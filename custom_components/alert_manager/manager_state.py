@@ -25,6 +25,7 @@ from .const import (
     SIGNAL_ALERTS_UPDATED,
     SIGNAL_HISTORY_UPDATED,
     SIGNAL_NOTIFICATION_LIFECYCLE,
+    TRANSITION_SOURCES,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
 from .packs.base import PackGeneratedAlert
@@ -558,7 +559,7 @@ class _StateMixin:
             record = self._pop_record(alert_id)
             if record is None:
                 continue
-            if record.details.source in ("transition", "attribute_transition"):
+            if record.details.source in TRANSITION_SOURCES:
                 record.details.condition_params = {
                     **(record.details.condition_params or {}),
                     "resolution_reason": "automatic",
@@ -672,7 +673,7 @@ class _StateMixin:
             self._queued_expired_alert_ids.add(alert_id)
             self._queue_entity_evaluations(
                 (record.details.entity_id,)
-                if record.details.source in ("transition", "attribute_transition")
+                if record.details.source in TRANSITION_SOURCES
                 else ()
             )
             return

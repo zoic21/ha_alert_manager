@@ -196,16 +196,24 @@ OPERATORS: Final = (
     "outside",
     "unchanged",
 )
-VALUE_SOURCES: Final = (
-    "state",
+# Unified names deliberately differ from legacy names: even unversioned YAML
+# can distinguish a stale attribute on a legacy state rule from a selected target.
+LEGACY_RULE_SOURCES: Final = {
+    "state": "value",
+    "attribute": "value",
+    "variation": "value_variation",
+    "state_variation": "value_variation",
+    "attribute_variation": "value_variation",
+    "transition": "value_transition",
+    "attribute_transition": "value_transition",
+    "none": "jinja",
+}
+LEGACY_ATTRIBUTE_SOURCES: Final = (
     "attribute",
-    "state_variation",
     "attribute_variation",
-    "transition",
     "attribute_transition",
-    "unchanged",
-    "jinja",
 )
-TRANSITION_SOURCES: Final = ("transition", "attribute_transition")
-ATTRIBUTE_SOURCES: Final = ("attribute", "attribute_variation", "attribute_transition")
-VARIATION_SOURCES: Final = ("state_variation", "attribute_variation")
+ATTRIBUTE_SOURCES: Final = ("value", "value_variation", "value_transition")
+VALUE_SOURCES: Final = (*ATTRIBUTE_SOURCES, "unchanged", "jinja")
+TRANSITION_SOURCES: Final = ("value_transition",)
+VARIATION_SOURCES: Final = ("value_variation",)

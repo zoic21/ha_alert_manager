@@ -4297,7 +4297,7 @@ def test_custom_rule_operator(hass, entry, operator, state, expected):
     assert record.details.rule_name == "Rule"
     assert record.details.condition_key == "rule.generated"
     assert record.details.condition_params == {
-        "source": "state",
+        "source": "value",
         "attribute": None,
         "operator": operator,
         "expected": (
@@ -4331,7 +4331,7 @@ def test_custom_rule_message_does_not_replace_condition(hass, entry):
     assert details.condition != details.message
     assert details.condition_key == "rule.generated"
     assert details.condition_params == {
-        "source": "state",
+        "source": "value",
         "attribute": None,
         "operator": "equals",
         "expected": "on",
@@ -5368,7 +5368,7 @@ def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
     assert manager.records["rule:legacy:sensor.test"].detected_at == detected_at
     assert manager.records["rule:legacy:sensor.test"].details.rule_id == "legacy"
     assert manager.records["rule:legacy:sensor.test"].details.rule_name == "Legacy"
-    assert manager.records["rule:legacy:sensor.test"].details.source == "state"
+    assert manager.records["rule:legacy:sensor.test"].details.source == "value"
     assert manager.records["rule:legacy:sensor.test"].details.operator == "equals"
     assert manager.records["rule:legacy:sensor.test"].details.comparison_value == "on"
     assert hass.stores["alert_manager"]["config"]["monitoring_enabled"] is True

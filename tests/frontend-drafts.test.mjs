@@ -74,7 +74,7 @@ for (const narrow of [false, true]) {
 
 test("rule input/change events retain text, numbers and switches across navigation", async () => {
   const p = panel();
-  p._editingRule = { name: "Old", source: "state", operator: "above", value: "10", duration: 60 };
+  p._editingRule = { name: "Old", source: "value", operator: "above", value: "10", duration: 60 };
   const form = new Root();
   p.shadowRoot.controls.set("#rule-form", form);
   for (const [name, value] of [["name", "New"], ["duration", "123"], ["value", "42"]]) {
@@ -129,7 +129,7 @@ test("notification edits survive navigation and decline discard on close or repl
 
 test("native selector events retain source, operator, entities and cleared Jinja fields", async () => {
   const p = panel();
-  p._editingRule = { name: "Rule", source: "state", operator: "above", value: "10", duration: 60, condition_template: "old", message: "old" };
+  p._editingRule = { name: "Rule", source: "value", operator: "above", value: "10", duration: 60, condition_template: "old", message: "old" };
   p._ruleAttributeOptions = () => [];
   p._refreshRuleAttributeSelector = p._refreshRuleConditionSection = () => {};
   for (const id of ["source", "operator", "entity-ids", "attribute", "condition-template", "message-template"]) {
@@ -137,7 +137,7 @@ test("native selector events retain source, operator, entities and cleared Jinja
   }
   p._hydrateRuleEditorControls();
   for (const [id, type, value] of [
-    ["source", "selected", "attribute"],
+    ["source", "selected", "value"],
     ["operator", "selected", "below"],
     ["entity-ids", "value-changed", ["sensor.changed"]],
     ["attribute", "value-changed", "battery"],
@@ -152,7 +152,7 @@ test("native selector events retain source, operator, entities and cleared Jinja
   let sent;
   p._call = async (message) => { sent = message; return null; };
   await p._saveRule(new Root());
-  assert.equal(sent.rule.source, "attribute");
+  assert.equal(sent.rule.source, "value");
   assert.equal(sent.rule.operator, "below");
   assert.equal(sent.rule.attribute, "battery");
   assert.deepEqual(sent.rule.entity_ids, ["sensor.changed"]);

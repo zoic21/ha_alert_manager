@@ -1666,7 +1666,7 @@ class _RuntimeMixin:
             return now
         if rule.source == "unchanged":
             return state.last_updated
-        if rule.source == "state":
+        if rule.source == "value" and rule.attribute is None:
             return getattr(state, "last_changed", state.last_updated)
         return now
 

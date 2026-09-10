@@ -63,7 +63,7 @@ const rule = () => ({
   name: "Original",
   entity_ids: ["sensor.one"],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "equals",
   value: ["on"],
@@ -234,7 +234,7 @@ test("attribute mode uses a Home Assistant selector instead of a plain text inpu
   const panel = new AlertManagerPanel();
   panel._editingRule = {
     ...rule(),
-    source: "attribute",
+    source: "value",
     attribute: "unit_of_measurement",
   };
 
@@ -248,7 +248,7 @@ test("attribute suggestions merge first-level attributes across selected entitie
   const panel = new AlertManagerPanel();
   panel._editingRule = {
     ...rule(),
-    source: "attribute",
+    source: "value",
     attribute: "unit_of_measurement",
     entity_ids: ["sensor.one", "sensor.two", "sensor.missing"],
   };

@@ -1609,8 +1609,10 @@ def test_resolved_notification_omits_old_diagnostic(
     assert item.condition == "Previous failure"
 
 
-@pytest.mark.parametrize("source", ["transition", "attribute_transition"])
-def test_transition_expiration_cleans_reminders_without_recovery(hass, entry, source):
+@pytest.mark.parametrize("attribute", [None, "mode"])
+def test_transition_expiration_cleans_reminders_without_recovery(
+    hass, entry, attribute
+):
     """Expiration stops reminders but must never claim a return to normal."""
 
     async def scenario():
@@ -1624,7 +1626,8 @@ def test_transition_expiration_cleans_reminders_without_recovery(hass, entry, so
             **_event_data(
                 "rule:edge:sensor.test", entity_id="sensor.test", device_id=None
             ),
-            "source": source,
+            "source": "value_transition",
+            "attribute": attribute,
         }
         await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
         # Model a start already sent, exercising the actual resolution branch.

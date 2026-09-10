@@ -88,11 +88,11 @@ export function historyConditionText(event) {
     if (event.condition_key) return this._conditionText(event);
     if (!event.source || !event.operator) return event.condition ?? "";
     const source = this._t(
-      event.source === "attribute"
+      (event.source === "attribute" || (event.source === "value" && event.attribute))
         ? "conditions.sources.attribute"
-        : event.source === "attribute_variation"
+        : (event.source === "attribute_variation" || (event.source === "value_variation" && event.attribute))
         ? "conditions.sources.attribute_variation"
-        : ["state_variation", "variation"].includes(event.source)
+        : ["value_variation", "state_variation", "variation"].includes(event.source)
         ? "conditions.sources.state_variation"
         : "conditions.sources.state",
       { attribute: event.attribute ?? "" },

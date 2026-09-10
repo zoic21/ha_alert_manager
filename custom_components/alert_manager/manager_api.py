@@ -378,7 +378,7 @@ class _ApiMixin:
         if reference is None and rule.condition_template is None:
             if rule.source == "unchanged":
                 reference = state.last_updated
-            elif rule.source == "state":
+            elif rule.source == "value" and rule.attribute is None:
                 reference = getattr(state, "last_changed", state.last_updated)
         if reference is None:
             return {

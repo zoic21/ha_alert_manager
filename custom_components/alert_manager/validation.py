@@ -22,7 +22,7 @@ from .const import (
     MIN_HISTORY_LIMIT,
     TRANSITION_SOURCES,
 )
-from .models import Rule, safe_float, validate_label_list
+from .models import Rule, normalize_rule_source, safe_float, validate_label_list
 from .notifications import validate_notification_profiles
 from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
@@ -397,6 +397,7 @@ def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:
     """Validate a rule create/update payload and enforce immutable ids."""
     if not isinstance(data, dict):
         raise ValueError("Rule must be an object")
+    data = normalize_rule_source(data)
     if data.get("source") in TRANSITION_SOURCES:
         data = {
             "duration": 0,

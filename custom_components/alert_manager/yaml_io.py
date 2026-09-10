@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG, TRANSITION_SOURCES
-from .models import Rule
+from .models import Rule, normalize_rule_source
 from .notifications import validate_notification_profiles
 from .packs import PACKS_BY_ID
 from .validation import validate_config, validate_rule_payload
@@ -152,11 +152,8 @@ def rule_to_yaml_data(
 ) -> dict[str, Any]:
     """Return the documented rule shape in a stable human-readable order."""
     data = rule.as_dict() if isinstance(rule, Rule) else dict(rule)
-    source = data.get("source", "state")
-    if source == "none":
-        source = "jinja"
-    elif source == "variation":
-        source = "state_variation"
+    data = normalize_rule_source(data)
+    source = data["source"]
     result: dict[str, Any] = {
         "name": data.get("name"),
         "enabled": data.get("enabled", True),

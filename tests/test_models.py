@@ -309,7 +309,7 @@ def test_variation_rule_requires_a_starting_condition_and_numeric_operator():
             "condition_template": "{{ true }}",
         }
     )
-    assert rule.source == "state_variation"
+    assert rule.source == "value_variation"
     assert rule.matches(6) is True
 
     with pytest.raises(ValueError, match="numeric operator"):
@@ -382,8 +382,8 @@ def test_legacy_none_source_is_normalized_to_jinja() -> None:
             "condition_template": "{{ true }}",
         }
     )
-    assert variation.source == "state_variation"
-    assert variation.as_dict()["source"] == "state_variation"
+    assert variation.source == "value_variation"
+    assert variation.as_dict()["source"] == "value_variation"
 
 
 def test_storage_migration_renames_legacy_sources_idempotently() -> None:
@@ -415,12 +415,12 @@ def test_storage_migration_renames_legacy_sources_idempotently() -> None:
     migrated, changed = _migrate_config_shape(stored_config)
     assert changed is True
     assert migrated["rules"][0]["source"] == "jinja"
-    assert migrated["rules"][1]["source"] == "state_variation"
+    assert migrated["rules"][1]["source"] == "value_variation"
     assert migrated["rules"][0]["update_message_when_active"] is False
     remigrated, changed_again = _migrate_config_shape(migrated)
     assert changed_again is False
     assert remigrated["rules"][0]["source"] == "jinja"
-    assert remigrated["rules"][1]["source"] == "state_variation"
+    assert remigrated["rules"][1]["source"] == "value_variation"
 
     alerts = {
         "rule:test:sensor.test": {"details": {"source": "none"}},
@@ -429,7 +429,7 @@ def test_storage_migration_renames_legacy_sources_idempotently() -> None:
     assert _migrate_alert_value_sources(alerts) is True
     assert alerts["rule:test:sensor.test"]["details"]["source"] == "jinja"
     assert (
-        alerts["rule:variation:sensor.power"]["details"]["source"] == "state_variation"
+        alerts["rule:variation:sensor.power"]["details"]["source"] == "value_variation"
     )
     assert _migrate_alert_value_sources(alerts) is False
 

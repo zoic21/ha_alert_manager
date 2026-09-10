@@ -565,7 +565,7 @@ test("new rules start enabled with safe defaults", () => {
     entity_ids: [],
     label_ids: [],
     enabled: true,
-    source: "state",
+    source: "value",
     attribute: "",
     operator: "equals",
     value: [""],
@@ -591,7 +591,7 @@ test("valid YAML switches back to the visual rule editor", async () => {
     name: "Liste YAML",
     enabled: true,
     entity_ids: ["todo.liste_d_achats"],
-    source: "state",
+    source: "value",
     operator: "equals",
     value: ["0"],
     duration: 900,
@@ -1065,7 +1065,7 @@ const ruleValues = (changes = {}) => ({
   name: "Liste vide",
   entity_ids: ["todo.liste_d_achats"],
   enabled: true,
-  source: "state",
+  source: "value",
   attribute: "",
   operator: "equals",
   value: "0",
@@ -1324,7 +1324,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
       label_ids: [],
         entity_ids: ["todo.liste_d_achats"],
         enabled: true,
-        source: "state",
+        source: "value",
         attribute: null,
         operator: "equals",
         value: ["0"],
@@ -1636,7 +1636,7 @@ test("alert details read the current value from a configured attribute path", ()
   };
   panel._alerts.alerts = [currentAlert({
     value: 11,
-    source: "attribute",
+    source: "value",
     attribute: "metrics.temperature",
   })];
 
@@ -2712,7 +2712,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /le message reste figé à l’activation/);
   assert.match(editor, /id="rule-update-message-when-active"/);
   assert.doesNotMatch(editor, /component\.alert_manager\.config_panel\.rules\.condition_template/);
-  assert.match(editor, /class="field rule-attribute-field" hidden/);
+  assert.match(editor, /class="field rule-attribute-field" >/);
   assert.doesNotMatch(editor, /rule-enabled|id="rule-enabled"|Activer la règle/);
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
@@ -2750,7 +2750,7 @@ test("attribute input follows the selected rule source without rerendering", () 
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
-  panel._editingRule = { ...ruleValues(), source: "state" };
+  panel._editingRule = { ...ruleValues(), source: "value" };
   panel._hass = { states: {} };
   const source = {
     addEventListener(type, listener) { if (type === "selected") this.listener = listener; },
@@ -2766,11 +2766,12 @@ test("attribute input follows the selected rule source without rerendering", () 
   })[query] ?? null;
 
   panel._hydrateSelectors();
-  source.listener({ detail: { value: "attribute" } });
-  assert.equal(panel._editingRule.source, "attribute");
+  source.listener({ detail: { value: "value" } });
+  assert.equal(panel._editingRule.source, "value");
   assert.equal(attribute.hidden, false);
-  source.listener({ detail: { value: "state" } });
-  assert.equal(attribute.hidden, true);
+  source.listener({ detail: { value: "unchanged" } });
+  assert.match(panel._renderRuleEditor(), /class="field rule-attribute-field" hidden/);
+  assert.equal(panel._editingRule.attribute, "");
 });
 
 test("rule editor width is adjustable and clamped", () => {
@@ -3753,7 +3754,7 @@ test("custom rule choices use native Home Assistant selects", () => {
   panel._activeTab = "rules";
   panel._editingRule = {
     entity_ids: ["sensor.one"],
-    source: "attribute",
+    source: "value",
     operator: "above",
   };
   panel._hass = { states: {} };
@@ -3768,14 +3769,11 @@ test("custom rule choices use native Home Assistant selects", () => {
 
   panel._hydrateSelectors();
 
-  assert.equal(source.value, "attribute");
+  assert.equal(source.value, "value");
   assert.deepEqual(source.options, [
-    { value: "state", label: "État principal" },
-    { value: "attribute", label: "Attribut" },
-    { value: "transition", label: "Transition" },
-    { value: "attribute_transition", label: "Transition attribut" },
-    { value: "state_variation", label: "Variation de l’état principal" },
-    { value: "attribute_variation", label: "Variation d’un attribut" },
+    { value: "value", label: "Valeur" },
+    { value: "value_transition", label: "Transition" },
+    { value: "value_variation", label: "Variation" },
     { value: "unchanged", label: "Aucun changement" },
     { value: "jinja", label: "Jinja" },
   ]);
@@ -3811,7 +3809,7 @@ test("range operators render two numeric bounds and save both values", async () 
 
   const values = {
     name: "Temperature range",
-    source: "state",
+    source: "value",
     operator: "between",
     "lower-bound": "10",
     "upper-bound": "20",
@@ -3846,7 +3844,7 @@ test("selected no-change operator hides comparison values and stays source-speci
   panel._editingRule = {
     ...newRuleDefaults(),
     entity_ids: ["sensor.pool"],
-    source: "attribute",
+    source: "value",
     attribute: "data.*.key",
     operator: "unchanged",
     value: "",
@@ -3866,12 +3864,12 @@ test("selected no-change operator hides comparison values and stays source-speci
   };
   panel._render = () => {};
   await panel._saveRule(form(ruleValues({
-    source: "attribute",
+    source: "value",
     attribute: "data.*.key",
     operator: "unchanged",
   })));
 
-  assert.equal(calls[0].rule.source, "attribute");
+  assert.equal(calls[0].rule.source, "value");
   assert.equal(calls[0].rule.attribute, "data.*.key");
   assert.equal(calls[0].rule.operator, "unchanged");
   assert.equal(calls[0].rule.value, "");
@@ -3926,18 +3924,18 @@ test("normal comparison rules still save without a Jinja condition", async () =>
   await panel._saveRule(form(ruleValues({ entity_ids: ["sensor.one"] })));
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].rule.source, "state");
+  assert.equal(calls[0].rule.source, "value");
   assert.equal(calls[0].rule.condition_template, null);
 });
 
-test("attribute variation requires its attribute and starting Jinja condition", async () => {
+test("variation with an optional attribute requires its starting Jinja condition", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
   panel._editingRule = {
     ...newRuleDefaults(),
     entity_ids: ["sensor.one"],
-    source: "attribute_variation",
+    source: "value_variation",
     attribute: "metrics.power",
     operator: "above",
     value: "5",
@@ -3949,13 +3947,13 @@ test("attribute variation requires its attribute and starting Jinja condition", 
   assert.match(editor, /rule-condition-template" required aria-required="true"/);
   assert.match(editor, /Capture la référence au passage à true/);
   assert.match(editor, /<ha-selector id="rule-attribute" data-field="attribute"><\/ha-selector>/);
-  assert.match(editor, /pas les jokers/);
+  assert.match(editor, /sans joker/);
 
   const calls = [];
   panel._hass = { callWS: async (message) => { calls.push(message); return message.rule; } };
   panel._render = () => {};
   await panel._saveRule(form(ruleValues({
-    source: "attribute_variation",
+    source: "value_variation",
     attribute: "metrics.power",
     operator: "above",
     value: "5",
@@ -3970,13 +3968,13 @@ test("attribute variation requires its attribute and starting Jinja condition", 
 
   panel._editingRule.condition_template = "{{ true }}";
   await panel._saveRule(form(ruleValues({
-    source: "attribute_variation",
+    source: "value_variation",
     attribute: "metrics.power",
     operator: "above",
     value: "5",
   })));
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].rule.source, "attribute_variation");
+  assert.equal(calls[0].rule.source, "value_variation");
   assert.equal(calls[0].rule.attribute, "metrics.power");
 });
 
@@ -4202,14 +4200,14 @@ const historyEvent = (changes = {}) => ({
   integration: "mqtt",
   message: "Refroidir la baie",
   trigger_value: 34.5,
-  source: "state",
+  source: "value",
   operator: "above",
   comparison_value: 33,
   attribute: null,
   condition: "État supérieur à 33 °C",
   condition_key: "rule.generated",
   condition_params: {
-    source: "state", operator: "above", expected: "33", unit: "°C", duration: 0,
+    source: "value", operator: "above", expected: "33", unit: "°C", duration: 0,
   },
   unit: "°C",
   detected_at: "2026-08-26T12:00:00+00:00",
@@ -4421,7 +4419,7 @@ test("structured automatic and generated rule conditions are localized", () => {
     condition: "État supérieur à 9 pendant 900 s",
     condition_key: "rule.generated",
     condition_params: {
-      source: "state",
+      source: "value",
       attribute: null,
       operator: "above",
       expected: "9",
