@@ -229,6 +229,59 @@ export const tableStyles = `
     text-align: end;
     white-space: pre-wrap;
   }
+  .alert-details-introduction {
+    flex-shrink: 0;
+    margin: 0 0 16px;
+    padding: 0 4px;
+  }
+  .alert-details-introduction .alert-details-item {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .alert-details-introduction dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .alert-details-introduction dd {
+    text-align: start;
+  }
+  .alert-details-introduction [data-detail-key="message"] dd {
+    font-weight: var(--ha-font-weight-medium, 500);
+    margin-bottom: 4px;
+  }
+  .alert-details-introduction [data-detail-key="condition"] dd {
+    color: var(--secondary-text-color);
+  }
+  .alert-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+    margin: 0;
+    padding: 16px;
+  }
+  .alert-details-grid .alert-details-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+  }
+  .alert-details-grid dd {
+    text-align: start;
+    max-width: 100%;
+  }
+  .alert-details-grid [data-detail-key="current-value"] {
+    grid-column-start: 1;
+  }
+  .alert-details-grid .alert-details-item-wide {
+    grid-column: 1 / -1;
+  }
   .alert-details-card + .alert-details-card {
     margin-top: 12px;
   }
@@ -272,8 +325,19 @@ export const tableStyles = `
   .alert-details-identifier-value {
     flex: 1;
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
     user-select: text;
+  }
+  .alert-details-identifier-value[aria-expanded="true"] {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .alert-details-identifier-value:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
   .alert-details-copy-status:not(:empty) {
     flex-basis: 100%;

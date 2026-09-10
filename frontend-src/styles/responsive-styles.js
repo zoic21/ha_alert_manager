@@ -282,16 +282,26 @@ export const responsiveStyles = `
     .alert-details-section-title {
       padding-inline: 12px;
     }
+    .alert-details-grid {
+      gap: 12px 16px;
+      padding: 12px;
+    }
     .alert-details-notification {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-      gap: 6px 12px;
-      padding-inline: 12px;
+      display: block;
+      padding: 8px 12px 12px;
+    }
+    .alert-details-notification .alert-details-item {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+      gap: 12px;
+      margin-top: 6px;
     }
     .alert-details-notification .alert-details-item:first-child {
-      grid-column: 1 / -1;
-      flex-direction: row;
-      justify-content: space-between;
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      margin-top: 0;
+    }
+    .alert-details-notification dd {
+      text-align: end;
     }
     .rule-editor-resize {
       display: none;

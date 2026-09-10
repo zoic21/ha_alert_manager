@@ -28,7 +28,8 @@
       "notifications_title": "Notifications",
       "copy_id": "Copier l’ID de l’alerte",
       "copied": "Copié",
-      "copy_failed": "Copie impossible. Sélectionnez l’ID pour le copier."
+      "copy_failed": "Copie impossible. Sélectionnez l’ID pour le copier.",
+      "expand_id": "Afficher ou réduire l’identifiant complet"
     },
     "automatic": {
       "aria_enable": "Activer {name}",

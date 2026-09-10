@@ -28,7 +28,8 @@
       "notifications_title": "Notifications",
       "copy_id": "Copy alert ID",
       "copied": "Copied",
-      "copy_failed": "Unable to copy. Select the ID to copy it."
+      "copy_failed": "Unable to copy. Select the ID to copy it.",
+      "expand_id": "Expand or collapse the full identifier"
     },
     "automatic": {
       "aria_enable": "Enable {name}",

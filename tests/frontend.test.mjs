@@ -5583,7 +5583,10 @@ test("alert details group timeline and delivery facts without hiding data in any
     assert.match(markup, /alert-details-identifier" data-detail-key="alert-id"/);
     assert.match(markup, /data-action="copy-alert-id"/);
     const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
-    assert.ok(cards[0].includes('data-detail-key="condition"'));
+    assert.match(markup, /alert-details-introduction[\s\S]*data-detail-key="condition"[\s\S]*<ha-card/);
+    assert.ok(!cards[0].includes('data-detail-key="condition"'));
+    assert.ok(cards[0].includes('class="alert-details-grid"'));
+    assert.ok(cards[0].includes('data-detail-key="entity-id"'));
     assert.ok(!cards[0].includes('data-detail-key="detected"'));
     assert.ok(cards[1].includes('data-detail-key="detected"'));
     assert.ok(cards.every((card) => !card.includes('data-detail-key="alert-id"')));
@@ -5617,4 +5620,23 @@ test("copying an alert ID is read-only and reports clipboard success or failure"
     if (original) Object.defineProperty(globalThis, "navigator", original);
     else delete globalThis.navigator;
   }
+});
+
+
+test("alert identifier toggles in place and history belongs to the timeline", async () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  panel._alertDetailsDialog = { alertId: row.id, historyOccurrenceCount: 4 };
+  const markup = panel._renderAlertDetails("overview", row);
+  assert.match(markup, /data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false"/);
+  const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
+  assert.ok(!cards[0].includes('data-detail-key="history-occurrences"'));
+  assert.match(cards[1], /data-detail-key="history-occurrences"[\s\S]*data-action="open-alert-history"/);
+  assert.equal(canUsePanelAction(true, "toggle-alert-id", "overview"), true);
+  let expanded = "false";
+  const control = { getAttribute: () => expanded, setAttribute: (name, value) => { assert.equal(name, "aria-expanded"); expanded = value; } };
+  await handleAlertTableAction.call(panel, "toggle-alert-id", control, {});
+  assert.equal(expanded, "true");
+  await handleAlertTableAction.call(panel, "toggle-alert-id", control, {});
+  assert.equal(expanded, "false");
 });

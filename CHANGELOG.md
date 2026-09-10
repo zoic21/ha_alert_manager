@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-beta.2 — September 10, 2026
+
+This is a beta prerelease.
+
+### Improvements
+
+- Present the alert message and condition above a compact two-column information grid, keeping entity IDs and long values on full-width rows.
+- Move the clickable history occurrence count into the timeline section.
+- Align notification type/count, profiles and last-send timestamps in consistent mobile rows.
+- Keep the alert ID on one truncated line with keyboard-accessible expansion and full-value copying.
+
 ## 2.3.0-beta.1 — September 10, 2026
 
 This is the first beta prerelease of 2.3.0, including all improvements and fixes from the 2.3.0 development releases documented below.

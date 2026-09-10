@@ -712,7 +712,7 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
-    const timestamp = event.target.closest?.('[data-action="toggle-alert-timestamp"]'); if (timestamp) { event.preventDefault(); void this._handleClick({ target: timestamp }); return; }
+    const detailToggle = event.target.closest?.('[data-action="toggle-alert-timestamp"], [data-action="toggle-alert-id"]'); if (detailToggle) { event.preventDefault(); void this._handleClick({ target: detailToggle }); return; }
     const summary = event.target.closest?.('.summary [data-action="filter-summary-status"]');
     if (summary) {
       event.preventDefault();

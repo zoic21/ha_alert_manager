@@ -1018,7 +1018,7 @@ export function renderAlertDetails(context) {
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
+    const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item${item.key === "entity-id" || String(item.value).length > 48 ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
           <dd>${item.datetime
             ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="${item.relative ? "relative" : "absolute"}" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
@@ -1028,11 +1028,14 @@ export function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));
-    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && item !== identifier);
+    const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
+    const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
+    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier)
+      .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
     const section = (entries, title = "") => entries.length ? `<ha-card outlined class="alert-details-card">${title ? `<h3 class="alert-details-section-title">${esc(title)}</h3>` : ""}<dl class="alert-details-list">${renderItems(entries)}</dl></ha-card>` : "";
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
@@ -1045,7 +1048,8 @@ export function renderAlertDetails(context) {
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
-    ${section(details)}
+    ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
+    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
     ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
       ${["alert", "resolved"].map((kind) => {
@@ -1053,7 +1057,7 @@ export function renderAlertDetails(context) {
         return entries.length ? `<dl class="alert-details-notification">${renderItems(entries)}</dl>` : "";
       }).join("")}
     </ha-card>` : ""}
-    ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
+    ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }
 
 export function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
@@ -1098,6 +1102,7 @@ export function renderAlertDetailsPanel(kind, row) {
         timelineLabel: this._t("alert_details.timeline"),
         notificationsLabel: this._t("alert_details.notifications_title"),
         copyLabel: this._t("alert_details.copy_id"),
+        expandIdLabel: this._t("alert_details.expand_id"),
         iconPath,
         menuAction,
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
@@ -1461,6 +1466,12 @@ export function syncNarrowTableHeaderBackgrounds() {
 }
 
 export async function handleAlertTableAction(action, button, event) {
+  if (action === "toggle-alert-id") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    button.setAttribute("aria-expanded", button.getAttribute("aria-expanded") === "true" ? "false" : "true");
+    return true;
+  }
   if (action === "copy-alert-id") {
     event.preventDefault?.();
     event.stopPropagation?.();

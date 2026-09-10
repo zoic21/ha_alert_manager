@@ -95,7 +95,7 @@ const ACTION_ICONS = Object.freeze({
 const readOnlyTabs = new Set(["overview", "history"]);
 const readOnlyActions = new Set([
   "tab", "filter-summary-status", "clear-filter-section", "toggle-filter-option",
-  "open-alert-history", "toggle-alert-timestamp", "copy-alert-id", "close-alert-details",
+  "open-alert-history", "toggle-alert-timestamp", "copy-alert-id", "toggle-alert-id", "close-alert-details",
   "toggle-history-statistics", "history-statistics-period", "history-statistics-leader",
 ]);
 
@@ -2198,7 +2198,7 @@ function renderAlertDetails(context) {
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
       ` data-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}="${esc(value)}"`
     )).join("");
-    const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item" data-detail-key="${esc(item.key)}">
+    const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item${item.key === "entity-id" || String(item.value).length > 48 ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
           <dd>${item.datetime
             ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="${item.relative ? "relative" : "absolute"}" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
@@ -2208,11 +2208,14 @@ function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));
-    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && item !== identifier);
+    const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
+    const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
+    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier)
+      .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
     const section = (entries, title = "") => entries.length ? `<ha-card outlined class="alert-details-card">${title ? `<h3 class="alert-details-section-title">${esc(title)}</h3>` : ""}<dl class="alert-details-list">${renderItems(entries)}</dl></ha-card>` : "";
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
@@ -2225,7 +2228,8 @@ function renderAlertDetails(context) {
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
-    ${section(details)}
+    ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
+    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
     ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
       ${["alert", "resolved"].map((kind) => {
@@ -2233,7 +2237,7 @@ function renderAlertDetails(context) {
         return entries.length ? `<dl class="alert-details-notification">${renderItems(entries)}</dl>` : "";
       }).join("")}
     </ha-card>` : ""}
-    ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
+    ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }
 
 function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
@@ -2278,6 +2282,7 @@ function renderAlertDetailsPanel(kind, row) {
         timelineLabel: this._t("alert_details.timeline"),
         notificationsLabel: this._t("alert_details.notifications_title"),
         copyLabel: this._t("alert_details.copy_id"),
+        expandIdLabel: this._t("alert_details.expand_id"),
         iconPath,
         menuAction,
         timedAcknowledgeLabel: menuAction === "acknowledge" ? this._t("timed_acknowledgement.title") : "",
@@ -2641,6 +2646,12 @@ function syncNarrowTableHeaderBackgrounds() {
 }
 
 async function handleAlertTableAction(action, button, event) {
+  if (action === "toggle-alert-id") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    button.setAttribute("aria-expanded", button.getAttribute("aria-expanded") === "true" ? "false" : "true");
+    return true;
+  }
   if (action === "copy-alert-id") {
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -7938,6 +7949,59 @@ const tableStyles = `
     text-align: end;
     white-space: pre-wrap;
   }
+  .alert-details-introduction {
+    flex-shrink: 0;
+    margin: 0 0 16px;
+    padding: 0 4px;
+  }
+  .alert-details-introduction .alert-details-item {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .alert-details-introduction dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .alert-details-introduction dd {
+    text-align: start;
+  }
+  .alert-details-introduction [data-detail-key="message"] dd {
+    font-weight: var(--ha-font-weight-medium, 500);
+    margin-bottom: 4px;
+  }
+  .alert-details-introduction [data-detail-key="condition"] dd {
+    color: var(--secondary-text-color);
+  }
+  .alert-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+    margin: 0;
+    padding: 16px;
+  }
+  .alert-details-grid .alert-details-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+  }
+  .alert-details-grid dd {
+    text-align: start;
+    max-width: 100%;
+  }
+  .alert-details-grid [data-detail-key="current-value"] {
+    grid-column-start: 1;
+  }
+  .alert-details-grid .alert-details-item-wide {
+    grid-column: 1 / -1;
+  }
   .alert-details-card + .alert-details-card {
     margin-top: 12px;
   }
@@ -7981,8 +8045,19 @@ const tableStyles = `
   .alert-details-identifier-value {
     flex: 1;
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
     user-select: text;
+  }
+  .alert-details-identifier-value[aria-expanded="true"] {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .alert-details-identifier-value:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
   }
   .alert-details-copy-status:not(:empty) {
     flex-basis: 100%;
@@ -9404,16 +9479,26 @@ const responsiveStyles = `
     .alert-details-section-title {
       padding-inline: 12px;
     }
+    .alert-details-grid {
+      gap: 12px 16px;
+      padding: 12px;
+    }
     .alert-details-notification {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-      gap: 6px 12px;
-      padding-inline: 12px;
+      display: block;
+      padding: 8px 12px 12px;
+    }
+    .alert-details-notification .alert-details-item {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+      gap: 12px;
+      margin-top: 6px;
     }
     .alert-details-notification .alert-details-item:first-child {
-      grid-column: 1 / -1;
-      flex-direction: row;
-      justify-content: space-between;
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      margin-top: 0;
+    }
+    .alert-details-notification dd {
+      text-align: end;
     }
     .rule-editor-resize {
       display: none;
@@ -10128,7 +10213,7 @@ class AlertManagerPanel extends HTMLElement {
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
-    const timestamp = event.target.closest?.('[data-action="toggle-alert-timestamp"]'); if (timestamp) { event.preventDefault(); void this._handleClick({ target: timestamp }); return; }
+    const detailToggle = event.target.closest?.('[data-action="toggle-alert-timestamp"], [data-action="toggle-alert-id"]'); if (detailToggle) { event.preventDefault(); void this._handleClick({ target: detailToggle }); return; }
     const summary = event.target.closest?.('.summary [data-action="filter-summary-status"]');
     if (summary) {
       event.preventDefault();
