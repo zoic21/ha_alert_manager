@@ -18,7 +18,7 @@
       "current_value": "Valeur actuelle",
       "trigger_value": "Valeur de déclenchement",
       "title": "Détails de l’alerte",
-      "notifications_alert": "Activation et rappels",
+      "notifications_alert": "Activation",
       "notifications_resolved": "Résolution",
       "notifications_count": "{count} envoyée(s)",
       "notification_profiles": "Profils",
@@ -29,7 +29,8 @@
       "copy_id": "Copier l’ID de l’alerte",
       "copied": "Copié",
       "copy_failed": "Copie impossible. Sélectionnez l’ID pour le copier.",
-      "expand_id": "Afficher ou réduire l’identifiant complet"
+      "expand_id": "Afficher ou réduire l’identifiant complet",
+      "notifications_reminder": "Rappels"
     },
     "automatic": {
       "aria_enable": "Activer {name}",

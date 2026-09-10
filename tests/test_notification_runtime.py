@@ -1187,7 +1187,8 @@ def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
                 "delivered_targets": [],
             },
         )
-        assert record.notifications["alert"]["count"] == 2
+        assert record.notifications["alert"]["count"] == 1
+        assert record.notifications["reminder"]["count"] == 1
         assert (
             AlertRecord.from_dict(record.as_storage_dict()).notifications
             == record.notifications
@@ -1205,7 +1206,8 @@ def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
         )
         stats = manager.history[0].notifications
         assert replacement.notifications is None
-        assert stats["alert"]["count"] == 2
+        assert stats["alert"]["count"] == 1
+        assert stats["reminder"]["count"] == 1
         assert stats["resolved"] == {
             "count": 2,
             "profiles": {"profile": "Profile", "second": "Second"},
@@ -1248,7 +1250,8 @@ def test_batch_and_reminders_pass_occurrences_to_accounting(
         )
         await runtime._async_send_reminders()
         assert seen == [
-            (kind, [now.isoformat()]) for kind in ("matched", "started", "reminder")
+            (kind, [now.isoformat()])
+            for kind in ("matched", "matched_reminder", "started", "reminder")
         ]
         await runtime.async_unload()
 
@@ -1639,3 +1642,57 @@ def test_transition_expiration_cleans_reminders_without_recovery(
         await runtime.async_unload()
 
     asyncio.run(scenario())
+
+
+def test_reminder_only_profile_never_appears_in_activation(hass, entry, set_now):
+    """Keep matching profiles and successful delivery facts in their own category."""
+
+    async def scenario():
+        now = datetime(2026, 9, 10, 12, tzinfo=UTC)
+        set_now(now)
+        manager = AlertManager(hass, entry)
+        record = _active_record(now)
+        manager.records = {record.details.id: record}
+        profile = _profile(reminder_interval=60)
+        profile["default_policy"]["notify_on_start"] = False
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: config,
+            lambda: manager.records,
+            _DeliverySpy(),
+            manager._async_record_notification,
+        )
+        await runtime.async_setup()
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, record.as_public_dict())
+        assert "alert" not in record.notifications
+        assert record.notifications["reminder"] == {
+            "count": 0,
+            "profiles": {"profile": "Profile"},
+            "last_sent": None,
+        }
+        runtime._runtime["profile"][record.details.id].next_reminder = now
+        await runtime._async_send_reminders()
+        assert "alert" not in record.notifications
+        assert record.notifications["reminder"]["count"] == 1
+        assert record.notifications["reminder"]["last_sent"] == now.isoformat()
+        assert (
+            AlertRecord.from_dict(record.as_storage_dict()).notifications
+            == record.notifications
+        )
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_legacy_notification_totals_remain_activation_on_restore():
+    """Old combined totals need no migration or inference of reminder counts."""
+    record = _active_record(datetime(2026, 9, 10, tzinfo=UTC))
+    legacy = {"alert": {"count": 7, "profiles": {"p": "Old"}, "last_sent": None}}
+    data = {**record.as_storage_dict(), "notifications": legacy}
+    restored = AlertRecord.from_dict(data)
+    assert restored.notifications == legacy
+    assert "reminder" not in restored.notifications

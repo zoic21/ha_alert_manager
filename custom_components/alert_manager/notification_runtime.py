@@ -476,10 +476,13 @@ class NotificationRuntime:
                     if policy.reminder_interval is not None
                     else None
                 )
-                if self._record_notification is not None and (
-                    policy.notify_on_start or policy.reminder_interval is not None
-                ):
-                    await self._record_notification([item], profile, "matched", now)
+                if self._record_notification is not None:
+                    if policy.notify_on_start:
+                        await self._record_notification([item], profile, "matched", now)
+                    if policy.reminder_interval is not None:
+                        await self._record_notification(
+                            [item], profile, "matched_reminder", now
+                        )
                 if policy.notify_on_start:
                     self._queue_batch(profile_id, "started", item)
                 changed = True

@@ -502,7 +502,7 @@ function historyFacetValue(row, key) {
 
 function historyAssociatedProfiles(row) {
     const notifications = row.source?.notifications;
-    return { ...notifications?.alert?.profiles, ...notifications?.resolved?.profiles };
+    return { ...notifications?.alert?.profiles, ...notifications?.reminder?.profiles, ...notifications?.resolved?.profiles };
 }
 
 export function historyFacetOptions(rows, key, t) {
@@ -969,9 +969,8 @@ export function alertDetailsItems(kind, row) {
       });
     }
     if (row.status !== "pending" && row.notifications) {
-      for (const notificationKind of kind === "history" ? ["alert", "resolved"] : ["alert"]) {
-        const stats = row.notifications[notificationKind];
-        if (!stats) continue;
+      for (const notificationKind of kind === "history" ? ["alert", "reminder", "resolved"] : ["alert", "reminder"]) {
+        const stats = row.notifications[notificationKind] ?? { count: 0 };
         items.push({
           key: `notifications-${notificationKind}`,
           label: this._t(`alert_details.notifications_${notificationKind}`),
@@ -979,12 +978,12 @@ export function alertDetailsItems(kind, row) {
         }, {
           key: `notification-profiles-${notificationKind}`,
           label: this._t("alert_details.notification_profiles"),
-          value: Object.values(stats.profiles || {}).join(", "),
+          value: Object.values(stats.profiles || {}).join(", ") || "—",
         });
-        if (stats.last_sent) items.push({
+        items.push({
           key: `notification-last-${notificationKind}`,
           label: this._t("alert_details.notification_last"),
-          value: this._date(stats.last_sent),
+          value: stats.last_sent ? this._date(stats.last_sent) : "—",
           datetime: stats.last_sent,
         });
       }
@@ -1052,7 +1051,7 @@ export function renderAlertDetails(context) {
     ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
     ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
-      ${["alert", "resolved"].map((kind) => {
+      ${["alert", "reminder", "resolved"].map((kind) => {
         const entries = notifications.filter((item) => item.key.endsWith(`-${kind}`));
         return entries.length ? `<dl class="alert-details-notification">${renderItems(entries)}</dl>` : "";
       }).join("")}

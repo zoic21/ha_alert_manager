@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-beta.3 — September 10, 2026
+
+This is a beta prerelease.
+
+### Improvements
+
+- Track activation, reminder and resolution notifications separately, each with its own successful delivery count, associated profiles and last delivery time.
+- Show zero reminders explicitly instead of implying that activation notifications included reminders; keep reminder-only profiles out of activation details.
+- Preserve the separate counters across restarts and history archiving, and include reminder profiles in history filters and recurrence statistics without double-counting occurrences.
+- Retain older combined notification totals under Activation, with no historical reconstruction or special legacy display.
+
 ## 2.3.0-beta.2 — September 10, 2026
 
 This is a beta prerelease.

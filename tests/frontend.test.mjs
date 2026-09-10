@@ -5405,13 +5405,15 @@ test("associated notification profile filters use history facts, including unmat
     historyEvent({ event_id: "matched", notifications: { alert: { count: 0, profiles: { p1: "Same" } } } }),
     historyEvent({ event_id: "resolved", notifications: { resolved: { count: 1, profiles: { p1: "Same" } } } }),
     historyEvent({ event_id: "other", notifications: { alert: { count: 2, profiles: { p2: "Same" } } } }),
+    historyEvent({ event_id: "reminder", notifications: { reminder: { count: 1, profiles: { p1: "Same", p3: "Reminder only" } } } }),
     historyEvent({ event_id: "legacy" }),
   ]);
-  assert.deepEqual(new Set(panel._filteredTableRows("history", rows).map((row) => row.id)), new Set(["matched", "resolved"]));
+  assert.deepEqual(new Set(panel._filteredTableRows("history", rows).map((row) => row.id)), new Set(["matched", "resolved", "reminder"]));
   assert.equal(panel._filterCount("history"), 1);
   assert.match(panel._renderFilterPane("history", rows), /data-filter-value="id:p1"/);
+  assert.match(panel._renderFilterPane("history", rows), /data-filter-value="id:p3"/);
   panel._resetTableFilters("history");
-  assert.equal(panel._filteredTableRows("history", rows).length, 4);
+  assert.equal(panel._filteredTableRows("history", rows).length, 5);
 });
 
 test("statistics drilldown integrates with native history filtering and reset", () => {
@@ -5593,7 +5595,8 @@ test("alert details group timeline and delivery facts without hiding data in any
     if (status === "pending") assert.equal(cards.length, 2);
     else {
       assert.match(cards[2], /alert-details-notification/);
-      assert.match(cards[2], /Activation et rappels/);
+      assert.match(cards[2], /Activation/);
+      assert.match(cards[2], /Rappels/);
       assert.match(cards[2], /0 envoyée/);
     }
     if (kind === "history") {
@@ -5639,4 +5642,24 @@ test("alert identifier toggles in place and history belongs to the timeline", as
   assert.equal(expanded, "true");
   await handleAlertTableAction.call(panel, "toggle-alert-id", control, {});
   assert.equal(expanded, "false");
+});
+
+
+test("notification details separate reminders and retain legacy activation totals", () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  row.notifications = { alert: { count: 7, profiles: { a: "Initial" }, last_sent: "2026-09-10T10:00:00+00:00" } };
+  let items = panel._alertDetailsItems("history", row);
+  assert.equal(items.find((item) => item.key === "notifications-alert").value, "7 envoyée(s)");
+  assert.equal(items.find((item) => item.key === "notifications-reminder").value, "0 envoyée(s)");
+  assert.equal(items.find((item) => item.key === "notification-profiles-reminder").value, "—");
+  assert.equal(items.find((item) => item.key === "notification-last-reminder").value, "—");
+  row.notifications.reminder = { count: 2, profiles: { b: "Reminder only" }, last_sent: "2026-09-10T11:00:00+00:00" };
+  items = panel._alertDetailsItems("history", row);
+  assert.equal(items.find((item) => item.key === "notification-profiles-alert").value, "Initial");
+  assert.equal(items.find((item) => item.key === "notification-profiles-reminder").value, "Reminder only");
+  assert.equal(items.find((item) => item.key === "notifications-reminder").value, "2 envoyée(s)");
+  const markup = panel._renderAlertDetails("history", row);
+  assert.equal((markup.match(/<dl class="alert-details-notification">/g) || []).length, 3);
+  assert.doesNotMatch(markup, /Activation et rappels/);
 });

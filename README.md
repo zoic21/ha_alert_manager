@@ -328,7 +328,7 @@ Titles distinguish **🚨 new alerts**, **🔔 reminders** and **✅ recoveries*
 
 Each profile shows its successful sends for the current hour and previous 23 hours (an approximate 24-hour window), since integration startup. These counters are kept only in memory and reset on restart/reload. A grouped send counts once even with several targets; tests and complete failures are excluded.
 
-Alert details show notifications from the built-in profiles: delivery count (including reminders), matching profiles even without reminders, and last delivery time. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History keeps recovery deliveries, their profiles and last delivery time separately. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
+Alert details track activation and reminder notifications separately, each with its delivery count, matching profiles and last delivery time. Reminder-only profiles appear under reminders. A zero count means no successful delivery of that type. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History also keeps recovery deliveries, their profiles and last delivery time separately. Older combined activation/reminder totals are retained under Activation. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
 
 ### Using your own notification automations
 

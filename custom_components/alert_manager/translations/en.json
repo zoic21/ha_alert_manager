@@ -18,7 +18,7 @@
       "current_value": "Current value",
       "trigger_value": "Trigger value",
       "title": "Alert details",
-      "notifications_alert": "Activation and reminders",
+      "notifications_alert": "Activation",
       "notifications_resolved": "Resolution",
       "notifications_count": "{count} sent",
       "notification_profiles": "Profiles",
@@ -29,7 +29,8 @@
       "copy_id": "Copy alert ID",
       "copied": "Copied",
       "copy_failed": "Unable to copy. Select the ID to copy it.",
-      "expand_id": "Expand or collapse the full identifier"
+      "expand_id": "Expand or collapse the full identifier",
+      "notifications_reminder": "Reminders"
     },
     "automatic": {
       "aria_enable": "Enable {name}",

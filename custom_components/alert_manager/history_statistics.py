@@ -72,10 +72,10 @@ def aggregate_history(
             )
             row["occurrences"] += 1
             row["total_duration_seconds"] += duration
-        # Association facts include matched-but-unsent profiles. Union both
-        # lifecycle categories: this counts occurrences, never deliveries.
+        # Association facts include matched-but-unsent profiles. Union all
+        # notification categories: this counts occurrences, never deliveries.
         profiles = {}
-        for category in ("alert", "resolved"):
+        for category in ("alert", "reminder", "resolved"):
             profiles.update(
                 (entry.notifications or {}).get(category, {}).get("profiles", {})
             )

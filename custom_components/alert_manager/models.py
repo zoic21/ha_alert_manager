@@ -358,7 +358,7 @@ def _notification_summary(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
     result = {}
-    for kind in ("alert", "resolved"):
+    for kind in ("alert", "reminder", "resolved"):
         data = value.get(kind)
         if not isinstance(data, dict):
             continue

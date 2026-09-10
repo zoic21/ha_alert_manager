@@ -50,13 +50,18 @@ class _StateMixin:
 
         def updated(summary: dict[str, Any] | None) -> dict[str, Any]:
             result = dict(summary or {})
-            key = "resolved" if kind == "resolved" else "alert"
+            if kind in ("reminder", "matched_reminder"):
+                key = "reminder"
+            elif kind == "resolved":
+                key = "resolved"
+            else:
+                key = "alert"
             stats = dict(result.get(key, {"count": 0, "last_sent": None}))
             stats["profiles"] = {
                 **stats.get("profiles", {}),
                 profile["id"]: profile["name"],
             }
-            if kind != "matched":
+            if kind not in ("matched", "matched_reminder"):
                 stats["count"] += 1
                 previous = stats["last_sent"]
                 stats["last_sent"] = (

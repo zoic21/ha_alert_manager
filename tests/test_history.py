@@ -402,6 +402,7 @@ def test_statistics_pack_rule_and_profile_associations(hass, entry, set_now):
     base = manager.history[0]
     notifications = {
         "alert": {"count": 0, "profiles": {"p1": "Matched only"}},
+        "reminder": {"count": 3, "profiles": {"p1": "Matched only", "p3": "Reminder"}},
         "resolved": {"count": 8, "profiles": {"p1": "Matched only", "p2": "Other"}},
     }
     events = (
@@ -415,6 +416,7 @@ def test_statistics_pack_rule_and_profile_associations(hass, entry, set_now):
     assert groups["profile"] == [
         {"id": "p1", "name": "Matched only", "occurrences": 1},
         {"id": "p2", "name": "Other", "occurrences": 1},
+        {"id": "p3", "name": "Reminder", "occurrences": 1},
     ]
     assert notifications["resolved"]["count"] == 8
 
