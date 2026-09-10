@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-dev.18 — September 10, 2026
+
+This is a development prerelease.
+
+### Improvements
+
+- Unify custom-rule state and attribute variants under canonical `value`, `value_variation` and `value_transition` sources; the optional Attribute field now determines whether the operation targets state or an attribute.
+- Migrate existing stored rules and YAML to the canonical sources while keeping legacy state rules from inheriting stale attributes and requiring legacy attribute rules to keep a valid attribute.
+- Migrate active alert sources during storage loading, before startup reconciliation, preserving alert identity, acknowledgements and expiration while runtime evaluation and notifications use canonical sources only.
+- Keep historical legacy sources readable and update rule testing, condition display, translations and documentation for the unified operations.
+
 ## 2.3.0-dev.17 — September 9, 2026
 
 This is a development prerelease.
@@ -1300,7 +1311,7 @@ Cette version reste une prérelease.
 
 - Correction du positionnement horizontal du volet de création ou modification
   d’une règle personnalisée sur les écrans larges.
-- Source frontend et bundle distribué régénérés et synchronisés pour garantir
+- Source frontend et bundle distribué régénéré et synchronisés pour garantir
   un build reproductible dans la CI.
 
 ## 1.5.5 — 26 août 2026
