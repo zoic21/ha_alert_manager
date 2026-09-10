@@ -181,6 +181,8 @@ Automation and script errors have no delay by default. A successful completed ex
 
 The Flapping pack detects repeated short anomalies per source and entity, even if they clear before the normal trigger delay. It is disabled by default: 5 occurrences within 1 hour trigger a separate alert, which resolves after 30 minutes without another occurrence. These settings can be adjusted globally, per source pack, per entity or per custom rule. Unavailable entities and connectivity are the preselected sources; source packs must be enabled, and custom rules can participate through their flapping option.
 
+Flapping alert details show the retained occurrence timestamps and the count / threshold. This evidence follows the detector’s bounded rolling window, survives restarts and is saved in resolved history; older alerts without this metadata explicitly indicate that timestamps are unavailable.
+
 ## Custom rules
 
 For everything else, create your own rules directly from the Alert Manager panel.

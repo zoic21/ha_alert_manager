@@ -5663,3 +5663,31 @@ test("notification details separate reminders and retain legacy activation total
   assert.equal((markup.match(/<dl class="alert-details-notification">/g) || []).length, 3);
   assert.doesNotMatch(markup, /Activation et rappels/);
 });
+
+
+test("flapping details expose bounded evidence in live and historical alerts", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const timestamps = [1789049252, 1789049915, 1789050694];
+  for (const kind of ["overview", "history"]) {
+    const row = { ...base, value: "3", source: { type: "flapping", condition_params: {
+      count: 3, threshold: 5, occurrences: timestamps,
+    } } };
+    const items = panel._alertDetailsItems(kind, row);
+    assert.equal(items.find((item) => item.key === "trigger-value").label, "Occurrences");
+    assert.equal(items.find((item) => item.key === "trigger-value").value, "3 / 5");
+    const markup = panel._renderAlertDetails(kind, row);
+    assert.match(markup, /alert-details-occurrences/);
+    for (const timestamp of timestamps) {
+      assert.ok(markup.includes(`<time datetime="${new Date(timestamp * 1000).toISOString()}">`));
+    }
+    row.source.condition_params = {};
+    const legacy = panel._renderAlertDetails(kind, row);
+    assert.match(legacy, /Horaires non disponibles/);
+    assert.doesNotMatch(legacy, /class="alert-details-occurrences"/);
+    assert.equal(panel._alertDetailsItems(kind, row).find((item) => item.key === "trigger-value").value, "3");
+    row.source.type = "unavailable";
+    assert.equal(panel._alertDetailsItems(kind, row).find((item) => item.key === "trigger-value").label, "Valeur de déclenchement");
+    assert.doesNotMatch(panel._renderAlertDetails(kind, row), /Horaires non disponibles/);
+  }
+});

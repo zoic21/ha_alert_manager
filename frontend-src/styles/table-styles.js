@@ -202,6 +202,17 @@ export const tableStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
+  .alert-details-occurrences {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 240px;
+    overflow-y: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .alert-details-occurrences li + li {
+    margin-top: var(--ha-space-1, 4px);
+  }
   .alert-details-list {
     width: 100%;
     min-width: 0;

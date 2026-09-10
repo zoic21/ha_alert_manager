@@ -588,6 +588,11 @@ def test_new_occurrence_extends_resolution_and_timer_resolves(hass, entry, set_n
     record = manager.records[alert_id]
     assert record.expires_at == start + timedelta(seconds=110)
     assert record.expires_at > first_deadline
+    expected_occurrences = [
+        (start + timedelta(seconds=seconds)).timestamp() for seconds in (10, 50)
+    ]
+    assert record.details.condition_params["occurrences"] == expected_occurrences
+    assert record.details.condition_params["threshold"] == 2
 
     timer = next(
         item
@@ -604,6 +609,10 @@ def test_new_occurrence_extends_resolution_and_timer_resolves(hass, entry, set_n
     run(fire_timer())
     assert alert_id not in manager.records
     assert manager.history[0].id == alert_id
+    assert manager.history[0].condition_params["occurrences"] == expected_occurrences
+    assert manager.history[0].condition_params["threshold"] == 2
+    manager._pack_runtime["flapping"]["unavailable:sensor.test"].clear()
+    assert manager.history[0].condition_params["occurrences"] == expected_occurrences
 
 
 def test_active_alert_and_occurrences_survive_restart(hass, entry, set_now):
@@ -624,6 +633,11 @@ def test_active_alert_and_occurrences_survive_restart(hass, entry, set_now):
     run(reloaded.async_setup())
     assert reloaded.records[alert_id].status is AlertStatus.ACTIVE
     assert reloaded.records[alert_id].expires_at == expected_deadline
+    assert reloaded.records[alert_id].details.condition_params["occurrences"] == [
+        start.timestamp(),
+        (start + timedelta(seconds=10)).timestamp(),
+    ]
+    assert reloaded.records[alert_id].details.condition_params["threshold"] == 2
     assert reloaded._pack_runtime["flapping"]
     assert any(
         timer["point"] == expected_deadline and not timer["cancelled"]

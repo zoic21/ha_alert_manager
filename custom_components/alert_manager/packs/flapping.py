@@ -227,6 +227,8 @@ def _process_occurrences(
                 condition_key="automatic.flapping",
                 condition_params={
                     "count": len(timestamps),
+                    "threshold": threshold,
+                    "occurrences": list(timestamps),
                     "duration": _compact_duration(window),
                     "duration_seconds": window,
                     "source": source_name,

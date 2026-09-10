@@ -863,6 +863,12 @@ export function alertDetailsItems(kind, row) {
       action,
       data,
     });
+    const flapping = row.source?.type === "flapping";
+    const params = flapping ? row.source.condition_params ?? {} : {};
+    const occurrenceDates = (Array.isArray(params.occurrences) ? params.occurrences : [])
+      .filter((value) => typeof value === "number" && Number.isFinite(value)
+        && Number.isFinite(new Date(value * 1000).getTime()))
+      .map((value) => new Date(value * 1000).toISOString());
     const items = [
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
@@ -898,8 +904,10 @@ export function alertDetailsItems(kind, row) {
       }]),
       {
         key: "trigger-value",
-        label: this._t("alert_details.trigger_value"),
-        value: row.value,
+        label: this._t(flapping ? "alert_details.flapping_occurrences" : "alert_details.trigger_value"),
+        value: flapping && Number.isInteger(params.threshold) && params.threshold >= 2
+          ? `${params.count ?? row.value} / ${params.threshold}`
+          : row.value,
       },
       {
         key: "detected",
@@ -908,6 +916,15 @@ export function alertDetailsItems(kind, row) {
         datetime: row.detected,
       },
     ];
+    if (flapping) {
+      items.push({
+        key: "flapping-occurrences",
+        label: this._t("alert_details.flapping_occurrences"),
+        value: occurrenceDates.length ? occurrenceDates.map((value) => this._date(value)).join("\n")
+          : this._t("alert_details.flapping_occurrences_unavailable"),
+        timestamps: occurrenceDates.map((datetime) => ({ datetime, value: this._date(datetime) })),
+      });
+    }
     if (kind === "history") {
       items.push(
         {
@@ -1019,7 +1036,9 @@ export function renderAlertDetails(context) {
     )).join("");
     const renderItems = (entries) => `${entries.map((item) => `<div class="alert-details-item${item.key === "entity-id" || String(item.value).length > 48 ? " alert-details-item-wide" : ""}" data-detail-key="${esc(item.key)}">
           <dt>${esc(item.label)}</dt>
-          <dd>${item.datetime
+          <dd>${item.timestamps?.length
+            ? `<ol class="alert-details-occurrences">${item.timestamps.map((timestamp) => `<li><time datetime="${esc(timestamp.datetime)}">${esc(timestamp.value)}</time></li>`).join("")}</ol>`
+            : item.datetime
             ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(item.datetime)}" data-timestamp-mode="${item.relative ? "relative" : "absolute"}" role="button" tabindex="0">${esc(item.value)}</span>${item.suffix ? ` ${esc(item.suffix)}` : ""}`
             : item.due
             ? `<span data-due="${esc(item.due)}">${esc(item.value)}</span>`
@@ -1027,7 +1046,7 @@ export function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences", "flapping-occurrences"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));

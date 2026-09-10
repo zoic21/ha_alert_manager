@@ -17,6 +17,8 @@
       "aria_menu": "Alert actions",
       "current_value": "Current value",
       "trigger_value": "Trigger value",
+      "flapping_occurrences": "Occurrences",
+      "flapping_occurrences_unavailable": "Occurrence times are not available for this alert.",
       "title": "Alert details",
       "notifications_alert": "Activation",
       "notifications_resolved": "Resolution",

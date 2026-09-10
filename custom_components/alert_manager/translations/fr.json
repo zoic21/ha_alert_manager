@@ -17,6 +17,8 @@
       "aria_menu": "Actions de l’alerte",
       "current_value": "Valeur actuelle",
       "trigger_value": "Valeur de déclenchement",
+      "flapping_occurrences": "Occurrences",
+      "flapping_occurrences_unavailable": "Horaires non disponibles pour cette alerte.",
       "title": "Détails de l’alerte",
       "notifications_alert": "Activation",
       "notifications_resolved": "Résolution",

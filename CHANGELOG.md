@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-beta.4 — September 10, 2026
+
+This is a beta prerelease.
+
+### Improvements
+
+- Show the occurrence timestamps retained by the flapping detector in live and historical alert details, together with the recorded occurrence count and threshold.
+- Preserve this bounded evidence through restart and history archiving using existing alert metadata, without additional collection or polling.
+- Explicitly indicate unavailable timestamps on older alerts instead of reconstructing historical evidence.
+
 ## 2.3.0-beta.3 — September 10, 2026
 
 This is a beta prerelease.
