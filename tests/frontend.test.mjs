@@ -4,6 +4,9 @@ import test from "node:test";
 
 import { handleNotificationProfileMenuSelection } from "../frontend-src/components/notification-profiles.js";
 
+import { handleAlertTableAction } from "../frontend-src/components/alert-table.js";
+import { canUsePanelAction } from "../frontend-src/utils/permissions.js";
+
 import { compactCss } from "./frontend-test-helpers.mjs";
 
 const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
@@ -5566,4 +5569,52 @@ test("non-admin sessions cannot restore an administrator cache or follow a priva
   const button = { dataset: { action: "tab", tab: "settings" }, closest() { return this; } };
   await reader._handleClick({ target: button });
   assert.equal(reader._activeTab, "overview");
+});
+
+
+test("alert details group timeline and delivery facts without hiding data in any state", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const status of ["active", "pending", "acknowledged", "resolved"]) {
+    const kind = status === "resolved" ? "history" : "overview";
+    const row = { ...base, status, notifications: { alert: { count: 0, profiles: {} }, resolved: { count: 1, profiles: { a: "Loïc" } } } };
+    const markup = panel._renderAlertDetails(kind, row);
+    assert.match(markup, /alert-details-section-title">Chronologie/);
+    assert.match(markup, /alert-details-identifier" data-detail-key="alert-id"/);
+    assert.match(markup, /data-action="copy-alert-id"/);
+    const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
+    assert.ok(cards[0].includes('data-detail-key="condition"'));
+    assert.ok(!cards[0].includes('data-detail-key="detected"'));
+    assert.ok(cards[1].includes('data-detail-key="detected"'));
+    assert.ok(cards.every((card) => !card.includes('data-detail-key="alert-id"')));
+    if (status === "pending") assert.equal(cards.length, 2);
+    else {
+      assert.match(cards[2], /alert-details-notification/);
+      assert.match(cards[2], /Activation et rappels/);
+      assert.match(cards[2], /0 envoyée/);
+    }
+    if (kind === "history") {
+      assert.match(cards[1], /Activée le/);
+      assert.match(cards[2], /Résolution/);
+    }
+  }
+});
+
+test("copying an alert ID is read-only and reports clipboard success or failure", async () => {
+  const panel = tablePanel();
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const status = { textContent: "" };
+  const button = { dataset: { alertId: "alert-id" }, parentElement: { querySelector: () => status } };
+  assert.equal(canUsePanelAction(true, "copy-alert-id", "overview"), true);
+  try {
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { clipboard: { writeText: async (value) => assert.equal(value, "alert-id") } } });
+    assert.equal(await handleAlertTableAction.call(panel, "copy-alert-id", button, {}), true);
+    assert.equal(status.textContent, "Copié");
+    navigator.clipboard.writeText = async () => { throw new Error("denied"); };
+    await handleAlertTableAction.call(panel, "copy-alert-id", button, {});
+    assert.match(status.textContent, /Copie impossible/);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "navigator", original);
+    else delete globalThis.navigator;
+  }
 });

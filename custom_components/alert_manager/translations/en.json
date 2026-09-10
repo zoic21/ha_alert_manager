@@ -18,11 +18,17 @@
       "current_value": "Current value",
       "trigger_value": "Trigger value",
       "title": "Alert details",
-      "notifications_alert": "Notifications",
-      "notifications_resolved": "Notifications · recovery",
+      "notifications_alert": "Activation and reminders",
+      "notifications_resolved": "Resolution",
       "notifications_count": "{count} sent",
       "notification_profiles": "Profiles",
-      "notification_last": "Last sent"
+      "notification_last": "Last sent",
+      "activated_at": "Activated at",
+      "timeline": "Timeline",
+      "notifications_title": "Notifications",
+      "copy_id": "Copy alert ID",
+      "copied": "Copied",
+      "copy_failed": "Unable to copy. Select the ID to copy it."
     },
     "automatic": {
       "aria_enable": "Enable {name}",

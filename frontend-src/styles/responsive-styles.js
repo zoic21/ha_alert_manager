@@ -277,11 +277,21 @@ export const responsiveStyles = `
       padding: 7px var(--ha-space-3, 12px);
     }
     .alert-details-summary {
-      padding: var(--ha-space-3, 12px);
+      padding: 8px 12px;
     }
-    .alert-details-status-icon {
-      width: 36px;
-      height: 36px;
+    .alert-details-section-title {
+      padding-inline: 12px;
+    }
+    .alert-details-notification {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+      gap: 6px 12px;
+      padding-inline: 12px;
+    }
+    .alert-details-notification .alert-details-item:first-child {
+      grid-column: 1 / -1;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 12px;
     }
     .rule-editor-resize {
       display: none;

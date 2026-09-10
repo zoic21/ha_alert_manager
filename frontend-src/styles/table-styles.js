@@ -153,7 +153,7 @@ export const tableStyles = `
     align-items: center;
     gap: var(--ha-space-3, 12px);
     margin-bottom: var(--ha-space-4, 16px);
-    padding: var(--ha-space-3, 12px) var(--ha-space-4, 16px);
+    padding: 8px var(--ha-space-4, 16px);
     border-radius: var(--ha-border-radius-lg, 12px);
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
@@ -172,8 +172,8 @@ export const tableStyles = `
   }
   .alert-details-status-icon {
     display: inline-flex;
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     flex: none;
     align-items: center;
     justify-content: center;
@@ -229,9 +229,54 @@ export const tableStyles = `
     text-align: end;
     white-space: pre-wrap;
   }
-  .alert-details-item[data-detail-key="alert-id"] dd {
-    color: var(--secondary-text-color, #727272);
+  .alert-details-card + .alert-details-card {
+    margin-top: 12px;
+  }
+  .alert-details-section-title {
+    margin: 0;
+    padding: 10px 16px 6px;
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-medium, 500);
+  }
+  .alert-details-notification {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: 12px;
+    margin: 0;
+    padding: 8px 16px 12px;
+  }
+  .alert-details-notification + .alert-details-notification {
+    border-top: 1px solid var(--divider-color);
+  }
+  .alert-details-notification .alert-details-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+  }
+  .alert-details-notification dd {
+    text-align: start;
+    max-width: 100%;
+  }
+  .alert-details-identifier {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    gap: 4px 8px;
+    margin-top: 8px;
+    color: var(--secondary-text-color);
     font-size: var(--ha-font-size-s, 12px);
+  }
+  .alert-details-identifier-value {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    user-select: text;
+  }
+  .alert-details-copy-status:not(:empty) {
+    flex-basis: 100%;
   }
   .alert-details-action {
     font-weight: var(--ha-font-weight-medium, 500);
