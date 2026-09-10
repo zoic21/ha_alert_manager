@@ -1311,7 +1311,7 @@ Cette version reste une prérelease.
 
 - Correction du positionnement horizontal du volet de création ou modification
   d’une règle personnalisée sur les écrans larges.
-- Source frontend et bundle distribué régénéré et synchronisés pour garantir
+- Source frontend et bundle distribué régénérés et synchronisés pour garantir
   un build reproductible dans la CI.
 
 ## 1.5.5 — 26 août 2026
