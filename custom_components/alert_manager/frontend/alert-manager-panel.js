@@ -7899,8 +7899,9 @@ const tableStyles = `
     gap: var(--ha-space-2, 8px);
   }
   .alert-details-notice {
+    display: block;
     flex: none;
-    margin-bottom: var(--ha-space-4, 16px);
+    margin-bottom: var(--ha-space-2, 8px);
   }
   .alert-details-summary {
     display: flex;
