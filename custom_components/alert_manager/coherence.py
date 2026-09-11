@@ -708,7 +708,7 @@ def scan_configuration(
             for document in documents:
                 if document is not None:
                     _walk(document, root_context, source, state)
-        except (OSError, UnicodeError, yaml.YAMLError):
+        except OSError, UnicodeError, yaml.YAMLError:
             skipped_files += 1
 
     for rule in custom_rules:

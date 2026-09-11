@@ -379,7 +379,7 @@ def _notification_summary(value: Any) -> dict[str, Any] | None:
                 parsed = datetime.fromisoformat(last_sent)
                 if parsed.tzinfo is None:
                     continue
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
         result[kind] = {
             "count": count,
@@ -1025,7 +1025,7 @@ def safe_float(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return number if math.isfinite(number) else None
 
