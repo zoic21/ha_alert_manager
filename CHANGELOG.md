@@ -2,6 +2,49 @@
 
 Toutes les évolutions notables d’Alert Manager sont documentées dans ce fichier.
 
+## 2.3.0-rc.1 — September 11, 2026
+
+This is the first release candidate for Alert Manager 2.3.0. It includes all
+changes from the 2.3 development and beta releases.
+
+### What's new
+
+- Add a native Alert Manager dashboard card that shows active alerts in compact
+  device groups and opens the matching alert or filtered Overview directly.
+- Add transition alerts for short-lived events, with optional automatic
+  resolution and no pending phase.
+- Add 7-day and 30-day History insights for recurring alerts, affected devices,
+  cumulative duration, notification profiles, packs and custom rules.
+- Add lightweight 24-hour runtime statistics to help diagnose Alert Manager
+  activity and performance without adding persistent data.
+- Allow notification profiles and individual configuration sections to be
+  edited in YAML, while keeping the visual editor available.
+- Extend coherence checks to custom Alert Manager rules and static ZHA device
+  references, with an optional alert that remains active until coherence is
+  restored.
+- Allow non-administrator users to view the dashboard card, Overview and
+  History. Configuration and every alert action remain administrator-only.
+
+### Easier-to-understand alerts
+
+- Redesign alert details with a clearer status, timeline and notification
+  breakdown on desktop and mobile.
+- Show retained history occurrences directly from an alert and open the matching
+  History with one click.
+- Separate activation, reminder and resolution notification information so a
+  sent reminder is never implied when none was delivered.
+- Show the recorded occurrence times behind flapping alerts in a compact,
+  collapsible list grouped by local date.
+- Simplify custom-rule operation names: the optional Attribute field now decides
+  whether a rule evaluates the entity state or an attribute. Existing rules and
+  active alerts are migrated automatically.
+
+### Important compatibility note
+
+- Remove the obsolete `sensor.alert_manager_device_main_active` sensor and
+  `alert_manager_device_alert_started` event. Automations using them must move to
+  the built-in notification profiles or per-alert events before upgrading.
+
 ## 2.3.0-beta.5 — September 10, 2026
 
 This is a beta prerelease.
