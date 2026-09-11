@@ -215,7 +215,7 @@ def test_text_rule_values_must_be_non_empty_unique_scalars():
         ["on", {"nested": True}],
         [date(2026, 8, 25)],
     ):
-        with pytest.raises(ValueError, match="Text operators?"):
+        with pytest.raises(ValueError, match=r"Text operators?"):
             Rule(
                 id="bad",
                 name="Bad",
@@ -716,7 +716,7 @@ def test_unknown_frontend_fields_are_rejected():
     """Typos and arbitrary client fields fail instead of being silently ignored."""
     with pytest.raises(ValueError, match="Unknown configuration field"):
         validate_config_update({"global_delai": 60})
-    with pytest.raises(ValueError, match="Unknown automatic.battery field"):
+    with pytest.raises(ValueError, match=r"Unknown automatic\.battery field"):
         validate_config_update({"automatic": {"battery": {"seuil": 10}}})
     with pytest.raises(ValueError, match="Unknown rule field"):
         validate_rule_payload(
@@ -788,7 +788,7 @@ def test_pack_declared_entity_settings_map_is_strictly_validated():
             "recovery": 120,
         }
     }
-    with pytest.raises(ValueError, match="Missing .* recovery"):
+    with pytest.raises(ValueError, match=r"Missing .* recovery"):
         validate_config(
             {
                 "automatic": {
@@ -823,7 +823,7 @@ def test_pack_declared_entity_settings_map_is_strictly_validated():
         )
     with pytest.raises(ValueError, match="between 2 and 1000"):
         validate_config({"automatic": {"flapping": {"occurrences": 1001}}})
-    with pytest.raises(ValueError, match="Unknown automatic.flapping field: delay"):
+    with pytest.raises(ValueError, match=r"Unknown automatic\.flapping field: delay"):
         validate_config_update({"automatic": {"flapping": {"delay": 0}}})
 
 

@@ -181,7 +181,7 @@ class AlertManagerStorage:
                 migrated = True
             try:
                 record = AlertRecord.from_dict(record_data)
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 _LOGGER.warning("Ignoring invalid persisted alert %s", alert_id)
                 migrated = True
                 continue
@@ -250,7 +250,7 @@ class AlertManagerStorage:
         try:
             path = Path(self._store.path)
             return await self._hass.async_add_executor_job(path.read_text, "utf-8")
-        except (AttributeError, OSError, UnicodeError):
+        except AttributeError, OSError, UnicodeError:
             return None
 
     def _migrate_config(self, stored: Any) -> tuple[dict[str, Any], bool]:
@@ -386,7 +386,7 @@ class AlertManagerConfigBackupStorage:
                 parsed_at = datetime.fromisoformat(created_at)
                 if parsed_at.tzinfo is None:
                     raise ValueError
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 _LOGGER.warning("Ignoring invalid configuration backup %r", backup_id)
                 continue
             seen.add(backup_id)
@@ -408,7 +408,7 @@ class AlertManagerConfigBackupStorage:
             config = await self._hass.async_add_executor_job(
                 parse_config_yaml, item["yaml"]
             )
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             _LOGGER.warning("Ignoring invalid configuration backup %r", item["id"])
             return False
         if len(config["rules"]) != item["rules"]:
@@ -520,7 +520,7 @@ class AlertManagerHistoryStorage:
                 changed = True
             try:
                 entry = AlertHistoryEntry.from_dict(raw_entry)
-            except (KeyError, TypeError, ValueError):
+            except KeyError, TypeError, ValueError:
                 _LOGGER.warning("Ignoring invalid persisted alert history entry")
                 changed = True
                 continue

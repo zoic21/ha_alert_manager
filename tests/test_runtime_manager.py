@@ -81,7 +81,7 @@ def test_jinja_message_rejects_renamed_alert_manager_entity(
     registry_entry(hass, "sensor.renamed_alert_count", platform="alert_manager")
     manager = make_manager(hass, entry)
 
-    with pytest.raises(ValueError, match="sensor.renamed_alert_count"):
+    with pytest.raises(ValueError, match=r"sensor\.renamed_alert_count"):
         run(
             manager.async_create_rule(
                 _rule(message="Count: {{ states('sensor.renamed_alert_count') }}")
