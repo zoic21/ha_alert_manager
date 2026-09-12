@@ -7,7 +7,7 @@ remain responsible for broad monitoring and specialized lifecycle behavior.
 ## Adding a recipe
 
 1. Add an independent YAML file under
-   `custom_components/alert_manager/rule_blueprints/<category>/`.
+   `custom_components/alert_manager/blueprint/<category>/`.
 2. Choose a permanent `blueprint_id`, `schema_version: 1`, and an independent
    positive `blueprint_version`. Increase the latter when changing the recipe.
 3. Add its `name_key`, `description_key`, and category name to the `config_panel`
@@ -16,7 +16,7 @@ remain responsible for broad monitoring and specialized lifecycle behavior.
    English fallback; creation uses the HA language translation of `name_key`.
 5. Add discovery tests against representative registry/state metadata.
 
-See `rule_blueprints/system/system_cpu_usage.yaml` for a complete example.
+See `blueprint/system/system_cpu_usage.yaml` for a complete example.
 There are no per-blueprint Python branches or frontend definitions.
 
 ## Requirements and discovery
@@ -64,7 +64,8 @@ only match when those attributes are present; do not use volatile attributes for
 stable membership. The initial Celsius temperature recipe deliberately excludes
 Fahrenheit sensors, avoiding an incorrect numeric threshold.
 
-`snapshot_installation` copies metadata on the HA event loop. File loading and
+`snapshot_installation` copies metadata on the HA event loop, including only
+state attributes referenced by valid catalog predicates. File loading and
 `prepare_blueprints` run in the executor. `discover_blueprint` and `explain_match`
 are pure and reusable without a panel or manager. The latter returns the outcome
 of each predicate for diagnostics/tests; the UI only consumes summary statuses.
@@ -77,8 +78,9 @@ The server rechecks the selected IDs under the existing configuration mutation
 lock. All candidates pass normal custom-rule, source and template validation
 before any live change. Manual and batch creation share the same evaluation,
 notification deferral, persistence and rollback path. A failure rejects the whole
-batch, including stale selections. Existing limits remain 50 entities per rule
-and 500 custom rules in total; entities are never silently truncated or split.
+batch, including stale selections or equivalent rules within the same batch.
+Existing limits remain 50 entities per rule and 500 custom rules in total; entities
+are never silently truncated or split.
 
 Generated rules store:
 

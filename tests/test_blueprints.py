@@ -8,6 +8,7 @@ import yaml
 
 from custom_components.alert_manager.blueprints import (
     discover_blueprint,
+    discovery_attributes,
     explain_match,
     load_blueprints,
     snapshot_installation,
@@ -73,7 +74,7 @@ def test_discovery_renamed_unavailable_disabled_and_units(hass, registry_entry):
     recipe = next(
         b for b in load_blueprints() if b["blueprint_id"] == "system_cpu_usage"
     )
-    snapshot = snapshot_installation(hass, hass.entity_registry)
+    snapshot = snapshot_installation(hass, hass.entity_registry, set())
     result = discover_blueprint(recipe, snapshot)
     assert result == {
         "status": "available",
@@ -83,7 +84,9 @@ def test_discovery_renamed_unavailable_disabled_and_units(hass, registry_entry):
     assert discover_blueprint(recipe, snapshot) == result
     hass.states.set("sensor.z_renamed", "unknown", {"unit_of_measurement": "%"})
     assert (
-        discover_blueprint(recipe, snapshot_installation(hass, hass.entity_registry))
+        discover_blueprint(
+            recipe, snapshot_installation(hass, hass.entity_registry, set())
+        )
         == result
     )
 
@@ -295,3 +298,56 @@ def test_provenance_survives_config_roundtrip_and_reload(hass, entry, registry_e
     add_sensor(hass, registry_entry, "sensor.cpu_new", "processor_use")
     run(restored.async_list_rule_blueprints())
     assert restored.config["rules"][0]["entity_ids"] == ["sensor.cpu"]
+
+
+def test_snapshot_copies_only_requested_attributes(hass, registry_entry):
+    class Uncopyable:
+        def __deepcopy__(self, memo):
+            raise AssertionError("Unrelated attributes must not be copied")
+
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    wanted = [1, 2]
+    hass.states.set("sensor.cpu", "95", {"wanted": wanted, "large": Uncopyable()})
+    catalog = [
+        {
+            "discovery": {
+                "all": [
+                    {"field": "domain", "equals": "sensor"},
+                    {"not": {"field": "attributes.wanted", "exists": False}},
+                    {"any": [{"field": "attributes.missing", "exists": False}]},
+                ]
+            }
+        },
+        {"error": "Invalid recipe"},
+    ]
+    attributes = discovery_attributes(catalog)
+    assert attributes == {"wanted", "missing"}
+    snapshot = snapshot_installation(hass, hass.entity_registry, attributes)
+    entity = next(e for e in snapshot["entities"] if e["entity_id"] == "sensor.cpu")
+    assert entity["attributes.wanted"] == [1, 2]
+    wanted.append(3)
+    assert entity["attributes.wanted"] == [1, 2]
+    assert "attributes.large" not in entity
+    assert "attributes.missing" not in entity
+
+
+def test_equivalent_blueprints_in_batch_are_rejected_atomically(
+    hass, entry, registry_entry, monkeypatch
+):
+    from custom_components.alert_manager import manager_api
+
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    recipe = next(
+        b for b in load_blueprints() if b["blueprint_id"] == "system_cpu_usage"
+    )
+    duplicate = deepcopy(recipe)
+    duplicate["blueprint_id"] = "duplicate_cpu"
+    duplicate["rule"]["value"] = str(recipe["rule"]["value"])
+    monkeypatch.setattr(manager_api, "load_blueprints", lambda: [recipe, duplicate])
+    manager = manager_for(hass, entry)
+    before = deepcopy(manager.config)
+    with pytest.raises(ValueError, match="equivalent rules"):
+        run(manager.async_generate_rules(["system_cpu_usage", "duplicate_cpu"]))
+    assert manager.config == before
+    assert not manager.rules
+    assert not manager.records

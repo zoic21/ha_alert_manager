@@ -237,6 +237,7 @@
       "transition_unavailable": "Les valeurs unknown et unavailable ne sont pas acceptées pour une transition.",
       "transition_distinct": "Le départ et l’arrivée doivent être différents.",
       "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours.",
+      "blueprint_duplicates": "La sélection contient des blueprints créant des règles équivalentes. Sélectionnez-en un seul.",
       "blueprint_selection": "Sélection de blueprints invalide.",
       "blueprint_stale": "Ces blueprints ne sont plus disponibles. Actualisez la liste avant de réessayer.",
       "blueprint_provenance": "Métadonnées de provenance du blueprint invalides."

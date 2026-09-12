@@ -1,4 +1,5 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Blueprint selection contains equivalent rules", "blueprint_duplicates"],
   ["Invalid blueprint selection", "blueprint_selection"],
   ["Blueprint selection is no longer available", "blueprint_stale"],
   ["Invalid rule blueprint provenance", "blueprint_provenance"],

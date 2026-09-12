@@ -28,7 +28,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
-from .blueprints import load_blueprints, prepare_blueprints, snapshot_installation
+from .blueprints import (
+    discovery_attributes,
+    load_blueprints,
+    prepare_blueprints,
+    rule_signature,
+    snapshot_installation,
+)
 from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
     CATEGORY_FLAPPING,
@@ -1075,7 +1081,9 @@ class _ApiMixin:
     async def _async_blueprint_candidates(self) -> list[dict[str, Any]]:
         """Load recipes off-loop, then discover using a current metadata snapshot."""
         catalog = await self.hass.async_add_executor_job(load_blueprints)
-        installation = snapshot_installation(self.hass, self._entity_registry)
+        installation = snapshot_installation(
+            self.hass, self._entity_registry, discovery_attributes(catalog)
+        )
         return await self.hass.async_add_executor_job(
             prepare_blueprints,
             catalog,
@@ -1107,6 +1115,7 @@ class _ApiMixin:
             row["blueprint_id"]: row for row in await self._async_blueprint_candidates()
         }
         rules = []
+        signatures = []
         for blueprint_id in sorted(blueprint_ids):
             row = rows.get(blueprint_id)
             if row is None or row["status"] != "available":
@@ -1116,7 +1125,12 @@ class _ApiMixin:
                 for key, value in row["rule"].items()
                 if key not in {"id", "version"}
             }
-            rules.append(validate_rule_payload(payload))
+            rule = validate_rule_payload(payload)
+            signature = rule_signature(rule)
+            if signature in signatures:
+                raise ValueError("Blueprint selection contains equivalent rules")
+            signatures.append(signature)
+            rules.append(rule)
         return await self._async_create_validated_rules(rules)
 
     @_serialize_config_mutation

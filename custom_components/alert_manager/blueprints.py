@@ -13,7 +13,7 @@ from .const import MAX_RULE_ENTITY_IDS
 from .models import Rule, normalize_scalar, safe_float
 from .validation import validate_rule_payload
 
-BLUEPRINT_DIRECTORY = Path(__file__).parent / "rule_blueprints"
+BLUEPRINT_DIRECTORY = Path(__file__).parent / "blueprint"
 _FIELDS = {
     "integration",
     "domain",
@@ -165,7 +165,25 @@ def load_blueprints(directory: Path = BLUEPRINT_DIRECTORY) -> list[dict[str, Any
     return catalog
 
 
-def snapshot_installation(hass: Any, registry: Any) -> dict[str, Any]:
+def discovery_attributes(catalog: list[dict[str, Any]]) -> set[str]:
+    """Collect only attributes referenced by validated discovery predicates."""
+    attributes = set()
+    pending = [item["discovery"] for item in catalog if "error" not in item]
+    while pending:
+        expression = pending.pop()
+        field = expression.get("field", "")
+        if field.startswith("attributes."):
+            attributes.add(field.removeprefix("attributes."))
+        for kind in ("all", "any"):
+            pending.extend(expression.get(kind, []))
+        if "not" in expression:
+            pending.append(expression["not"])
+    return attributes
+
+
+def snapshot_installation(
+    hass: Any, registry: Any, attributes: set[str]
+) -> dict[str, Any]:
     """Copy HA metadata on the event loop; state values never determine membership."""
     entries = {entry.entry_id: entry for entry in hass.config_entries.async_entries()}
     integrations = {
@@ -175,14 +193,14 @@ def snapshot_installation(hass: Any, registry: Any) -> dict[str, Any]:
     }
     states = {state.entity_id: state for state in hass.states.async_all()}
     entities = []
-    for entity_id in sorted(set(registry.entities) | set(states)):
+    for entity_id in set(registry.entities) | set(states):
         entry = registry.async_get(entity_id)
         config_entry = entries.get(getattr(entry, "config_entry_id", None))
         if getattr(entry, "disabled_by", None) or getattr(
             config_entry, "disabled_by", None
         ):
             continue
-        attrs = dict(states[entity_id].attributes) if entity_id in states else {}
+        attrs = states[entity_id].attributes if entity_id in states else {}
         entity = {
             "entity_id": entity_id,
             "domain": entity_id.partition(".")[0],
@@ -200,7 +218,11 @@ def snapshot_installation(hass: Any, registry: Any) -> dict[str, Any]:
             or attrs.get("device_class"),
             "unit_of_measurement": getattr(entry, "unit_of_measurement", None)
             or attrs.get("unit_of_measurement"),
-            **{f"attributes.{key}": deepcopy(value) for key, value in attrs.items()},
+            **{
+                f"attributes.{key}": deepcopy(attrs[key])
+                for key in attributes
+                if key in attrs
+            },
         }
         if config_entry:
             entity["integration"] = config_entry.domain
