@@ -3119,7 +3119,7 @@ test("one configuration button counts all pack exceptions and global settings ex
   assert.doesNotMatch(settings, /id="global-delay"|settings-entity_delays-configuration|settings-excluded_entities-configuration|settings-excluded_devices-configuration/);
 });
 
-test("pack defaults and both exception levels share one side drawer", () => {
+test("execution defaults and entity exceptions share one side drawer", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
   panel._configurationDrawer = { kind: "automatic", id: "execution_errors" };
@@ -3127,7 +3127,7 @@ test("pack defaults and both exception levels share one side drawer", () => {
   assert.equal((html.match(/class="side-drawer configuration-drawer"/g) ?? []).length, 1);
   assert.match(html, /auto-execution_errors-failure_threshold/);
   assert.match(html, /auto-execution_errors-entity_overrides-target-0/);
-  assert.match(html, /data-field-id="device_overrides"/);
+  assert.doesNotMatch(html, /data-field-id="device_overrides"/);
   assert.match(html, /data-configuration-yaml-menu/);
 });
 

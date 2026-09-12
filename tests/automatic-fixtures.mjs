@@ -7,7 +7,7 @@ export function automaticPacks() {
     const scalar = numbers.map((field) => ({ type: "number", translation_key: field.id, ...field }));
     const fields = [{ id: "enabled", translation_key: "monitoring", type: "boolean" }, ...(id === "flapping" ? [] : [{ id: "delay", translation_key: "trigger_delay", type: "number", unit: "s" }]), ...scalar];
     const maps = ["device", "entity"].map((kind) => ({ id: `${kind}_overrides`, translation_key: `${kind}_overrides`, type: `${kind}_settings_map`, default: {}, sparse: true, fields }));
-    return { id, translation_key: id, available: true, prerequisites: id === "unifi" ? ["unifi"] : [], uses_delay: id !== "flapping", target_filter: id === "battery" ? { domain: "sensor", device_class: "battery" } : id === "execution_errors" ? { domain: ["automation", "script"] } : {}, config_fields: [...scalar, ...(id === "flapping" ? [{ id: "source_packs", type: "pack_settings_map", fields: [...scalar, ...maps] }] : []), ...maps] };
+    return { id, exception_targets: id === "execution_errors" ? ["entity"] : ["device", "entity"], translation_key: id, available: true, prerequisites: id === "unifi" ? ["unifi"] : [], uses_delay: id !== "flapping", target_filter: id === "battery" ? { domain: "sensor", device_class: "battery" } : id === "execution_errors" ? { domain: ["automation", "script"] } : {}, config_fields: [...scalar, ...(id === "flapping" ? [{ id: "source_packs", type: "pack_settings_map", fields: [...scalar, ...maps] }] : []), ...maps] };
   });
 }
 export function automaticConfig() {

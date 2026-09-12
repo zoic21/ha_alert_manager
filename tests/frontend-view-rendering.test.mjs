@@ -660,3 +660,41 @@ test("coherence report keeps settings out of its header before and after a scan"
     assert.match(markup, /data-action="scan-coherence"/);
   }
 });
+
+for (const id of ["unavailable", "connectivity", "unifi", "battery", "execution_errors", "flapping"]) {
+  test(`compact ${id} configuration groups defaults and exception fields without a duplicate switch`, () => {
+    const packs = automaticPacks();
+    const config = { automatic: automaticConfig() };
+    config.automatic[id].device_overrides = { device: {} };
+    config.automatic[id].entity_overrides = { "sensor.example": {} };
+    const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+    const markup = renderAutomatic({ availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id }, t });
+    assert.doesNotMatch(markup, /drawer-enabled/);
+    assert.match(markup, new RegExp(`id="auto-${id}-enabled"`));
+    assert.match(markup, /class="automatic-pack-settings"/);
+    const row = markup.slice(markup.indexOf(`id="auto-${id}-entity_overrides-target-0"`));
+    const monitoring = row.slice(row.indexOf('class="field pack-setting-field"'), row.indexOf('</div>', row.indexOf('class="field pack-setting-field"')));
+    assert.match(monitoring, new RegExp(`entity_overrides-0-enabled`));
+    assert.doesNotMatch(monitoring, /<small>/);
+    assert.match(row, /automatic.inherited_value/);
+    if (id === "execution_errors") {
+      assert.doesNotMatch(markup, /data-field-id="device_overrides"/);
+      assert.match(markup, /auto-execution_errors-delay[\s\S]*auto-execution_errors-failure_threshold/);
+    } else assert.match(markup, new RegExp(`auto-${id}-device_overrides-target-0`));
+  });
+}
+
+test("flapping respects the selected source's exception targets without losing saved data", () => {
+  const packs = automaticPacks();
+  const config = { automatic: automaticConfig() };
+  config.automatic.flapping.source_packs.execution_errors = {
+    device_overrides: { old_device: { occurrences: 9 } },
+    entity_overrides: { "automation.test": { occurrences: 3 } },
+  };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const before = structuredClone(draft);
+  const markup = renderAutomatic({ availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id: "flapping", sourceId: "execution_errors" }, t });
+  assert.doesNotMatch(markup, /data-field-id="device_overrides"/);
+  assert.match(markup, /auto-flapping-entity_overrides-target-0/);
+  assert.deepEqual(draft, before);
+});

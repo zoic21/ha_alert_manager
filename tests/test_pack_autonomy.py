@@ -91,3 +91,15 @@ assert pack.default_config()["device_overrides"] == {}
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_execution_pack_owns_entity_only_editor_targets():
+    from custom_components.alert_manager.packs import PACKS_BY_ID
+
+    pack = PACKS_BY_ID["execution_errors"]
+    metadata = pack.as_public_dict(None)
+    assert metadata["exception_targets"] == ["entity"]
+    assert metadata["target_filter"] == {"domain": ["automation", "script"]}
+    # Editor target support does not remove or migrate saved detector settings.
+    assert "device_overrides" in pack.default_config()
+    assert PACKS_BY_ID["battery"].exception_targets == ("device", "entity")

@@ -333,6 +333,7 @@ def _reset_runtime(hass: HomeAssistant) -> None:
 
 PACK = AutomaticPack(
     default_delay=0,
+    exception_targets=("entity",),
     target_filter={"domain": ["automation", "script"]},
     order=4,
     id=PACK_ID,

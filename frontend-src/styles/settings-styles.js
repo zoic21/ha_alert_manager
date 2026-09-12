@@ -808,9 +808,41 @@ export const settingsStyles = `
     border-radius: 12px;
   }
   .automatic-pack-row { gap: 8px; }
-  .automatic-exception { padding: 12px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
-  .automatic-exception-target { display: flex; align-items: center; gap: 8px; }
+  .fields.automatic-configuration-fields {
+    gap: 16px;
+  }
+  .automatic-configuration-fields .full {
+    margin-top: 0;
+  }
+  .automatic-pack-settings,
+  .automatic-exception .pack-settings-values {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: 12px 16px;
+    align-items: start;
+  }
+  .automatic-pack-settings > .pack-setting-field > .field-label,
+  .automatic-exception .pack-setting-field > .field-label {
+    min-height: 2.6em;
+    display: flex;
+    align-items: end;
+  }
+  .pack-map-row.automatic-exception {
+    padding: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .automatic-exception-target {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+  }
   .automatic-exception-target ha-selector { flex: 1; min-width: 0; }
-  .automatic-exception .pack-settings-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .automatic-exception .pack-setting-field { min-width: 0; }
+  .automatic-exception > ha-button { align-self: flex-start; margin-top: 0; }
 `;

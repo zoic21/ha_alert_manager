@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.2**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.3**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -16,6 +16,9 @@ This is a prerelease for testing, not a stable release.
   Home Assistant label and preserve effective delays, thresholds and flapping precedence.
   Missing registry targets or failed writes stop conversion with recoverable source data.
 - Added administrator-only contextual configuration from automatic alert details.
+- Compacted pack configuration drawers with dropdown monitoring overrides and
+  side-by-side settings. Execution-error configuration offers automation/script
+  entity targets only, including source-specific flapping configuration.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.

@@ -175,6 +175,7 @@ class AutomaticPack:
     default_enabled: bool = True
     order: int = 100
     target_filter: dict[str, Any] = field(default_factory=dict)
+    exception_targets: tuple[str, ...] = ("device", "entity")
     occurrence_batch_handler: PackOccurrenceBatchHandler | None = None
 
     def default_config(self) -> dict[str, Any]:
@@ -214,6 +215,7 @@ class AutomaticPack:
             "prerequisites": list(self.prerequisites),
             "available": self.available(hass),
             "target_filter": deepcopy(self.target_filter),
+            "exception_targets": list(self.exception_targets),
         }
         if not self.uses_delay:
             result["uses_delay"] = False

@@ -342,9 +342,12 @@ test("pack-declared boolean, text and choice fields survive drafts and sparse ov
   const selectors = new Map();
   p._configureSelector = (id, selector, value, changed) => selectors.set(id, { selector, value, changed });
   hydrateAutomaticControls.call(p);
+  assert.equal(selectors.get("auto-sample-strict").selector.select.mode, "dropdown");
+  assert.equal(selectors.get("auto-sample-entity_overrides-0-mode").value, "inherit");
+  assert.equal(selectors.get("auto-sample-entity_overrides-0-mode").selector.select.mode, "dropdown");
   selectors.get("auto-sample-strict").changed("disabled");
   selectors.get("auto-sample-mode").changed(JSON.stringify("slow"));
-  selectors.get("auto-sample-entity_overrides-0-strict").changed("");
+  selectors.get("auto-sample-entity_overrides-0-strict").changed("inherit");
   selectors.get("auto-sample-entity_overrides-0-mode").changed(JSON.stringify("slow"));
   const input = control(p, "#auto-sample-message", { type: "text", value: "door open" });
   input.dataset = { packDefault: "sample", settingId: "message" };
