@@ -7,19 +7,22 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.4**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.5**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
-  explicit defaults, and sparse device/entity exceptions with visible inheritance.
+  explicit defaults, and sparse device/entity exceptions.
 - Kept global automatic exclusions by label; migrate old direct exclusions to a dedicated
   Home Assistant label and preserve effective delays, thresholds and flapping precedence.
   Missing registry targets or failed writes stop conversion with recoverable source data.
 - Added administrator-only contextual configuration from automatic alert details.
-- Compacted pack configuration drawers with dropdown monitoring overrides and
+- Compacted pack configuration drawers with monitoring switches and
   side-by-side settings. Execution-error configuration offers automation/script
   entity targets only, including source-specific flapping configuration. Source
-  toggles align with their labels; inheritance is adjusted directly in each field.
+  toggles align with their labels. Empty numeric fields inherit their parent settings;
+  a disabled pack or device cannot be reactivated by an entity exception.
+- Simplified notification exceptions with the same switches and reminder input as
+  the profile defaults, preserving effective values when editing existing exceptions.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.

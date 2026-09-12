@@ -173,7 +173,7 @@ Open **Configuration → Automatic monitoring** to enable and configure the pack
 | Automation and script errors | an `automation` or `script` execution finishes with an error |
 | Flapping / instability | the same anomaly occurs repeatedly within a detection window |
 
-Each pack has one **Configure** drawer for defaults, labels and device/entity exceptions. The main card shows its defaults and exception count. Exceptions store only overridden fields: **entity → device → pack**, independently for monitoring, delay and the pack’s parameters. Clearing a field restores inheritance; an explicit zero delay triggers immediately. The drawer shows inherited values and their origin. A disabled exception retains its saved parameters. Device exceptions automatically cover newly added eligible entities.
+Each pack has one **Configure** drawer for defaults, labels and device/entity exceptions. The main card shows its defaults and exception count. The **Monitor** switch is on by default. A disabled pack or device blocks its entity exceptions. Delay and pack parameters inherit independently: **entity → device → pack**. Clearing a numeric field restores inheritance; an explicit zero delay triggers immediately. Disabled exceptions keep their parameters visible but greyed out. Device exceptions automatically cover newly added eligible entities.
 
 Global exclusions use **Home Assistant labels** on entities or devices, and affect automatic monitoring only. Custom rules remain independent. An enabled exception cannot bypass the global monitoring switch, a disabled pack, an exclusion label or the pack’s eligibility checks. Trigger delays belong to individual packs; the separate pending-alert display delay only controls visibility.
 
@@ -341,7 +341,7 @@ Save the profile, then use **Test** in its three-dot menu to send a real test no
 
 A profile can cover all alerts or only alerts matching at least one selected label. Matching combines the labels of the entity, its device, and the custom rule or automatic pack that produced the alert.
 
-Exceptions require **all selected labels to match (AND)** and override new-alert, recovery or reminder settings. The **first matching exception in list order** takes precedence; settings left inherited keep the profile defaults. In YAML, exceptions use `selector_ids`; existing single-label exceptions using `selector_id` remain accepted.
+Exceptions require **all selected labels to match (AND)** and override new-alert, recovery or reminder settings. The **first matching exception in list order** takes precedence; the visual editor uses explicit switches and a reminder interval, just like the profile defaults. Clearing the interval disables reminders. Existing sparse exceptions display their effective profile values; YAML still accepts omitted fields to inherit profile defaults. In YAML, exceptions use `selector_ids`; existing single-label exceptions using `selector_id` remain accepted.
 
 ### Batching, reminders and mobile navigation
 

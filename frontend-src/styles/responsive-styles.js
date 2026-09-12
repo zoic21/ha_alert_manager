@@ -211,6 +211,7 @@ export const responsiveStyles = `
     .delay-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }
+    .automatic-exception .pack-settings-values,
     .pack-settings-values {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -340,13 +341,7 @@ export const responsiveStyles = `
       border-inline-end: 0;
       border-block-end: 1px solid var(--divider-color, #ddd);
     }
-    .notification-exception-reminder {
-      grid-column: 1 / -1;
-    }
-    .notification-exception-reminder.has-custom-value
-      .notification-exception-reminder-controls {
-      grid-template-columns: 1fr;
-    }
+
     .rule-value-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }

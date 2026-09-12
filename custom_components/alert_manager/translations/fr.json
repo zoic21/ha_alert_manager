@@ -107,7 +107,7 @@
       "save": "Enregistrer la surveillance automatique",
       "labels": "Étiquettes",
       "labels_help": "Ajoutées aux alertes du pack et utilisées pour les notifications.",
-      "inheritance_help": "Chaque champ hérite de l’appareil, puis du pack. Un champ numérique vide hérite ; 0 signifie immédiat. Les exclusions globales et la désactivation du pack restent prioritaires.",
+      "inheritance_help": "Les champs numériques vides héritent de l’appareil, puis du pack. 0 signifie immédiat pour un délai. La désactivation du pack ou de l’appareil reste prioritaire.",
       "inherit": "Hérité",
       "monitoring_enabled": "Activée",
       "monitoring_disabled": "Désactivée",
@@ -117,13 +117,6 @@
       "source_context": "Réglages de la source",
       "all_sources": "Valeurs par défaut pour toutes les sources",
       "source_enabled": "Surveiller cette source",
-      "inherited_value": "{value} — {origin}",
-      "origin_pack": "défaut du pack",
-      "origin_source": "défaut de la source",
-      "origin_device": "réglage de l’appareil",
-      "origin_entity": "réglage de l’entité",
-      "origin_source_device": "appareil pour cette source",
-      "origin_source_entity": "entité pour cette source",
       "orphan_target": "Cette cible est introuvable. Ses réglages sont conservés ; modifiez ou supprimez l’exception.",
       "inapplicable_target": "Cette cible n’est actuellement pas éligible à ce pack. Ses réglages sont conservés.",
       "blocked_label": "Un label d’exclusion global bloque cette cible. Une exception ne peut pas contourner cette exclusion.",
@@ -133,7 +126,9 @@
       "configure_monitoring": "Configurer cette surveillance",
       "administrative_resolution": "Surveillance désactivée ou exclue (sans retour à la normale)",
       "hours_short": "h",
-      "minutes_short": "min"
+      "minutes_short": "min",
+      "monitor_target": "Surveiller",
+      "blocked_device": "Surveillance désactivée pour cet appareil."
     },
     "buttons": {
       "add": "Ajouter",

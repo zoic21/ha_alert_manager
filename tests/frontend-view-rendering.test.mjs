@@ -309,7 +309,7 @@ test("automatic rendering is pure and places defaults with sparse exceptions", (
   assert.match(markup, /auto-battery-device_overrides-target-0/);
   assert.match(markup, /data-action="remove-pack-map-row"/);
   assert.doesNotMatch(markup, /data-action="inherit-pack-row"/);
-  assert.match(markup, /automatic.inherited_value/);
+  assert.doesNotMatch(markup, /automatic.inherited_value/);
 });
 
 test("flapping source contexts share one drawer without an ordinary delay", () => {
@@ -673,10 +673,11 @@ for (const id of ["unavailable", "connectivity", "unifi", "battery", "execution_
     assert.match(markup, new RegExp(`id="auto-${id}-enabled"`));
     assert.match(markup, /class="automatic-pack-settings"/);
     const row = markup.slice(markup.indexOf(`id="auto-${id}-entity_overrides-target-0"`));
-    const monitoring = row.slice(row.indexOf('class="field pack-setting-field"'), row.indexOf('</div>', row.indexOf('class="field pack-setting-field"')));
+    const monitoring = row.slice(row.indexOf('class="field pack-setting-field pack-monitoring-field"'), row.indexOf('</div>', row.indexOf('class="field pack-setting-field pack-monitoring-field"')));
     assert.match(monitoring, new RegExp(`entity_overrides-0-enabled`));
     assert.doesNotMatch(monitoring, /<small>/);
-    assert.match(row, /automatic.inherited_value/);
+    assert.doesNotMatch(row, /automatic.inherited_value/);
+    assert.match(monitoring, /<ha-switch[^>]*checked/);
     if (id === "execution_errors") {
       assert.doesNotMatch(markup, /data-field-id="device_overrides"/);
       assert.match(markup, /auto-execution_errors-delay[\s\S]*auto-execution_errors-failure_threshold/);
@@ -697,4 +698,27 @@ test("flapping respects the selected source's exception targets without losing s
   assert.doesNotMatch(markup, /data-field-id="device_overrides"/);
   assert.match(markup, /auto-flapping-entity_overrides-target-0/);
   assert.deepEqual(draft, before);
+});
+
+
+test("disabled device blocks entity switches and retains greyed settings until reenabled", () => {
+  const packs = automaticPacks();
+  const config = { automatic: automaticConfig() };
+  config.automatic.battery.device_overrides = { dev: { enabled: false } };
+  config.automatic.battery.entity_overrides = { "sensor.a": { enabled: true, delay: 42, threshold: 12 } };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const context = { availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id: "battery" }, hass: { entities: { "sensor.a": { device_id: "dev" } }, devices: { dev: {} } }, t };
+  let markup = renderAutomatic(context);
+  assert.match(markup, /automatic.blocked_device/);
+  assert.match(markup, /id="auto-battery-entity_overrides-0-enabled"[^>]*disabled=""[^>]*checked/);
+  assert.match(markup, /id="auto-battery-entity_overrides-0-delay"[^>]*data-duration-value="42"[^>]*disabled=""/);
+  draft.battery.device_overrides[0].enabled = true;
+  markup = renderAutomatic(context);
+  assert.doesNotMatch(markup, /automatic.blocked_device/);
+  assert.doesNotMatch(markup.match(/id="auto-battery-entity_overrides-0-enabled"[^>]*>/)[0], /disabled/);
+  draft.battery.entity_overrides[0].enabled = false;
+  markup = renderAutomatic(context);
+  assert.doesNotMatch(markup.match(/id="auto-battery-entity_overrides-0-enabled"[^>]*>/)[0], /checked|disabled/);
+  assert.match(markup, /id="auto-battery-entity_overrides-0-delay"[^>]*data-duration-value="42"[^>]*disabled=""/);
+  assert.equal(draft.battery.entity_overrides[0].threshold, 12);
 });

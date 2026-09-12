@@ -2957,6 +2957,7 @@ test("flapping saves global and per-entity values without a pack delay", async (
   panel._render = () => {};
   const controls = {
     "#auto-flapping-enabled": { checked: true },
+    "#auto-flapping-entity_overrides-0-enabled": { checked: false },
     "#auto-flapping-occurrences": { value: "4" },
     "#auto-flapping-window": { value: "900" },
     "#auto-flapping-recovery": { value: "300" },
@@ -2964,10 +2965,9 @@ test("flapping saves global and per-entity values without a pack delay", async (
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   panel.shadowRoot.querySelectorAll = () => [];
   panel._configurationDrawer = { kind: "automatic", id: "flapping" };
-  panel._configureSelector = (id, _selector, _value, change) => {
-    if (id.endsWith("-0-enabled")) change("disabled");
-  };
+  panel._configureSelector = () => {};
   panel._hydrateAutomaticControls();
+  controls["#auto-flapping-entity_overrides-0-enabled"].onchange();
   let call;
   panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
 

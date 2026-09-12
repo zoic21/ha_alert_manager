@@ -107,7 +107,7 @@
       "save": "Save automatic monitoring",
       "labels": "Labels",
       "labels_help": "Added to pack alerts and used for notifications.",
-      "inheritance_help": "Each field inherits from the device, then the pack. Empty numeric fields inherit; 0 means immediate. Global exclusions and a disabled pack always block automatic monitoring.",
+      "inheritance_help": "Empty numeric fields inherit from the device, then the pack. 0 means immediate for a delay. Disabling the pack or device always takes priority.",
       "inherit": "Inherited",
       "monitoring_enabled": "Enabled",
       "monitoring_disabled": "Disabled",
@@ -117,13 +117,6 @@
       "source_context": "Source settings",
       "all_sources": "Defaults for all sources",
       "source_enabled": "Monitor this source",
-      "inherited_value": "{value} — {origin}",
-      "origin_pack": "pack default",
-      "origin_source": "source default",
-      "origin_device": "device setting",
-      "origin_entity": "entity setting",
-      "origin_source_device": "source device setting",
-      "origin_source_entity": "source entity setting",
       "orphan_target": "This target is missing. Its settings are retained; edit or remove the exception.",
       "inapplicable_target": "This target is not currently eligible for this pack. Its settings are retained.",
       "blocked_label": "A global exclusion label blocks this target. An exception cannot override that exclusion.",
@@ -133,7 +126,9 @@
       "configure_monitoring": "Configure this monitoring",
       "administrative_resolution": "Monitoring disabled or excluded (not a recovery)",
       "hours_short": "h",
-      "minutes_short": "min"
+      "minutes_short": "min",
+      "monitor_target": "Monitor",
+      "blocked_device": "Monitoring is disabled for this device."
     },
     "buttons": {
       "add": "Add",

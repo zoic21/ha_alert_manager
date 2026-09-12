@@ -314,19 +314,6 @@ export const settingsStyles = `
   .notification-exception-grid > .field {
     justify-content: flex-end;
   }
-  .notification-exception-reminder.has-custom-value {
-    grid-column: 1 / -1;
-  }
-  .notification-exception-reminder-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 16px;
-  }
-  .notification-exception-reminder.has-custom-value
-    .notification-exception-reminder-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .notification-exception h3,
   .notification-exceptions-header h3,
   .side-drawer-section > h3 {
@@ -821,6 +808,16 @@ export const settingsStyles = `
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 12px 16px;
     align-items: start;
+  }
+  .automatic-exception .pack-settings-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+  }
+  .automatic-exception .pack-monitoring-field {
+    justify-content: center;
+  }
+  .pack-setting-field:has([disabled]) {
+    opacity: .6;
   }
   .automatic-pack-settings > .pack-setting-field > .field-label,
   .automatic-exception .pack-setting-field > .field-label {

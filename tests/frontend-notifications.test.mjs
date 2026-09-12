@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { openAlertDeepLink } from "../frontend-src/components/alert-table.js";
 import {
+  captureNotificationProfileDraft,
   handleNotificationProfileAction,
   hydrateNotificationProfileControls,
   newNotificationProfileDraft,
@@ -97,7 +98,7 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
   assert.doesNotMatch(markup, /<(button|select|input)\b/);
 });
 
-test("custom exception reminders align their mode and value side by side", () => {
+test("exception switches and reminder reuse the default policy layout", () => {
   const draft = structuredClone(profile);
   draft.exceptions[0].reminder_interval = 300;
 
@@ -108,8 +109,11 @@ test("custom exception reminders align their mode and value side by side", () =>
     t,
   });
 
-  assert.match(markup, /notification-exception-reminder has-custom-value/);
-  assert.match(markup, /notification-exception-reminder-controls[\s\S]*notification-exception-reminder-mode-0[\s\S]*notification-exception-reminder-0/);
+  assert.match(markup, /notification-policy-card full[\s\S]*notification-policy-switches[\s\S]*notification-policy-reminder/);
+  assert.match(markup, /<ha-switch id="notification-exception-start-0"[^>]*checked/);
+  assert.match(markup, /<ha-switch id="notification-exception-resolved-0"[^>]*checked/);
+  assert.match(markup, /id="notification-exception-reminder-0"[^>]*data-duration-value="300"/);
+  assert.doesNotMatch(markup, /notification-exception-reminder-mode|<ha-select\b/);
 });
 
 test("notification validation is rendered inside the open drawer", () => {
@@ -764,3 +768,34 @@ for (const mode of ["visual", "yaml"]) {
     }
   });
 }
+
+
+test("notification exceptions preserve effective legacy values and save explicit switches", () => {
+  const draft = structuredClone(profile);
+  draft.default_policy.notify_on_start = false;
+  const before = structuredClone(draft);
+  const markup = renderNotificationProfileDrawer({ draft, t });
+  assert.deepEqual(draft, before);
+  assert.doesNotMatch(markup.match(/<ha-switch id="notification-exception-start-0"[^>]*>/)[0], /checked/);
+  assert.match(markup, /<ha-switch id="notification-exception-resolved-0"[^>]*checked/);
+  const controls = {
+    "#notification-profile-name": { value: draft.name },
+    "#notification-profile-enabled": { checked: true },
+    "#notification-start": { checked: false },
+    "#notification-resolved": { checked: false },
+    "#notification-reminder": { value: 300 },
+    "#notification-exception-start-0": { checked: false },
+    "#notification-exception-resolved-0": { checked: true },
+    "#notification-exception-reminder-0": { value: "" },
+  };
+  const panel = { _notificationProfileDraft: draft, shadowRoot: { querySelector: (id) => controls[id] } };
+  captureNotificationProfileDraft(panel);
+  assert.equal(draft.exceptions[0].notify_on_start, false);
+  assert.equal(draft.exceptions[0].notify_on_resolved, true);
+  assert.equal(draft.exceptions[0].reminder_interval, null);
+  controls["#notification-exception-start-0"].checked = true;
+  controls["#notification-exception-reminder-0"].value = 600;
+  captureNotificationProfileDraft(panel);
+  assert.equal(draft.exceptions[0].notify_on_start, true);
+  assert.equal(draft.exceptions[0].reminder_interval, 600);
+});

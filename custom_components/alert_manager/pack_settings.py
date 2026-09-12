@@ -47,6 +47,9 @@ def resolve_settings(
             for key, value in (
                 scope.get(f"{kind}_overrides", {}).get(target_id, {}).items()
             ):
+                # A more specific exception cannot reactivate a disabled parent.
+                if key == "enabled" and values.get("enabled") is False:
+                    continue
                 values[key] = value
                 origins[key] = f"{prefix}{kind}"
     if not config.get("enabled", False):

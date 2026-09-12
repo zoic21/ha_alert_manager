@@ -15,8 +15,8 @@ def test_fields_inherit_independently_and_zero_remains_explicit():
     }
     before = deepcopy(config)
     values, origins = resolve_settings(config, "sensor.battery", "device")
-    assert values == {"enabled": True, "delay": 1800, "threshold": 10}
-    assert origins == {"enabled": "entity", "delay": "device", "threshold": "entity"}
+    assert values == {"enabled": False, "delay": 1800, "threshold": 10}
+    assert origins == {"enabled": "device", "delay": "device", "threshold": "entity"}
     assert config == before
     config["entity_overrides"]["sensor.battery"]["delay"] = 0
     assert resolve_settings(config, "sensor.battery", "device")[0]["delay"] == 0
@@ -76,6 +76,40 @@ def test_source_exceptions_are_isolated_with_field_by_field_priority():
     )
     assert (
         resolve_settings(config, "sensor.test", "device", source_id="battery")[0][
+            "enabled"
+        ]
+        is False
+    )
+
+
+def test_disabled_device_blocks_source_entity_until_reenabled():
+    config = {
+        "enabled": True,
+        "device_overrides": {"dev": {"enabled": False}},
+        "source_packs": {
+            "unavailable": {
+                "enabled": True,
+                "device_overrides": {"dev": {"enabled": True}},
+                "entity_overrides": {"sensor.a": {"enabled": True, "window": 60}},
+            }
+        },
+    }
+    values, origins = resolve_settings(
+        config, "sensor.a", "dev", source_id="unavailable"
+    )
+    assert values["enabled"] is False
+    assert origins["enabled"] == "device"
+    assert values["window"] == 60
+    config["device_overrides"]["dev"]["enabled"] = True
+    assert (
+        resolve_settings(config, "sensor.a", "dev", source_id="unavailable")[0][
+            "enabled"
+        ]
+        is True
+    )
+    config["source_packs"]["unavailable"]["device_overrides"]["dev"]["enabled"] = False
+    assert (
+        resolve_settings(config, "sensor.a", "dev", source_id="unavailable")[0][
             "enabled"
         ]
         is False

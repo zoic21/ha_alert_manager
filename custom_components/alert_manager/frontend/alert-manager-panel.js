@@ -3453,8 +3453,6 @@ function hydrateConfigurationYaml(panel) {
 }
 
 // Source: frontend-src/components/notification-profiles.js
-const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
-
 const exceptionLabelIds = (exception) => exception.selector_ids
   ?? (exception.selector_id ? [exception.selector_id] : []);
 
@@ -3560,7 +3558,7 @@ function renderNotificationProfileDrawer({
   <section class="notification-profile-section">
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <ha-sortable id="notification-exception-sortable" handle-selector=".notification-exception-reorder" draggable-selector=".notification-exception"><div class="notification-exception-list">${draft.exceptions.length
-    ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
+    ? draft.exceptions.map((exception, index) => renderException(exception, index, t, draft.default_policy)).join("")
     : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div></ha-sortable>
   </section>`;
   return renderConfigurationDrawer({
@@ -3583,27 +3581,21 @@ function renderPolicySwitch(id, label, checked) {
   return `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
 }
 
-function renderException(exception, index, t) {
-  const reminderMode = Object.hasOwn(exception, "reminder_interval")
-    ? (exception.reminder_interval === null ? "never" : "custom")
-    : "inherit";
+function renderException(exception, index, t, defaults) {
+  const policy = { ...defaults, ...exception };
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
     <div class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
-      ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
-      ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), exception.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS)}` : ""}</div></div>
+      <div class="notification-policy-card full">
+        <div class="notification-policy-switches">
+          ${renderPolicySwitch(`notification-exception-start-${index}`, t("notifications.on_start"), policy.notify_on_start)}
+          ${renderPolicySwitch(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), policy.notify_on_resolved)}
+        </div>
+        <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
+      </div>
     </div>
   </ha-card>`;
-}
-
-function renderOverrideSelect(id, label, value) {
-  return `<div class="field"><span class="field-label">${esc(label)}</span><ha-select id="${id}" data-value="${esc(value)}"></ha-select></div>`;
-}
-
-function booleanOverrideValue(exception, key) {
-  return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
 }
 
 function hydrateNotificationProfileControls(panel) {
@@ -3667,35 +3659,6 @@ function hydrateNotificationProfileControls(panel) {
         delete exception.selector_id;
       },
     );
-    for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
-      panel._configureSelect(
-        `notification-exception-${suffix}-${index}`,
-        POLICY_BOOLEAN_OPTIONS.map((value) => ({
-          value,
-          label: panel._t(`notifications.override.${value}`),
-        })),
-        booleanOverrideValue(exception, key),
-        (value) => setBooleanOverride(exception, key, value),
-      );
-    }
-    const reminderMode = Object.hasOwn(exception, "reminder_interval")
-      ? (exception.reminder_interval === null ? "never" : "custom")
-      : "inherit";
-    panel._configureSelect(
-      `notification-exception-reminder-mode-${index}`,
-      ["inherit", "never", "custom"].map((value) => ({
-        value,
-        label: panel._t(`notifications.reminder_modes.${value}`),
-      })),
-      reminderMode,
-      (value) => {
-        captureNotificationProfileDraft(panel);
-        if (value === "inherit") delete exception.reminder_interval;
-        else if (value === "never") exception.reminder_interval = null;
-        else exception.reminder_interval = DEFAULT_NOTIFICATION_REMINDER_SECONDS;
-        panel._refreshSettingsConfigurationDrawer();
-      },
-    );
   });
 }
 
@@ -3745,11 +3708,6 @@ function moveNotificationException(panel, oldIndex, newIndex) {
   )?.focus();
 }
 
-function setBooleanOverride(exception, key, value) {
-  if (value === "inherit") delete exception[key];
-  else exception[key] = value === "true";
-}
-
 function captureNotificationProfileDraft(panel) {
   const draft = panel._notificationProfileDraft;
   if (!draft || !panel.shadowRoot.querySelector("#notification-profile-name")) return;
@@ -3760,9 +3718,12 @@ function captureNotificationProfileDraft(panel) {
   const reminder = String(durationFieldValue(panel.shadowRoot.querySelector("#notification-reminder")) ?? "").trim();
   draft.default_policy.reminder_interval = reminder === "" ? null : Number(reminder);
   draft.exceptions.forEach((exception, index) => {
-    if (!Object.hasOwn(exception, "reminder_interval") || exception.reminder_interval === null) return;
+    for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
+      const control = panel.shadowRoot.querySelector(`#notification-exception-${suffix}-${index}`);
+      if (control) exception[key] = Boolean(control.checked);
+    }
     const value = durationFieldValue(panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`));
-    if (value !== undefined) exception.reminder_interval = Number(value);
+    if (value !== undefined) exception.reminder_interval = value === "" ? null : Number(value);
   });
 }
 
@@ -3984,6 +3945,7 @@ async function handleNotificationProfileAction(action, button) {
     this._notificationProfileDraft.exceptions.push({
       selector_type: "label",
       selector_ids: [],
+      ...this._notificationProfileDraft.default_policy,
     });
     this._refreshSettingsConfigurationDrawer(
       `[data-notification-exception="${this._notificationProfileDraft.exceptions.length - 1}"]`,
@@ -6583,7 +6545,7 @@ function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities
   let value = draft[fieldId];
   let origin = "pack";
   const source = sourceId ? draft.source_packs?.[sourceId] : null;
-  if (source?.[fieldId] != null) { value = source[fieldId]; origin = "source"; }
+  if (source?.[fieldId] != null && !(fieldId === "enabled" && value === false)) { value = source[fieldId]; origin = "source"; }
   const deviceId = kind === "entity_overrides" ? entities[targetId]?.device_id : targetId;
   for (const [key, id] of [["device_overrides", deviceId], ["entity_overrides", targetId]]) {
     if (key === "entity_overrides" && kind === "device_overrides") continue;
@@ -6591,7 +6553,7 @@ function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities
       // Exclude the field currently edited: its inherited value is its parent.
       if (key === kind && ((!sourceId && scope === draft) || (sourceId && scope === source))) continue;
       const row = scope?.[key]?.find((row) => row.target_id === id);
-      if (row && Object.hasOwn(row, fieldId)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
+      if (row && Object.hasOwn(row, fieldId) && !(fieldId === "enabled" && value === false)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
     }
   }
   return { value, origin };
@@ -6614,17 +6576,22 @@ function targetWarning(pack, row, kind, config, hass, sourceId) {
   return null;
 }
 
-function renderSetting(field, value, id, attributes, t, inherited = null) {
+function renderSetting(field, value, id, attributes, t, sparse = false, disabled = false) {
+  if (disabled) attributes = { ...attributes, disabled: "" };
   const label = t(`automatic.fields.${field.translation_key}.label`);
   const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  if (field.id === "enabled" && attributes["data-pack-setting"]) {
+    const label = t("automatic.monitor_target");
+    return `<div class="field pack-setting-field pack-monitoring-field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" ${attrs} aria-label="${esc(label)}" ${value !== false ? "checked" : ""}></ha-switch></div></div>`;
+  }
   const control = ["boolean", "select"].includes(field.type)
     ? `<ha-selector id="${id}" ${attrs} aria-label="${esc(label)}"></ha-selector>`
     : field.type === "text"
       ? `<ha-input id="${id}" type="text" value="${esc(value ?? "")}" ${attrs} aria-label="${esc(label)}"></ha-input>`
     : field.unit === "s"
-      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: inherited === null })
-      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${inherited === null ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
-  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}${inherited && field.id !== "enabled" ? `<small>${esc(t("automatic.inherited_value", { value: formatSetting(inherited.value, field, t), origin: t(`automatic.origin_${inherited.origin}`) }))}</small>` : ""}</div>`;
+      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: !sparse })
+      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${!sparse ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
+  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}</div>`;
 }
 
 function renderPackField(pack, field, config, context) {
@@ -6635,10 +6602,13 @@ function renderPackField(pack, field, config, context) {
   const rows = scope?.[field.id] ?? [];
   return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))}</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     ${rows.length ? rows.map((row, index) => {
-      const warning = targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, context.config, hass, sourceId);
+      const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities);
+      const parentBlocked = parent.value === false;
+      const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
+      const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);
       return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
         ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
-        <div class="pack-settings-values">${field.fields.filter((setting) => setting.id === "enabled" || row.enabled !== false).map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, inheritedPackSetting(draft[pack.id], setting.id, row.target_id, field.id, sourceId, hass?.entities))).join("")}</div>
+        <div class="pack-settings-values">${field.fields.map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false))).join("")}</div>
       </ha-card>`;
     }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
@@ -6657,7 +6627,7 @@ function renderAutomaticConfigurationDrawer(context) {
     <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
     ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
     ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
-    ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, sourceId ? { value: settings[field.id], origin: "pack" } : null)).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
+    ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, Boolean(sourceId))).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
   </div>`;
   return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
 }
@@ -6672,6 +6642,8 @@ function captureAutomaticMapValues() {
   if (!this._automaticMapDraft || this._configurationDrawer?.mode === "yaml") return;
   const sourceId = this._configurationDrawer?.sourceId ?? "";
   this.shadowRoot.querySelectorAll("[data-pack-setting], [data-pack-default]").forEach((input) => {
+    if (input.disabled || input.hasAttribute?.("disabled")) return;
+    if (input.tagName?.toLowerCase() === "ha-switch") return;
     if (input.tagName?.toLowerCase() === "ha-selector" && input.dataset.durationValue === undefined) return;
     const scope = scopeFor(this._automaticMapDraft[input.dataset.packSetting ?? input.dataset.packDefault], sourceId);
     const row = input.dataset.packField ? scope?.[input.dataset.packField]?.[Number(input.dataset.packIndex)] : scope;
@@ -6736,9 +6708,20 @@ function refreshAutomaticConfigurationDrawer(revealSelector) {
 function updateAutomaticConfigurationCount() { /* Counts refresh with the saved page. */ }
 
 function hydratePackChoice(panel, id, field, values, sparse) {
+  if (field.id === "enabled") {
+    const control = panel.shadowRoot.querySelector(`#${id}`);
+    if (control) control.onchange = () => {
+      if (control.disabled || control.hasAttribute?.("disabled")) return;
+      captureAutomaticMapValues.call(panel);
+      values.enabled = control.checked;
+      panel._markConfigurationDirty("automatic");
+      refreshAutomaticConfigurationDrawer.call(panel);
+    };
+    return;
+  }
   const boolean = field.type === "boolean";
   const options = boolean
-    ? [{ value: "enabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_enabled" : "automatic.boolean_true") }, { value: "disabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_disabled" : "automatic.boolean_false") }]
+    ? [{ value: "enabled", label: panel._t("automatic.boolean_true") }, { value: "disabled", label: panel._t("automatic.boolean_false") }]
     : (field.options ?? []).map((value) => ({ value: JSON.stringify(value), label: value }));
   if (sparse) options.unshift({ value: "inherit", label: panel._t("automatic.inherit") });
   const value = values[field.id] == null ? sparse ? "inherit" : "" : boolean ? values[field.id] ? "enabled" : "disabled" : JSON.stringify(values[field.id]);
@@ -6747,7 +6730,6 @@ function hydratePackChoice(panel, id, field, values, sparse) {
     if (selected == null || (sparse && ["", "inherit"].includes(selected))) delete values[field.id];
     else values[field.id] = boolean ? selected === "enabled" : JSON.parse(selected);
     panel._markConfigurationDirty("automatic");
-    if (field.id === "enabled") refreshAutomaticConfigurationDrawer.call(panel);
   });
 }
 
@@ -6759,8 +6741,10 @@ function hydrateAutomaticControls() {
     const draft = this._automaticMapDraft[pack.id];
     const control = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (control) control.onchange = () => {
+      captureAutomaticMapValues.call(this);
       draft.enabled = control.checked;
       this._markConfigurationDirty("automatic");
+      if (drawer?.kind === "automatic") refreshAutomaticConfigurationDrawer.call(this);
     };
     if (drawer?.kind !== "automatic" || drawer.id !== pack.id || drawer.mode === "yaml") continue;
     const scope = scopeFor(draft, drawer.sourceId);
@@ -8322,19 +8306,6 @@ const settingsStyles = `
   .notification-exception-grid > .field {
     justify-content: flex-end;
   }
-  .notification-exception-reminder.has-custom-value {
-    grid-column: 1 / -1;
-  }
-  .notification-exception-reminder-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 16px;
-  }
-  .notification-exception-reminder.has-custom-value
-    .notification-exception-reminder-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .notification-exception h3,
   .notification-exceptions-header h3,
   .side-drawer-section > h3 {
@@ -8829,6 +8800,16 @@ const settingsStyles = `
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
     gap: 12px 16px;
     align-items: start;
+  }
+  .automatic-exception .pack-settings-values {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+  }
+  .automatic-exception .pack-monitoring-field {
+    justify-content: center;
+  }
+  .pack-setting-field:has([disabled]) {
+    opacity: .6;
   }
   .automatic-pack-settings > .pack-setting-field > .field-label,
   .automatic-exception .pack-setting-field > .field-label {
@@ -9385,6 +9366,7 @@ const responsiveStyles = `
     .delay-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }
+    .automatic-exception .pack-settings-values,
     .pack-settings-values {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -9514,13 +9496,7 @@ const responsiveStyles = `
       border-inline-end: 0;
       border-block-end: 1px solid var(--divider-color, #ddd);
     }
-    .notification-exception-reminder {
-      grid-column: 1 / -1;
-    }
-    .notification-exception-reminder.has-custom-value
-      .notification-exception-reminder-controls {
-      grid-template-columns: 1fr;
-    }
+
     .rule-value-row {
       grid-template-columns: minmax(0, 1fr) auto;
     }

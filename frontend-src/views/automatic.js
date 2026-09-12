@@ -62,7 +62,7 @@ export function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, e
   let value = draft[fieldId];
   let origin = "pack";
   const source = sourceId ? draft.source_packs?.[sourceId] : null;
-  if (source?.[fieldId] != null) { value = source[fieldId]; origin = "source"; }
+  if (source?.[fieldId] != null && !(fieldId === "enabled" && value === false)) { value = source[fieldId]; origin = "source"; }
   const deviceId = kind === "entity_overrides" ? entities[targetId]?.device_id : targetId;
   for (const [key, id] of [["device_overrides", deviceId], ["entity_overrides", targetId]]) {
     if (key === "entity_overrides" && kind === "device_overrides") continue;
@@ -70,7 +70,7 @@ export function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, e
       // Exclude the field currently edited: its inherited value is its parent.
       if (key === kind && ((!sourceId && scope === draft) || (sourceId && scope === source))) continue;
       const row = scope?.[key]?.find((row) => row.target_id === id);
-      if (row && Object.hasOwn(row, fieldId)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
+      if (row && Object.hasOwn(row, fieldId) && !(fieldId === "enabled" && value === false)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
     }
   }
   return { value, origin };
@@ -93,17 +93,22 @@ function targetWarning(pack, row, kind, config, hass, sourceId) {
   return null;
 }
 
-function renderSetting(field, value, id, attributes, t, inherited = null) {
+function renderSetting(field, value, id, attributes, t, sparse = false, disabled = false) {
+  if (disabled) attributes = { ...attributes, disabled: "" };
   const label = t(`automatic.fields.${field.translation_key}.label`);
   const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  if (field.id === "enabled" && attributes["data-pack-setting"]) {
+    const label = t("automatic.monitor_target");
+    return `<div class="field pack-setting-field pack-monitoring-field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" ${attrs} aria-label="${esc(label)}" ${value !== false ? "checked" : ""}></ha-switch></div></div>`;
+  }
   const control = ["boolean", "select"].includes(field.type)
     ? `<ha-selector id="${id}" ${attrs} aria-label="${esc(label)}"></ha-selector>`
     : field.type === "text"
       ? `<ha-input id="${id}" type="text" value="${esc(value ?? "")}" ${attrs} aria-label="${esc(label)}"></ha-input>`
     : field.unit === "s"
-      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: inherited === null })
-      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${inherited === null ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
-  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}${inherited && field.id !== "enabled" ? `<small>${esc(t("automatic.inherited_value", { value: formatSetting(inherited.value, field, t), origin: t(`automatic.origin_${inherited.origin}`) }))}</small>` : ""}</div>`;
+      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: !sparse })
+      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${!sparse ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
+  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}</div>`;
 }
 
 export function renderPackField(pack, field, config, context) {
@@ -114,10 +119,13 @@ export function renderPackField(pack, field, config, context) {
   const rows = scope?.[field.id] ?? [];
   return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))}</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     ${rows.length ? rows.map((row, index) => {
-      const warning = targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, context.config, hass, sourceId);
+      const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities);
+      const parentBlocked = parent.value === false;
+      const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
+      const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);
       return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
         ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
-        <div class="pack-settings-values">${field.fields.filter((setting) => setting.id === "enabled" || row.enabled !== false).map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, inheritedPackSetting(draft[pack.id], setting.id, row.target_id, field.id, sourceId, hass?.entities))).join("")}</div>
+        <div class="pack-settings-values">${field.fields.map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false))).join("")}</div>
       </ha-card>`;
     }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
@@ -136,7 +144,7 @@ export function renderAutomaticConfigurationDrawer(context) {
     <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
     ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
     ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
-    ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, sourceId ? { value: settings[field.id], origin: "pack" } : null)).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
+    ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, Boolean(sourceId))).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
   </div>`;
   return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
 }
@@ -151,6 +159,8 @@ export function captureAutomaticMapValues() {
   if (!this._automaticMapDraft || this._configurationDrawer?.mode === "yaml") return;
   const sourceId = this._configurationDrawer?.sourceId ?? "";
   this.shadowRoot.querySelectorAll("[data-pack-setting], [data-pack-default]").forEach((input) => {
+    if (input.disabled || input.hasAttribute?.("disabled")) return;
+    if (input.tagName?.toLowerCase() === "ha-switch") return;
     if (input.tagName?.toLowerCase() === "ha-selector" && input.dataset.durationValue === undefined) return;
     const scope = scopeFor(this._automaticMapDraft[input.dataset.packSetting ?? input.dataset.packDefault], sourceId);
     const row = input.dataset.packField ? scope?.[input.dataset.packField]?.[Number(input.dataset.packIndex)] : scope;
@@ -215,9 +225,20 @@ export function refreshAutomaticConfigurationDrawer(revealSelector) {
 export function updateAutomaticConfigurationCount() { /* Counts refresh with the saved page. */ }
 
 function hydratePackChoice(panel, id, field, values, sparse) {
+  if (field.id === "enabled") {
+    const control = panel.shadowRoot.querySelector(`#${id}`);
+    if (control) control.onchange = () => {
+      if (control.disabled || control.hasAttribute?.("disabled")) return;
+      captureAutomaticMapValues.call(panel);
+      values.enabled = control.checked;
+      panel._markConfigurationDirty("automatic");
+      refreshAutomaticConfigurationDrawer.call(panel);
+    };
+    return;
+  }
   const boolean = field.type === "boolean";
   const options = boolean
-    ? [{ value: "enabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_enabled" : "automatic.boolean_true") }, { value: "disabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_disabled" : "automatic.boolean_false") }]
+    ? [{ value: "enabled", label: panel._t("automatic.boolean_true") }, { value: "disabled", label: panel._t("automatic.boolean_false") }]
     : (field.options ?? []).map((value) => ({ value: JSON.stringify(value), label: value }));
   if (sparse) options.unshift({ value: "inherit", label: panel._t("automatic.inherit") });
   const value = values[field.id] == null ? sparse ? "inherit" : "" : boolean ? values[field.id] ? "enabled" : "disabled" : JSON.stringify(values[field.id]);
@@ -226,7 +247,6 @@ function hydratePackChoice(panel, id, field, values, sparse) {
     if (selected == null || (sparse && ["", "inherit"].includes(selected))) delete values[field.id];
     else values[field.id] = boolean ? selected === "enabled" : JSON.parse(selected);
     panel._markConfigurationDirty("automatic");
-    if (field.id === "enabled") refreshAutomaticConfigurationDrawer.call(panel);
   });
 }
 
@@ -238,8 +258,10 @@ export function hydrateAutomaticControls() {
     const draft = this._automaticMapDraft[pack.id];
     const control = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
     if (control) control.onchange = () => {
+      captureAutomaticMapValues.call(this);
       draft.enabled = control.checked;
       this._markConfigurationDirty("automatic");
+      if (drawer?.kind === "automatic") refreshAutomaticConfigurationDrawer.call(this);
     };
     if (drawer?.kind !== "automatic" || drawer.id !== pack.id || drawer.mode === "yaml") continue;
     const scope = scopeFor(draft, drawer.sourceId);

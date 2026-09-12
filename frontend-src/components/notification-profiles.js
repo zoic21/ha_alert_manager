@@ -1,15 +1,12 @@
 import { durationFieldValue, renderDurationControl } from "./duration-field.js";
 import { loadNativeBottomSheet, renderConfigurationDrawer, renderConfigurationRemove } from "./configuration-drawer.js";
 import {
-  DEFAULT_NOTIFICATION_REMINDER_SECONDS,
   MAX_DURATION_SECONDS,
   MDI_PLUS,
   MDI_DOTS_VERTICAL,
   MIN_NOTIFICATION_REMINDER_SECONDS,
 } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
-
-const POLICY_BOOLEAN_OPTIONS = ["inherit", "true", "false"];
 
 const exceptionLabelIds = (exception) => exception.selector_ids
   ?? (exception.selector_id ? [exception.selector_id] : []);
@@ -116,7 +113,7 @@ export function renderNotificationProfileDrawer({
   <section class="notification-profile-section">
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <ha-sortable id="notification-exception-sortable" handle-selector=".notification-exception-reorder" draggable-selector=".notification-exception"><div class="notification-exception-list">${draft.exceptions.length
-    ? draft.exceptions.map((exception, index) => renderException(exception, index, t)).join("")
+    ? draft.exceptions.map((exception, index) => renderException(exception, index, t, draft.default_policy)).join("")
     : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div></ha-sortable>
   </section>`;
   return renderConfigurationDrawer({
@@ -139,27 +136,21 @@ function renderPolicySwitch(id, label, checked) {
   return `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
 }
 
-function renderException(exception, index, t) {
-  const reminderMode = Object.hasOwn(exception, "reminder_interval")
-    ? (exception.reminder_interval === null ? "never" : "custom")
-    : "inherit";
+function renderException(exception, index, t, defaults) {
+  const policy = { ...defaults, ...exception };
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
     <div class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
-      ${renderOverrideSelect(`notification-exception-start-${index}`, t("notifications.on_start"), booleanOverrideValue(exception, "notify_on_start"))}
-      ${renderOverrideSelect(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), booleanOverrideValue(exception, "notify_on_resolved"))}
-      <div class="field notification-exception-reminder ${reminderMode === "custom" ? "has-custom-value" : ""}"><span class="field-label">${esc(t("notifications.reminder"))}</span><div class="notification-exception-reminder-controls"><ha-select id="notification-exception-reminder-mode-${index}"></ha-select>${reminderMode === "custom" ? `${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), exception.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS)}` : ""}</div></div>
+      <div class="notification-policy-card full">
+        <div class="notification-policy-switches">
+          ${renderPolicySwitch(`notification-exception-start-${index}`, t("notifications.on_start"), policy.notify_on_start)}
+          ${renderPolicySwitch(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), policy.notify_on_resolved)}
+        </div>
+        <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
+      </div>
     </div>
   </ha-card>`;
-}
-
-function renderOverrideSelect(id, label, value) {
-  return `<div class="field"><span class="field-label">${esc(label)}</span><ha-select id="${id}" data-value="${esc(value)}"></ha-select></div>`;
-}
-
-function booleanOverrideValue(exception, key) {
-  return Object.hasOwn(exception, key) ? String(exception[key]) : "inherit";
 }
 
 export function hydrateNotificationProfileControls(panel) {
@@ -223,35 +214,6 @@ export function hydrateNotificationProfileControls(panel) {
         delete exception.selector_id;
       },
     );
-    for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
-      panel._configureSelect(
-        `notification-exception-${suffix}-${index}`,
-        POLICY_BOOLEAN_OPTIONS.map((value) => ({
-          value,
-          label: panel._t(`notifications.override.${value}`),
-        })),
-        booleanOverrideValue(exception, key),
-        (value) => setBooleanOverride(exception, key, value),
-      );
-    }
-    const reminderMode = Object.hasOwn(exception, "reminder_interval")
-      ? (exception.reminder_interval === null ? "never" : "custom")
-      : "inherit";
-    panel._configureSelect(
-      `notification-exception-reminder-mode-${index}`,
-      ["inherit", "never", "custom"].map((value) => ({
-        value,
-        label: panel._t(`notifications.reminder_modes.${value}`),
-      })),
-      reminderMode,
-      (value) => {
-        captureNotificationProfileDraft(panel);
-        if (value === "inherit") delete exception.reminder_interval;
-        else if (value === "never") exception.reminder_interval = null;
-        else exception.reminder_interval = DEFAULT_NOTIFICATION_REMINDER_SECONDS;
-        panel._refreshSettingsConfigurationDrawer();
-      },
-    );
   });
 }
 
@@ -301,11 +263,6 @@ export function moveNotificationException(panel, oldIndex, newIndex) {
   )?.focus();
 }
 
-function setBooleanOverride(exception, key, value) {
-  if (value === "inherit") delete exception[key];
-  else exception[key] = value === "true";
-}
-
 export function captureNotificationProfileDraft(panel) {
   const draft = panel._notificationProfileDraft;
   if (!draft || !panel.shadowRoot.querySelector("#notification-profile-name")) return;
@@ -316,9 +273,12 @@ export function captureNotificationProfileDraft(panel) {
   const reminder = String(durationFieldValue(panel.shadowRoot.querySelector("#notification-reminder")) ?? "").trim();
   draft.default_policy.reminder_interval = reminder === "" ? null : Number(reminder);
   draft.exceptions.forEach((exception, index) => {
-    if (!Object.hasOwn(exception, "reminder_interval") || exception.reminder_interval === null) return;
+    for (const [suffix, key] of [["start", "notify_on_start"], ["resolved", "notify_on_resolved"]]) {
+      const control = panel.shadowRoot.querySelector(`#notification-exception-${suffix}-${index}`);
+      if (control) exception[key] = Boolean(control.checked);
+    }
     const value = durationFieldValue(panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`));
-    if (value !== undefined) exception.reminder_interval = Number(value);
+    if (value !== undefined) exception.reminder_interval = value === "" ? null : Number(value);
   });
 }
 
@@ -540,6 +500,7 @@ export async function handleNotificationProfileAction(action, button) {
     this._notificationProfileDraft.exceptions.push({
       selector_type: "label",
       selector_ids: [],
+      ...this._notificationProfileDraft.default_policy,
     });
     this._refreshSettingsConfigurationDrawer(
       `[data-notification-exception="${this._notificationProfileDraft.exceptions.length - 1}"]`,
