@@ -40,7 +40,7 @@ function formatSetting(value, field, t) {
 export function renderAutomatic(context) {
   const { availablePacks, draft, t } = context;
   return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
-    <h2>${esc(t("tabs.automatic"))}</h2><form id="automatic-form" class="automatic-grid">
+    <h2>${esc(t("tabs.automatic"))}</h2><div id="automatic-form" class="automatic-grid">
     ${availablePacks.map((pack) => {
       const settings = draft[pack.id];
       const name = t(`packs.${pack.translation_key || pack.id}.name`);
@@ -48,7 +48,7 @@ export function renderAutomatic(context) {
       return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
         <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
         <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
-    }).join("")}</form>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
+    }).join("")}</div>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
 }
 
 export function renderAutomaticPanel() {

@@ -688,7 +688,7 @@
       "history_limit": "Nombre d’événements historiques conservés",
       "history_limit_help": "De 0 à 1000 événements. La valeur par défaut est 100 ; 0 désactive la conservation du nouvel historique.",
       "history_limit_validation": "Le nombre d’événements historiques doit être un entier compris entre 0 et 1000.",
-      "miscellaneous": "Divers",
+      "general": "Général",
       "history_settings": "Historique",
       "label_exclusions": "Labels exclus des surveillances automatiques",
       "labels_help": "Une règle personnalisée ignore ces labels.",

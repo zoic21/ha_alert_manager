@@ -6531,7 +6531,7 @@ function formatSetting(value, field, t) {
 function renderAutomatic(context) {
   const { availablePacks, draft, t } = context;
   return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
-    <h2>${esc(t("tabs.automatic"))}</h2><form id="automatic-form" class="automatic-grid">
+    <h2>${esc(t("tabs.automatic"))}</h2><div id="automatic-form" class="automatic-grid">
     ${availablePacks.map((pack) => {
       const settings = draft[pack.id];
       const name = t(`packs.${pack.translation_key || pack.id}.name`);
@@ -6539,7 +6539,7 @@ function renderAutomatic(context) {
       return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
         <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
         <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
-    }).join("")}</form>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
+    }).join("")}</div>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
 }
 
 function renderAutomaticPanel() {
@@ -6888,11 +6888,10 @@ async function handleAutomaticAction(action, button) {
 
 // Source: frontend-src/views/settings.js
 const SETTINGS_SECTIONS = [
+  ["general", "settings.general", "mdi:tune"],
   ["automatic", "tabs.automatic", "mdi:radar"],
   ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
-  ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
   ["notifications", "notifications.title", "mdi:bell-outline"],
-  ["miscellaneous", "settings.miscellaneous", "mdi:tune"],
   ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
   ["diagnostics", "statistics.title", "mdi:speedometer"],
 ];
@@ -6912,8 +6911,19 @@ function renderSettings(context) {
     const ignoredReferences = settingsDraft.coherence_ignored_entity_references;
     return `<div class="stack settings-page${configurationDrawer ? " has-editor" : ""}">
       ${renderSettingsNavigation(t)}
-      ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
+      <ha-card id="settings-section-general" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.general"))}</h2><div class="settings-grid">
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
+        <div class="history-settings">
+          <div class="history-settings-row">
+            <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
+            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
+          </div>
+          <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
+        </div>
+        <div class="field settings-wide"><span class="field-label">${esc(t("settings.exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
+      </div></ha-card>
+      ${automaticMarkup}
       <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
         <div class="coherence-options">
@@ -6926,11 +6936,7 @@ function renderSettings(context) {
           <small>${esc(t("settings.coherence_ignored_entity_references_help"))}</small>
         </div>
       </div></ha-card>
-      <ha-card id="settings-section-exclusions" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
-        <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
-        <div class="settings-wide settings-configuration-actions">
-        </div>
-      </div></ha-card>
+
       ${renderNotificationProfiles({
         profiles: settingsDraft.notification_profiles ?? [],
         batchDelayField: renderNumberField("notification-batch-delay", t("notifications.batch_delay"), settingsDraft.notification_batch_delay ?? config.notification_batch_delay ?? 30, t("units.seconds"), 10, 300, { help: t("notifications.batch_delay_help") }),
@@ -6938,16 +6944,7 @@ function renderSettings(context) {
         busy,
         t,
       })}
-      <ha-card id="settings-section-miscellaneous" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.miscellaneous"))}</h2><div class="settings-grid">
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
-        <div class="history-settings">
-          <div class="history-settings-row">
-            <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
-            <ha-input id="history-limit" type="number" min="0" max="1000" step="1" value="${esc(settingsDraft.history_limit ?? historyConfig.retention_limit)}" required aria-label="${esc(t("settings.history_limit"))}"><span slot="end">${esc(t("units.events"))}</span></ha-input>
-          </div>
-          <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
-        </div>
-      </div></ha-card>
+
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>

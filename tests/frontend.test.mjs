@@ -2435,7 +2435,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(automatic, /data-action="save-automatic"/);
   assert.match(automatic, /^<ha-card id="settings-section-automatic" outlined/);
   assert.match(automatic, /<section class="category-card automatic-pack-row">/);
-  assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
+  assert.match(automatic, /<div id="automatic-form" class="automatic-grid">/);
   assert.match(automatic, /data-action="open-automatic-configuration"/);
   assert.doesNotMatch(automatic, /low_battery_level/);
   assert.doesNotMatch(settings, /id="global-delay"/);
@@ -2444,9 +2444,12 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
   assert.match(settings, /<form id="settings-form" class="stack settings-form"/);
-  assert.match(settings, /<h2>Divers<\/h2>/);
+  assert.equal((settings.match(/<form\b/g) ?? []).length, 1, "configuration must not nest forms");
+  assert.ok(settings.indexOf('id="settings-form"') < settings.indexOf('id="pending-display-delay"'));
+  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('id="automatic-form"'));
+  assert.match(settings, /<h2>Général<\/h2>/);
   assert.match(settings, /<h2>Analyse de cohérence<\/h2>/);
-  assert.match(settings, /<h2>Exclusions de la surveillance automatique<\/h2>/);
+  assert.match(settings, /<span class="field-label">Exclusions de la surveillance automatique<\/span>/);
   assert.doesNotMatch(settings, /<h2>Historique<\/h2>|<h2>Affichage des alertes<\/h2>/);
   assert.match(settings, /<ha-chip-set class="ignored-reference-chips">[\s\S]*<ha-input-chip[^>]+data-ignored-reference="toto\.plop"/);
   assert.match(settings, /<ha-input id="ignored-reference-input"[^>]+placeholder="Exemple : toto\.plop"/);
@@ -2458,12 +2461,12 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
-  assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
+  assert.match(settings, /<div class="field settings-wide"><span class="field-label">Exclusions de la surveillance automatique<\/span><ha-selector id="excluded-labels"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.equal((settings.match(/data-action="save-configuration"/g) ?? []).length, 1);
   assert.match(settings, /slot="fab" size="l" class=""[^>]*data-action="save-configuration"/);
   assert.doesNotMatch(settings, /class="actions settings-save-actions"/);
-  assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings"'));
+  assert.ok(settings.indexOf('class="history-settings"') < settings.indexOf('id="excluded-labels"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
