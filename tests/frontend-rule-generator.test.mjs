@@ -15,11 +15,27 @@ test("generator uses native drawer, escaped labels and disabled reasons", () => 
   assert.match(html, /ha-checkbox/);
   assert.match(html, /generator.status.no_entities/);
   assert.match(html, /&lt;script&gt;/);
-  assert.doesNotMatch(html, /<script>/);
+  assert.doesNotMatch(html, /<script\b/i);
   assert.match(html, /data-action="generate-rules" disabled/);
   assert.ok(html.indexOf('data-blueprint-id="cpu"') < html.indexOf('generator.status.no_entities'));
   assert.doesNotMatch(html, /ha-selector|ha-input|ha-textfield/);
 });
+
+for (const [label, escaped] of [
+  ["<script>", "&lt;script&gt;"],
+  ["<SCRIPT>", "&lt;SCRIPT&gt;"],
+  ["<ScRiPt>", "&lt;ScRiPt&gt;"],
+  ['<SCRIPT src="test.js">', "&lt;SCRIPT src=&quot;test.js&quot;&gt;"],
+]) {
+  test(`generator escapes script labels: ${label}`, () => {
+    const draft = drawer();
+    draft.rows = [{ ...row, name_key: label, description_key: label }];
+    const html = render(draft);
+    assert.ok(html.includes(`<strong>${escaped}</strong><p>${escaped}</p>`));
+    assert.ok(html.includes(`aria-label="${escaped}"`));
+    assert.doesNotMatch(html, /<script\b/i);
+  });
+}
 
 test("Custom rules exposes the generator action", () => {
   const html = renderRules({ editorOpen: false, editor: "", editorWidth: 560, pageMessages: "", t: (key) => key, renderFacetFilter: () => "" });
