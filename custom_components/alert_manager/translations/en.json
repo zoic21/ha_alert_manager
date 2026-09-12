@@ -279,7 +279,11 @@
       "transition_finite": "Transition numbers must be finite.",
       "transition_unavailable": "Unknown and unavailable cannot be transition values.",
       "transition_distinct": "Departure and arrival must differ.",
-      "transition_expiration": "Automatic resolution must be between 1 second and 365 days."
+      "transition_expiration": "Automatic resolution must be between 1 second and 365 days.",
+      "blueprint_duplicates": "The selection contains blueprints that create equivalent rules. Select only one.",
+      "blueprint_selection": "Invalid blueprint selection.",
+      "blueprint_stale": "These blueprints are no longer available. Refresh the list and try again.",
+      "blueprint_provenance": "Invalid blueprint provenance metadata."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -878,6 +882,50 @@
       "coherence": "Coherence",
       "coherence_one": "1 issue detected",
       "coherence_count": "{count} issues detected"
+    },
+    "generator": {
+      "title": "Generate rules",
+      "refresh": "Refresh",
+      "create": "Create selected rules",
+      "created": "Selected rules created.",
+      "help": "Select ready-to-use blueprints. Created rules remain editable in Custom rules; they do not synchronize automatically.",
+      "invalid": "Invalid blueprint",
+      "entity_count": "{count} entities",
+      "replacement": "Replaced by {id}",
+      "categories": {
+        "system": "System",
+        "storage": "Storage",
+        "network": "Network",
+        "home_assistant": "Home Assistant",
+        "integrations": "Integrations",
+        "other": "Other"
+      },
+      "status": {
+        "invalid": "Invalid blueprint configuration",
+        "deprecated": "Deprecated blueprint",
+        "missing_integration": "Required integration not configured",
+        "missing_domain": "Required entity domain not found",
+        "no_entities": "No compatible enabled entity found",
+        "too_many_entities": "More than 50 matching entities; narrow the blueprint discovery",
+        "already_generated": "Rule already generated",
+        "matching_rule": "A matching rule already exists"
+      },
+      "system_cpu_usage": {
+        "name": "System: high CPU usage",
+        "description": "System Monitor CPU usage above 90% for 5 minutes."
+      },
+      "system_memory_usage": {
+        "name": "System: high memory usage",
+        "description": "System Monitor memory usage above 90% for 5 minutes."
+      },
+      "system_cpu_temperature": {
+        "name": "System: high CPU temperature",
+        "description": "System Monitor CPU temperature above 80 °C for 5 minutes (Celsius sensors)."
+      },
+      "storage_disk_usage": {
+        "name": "Storage: high disk usage",
+        "description": "System Monitor disk usage above 90% for 5 minutes."
+      }
     }
   },
   "services": {

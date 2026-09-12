@@ -25,6 +25,7 @@ MAX_YAML_SIZE = 1_000_000
 
 
 _RULE_YAML_KEYS = {
+    "blueprint",
     "from_value",
     "to_value",
     "auto_resolve",
@@ -190,6 +191,8 @@ def rule_to_yaml_data(
             "flapping_recovery": data.get("flapping_recovery"),
         }
     )
+    if data.get("blueprint") is not None:
+        result["blueprint"] = data["blueprint"]
     if include_id:
         return {"id": data.get("id"), **result}
     return result

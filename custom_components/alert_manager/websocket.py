@@ -643,6 +643,44 @@ async def websocket_rule_delete(
     connection.send_result(msg["id"], {"deleted": True})
 
 
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/rules/blueprints/list"}
+)
+async def websocket_rule_blueprints_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Discover built-in recipes on explicit administrator request."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], await manager.async_list_rule_blueprints())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/blueprints/create",
+        vol.Required("blueprint_ids"): vol.All(
+            [vol.All(str, vol.Length(min=1, max=128))],
+            vol.Length(min=1, max=50),
+        ),
+    }
+)
+async def websocket_rule_blueprints_create(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create normal rules through the existing serialized configuration path."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_generate_rules(msg["blueprint_ids"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register each command once for the Home Assistant process lifetime."""
     for command in (
@@ -665,6 +703,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_notification_test,
         websocket_notification_stats_get,
         websocket_rule_create,
+        websocket_rule_blueprints_list,
+        websocket_rule_blueprints_create,
         websocket_rule_update,
         websocket_rule_yaml_validate,
         websocket_notification_yaml_validate,

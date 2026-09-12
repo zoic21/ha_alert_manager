@@ -83,6 +83,7 @@ const ruleToYaml = (rule) => {
     `flapping_window: ${yamlValue(rule.flapping_window)}`,
     `flapping_recovery: ${yamlValue(rule.flapping_recovery)}`,
   );
+  if (rule.blueprint) lines.push(`blueprint: ${JSON.stringify(rule.blueprint)}`);
   return `${lines.join("\n")}\n`;
 };
 

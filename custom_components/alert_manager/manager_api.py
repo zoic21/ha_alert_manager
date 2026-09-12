@@ -28,6 +28,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
+from .blueprints import (
+    discovery_attributes,
+    load_blueprints,
+    prepare_blueprints,
+    rule_signature,
+    snapshot_installation,
+)
 from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
     DOMAIN,
@@ -1030,25 +1037,90 @@ class _ApiMixin:
         self._publish_if_changed(force=True)
         return {"config": self.get_config(), "summary": summary}
 
+    async def _async_blueprint_candidates(self) -> list[dict[str, Any]]:
+        """Load recipes off-loop, then discover using a current metadata snapshot."""
+        catalog = await self.hass.async_add_executor_job(load_blueprints)
+        installation = snapshot_installation(
+            self.hass, self._entity_registry, discovery_attributes(catalog)
+        )
+        return await self.hass.async_add_executor_job(
+            prepare_blueprints,
+            catalog,
+            installation,
+            deepcopy(self.config["rules"]),
+            dict(self._condition_translations),
+        )
+
+    async def async_list_rule_blueprints(self) -> list[dict[str, Any]]:
+        """Expose generator choices without adding listeners or runtime state."""
+        return [
+            {key: value for key, value in row.items() if key != "rule"}
+            for row in await self._async_blueprint_candidates()
+        ]
+
+    @_serialize_config_mutation
+    async def async_generate_rules(
+        self, blueprint_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Recheck selected recipes and create the whole batch in one transaction."""
+        if (
+            not isinstance(blueprint_ids, list)
+            or not 1 <= len(blueprint_ids) <= 50
+            or any(not isinstance(item, str) for item in blueprint_ids)
+            or len(set(blueprint_ids)) != len(blueprint_ids)
+        ):
+            raise ValueError("Invalid blueprint selection")
+        rows = {
+            row["blueprint_id"]: row for row in await self._async_blueprint_candidates()
+        }
+        rules = []
+        signatures = []
+        for blueprint_id in sorted(blueprint_ids):
+            row = rows.get(blueprint_id)
+            if row is None or row["status"] != "available":
+                raise ValueError("Blueprint selection is no longer available")
+            payload = {
+                key: value
+                for key, value in row["rule"].items()
+                if key not in {"id", "version"}
+            }
+            rule = validate_rule_payload(payload)
+            signature = rule_signature(rule)
+            if signature in signatures:
+                raise ValueError("Blueprint selection contains equivalent rules")
+            signatures.append(signature)
+            rules.append(rule)
+        return await self._async_create_validated_rules(rules)
+
     @_serialize_config_mutation
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
-        validate_rule_count(len(self.config["rules"]) + 1)
-        rule = validate_rule_payload(data)
-        self._validate_rule_sources(rule)
-        self._validate_rule_template(rule)
+        return (
+            await self._async_create_validated_rules([validate_rule_payload(data)])
+        )[0]
+
+    async def _async_create_validated_rules(
+        self, rules: list[Rule]
+    ) -> list[dict[str, Any]]:
+        """Share creation, evaluation and rollback; caller holds the mutation lock."""
+        validate_rule_count(len(self.config["rules"]) + len(rules))
+        for rule in rules:
+            self._validate_rule_sources(rule)
+            self._validate_rule_template(rule)
         previous = self._configuration_snapshot()
         try:
-            self.config["rules"].append(rule.as_dict())
+            self.config["rules"].extend(rule.as_dict() for rule in rules)
             self._rebuild_rule_index()
-            for entity_id in rule.entity_ids:
+            for entity_id in sorted(
+                {entity for rule in rules for entity in rule.entity_ids}
+            ):
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
             await self._async_save_state()
         except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
         self._publish_if_changed()
-        return rule.as_dict()
+        return [rule.as_dict() for rule in rules]
 
     async def async_create_rule_yaml(self, raw_yaml: str) -> dict[str, Any]:
         """Create a rule from YAML while keeping backend id generation."""

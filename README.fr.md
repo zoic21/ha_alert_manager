@@ -218,6 +218,21 @@ Les champs de durée du panneau utilisent le sélecteur natif de Home Assistant 
 
 Sur ordinateur, la largeur des volets de règles et de configuration est redimensionnable. Ils s’adaptent aux écrans mobiles et demandent confirmation avant d’abandonner les modifications à la fermeture.
 
+### Générer des règles à partir de blueprints
+
+Dans **Règles personnalisées → Générer des règles**, cochez les blueprints puis
+cliquez sur **Créer les règles sélectionnées**. Le générateur indique le nombre
+d’entités compatibles et explique les choix indisponibles. Le catalogue initial
+utilise les capteurs System Monitor : CPU, mémoire et disque au-dessus de 90 %,
+et température CPU au-dessus de 80 °C, pendant cinq minutes. Activez d’abord les
+capteurs System Monitor concernés ; la température doit être exprimée en Celsius.
+
+Chaque sélection crée une règle personnalisée modifiable contenant toutes les
+entités compatibles (50 au maximum). Le lot est créé entièrement ou pas du tout.
+Les règles restent ensuite indépendantes de leur blueprint, sans synchronisation
+automatique ni scan périodique. Renommer une règle ne fait pas oublier son origine
+au générateur. Le [guide de contribution](docs/rule-blueprints.md) décrit le format YAML.
+
 ### Exemples
 
 #### Un thermostat qui chauffe sans réchauffer la pièce

@@ -511,6 +511,7 @@ const ruleToYaml = (rule) => {
     `flapping_window: ${yamlValue(rule.flapping_window)}`,
     `flapping_recovery: ${yamlValue(rule.flapping_recovery)}`,
   );
+  if (rule.blueprint) lines.push(`blueprint: ${JSON.stringify(rule.blueprint)}`);
   return `${lines.join("\n")}\n`;
 };
 
@@ -631,6 +632,10 @@ function syncRuntimeMetadata(states) {
 
 // Source: frontend-src/utils/translations.js
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Blueprint selection contains equivalent rules", "blueprint_duplicates"],
+  ["Invalid blueprint selection", "blueprint_selection"],
+  ["Blueprint selection is no longer available", "blueprint_stale"],
+  ["Invalid rule blueprint provenance", "blueprint_provenance"],
   ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
   ["Transition departure and arrival must differ", "transition_distinct"],
   ["Transition values cannot be unknown or unavailable", "transition_unavailable"],
@@ -1027,6 +1032,7 @@ async function call(message, successText) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
+    refreshRuleGeneratorState(this);
     try {
       const result = await this._api.call(message);
       this._notice = successText ? { kind: "success", text: successText } : null;
@@ -1037,6 +1043,7 @@ async function call(message, successText) {
     } finally {
       this._busy = false;
       this._refreshUiState();
+      refreshRuleGeneratorState(this);
     }
 }
 
@@ -3023,6 +3030,7 @@ function renderConfigurationRemove(label, action, attributes = {}) {
 
 const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
+  "open-rule-generator",
   "open-automatic-configuration",
   "open-deleted-entities",
   "open-settings-configuration",
@@ -4179,6 +4187,7 @@ function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
+      ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
@@ -4602,6 +4611,7 @@ async function duplicateRuleDraft() {
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
+    delete duplicate.blueprint;
     this._editingRule = duplicate;
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -4993,6 +5003,113 @@ function hydrateRuleEditorControls() {
       if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
+}
+
+// Source: frontend-src/components/rule-generator.js
+function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
+  // Available groups precede unavailable groups, including across categories.
+  const groups = new Map();
+  for (const row of drawer.rows) {
+    const group = `${row.status === "available" ? "available" : "unavailable"}:${row.category}`;
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  const content = drawer.loading ? `<p role="status">${esc(t("loading"))}</p>`
+    : [...groups.values()].map((rows) => `<section class="generator-category">
+        <h3>${esc(t(`generator.categories.${rows[0].category}`))}</h3>
+        ${rows.map((row) => `<div class="generator-row">
+          <ha-checkbox data-blueprint-id="${esc(row.blueprint_id)}" aria-label="${esc(t(row.name_key))}" ${row.status !== "available" || busy ? "disabled" : ""}></ha-checkbox>
+          <div><strong>${esc(t(row.name_key))}</strong><p>${esc(t(row.description_key))}</p>
+            <small>${esc(t("generator.entity_count", { count: row.entity_count }))}${row.status === "available" ? "" : ` · ${esc(t(`generator.status.${row.status}`))}`}${row.replaced_by ? ` · ${esc(t("generator.replacement", { id: row.replaced_by }))}` : ""}</small>
+          </div>
+        </div>`).join("")}
+      </section>`).join("");
+  return renderConfigurationDrawer({
+    title: t("generator.title"), ariaLabel: t("generator.title"),
+    resizeLabel: t("rules.aria_resize"),
+    headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}>${esc(t("generator.refresh"))}</ha-button>`,
+    banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
+    content, saveAction: "generate-rules", saveLabel: t("generator.create"),
+    busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,
+  });
+}
+
+function hydrateRuleGenerator(root, panel) {
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return;
+  root?.querySelectorAll?.("ha-checkbox[data-blueprint-id]").forEach((checkbox) => {
+    checkbox.checked = drawer.selected.has(checkbox.dataset.blueprintId);
+    // Property assignment keeps repeated hydration idempotent.
+    checkbox.onchange = () => {
+      if (checkbox.disabled || panel._busy) return;
+      const id = checkbox.dataset.blueprintId;
+      if (checkbox.checked) drawer.selected.add(id);
+      else drawer.selected.delete(id);
+      const create = root.querySelector('[data-action="generate-rules"]');
+      if (create) create.disabled = !drawer.selected.size || panel._busy;
+    };
+  });
+}
+
+async function handleRuleGeneratorAction(panel, action) {
+  if (action === "open-rule-generator") {
+    if (panel._busy) return true;
+    if (panel._ruleDirty && !window.confirm(panel._t("rules.discard_confirm"))) return true;
+    panel._editingRule = null;
+    panel._ruleDirty = false;
+    panel._configurationDrawer = { kind: "generator", rows: [], selected: new Set(), loading: false };
+    action = "refresh-rule-generator";
+  }
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return false;
+  if (action === "close-configuration-drawer") {
+    if (panel._busy) return true;
+    panel._configurationDrawer = null;
+    panel._render();
+    return true;
+  }
+  if (action === "refresh-rule-generator") {
+    if (panel._busy || drawer.loading) return true;
+    drawer.loading = true;
+    drawer.selected.clear();
+    panel._render();
+    const rows = await panel._call({ type: "alert_manager/rules/blueprints/list" });
+    if (panel._configurationDrawer !== drawer) return true;
+    drawer.rows = rows ?? [];
+    drawer.loading = false;
+    panel._render();
+    return true;
+  }
+  if (action === "generate-rules") {
+    if (panel._busy || drawer.loading || !drawer.selected.size) return true;
+    const result = await panel._call({
+      type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
+    }, panel._t("generator.created"));
+    if (result) {
+      for (const rule of result) {
+        const index = panel._config.rules.findIndex((existing) => existing.id === rule.id);
+        if (index < 0) panel._config.rules.push(rule);
+        else panel._config.rules[index] = rule;
+      }
+      if (panel._configurationDrawer === drawer) {
+        panel._configurationDrawer = null;
+        panel._notice = { kind: "success", text: panel._t("generator.created") };
+      }
+    }
+    panel._render();
+    return true;
+  }
+  return false;
+}
+
+function refreshRuleGeneratorState(panel) {
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return;
+  for (const action of ["generate-rules", "refresh-rule-generator"]) {
+    const button = panel.shadowRoot?.querySelector?.(`[data-action="${action}"]`);
+    if (button) button.disabled = panel._busy || drawer.loading
+      || (action === "generate-rules" && !drawer.selected.size);
+  }
 }
 
 // Source: frontend-src/views/overview.js
@@ -6037,6 +6154,7 @@ function hydrateRules(root, context) {
 }
 
 function hydrateRuleTable() {
+    hydrateRuleGenerator(this.shadowRoot, this);
     if (!this._config) return;
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
@@ -6151,6 +6269,7 @@ function renderRules(context) {
           <ha-card outlined class="panel rules-list-panel">
             <div class="rules-header">
               <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
+              <ha-button data-action="open-rule-generator">${esc(t("generator.title"))}</ha-button>
               <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
             </div>
           </ha-card>
@@ -6165,10 +6284,14 @@ function renderRules(context) {
 
 function renderRulesPanel() {
     this._ensureRulesTableState();
-    const editorOpen = this._editingRule !== null;
+    const generator = this._configurationDrawer?.kind === "generator";
+    const editorOpen = generator || this._editingRule !== null;
     return renderRules({
       editorOpen,
-      editor: editorOpen ? this._renderRuleEditor() : "",
+      editor: generator ? renderRuleGenerator({
+        drawer: this._configurationDrawer, busy: this._busy,
+        useBottomSheet: this._useNativeBottomSheet(), t: (key, params) => this._t(key, params),
+      }) : editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),
       t: (key, replacements) => this._t(key, replacements),
@@ -6252,6 +6375,8 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
     }
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -6259,7 +6384,7 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleEditorError = null;
     this._clearRuleTestResult();
     this._ruleDirty = false;
-    if (navigate) this._render();
+    if (navigate || generatorOpen) this._render();
     else this._refreshRuleEditor();
     return true;
 }
@@ -6327,15 +6452,19 @@ function replaceRule(rule) {
 }
 
 async function handleRulesAction(action, button) {
+  if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
-    this._refreshRuleEditor();
+    if (generatorOpen) this._render();
+    else this._refreshRuleEditor();
     return true;
   }
   if (action === "cancel-rule") {
@@ -8695,6 +8824,12 @@ const settingsStyles = `
 
 // Source: frontend-src/styles/rule-editor-styles.js
 const ruleEditorStyles = `
+      .generator-category { margin-bottom: 24px; }
+      .generator-row { display: flex; gap: 12px; padding: 12px 0; align-items: flex-start; }
+      .generator-row > div { min-width: 0; overflow-wrap: anywhere; }
+      .generator-row p { margin: 4px 0; color: var(--secondary-text-color); }
+      .generator-row small { color: var(--secondary-text-color); }
+
   /* Rule editor */
   .actions {
     display: flex;
