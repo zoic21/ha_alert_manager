@@ -965,9 +965,13 @@ class _RuntimeMixin:
                             new_entity_id in overrides
                             and overrides[new_entity_id] != overrides[old_entity_id]
                         ):
-                            raise ValueError(
-                                f"Conflicting monitoring exceptions for {new_entity_id}"
+                            _LOGGER.warning(
+                                "Retaining conflicting monitoring exceptions for %s "
+                                "and %s after entity rename",
+                                old_entity_id,
+                                new_entity_id,
                             )
+                            continue
                         overrides[new_entity_id] = overrides.pop(old_entity_id)
                         changed = True
 
@@ -1880,7 +1884,7 @@ class _RuntimeMixin:
         if isinstance(evaluation, PackNeutral | PackRecheck):
             record = self.records.get(alert_id)
             if record is not None:
-                result[alert_id] = (record.details, config["delay"])
+                result[alert_id] = (record.details, config.get("delay", 0))
             return True
         if evaluation is None:
             return False
@@ -1899,7 +1903,7 @@ class _RuntimeMixin:
                 condition_params=evaluation.condition_params,
                 message=condition,
             ),
-            self._delay_for(state, pack_id),
+            config.get("delay", 0),
         )
         return False
 
@@ -2119,10 +2123,6 @@ class _RuntimeMixin:
                 record.expires_at = deadline
                 self._cancel_timer(record.details.id)
                 self._schedule_timer(record)
-
-    def _delay_for(self, state: State, category: str) -> int:
-        """Return this pack's effective delay, including an explicit zero."""
-        return self._pack_settings(category, state.entity_id)["delay"]
 
     def _details(
         self,

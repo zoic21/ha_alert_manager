@@ -8,12 +8,11 @@ from typing import Any
 
 from homeassistant.core import valid_entity_id
 
+from .config_defaults import CATEGORIES, DEFAULT_CONFIG
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
-    CATEGORIES,
     COHERENCE_SCHEDULES,
     CUSTOM_RULE_ALLOWED_ENTITY_IDS,
-    DEFAULT_CONFIG,
     MAX_DELAY,
     MAX_HISTORY_LIMIT,
     MAX_RULE_ENTITY_IDS,
@@ -248,6 +247,12 @@ def _normalize_pack_field(
         if not isinstance(value, bool):
             raise ValueError(f"{path} must be a boolean")
         return value
+    if field.type in ("text", "select"):
+        if not isinstance(value, str):
+            raise ValueError(f"{path} must be a string")
+        if field.type == "select" and value not in field.options:
+            raise ValueError(f"{path} must be one of {field.options}")
+        return value
     if field.type in ("device_number_map", "entity_number_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
@@ -282,7 +287,7 @@ def _normalize_pack_field(
     if field.type in ("device_settings_map", "entity_settings_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
-        normalized_settings: dict[str, dict[str, bool | float | int]] = {}
+        normalized_settings: dict[str, dict[str, Any]] = {}
         allowed = {item.id: item for item in field.fields}
         for target_id, raw_settings in value.items():
             if field.type == "device_settings_map":
@@ -327,7 +332,7 @@ def _normalize_pack_field(
             raise ValueError(f"{path} must be an object")
         allowed_settings = {item.id: item for item in field.fields}
         allowed_packs = set(PACKS_BY_ID) - {pack_id}
-        normalized_packs: dict[str, dict[str, float | int | None]] = {}
+        normalized_packs: dict[str, dict[str, Any]] = {}
         for source_pack_id, raw_settings in value.items():
             if source_pack_id not in allowed_packs:
                 raise ValueError(f"{path} contains an invalid source pack")

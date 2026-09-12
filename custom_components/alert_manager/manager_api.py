@@ -42,7 +42,7 @@ from .const import (
 from .history_statistics import aggregate_history
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .pack_migration import async_migrate_exclusions
-from .packs import PACKS, PACKS_BY_ID, execution_errors, reset_pack_runtimes
+from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
 from .storage import StorageDurabilitySnapshot, sort_history
 from .transactions import async_finish_non_interruptible
@@ -82,7 +82,7 @@ class _ConfigurationSnapshot:
     variation_baselines: dict[str, float]
     variation_baselines_dirty: bool
     pack_runtime: dict[str, dict[str, Any]]
-    execution_runtime: Any
+    pack_snapshots: dict[str, Any]
     unverified_restored_alert_ids: set[str]
     rule_template_render_info: dict[tuple[str, str], Any]
     rule_message_render_info: dict[tuple[str, str], Any]
@@ -622,19 +622,7 @@ class _ApiMixin:
 
     def get_packs(self) -> list[dict[str, Any]]:
         """Return backend-owned pack metadata with current availability."""
-        filters = {
-            "battery": {"domain": "sensor", "device_class": "battery"},
-            "connectivity": {"domain": "binary_sensor", "device_class": "connectivity"},
-            "unifi": {"integration": "unifi"},
-            "execution_errors": {"domain": ["automation", "script"]},
-        }
-        return [
-            {
-                **pack.as_public_dict(self.hass),
-                "target_filter": filters.get(pack.id, {}),
-            }
-            for pack in PACKS
-        ]
+        return [pack.as_public_dict(self.hass) for pack in PACKS]
 
     def get_rule_yaml(self, rule_id: str) -> str:
         """Return the editable YAML form of one existing rule."""
@@ -1189,7 +1177,11 @@ class _ApiMixin:
             variation_baselines=dict(self._variation_baselines),
             variation_baselines_dirty=self._variation_baselines_dirty,
             pack_runtime=deepcopy(self._pack_runtime),
-            execution_runtime=execution_errors.snapshot_runtime(self.hass),
+            pack_snapshots={
+                pack.id: pack.snapshot_handler(self.hass)
+                for pack in PACKS
+                if pack.snapshot_handler is not None
+            },
             unverified_restored_alert_ids=set(self._unverified_restored_alert_ids),
             rule_template_render_info=dict(self._rule_template_render_info),
             rule_message_render_info=dict(self._rule_message_render_info),
@@ -1210,7 +1202,9 @@ class _ApiMixin:
         self._variation_baselines = snapshot.variation_baselines
         self._variation_baselines_dirty = snapshot.variation_baselines_dirty
         self._pack_runtime = snapshot.pack_runtime
-        execution_errors.restore_runtime(self.hass, snapshot.execution_runtime)
+        for pack in PACKS:
+            if pack.restore_handler is not None and pack.id in snapshot.pack_snapshots:
+                pack.restore_handler(self.hass, snapshot.pack_snapshots[pack.id])
         self._unverified_restored_alert_ids = set(
             snapshot.unverified_restored_alert_ids
         )

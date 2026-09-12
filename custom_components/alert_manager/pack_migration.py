@@ -10,7 +10,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 
-from .const import DEFAULT_CONFIG, DEFAULT_DELAY
+from .config_defaults import DEFAULT_CONFIG
+from .const import DEFAULT_DELAY
 
 _MIGRATION_LABEL = "Alert Manager - migrated automatic exclusions"
 _MIGRATION_DESCRIPTION = "alert_manager:automatic-exclusions:2.4"
@@ -32,7 +33,16 @@ def migrate_pack_config(raw: dict[str, Any]) -> dict[str, Any]:
     automatic = config.setdefault("automatic", {})
     if not isinstance(automatic, dict):
         raise ValueError("automatic must be an object")
-    for pack_id, defaults in DEFAULT_CONFIG["automatic"].items():
+    # Legacy global delays never applied to packs introduced after this schema.
+    for pack_id in (
+        "unavailable",
+        "connectivity",
+        "unifi",
+        "battery",
+        "execution_errors",
+        "flapping",
+    ):
+        defaults = DEFAULT_CONFIG["automatic"][pack_id]
         pack = automatic.setdefault(pack_id, {})
         if not isinstance(pack, dict):
             raise ValueError(f"automatic.{pack_id} must be an object")

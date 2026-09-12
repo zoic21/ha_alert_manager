@@ -10,7 +10,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 
-from custom_components.alert_manager.const import DEFAULT_CONFIG
+from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.pack_migration import async_migrate_exclusions
 from custom_components.alert_manager.pack_settings import resolve_settings
 from custom_components.alert_manager.storage import _migrate_config_shape

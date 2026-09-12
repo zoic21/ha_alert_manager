@@ -194,3 +194,52 @@ def test_idless_legacy_import_reuses_unambiguous_unchanged_rule(hass, entry):
     document["rules"][0].pop("id")
     run(manager.async_import_config(yaml.safe_dump(document)))
     assert manager.config["rules"][0]["id"] == rule["id"]
+
+
+def test_pack_candidate_resolves_settings_once_and_accepts_no_delay(
+    hass, entry, monkeypatch
+):
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from custom_components.alert_manager.packs import PACKS_BY_ID
+
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    state = hass.states.set("sensor.battery", "5", {"device_class": "battery"})
+    with patch.object(
+        manager, "_pack_settings", wraps=manager._pack_settings
+    ) as resolver:
+        candidates = {}
+        manager._add_pack_candidate(candidates, state, "battery")
+        assert candidates["battery:sensor.battery"][1] == 900
+        assert resolver.call_count == 1
+    monkeypatch.setitem(
+        PACKS_BY_ID, "battery", replace(PACKS_BY_ID["battery"], uses_delay=False)
+    )
+    del manager.config["automatic"]["battery"]["delay"]
+    candidates = {}
+    manager._add_pack_candidate(candidates, state, "battery")
+    assert candidates["battery:sensor.battery"][1] == 0
+
+
+def test_rename_conflict_keeps_exceptions_and_reconciles_live_identity(hass, entry):
+    manager = AlertManager(hass, entry)
+    hass.states.set("sensor.old", "unavailable")
+    run(manager.async_setup())
+    overrides = {
+        "sensor.old": {"delay": 60},
+        "sensor.new": {"delay": 120},
+    }
+    manager.config["automatic"]["unavailable"]["entity_overrides"] = deepcopy(overrides)
+    manager.config["automatic"]["battery"]["entity_overrides"] = {
+        "sensor.old": {"threshold": 10}
+    }
+    manager._pending_entity_renames["sensor.old"] = "sensor.new"
+    assert manager._apply_pending_entity_renames()
+    assert manager.config["automatic"]["unavailable"]["entity_overrides"] == overrides
+    assert manager.config["automatic"]["battery"]["entity_overrides"] == {
+        "sensor.new": {"threshold": 10}
+    }
+    assert "unavailable:sensor.new" in manager.records
+    assert "unavailable:sensor.old" not in manager.records

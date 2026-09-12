@@ -14,7 +14,13 @@ from ..const import (
     MIN_THRESHOLD,
 )
 from ..models import safe_float
-from .base import AutomaticPack, PackConfigField, PackMatch, PackNeutral
+from .base import (
+    AutomaticPack,
+    PackConfigField,
+    PackMatch,
+    PackNeutral,
+    configuration_fields,
+)
 
 
 def _applies(_hass: HomeAssistant, state: State) -> bool:
@@ -55,13 +61,15 @@ def _evaluate(
 
 
 PACK = AutomaticPack(
+    target_filter={"domain": "sensor", "device_class": "battery"},
+    order=3,
     id=CATEGORY_BATTERY,
     translation_key="battery",
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
     should_evaluate=_should_evaluate,
-    config_fields=(
+    config_fields=configuration_fields(
         PackConfigField(
             id="threshold",
             type="number",

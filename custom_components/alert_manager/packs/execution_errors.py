@@ -17,6 +17,7 @@ from .base import (
     PackMatch,
     PackNeutral,
     PackRecheck,
+    configuration_fields,
 )
 
 PACK_ID = "execution_errors"
@@ -331,6 +332,9 @@ def _reset_runtime(hass: HomeAssistant) -> None:
 
 
 PACK = AutomaticPack(
+    default_delay=0,
+    target_filter={"domain": ["automation", "script"]},
+    order=4,
     id=PACK_ID,
     translation_key="execution_errors",
     prerequisites=(),
@@ -338,8 +342,10 @@ PACK = AutomaticPack(
     evaluate=_evaluate,
     should_evaluate=_should_evaluate,
     reset_handler=_reset_runtime,
+    snapshot_handler=snapshot_runtime,
+    restore_handler=restore_runtime,
     reset_entity_handler=_reset_entity,
-    config_fields=(
+    config_fields=configuration_fields(
         PackConfigField(
             id="failure_threshold",
             type="number",

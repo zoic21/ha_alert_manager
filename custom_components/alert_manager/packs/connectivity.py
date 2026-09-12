@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_CONNECTIVITY
-from .base import AutomaticPack, PackMatch, PackNeutral
+from .base import AutomaticPack, PackMatch, PackNeutral, configuration_fields
 
 
 def _applies(hass: HomeAssistant, state: State) -> bool:
@@ -53,6 +53,9 @@ def _evaluate(
 
 
 PACK = AutomaticPack(
+    config_fields=configuration_fields(),
+    target_filter={"domain": "binary_sensor", "device_class": "connectivity"},
+    order=1,
     id=CATEGORY_CONNECTIVITY,
     translation_key="connectivity",
     prerequisites=(),

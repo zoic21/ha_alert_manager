@@ -12,7 +12,8 @@ from typing import Any
 
 import yaml
 
-from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG, TRANSITION_SOURCES
+from .config_defaults import CATEGORIES, DEFAULT_CONFIG
+from .const import ATTRIBUTE_SOURCES, TRANSITION_SOURCES
 from .models import Rule, normalize_rule_source
 from .notifications import validate_notification_profiles
 from .pack_migration import migrate_flapping_precedence, migrate_pack_config
@@ -312,7 +313,9 @@ def parse_config_yaml(
         raise ValueError("config.automatic must be an object")
     # Exports created before newer packs remain importable; their configuration
     # is filled from the current defaults by validate_config().
-    allowed_missing = {"execution_errors", "flapping"}
+    # Only the four historical packs were mandatory in the V1 format.
+    required = {"unavailable", "connectivity", "unifi", "battery"}
+    allowed_missing = set(CATEGORIES) - required
     missing = set(CATEGORIES) - set(automatic)
     unknown = set(automatic) - set(CATEGORIES)
     if unknown or missing - allowed_missing:

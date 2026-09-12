@@ -16,13 +16,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
+from .config_defaults import DEFAULT_CONFIG
 from .const import (
     CONFIG_BACKUP_LIMIT,
     CONFIG_BACKUP_STORAGE_KEY,
     CONFIG_BACKUP_STORAGE_VERSION,
     DEFAULT_COHERENCE_SCAN_ESPHOME,
     DEFAULT_COHERENCE_SCHEDULE,
-    DEFAULT_CONFIG,
     DEFAULT_EXCLUSION_LABEL,
     DEFAULT_HISTORY_LIMIT,
     HISTORY_STORAGE_KEY,

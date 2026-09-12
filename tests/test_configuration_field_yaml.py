@@ -6,7 +6,7 @@ from copy import deepcopy
 import pytest
 import yaml
 
-from custom_components.alert_manager.const import DEFAULT_CONFIG
+from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.packs import PACKS_BY_ID
 from custom_components.alert_manager.yaml_io import parse_configuration_field_yaml

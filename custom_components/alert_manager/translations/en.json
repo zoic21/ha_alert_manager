@@ -111,6 +111,8 @@
       "inherit": "Inherited",
       "monitoring_enabled": "Enabled",
       "monitoring_disabled": "Disabled",
+      "boolean_true": "Yes",
+      "boolean_false": "No",
       "restore_inheritance": "Restore inheritance",
       "no_exceptions": "No exceptions",
       "source_context": "Source settings",

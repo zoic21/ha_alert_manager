@@ -22,6 +22,7 @@ from .base import (
     PackConfigField,
     PackGeneratedAlert,
     PackOccurrence,
+    exception_fields,
 )
 
 PACK_ID = "flapping"
@@ -303,6 +304,8 @@ _ENABLED_FIELD = PackConfigField(
 )
 
 PACK = AutomaticPack(
+    default_enabled=False,
+    order=5,
     id=PACK_ID,
     translation_key=PACK_ID,
     prerequisites=(),
@@ -312,6 +315,9 @@ PACK = AutomaticPack(
     uses_delay=False,
     occurrence_batch_handler=_process_occurrences,
     config_fields=(
+        *exception_fields(
+            _OCCURRENCES_FIELD, _WINDOW_FIELD, _RECOVERY_FIELD, delay=False
+        ),
         _OCCURRENCES_FIELD,
         _WINDOW_FIELD,
         _RECOVERY_FIELD,
@@ -323,7 +329,11 @@ PACK = AutomaticPack(
                 "unavailable": dict.fromkeys(("occurrences", "window", "recovery")),
                 "connectivity": dict.fromkeys(("occurrences", "window", "recovery")),
             },
-            fields=_SOURCE_FIELDS,
+            fields=(
+                _ENABLED_FIELD,
+                *_SOURCE_FIELDS,
+                *exception_fields(*_SOURCE_FIELDS, delay=False),
+            ),
         ),
     ),
 )

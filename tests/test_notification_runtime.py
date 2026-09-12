@@ -13,8 +13,8 @@ from unittest.mock import Mock
 import pytest
 from homeassistant.core import CoreState, Event
 
+from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.const import (
-    DEFAULT_CONFIG,
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     EVENT_ALERT_UNACKNOWLEDGED,

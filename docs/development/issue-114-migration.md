@@ -43,3 +43,51 @@ The legacy characterization cases, migration failure/retry tests, live configura
 regressions, existing execution/flapping/runtime tests and visual/YAML UI tests cover
 the boundary behavior. The UI uses shared pack metadata for one drawer per pack,
 with source contexts, sparse exceptions, native pickers and administrator-only actions.
+
+## Pack ownership after review
+
+A module in `packs/` exports its own `PACK: AutomaticPack`. Discovery happens once
+at import, with explicit `order` preserving the existing detector order. The
+registry neither changes descriptors nor maintains a list of pack-specific fields.
+`config_defaults.py` assembles defaults directly from each declaration, and the
+configuration API exports its `target_filter` and field metadata unchanged.
+
+For example, a state pack can declare:
+
+```python
+PACK = AutomaticPack(
+    id="example",
+    translation_key="example",
+    prerequisites=(),
+    applies=_applies,
+    evaluate=_evaluate,
+    default_delay=60,
+    target_filter={"domain": "sensor"},
+    config_fields=configuration_fields(
+        PackConfigField("threshold", "number", "threshold", 15, minimum=0),
+        PackConfigField("strict", "boolean", "strict", True),
+        PackConfigField("message", "text", "message", "check"),
+        PackConfigField("mode", "select", "mode", "fast", options=("fast", "slow")),
+    ),
+)
+```
+
+The shared helper is optional: it creates device/entity exception maps for exactly
+those fields, plus the common enabled/delay controls. Packs may declare those
+maps themselves when their schema differs, as flapping does for source contexts.
+`uses_delay=False` omits the common timer setting. `default_enabled` and
+`default_delay` belong to the pack; enabling or disabling monitoring does not
+change the evaluator contract. New field labels use the usual FR/EN translations.
+
+Boolean, numeric, text and choice fields use the same schema for backend
+validation, visual drafts, YAML and field-by-field inheritance. Empty exception
+inputs inherit; explicit false and zero remain overrides. Optional transactional
+snapshot/restore callbacks also belong to the pack, without naming a detector in
+the configuration API.
+
+Review regressions load a fresh integration with only one additional pack file,
+then exercise discovery, defaults, strict validation, inheritance and YAML round
+trips. Existing exports may omit subsequently added packs. V1 migration remains
+limited to the packs that actually existed in V1. A rename collision retains both
+explicit exception entries, logs the conflict, and continues reconciling live
+identities; it must not partially abort the registry worker.

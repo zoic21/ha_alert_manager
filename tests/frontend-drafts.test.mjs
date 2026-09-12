@@ -315,3 +315,45 @@ test("contextual monitoring configuration requires an admin and a current applic
   delete row.source.rule_id; row.source.type = "obsolete"; assert.equal(action(), undefined);
   row.source.type = "battery"; context._hass.states = {}; assert.equal(action(), undefined);
 });
+
+test("pack-declared boolean, text and choice fields survive drafts and sparse overrides", async () => {
+  const { renderAutomaticConfigurationDrawer, hydrateAutomaticControls, captureAutomaticConfigurationValues, collectAutomaticChanges } = await import("../frontend-src/views/automatic.js");
+  const p = panel();
+  const settings = [
+    { id: "strict", type: "boolean", translation_key: "strict", default: true },
+    { id: "message", type: "text", translation_key: "message", default: "check" },
+    { id: "mode", type: "select", translation_key: "mode", default: "fast", options: ["fast", "slow"] },
+  ];
+  const pack = { id: "sample", translation_key: "sample", available: true, config_fields: [
+    ...settings,
+    { id: "device_overrides", type: "device_settings_map", default: {}, fields: settings, sparse: true },
+    { id: "entity_overrides", type: "entity_settings_map", default: {}, fields: settings, sparse: true },
+  ] };
+  p._packs = [pack];
+  p._config.automatic = { sample: { enabled: true, delay: 42, strict: true, message: "check", mode: "fast", device_overrides: {}, entity_overrides: { "sensor.a": { strict: false } } } };
+  p._ensureAutomaticDraft();
+  p._configurationDrawer = { kind: "automatic", id: "sample" };
+  const html = renderAutomaticConfigurationDrawer({ availablePacks: p._packs, draft: p._automaticMapDraft, configurationDrawer: p._configurationDrawer, config: p._config, hass: p._hass, t: (key) => key });
+  for (const id of ["strict", "message", "mode"]) {
+    assert.match(html, new RegExp(`id="auto-sample-${id}"`));
+    assert.match(html, new RegExp(`id="auto-sample-entity_overrides-0-${id}"`));
+  }
+  assert.match(html, /type="text" value="check"/);
+  const selectors = new Map();
+  p._configureSelector = (id, selector, value, changed) => selectors.set(id, { selector, value, changed });
+  hydrateAutomaticControls.call(p);
+  selectors.get("auto-sample-strict").changed("disabled");
+  selectors.get("auto-sample-mode").changed(JSON.stringify("slow"));
+  selectors.get("auto-sample-entity_overrides-0-strict").changed("");
+  selectors.get("auto-sample-entity_overrides-0-mode").changed(JSON.stringify("slow"));
+  const input = control(p, "#auto-sample-message", { type: "text", value: "door open" });
+  input.dataset = { packDefault: "sample", settingId: "message" };
+  const override = control(p, "#custom-text", { type: "text", value: "check device", dataset: { packSetting: "sample", packField: "entity_overrides", packIndex: "0", settingId: "message" } });
+  p.shadowRoot.controls.set("[data-pack-setting], [data-pack-default]", [input, override]);
+  captureAutomaticConfigurationValues.call(p);
+  const changes = collectAutomaticChanges.call(p).automatic.sample;
+  assert.equal(changes.strict, false);
+  assert.equal(changes.mode, "slow");
+  assert.equal(changes.message, "door open");
+  assert.deepEqual(changes.entity_overrides["sensor.a"], { mode: "slow", message: "check device" });
+});

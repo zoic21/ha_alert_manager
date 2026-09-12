@@ -9,8 +9,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.const import (
-    DEFAULT_CONFIG,
     INTEGRATION_VERSION,
     MAX_RULE_CONDITION_TEMPLATE_LENGTH,
     MAX_RULE_ENTITY_IDS,
