@@ -26,11 +26,10 @@ import {
 
 const SETTINGS_SECTIONS = [
   ["automatic", "tabs.automatic", "mdi:radar"],
-  ["alert-display", "settings.alert_display", "mdi:alert-outline"],
   ["coherence", "settings.coherence_settings", "mdi:check-decagram-outline"],
   ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
   ["notifications", "notifications.title", "mdi:bell-outline"],
-  ["history", "settings.history_settings", "mdi:history"],
+  ["miscellaneous", "settings.miscellaneous", "mdi:tune"],
   ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
   ["diagnostics", "statistics.title", "mdi:speedometer"],
 ];
@@ -52,9 +51,6 @@ export function renderSettings(context) {
       ${renderSettingsNavigation(t)}
       ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
-      <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
-      </div></ha-card>
       <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
         <div class="coherence-options">
@@ -79,7 +75,8 @@ export function renderSettings(context) {
         busy,
         t,
       })}
-      <ha-card id="settings-section-history" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.history_settings"))}</h2>
+      <ha-card id="settings-section-miscellaneous" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.miscellaneous"))}</h2><div class="settings-grid">
+        ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
         <div class="history-settings">
           <div class="history-settings-row">
             <span class="field-label history-limit-label">${esc(t("settings.history_limit"))}</span>
@@ -87,7 +84,7 @@ export function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
-      </ha-card>
+      </div></ha-card>
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
         <input id="config-import-file" data-import-file type="file" accept=".yaml,.yml,text/yaml,application/x-yaml" hidden>

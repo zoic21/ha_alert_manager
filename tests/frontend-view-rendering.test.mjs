@@ -351,13 +351,19 @@ test("settings rendering consumes prepared drafts without initializing them", ()
 
   assert.doesNotMatch(markup, /id="global-delay"/);
   assert.match(markup, /class="panel settings-navigation"/);
-  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 8);
-  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 8);
-  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 8);
+  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 7);
+  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 7);
+  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 7);
+  assert.match(markup, /data-section-id="miscellaneous"/);
+  assert.doesNotMatch(markup, /data-section-id="(?:alert-display|history)"/);
+  const miscellaneousCard = markup.match(/<ha-card id="settings-section-miscellaneous"[\s\S]*?<\/ha-card>/)[0];
+  assert.match(miscellaneousCard, /class="settings-grid"/);
+  assert.match(miscellaneousCard, /id="pending-display-delay"/);
+  assert.match(miscellaneousCard, /id="history-limit"/);
   assert.match(markup, /data-section-id="automatic"><ha-icon slot="start" icon="mdi:radar"/);
   assert.match(markup, /data-section-id="transfer"><ha-icon slot="start" icon="mdi:file-swap-outline"/);
   assert.ok(markup.includes(automaticMarkup));
-  assert.ok(markup.indexOf(automaticMarkup) < markup.indexOf("settings-section-alert-display"));
+  assert.ok(markup.indexOf(automaticMarkup) < markup.indexOf("settings-section-miscellaneous"));
   assert.match(markup, /id="settings-section-notifications"/);
   assert.match(markup, /coherence-scan-esphome[^>]*checked/);
   const coherenceCard = markup.match(/<ha-card id="settings-section-coherence"[\s\S]*?<\/ha-card>/)[0];

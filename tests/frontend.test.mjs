@@ -2444,10 +2444,10 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
   assert.match(settings, /<form id="settings-form" class="stack settings-form"/);
-  assert.match(settings, /<h2>Affichage des alertes<\/h2>/);
+  assert.match(settings, /<h2>Divers<\/h2>/);
   assert.match(settings, /<h2>Analyse de cohérence<\/h2>/);
   assert.match(settings, /<h2>Exclusions de la surveillance automatique<\/h2>/);
-  assert.match(settings, /<h2>Historique<\/h2>/);
+  assert.doesNotMatch(settings, /<h2>Historique<\/h2>|<h2>Affichage des alertes<\/h2>/);
   assert.match(settings, /<ha-chip-set class="ignored-reference-chips">[\s\S]*<ha-input-chip[^>]+data-ignored-reference="toto\.plop"/);
   assert.match(settings, /<ha-input id="ignored-reference-input"[^>]+placeholder="Exemple : toto\.plop"/);
   assert.match(settings, /data-action="add-ignored-reference"/);

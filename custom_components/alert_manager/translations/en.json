@@ -686,6 +686,7 @@
       "history_limit": "Number of historical events retained",
       "history_limit_help": "From 0 to 1000 events. The default is 100; 0 disables storage of future history.",
       "history_limit_validation": "The number of historical events must be an integer from 0 to 1000.",
+      "miscellaneous": "Miscellaneous",
       "history_settings": "History",
       "label_exclusions": "Labels excluded from automatic monitoring",
       "labels_help": "Custom rules ignore these labels.",
