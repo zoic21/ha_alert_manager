@@ -5,8 +5,17 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.4.0 — Unreleased
+## 2.4 — Unreleased
 
+- Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
+  explicit defaults, and sparse device/entity exceptions with visible inheritance.
+- Kept global automatic exclusions by label; migrate old direct exclusions to a dedicated
+  Home Assistant label and preserve effective delays, thresholds and flapping precedence.
+  Missing registry targets or failed writes stop conversion with recoverable source data.
+- Added administrator-only contextual configuration from automatic alert details.
+- Preserve compatible alert identities, acknowledgements, history and occurrence evidence
+  during edits/imports. Disabled monitoring cancels affected notifications and timers
+  without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
   other targets and notification groups retain the existing title emojis.
