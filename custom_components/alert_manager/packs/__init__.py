@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Collection
+from importlib import import_module
+from pkgutil import iter_modules
 
 from homeassistant.core import HomeAssistant
 
@@ -14,21 +16,26 @@ from .base import (
     PackOccurrence,
     PackRecheck,
 )
-from .battery import PACK as BATTERY_PACK
-from .connectivity import PACK as CONNECTIVITY_PACK
-from .execution_errors import PACK as EXECUTION_ERRORS_PACK
-from .flapping import PACK as FLAPPING_PACK
-from .unavailable import PACK as UNAVAILABLE_PACK
-from .unifi import PACK as UNIFI_PACK
 
-PACKS: tuple[AutomaticPack, ...] = (
-    UNAVAILABLE_PACK,
-    CONNECTIVITY_PACK,
-    UNIFI_PACK,
-    BATTERY_PACK,
-    EXECUTION_ERRORS_PACK,
-    FLAPPING_PACK,
-)
+
+def discover_packs() -> tuple[AutomaticPack, ...]:
+    """Load pack declarations once; adding a module needs no central mapping."""
+    packs = []
+    ids = set()
+    for module in iter_modules(__path__):
+        if module.name.startswith("_") or module.name == "base":
+            continue
+        pack = getattr(import_module(f"{__name__}.{module.name}"), "PACK", None)
+        if pack is None:
+            continue
+        if not isinstance(pack, AutomaticPack) or pack.id in ids:
+            raise ValueError(f"Invalid or duplicate pack declaration: {module.name}")
+        ids.add(pack.id)
+        packs.append(pack)
+    return tuple(sorted(packs, key=lambda pack: (pack.order, pack.id)))
+
+
+PACKS: tuple[AutomaticPack, ...] = discover_packs()
 PACKS_BY_ID = {pack.id: pack for pack in PACKS}
 OCCURRENCE_PACKS = tuple(
     pack for pack in PACKS if pack.occurrence_batch_handler is not None

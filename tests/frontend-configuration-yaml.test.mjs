@@ -68,9 +68,10 @@ for (const kind of ["settings", "automatic"]) {
     await switchConfigurationYaml(p);
     assert.equal(drawer.mode, "yaml");
     assert.equal(p.dirty, undefined);
-    assert.doesNotMatch(drawer.yaml, /label_ids|monitoring_enabled/);
+    if (kind === "settings") assert.doesNotMatch(drawer.yaml, /label_ids|monitoring_enabled/);
+    else assert.match(drawer.yaml, /"pack":/);
     const value = kind === "settings" ? { "sensor.b": 120, "sensor.a": 0 }
-      : configurationDraftToValue(p._automaticMapDraft.flapping.entity_overrides, "entity_settings_map");
+      : { ...p._automaticMapDraft.flapping, entity_overrides: configurationDraftToValue(p._automaticMapDraft.flapping.entity_overrides, "entity_settings_map") };
     p._api.call = async (request) => {
       assert.equal(request.type, "alert_manager/config/field/yaml/validate");
       assert.equal(request.pack_id, kind === "automatic" ? "flapping" : undefined);
@@ -179,7 +180,7 @@ test("raw YAML survives navigation, then the regular save sends validated pack v
   assert.equal(p._configurationDrawer, drawer);
   assert.match(drawer.yaml, /unsaved comment/);
   const value = { "sensor.changed": { enabled: false, occurrences: 3, window: 300, recovery: 60 } };
-  p._api.call = async () => ({ value });
+  p._api.call = async () => ({ value: { ...p._automaticMapDraft.flapping, entity_overrides: value } });
   p._ensureAutomaticDraft = () => {};
   p.shadowRoot = { querySelector: () => null, querySelectorAll: () => [] };
   let sent;
@@ -217,7 +218,7 @@ for (const kind of ["settings", "automatic"]) {
       : { "sensor.new": { enabled: false, occurrences: 3, window: 300, recovery: 60 } };
     p._api.call = async (request) => {
       calls.push(request);
-      return request.type.endsWith("/validate") ? { value } : {};
+      return request.type.endsWith("/validate") ? { value: kind === "automatic" ? { ...p._automaticMapDraft.flapping, entity_overrides: value } : value } : {};
     };
     p._saveSettings = saveSettings.bind(p);
     assert.equal(await saveConfiguration.call(p), true);
@@ -225,7 +226,8 @@ for (const kind of ["settings", "automatic"]) {
       "alert_manager/config/field/yaml/validate", "alert_manager/config/update",
     ]);
     const config = calls[1].config;
-    assert.deepEqual(kind === "settings" ? config.entity_delays : config.automatic.flapping.entity_overrides, value);
+    if (kind === "automatic") assert.deepEqual(config.automatic.flapping.entity_overrides, value);
+    else { assert.equal(config.entity_delays, undefined); assert.deepEqual(p._entityDelayDraft, configurationValueToDraft(value, "entity_delays")); }
     assert.equal(config.automatic.flapping.enabled, false);
     assert.deepEqual(config.automatic.flapping.label_ids, ["b", "a"]);
   });

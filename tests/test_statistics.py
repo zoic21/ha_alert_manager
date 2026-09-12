@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.manager import AlertManager
@@ -120,7 +121,7 @@ def test_lifecycle_statistics_and_restart(hass, entry, set_now):
         await restored.async_evaluate_entity("sensor.test")
         await restored.async_evaluate_entity("sensor.test")
         assert restored.statistics.snapshot()["resolutions"] == 1
-        await restored.async_update_config({"global_delay": 0})
+        await restored.async_update_config(automatic_settings(delay=0))
         hass.states.set("sensor.test", "unavailable")
         await restored.async_evaluate_entity("sensor.test")
         assert restored.statistics.snapshot()["activations"] == 1
@@ -148,7 +149,7 @@ def test_committed_pending_and_failed_configuration(hass, entry):
 
         manager.storage.async_save = fail
         with pytest.raises(OSError):
-            await manager.async_update_config({"global_delay": 0})
+            await manager.async_update_config(automatic_settings(delay=0))
         assert manager.statistics.snapshot()["activations"] == 0
         manager.storage.async_save = original
         await manager.async_unload()
@@ -193,7 +194,7 @@ def test_silent_import_counts_transitions_without_replaying_events(hass, entry):
         await manager.async_setup()
         hass.states.set("sensor.test", "unavailable")
         config = deepcopy(manager.config)
-        config["global_delay"] = 0
+        config["automatic"]["unavailable"]["delay"] = 0
         events = list(hass.bus.fired)
         await manager.async_import_config(dump_config_yaml(config))
         assert manager.statistics.snapshot()["activations"] == 1

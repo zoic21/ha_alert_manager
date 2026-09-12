@@ -30,7 +30,6 @@ from homeassistant.util import dt as dt_util
 
 from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
-    CATEGORY_FLAPPING,
     DOMAIN,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
@@ -42,6 +41,7 @@ from .const import (
 )
 from .history_statistics import aggregate_history
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
+from .pack_migration import async_migrate_exclusions
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
 from .storage import StorageDurabilitySnapshot, sort_history
@@ -76,11 +76,13 @@ class _ConfigurationSnapshot:
     config: dict[str, Any]
     records: dict[str, AlertRecord]
     pending_history: list[AlertHistoryEntry]
+    administratively_removed: set[str]
     transition_confirmed: dict[str, Any]
     transition_observations: dict[str, Any]
     variation_baselines: dict[str, float]
     variation_baselines_dirty: bool
     pack_runtime: dict[str, dict[str, Any]]
+    pack_snapshots: dict[str, Any]
     unverified_restored_alert_ids: set[str]
     rule_template_render_info: dict[tuple[str, str], Any]
     rule_message_render_info: dict[tuple[str, str], Any]
@@ -661,7 +663,9 @@ class _ApiMixin:
 
     async def async_preview_config_import(self, raw_yaml: str) -> dict[str, Any]:
         """Validate an import without touching the active configuration."""
-        candidate = await self.hass.async_add_executor_job(parse_config_yaml, raw_yaml)
+        candidate = await self.hass.async_add_executor_job(
+            parse_config_yaml, raw_yaml, deepcopy(self.config["rules"])
+        )
         self._validate_config_rule_sources(candidate)
         return import_summary(candidate)
 
@@ -841,8 +845,6 @@ class _ApiMixin:
         if "rules" in changes:
             raise ValueError("Rules must be changed through the rules API")
         candidate = _deep_merge(self.get_config(), changes)
-        if "entity_delays" in changes:
-            candidate["entity_delays"] = deepcopy(changes["entity_delays"])
         for pack_id, pack_changes in changes.get("automatic", {}).items():
             for field in PACKS_BY_ID[pack_id].config_fields:
                 if field.type.endswith("_map") and field.id in pack_changes:
@@ -891,19 +893,6 @@ class _ApiMixin:
         coherence_schedule_changed = (
             candidate["coherence_schedule"] != self.config["coherence_schedule"]
         )
-        reset_all_pack_runtimes = detection_changed and (
-            not candidate["monitoring_enabled"]
-            or bool(
-                changed_keys
-                & {"excluded_entities", "excluded_devices", "excluded_labels"}
-            )
-        )
-        disabled_pack_ids = {
-            pack.id
-            for pack in PACKS
-            if self.config["automatic"][pack.id]["enabled"]
-            and not candidate["automatic"][pack.id]["enabled"]
-        }
         notification_profiles_changed = candidate[
             "notification_profiles"
         ] != self.config.get("notification_profiles", [])
@@ -928,27 +917,7 @@ class _ApiMixin:
                     self._clear_variation_baselines()
                 if detection_changed:
                     self._rebuild_rule_index()
-                    disabled_flapping_entities = {
-                        entity_id
-                        for entity_id, settings in candidate["automatic"][
-                            CATEGORY_FLAPPING
-                        ]["entity_overrides"].items()
-                        if not settings["enabled"]
-                    }
-                    flapping_runtime = self._pack_runtime.get(CATEGORY_FLAPPING, {})
-                    disabled_suffixes = tuple(
-                        f":{entity_id}" for entity_id in disabled_flapping_entities
-                    )
-                    for source_id in tuple(flapping_runtime):
-                        if source_id.endswith(disabled_suffixes):
-                            flapping_runtime.pop(source_id, None)
-                for pack_id in disabled_pack_ids:
-                    self._pack_runtime.pop(pack_id, None)
-                if reset_all_pack_runtimes:
-                    reset_pack_runtimes(self.hass)
-                    self._pack_runtime.clear()
-                elif disabled_pack_ids:
-                    reset_pack_runtimes(self.hass, disabled_pack_ids)
+                    self._reconcile_flapping_settings()
                 if detection_changed:
                     await self.async_evaluate_all(save=False, publish=False)
                 if coherence_alert_changed:
@@ -994,7 +963,12 @@ class _ApiMixin:
     @_serialize_config_mutation
     async def async_import_config(self, raw_yaml: str) -> dict[str, Any]:
         """Replace configuration through one validated, recoverable transaction."""
-        candidate = await self.hass.async_add_executor_job(parse_config_yaml, raw_yaml)
+        candidate = await self.hass.async_add_executor_job(
+            parse_config_yaml, raw_yaml, deepcopy(self.config["rules"])
+        )
+        candidate = validate_config(
+            await async_migrate_exclusions(self.hass, candidate)
+        )
         candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
@@ -1002,21 +976,15 @@ class _ApiMixin:
         previous_history = list(self.history)
         previous_recovery_active = self.recovery_active
         previous_monitoring_enabled = self.monitoring_enabled
-        history_cleared = False
 
         with self.notification_runtime.events_paused():
             self._cancel_all_timers()
-            reset_pack_runtimes(self.hass)
             try:
                 self._recovery_active = False
                 self.config = candidate
-                self._replace_records({})
-                self.history = []
-                self._pending_history = []
-                self._clear_variation_baselines()
-                self._pack_runtime = {}
                 self.storage.pack_runtime = self._pack_runtime
                 self._rebuild_rule_index()
+                self._reconcile_flapping_settings()
                 self._refresh_pack_entry_listeners()
                 self._pack_availability = self._current_pack_availability()
                 await self.async_evaluate_all(
@@ -1025,22 +993,13 @@ class _ApiMixin:
                     emit_events=False,
                 )
                 self._reschedule_hidden_pending_visibility(dt_util.now())
-                await self.history_storage.async_save([])
-                history_cleared = True
-                await self._async_save_main_store()
+                await self._async_save_state()
                 self._immediate_state_save_required = False
                 self._variation_baselines_dirty = False
             except BaseException:
                 self._recovery_active = previous_recovery_active
                 self._restore_configuration_snapshot(previous)
                 self.history = previous_history
-                if history_cleared:
-                    try:
-                        await self.history_storage.async_save(previous_history)
-                    except Exception:
-                        _LOGGER.exception(
-                            "Unable to restore alert history after failed config import"
-                        )
                 raise
 
             self.notification_runtime.discard_batches()
@@ -1054,7 +1013,7 @@ class _ApiMixin:
                     async_dismiss_persistent_notification(
                         self.hass, MONITORING_NOTIFICATION_ID
                     )
-                    self._emit_resume_events(previous.records)
+                    self._emit_resume_events(previous.records, emit_events=False)
                 else:
                     self._cancel_all_timers()
                 async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
@@ -1212,11 +1171,17 @@ class _ApiMixin:
             config=deepcopy(self.config),
             records=deepcopy(self.records),
             pending_history=list(self._pending_history),
+            administratively_removed=set(self._administratively_removed),
             transition_confirmed=dict(self._transition_confirmed),
             transition_observations=dict(self._transition_observations),
             variation_baselines=dict(self._variation_baselines),
             variation_baselines_dirty=self._variation_baselines_dirty,
             pack_runtime=deepcopy(self._pack_runtime),
+            pack_snapshots={
+                pack.id: pack.snapshot_handler(self.hass)
+                for pack in PACKS
+                if pack.snapshot_handler is not None
+            },
             unverified_restored_alert_ids=set(self._unverified_restored_alert_ids),
             rule_template_render_info=dict(self._rule_template_render_info),
             rule_message_render_info=dict(self._rule_message_render_info),
@@ -1231,11 +1196,15 @@ class _ApiMixin:
         self._cancel_all_timers()
         self.config = snapshot.config
         self._pending_history = snapshot.pending_history
+        self._administratively_removed = snapshot.administratively_removed
         self._transition_confirmed = snapshot.transition_confirmed
         self._transition_observations = snapshot.transition_observations
         self._variation_baselines = snapshot.variation_baselines
         self._variation_baselines_dirty = snapshot.variation_baselines_dirty
         self._pack_runtime = snapshot.pack_runtime
+        for pack in PACKS:
+            if pack.restore_handler is not None and pack.id in snapshot.pack_snapshots:
+                pack.restore_handler(self.hass, snapshot.pack_snapshots[pack.id])
         self._unverified_restored_alert_ids = set(
             snapshot.unverified_restored_alert_ids
         )

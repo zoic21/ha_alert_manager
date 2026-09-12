@@ -319,9 +319,9 @@ def test_per_entity_consecutive_failure_threshold(hass, entry, scenario_cls):
 
     async def scenario():
         runtime = await scenario_cls.create(hass, entry)
-        runtime.manager.config["automatic"]["execution_errors"][
-            "failure_thresholds"
-        ] = {runtime.entity_id: 3}
+        runtime.manager.config["automatic"]["execution_errors"]["entity_overrides"] = {
+            runtime.entity_id: {"failure_threshold": 3}
+        }
         alert_id = f"execution_errors:{runtime.entity_id}"
 
         for index in range(2):
@@ -357,9 +357,9 @@ def test_back_to_back_failures_survive_the_deferred_evaluation(
 
     async def scenario():
         runtime = await scenario_cls.create(hass, entry)
-        runtime.manager.config["automatic"]["execution_errors"][
-            "failure_thresholds"
-        ] = {runtime.entity_id: 2}
+        runtime.manager.config["automatic"]["execution_errors"]["entity_overrides"] = {
+            runtime.entity_id: {"failure_threshold": 2}
+        }
 
         first = runtime.start("failed-1")
         runtime.finish(first, "First failure")
@@ -479,14 +479,22 @@ def test_excluded_execution_cycle_is_not_replayed_later(hass, entry, scenario_cl
     async def scenario():
         runtime = await scenario_cls.create(hass, entry)
         await runtime.manager.async_update_config(
-            {"excluded_entities": [runtime.entity_id]}
+            {
+                "automatic": {
+                    "execution_errors": {
+                        "entity_overrides": {runtime.entity_id: {"enabled": False}}
+                    }
+                }
+            }
         )
         failed = runtime.start("excluded-error")
         runtime.finish(failed, "Excluded failure")
         await runtime.flush()
         assert runtime.manager.records == {}
 
-        await runtime.manager.async_update_config({"excluded_entities": []})
+        await runtime.manager.async_update_config(
+            {"automatic": {"execution_errors": {"entity_overrides": {}}}}
+        )
         assert runtime.manager.records == {}
 
     asyncio.run(scenario())
@@ -573,9 +581,9 @@ def test_incomplete_cycle_breaks_consecutive_failure_sequence(
 
     async def scenario():
         runtime = await scenario_cls.create(hass, entry)
-        runtime.manager.config["automatic"]["execution_errors"][
-            "failure_thresholds"
-        ] = {runtime.entity_id: 2}
+        runtime.manager.config["automatic"]["execution_errors"]["entity_overrides"] = {
+            runtime.entity_id: {"failure_threshold": 2}
+        }
         alert_id = f"execution_errors:{runtime.entity_id}"
 
         first = runtime.start("first-failure")

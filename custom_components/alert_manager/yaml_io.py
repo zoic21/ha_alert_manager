@@ -12,13 +12,15 @@ from typing import Any
 
 import yaml
 
-from .const import ATTRIBUTE_SOURCES, CATEGORIES, DEFAULT_CONFIG, TRANSITION_SOURCES
+from .config_defaults import CATEGORIES, DEFAULT_CONFIG
+from .const import ATTRIBUTE_SOURCES, TRANSITION_SOURCES
 from .models import Rule, normalize_rule_source
 from .notifications import validate_notification_profiles
+from .pack_migration import migrate_flapping_precedence, migrate_pack_config
 from .packs import PACKS_BY_ID
 from .validation import validate_config, validate_rule_payload
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 MAX_YAML_SIZE = 1_000_000
 
 
@@ -50,12 +52,8 @@ _CONFIG_YAML_KEY_ORDER = (
     "coherence_scan_esphome",
     "coherence_alert_enabled",
     "coherence_ignored_entity_references",
-    "global_delay",
     "pending_display_delay",
     "excluded_labels",
-    "excluded_entities",
-    "excluded_devices",
-    "entity_delays",
     "automatic",
     "notification_profiles",
     "notification_batch_delay",
@@ -122,6 +120,15 @@ def parse_configuration_field_yaml(
     raw_yaml: str, field_id: str, pack_id: str | None = None
 ) -> Any:
     """Validate only the field owned by a configuration drawer, without mutation."""
+    if pack_id in PACKS_BY_ID and field_id == "pack":
+        data = _load_yaml(raw_yaml, description="Configuration")
+        if not isinstance(data, dict) or set(data) != {"pack"}:
+            raise ValueError("Expected one pack mapping")
+        from .validation import validate_config_update
+
+        changes = {"automatic": {pack_id: data["pack"]}}
+        validate_config_update(changes)
+        return validate_config(changes)["automatic"][pack_id]
     if pack_id is None:
         if field_id not in {"excluded_entities", "excluded_devices", "entity_delays"}:
             raise ValueError("Unsupported configuration panel")
@@ -234,7 +241,7 @@ def dump_config_yaml(config: Mapping[str, Any]) -> str:
     """Serialize all persistent configuration, excluding runtime alert data."""
     normalized = validate_config(dict(config))
     config_data = {key: deepcopy(normalized[key]) for key in _CONFIG_YAML_KEY_ORDER}
-    rules = [rule_to_yaml_data(rule) for rule in normalized["rules"]]
+    rules = [rule_to_yaml_data(rule, include_id=True) for rule in normalized["rules"]]
     return _dump_yaml(
         {
             "version": FORMAT_VERSION,
@@ -244,13 +251,15 @@ def dump_config_yaml(config: Mapping[str, Any]) -> str:
     )
 
 
-def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
+def parse_config_yaml(
+    raw_yaml: Any, existing_rules: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Parse one complete configuration import with an intentionally strict schema."""
     document = _load_yaml(raw_yaml, description="Configuration")
     if not isinstance(document, dict):
         raise ValueError("Configuration YAML root must be an object")
     _reject_unknown(document, {"version", "config", "rules"}, prefix="configuration")
-    if document.get("version") != FORMAT_VERSION:
+    if document.get("version") not in (1, FORMAT_VERSION):
         raise ValueError(
             f"Unsupported configuration format version: {document.get('version')}"
         )
@@ -259,7 +268,18 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         raise ValueError("Configuration config must be an object")
     _reject_unknown(
         config,
-        _CONFIG_YAML_KEYS | {"active_display_delay"},
+        _CONFIG_YAML_KEYS
+        | (
+            {
+                "active_display_delay",
+                "global_delay",
+                "entity_delays",
+                "excluded_entities",
+                "excluded_devices",
+            }
+            if document.get("version") == 1
+            else {"active_display_delay"}
+        ),
         prefix="config",
     )
     if "active_display_delay" in config:
@@ -293,24 +313,21 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         raise ValueError("config.automatic must be an object")
     # Exports created before newer packs remain importable; their configuration
     # is filled from the current defaults by validate_config().
-    allowed_missing = {"execution_errors", "flapping"}
+    # Only the four historical packs were mandatory in the V1 format.
+    required = {"unavailable", "connectivity", "unifi", "battery"}
+    allowed_missing = set(CATEGORIES) - required
     missing = set(CATEGORIES) - set(automatic)
     unknown = set(automatic) - set(CATEGORIES)
     if unknown or missing - allowed_missing:
         field = sorted(unknown or missing)[0]
         raise ValueError(f"Invalid automatic pack configuration: {field}")
-    for category in automatic:
-        expected_fields = set(DEFAULT_CONFIG["automatic"][category])
-        actual_fields = (
-            set(automatic[category]) if isinstance(automatic[category], dict) else set()
-        )
-        allowed_missing_fields = {"source_packs"} if category == "flapping" else set()
-        allowed_missing_fields.add("label_ids")
-        missing = expected_fields - actual_fields
-        if actual_fields - expected_fields or missing - allowed_missing_fields:
-            unknown = actual_fields - expected_fields
-            field = sorted(missing - allowed_missing_fields or unknown)[0]
-            raise ValueError(f"Invalid automatic.{category} field: {field}")
+    for category, settings in automatic.items():
+        if not isinstance(settings, dict):
+            raise ValueError(f"automatic.{category} must be an object")
+        allowed = set(DEFAULT_CONFIG["automatic"][category])
+        if document.get("version") == 1:
+            allowed |= {"device_thresholds", "failure_thresholds"}
+        _reject_unknown(settings, allowed, prefix=f"automatic.{category}")
 
     rules = document.get("rules")
     if not isinstance(rules, list):
@@ -327,6 +344,20 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
                 rule = validate_rule_payload(dict(raw_rule))
             except TypeError as err:
                 raise ValueError(f"Invalid rules[{index}]: {err}") from err
+            # Older portable exports omitted IDs. Reuse an unambiguous unchanged
+            # local rule identity instead of duplicating its compatible alerts.
+            comparable = {
+                key: value for key, value in rule.as_dict().items() if key != "id"
+            }
+            matches = [
+                item["id"]
+                for item in existing_rules or []
+                if item.get("id") not in seen_ids
+                and {key: value for key, value in item.items() if key != "id"}
+                == comparable
+            ]
+            if len(matches) == 1:
+                rule = validate_rule_payload(dict(raw_rule), rule_id=matches[0])
             if rule.id in seen_ids:
                 raise ValueError(f"Duplicate rule id: {rule.id}")
             seen_ids.add(rule.id)
@@ -344,7 +375,26 @@ def parse_config_yaml(raw_yaml: Any) -> dict[str, Any]:
         normalized_rules.append(rule.as_dict())
 
     candidate = {**deepcopy(config), "rules": normalized_rules}
-    return validate_config(candidate)
+    if document.get("version") == 1:
+        candidate = migrate_flapping_precedence(migrate_pack_config(candidate))
+    # Parsing runs in the executor. Registry conversion belongs to the admitted
+    # import transaction; preserve unresolved targets in the preview until then.
+    exclusions = {
+        key: candidate.pop(key)
+        for key in ("excluded_entities", "excluded_devices")
+        if key in candidate
+    }
+    from .validation import validate_device_list, validate_entity_list
+
+    if "excluded_entities" in exclusions:
+        exclusions["excluded_entities"] = validate_entity_list(
+            exclusions["excluded_entities"]
+        )
+    if "excluded_devices" in exclusions:
+        exclusions["excluded_devices"] = validate_device_list(
+            exclusions["excluded_devices"]
+        )
+    return {**validate_config(candidate), **exclusions}
 
 
 def import_summary(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -353,7 +403,12 @@ def import_summary(config: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "rules": len(config["rules"]),
         "enabled_packs": sum(1 for pack in automatic.values() if pack["enabled"]),
-        "entity_delays": len(config["entity_delays"]),
+        "pack_exceptions": sum(
+            len(scope.get(f"{kind}_overrides", {}))
+            for pack in automatic.values()
+            for scope in (pack, *pack.get("source_packs", {}).values())
+            for kind in ("device", "entity")
+        ),
         "warnings": [],
     }
 

@@ -1,6 +1,7 @@
 import { navigate } from "../utils/navigation.js";
 export { navigate };
 import { alertLabelIds } from "../utils/alert-labels.js";
+import { handleAutomaticAction } from "../views/automatic.js";
 import { handleHistoryAction } from "../views/history.js";
 import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
@@ -869,7 +870,19 @@ export function alertDetailsItems(kind, row) {
       .filter((value) => typeof value === "number" && Number.isFinite(value)
         && Number.isFinite(new Date(value * 1000).getTime()))
       .map((value) => new Date(value * 1000).toISOString());
+    const monitoringPack = !row.source?.rule_id && (this._packs ?? []).find((pack) => pack.id === row.source?.type);
+    const monitoringSource = flapping ? (row.source?.source ?? row.source?.id?.replace(/^flapping:/, "") ?? "").split(":")[0] : "";
+    const targetPack = flapping ? (this._packs ?? []).find((pack) => pack.id === monitoringSource) : monitoringPack;
+    const targetState = this._hass?.states?.[row.entityId];
+    const targetEntry = this._hass?.entities?.[row.entityId];
+    const targetFilter = targetPack?.target_filter ?? {};
+    const targetExists = Boolean(targetState || targetEntry);
+    const targetMatches = (!targetFilter.domain || [].concat(targetFilter.domain).includes(row.entityId?.split(".")[0]))
+      && (!targetFilter.device_class || !targetState?.attributes?.device_class || [].concat(targetFilter.device_class).includes(targetState.attributes.device_class));
+    const canConfigureMonitoring = targetExists && targetMatches && !this._readOnly && monitoringPack && monitoringPack.available !== false && (!flapping || (this._packs ?? []).some((pack) => pack.id === monitoringSource && pack.available !== false));
     const items = [
+      ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
+      ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
@@ -1589,6 +1602,17 @@ export async function handleAlertTableAction(action, button, event) {
     event.stopPropagation?.();
     const path = `/config/devices/device/${encodeURIComponent(button.dataset.deviceId)}`;
     this._closeAlertDetailsDialog(() => this._navigate(path));
+    return true;
+  }
+  if (action === "configure-alert-monitoring") {
+    event.preventDefault?.(); event.stopPropagation?.();
+    if (this._readOnly) return true;
+    this._closeAlertDetailsDialog(() => {
+      this._activeTab = "settings";
+      this._navigate("/alert-manager/settings");
+      this._render();
+      void handleAutomaticAction.call(this, "open-automatic-configuration", button);
+    });
     return true;
   }
   if (action === "open-alert-rule") {

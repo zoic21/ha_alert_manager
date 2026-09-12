@@ -1,3 +1,5 @@
+import { automaticConfig, automaticPacks } from "./automatic-fixtures.mjs";
+import { automaticPackToDraft } from "../frontend-src/components/configuration-yaml.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -292,240 +294,34 @@ test("updating a mobile configuration drawer preserves its native bottom sheet",
   assert.match(template.markup, /^<ha-resizable-bottom-sheet/);
 });
 
-test("automatic rendering uses prepared configuration and draft data", () => {
-  const pack = {
-    id: "battery",
-    available: true,
-    translation_key: "battery",
-    config_fields: [
-      {
-        id: "threshold",
-        type: "number",
-        translation_key: "threshold",
-        default: 15,
-        unit: "%",
-      },
-      {
-        id: "device_thresholds",
-        type: "device_number_map",
-        translation_key: "device_thresholds",
-        unit: "%",
-      },
-    ],
-  };
-  const markup = renderAutomatic({
-    availablePacks: [pack],
-    config: {
-      automatic: {
-        battery: {
-          enabled: true,
-          delay: 60,
-          threshold: 15,
-          device_thresholds: { "device-1": 15 },
-        },
-      },
-    },
-    draft: {
-      battery: {
-        enabled: true,
-        delay: 60,
-        threshold: 15,
-        device_thresholds: [{ target_id: "device-1", value: 15 }],
-      },
-    },
-    configurationDrawer: { kind: "automatic", id: "battery" },
-    busy: false,
-    renderNumberField: (id, label, value) => `<number id="${id}">${label}:${value}</number>`,
-    t,
-  });
-
+test("automatic rendering is pure and places defaults with sparse exceptions", () => {
+  const config = { automatic: automaticConfig() };
+  config.automatic.battery.device_overrides = { "device-1": { threshold: 15 } };
+  const packs = automaticPacks();
+  const context = { availablePacks: packs, config, draft: Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])])), configurationDrawer: { kind: "automatic", id: "battery" }, t };
+  const before = structuredClone(context.draft);
+  const markup = renderAutomatic(context);
+  assert.deepEqual(context.draft, before);
   assert.match(markup, /^<ha-card id="settings-section-automatic" outlined/);
-  assert.match(markup, /<h2 class="automatic-section-title">tabs\.automatic<\/h2>/);
-  assert.match(markup, /<section class="category-card">/);
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
   assert.match(markup, /auto-battery-delay/);
-  assert.match(markup, /auto-battery-threshold[^>]*>automatic\.fields\.threshold\.label:15/);
-  assert.match(markup, /auto-battery-device_thresholds-configuration/);
-  assert.match(markup, /automatic-configuration-entry/);
-  assert.match(markup, /class="side-drawer configuration-drawer"/);
-  assert.match(markup, /auto-battery-device_thresholds-target-0/);
-  assert.match(markup, /class="pack-map-row pack-number-row battery-threshold-row"/);
-  assert.doesNotMatch(markup, /class="battery-threshold-value"/);
-  assert.match(markup, /<ha-icon-button class="configuration-remove"[^>]*data-action="remove-pack-map-row"[^>]*title="buttons\.remove"/);
-  assert.doesNotMatch(markup, /<span class="field-label">automatic\.fields\.device_thresholds\.label<\/span>/);
-
-  assert.match(markup, /value="15"/);
-  assert.match(markup, /pack-map-heading[\s\S]*data-action="add-pack-map-row"/);
-  const drawerMarkup = markup.slice(markup.indexOf("configuration-drawer-backdrop"));
-  const automaticCardMarkup = markup.slice(0, markup.indexOf("configuration-drawer-backdrop"));
-  assert.equal((automaticCardMarkup.match(/<ha-card/g) ?? []).length, 1);
-  assert.doesNotMatch(drawerMarkup, /auto-battery-threshold/);
-
-  const automationErrors = renderAutomatic({
-    availablePacks: [{
-      id: "execution_errors",
-      available: true,
-      translation_key: "execution_errors",
-      config_fields: [{
-        id: "failure_thresholds",
-        type: "entity_number_map",
-        translation_key: "failure_thresholds",
-        minimum: 1,
-        maximum: 100,
-        step: 1,
-        entity_domains: ["automation", "script"],
-      }],
-    }],
-    config: {
-      automatic: {
-        execution_errors: {
-          enabled: true,
-          delay: 0,
-          failure_thresholds: { "automation.test": 3 },
-        },
-      },
-    },
-    draft: {
-      execution_errors: {
-        enabled: true,
-        delay: 0,
-        failure_thresholds: [{ target_id: "automation.test", value: 3 }],
-      },
-    },
-    configurationDrawer: { kind: "automatic", id: "execution_errors" },
-    busy: false,
-    renderNumberField: (id) => `<number id="${id}"></number>`,
-    t,
-  });
-  assert.match(automationErrors, /packs\.execution_errors\.name/);
-  assert.match(automationErrors, /auto-execution_errors-enabled[^>]*checked/);
-  assert.match(automationErrors, /auto-execution_errors-delay/);
-  assert.match(automationErrors, /auto-execution_errors-failure_thresholds-target-0/);
-  assert.match(automationErrors, /value="3"/);
+  assert.match(markup, /auto-battery-threshold/);
+  assert.match(markup, /auto-battery-device_overrides-target-0/);
+  assert.match(markup, /data-action="remove-pack-map-row"/);
+  assert.match(markup, /data-action="inherit-pack-row"/);
+  assert.match(markup, /automatic.inherited_value/);
 });
 
-test("flapping renders source packs and entity overrides in separate drawers", () => {
-  const numberFields = [
-    { id: "occurrences", type: "number", translation_key: "flapping_occurrences", default: 5, minimum: 2, maximum: 100, step: 1 },
-    { id: "window", type: "number", translation_key: "flapping_window", default: 3600, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
-    { id: "recovery", type: "number", translation_key: "flapping_recovery", default: 1800, minimum: 1, maximum: 31536000, step: 1, unit: "s" },
-  ];
-  const pack = {
-    id: "flapping",
-    available: true,
-    translation_key: "flapping",
-    uses_delay: false,
-    config_fields: [
-      ...numberFields,
-      {
-        id: "source_packs",
-        type: "pack_settings_map",
-        translation_key: "flapping_source_packs",
-        fields: numberFields.map((field) => ({ ...field, default: undefined })),
-      },
-      {
-        id: "entity_overrides",
-        type: "entity_settings_map",
-        translation_key: "flapping_entity_overrides",
-        fields: [
-          { id: "enabled", type: "boolean", translation_key: "flapping_enabled", default: true },
-          ...numberFields,
-        ],
-      },
-    ],
-  };
-  const config = {
-    automatic: {
-      unavailable: { enabled: true, delay: null },
-      connectivity: { enabled: true, delay: null },
-      battery: { enabled: true, delay: null },
-      flapping: {
-        enabled: true,
-        occurrences: 5,
-        window: 3600,
-        recovery: 1800,
-        source_packs: {
-          unavailable: { occurrences: null, window: null, recovery: null },
-          connectivity: { occurrences: null, window: null, recovery: null },
-        },
-        entity_overrides: {
-          "sensor.test": { enabled: true, occurrences: 3, window: 600, recovery: 120 },
-        },
-      },
-    },
-  };
-  const draft = {
-    ...config.automatic,
-    flapping: {
-      ...config.automatic.flapping,
-      occurrences: 5,
-      window: 3600,
-      recovery: 1800,
-      source_packs: {
-        unavailable: { occurrences: null, window: null, recovery: null },
-        connectivity: { occurrences: null, window: null, recovery: null },
-      },
-      entity_overrides: [{
-        target_id: "sensor.test", enabled: true, occurrences: 3, window: 600, recovery: 120,
-      }],
-    },
-  };
-  const markup = renderAutomatic({
-    availablePacks: [
-      pack,
-      { id: "unavailable", available: true, translation_key: "unavailable" },
-      { id: "connectivity", available: true, translation_key: "connectivity" },
-      { id: "battery", available: true, translation_key: "battery" },
-    ],
-    config,
-    draft,
-    configurationDrawer: { kind: "automatic", id: "flapping", fieldId: "source_packs" },
-    busy: false,
-    renderNumberField: (id) => `<number id="${id}"></number>`,
-    t,
-  });
-
-  assert.doesNotMatch(markup, /auto-flapping-delay/);
-  assert.match(markup, /auto-flapping-occurrences/);
-  assert.match(markup, /auto-flapping-window/);
-  assert.match(markup, /auto-flapping-recovery/);
-  assert.match(markup, /auto-flapping-source_packs-configuration/);
-  assert.match(markup, /auto-flapping-entity_overrides-configuration/);
-  assert.match(markup, /automatic-configuration-entry has-multiple-configurations/);
-  assert.match(markup, /data-setting-id="occurrences"/);
-  assert.match(markup, /data-setting-id="window"/);
-  assert.match(markup, /data-setting-id="recovery"/);
-  assert.match(markup, /data-source-pack-id="unavailable"[^>]*checked/);
-  assert.match(markup, /data-source-pack-id="connectivity"[^>]*checked/);
-  assert.match(markup, /data-source-pack-id="battery"/);
-  assert.match(markup, /data-pack-source-values="battery" hidden/);
-  assert.doesNotMatch(markup, /auto-flapping-entity_overrides-target-0/);
-
-  const entityMarkup = renderAutomatic({
-    availablePacks: [
-      pack,
-      { id: "unavailable", available: true, translation_key: "unavailable" },
-      { id: "connectivity", available: true, translation_key: "connectivity" },
-      { id: "battery", available: true, translation_key: "battery" },
-    ],
-    config,
-    draft,
-    configurationDrawer: {
-      kind: "automatic", id: "flapping", fieldId: "entity_overrides",
-    },
-    busy: false,
-    renderNumberField: (id) => `<number id="${id}"></number>`,
-    t,
-  });
-  assert.match(entityMarkup, /auto-flapping-entity_overrides-target-0/);
-  assert.match(entityMarkup, /automatic\.entity/);
-  assert.match(entityMarkup, /data-pack-setting-toggle="flapping"[^>]*checked/);
-  assert.match(entityMarkup, /ha-switch class="pack-setting-toggle" aria-label="automatic\.fields\.flapping_enabled\.label" title=/);
-  assert.doesNotMatch(entityMarkup, /<span[^>]*>automatic\.fields\.flapping_enabled\.label<\/span>/);
-  assert.match(entityMarkup, /class="pack-setting-field/);
-  assert.match(entityMarkup, /data-setting-id="occurrences"[\s\S]*data-setting-id="window"[\s\S]*data-setting-id="recovery"[\s\S]*data-action="remove-pack-map-row"/);
-  assert.deepEqual(numberFields.map((field) => field.id), ["occurrences", "window", "recovery"]);
-  assert.doesNotMatch(entityMarkup, /data-pack-source-toggle/);
+test("flapping source contexts share one drawer without an ordinary delay", () => {
+  const packs = automaticPacks(); const config = { automatic: automaticConfig() };
+  config.automatic.flapping.source_packs.unavailable.entity_overrides = { "sensor.a": { recovery: 30 } };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const markup = renderAutomatic({ availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id: "flapping", sourceId: "unavailable" }, t });
+  assert.equal((markup.match(/class="side-drawer configuration-drawer"/g) ?? []).length, 1);
+  assert.match(markup, /auto-flapping-source-context/);
+  assert.match(markup, /auto-flapping-source-enabled/);
+  assert.match(markup, /auto-flapping-entity_overrides-target-0/);
+  assert.doesNotMatch(markup, /id="auto-flapping-delay"/);
 });
 
 test("settings rendering consumes prepared drafts without initializing them", () => {
@@ -552,11 +348,11 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     t,
   });
 
-  assert.match(markup, /id="global-delay"/);
+  assert.doesNotMatch(markup, /id="global-delay"/);
   assert.match(markup, /class="panel settings-navigation"/);
-  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 9);
-  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 9);
-  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 9);
+  assert.equal(markup.match(/data-action="scroll-settings-section"/g)?.length, 8);
+  assert.equal(markup.match(/appearance="outlined" data-action="scroll-settings-section"/g)?.length, 8);
+  assert.equal(markup.match(/<ha-icon slot="start" icon="mdi:/g)?.length, 8);
   assert.match(markup, /data-section-id="automatic"><ha-icon slot="start" icon="mdi:radar"/);
   assert.match(markup, /data-section-id="transfer"><ha-icon slot="start" icon="mdi:file-swap-outline"/);
   assert.ok(markup.includes(automaticMarkup));
@@ -569,7 +365,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(coherenceCard, /aria-describedby="coherence-alert-help"/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
-  assert.match(markup, /settings-entity_delays-configuration/);
+  assert.doesNotMatch(markup, /settings-entity_delays-configuration/);
   assert.match(markup, /class="side-drawer configuration-drawer"/);
   assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
   assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
@@ -756,8 +552,8 @@ test("added rows reveal after rendering and ignore rows removed before the frame
 
 
 for (const [packId, fieldId, fieldType] of [
-  ["battery", "device_thresholds", "device_number_map"],
-  ["execution_errors", "failure_thresholds", "entity_number_map"],
+  ["battery", "device_overrides", "device_settings_map"],
+  ["execution_errors", "entity_overrides", "entity_settings_map"],
   ["flapping", "entity_overrides", "entity_settings_map"],
 ]) {
   test(`${packId} adding a configuration reveals the newly appended row`, async () => {
@@ -765,7 +561,7 @@ for (const [packId, fieldId, fieldType] of [
     const calls = [];
     const addedRow = { scrollIntoView: options => calls.push(options) };
     const drawer = { querySelector: selector => {
-      assert.equal(selector, ".pack-map-row:last-child");
+      assert.equal(selector, ".automatic-exception:last-child");
       assert.equal(rows.length, 2);
       return addedRow;
     } };

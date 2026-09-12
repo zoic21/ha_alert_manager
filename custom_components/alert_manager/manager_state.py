@@ -249,6 +249,10 @@ class _StateMixin:
                     and self._runtime_phase is not RuntimePhase.STOPPING
                 ):
                     self._schedule_live_message_flush()
+        if self._administratively_removed:
+            removed = set(self._administratively_removed)
+            await self.notification_runtime.async_discard_alerts(removed)
+            self._administratively_removed.difference_update(removed)
         await self._async_flush_history()
 
     async def _async_save_main_store(self) -> None:
@@ -569,9 +573,16 @@ class _StateMixin:
                     **(record.details.condition_params or {}),
                     "resolution_reason": "automatic",
                 }
+            enabled = self._record_monitoring_enabled(record)
+            if not enabled:
+                record.details.condition_params = {
+                    **(record.details.condition_params or {}),
+                    "resolution_reason": "monitoring_disabled",
+                }
+                self._administratively_removed.add(alert_id)
             if archive_resolutions:
                 self._pending_history.append(AlertHistoryEntry.resolved(record, now))
-            if emit_events:
+            if emit_events and enabled:
                 self._fire_resolved(record, now)
             self._immediate_state_save_required = True
             changed = True

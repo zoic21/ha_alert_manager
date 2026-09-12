@@ -173,13 +173,17 @@ Open **Configuration → Automatic monitoring** to enable and configure the pack
 | Automation and script errors | an `automation` or `script` execution finishes with an error |
 | Flapping / instability | the same anomaly occurs repeatedly within a detection window |
 
-Each monitor can be enabled independently. Delays and exclusions can be adjusted from the UI, and battery thresholds can be adapted when some devices need different limits.
+Each pack has one **Configure** drawer for defaults, labels and device/entity exceptions. The main card shows its defaults and exception count. Exceptions store only overridden fields: **entity → device → pack**, independently for monitoring, delay and the pack’s parameters. Clearing a field restores inheritance; an explicit zero delay triggers immediately. The drawer shows inherited values and their origin. A disabled exception retains its saved parameters. Device exceptions automatically cover newly added eligible entities.
+
+Global exclusions use **Home Assistant labels** on entities or devices, and affect automatic monitoring only. Custom rules remain independent. An enabled exception cannot bypass the global monitoring switch, a disabled pack, an exclusion label or the pack’s eligibility checks. Trigger delays belong to individual packs; the separate pending-alert display delay only controls visibility.
+
+Administrators can open **Configure this monitoring** from an automatic alert’s details, with its target and flapping source preselected. Opening creates a draft, not a saved exception. Missing or no-longer-applicable targets remain visible for correction or removal. Disabling a target cancels its timers, queued notifications and reminders; any retained history says monitoring was disabled and no recovery notification is sent. Changing a pending delay preserves the original observation time; compatible active and acknowledged alerts retain their identity.
 
 Each pack can carry Home Assistant labels (`automatic.<pack>.label_ids` in YAML), so its alerts can be selected by notification profiles and label exceptions. Changing a pack’s labels updates its current alerts; history retains the labels recorded when the alert was resolved.
 
 Automation and script errors have no delay by default. A successful completed execution resolves the alert. For selected automations or scripts, you can require several consecutive failed execution cycles before raising it.
 
-The Flapping pack detects repeated short anomalies per source and entity, even if they clear before the normal trigger delay. It is disabled by default: 5 occurrences within 1 hour trigger a separate alert, which resolves after 30 minutes without another occurrence. These settings can be adjusted globally, per source pack, per entity or per custom rule. Unavailable entities and connectivity are the preselected sources; source packs must be enabled, and custom rules can participate through their flapping option.
+The Flapping pack detects repeated short anomalies per source and entity, even if they clear before the normal trigger delay. It is disabled by default: 5 occurrences within 1 hour trigger a separate alert, which resolves after 30 minutes without another occurrence. These settings can be adjusted at pack level, per source pack, per device, per entity or per custom rule. Unavailable entities and connectivity are the preselected sources; source packs must be enabled, and custom rules can participate through their flapping option.
 
 Flapping alert details keep the count / threshold visible. A collapsed section reveals the retained occurrence times, grouped by local date in a compact grid. This evidence follows the detector’s bounded rolling window, survives restarts and is saved in resolved history; older alerts without this metadata explicitly indicate that timestamps are unavailable.
 
@@ -273,11 +277,17 @@ Enable **Create an alert for coherence issues** under **Configuration → Cohere
 
 ## Configuration export and recovery
 
-Every configuration side panel also offers **YAML mode** in its three-dot menu: pack overrides (battery thresholds, execution errors and flapping), entity/device exclusions and per-entity delays. The YAML contains only the field edited in that panel, using the same keys as configuration exports and durations in seconds. Switching editors preserves unsaved values and list order. Invalid YAML, unknown fields and invalid settings block saving and returning to the visual editor; closing a changed panel asks for confirmation. Use **Save** to apply changes. Read-only detail and diagnostic panels are not editable.
+Each pack drawer offers **YAML mode** in its three-dot menu. Its `pack` mapping contains the complete pack configuration, including sparse `device_overrides`, `entity_overrides` and source-specific flapping exceptions. Durations are in seconds. Visual and YAML editors share backend validation. Duplicate targets, unknown fields and invalid settings block saving; unsaved changes require confirmation before discarding. Notification profiles keep their own YAML editor.
 
 The complete configuration can be exported and imported as YAML. Alert Manager also keeps the three latest valid daily configuration exports. They can be downloaded or restored from the settings page.
 
-If the stored configuration cannot be loaded at startup, Alert Manager starts safely with defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently. Restoring a complete backup replaces the current configuration, runtime alerts and history.
+If the stored configuration cannot be loaded at startup, Alert Manager starts safely with defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently. Restoring a complete backup replaces the configuration and reevaluates current states while retaining compatible alert/rule IDs, acknowledgements, occurrence evidence and history. New version-2 exports retain rule IDs.
+
+### Migration from earlier configurations
+
+Loading an older configuration, version-1 YAML or backup converts shared trigger delays into explicit pack defaults and old per-entity delays into pack exceptions, including disabled packs. Battery thresholds and failed-cycle counts retain their targets and values. Old source-priority flapping values become explicit source-scoped exceptions where necessary to preserve behavior.
+
+Direct entity/device exclusions become the dedicated **Alert Manager - migrated automatic exclusions** label, added alongside existing labels and selected as a global automatic exclusion. Registry writes complete before the source exclusions are removed. Interrupted retries reuse the same marked label. If a target is missing or has no registry entry, a same-name user label conflicts, or a registry/write operation fails, conversion stops with the exact error and the source data remains recoverable. Restore the missing target or explicitly correct/remove that exclusion in the original YAML, then import again. Do not delete the migration label while its exclusions are still needed.
 
 ## Alert lifecycle
 

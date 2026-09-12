@@ -11,7 +11,7 @@ DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.4.0-dev.1"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.33"
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.34"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"
@@ -111,75 +111,6 @@ CATEGORY_CONNECTIVITY: Final = "connectivity"
 CATEGORY_UNIFI: Final = "unifi"
 CATEGORY_BATTERY: Final = "battery"
 CATEGORY_FLAPPING: Final = "flapping"
-CATEGORIES: Final = (
-    CATEGORY_UNAVAILABLE,
-    CATEGORY_CONNECTIVITY,
-    CATEGORY_UNIFI,
-    CATEGORY_BATTERY,
-    "execution_errors",
-    CATEGORY_FLAPPING,
-)
-
-DEFAULT_CONFIG: Final = {
-    "monitoring_enabled": True,
-    "history_limit": DEFAULT_HISTORY_LIMIT,
-    "coherence_schedule": DEFAULT_COHERENCE_SCHEDULE,
-    "coherence_scan_esphome": DEFAULT_COHERENCE_SCAN_ESPHOME,
-    "coherence_alert_enabled": False,
-    "coherence_ignored_entity_references": [],
-    "global_delay": DEFAULT_DELAY,
-    "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
-    "excluded_labels": [],
-    "excluded_entities": [],
-    "excluded_devices": [],
-    "entity_delays": {},
-    "automatic": {
-        CATEGORY_UNAVAILABLE: {
-            "enabled": True,
-            "label_ids": [],
-            "delay": None,
-        },
-        CATEGORY_CONNECTIVITY: {"enabled": True, "label_ids": [], "delay": None},
-        CATEGORY_UNIFI: {"enabled": True, "label_ids": [], "delay": None},
-        CATEGORY_BATTERY: {
-            "enabled": True,
-            "label_ids": [],
-            "delay": None,
-            "threshold": DEFAULT_BATTERY_THRESHOLD,
-            "device_thresholds": {},
-        },
-        "execution_errors": {
-            "enabled": True,
-            "label_ids": [],
-            "delay": 0,
-            "failure_thresholds": {},
-        },
-        CATEGORY_FLAPPING: {
-            "enabled": False,
-            "label_ids": [],
-            "occurrences": DEFAULT_FLAPPING_OCCURRENCES,
-            "window": DEFAULT_FLAPPING_WINDOW,
-            "recovery": DEFAULT_FLAPPING_RECOVERY,
-            "source_packs": {
-                CATEGORY_UNAVAILABLE: {
-                    "occurrences": None,
-                    "window": None,
-                    "recovery": None,
-                },
-                CATEGORY_CONNECTIVITY: {
-                    "occurrences": None,
-                    "window": None,
-                    "recovery": None,
-                },
-            },
-            "entity_overrides": {},
-        },
-    },
-    "rules": [],
-    "notification_profiles": [],
-    "notification_batch_delay": NOTIFICATION_BATCH_SECONDS,
-}
-
 MIN_DELAY: Final = 0
 MAX_DELAY: Final = 31_536_000
 MIN_THRESHOLD: Final = -1_000_000_000.0

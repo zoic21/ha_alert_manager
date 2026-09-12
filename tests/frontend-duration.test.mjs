@@ -86,28 +86,28 @@ test("rule form converts native duration objects and retains inherited flapping 
   assert.equal(captureRuleDraftFromForm(form, result).flapping_window, null);
 });
 
-test("pack duration and nested overrides retain seconds while cleared overrides stay null", () => {
+test("pack duration and sparse overrides retain seconds while clearing restores inheritance", () => {
   const delay = durationField(900, false);
   const window = durationField(7200);
   const source = durationField(null, false);
-  Object.assign(source.dataset, { packSourceSetting: "flapping", packField: "packs", sourcePackId: "battery", settingId: "recovery" });
+  Object.assign(source.dataset, { packSetting: "flapping", packField: "entity_overrides", packIndex: "0", settingId: "recovery" });
   setup([delay, window, source]);
-  const draft = { flapping: { delay: null, window: 60, packs: { battery: { recovery: 10 } } } };
+  const draft = { flapping: { delay: null, window: 60, entity_overrides: [{ target_id: "sensor.a", recovery: 10 }] } };
   const panel = {
     _ensureAutomaticDraft() {}, _automaticMapDraft: draft,
     _packs: [{ id: "flapping", config_fields: [{ id: "window", type: "number" }] }],
     shadowRoot: {
       querySelector: (selector) => ({ "#auto-flapping-delay": delay, "#auto-flapping-window": window })[selector],
-      querySelectorAll: (selector) => selector === "[data-pack-source-setting]" ? [source] : [],
+      querySelectorAll: (selector) => selector === "[data-pack-setting], [data-pack-default]" ? [source] : [],
     },
   };
   captureAutomaticConfigurationValues.call(panel);
   assert.equal(draft.flapping.delay, 900);
   assert.equal(draft.flapping.window, 7200);
-  assert.equal(draft.flapping.packs.battery.recovery, null);
+  assert.equal(draft.flapping.entity_overrides[0].recovery, undefined);
   change(source, { minutes: 2 });
   captureAutomaticMapValues.call(panel);
-  assert.equal(draft.flapping.packs.battery.recovery, 120);
+  assert.equal(draft.flapping.entity_overrides[0].recovery, 120);
 });
 
 test("notification reminders serialize native durations and clearing still means never", () => {

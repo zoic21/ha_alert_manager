@@ -12,6 +12,7 @@ from unittest.mock import Mock
 import pytest
 from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import Event, State
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager import manager_runtime
 from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
@@ -870,8 +871,8 @@ def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_no
         await manager.async_acknowledge(old_alert_id, "Admin")
         await manager.async_update_config(
             {
-                "entity_delays": {"sensor.old": 123},
-                "excluded_entities": ["sensor.old"],
+                **automatic_settings(delays={"sensor.old": 123}),
+                "excluded_labels": ["excluded"],
             }
         )
         original = manager.records[old_alert_id]
@@ -897,8 +898,10 @@ def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_no
 
         new_alert_id = f"rule:{created['id']}:sensor.new"
         assert manager.config["rules"][0]["entity_ids"] == ["sensor.new"]
-        assert manager.config["entity_delays"] == {"sensor.new": 123}
-        assert manager.config["excluded_entities"] == ["sensor.new"]
+        assert manager.config["automatic"]["unavailable"]["entity_overrides"] == {
+            "sensor.new": {"delay": 123}
+        }
+        assert manager.config["excluded_labels"] == ["excluded"]
         assert old_alert_id not in manager.records
         record = manager.records[new_alert_id]
         assert old_alert_id not in manager._record_ids_by_entity.get(
@@ -1011,8 +1014,13 @@ def test_runtime_rule_cleanup_remains_silent(hass, entry):
             0,
             1,
         ),
-        ({"global_delay": 123}, 1, 0, 1),
-        ({"automatic": {"battery": {"threshold": 23}}, "global_delay": 123}, 1, 0, 1),
+        (automatic_settings(delay=123), 1, 0, 1),
+        (
+            automatic_settings(delay=123, automatic={"battery": {"threshold": 23}}),
+            1,
+            0,
+            1,
+        ),
     ],
 )
 def test_config_update_work_matches_changed_values(
@@ -1036,7 +1044,12 @@ def test_config_update_work_matches_changed_values(
         monkeypatch.setattr(manager.storage._store, "async_save", save)
         # The UI includes unchanged detection fields in a general settings save.
         await manager.async_update_config(
-            {"global_delay": manager.config["global_delay"], **changes}
+            {
+                **automatic_settings(
+                    delay=manager.config["automatic"]["unavailable"]["delay"]
+                ),
+                **changes,
+            }
         )
         assert evaluate.await_count == evaluations
         assert visibility.call_count == presentation

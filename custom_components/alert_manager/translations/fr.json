@@ -85,13 +85,56 @@
         },
         "threshold": {
           "label": "Seuil global"
+        },
+        "monitoring": {
+          "label": "Surveillance"
+        },
+        "trigger_delay": {
+          "label": "Délai de déclenchement"
+        },
+        "failure_threshold": {
+          "label": "Exécutions consécutives en échec"
+        },
+        "device_overrides": {
+          "label": "Exceptions par appareil"
+        },
+        "entity_overrides": {
+          "label": "Exceptions par entité"
         }
       },
       "enable_source_pack": "Activer le pack source {name}",
       "pack_delay": "Délai propre au pack",
       "save": "Enregistrer la surveillance automatique",
       "labels": "Étiquettes",
-      "labels_help": "Ajoutées aux alertes du pack et utilisées pour les notifications."
+      "labels_help": "Ajoutées aux alertes du pack et utilisées pour les notifications.",
+      "inheritance_help": "Chaque champ hérite de l’appareil, puis du pack. Un champ numérique vide hérite ; 0 signifie immédiat. Les exclusions globales et la désactivation du pack restent prioritaires.",
+      "inherit": "Hérité",
+      "monitoring_enabled": "Activée",
+      "monitoring_disabled": "Désactivée",
+      "boolean_true": "Oui",
+      "boolean_false": "Non",
+      "restore_inheritance": "Rétablir l’héritage",
+      "no_exceptions": "Aucune exception",
+      "source_context": "Réglages de la source",
+      "all_sources": "Valeurs par défaut pour toutes les sources",
+      "source_enabled": "Surveiller cette source",
+      "inherited_value": "{value} — {origin}",
+      "origin_pack": "défaut du pack",
+      "origin_source": "défaut de la source",
+      "origin_device": "réglage de l’appareil",
+      "origin_entity": "réglage de l’entité",
+      "origin_source_device": "appareil pour cette source",
+      "origin_source_entity": "entité pour cette source",
+      "orphan_target": "Cette cible est introuvable. Ses réglages sont conservés ; modifiez ou supprimez l’exception.",
+      "inapplicable_target": "Cette cible n’est actuellement pas éligible à ce pack. Ses réglages sont conservés.",
+      "blocked_label": "Un label d’exclusion global bloque cette cible. Une exception ne peut pas contourner cette exclusion.",
+      "blocked_global": "La surveillance automatique est suspendue globalement.",
+      "blocked_source": "Le pack source est désactivé ou indisponible.",
+      "unavailable_pack": "L’intégration requise est indisponible. Les réglages sont conservés.",
+      "configure_monitoring": "Configurer cette surveillance",
+      "administrative_resolution": "Surveillance désactivée ou exclue (sans retour à la normale)",
+      "hours_short": "h",
+      "minutes_short": "min"
     },
     "buttons": {
       "add": "Ajouter",
@@ -635,7 +678,7 @@
       "duplicate_delay_save": "L’entité {entity_id} est présente deux fois dans les délais.",
       "entity_delay": "Délais particuliers par entité",
       "entity_exclusions": "Entités exclues",
-      "exclusions": "Exclusions de la surveillance",
+      "exclusions": "Exclusions de la surveillance automatique",
       "explicit_exclusions": "Exclusions explicites",
       "general": "Paramètres généraux",
       "global_delay": "Délai global",
@@ -655,7 +698,7 @@
       "transfer_title": "Export et import de configuration",
       "export": "Exporter en YAML",
       "import": "Importer un YAML",
-      "import_confirm": "La configuration actuelle sera entièrement remplacée.\n\nRègles : {rules}\nPacks activés : {packs}\nDélais particuliers : {delays}\n\nContinuer ?",
+      "import_confirm": "La configuration actuelle sera entièrement remplacée.\n\nRègles : {rules}\nPacks activés : {packs}\nExceptions des packs : {exceptions}\n\nContinuer ?",
       "import_read_error": "Impossible de lire le fichier sélectionné.",
       "yaml_help": "Seuls les réglages de ce volet sont modifiés. Les durées sont en secondes. Utilisez Enregistrer pour appliquer les changements.",
       "yaml_invalid": "Configuration invalide : {error}",

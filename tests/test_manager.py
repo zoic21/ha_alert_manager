@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, Event
 from homeassistant.util import dt as dt_util
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import (
     ALERT_MANAGER_ENTITY_IDS,
@@ -529,7 +530,7 @@ def test_pending_alert_is_exposed_after_configured_display_delay(
     registry_entry(hass, "sensor.ups", device_id=device.id)
     hass.states.set("sensor.ups", "unavailable")
     manager = make_manager(hass, entry)
-    run(manager.async_update_config({"entity_delays": {"sensor.ups": 30}}))
+    run(manager.async_update_config(automatic_settings(delays={"sensor.ups": 30})))
     record = manager.records["unavailable:sensor.ups"]
     assert record.status is AlertStatus.PENDING
     assert record.visible_at == start + timedelta(seconds=10)
@@ -658,7 +659,7 @@ def test_shutdown_discards_queued_unavailable_transition(hass, entry, delay):
         await manager.async_setup()
         await manager.async_update_config(
             {
-                "entity_delays": {"event.baby": delay},
+                **automatic_settings(delays={"event.baby": delay}),
                 "pending_display_delay": 0,
             }
         )
@@ -698,7 +699,7 @@ def test_shutdown_ignores_registry_callbacks(hass, entry, registry_entry, device
         hass.states.set("sensor.old", "unavailable")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
-        await manager.async_update_config({"entity_delays": {"sensor.old": 0}})
+        await manager.async_update_config(automatic_settings(delays={"sensor.old": 0}))
         alert_id = "unavailable:sensor.old"
         assert manager.records[alert_id].status is AlertStatus.ACTIVE
 
@@ -3678,12 +3679,12 @@ def test_automatic_pack_messages_follow_home_assistant_language(hass, entry):
 
     run(
         manager.async_update_config(
-            {
-                "entity_delays": {
+            automatic_settings(
+                delays={
                     "sensor.offline": 0,
                     "sensor.battery": 0,
                 }
-            }
+            )
         )
     )
     started_messages = {
@@ -3724,7 +3725,11 @@ def test_battery_device_threshold_overrides_entity_and_global_thresholds(
 
     run(
         manager.async_update_config(
-            {"automatic": {"battery": {"device_thresholds": {device.id: 25}}}}
+            {
+                "automatic": {
+                    "battery": {"device_overrides": {device.id: {"threshold": 25}}}
+                }
+            }
         )
     )
     record = manager.records["battery:sensor.remote_battery"]
@@ -3732,10 +3737,10 @@ def test_battery_device_threshold_overrides_entity_and_global_thresholds(
 
     run(
         manager.async_update_config(
-            {"automatic": {"battery": {"device_thresholds": {}}}}
+            {"automatic": {"battery": {"device_overrides": {}}}}
         )
     )
-    assert manager.config["automatic"]["battery"]["device_thresholds"] == {}
+    assert manager.config["automatic"]["battery"]["device_overrides"] == {}
     assert "battery:sensor.remote_battery" not in manager.records
 
 
@@ -4374,22 +4379,22 @@ def test_delay_priority(hass, entry):
     manager = make_manager(hass, entry)
     run(
         manager.async_update_config(
-            {
-                "global_delay": 100,
-                "automatic": {"unavailable": {"delay": 80}},
-                "entity_delays": {"sensor.test": 20},
-            }
+            automatic_settings(
+                delay=100,
+                delays={"sensor.test": 20},
+                automatic={"unavailable": {"delay": 80}},
+            )
         )
     )
     assert manager.records["unavailable:sensor.test"].delay == 20
 
-    run(manager.async_update_config({"entity_delays": {}}))
+    run(manager.async_update_config(automatic_settings(delays={})))
     assert manager.records["unavailable:sensor.test"].delay == 80
 
-    run(manager.async_update_config({"automatic": {"unavailable": {"delay": None}}}))
+    run(manager.async_update_config({"automatic": {"unavailable": {"delay": 100}}}))
     assert manager.records["unavailable:sensor.test"].delay == 100
 
-    run(manager.async_update_config({"entity_delays": {"sensor.custom": 1}}))
+    run(manager.async_update_config(automatic_settings(delays={"sensor.custom": 1})))
     rule = run(
         manager.async_create_rule(
             {
@@ -4630,7 +4635,7 @@ def test_configuration_write_failure_restores_runtime_state(hass, entry):
 
     manager.storage.async_save = fail_save
     with pytest.raises(OSError, match="storage unavailable"):
-        run(manager.async_update_config({"entity_delays": {"sensor.test": 0}}))
+        run(manager.async_update_config(automatic_settings(delays={"sensor.test": 0})))
     assert manager.get_config() == before_config
     assert manager.records == before_records
     assert [timer for timer in hass.timers if not timer["cancelled"]]
@@ -5043,12 +5048,12 @@ def test_removing_entity_delay_replaces_the_complete_mapping(hass, entry):
     """Saving an empty entity-delay mapping really removes existing overrides."""
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
-    run(manager.async_update_config({"entity_delays": {"sensor.test": 20}}))
+    run(manager.async_update_config(automatic_settings(delays={"sensor.test": 20})))
     assert manager.records["unavailable:sensor.test"].delay == 20
 
-    run(manager.async_update_config({"entity_delays": {}}))
+    run(manager.async_update_config(automatic_settings(delays={})))
 
-    assert manager.config["entity_delays"] == {}
+    assert manager.config["automatic"]["unavailable"]["entity_overrides"] == {}
     assert manager.records["unavailable:sensor.test"].delay == 900
 
 
@@ -5080,27 +5085,25 @@ def test_rule_delay_extension_rechecks_an_active_instance(hass, entry, set_now):
     ]
 
 
-def test_entity_delay_extension_returns_active_automatic_alert_to_pending(
-    hass, entry, set_now
-):
+def test_entity_delay_extension_preserves_active_automatic_alert(hass, entry, set_now):
     """Automatic delay changes retain the id and original detection time."""
     start = datetime(2026, 8, 24, 12, tzinfo=UTC)
     set_now(start)
     hass.states.set("sensor.test", "unavailable")
     manager = make_manager(hass, entry)
-    run(manager.async_update_config({"entity_delays": {"sensor.test": 0}}))
+    run(manager.async_update_config(automatic_settings(delays={"sensor.test": 0})))
     record = manager.records["unavailable:sensor.test"]
     assert record.status is AlertStatus.ACTIVE
     assert record.detected_at == start
 
     hass.bus.fired.clear()
-    run(manager.async_update_config({"entity_delays": {"sensor.test": 60}}))
+    run(manager.async_update_config(automatic_settings(delays={"sensor.test": 60})))
     record = manager.records["unavailable:sensor.test"]
     assert record.details.id == "unavailable:sensor.test"
     assert record.detected_at == start
-    assert record.due_at == start + timedelta(seconds=60)
-    assert record.status is AlertStatus.PENDING
-    assert record.active_since is None
+    assert record.due_at == start
+    assert record.status is AlertStatus.ACTIVE
+    assert record.active_since == start
     assert not [
         event for event, _data in hass.bus.fired if event == EVENT_ALERT_RESOLVED
     ]
@@ -5199,10 +5202,12 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
     run(
         manager.async_update_config(
             {
-                "entity_delays": {
-                    "sensor.ups_status": 0,
-                    "sensor.ups_battery": 60,
-                },
+                **automatic_settings(
+                    delays={
+                        "sensor.ups_status": 0,
+                        "sensor.ups_battery": 60,
+                    }
+                ),
                 "pending_display_delay": 0,
             }
         )
@@ -5218,12 +5223,12 @@ def test_same_device_alerts_remain_individual_in_state_and_events(
 
     run(
         manager.async_update_config(
-            {
-                "entity_delays": {
+            automatic_settings(
+                delays={
                     "sensor.ups_status": 0,
                     "sensor.ups_battery": 0,
                 }
-            }
+            )
         )
     )
     started = [data for event, data in hass.bus.fired if event == EVENT_ALERT_STARTED]
