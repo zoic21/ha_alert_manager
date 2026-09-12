@@ -45,6 +45,12 @@ _PROFILE_KEYS = {
 _EXCEPTION_KEYS = {"selector_type", "selector_id", "selector_ids", *_POLICY_KEYS}
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
+_NOTIFICATION_ICONS = {
+    "started": ("mdi:alert-circle", "🚨"),
+    "reminder": ("mdi:bell-ring", "🔔"),
+    "resolved": ("mdi:check-circle", "✅"),
+    "test": ("mdi:bell-check", ""),
+}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,6 +105,7 @@ class NotificationManager:
             title=self.text("test_title", _TEST_TITLE),
             message=self.text("test_message", _TEST_MESSAGE),
             click_url="/alert-manager",
+            kind="test",
         )
 
     async def async_send(
@@ -108,13 +115,15 @@ class NotificationManager:
         title: str,
         message: str,
         click_url: str | None = None,
+        kind: str | None = None,
     ) -> dict[str, Any]:
-        """Send independently to every configured notification entity."""
+        """Send plain title text; select native icons or emoji per target and kind."""
         delivered, failed = await self._async_send_targets(
             targets,
             title=title,
             message=message,
             click_url=click_url,
+            kind=kind,
         )
         return {
             "success": bool(delivered),
@@ -129,6 +138,7 @@ class NotificationManager:
         title: str,
         message: str,
         click_url: str | None,
+        kind: str | None,
     ) -> tuple[list[str], list[dict[str, str]]]:
         """Deliver one batch concurrently and isolate known HA service failures."""
         results = await asyncio.gather(
@@ -138,6 +148,7 @@ class NotificationManager:
                     title=title,
                     message=message,
                     click_url=click_url,
+                    kind=kind,
                 )
                 for target in targets
             )
@@ -158,18 +169,27 @@ class NotificationManager:
         title: str,
         message: str,
         click_url: str | None,
+        kind: str | None,
     ) -> str | None:
         """Call one native notify entity and return a bounded known error."""
         try:
-            mobile_service = self._mobile_notify_service(target) if click_url else None
+            icon, emoji = _NOTIFICATION_ICONS.get(kind or "", (None, ""))
+            mobile_service = (
+                self._mobile_notify_service(target) if click_url or icon else None
+            )
             if mobile_service is not None:
+                data: dict[str, str] = {}
+                if click_url:
+                    data.update(url=click_url, clickAction=click_url)
+                if icon:
+                    data["notification_icon"] = icon
                 await self._hass.services.async_call(
                     NOTIFY_DOMAIN,
                     mobile_service,
                     {
                         ATTR_TITLE: title,
                         ATTR_MESSAGE: message,
-                        "data": {"url": click_url, "clickAction": click_url},
+                        "data": data,
                     },
                     blocking=True,
                 )
@@ -178,7 +198,7 @@ class NotificationManager:
                 NOTIFY_DOMAIN,
                 SERVICE_SEND_MESSAGE,
                 {
-                    ATTR_TITLE: title,
+                    ATTR_TITLE: f"{emoji} {title}" if emoji else title,
                     ATTR_MESSAGE: message,
                 },
                 blocking=True,

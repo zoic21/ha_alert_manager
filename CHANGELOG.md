@@ -16,6 +16,9 @@ before a stable release are intentionally omitted.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
+- Added native Companion notification icons for new alerts, reminders and recoveries,
+  including batches and profile tests. Supported mobile targets use text-only titles;
+  other targets and notification groups retain the existing title emojis.
 
 ## 2.3.0 — Release candidate
 
