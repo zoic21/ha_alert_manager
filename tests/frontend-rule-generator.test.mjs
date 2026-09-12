@@ -105,3 +105,34 @@ test("visual payload and YAML preserve structured provenance", async () => {
   assert.ok(ruleToYaml({ ...rule, blueprint: { ...blueprint, id: 'cpu: "test"' } })
     .includes('  id: "cpu: \\"test\\""\n'));
 });
+
+test("generated recipes stay selectable with overwrite warning", () => {
+  const draft = drawer();
+  draft.rows[0] = { ...row, status: "already_generated" };
+  const html = render(draft);
+  assert.match(html, /generator.status.already_generated/);
+  assert.doesNotMatch(html, /<ha-checkbox[^>]*disabled/);
+});
+
+for (const confirmed of [false, true]) {
+  test(`regeneration requires confirmation (${confirmed}) and replaces the existing rule`, async (t) => {
+    const previousWindow = globalThis.window;
+    globalThis.window = { confirm: () => confirmed };
+    t.after(() => { globalThis.window = previousWindow; });
+    const draft = drawer();
+    draft.rows[0] = { ...row, status: "already_generated" };
+    draft.selected.add("cpu");
+    let message;
+    const panel = { _configurationDrawer: draft, _config: { rules: [{ id: "existing", name: "Edited" }] }, _t: (key) => key, _render() {}, async _call(value) { message = value; return [{ id: "existing", name: "Regenerated" }]; } };
+    await handleRuleGeneratorAction(panel, "generate-rules");
+    assert.equal(panel._config.rules.length, 1);
+    if (confirmed) {
+      assert.equal(message.overwrite, true);
+      assert.equal(panel._config.rules[0].name, "Regenerated");
+    } else {
+      assert.equal(message, undefined);
+      assert.equal(panel._configurationDrawer, draft);
+      assert.equal(panel._config.rules[0].name, "Edited");
+    }
+  });
+}

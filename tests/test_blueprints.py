@@ -446,3 +446,78 @@ def test_device_discovery_supports_unregistered_sensors(hass):
             "status": "available",
             "entity_ids": [f"sensor.unas_{metric}_usage"],
         }
+
+
+def test_regeneration_preserves_identity_and_rediscovers(hass, entry, registry_entry):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+    original = run(manager.async_generate_rules(["system_cpu_usage"]))[0]
+    run(manager.async_update_rule(original["id"], {"name": "Custom", "value": 70}))
+    add_sensor(hass, registry_entry, "sensor.new_cpu", "processor_use")
+    result = run(manager.async_generate_rules(["system_cpu_usage"], overwrite=True))[0]
+    assert result["id"] == original["id"]
+    assert result["name"] == original["name"]
+    assert result["value"] == original["value"]
+    assert result["entity_ids"] == ["sensor.cpu", "sensor.new_cpu"]
+    assert len(manager.config["rules"]) == 1
+
+
+def test_regeneration_failure_rolls_back_mixed_batch(
+    hass, entry, registry_entry, monkeypatch
+):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    add_sensor(hass, registry_entry, "sensor.memory", "memory_use_percent")
+    manager = manager_for(hass, entry)
+    original = run(manager.async_generate_rules(["system_cpu_usage"]))[0]
+    run(manager.async_update_rule(original["id"], {"value": 70}))
+    before = deepcopy(manager.config)
+    records = deepcopy(manager.records)
+
+    async def fail():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(manager, "_async_save_state", fail)
+    with pytest.raises(OSError, match="disk full"):
+        run(
+            manager.async_generate_rules(
+                ["system_cpu_usage", "system_memory_usage"], overwrite=True
+            )
+        )
+    assert manager.config == before
+    assert manager.records == records
+
+
+def test_regeneration_still_requires_compatible_entities(hass, entry, registry_entry):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+    run(manager.async_generate_rules(["system_cpu_usage"]))
+    hass.states.set("sensor.cpu", "95", {"unit_of_measurement": "MB"})
+    with pytest.raises(ValueError, match="no longer available"):
+        run(manager.async_generate_rules(["system_cpu_usage"], overwrite=True))
+
+
+def test_regeneration_does_not_choose_between_duplicated_rules(
+    hass, entry, registry_entry
+):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+    original = run(manager.async_generate_rules(["system_cpu_usage"]))[0]
+    run(
+        manager.async_create_rule(
+            {
+                key: value
+                for key, value in original.items()
+                if key not in {"id", "version"}
+            }
+        )
+    )
+    before = deepcopy(manager.config)
+    row = next(
+        row
+        for row in run(manager.async_list_rule_blueprints())
+        if row["blueprint_id"] == "system_cpu_usage"
+    )
+    assert row["status"] == "multiple_generated"
+    with pytest.raises(ValueError, match="no longer available"):
+        run(manager.async_generate_rules(["system_cpu_usage"], overwrite=True))
+    assert manager.config == before

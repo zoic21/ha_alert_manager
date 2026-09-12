@@ -278,7 +278,10 @@ def prepare_blueprints(
     """Build validated normal-rule candidates and UI summaries from one snapshot."""
     rows = []
     signatures = [rule_signature(Rule.from_dict(rule)) for rule in rules]
-    generated = {rule.get("blueprint", {}).get("id") for rule in rules}
+    generated: dict[str, list[str]] = {}
+    for rule in rules:
+        if blueprint_id := rule.get("blueprint", {}).get("id"):
+            generated.setdefault(blueprint_id, []).append(rule["id"])
     for blueprint in catalog:
         row = {
             key: blueprint.get(key)
@@ -291,8 +294,8 @@ def prepare_blueprints(
         }
         row.update(discover_blueprint(blueprint, installation))
         row["entity_count"] = len(row["entity_ids"])
-        if blueprint["blueprint_id"] in generated:
-            row["status"] = "already_generated"
+        existing_ids = generated.get(blueprint["blueprint_id"], [])
+        row["existing_rule_ids"] = existing_ids
         if row["status"] == "available":
             payload = deepcopy(blueprint["rule"])
             payload["name"] = translations.get(
@@ -310,7 +313,11 @@ def prepare_blueprints(
                 row["rule"] = candidate.as_dict()
                 # Same effective configuration, regardless of display name/provenance.
                 signature = rule_signature(candidate)
-                if signature in signatures:
+                if len(existing_ids) > 1:
+                    row["status"] = "multiple_generated"
+                elif existing_ids:
+                    row["status"] = "already_generated"
+                elif signature in signatures:
                     row["status"] = "matching_rule"
             except ValueError as err:
                 row.update(status="invalid", reason=str(err))
@@ -318,7 +325,7 @@ def prepare_blueprints(
     return sorted(
         rows,
         key=lambda row: (
-            row["status"] != "available",
+            row["status"] not in {"available", "already_generated"},
             row["category"],
             row["blueprint_id"],
         ),

@@ -882,6 +882,7 @@
     },
     "generator": {
       "title": "Générer des règles",
+      "overwrite_confirm": "Cela écrasera la règle déjà existante pour chaque blueprint concerné, y compris vos modifications. Continuer ?",
       "refresh": "Actualiser",
       "create": "Créer les règles sélectionnées",
       "created": "Les règles sélectionnées ont été créées.",
@@ -904,7 +905,8 @@
         "missing_domain": "Domaine d’entité requis introuvable",
         "no_entities": "Aucune entité activée compatible",
         "too_many_entities": "Plus de 50 entités correspondent ; affiner la découverte du blueprint",
-        "already_generated": "Règle déjà générée",
+        "multiple_generated": "Plusieurs règles utilisent ce blueprint ; supprimez les doublons avant de régénérer",
+        "already_generated": "Cela écrasera la règle déjà existante",
         "matching_rule": "Une règle équivalente existe déjà"
       },
       "system_cpu_usage": {

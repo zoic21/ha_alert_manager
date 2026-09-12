@@ -4976,7 +4976,7 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
   // Available groups precede unavailable groups, including across categories.
   const groups = new Map();
   for (const row of drawer.rows) {
-    const group = `${row.status === "available" ? "available" : "unavailable"}:${row.category}`;
+    const group = `${["available", "already_generated"].includes(row.status) ? "available" : "unavailable"}:${row.category}`;
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push(row);
   }
@@ -4984,7 +4984,7 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
     : [...groups.values()].map((rows) => `<section class="generator-category">
         <h3>${esc(t(`generator.categories.${rows[0].category}`))}</h3>
         ${rows.map((row) => `<div class="generator-row">
-          <ha-checkbox data-blueprint-id="${esc(row.blueprint_id)}" aria-label="${esc(t(row.name_key))}" ${row.status !== "available" || busy ? "disabled" : ""}></ha-checkbox>
+          <ha-checkbox data-blueprint-id="${esc(row.blueprint_id)}" aria-label="${esc(t(row.name_key))}" ${!["available", "already_generated"].includes(row.status) || busy ? "disabled" : ""}></ha-checkbox>
           <div><strong>${esc(t(row.name_key))}</strong><p>${esc(t(row.description_key))}</p>
             <small>${esc(t("generator.entity_count", { count: row.entity_count }))}${row.status === "available" ? "" : ` · ${esc(t(`generator.status.${row.status}`))}`}${row.replaced_by ? ` · ${esc(t("generator.replacement", { id: row.replaced_by }))}` : ""}</small>
           </div>
@@ -5048,8 +5048,12 @@ async function handleRuleGeneratorAction(panel, action) {
   }
   if (action === "generate-rules") {
     if (panel._busy || drawer.loading || !drawer.selected.size) return true;
+    const overwrite = drawer.rows.some((row) => drawer.selected.has(row.blueprint_id)
+      && row.status === "already_generated");
+    if (overwrite && !window.confirm(panel._t("generator.overwrite_confirm"))) return true;
     const result = await panel._call({
       type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
+      ...(overwrite ? { overwrite: true } : {}),
     }, panel._t("generator.created"));
     if (result) {
       for (const rule of result) {

@@ -661,6 +661,7 @@ async def websocket_rule_blueprints_list(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "alert_manager/rules/blueprints/create",
+        vol.Optional("overwrite", default=False): bool,
         vol.Required("blueprint_ids"): vol.All(
             [vol.All(str, vol.Length(min=1, max=128))],
             vol.Length(min=1, max=50),
@@ -674,7 +675,9 @@ async def websocket_rule_blueprints_create(
     if (manager := _manager(hass, connection, msg["id"])) is None:
         return
     try:
-        result = await manager.async_generate_rules(msg["blueprint_ids"])
+        result = await manager.async_generate_rules(
+            msg["blueprint_ids"], overwrite=msg.get("overwrite", False)
+        )
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return

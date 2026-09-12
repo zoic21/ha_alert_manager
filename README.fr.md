@@ -237,6 +237,7 @@ entités compatibles (50 au maximum). Le lot est créé entièrement ou pas du t
 Les règles restent ensuite indépendantes de leur blueprint, sans synchronisation
 automatique ni scan périodique. Renommer une règle ne fait pas oublier son origine
 au générateur. Le [guide de contribution](docs/rule-blueprints.md) décrit le format YAML.
+Une règle déjà générée peut être régénérée après confirmation : cela écrase ses personnalisations avec les paramètres du blueprint et les entités actuellement détectées, en conservant son identifiant.
 
 ### Exemples
 

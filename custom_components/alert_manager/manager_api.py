@@ -1052,7 +1052,7 @@ class _ApiMixin:
 
     @_serialize_config_mutation
     async def async_generate_rules(
-        self, blueprint_ids: list[str]
+        self, blueprint_ids: list[str], *, overwrite: bool = False
     ) -> list[dict[str, Any]]:
         """Recheck selected recipes and create the whole batch in one transaction."""
         if (
@@ -1069,7 +1069,9 @@ class _ApiMixin:
         signatures = []
         for blueprint_id in sorted(blueprint_ids):
             row = rows.get(blueprint_id)
-            if row is None or row["status"] != "available":
+            if row is None or row["status"] not in (
+                {"available", "already_generated"} if overwrite else {"available"}
+            ):
                 raise ValueError("Blueprint selection is no longer available")
             payload = {
                 key: value
@@ -1081,6 +1083,13 @@ class _ApiMixin:
             if signature in signatures:
                 raise ValueError("Blueprint selection contains equivalent rules")
             signatures.append(signature)
+            existing_ids = row["existing_rule_ids"]
+            if len(existing_ids) > 1:
+                raise ValueError(
+                    "Multiple rules use this blueprint; remove duplicates first"
+                )
+            if existing_ids:
+                rule = validate_rule_payload(payload, rule_id=existing_ids[0])
             rules.append(rule)
         return await self._async_create_validated_rules(rules)
 
@@ -1095,22 +1104,39 @@ class _ApiMixin:
         self, rules: list[Rule]
     ) -> list[dict[str, Any]]:
         """Share creation, evaluation and rollback; caller holds the mutation lock."""
-        validate_rule_count(len(self.config["rules"]) + len(rules))
+        existing = {item["id"]: item for item in self.config["rules"]}
+        replacements = [
+            (Rule.from_dict(existing[rule.id]), rule)
+            for rule in rules
+            if rule.id in existing
+        ]
+        additions = [rule for rule in rules if rule.id not in existing]
+        validate_rule_count(len(existing) + len(additions))
         for rule in rules:
             self._validate_rule_sources(rule)
             self._validate_rule_template(rule)
         previous = self._configuration_snapshot()
         try:
-            self.config["rules"].extend(rule.as_dict() for rule in rules)
+            updated = {rule.id: rule.as_dict() for _, rule in replacements}
+            self.config["rules"] = [
+                updated.get(item["id"], item) for item in self.config["rules"]
+            ]
+            self.config["rules"].extend(rule.as_dict() for rule in additions)
             self._rebuild_rule_index()
+            applied = []
+            for old_rule, rule in replacements:
+                removed = await self._async_apply_rule_update(old_rule, rule)
+                applied.append((old_rule, rule, removed))
             for entity_id in sorted(
-                {entity for rule in rules for entity in rule.entity_ids}
+                {entity for rule in additions for entity in rule.entity_ids}
             ):
                 await self.async_evaluate_entity(entity_id, save=False, publish=False)
             await self._async_save_state()
         except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
+        for old_rule, rule, removed in applied:
+            await self._async_finalize_rule_update(old_rule, rule, removed)
         self._publish_if_changed()
         return [rule.as_dict() for rule in rules]
 
@@ -1134,49 +1160,65 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             self.config["rules"][index] = rule.as_dict()
-            variation_definition_changed = (
-                old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
-            ) and (
-                _variation_reference_signature(old_rule)
-                != _variation_reference_signature(rule)
-            )
-            if variation_definition_changed:
-                for entity_id in set(old_rule.entity_ids) | set(rule.entity_ids):
-                    key = f"{rule_id}:{entity_id}"
-                    if self._variation_baselines.pop(key, None) is not None:
-                        self._variation_baselines_dirty = True
             self._rebuild_rule_index()
-
-            removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
-            if not rule.enabled:
-                removed_entities.update(old_rule.entity_ids)
-            old_inactivity = (
-                old_rule.source == "unchanged" or old_rule.operator == "unchanged"
-            )
-            new_inactivity = rule.source == "unchanged" or rule.operator == "unchanged"
-            inactivity_changed = (old_inactivity or new_inactivity) and (
-                _inactivity_reference_signature(old_rule)
-                != _inactivity_reference_signature(rule)
-            )
-            if inactivity_changed:
-                removed_entities.update(set(old_rule.entity_ids) & set(rule.entity_ids))
-            if self.monitoring_enabled:
-                self._remove_rule_instances(rule_id, removed_entities)
-
-            affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
-            for entity_id in affected_entities:
-                await self.async_evaluate_entity(entity_id, save=False, publish=False)
-            if old_rule.label_ids != rule.label_ids:
-                for entity_id in rule.entity_ids:
-                    if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
-                        record.details.labels = list(rule.label_ids)
-            if old_rule.message != rule.message:
-                for entity_id in rule.entity_ids:
-                    self._refresh_active_rule_message(rule, entity_id)
+            removed_entities = await self._async_apply_rule_update(old_rule, rule)
             await self._async_save_state()
         except BaseException:
             self._restore_configuration_snapshot(previous)
             raise
+        await self._async_finalize_rule_update(old_rule, rule, removed_entities)
+        self._publish_if_changed()
+        return rule.as_dict()
+
+    async def _async_apply_rule_update(self, old_rule: Rule, rule: Rule) -> set[str]:
+        """Apply one validated replacement inside the caller's transaction."""
+        rule_id = rule.id
+        variation_definition_changed = (
+            old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
+        ) and (
+            _variation_reference_signature(old_rule)
+            != _variation_reference_signature(rule)
+        )
+        if variation_definition_changed:
+            for entity_id in set(old_rule.entity_ids) | set(rule.entity_ids):
+                key = f"{rule_id}:{entity_id}"
+                if self._variation_baselines.pop(key, None) is not None:
+                    self._variation_baselines_dirty = True
+
+        removed_entities = set(old_rule.entity_ids) - set(rule.entity_ids)
+        if not rule.enabled:
+            removed_entities.update(old_rule.entity_ids)
+        old_inactivity = (
+            old_rule.source == "unchanged" or old_rule.operator == "unchanged"
+        )
+        new_inactivity = rule.source == "unchanged" or rule.operator == "unchanged"
+        inactivity_changed = (old_inactivity or new_inactivity) and (
+            _inactivity_reference_signature(old_rule)
+            != _inactivity_reference_signature(rule)
+        )
+        if inactivity_changed:
+            removed_entities.update(set(old_rule.entity_ids) & set(rule.entity_ids))
+        if self.monitoring_enabled:
+            self._remove_rule_instances(rule_id, removed_entities)
+
+        affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
+        for entity_id in affected_entities:
+            await self.async_evaluate_entity(entity_id, save=False, publish=False)
+        if old_rule.label_ids != rule.label_ids:
+            for entity_id in rule.entity_ids:
+                if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
+                    record.details.labels = list(rule.label_ids)
+        if old_rule.message != rule.message:
+            for entity_id in rule.entity_ids:
+                self._refresh_active_rule_message(rule, entity_id)
+        return removed_entities
+
+    async def _async_finalize_rule_update(
+        self, old_rule: Rule, rule: Rule, removed_entities: set[str]
+    ) -> None:
+        """Discard stale notifications only after the configuration is saved."""
+        rule_id = rule.id
+        affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
         alert_ids_to_discard: set[str] = set()
         if old_rule.label_ids != rule.label_ids:
             alert_ids_to_discard.update(
@@ -1197,8 +1239,6 @@ class _ApiMixin:
         await self.notification_runtime.async_discard_alerts(alert_ids_to_discard)
         if old_rule.label_ids != rule.label_ids:
             await self._async_refresh_notification_runtime(reset_reminders=True)
-        self._publish_if_changed()
-        return rule.as_dict()
 
     async def async_update_rule_yaml(
         self, rule_id: str, raw_yaml: str

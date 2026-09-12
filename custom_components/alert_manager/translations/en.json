@@ -882,6 +882,7 @@
     },
     "generator": {
       "title": "Generate rules",
+      "overwrite_confirm": "This will overwrite the existing rule for each selected blueprint, including your changes. Continue?",
       "refresh": "Refresh",
       "create": "Create selected rules",
       "created": "Selected rules created.",
@@ -904,7 +905,8 @@
         "missing_domain": "Required entity domain not found",
         "no_entities": "No compatible enabled entity found",
         "too_many_entities": "More than 50 matching entities; narrow the blueprint discovery",
-        "already_generated": "Rule already generated",
+        "multiple_generated": "Multiple rules use this blueprint; remove duplicates before regenerating",
+        "already_generated": "This will overwrite the existing rule",
         "matching_rule": "A matching rule already exists"
       },
       "system_cpu_usage": {
