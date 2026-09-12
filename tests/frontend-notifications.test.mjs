@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { t as translate } from "../frontend-src/utils/translations.js";
+import { settingsStyles } from "../frontend-src/styles/settings-styles.js";
 
 import { openAlertDeepLink } from "../frontend-src/components/alert-table.js";
 import {
@@ -20,6 +21,13 @@ const t = (key, replacements = {}) => Object.entries(replacements).reduce(
   (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
   key,
 );
+
+test("notification exception actions have no extra gap and retain native button sizing", () => {
+  const styles = [...settingsStyles.matchAll(/\.notification-exception-heading\s*\{([^}]+)\}/g)].at(-1)?.[1];
+  assert.match(styles, /gap:\s*0\s*;/);
+  assert.match(styles, /justify-content:\s*flex-end\s*;/);
+  assert.doesNotMatch(styles, /(?:width|height|--mdc-icon-button-size)\s*:/);
+});
 
 const profile = {
   id: "owner",
@@ -70,6 +78,51 @@ for (const [language, emptyTitle, summary] of [
     assert.doesNotMatch(markup, /component\.alert_manager\.config_panel|\{(?:start|resolved|reminder)\}/);
   });
 }
+
+test("exception header uses dense native badges and refreshes selected labels without removal controls", () => {
+  const oldDocument = globalThis.document;
+  const oldElements = globalThis.customElements;
+  globalThis.customElements = { get: () => class {} };
+  globalThis.document = { createElement: (tagName) => ({
+    tagName, attributes: {}, children: [], style: {},
+    setAttribute(key, value) { this.attributes[key] = value; },
+    append(child) { this.children.push(child); },
+  }) };
+  try {
+    const draft = structuredClone(profile);
+    const header = { replaceChildren(child) { this.child = child; } };
+    const summary = {};
+    const expansion = {
+      querySelector: (selector) => selector === ".notification-exception-labels" ? header : summary,
+      querySelectorAll: () => [], hasAttribute: () => false, addEventListener() {},
+    };
+    const callbacks = {};
+    const panel = {
+      _notificationProfileDraft: draft,
+      _labels: [{ label_id: "battery", name: "Battery", color: "blue", icon: "mdi:battery" }],
+      _t: t, _multipleSelectorValue: (value) => value,
+      _configureSelector: (id, config, value, callback) => { callbacks[id] = callback; },
+      shadowRoot: { querySelector: (selector) => selector === '[data-notification-expansion="0"]' ? expansion : null },
+    };
+    hydrateNotificationProfileControls(panel);
+    const badge = header.child.children[0];
+    assert.equal(badge.tagName, "ha-label");
+    assert.equal(badge.textContent, "Battery");
+    assert.equal(badge.attributes.color, "blue");
+    assert.equal(badge.attributes.dense, "");
+    assert.equal(badge.attributes.removable, undefined);
+    assert.equal(badge.children.length, 1);
+    assert.equal(badge.children[0].attributes.icon, "mdi:battery");
+    callbacks["notification-exception-selector-0"](["missing"]);
+    assert.equal(header.child.children[0].textContent, "missing");
+    callbacks["notification-exception-selector-0"]([]);
+    assert.equal(header.textContent, "notifications.new_exception");
+    assert.match(settingsStyles, /\.notification-exception-labels > span\s*\{ flex-wrap: wrap;/);
+  } finally {
+    globalThis.document = oldDocument;
+    globalThis.customElements = oldElements;
+  }
+});
 
 test("notification profile list exposes edit without standalone test or delete actions", () => {
   const markup = renderNotificationProfiles({

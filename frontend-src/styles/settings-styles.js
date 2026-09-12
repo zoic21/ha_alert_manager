@@ -313,8 +313,24 @@ export const settingsStyles = `
     background: var(--card-background-color);
     border-radius: inherit;
   }
-  .notification-exception-heading { flex: none; margin-inline-start: 8px; }
+  .notification-exception-heading {
+    flex: none;
+    justify-content: flex-end;
+    gap: 0;
+    margin-inline-start: 8px;
+  }
   .notification-exception-heading .configuration-remove { margin: 0; }
+  .notification-exception-header { min-width: 0; flex: 1; padding-block: 8px; }
+  .notification-exception-labels > span { flex-wrap: wrap; }
+  .notification-exception-labels ha-label { max-width: 100%; }
+  .notification-exception-summary {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
   .notification-exception-grid { padding: 0 12px 12px; }
   .notification-exception-grid > .field {
     justify-content: flex-end;

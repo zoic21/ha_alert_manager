@@ -3601,10 +3601,24 @@ function notificationExceptionSummary(exception, defaults, t) {
   });
 }
 
+function hydrateNotificationExceptionHeader(expansion, exception, panel) {
+  const header = expansion.querySelector?.(".notification-exception-labels");
+  if (!header) return;
+  const metadata = labelMetadata(exceptionLabelIds(exception), new Map(
+    (panel._labels ?? []).map((label) => [label.label_id, label]),
+  ));
+  if (metadata.length) header.replaceChildren(nativeLabelBadges(metadata, panel._hass));
+  else header.textContent = panel._t("notifications.new_exception");
+  expansion.querySelector(".notification-exception-summary").textContent =
+    notificationExceptionSummary(exception, panel._notificationProfileDraft.default_policy,
+      (key, params) => panel._t(key, params));
+}
+
 function renderException(exception, index, t, defaults, labels, expandedExceptions) {
   const policy = { ...defaults, ...exception };
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
     <ha-expansion-panel left-chevron data-notification-expansion="${index}" header="${esc(notificationExceptionTitle(exception, labels, t))}" secondary="${esc(notificationExceptionSummary(exception, defaults, t))}" ${(expandedExceptions?.has(exception) ?? !exceptionLabelIds(exception).length) ? "expanded" : ""}>
+    <div slot="header" class="notification-exception-header"><div class="notification-exception-labels">${esc(notificationExceptionTitle(exception, labels, t))}</div><div class="notification-exception-summary">${esc(notificationExceptionSummary(exception, defaults, t))}</div></div>
     <div slot="icons" class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
@@ -3673,6 +3687,7 @@ function hydrateNotificationProfileControls(panel) {
   draft.exceptions.forEach((exception, index) => {
     const expansion = panel.shadowRoot?.querySelector(`[data-notification-expansion="${index}"]`);
     if (expansion) {
+      hydrateNotificationExceptionHeader(expansion, exception, panel);
       panel._notificationExpandedExceptions ??= new WeakSet();
       if (expansion.expanded || expansion.hasAttribute("expanded")) panel._notificationExpandedExceptions.add(exception);
       if (expansion._notificationExpansionHandler) expansion.removeEventListener("expanded-changed", expansion._notificationExpansionHandler);
@@ -3684,6 +3699,7 @@ function hydrateNotificationProfileControls(panel) {
           captureNotificationProfileDraft(panel);
           expansion.header = notificationExceptionTitle(exception, panel._labels ?? [], (key) => panel._t(key));
           expansion.secondary = notificationExceptionSummary(exception, draft.default_policy, (key, replacements) => panel._t(key, replacements));
+          hydrateNotificationExceptionHeader(expansion, exception, panel);
         }
       };
       expansion.addEventListener("expanded-changed", expansion._notificationExpansionHandler);
@@ -3701,6 +3717,7 @@ function hydrateNotificationProfileControls(panel) {
       (value) => {
         exception.selector_ids = panel._multipleSelectorValue(value);
         delete exception.selector_id;
+        if (expansion) hydrateNotificationExceptionHeader(expansion, exception, panel);
       },
     );
   });
@@ -8411,8 +8428,24 @@ const settingsStyles = `
     background: var(--card-background-color);
     border-radius: inherit;
   }
-  .notification-exception-heading { flex: none; margin-inline-start: 8px; }
+  .notification-exception-heading {
+    flex: none;
+    justify-content: flex-end;
+    gap: 0;
+    margin-inline-start: 8px;
+  }
   .notification-exception-heading .configuration-remove { margin: 0; }
+  .notification-exception-header { min-width: 0; flex: 1; padding-block: 8px; }
+  .notification-exception-labels > span { flex-wrap: wrap; }
+  .notification-exception-labels ha-label { max-width: 100%; }
+  .notification-exception-summary {
+    color: var(--secondary-text-color);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+  }
   .notification-exception-grid { padding: 0 12px 12px; }
   .notification-exception-grid > .field {
     justify-content: flex-end;
