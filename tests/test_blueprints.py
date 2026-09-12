@@ -1,0 +1,297 @@
+"""Rule recipes use normal rules and on-demand deterministic discovery."""
+
+import asyncio
+from copy import deepcopy
+
+import pytest
+import yaml
+
+from custom_components.alert_manager.blueprints import (
+    discover_blueprint,
+    explain_match,
+    load_blueprints,
+    snapshot_installation,
+    validate_discovery,
+)
+from custom_components.alert_manager.manager import AlertManager
+from custom_components.alert_manager.models import Rule
+from custom_components.alert_manager.yaml_io import dump_rule_yaml, parse_rule_yaml
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+def add_sensor(hass, registry_entry, entity_id, key, unit="%", state="95", **kwargs):
+    entity = registry_entry(
+        hass, entity_id, platform="systemmonitor", unique_id=key, **kwargs
+    )
+    hass.states.set(entity_id, state, {"unit_of_measurement": unit})
+    return entity
+
+
+def manager_for(hass, entry):
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    return manager
+
+
+def test_catalog_is_valid_and_localized():
+    import json
+    from pathlib import Path
+
+    catalog = load_blueprints()
+    assert len(catalog) == 4
+    for blueprint in catalog:
+        assert "error" not in blueprint
+        assert blueprint["schema_version"] == blueprint["blueprint_version"] == 1
+        for language in ("en", "fr"):
+            data = json.loads(
+                (
+                    Path("custom_components/alert_manager/translations")
+                    / f"{language}.json"
+                ).read_text()
+            )["config_panel"]
+            for field in ("name_key", "description_key"):
+                value = data
+                for key in blueprint[field].split("."):
+                    value = value[key]
+                assert value
+            assert data["generator"]["categories"][blueprint["category"]]
+
+
+def test_discovery_renamed_unavailable_disabled_and_units(hass, registry_entry):
+    add_sensor(
+        hass, registry_entry, "sensor.z_renamed", "processor_use", state="unavailable"
+    )
+    add_sensor(hass, registry_entry, "sensor.a_renamed", "processor_use")
+    add_sensor(
+        hass, registry_entry, "sensor.disabled", "processor_use", disabled_by="user"
+    )
+    add_sensor(hass, registry_entry, "sensor.wrong_unit", "processor_use", unit="MB")
+    add_sensor(hass, registry_entry, "sensor.memory", "memory_use_percent")
+    recipe = next(
+        b for b in load_blueprints() if b["blueprint_id"] == "system_cpu_usage"
+    )
+    snapshot = snapshot_installation(hass, hass.entity_registry)
+    result = discover_blueprint(recipe, snapshot)
+    assert result == {
+        "status": "available",
+        "entity_ids": ["sensor.a_renamed", "sensor.z_renamed"],
+    }
+    snapshot["entities"].reverse()
+    assert discover_blueprint(recipe, snapshot) == result
+    hass.states.set("sensor.z_renamed", "unknown", {"unit_of_measurement": "%"})
+    assert (
+        discover_blueprint(recipe, snapshot_installation(hass, hass.entity_registry))
+        == result
+    )
+
+
+def test_requirements_lifecycle_limits_and_explanation():
+    recipe = load_blueprints()[0]
+    empty = {"integrations": set(), "entities": []}
+    assert discover_blueprint(recipe, empty)["status"] == "missing_integration"
+    empty["integrations"].add("systemmonitor")
+    assert discover_blueprint(recipe, empty)["status"] == "no_entities"
+    assert (
+        discover_blueprint(
+            {**recipe, "requirements": {"entity_domains": ["sensor"]}}, empty
+        )["status"]
+        == "missing_domain"
+    )
+    assert (
+        discover_blueprint({**recipe, "deprecated": True, "replaced_by": "new"}, empty)[
+            "replaced_by"
+        ]
+        == "new"
+    )
+    expr = {
+        "all": [
+            {"field": "domain", "equals": "sensor"},
+            {
+                "any": [
+                    {"field": "device_class", "in": ["temperature"]},
+                    {"field": "entity_id", "glob": "sensor.cpu_*"},
+                ]
+            },
+            {"not": {"field": "attributes.error", "exists": True}},
+        ]
+    }
+    validate_discovery(expr)
+    entity = {"domain": "sensor", "entity_id": "sensor.cpu_1"}
+    explanation = explain_match(expr, entity)
+    assert explanation["matched"]
+    assert not explanation["criteria"][1]["criteria"][0]["matched"]
+    assert not explain_match(expr, {**entity, "attributes.error": False})["matched"]
+    installation = {
+        "integrations": {"systemmonitor"},
+        "entities": [{**entity, "entity_id": f"sensor.cpu_{i}"} for i in range(51)],
+    }
+    assert (
+        discover_blueprint({**recipe, "discovery": expr}, installation)["status"]
+        == "too_many_entities"
+    )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        {},
+        {"any": []},
+        {"field": "bogus", "equals": 1},
+        {"field": "domain", "regex": ".*"},
+        {"field": "domain", "in": "sensor"},
+        {"field": "domain", "exists": "yes"},
+        {"all": [], "extra": True},
+    ],
+)
+def test_unknown_discovery_fails_closed(expression):
+    with pytest.raises(ValueError):
+        validate_discovery(expression)
+
+
+def test_loader_isolates_bad_files_and_duplicate_ids(tmp_path):
+    valid = load_blueprints()[0]
+    (tmp_path / "valid.yaml").write_text(yaml.safe_dump(valid))
+    (tmp_path / "broken.yaml").write_text("discovery: [")
+    loaded = load_blueprints(tmp_path)
+    assert len(loaded) == 2
+    assert sum("error" in b for b in loaded) == 1
+    (tmp_path / "duplicate.yaml").write_text(yaml.safe_dump(valid))
+    assert all("error" in b for b in load_blueprints(tmp_path))
+
+
+def test_generation_batch_edit_yaml_and_duplicates(hass, entry, registry_entry):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    add_sensor(hass, registry_entry, "sensor.memory", "memory_use_percent")
+    manager = manager_for(hass, entry)
+    created = run(
+        manager.async_generate_rules(["system_memory_usage", "system_cpu_usage"])
+    )
+    assert len(created) == 2
+    assert len(manager.config["rules"]) == 2
+    rule = created[0]
+    assert rule["name"] == "Système : utilisation CPU élevée"
+    assert rule["blueprint"] == {
+        "id": "system_cpu_usage",
+        "version": 1,
+        "managed": False,
+    }
+    updated = run(
+        manager.async_update_rule(rule["id"], {"name": "Renamed", "value": 70})
+    )
+    assert updated["blueprint"] == rule["blueprint"]
+    assert parse_rule_yaml(dump_rule_yaml(updated)).blueprint == rule["blueprint"]
+    updated = run(manager.async_update_rule_yaml(rule["id"], dump_rule_yaml(updated)))
+    assert updated["blueprint"] == rule["blueprint"]
+    rows = run(manager.async_list_rule_blueprints())
+    assert all("rule" not in row for row in rows)
+    assert {
+        row["status"]
+        for row in rows
+        if row["blueprint_id"] in {"system_cpu_usage", "system_memory_usage"}
+    } == {"already_generated"}
+    with pytest.raises(ValueError, match="no longer available"):
+        run(manager.async_generate_rules(["system_cpu_usage"]))
+    assert len(manager.config["rules"]) == 2
+
+
+def test_matching_manual_rule_and_atomic_invalid_selection(hass, entry, registry_entry):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+    before = deepcopy(manager.config)
+    with pytest.raises(ValueError, match="no longer available"):
+        run(manager.async_generate_rules(["system_cpu_usage", "unknown"]))
+    assert manager.config == before
+    recipe = next(
+        b for b in load_blueprints() if b["blueprint_id"] == "system_cpu_usage"
+    )
+    run(
+        manager.async_create_rule(
+            {**recipe["rule"], "entity_ids": ["sensor.cpu"], "name": "Manual"}
+        )
+    )
+    row = next(
+        row
+        for row in run(manager.async_list_rule_blueprints())
+        if row["blueprint_id"] == "system_cpu_usage"
+    )
+    assert row["status"] == "matching_rule"
+
+
+def test_batch_save_failure_rolls_back(hass, entry, registry_entry, monkeypatch):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    add_sensor(hass, registry_entry, "sensor.memory", "memory_use_percent")
+    manager = manager_for(hass, entry)
+    before_config = deepcopy(manager.config)
+    before_records = deepcopy(manager.records)
+
+    async def fail():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(manager, "_async_save_state", fail)
+    with pytest.raises(OSError, match="disk full"):
+        run(manager.async_generate_rules(["system_cpu_usage", "system_memory_usage"]))
+    assert manager.config == before_config
+    assert manager.records == before_records
+    assert not manager.rules
+
+
+def test_concurrent_generation_rechecks_duplicates(hass, entry, registry_entry):
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+
+    async def generate():
+        return await asyncio.gather(
+            manager.async_generate_rules(["system_cpu_usage"]),
+            manager.async_generate_rules(["system_cpu_usage"]),
+            return_exceptions=True,
+        )
+
+    results = run(generate())
+    assert sum(isinstance(result, ValueError) for result in results) == 1
+    assert len(manager.config["rules"]) == 1
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        "cpu",
+        {},
+        {"id": "x", "version": True, "managed": False},
+        {"id": "x", "version": 1, "managed": True},
+    ],
+)
+def test_invalid_provenance_rejected(provenance):
+    with pytest.raises(ValueError, match="provenance"):
+        Rule.from_dict(
+            {
+                "id": "x",
+                "name": "Test",
+                "entity_ids": ["sensor.x"],
+                "operator": "above",
+                "value": 90,
+                "duration": 0,
+                "blueprint": provenance,
+            }
+        )
+
+
+def test_provenance_survives_config_roundtrip_and_reload(hass, entry, registry_entry):
+    from custom_components.alert_manager.yaml_io import (
+        dump_config_yaml,
+        parse_config_yaml,
+    )
+
+    add_sensor(hass, registry_entry, "sensor.cpu", "processor_use")
+    manager = manager_for(hass, entry)
+    rule = run(manager.async_generate_rules(["system_cpu_usage"]))[0]
+    exported = parse_config_yaml(dump_config_yaml(manager.config))
+    assert exported["rules"][0]["blueprint"] == rule["blueprint"]
+    restored = manager_for(hass, entry)
+    assert restored.config["rules"][0]["blueprint"] == rule["blueprint"]
+    # Adding another matching entity does not manage or rewrite the original rule.
+    add_sensor(hass, registry_entry, "sensor.cpu_new", "processor_use")
+    run(restored.async_list_rule_blueprints())
+    assert restored.config["rules"][0]["entity_ids"] == ["sensor.cpu"]

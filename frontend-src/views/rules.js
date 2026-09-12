@@ -1,3 +1,4 @@
+import { handleRuleGeneratorAction, hydrateRuleGenerator, renderRuleGenerator } from "../components/rule-generator.js";
 import { revealAddedRow } from "../components/configuration-drawer.js";
 import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
 import { MDI_PLUS } from "../utils/constants.js";
@@ -168,6 +169,7 @@ export function hydrateRules(root, context) {
 }
 
 export function hydrateRuleTable() {
+    hydrateRuleGenerator(this.shadowRoot, this);
     if (!this._config) return;
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
@@ -282,6 +284,7 @@ export function renderRules(context) {
           <ha-card outlined class="panel rules-list-panel">
             <div class="rules-header">
               <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
+              <ha-button data-action="open-rule-generator">${esc(t("generator.title"))}</ha-button>
               <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
             </div>
           </ha-card>
@@ -296,10 +299,14 @@ export function renderRules(context) {
 
 export function renderRulesPanel() {
     this._ensureRulesTableState();
-    const editorOpen = this._editingRule !== null;
+    const generator = this._configurationDrawer?.kind === "generator";
+    const editorOpen = generator || this._editingRule !== null;
     return renderRules({
       editorOpen,
-      editor: editorOpen ? this._renderRuleEditor() : "",
+      editor: generator ? renderRuleGenerator({
+        drawer: this._configurationDrawer, busy: this._busy,
+        useBottomSheet: this._useNativeBottomSheet(), t: (key, params) => this._t(key, params),
+      }) : editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),
       t: (key, replacements) => this._t(key, replacements),
@@ -383,6 +390,8 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
     }
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -390,7 +399,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleEditorError = null;
     this._clearRuleTestResult();
     this._ruleDirty = false;
-    if (navigate) this._render();
+    if (navigate || generatorOpen) this._render();
     else this._refreshRuleEditor();
     return true;
 }
@@ -458,15 +467,19 @@ export function replaceRule(rule) {
 }
 
 export async function handleRulesAction(action, button) {
+  if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
-    this._refreshRuleEditor();
+    if (generatorOpen) this._render();
+    else this._refreshRuleEditor();
     return true;
   }
   if (action === "cancel-rule") {

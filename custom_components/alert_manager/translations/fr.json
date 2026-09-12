@@ -236,7 +236,10 @@
       "transition_finite": "Les nombres de transition doivent être finis.",
       "transition_unavailable": "Les valeurs unknown et unavailable ne sont pas acceptées pour une transition.",
       "transition_distinct": "Le départ et l’arrivée doivent être différents.",
-      "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours."
+      "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours.",
+      "blueprint_selection": "Sélection de blueprints invalide.",
+      "blueprint_stale": "Ces blueprints ne sont plus disponibles. Actualisez la liste avant de réessayer.",
+      "blueprint_provenance": "Métadonnées de provenance du blueprint invalides."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -835,6 +838,50 @@
       "coherence": "Cohérence",
       "coherence_one": "1 problème détecté",
       "coherence_count": "{count} problèmes détectés"
+    },
+    "generator": {
+      "title": "Générer des règles",
+      "refresh": "Actualiser",
+      "create": "Créer les règles sélectionnées",
+      "created": "Les règles sélectionnées ont été créées.",
+      "help": "Sélectionnez des blueprints prêts à l’emploi. Les règles créées restent modifiables dans Règles personnalisées, sans synchronisation automatique.",
+      "invalid": "Blueprint invalide",
+      "entity_count": "{count} entités",
+      "replacement": "Remplacé par {id}",
+      "categories": {
+        "system": "Système",
+        "storage": "Stockage",
+        "network": "Réseau",
+        "home_assistant": "Home Assistant",
+        "integrations": "Intégrations",
+        "other": "Autres"
+      },
+      "status": {
+        "invalid": "Configuration du blueprint invalide",
+        "deprecated": "Blueprint obsolète",
+        "missing_integration": "Intégration requise non configurée",
+        "missing_domain": "Domaine d’entité requis introuvable",
+        "no_entities": "Aucune entité activée compatible",
+        "too_many_entities": "Plus de 50 entités correspondent ; affiner la découverte du blueprint",
+        "already_generated": "Règle déjà générée",
+        "matching_rule": "Une règle équivalente existe déjà"
+      },
+      "system_cpu_usage": {
+        "name": "Système : utilisation CPU élevée",
+        "description": "Utilisation CPU System Monitor supérieure à 90 % pendant 5 minutes."
+      },
+      "system_memory_usage": {
+        "name": "Système : utilisation mémoire élevée",
+        "description": "Utilisation mémoire System Monitor supérieure à 90 % pendant 5 minutes."
+      },
+      "system_cpu_temperature": {
+        "name": "Système : température CPU élevée",
+        "description": "Température CPU System Monitor supérieure à 80 °C pendant 5 minutes (capteurs en Celsius)."
+      },
+      "storage_disk_usage": {
+        "name": "Stockage : utilisation disque élevée",
+        "description": "Utilisation disque System Monitor supérieure à 90 % pendant 5 minutes."
+      }
     }
   },
   "services": {

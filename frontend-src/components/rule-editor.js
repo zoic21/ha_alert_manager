@@ -125,6 +125,7 @@ export function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
+      ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
@@ -548,6 +549,7 @@ export async function duplicateRuleDraft() {
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
+    delete duplicate.blueprint;
     this._editingRule = duplicate;
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";

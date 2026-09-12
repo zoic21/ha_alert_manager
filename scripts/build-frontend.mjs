@@ -20,6 +20,7 @@ const sourceNames = [
   "components/configuration-yaml.js",
   "components/notification-profiles.js",
   "components/rule-editor.js",
+  "components/rule-generator.js",
   "views/overview.js",
   "views/history.js",
   "views/coherence.js",

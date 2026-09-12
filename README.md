@@ -211,6 +211,21 @@ Duration fields throughout the panel use Home Assistant’s native duration sele
 
 On desktop, the rule editor and configuration drawers can be resized in width. They adapt to mobile screens, and closing a modified editor asks for confirmation before discarding changes.
 
+### Generate rules from blueprints
+
+In **Custom rules → Generate rules**, select built-in blueprints and click
+**Create selected rules**. The generator shows matching entity counts and explains
+unavailable choices. The initial catalog uses System Monitor sensors: CPU,
+memory and disk usage above 90%, and CPU temperature above 80 °C, each for five
+minutes. Enable the relevant System Monitor sensors first; temperature discovery
+requires Celsius units.
+
+Each selection creates one editable custom rule with all compatible entities
+(up to 50). Rules are created together or not at all, and remain independent of
+their blueprint afterward. No automatic synchronization or periodic scan is
+added. Renaming a rule does not make the generator forget its origin.
+See [the blueprint contributor guide](docs/rule-blueprints.md) for the YAML format.
+
 ### Examples
 
 #### A thermostat that heats without warming the room

@@ -772,3 +772,52 @@ def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
     assert [error[1] for error in connection.errors] == ["unauthorized"] * len(
         protected
     )
+
+
+def test_blueprint_commands_require_admin_and_validate_batch(hass, entry):
+    from custom_components.alert_manager.websocket import (
+        websocket_rule_blueprints_create,
+        websocket_rule_blueprints_list,
+    )
+
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=False)
+    for command, message in (
+        (
+            websocket_rule_blueprints_list,
+            {"id": 201, "type": "alert_manager/rules/blueprints/list"},
+        ),
+        (
+            websocket_rule_blueprints_create,
+            {
+                "id": 202,
+                "type": "alert_manager/rules/blueprints/create",
+                "blueprint_ids": ["system_cpu_usage"],
+            },
+        ),
+    ):
+        asyncio.run(command(hass, connection, message))
+    assert [error[1] for error in connection.errors] == ["unauthorized", "unauthorized"]
+    assert connection.results == []
+    admin = Connection(admin=True)
+    asyncio.run(
+        websocket_rule_blueprints_list(
+            hass, admin, {"id": 203, "type": "alert_manager/rules/blueprints/list"}
+        )
+    )
+    assert len(admin.results[0][1]) == 4
+    asyncio.run(
+        websocket_rule_blueprints_create(
+            hass,
+            admin,
+            {
+                "id": 204,
+                "type": "alert_manager/rules/blueprints/create",
+                "blueprint_ids": ["unknown"],
+            },
+        )
+    )
+    assert admin.errors[0][1] == "invalid_format"
+    assert not manager.config["rules"]

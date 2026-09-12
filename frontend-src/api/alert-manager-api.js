@@ -1,3 +1,4 @@
+import { refreshRuleGeneratorState } from "../components/rule-generator.js";
 import { refreshHistoryOccurrenceDetails } from "../components/alert-table.js";
 import { syncRuntimeMetadata } from "../utils/formatting.js";
 
@@ -295,6 +296,7 @@ export async function call(message, successText) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
+    refreshRuleGeneratorState(this);
     try {
       const result = await this._api.call(message);
       this._notice = successText ? { kind: "success", text: successText } : null;
@@ -305,6 +307,7 @@ export async function call(message, successText) {
     } finally {
       this._busy = false;
       this._refreshUiState();
+      refreshRuleGeneratorState(this);
     }
 }
 

@@ -244,6 +244,7 @@ class Registry:
     def __init__(self, kind: str):
         self.kind = kind
         self.entries = {}
+        self.entities = self.entries
         self.deleted_entities = {}
         self.labels = {}
 

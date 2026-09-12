@@ -692,6 +692,7 @@ class Rule:
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
     version: int = 2
+    blueprint: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -761,6 +762,18 @@ class Rule:
             raise ValueError("Rule name is required")
         if len(self.name) > MAX_RULE_NAME_LENGTH:
             raise ValueError("Rule name is too long")
+        if self.blueprint is not None:
+            provenance = self.blueprint
+            if (
+                not isinstance(provenance, dict)
+                or set(provenance) != {"id", "version", "managed"}
+                or not isinstance(provenance.get("id"), str)
+                or not 1 <= len(provenance["id"].strip()) <= 128
+                or type(provenance.get("version")) is not int
+                or provenance["version"] < 1
+                or provenance.get("managed") is not False
+            ):
+                raise ValueError("Invalid rule blueprint provenance")
         self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")

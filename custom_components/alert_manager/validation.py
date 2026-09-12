@@ -59,6 +59,7 @@ _AUTOMATIC_KEYS = {
 # Accepted only so a cached V1 panel can finish one safe migration update.
 _AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
+    "blueprint",
     "from_value",
     "to_value",
     "auto_resolve",

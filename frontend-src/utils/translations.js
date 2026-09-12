@@ -1,4 +1,7 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Invalid blueprint selection", "blueprint_selection"],
+  ["Blueprint selection is no longer available", "blueprint_stale"],
+  ["Invalid rule blueprint provenance", "blueprint_provenance"],
   ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
   ["Transition departure and arrival must differ", "transition_distinct"],
   ["Transition values cannot be unknown or unavailable", "transition_unavailable"],
