@@ -12,8 +12,19 @@ INTEGRATION = ROOT / "custom_components" / "alert_manager"
 TRANSLATIONS = INTEGRATION / "translations"
 
 
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for key, value in pairs:
+        assert key not in result, f"Duplicate translation key: {key}"
+        result[key] = value
+    return result
+
+
 def _load(language: str) -> dict:
-    return json.loads((TRANSLATIONS / f"{language}.json").read_text())
+    return json.loads(
+        (TRANSLATIONS / f"{language}.json").read_text(),
+        object_pairs_hook=_unique_keys,
+    )
 
 
 def _flatten(value: dict, prefix: str = "") -> dict[str, str]:

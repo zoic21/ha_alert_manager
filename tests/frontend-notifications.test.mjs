@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { t as translate } from "../frontend-src/utils/translations.js";
 
 import { openAlertDeepLink } from "../frontend-src/components/alert-table.js";
 import {
@@ -36,6 +38,38 @@ const profile = {
     notify_on_resolved: true,
   }],
 };
+
+for (const [language, emptyTitle, summary] of [
+  ["fr", "Nouvelle exception", "Nouvelle : Oui · Résolue : Oui · Rappel : Jamais"],
+  ["en", "New exception", "New: Yes · Resolved: Yes · Reminder: Never"],
+]) {
+  test(`notification summaries resolve real ${language} resources with and without labels`, () => {
+    const catalog = JSON.parse(readFileSync(new URL(
+      `../custom_components/alert_manager/translations/${language}.json`, import.meta.url,
+    ), "utf8"));
+    const resources = {};
+    const flatten = (value, prefix) => {
+      for (const [key, item] of Object.entries(value)) {
+        if (typeof item === "object") flatten(item, `${prefix}.${key}`);
+        else resources[`${prefix}.${key}`] = item;
+      }
+    };
+    flatten(catalog.config_panel, "component.alert_manager.config_panel");
+    const t = (key, params) => translate.call({
+      _translations: resources, _englishTranslations: {},
+    }, key, params);
+    const draft = structuredClone(profile);
+    draft.default_policy.reminder_interval = null;
+    draft.exceptions.push({ selector_ids: [], notify_on_resolved: true });
+    const markup = renderNotificationProfileDrawer({
+      draft, labels: [{ label_id: "battery", name: "Battery" }], t,
+    });
+    assert.match(markup, /header="Battery"/);
+    assert.ok(markup.includes(`header="${emptyTitle}"`));
+    assert.equal(markup.split(`secondary="${summary}"`).length - 1, 2);
+    assert.doesNotMatch(markup, /component\.alert_manager\.config_panel|\{(?:start|resolved|reminder)\}/);
+  });
+}
 
 test("notification profile list exposes edit without standalone test or delete actions", () => {
   const markup = renderNotificationProfiles({
