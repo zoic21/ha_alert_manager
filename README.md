@@ -324,7 +324,11 @@ New-alert and recovery notifications are grouped separately per profile. The glo
 
 Due reminders are grouped per profile and stop when an alert is acknowledged or resolved. After a restart, reminders wait until alert reconciliation completes. Only confirmed alerts resume reminders; an overdue deadline restarts from the profile interval, without replaying missed reminders.
 
-Titles distinguish **🚨 new alerts**, **🔔 reminders** and **✅ recoveries**. With a supported Home Assistant Companion target, tapping a notification opens the alert details for a single ongoing alert, the overview for several ongoing alerts, or **History** for recoveries. Generic notification delivery sends the title and message without appending a raw navigation URL.
+Recognized Home Assistant Companion targets receive native icons: `mdi:alert-circle` for new alerts, `mdi:bell-ring` for reminders and `mdi:check-circle` for recoveries, including batches. Their titles keep the text and counts without a redundant emoji. Other targets, notification groups and Companion targets whose mobile action cannot be resolved keep **🚨 new alerts**, **🔔 reminders** and **✅ recoveries** in their titles. In a profile with different target types, each target receives its own presentation.
+
+With a supported Companion target, tapping a notification opens the alert details for a single ongoing alert, the overview for several ongoing alerts, or **History** for recoveries. Generic notification delivery sends the title and message without appending a raw navigation URL.
+
+According to the [Companion documentation](https://companion.home-assistant.io/docs/notifications/notifications-basic/#notification-icon-and-color), Android uses the status-bar icon and iOS uses a sender avatar; rendering differs by platform. **Test** sends `mdi:bell-check` through the same delivery path without creating an alert or history entry. Rendering and navigation still need validation on physical iOS/Android devices; no minimum tested app version is claimed. Home Assistant receives no rendering confirmation: an older app may ignore the icon without an error, so automatic emoji fallback on that device is not possible. There is no resend just to change an icon.
 
 ### Per-alert notification details
 

@@ -5,6 +5,12 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.4.0 — Unreleased
+
+- Added native Companion notification icons for new alerts, reminders and recoveries,
+  including batches and profile tests. Supported mobile targets use text-only titles;
+  other targets and notification groups retain the existing title emojis.
+
 ## 2.3.0 — Release candidate
 
 ### Major changes

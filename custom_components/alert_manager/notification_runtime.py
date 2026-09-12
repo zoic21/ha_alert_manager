@@ -590,6 +590,7 @@ class NotificationRuntime:
             title=title,
             message=message,
             click_url=url,
+            kind=kind,
         )
         await self._async_record_delivery(profile, kind, items, result)
 
@@ -607,6 +608,7 @@ class NotificationRuntime:
                 title=title,
                 message=message,
                 click_url=url,
+                kind="reminder",
             )
             await self._async_record_delivery(profile, "reminder", items, result)
 
@@ -821,8 +823,6 @@ class NotificationRuntime:
             "reminder": "Alert reminder" if count == 1 else "Reminder: {count} alerts",
         }[kind]
         title = self._delivery.text(title_key, fallback).replace("{count}", str(count))
-        icon = {"started": "🚨", "reminder": "🔔", "resolved": "✅"}[kind]
-        title = f"{icon} {title}"
         grouped: dict[str, list[_NotificationItem]] = {}
         for item in items:
             key = (

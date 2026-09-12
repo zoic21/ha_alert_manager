@@ -108,7 +108,7 @@ def _active_record(now: datetime) -> AlertRecord:
 @pytest.mark.parametrize("count", [1, 2])
 @pytest.mark.parametrize("grouped", [False, True])
 def test_notification_compact_titles(
-    hass, entry, kind, icon, language, count, grouped
+    hass, entry, registry_entry, config_entry, kind, icon, language, count, grouped
 ) -> None:
     """Render concise singular/plural titles for individual and grouped alerts."""
     delivery = NotificationManager(hass, lambda: [])
@@ -152,8 +152,42 @@ def test_notification_compact_titles(
             "reminder": ("Alert reminder", "Reminder: 2 alerts"),
         },
     }
-    assert title == f"{icon} {expected_titles[language or 'en'][kind][count - 1]}"
-    assert title.count(icon) == 1
+    assert title == expected_titles[language or "en"][kind][count - 1]
+    mobile_entry = config_entry(hass, "mobile_app")
+    mobile_entry.data = {"device_name": "Phone"}
+    registry_entry(
+        hass,
+        "notify.phone",
+        platform="mobile_app",
+        config_entry_id=mobile_entry.entry_id,
+    )
+
+    async def send(_call):
+        pass
+
+    hass.services.async_register("notify", "mobile_app_phone", send)
+    hass.services.async_register("notify", "send_message", send)
+    asyncio.run(
+        delivery.async_send(
+            targets=["notify.phone", "notify.generic"],
+            title=title,
+            message=message,
+            kind=kind,
+            click_url=runtime._batch_url(kind, items),
+        )
+    )
+    mobile, generic = hass.services.calls
+    assert mobile["data"]["title"] == title
+    assert (
+        mobile["data"]["data"]["notification_icon"]
+        == {
+            "started": "mdi:alert-circle",
+            "reminder": "mdi:bell-ring",
+            "resolved": "mdi:check-circle",
+        }[kind]
+    )
+    assert generic["data"]["title"] == f"{icon} {title}"
+    assert generic["data"]["title"].count(icon) == 1
     assert "{count}" not in title
     assert len(message.splitlines()) == (1 if grouped else count)
     if kind == "resolved":
@@ -578,6 +612,11 @@ def test_usage_counts_started_resolved_and_reminder_batches(
         await runtime._async_flush_batch("profile", "resolved")
 
         assert runtime.usage_snapshot() == {"last_24h": {"profile": 3}}
+        assert [call["kind"] for call in runtime._delivery.calls] == [
+            "started",
+            "reminder",
+            "resolved",
+        ]
         await runtime.async_unload()
 
     asyncio.run(scenario())
