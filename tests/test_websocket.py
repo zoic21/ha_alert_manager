@@ -7,6 +7,8 @@ import importlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from pack_test_helpers import automatic_settings
+
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.websocket import (
@@ -59,7 +61,7 @@ def test_timed_acknowledgement_websocket_validates_and_forwards_duration(hass, e
     manager = AlertManager(hass, entry)
     hass.states.set("sensor.test", "unavailable")
     asyncio.run(manager.async_setup())
-    asyncio.run(manager.async_update_config({"global_delay": 0}))
+    asyncio.run(manager.async_update_config(automatic_settings(delay=0)))
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=True)
     message = {
@@ -114,7 +116,7 @@ def test_websocket_invalid_frontend_data_gets_readable_error(hass, entry):
             {
                 "id": 2,
                 "type": "alert_manager/config/update",
-                "config": {"global_delay": -1},
+                "config": automatic_settings(delay=-1),
             },
         )
     )
@@ -129,7 +131,7 @@ def test_bulk_acknowledgement_websocket_uses_one_transaction(hass, entry):
         hass.states.set(entity_id, "unavailable")
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
-    asyncio.run(manager.async_update_config({"global_delay": 0}))
+    asyncio.run(manager.async_update_config(automatic_settings(delay=0)))
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=True)
     alert_ids = ["unavailable:sensor.one", "unavailable:sensor.two"]
@@ -177,45 +179,22 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
     ]
     assert all(pack["translation_key"] == pack["id"] for pack in packs)
     assert all("name" not in pack and "description" not in pack for pack in packs)
-    assert next(pack for pack in packs if pack["id"] == "unifi") == {
-        "id": "unifi",
-        "translation_key": "unifi",
-        "prerequisites": ["unifi"],
-        "available": False,
-    }
+    unifi = next(pack for pack in packs if pack["id"] == "unifi")
+    assert unifi["available"] is False
+    assert unifi["prerequisites"] == ["unifi"]
+    for pack in packs:
+        fields = {field["id"]: field for field in pack["config_fields"]}
+        for kind in ("device", "entity"):
+            field = fields[f"{kind}_overrides"]
+            assert field["type"] == f"{kind}_settings_map"
+            assert field["sparse"] is True
+            assert field["fields"][0]["id"] == "enabled"
+        if pack["id"] != "flapping":
+            assert fields["entity_overrides"]["fields"][1]["id"] == "delay"
     battery = next(pack for pack in packs if pack["id"] == "battery")
-    assert [field["id"] for field in battery["config_fields"]] == [
-        "threshold",
-        "device_thresholds",
-    ]
-    assert battery["config_fields"][1]["type"] == "device_number_map"
-    execution_errors = next(pack for pack in packs if pack["id"] == "execution_errors")
-    assert execution_errors["config_fields"] == [
-        {
-            "id": "failure_thresholds",
-            "type": "entity_number_map",
-            "translation_key": "failure_thresholds",
-            "default": {},
-            "minimum": 1,
-            "maximum": 100,
-            "step": 1,
-            "entity_domains": ["automation", "script"],
-        }
-    ]
-    flapping = next(pack for pack in packs if pack["id"] == "flapping")
-    entity_overrides = next(
-        field
-        for field in flapping["config_fields"]
-        if field["id"] == "entity_overrides"
-    )
-    assert entity_overrides["type"] == "entity_settings_map"
-    assert entity_overrides["fields"][0] == {
-        "id": "enabled",
-        "type": "boolean",
-        "translation_key": "flapping_enabled",
-        "default": True,
-        "step": "any",
-    }
+    assert battery["config_fields"][0]["id"] == "threshold"
+    execution = next(pack for pack in packs if pack["id"] == "execution_errors")
+    assert execution["config_fields"][0]["id"] == "failure_threshold"
 
 
 def test_websocket_rule_actions_create_update_and_delete(hass, entry):
@@ -578,7 +557,7 @@ def test_configuration_export_validation_and_import_round_trip(hass, entry):
 
     asyncio.run(websocket_config_export(hass, connection, {"id": 20}))
     exported = connection.results[-1][1]["yaml"]
-    assert exported.startswith("version: 1\n")
+    assert exported.startswith("version: 2\n")
 
     asyncio.run(
         websocket_config_import_validate(
@@ -649,10 +628,10 @@ def test_yaml_preview_and_export_use_executor(hass, entry, monkeypatch):
         calls.append("dump")
         return dump(config)
 
-    def tracked_parse(raw):
+    def tracked_parse(raw, *args):
         assert threading.get_ident() != loop_thread
         calls.append("parse")
-        return parse(raw)
+        return parse(raw, *args)
 
     def tracked_validate(config):
         assert threading.get_ident() == loop_thread
@@ -720,15 +699,22 @@ def test_configuration_field_yaml_websocket_validates_without_saving(hass, entry
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
     connection = Connection(admin=True)
-    for raw in ["entity_delays: {sensor.test: 120}", "entity_delays: ["]:
+    for raw in ["entity_overrides: {sensor.test: {delay: 120}}", "entity_overrides: ["]:
         asyncio.run(
             websocket_configuration_field_yaml_validate(
-                hass, connection, {"id": 99, "yaml": raw, "field_id": "entity_delays"}
+                hass,
+                connection,
+                {
+                    "id": 99,
+                    "yaml": raw,
+                    "field_id": "entity_overrides",
+                    "pack_id": "unavailable",
+                },
             )
         )
-    assert connection.results == [(99, {"value": {"sensor.test": 120}})]
+    assert connection.results == [(99, {"value": {"sensor.test": {"delay": 120}}})]
     assert connection.errors[0][0:2] == (99, "invalid_format")
-    assert manager.config["entity_delays"] == {}
+    assert manager.config["automatic"]["unavailable"]["entity_overrides"] == {}
     unauthorized = Connection(admin=False)
     asyncio.run(
         websocket_configuration_field_yaml_validate(

@@ -308,7 +308,7 @@ def test_disabled_occurrence_pack_adds_no_work_to_source_creation(
     live_state(manager, hass, "sensor.test", "unavailable")
 
     assert "unavailable:sensor.test" in manager.records
-    assert manager._pack_runtime == {}
+    assert not manager._pack_runtime.get("flapping")
 
 
 def test_old_occurrences_leave_the_window(hass, entry, set_now):
@@ -548,6 +548,7 @@ def test_occurrence_memory_keeps_only_the_newest_sources(hass, set_now, monkeypa
         {
             "automatic": {
                 "flapping": {
+                    "enabled": True,
                     "occurrences": 5,
                     "window": 60,
                     "recovery": 60,
@@ -714,7 +715,7 @@ def test_disabling_pack_cancels_alert_timer_and_keeps_history(hass, entry, set_n
 
     run(manager.async_update_config({"automatic": {"flapping": {"enabled": False}}}))
     assert alert_id not in manager.records
-    assert "flapping" not in manager._pack_runtime
+    assert not manager._pack_runtime.get("flapping")
     assert flapping._LAST_CLEANUP not in hass.data
     assert manager.history[0].id == alert_id
     assert not [
@@ -776,10 +777,20 @@ def test_excluding_source_resolves_flapping_through_normal_evaluation(
     alert_id = "flapping:unavailable:sensor.test"
     deadline = manager.records[alert_id].expires_at
 
-    run(manager.async_update_config({"excluded_entities": ["sensor.test"]}))
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "unavailable": {
+                        "entity_overrides": {"sensor.test": {"enabled": False}}
+                    }
+                }
+            }
+        )
+    )
 
     assert alert_id not in manager.records
-    assert manager._pack_runtime == {}
+    assert not manager._pack_runtime.get("flapping")
     assert manager.history[0].id == alert_id
     assert not [
         timer
@@ -1225,3 +1236,88 @@ def test_reconciliation_flapping_compound_id_survives_entity_rename(
         await restarted.async_unload()
 
     run(scenario())
+
+
+def test_automatic_exclusion_labels_do_not_block_custom_rule_flapping(
+    hass, entry, set_now
+):
+    from types import SimpleNamespace
+
+    from homeassistant.helpers import entity_registry as er
+
+    start = datetime(2026, 9, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "off")
+    er.async_get(hass).entries["sensor.test"] = SimpleNamespace(
+        entity_id="sensor.test",
+        device_id=None,
+        area_id=None,
+        labels={"excluded"},
+        disabled_by=None,
+        platform="test",
+        config_entry_id=None,
+    )
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=2)
+    run(manager.async_update_config({"excluded_labels": ["excluded"]}))
+    rule = run(
+        manager.async_create_rule(
+            {
+                "name": "Explicit source",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "flapping_enabled": True,
+            }
+        )
+    )
+    for offset in (0, 10):
+        set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", "on")
+        live_state(manager, hass, "sensor.test", "off")
+    alert_id = f"flapping:rule:{rule['id']}:sensor.test"
+    assert alert_id in manager.records
+    assert manager.records[alert_id].status is AlertStatus.ACTIVE
+    run(manager.async_update_config({"automatic": {"unavailable": {"enabled": False}}}))
+    assert alert_id in manager.records
+
+
+def test_flapping_recovery_edit_keeps_occurrence_evidence_and_last_observation(
+    hass, entry, set_now
+):
+    start = datetime(2026, 9, 12, tzinfo=UTC)
+    set_now(start)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    configure(manager, occurrences=2, recovery=120)
+    occurrence(manager, hass, set_now, start)
+    occurrence(manager, hass, set_now, start + timedelta(seconds=10))
+    alert_id = "flapping:unavailable:sensor.test"
+    previous = deepcopy(manager.records[alert_id])
+    set_now(start + timedelta(seconds=20))
+    run(manager.async_update_config({"automatic": {"flapping": {"recovery": 300}}}))
+    record = manager.records[alert_id]
+    assert record.expires_at == start + timedelta(seconds=310)
+    assert record.active_since == previous.active_since
+    assert (
+        record.details.condition_params["occurrences"]
+        == previous.details.condition_params["occurrences"]
+    )
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "unavailable": {
+                        "entity_overrides": {"sensor.test": {"enabled": False}}
+                    }
+                }
+            }
+        )
+    )
+    assert alert_id not in manager.records
+    assert "unavailable:sensor.test" not in manager._pack_runtime["flapping"]
+    assert (
+        manager.history[-1].condition_params["resolution_reason"]
+        == "monitoring_disabled"
+    )

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import (
     DATA_MANAGER,
@@ -127,7 +128,7 @@ def test_bulk_acknowledgement_uses_one_storage_write(hass, entry, set_now):
         hass.states.set(entity_id, "unavailable")
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
-    run(manager.async_update_config({"global_delay": 0}))
+    run(manager.async_update_config(automatic_settings(delay=0)))
     alert_ids = ["unavailable:sensor.one", "unavailable:sensor.two"]
     saves = hass.store_save_count
 

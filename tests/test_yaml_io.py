@@ -6,6 +6,7 @@ import asyncio
 from copy import deepcopy
 
 import pytest
+import yaml
 
 from custom_components.alert_manager.const import DEFAULT_CONFIG
 from custom_components.alert_manager.manager import AlertManager
@@ -278,14 +279,14 @@ def test_config_export_is_deterministic_and_reimportable() -> None:
     ]
     first = dump_config_yaml(config)
     assert first == dump_config_yaml(config)
-    assert first.startswith("version: 1\nconfig:\n")
+    assert first.startswith("version: 2\nconfig:\n")
     assert "  monitoring_enabled: true\n" in first
     assert "  coherence_schedule: none\n" in first
     assert "  coherence_scan_esphome: true\n" in first
     assert "  coherence_ignored_entity_references: []\n" in first
-    assert "id: stable-rule-id" not in first
+    assert "id: stable-rule-id" in first
     imported = parse_config_yaml(first)
-    assert imported["rules"][0]["id"] != "stable-rule-id"
+    assert imported["rules"][0]["id"] == "stable-rule-id"
     assert imported["rules"][0]["id"]
     assert "alerts:" not in first
 
@@ -325,24 +326,17 @@ def test_pre_dev14_export_without_pending_display_delay_uses_default() -> None:
 def test_older_export_without_execution_errors_pack_uses_default() -> None:
     """Exports created before the new pack remain importable."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
-    legacy = exported.replace(
-        "    execution_errors:\n"
-        "      enabled: true\n"
-        "      label_ids: []\n"
-        "      delay: 0\n"
-        "      failure_thresholds: {}\n",
-        "",
-    )
+    payload = yaml.safe_load(exported)
+    payload["config"]["automatic"].pop("execution_errors")
+    legacy = yaml.safe_dump(payload)
 
     imported = parse_config_yaml(legacy)
 
     assert "    execution_errors:" not in legacy
-    assert imported["automatic"]["execution_errors"] == {
-        "enabled": True,
-        "label_ids": [],
-        "delay": 0,
-        "failure_thresholds": {},
-    }
+    assert (
+        imported["automatic"]["execution_errors"]
+        == DEFAULT_CONFIG["automatic"]["execution_errors"]
+    )
 
 
 def test_older_export_without_flapping_pack_uses_disabled_default() -> None:
@@ -456,11 +450,11 @@ def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, en
     ]
     result = run(manager.async_import_config(dump_config_yaml(config)))
     imported_rule_id = manager.config["rules"][0]["id"]
-    assert imported_rule_id != "stable-multi-rule"
+    assert imported_rule_id == "stable-multi-rule"
     assert result["summary"] == {
         "rules": 1,
         "enabled_packs": 5,
-        "entity_delays": 0,
+        "pack_exceptions": 0,
         "warnings": [],
     }
     assert set(manager.records) >= {

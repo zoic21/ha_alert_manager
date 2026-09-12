@@ -27,7 +27,7 @@ def resolve_settings(
     scopes = [(config, "")]
     if source_id is not None:
         source = config.get("source_packs", {}).get(source_id)
-        if source is None:
+        if source is None or source.get("enabled") is False:
             values["enabled"] = False
             origins["enabled"] = "source"
             return values, origins

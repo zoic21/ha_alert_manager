@@ -36,6 +36,7 @@ from .storage import (
     AlertManagerConfigBackupStorage,
     AlertManagerHistoryStorage,
     AlertManagerStorage,
+    ConfigMigrationError,
 )
 from .transactions import (
     StartupReconciliationTransaction,
@@ -103,6 +104,7 @@ class AlertManager(
         self._record_ids_by_entity: dict[str, set[str]] = {}
         self.history: list[AlertHistoryEntry] = []
         self._pending_history: list[AlertHistoryEntry] = []
+        self._administratively_removed: set[str] = set()
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
         self._transition_observations: dict[str, TransitionObservation] = {}
@@ -131,8 +133,6 @@ class AlertManager(
         self._unloading = False
         self._last_public_snapshot: dict[str, Any] | None = None
         self._pack_availability: dict[str, bool] = {}
-        self._excluded_entities: frozenset[str] = frozenset()
-        self._excluded_devices: frozenset[str] = frozenset()
         self._excluded_labels: frozenset[str] = frozenset()
         self._rule_templates: dict[str, Template] = {}
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
@@ -187,13 +187,15 @@ class AlertManager(
             loaded_config, records, migrated = await self.storage.async_load()
             candidate = validate_config(loaded_config)
             self._validate_config_rule_sources(candidate)
-        except Exception:
+        except Exception as err:
             _LOGGER.exception(
                 "Stored configuration is unusable; starting with defaults without "
                 "writing them"
             )
             self._enter_config_recovery()
             self.config = validate_config({})
+            if isinstance(err, ConfigMigrationError):
+                self.config["monitoring_enabled"] = False
             records = {}
             migrated = False
             self.storage.variation_baselines = {}

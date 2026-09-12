@@ -48,12 +48,14 @@ class PackConfigField:
     unit: str | None = None
     entity_domains: tuple[str, ...] | None = None
     fields: tuple[PackConfigField, ...] = ()
+    sparse: bool = False
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
         return {
             key: value
             for key, value in {
+                "sparse": self.sparse,
                 "id": self.id,
                 "type": self.type,
                 "translation_key": self.translation_key,
@@ -128,6 +130,7 @@ class AutomaticPack:
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
     should_evaluate: PackShouldEvaluate | None = None
     reset_handler: PackResetHandler | None = None
+    reset_entity_handler: Callable[[HomeAssistant, str], None] | None = None
     config_fields: tuple[PackConfigField, ...] = ()
     uses_delay: bool = True
     occurrence_batch_handler: PackOccurrenceBatchHandler | None = None

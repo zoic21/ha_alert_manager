@@ -43,7 +43,7 @@ from custom_components.alert_manager.validation import (
 
 def test_execution_errors_pack_alerts_without_delay_by_default():
     """Only execution failures bypass the general 900-second default delay."""
-    assert DEFAULT_CONFIG["global_delay"] == 900
+    assert DEFAULT_CONFIG["automatic"]["unavailable"]["delay"] == 900
     assert DEFAULT_CONFIG["automatic"]["execution_errors"]["delay"] == 0
 
 
@@ -663,10 +663,10 @@ def test_frontend_payload_validation():
                 "duration": 10,
             }
         )
-    with pytest.raises(ValueError, match="Invalid entity id"):
+    with pytest.raises(ValueError, match="Legacy exclusions"):
         validate_config({"excluded_entities": ["invalid"]})
     with pytest.raises(ValueError, match="integer"):
-        validate_config({"global_delay": 2.5})
+        validate_config({"automatic": {"unavailable": {"delay": 2.5}}})
     assert (
         validate_config({"coherence_schedule": "weekly"})["coherence_schedule"]
         == "weekly"
@@ -748,16 +748,32 @@ def test_pack_declared_device_number_map_is_strictly_validated():
     """Pack metadata fields reject malformed device IDs and numeric values."""
     device_id = "a" * 32
     normalized = validate_config(
-        {"automatic": {"battery": {"device_thresholds": {device_id: "22"}}}}
+        {
+            "automatic": {
+                "battery": {"device_overrides": {device_id: {"threshold": "22"}}}
+            }
+        }
     )
-    assert normalized["automatic"]["battery"]["device_thresholds"] == {device_id: 22.0}
+    assert normalized["automatic"]["battery"]["device_overrides"] == {
+        device_id: {"threshold": 22.0}
+    }
     with pytest.raises(ValueError, match="invalid device id"):
         validate_config(
-            {"automatic": {"battery": {"device_thresholds": {"invalid": 20}}}}
+            {
+                "automatic": {
+                    "battery": {"device_overrides": {"invalid": {"threshold": 20}}}
+                }
+            }
         )
     with pytest.raises(ValueError, match="finite number"):
         validate_config(
-            {"automatic": {"battery": {"device_thresholds": {device_id: float("nan")}}}}
+            {
+                "automatic": {
+                    "battery": {
+                        "device_overrides": {device_id: {"threshold": float("nan")}}
+                    }
+                }
+            }
         )
 
 
@@ -788,22 +804,21 @@ def test_pack_declared_entity_settings_map_is_strictly_validated():
             "recovery": 120,
         }
     }
-    with pytest.raises(ValueError, match=r"Missing .* recovery"):
-        validate_config(
-            {
-                "automatic": {
-                    "flapping": {
-                        "entity_overrides": {
-                            entity_id: {
-                                "enabled": True,
-                                "occurrences": 3,
-                                "window": 600,
-                            }
+    validate_config(
+        {
+            "automatic": {
+                "flapping": {
+                    "entity_overrides": {
+                        entity_id: {
+                            "enabled": True,
+                            "occurrences": 3,
+                            "window": 600,
                         }
                     }
                 }
             }
-        )
+        }
+    )
     with pytest.raises(ValueError, match="invalid entity id"):
         validate_config(
             {
@@ -892,36 +907,48 @@ def test_pack_declared_entity_number_map_is_strictly_validated():
     normalized = validate_config(
         {
             "automatic": {
-                "execution_errors": {"failure_thresholds": {"automation.test": "3"}}
+                "execution_errors": {
+                    "entity_overrides": {"automation.test": {"failure_threshold": "3"}}
+                }
             }
         }
     )
-    assert normalized["automatic"]["execution_errors"]["failure_thresholds"] == {
-        "automation.test": 3
+    assert normalized["automatic"]["execution_errors"]["entity_overrides"] == {
+        "automation.test": {"failure_threshold": 3}
     }
     script = validate_config(
         {
             "automatic": {
-                "execution_errors": {"failure_thresholds": {"script.test": "4"}}
+                "execution_errors": {
+                    "entity_overrides": {"script.test": {"failure_threshold": "4"}}
+                }
             }
         }
     )
-    assert script["automatic"]["execution_errors"]["failure_thresholds"] == {
-        "script.test": 4
+    assert script["automatic"]["execution_errors"]["entity_overrides"] == {
+        "script.test": {"failure_threshold": 4}
     }
-    with pytest.raises(ValueError, match="outside the automation, script domains"):
-        validate_config(
-            {
-                "automatic": {
-                    "execution_errors": {"failure_thresholds": {"sensor.test": 3}}
+    orphan = validate_config(
+        {
+            "automatic": {
+                "execution_errors": {
+                    "entity_overrides": {"sensor.test": {"failure_threshold": 3}}
                 }
             }
-        )
+        }
+    )
+    assert orphan["automatic"]["execution_errors"]["entity_overrides"][
+        "sensor.test"
+    ] == {"failure_threshold": 3}
     with pytest.raises(ValueError, match="must be an integer"):
         validate_config(
             {
                 "automatic": {
-                    "execution_errors": {"failure_thresholds": {"automation.test": 2.5}}
+                    "execution_errors": {
+                        "entity_overrides": {
+                            "automation.test": {"failure_threshold": 2.5}
+                        }
+                    }
                 }
             }
         )
@@ -929,7 +956,11 @@ def test_pack_declared_entity_number_map_is_strictly_validated():
         validate_config(
             {
                 "automatic": {
-                    "execution_errors": {"failure_thresholds": {"automation.test": 0}}
+                    "execution_errors": {
+                        "entity_overrides": {
+                            "automation.test": {"failure_threshold": 0}
+                        }
+                    }
                 }
             }
         )

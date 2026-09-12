@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from homeassistant.components.automation import DATA_COMPONENT
@@ -230,9 +230,7 @@ def _should_evaluate(
 
 def _failure_threshold(config: dict[str, Any], entity_id: str) -> int:
     """Return the configured consecutive failed-cycle threshold."""
-    thresholds = config.get("failure_thresholds", {})
-    value = thresholds.get(entity_id, 1) if isinstance(thresholds, dict) else 1
-    return int(value)
+    return int(config.get("failure_threshold", 1))
 
 
 def _evaluate(
@@ -292,6 +290,41 @@ def _evaluate(
     return PackMatch(condition_key="automatic.execution_errors")
 
 
+def snapshot_runtime(hass: HomeAssistant) -> dict[str, _ExecutionTracker] | None:
+    """Copy mutable cycle bookkeeping, retaining read-only HA trace references."""
+    cycles = hass.data.get(_DATA_CYCLES)
+    if cycles is None:
+        return None
+
+    def copy_cycle(cycle: _ExecutionCycle | None) -> _ExecutionCycle | None:
+        return replace(cycle, traces=dict(cycle.traces)) if cycle else None
+
+    return {
+        entity_id: replace(
+            tracker,
+            active=copy_cycle(tracker.active),
+            completed=[copy_cycle(cycle) for cycle in tracker.completed],
+            pending_result=copy_cycle(tracker.pending_result),
+        )
+        for entity_id, tracker in cycles.items()
+    }
+
+
+def restore_runtime(
+    hass: HomeAssistant, snapshot: dict[str, _ExecutionTracker] | None
+) -> None:
+    """Restore detector bookkeeping after a rejected configuration write."""
+    if snapshot is None:
+        hass.data.pop(_DATA_CYCLES, None)
+    else:
+        hass.data[_DATA_CYCLES] = snapshot
+
+
+def _reset_entity(hass: HomeAssistant, entity_id: str) -> None:
+    """Forget excluded/disabled execution cycles without recording an outcome."""
+    hass.data.get(_DATA_CYCLES, {}).pop(entity_id, None)
+
+
 def _reset_runtime(hass: HomeAssistant) -> None:
     """Drop transient trace references when monitoring stops or unloads."""
     hass.data.pop(_DATA_CYCLES, None)
@@ -305,12 +338,13 @@ PACK = AutomaticPack(
     evaluate=_evaluate,
     should_evaluate=_should_evaluate,
     reset_handler=_reset_runtime,
+    reset_entity_handler=_reset_entity,
     config_fields=(
         PackConfigField(
-            id="failure_thresholds",
-            type="entity_number_map",
-            translation_key="failure_thresholds",
-            default={},
+            id="failure_threshold",
+            type="number",
+            translation_key="failure_threshold",
+            default=1,
             minimum=1,
             maximum=100,
             step=1,

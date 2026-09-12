@@ -84,9 +84,9 @@ def test_backup_yaml_parsing_runs_in_executor(hass, monkeypatch):
     parser_threads = []
     original_parser = storage_module.parse_config_yaml
 
-    def tracked_parse(candidate):
+    def tracked_parse(candidate, *args):
         parser_threads.append(threading.get_ident())
-        return original_parser(candidate)
+        return original_parser(candidate, *args)
 
     monkeypatch.setattr(storage_module, "parse_config_yaml", tracked_parse)
     backup = run(
@@ -107,9 +107,9 @@ def test_config_import_parsing_runs_in_executor(hass, entry, monkeypatch):
     parser_threads = []
     original_parser = manager_api_module.parse_config_yaml
 
-    def tracked_parse(candidate):
+    def tracked_parse(candidate, *args):
         parser_threads.append(threading.get_ident())
-        return original_parser(candidate)
+        return original_parser(candidate, *args)
 
     monkeypatch.setattr(manager_api_module, "parse_config_yaml", tracked_parse)
     run(manager.async_import_config(raw_yaml))
@@ -283,9 +283,7 @@ def test_explicit_backup_restore_uses_import_and_clears_recovery_notification(
     assert run(manager.async_get_recovery_status())["backups"] == [backup]
 
 
-def test_backup_restore_regenerates_rule_ids_resets_runtime_and_reevaluates(
-    hass, entry
-):
+def test_backup_restore_preserves_rule_ids_history_and_reevaluates(hass, entry):
     """A complete restore keeps functional config, not stale engine state."""
     hass.states.set("sensor.target", "on")
     manager = AlertManager(hass, entry)
@@ -311,9 +309,9 @@ def test_backup_restore_regenerates_rule_ids_resets_runtime_and_reevaluates(
     run(manager.async_restore_config_backup(backup["id"]))
 
     restored_rule = manager.get_config()["rules"][0]
-    assert restored_rule["id"] != created_rule["id"]
+    assert restored_rule["id"] == created_rule["id"]
     assert run(manager.async_export_config_yaml()) == backup_yaml
-    assert manager.history == []
+    assert manager.history
     assert manager._pending_history == []
     assert manager._variation_baselines == {}
     assert any("sensor.target" in alert_id for alert_id in manager.records)

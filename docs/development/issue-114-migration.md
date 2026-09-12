@@ -1,9 +1,4 @@
-# Issue 114: migration inventory and implementation status
-
-This draft does **not implement issue 114**. It captures the old effective
-precedence and provides a pure prospective resolver. The resolver is deliberately
-not connected to monitoring until the canonical validator, migration and lifecycle
-changes can be delivered together. Do not merge or close #114 on this basis.
+# Issue 114: migration boundaries and invariants
 
 ## Legacy fields and consumers
 
@@ -21,67 +16,30 @@ changes can be delivered together. Do not merge or close #114 on this basis.
 | `excluded_labels` | Entity labels and device labels gate automatic monitoring. | Preserve selected labels and all existing registry label assignments. |
 | `pending_display_delay` | Controls pending visibility, independently of anomaly duration. | Unchanged; do not remove with `global_delay`. |
 
-`tests/test_pack_configuration_legacy.py` captures the old delay and flapping
-precedence so conversion tests can retain those examples. Existing battery,
-execution-cycle, monitoring and flapping tests also remain unchanged.
 
-## Existing boundaries that must be updated together
+## Canonical implementation
 
-- `storage.AlertManagerStore._async_migrate_func` and
-  `AlertManagerStorage._migrate_config`: load/migrate before startup reconciliation;
-  preserve the original store and enter configuration recovery on failure.
-- `validation.validate_config` and `validate_config_update`: one canonical sparse
-  schema, duplicate/unknown-field rejection, strict durations and scope validation.
-- `yaml_io`: versioned complete import/export and per-drawer validation must use
-  the same validator. YAML parsing runs in the executor; HA registry calls must
-  remain on the event loop.
-- `manager_api.async_import_config`: the current import transaction **clears live
-  records and history**. Do not reuse that behavior for the automatic 2.4 storage
-  migration. Its interaction with legacy backup restoration must be addressed
-  explicitly before preserving migration-related IDs/history can be claimed.
-- Registry label creation/assignment is not atomic with Alert Manager storage.
-  Test interrupted retries and durability ordering; adding a label to a registry
-  entry must not be assumed durable merely because the callback returned.
-- Entity rename handling currently updates separate delay/flapping/exclusion
-  structures. It must rename canonical overrides in every source scope and reject
-  identity conflicts, while preserving orphaned exceptions for user recovery.
-- `manager_runtime` currently can demote an active alert to pending and clear its
-  acknowledgement when a longer delay is saved. The new configuration contract
-  requires preserving active/acknowledged instances.
-- Missing candidates currently follow normal resolution handling. Administrative
-  disable/exclusion needs explicit history attribution, timer/detector cleanup,
-  queued notification invalidation, and no recovery event. Reuse
-  `NotificationRuntime.async_discard_alerts` after a successful transaction.
-- Execution trace observers and evaluations both need the same effective settings;
-  changing only candidate creation would leave failed-cycle counting inconsistent.
-- Flapping source disable/exclusion must clear only affected automatic source
-  memory and timers, without turning a configuration reevaluation into an occurrence.
+`pack_settings.resolve_settings` resolves validated sparse fields with dictionary
+lookups and current registry membership. Entity beats device beats pack for each
+field; flapping additionally uses selected source defaults and scoped exceptions.
+Pack/global/label/eligibility gates remain hard gates. Runtime never converts old
+fields. Registry bursts reconcile flapping memory and timers in the existing worker.
 
-## Prospective resolver
+Storage shape migration and version-1 YAML parsing use the same pure conversions.
+`async_migrate_exclusions` validates all targets and configuration before native HA
+label assignments on the event loop. A narrow durability adapter flushes each
+registry's native Store before committing removal of source exclusions. HA exposes
+no public registry flush method: the adapter uses `_store` and `_data_to_save`,
+and fails closed if these internals change. No blocking file I/O runs on the event
+loop. Partial assignment is additive and deliberately retained for idempotent retry;
+source exclusions are not removed on failure or cancellation.
 
-`pack_settings.resolve_settings` expects already validated canonical settings.
-It performs dictionary lookups only, returns values and their origin, preserves
-explicit zero/false and parent-equal overrides, and never mutates configuration.
-The caller supplies current registry membership and enforces global switches,
-labels and eligibility. A disabled pack cannot be enabled by a target exception.
+Imports retain compatible records, history, acknowledgements and flapping evidence.
+Administrative removals use existing history with `monitoring_disabled` attribution,
+cancel detector/timer work, and discard queued sends/reminders after durable commit.
+Pending delay edits derive deadlines from the existing observation start.
 
-Common target scopes are `device_overrides` and `entity_overrides`. For automatic
-flapping, a selected `source_packs` entry can also contain those sparse maps.
-Source-specific target fields beat corresponding common target fields; entity
-fields beat device fields; device fields beat source defaults. Validation must
-prevent nested maps or unsupported fields inside an individual target exception.
-Custom rules must keep a separate source-policy boundary.
-
-## Still required before this PR is ready
-
-- Canonical descriptors, authoritative validation and all detector consumers.
-- Idempotent load/import/restore conversion, including label failure/interruption
-  tests and preservation of alerts, acknowledgements, evidence and history.
-- Live reconciliation, execution-cycle state, flapping resources, notification
-  queues/reminders and registry-change regression coverage.
-- One compact pack row and one visual/YAML drawer, native selectors, effective
-  inherited values/origins, restoring inheritance, source-specific editing,
-  orphan visibility and relevant target filtering.
-- Administrator-only contextual editing from applicable automatic alerts.
-- French/English translations, user documentation and migration/changelog notes.
-- Full final backend/frontend validation and desktop/mobile UI verification.
+The legacy characterization cases, migration failure/retry tests, live configuration
+regressions, existing execution/flapping/runtime tests and visual/YAML UI tests cover
+the boundary behavior. The UI uses shared pack metadata for one drawer per pack,
+with source contexts, sparse exceptions, native pickers and administrator-only actions.

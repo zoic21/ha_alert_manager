@@ -15,6 +15,8 @@ from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertDetails
 from custom_components.alert_manager.packs.base import PackOccurrence
 from custom_components.alert_manager.packs.flapping import _settings
+from custom_components.alert_manager.storage import _migrate_config_shape
+from custom_components.alert_manager.validation import validate_config
 
 
 @pytest.mark.parametrize(
@@ -25,24 +27,39 @@ def test_legacy_entity_delay_beats_pack_default_even_when_disabled(
 ):
     manager = AlertManager(hass, entry)
     manager.config = deepcopy(DEFAULT_CONFIG)
+    manager.config.pop("pack_config_version")
+    manager.config["entity_delays"] = {}
     state = hass.states.set("sensor.example", "unavailable")
     manager.config["global_delay"] = 900
     manager.config["automatic"][pack_id].update(enabled=False, delay=1800)
     manager.config["entity_delays"][state.entity_id] = 0
+    legacy = deepcopy(manager.config)
+    manager.config = validate_config(_migrate_config_shape(legacy)[0])
     assert manager._delay_for(state, pack_id) == 0
+    manager.config = legacy
     del manager.config["entity_delays"][state.entity_id]
+    legacy = deepcopy(manager.config)
+    manager.config = validate_config(_migrate_config_shape(legacy)[0])
     assert manager._delay_for(state, pack_id) == 1800
+    manager.config = legacy
     manager.config["automatic"][pack_id]["delay"] = None
+    manager.config = validate_config(_migrate_config_shape(manager.config)[0])
     assert manager._delay_for(state, pack_id) == 900
 
 
 def test_legacy_execution_errors_have_an_independent_immediate_default(hass, entry):
     manager = AlertManager(hass, entry)
     manager.config = deepcopy(DEFAULT_CONFIG)
+    manager.config.pop("pack_config_version")
+    manager.config["entity_delays"] = {}
     manager.config["global_delay"] = 900
     state = hass.states.set("automation.example", "on")
+    legacy = deepcopy(manager.config)
+    manager.config = validate_config(_migrate_config_shape(legacy)[0])
     assert manager._delay_for(state, "execution_errors") == 0
+    manager.config = legacy
     manager.config["entity_delays"][state.entity_id] = 60
+    manager.config = validate_config(_migrate_config_shape(manager.config)[0])
     assert manager._delay_for(state, "execution_errors") == 60
 
 
@@ -85,6 +102,8 @@ def test_legacy_flapping_source_fields_beat_entity_fields(custom_rule):
             "flapping_recovery": 600,
         }
     }
+    config.pop("pack_config_version")
+    config = validate_config(_migrate_config_shape(config)[0])
     assert _settings(occurrence, config, rules) == (8, 1800, 600)
     config["automatic"]["flapping"]["entity_overrides"]["sensor.example"]["enabled"] = (
         False

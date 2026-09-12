@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import DEFAULT_DELAY
 from custom_components.alert_manager.manager import AlertManager
@@ -33,7 +34,9 @@ def test_failed_config_mutation_cannot_rollback_concurrent_rule_create(
 
         monkeypatch.setattr(manager.storage, "async_save", controlled_save)
 
-        first = asyncio.create_task(manager.async_update_config({"global_delay": 123}))
+        first = asyncio.create_task(
+            manager.async_update_config(automatic_settings(delay=123))
+        )
         await first_save_started.wait()
 
         second = asyncio.create_task(
@@ -62,7 +65,7 @@ def test_failed_config_mutation_cannot_rollback_concurrent_rule_create(
 
         created = await second
         config = manager.get_config()
-        assert config["global_delay"] == DEFAULT_DELAY
+        assert config["automatic"]["unavailable"]["delay"] == DEFAULT_DELAY
         assert config["rules"] == [created]
         assert save_count == 2
 

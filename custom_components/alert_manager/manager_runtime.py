@@ -47,6 +47,7 @@ from .models import (
     calculate_due_at,
     safe_float,
 )
+from .pack_settings import resolve_settings
 from .packs import (
     OCCURRENCE_PACKS,
     PACKS,
@@ -55,6 +56,7 @@ from .packs import (
     PackOccurrence,
     PackRecheck,
 )
+from .packs.flapping import _settings as flapping_settings
 from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 from .runtime_phase import RuntimePhase
 from .transactions import (
@@ -514,8 +516,17 @@ class _RuntimeMixin:
                         **(previous.details.condition_params or {}),
                         "resolution_reason": "automatic",
                     }
+                enabled = self._record_monitoring_enabled(previous)
+                if not enabled:
+                    previous.details.condition_params = {
+                        **(previous.details.condition_params or {}),
+                        "resolution_reason": "monitoring_disabled",
+                    }
                 self._pending_history.append(AlertHistoryEntry.resolved(previous, now))
-                self._fire_resolved(previous, now)
+                if enabled:
+                    self._fire_resolved(previous, now)
+                else:
+                    self._administratively_removed.add(alert_id)
             elif (
                 previous.status is AlertStatus.PENDING
                 and current.status is AlertStatus.ACTIVE
@@ -645,17 +656,26 @@ class _RuntimeMixin:
                 entity_id in self._rules_by_entity
                 or entity_id in self._record_ids_by_entity
             )
-        automatic = self.config.get("automatic", {})
         pack_relevant = False
-        automatic_eligible: bool | None = None
+        automatic_eligible = None
         for pack in PACKS:
-            config = automatic.get(pack.id, {})
+            config = self._pack_settings(pack.id, entity_id)
             if not config.get("enabled", False):
+                if pack.reset_entity_handler is not None:
+                    pack.reset_entity_handler(self.hass, entity_id)
                 continue
             if not self._pack_is_available(pack.id):
                 continue
             if new_state is None or not pack.applies(self.hass, new_state):
                 continue
+            # Stateful execution filters must never ingest excluded cycles.
+            if pack.reset_entity_handler is not None:
+                automatic_eligible = self._is_base_eligible(
+                    entity_id
+                ) and self._is_automatic_eligible(entity_id)
+                if not automatic_eligible:
+                    pack.reset_entity_handler(self.hass, entity_id)
+                    continue
             if pack.should_evaluate is not None and not pack.should_evaluate(
                 self.hass, old_state, new_state, config
             ):
@@ -934,33 +954,22 @@ class _RuntimeMixin:
                 )
                 changed = True
 
-            entity_delays = self.config.get("entity_delays", {})
-            if old_entity_id in entity_delays:
-                entity_delays.setdefault(new_entity_id, entity_delays[old_entity_id])
-                entity_delays.pop(old_entity_id)
-                changed = True
-
-            flapping_overrides = (
-                self.config.get("automatic", {})
-                .get("flapping", {})
-                .get("entity_overrides", {})
-            )
-            if old_entity_id in flapping_overrides:
-                flapping_overrides.setdefault(
-                    new_entity_id, flapping_overrides[old_entity_id]
-                )
-                flapping_overrides.pop(old_entity_id)
-                changed = True
-
-            excluded_entities = self.config.get("excluded_entities", [])
-            if old_entity_id in excluded_entities:
-                self.config["excluded_entities"] = list(
-                    dict.fromkeys(
-                        new_entity_id if item == old_entity_id else item
-                        for item in excluded_entities
-                    )
-                )
-                changed = True
+            for pack_config in self.config["automatic"].values():
+                for scope in (
+                    pack_config,
+                    *pack_config.get("source_packs", {}).values(),
+                ):
+                    overrides = scope.get("entity_overrides", {})
+                    if old_entity_id in overrides:
+                        if (
+                            new_entity_id in overrides
+                            and overrides[new_entity_id] != overrides[old_entity_id]
+                        ):
+                            raise ValueError(
+                                f"Conflicting monitoring exceptions for {new_entity_id}"
+                            )
+                        overrides[new_entity_id] = overrides.pop(old_entity_id)
+                        changed = True
 
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
                 if alert_id == COHERENCE_ALERT_ID:
@@ -1081,6 +1090,9 @@ class _RuntimeMixin:
                     self._registry_evaluation_dirty = False
                     processed_registry_change = True
                     renamed = self._apply_pending_entity_renames()
+                    # Registry bursts already use a bounded/coalesced worker. No
+                    # flapping memory scans are added to ordinary state events.
+                    self._reconcile_flapping_settings()
                     evaluated = False
                     if self.monitoring_enabled:
                         if targets is None or renamed:
@@ -1341,13 +1353,16 @@ class _RuntimeMixin:
             candidates.keys() - indeterminate_candidate_ids,
             indeterminate_candidate_ids,
         )
+        preserved_ids = {
+            alert_id
+            for alert_id in preserved_ids
+            if self._record_monitoring_enabled(self.records[alert_id])
+        }
         preserved_ids.discard(COHERENCE_ALERT_ID)
         preserved_ids.update(coherence_preserved)
         persisted_changed |= self._variation_baselines_dirty
         immediate_changed |= self._variation_baselines_dirty
-        collect_occurrences = (
-            _new_occurrences is not None and self._is_automatic_eligible(entity_id)
-        )
+        collect_occurrences = _new_occurrences is not None
 
         for alert_id, (details, delay) in candidates.items():
             record = self.records.get(alert_id)
@@ -1386,7 +1401,10 @@ class _RuntimeMixin:
                         self._schedule_live_message_flush()
                     else:
                         immediate_changed = True
-                if record.delay != delay:
+                if record.delay != delay and (
+                    record.status is AlertStatus.PENDING
+                    or record.details.type not in PACKS_BY_ID
+                ):
                     pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
                     record.due_at = calculate_due_at(
@@ -1400,9 +1418,7 @@ class _RuntimeMixin:
                         record.active_since = None
                         record.visible_at = record.detected_at
                         record.clear_acknowledgement()
-                    elif (
-                        record.status is AlertStatus.PENDING and not pending_was_visible
-                    ):
+                    elif not pending_was_visible:
                         self._recalculate_hidden_pending_visibility(record, now)
                     persisted_changed = True
                     immediate_changed = True
@@ -1443,25 +1459,12 @@ class _RuntimeMixin:
             if self._preserve_transition_record(alert_id):
                 continue
             record = self.records.get(alert_id)
-            if record is not None and record.expires_at is not None:
-                pack_config = self.config["automatic"].get(record.details.type)
-                if (
-                    pack_config is not None
-                    and pack_config["enabled"]
-                    and self._pack_is_available(record.details.type)
-                    and self._is_base_eligible(entity_id)
-                    and self._is_automatic_eligible(entity_id)
-                    and not (
-                        record.details.type == CATEGORY_FLAPPING
-                        and self.config["automatic"][CATEGORY_FLAPPING][
-                            "entity_overrides"
-                        ]
-                        .get(entity_id, {})
-                        .get("enabled")
-                        is False
-                    )
-                ):
-                    continue
+            if (
+                record is not None
+                and record.expires_at is not None
+                and self._record_monitoring_enabled(record)
+            ):
+                continue
             record = self._pop_record(alert_id)
             if record is None:
                 continue
@@ -1472,12 +1475,19 @@ class _RuntimeMixin:
                 "coherence_alert_enabled"
             ):
                 continue
+            administrative = not self._record_monitoring_enabled(record)
+            if administrative:
+                record.details.condition_params = {
+                    **(record.details.condition_params or {}),
+                    "resolution_reason": "monitoring_disabled",
+                }
+                self._administratively_removed.add(alert_id)
             if record.status is AlertStatus.ACTIVE:
                 if archive_resolutions:
                     self._pending_history.append(
                         AlertHistoryEntry.resolved(record, now)
                     )
-                if emit_events:
+                if emit_events and not administrative:
                     self._fire_resolved(record, now)
         if immediate_changed:
             self._immediate_state_save_required = True
@@ -1767,6 +1777,10 @@ class _RuntimeMixin:
         indeterminate_ids: set[str] = set()
         entity_id = state.entity_id
         automatic_eligible = self._is_automatic_eligible(entity_id)
+        if not automatic_eligible:
+            for pack in PACKS:
+                if pack.reset_entity_handler is not None:
+                    pack.reset_entity_handler(self.hass, entity_id)
 
         if state.state == STATE_UNAVAILABLE:
             if automatic_eligible:
@@ -1849,10 +1863,12 @@ class _RuntimeMixin:
         pack_id: str,
     ) -> bool:
         """Apply one pack result and report a non-authoritative observation."""
-        config = self.config["automatic"][pack_id]
+        config = self._pack_settings(pack_id, state.entity_id)
         pack = PACKS_BY_ID[pack_id]
         if not config["enabled"] or not self._pack_is_available(pack_id):
             self._cancel_pack_recheck(pack_id, state.entity_id)
+            if pack.reset_entity_handler is not None:
+                pack.reset_entity_handler(self.hass, state.entity_id)
             return False
 
         evaluation = pack.evaluate(self.hass, state, config)
@@ -1864,7 +1880,7 @@ class _RuntimeMixin:
         if isinstance(evaluation, PackNeutral | PackRecheck):
             record = self.records.get(alert_id)
             if record is not None:
-                result[alert_id] = (record.details, record.delay)
+                result[alert_id] = (record.details, config["delay"])
             return True
         if evaluation is None:
             return False
@@ -1968,21 +1984,9 @@ class _RuntimeMixin:
                 return False
         return True
 
-    def _is_explicitly_excluded(self, entity_id: str) -> bool:
-        """Apply the existing explicit entity and device exclusions."""
-        if entity_id in self._excluded_entities:
-            return True
-        entity_entry = self._entity_registry.async_get(entity_id)
-        return bool(
-            entity_entry is not None
-            and entity_entry.device_id in self._excluded_devices
-        )
-
     def _is_automatic_eligible(self, entity_id: str) -> bool:
         """Apply explicit and selected-label exclusions to automatic packs only."""
         if self._is_own_entity(entity_id):
-            return False
-        if self._is_explicitly_excluded(entity_id):
             return False
         if not self._excluded_labels:
             return True
@@ -1999,15 +2003,126 @@ class _RuntimeMixin:
             device is not None and self._excluded_labels.intersection(device.labels)
         )
 
+    def _pack_settings(
+        self, pack_id: str, entity_id: str, *, source_id: str | None = None
+    ) -> dict[str, Any]:
+        """Resolve the current registry membership using constant-time lookups."""
+        entry = self._entity_registry.async_get(entity_id)
+        return resolve_settings(
+            self.config["automatic"][pack_id],
+            entity_id,
+            entry.device_id if entry else None,
+            source_id=source_id,
+        )[0]
+
+    def _source_flapping_settings(
+        self, source_id: str, entity_id: str
+    ) -> tuple[int, int, int] | None:
+        """Reuse the occurrence detector's settings without inventing an occurrence."""
+        source_type = source_id.partition(":")[0]
+        rule_id = (
+            source_id[len("rule:") :].rsplit(":", 1)[0]
+            if source_type == "rule"
+            else None
+        )
+        if not self._is_base_eligible(entity_id):
+            return None
+        if rule_id is None and (
+            source_type not in PACKS_BY_ID
+            or not self._is_automatic_eligible(entity_id)
+            or not self._pack_settings(source_type, entity_id)["enabled"]
+            or not self._pack_is_available(source_type)
+        ):
+            return None
+        rule = next(
+            (
+                rule
+                for rule in self._rules_by_entity.get(entity_id, ())
+                if rule.id == rule_id and rule.enabled
+            ),
+            None,
+        )
+        source = AlertDetails(
+            id=source_id,
+            type=source_type,
+            entity_id=entity_id,
+            name=entity_id,
+            value=None,
+            condition="",
+            rule_id=rule_id,
+        )
+        entry = self._entity_registry.async_get(entity_id)
+        return flapping_settings(
+            PackOccurrence(source, dt_util.now()),
+            self.config,
+            {rule.id: rule.as_dict()} if rule else {},
+            entry.device_id if entry else None,
+        )
+
+    def _record_monitoring_enabled(self, record: AlertRecord) -> bool:
+        """Distinguish an administrative removal from genuine anomaly recovery."""
+        details = record.details
+        if details.type == CATEGORY_FLAPPING:
+            return bool(
+                self.config["automatic"][CATEGORY_FLAPPING]["enabled"]
+                and self._source_flapping_settings(
+                    details.source or details.id.removeprefix("flapping:"),
+                    details.entity_id,
+                )
+            )
+        if details.type not in PACKS_BY_ID:
+            return True
+        return (
+            self._is_base_eligible(details.entity_id)
+            and self._is_automatic_eligible(details.entity_id)
+            and self._pack_settings(details.type, details.entity_id)["enabled"]
+            and self._pack_is_available(details.type)
+        )
+
+    def _reconcile_flapping_settings(self) -> None:
+        """Prune disabled sources and adjust quiet deadlines from their evidence."""
+        data = self._pack_runtime.get(CATEGORY_FLAPPING, {})
+        if not self.config["automatic"][CATEGORY_FLAPPING]["enabled"]:
+            from .packs.flapping import _LAST_CLEANUP
+
+            self.hass.data.pop(_LAST_CLEANUP, None)
+        for source_id in tuple(data):
+            entity_id = source_id.rsplit(":", 1)[-1]
+            if (
+                not self.config["automatic"][CATEGORY_FLAPPING]["enabled"]
+                or self._source_flapping_settings(source_id, entity_id) is None
+            ):
+                data.pop(source_id, None)
+        for record in self.records.values():
+            if record.details.type != CATEGORY_FLAPPING:
+                continue
+            source_id = record.details.source or record.details.id.removeprefix(
+                "flapping:"
+            )
+            settings = self._source_flapping_settings(
+                source_id, record.details.entity_id
+            )
+            if settings is None:
+                continue
+            params = record.details.condition_params or {}
+            last = params.get("last_occurrence")
+            if not isinstance(last, str):
+                continue
+            try:
+                occurred = datetime.fromisoformat(last)
+            except ValueError:
+                continue
+            if occurred.tzinfo is None:
+                continue
+            deadline = occurred + timedelta(seconds=settings[2])
+            if record.expires_at != deadline:
+                record.expires_at = deadline
+                self._cancel_timer(record.details.id)
+                self._schedule_timer(record)
+
     def _delay_for(self, state: State, category: str) -> int:
-        """Resolve delay priority for automatic detections."""
-        entity_id = state.entity_id
-        if entity_id in self.config["entity_delays"]:
-            return self.config["entity_delays"][entity_id]
-        category_delay = self.config["automatic"][category].get("delay")
-        if isinstance(category_delay, int):
-            return category_delay
-        return self.config["global_delay"]
+        """Return this pack's effective delay, including an explicit zero."""
+        return self._pack_settings(category, state.entity_id)["delay"]
 
     def _details(
         self,

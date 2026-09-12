@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.button import async_setup_entry as setup_button
 from custom_components.alert_manager.const import (
@@ -208,7 +209,7 @@ def test_delay_change_keeps_accumulated_pause_out_of_countdown(hass, entry, set_
     set_now(start + timedelta(seconds=100))
     run(manager.async_set_monitoring(False))
     set_now(start + timedelta(seconds=400))
-    run(manager.async_update_config({"global_delay": 1200}))
+    run(manager.async_update_config(automatic_settings(delay=1200)))
     run(manager.async_set_monitoring(True))
 
     record = manager.records[alert_id]
@@ -269,7 +270,9 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
     run(
         manager.async_update_config(
             {
-                "entity_delays": {"sensor.active": 0, "sensor.pending": 900},
+                **automatic_settings(
+                    delays={"sensor.active": 0, "sensor.pending": 900}
+                ),
                 "pending_display_delay": 0,
             }
         )
@@ -278,13 +281,13 @@ def test_partitioned_sensor_attributes_are_exact_and_non_overlapping(
     hass.states.set("sensor.other", "unavailable", {"friendly_name": "Other"})
     run(
         manager.async_update_config(
-            {
-                "entity_delays": {
+            automatic_settings(
+                delays={
                     "sensor.active": 0,
                     "sensor.pending": 900,
                     "sensor.other": 0,
                 }
-            }
+            )
         )
     )
 
@@ -349,7 +352,7 @@ def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):
         await first.async_setup()
         await first.async_update_config(
             {
-                "entity_delays": {"sensor.active": 0},
+                **automatic_settings(delays={"sensor.active": 0}),
                 "pending_display_delay": 0,
             }
         )

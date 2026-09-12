@@ -85,13 +85,54 @@
         },
         "threshold": {
           "label": "Global threshold"
+        },
+        "monitoring": {
+          "label": "Monitoring"
+        },
+        "trigger_delay": {
+          "label": "Trigger delay"
+        },
+        "failure_threshold": {
+          "label": "Consecutive failed executions"
+        },
+        "device_overrides": {
+          "label": "Device exceptions"
+        },
+        "entity_overrides": {
+          "label": "Entity exceptions"
         }
       },
       "enable_source_pack": "Enable source pack {name}",
       "pack_delay": "Pack delay",
       "save": "Save automatic monitoring",
       "labels": "Labels",
-      "labels_help": "Added to pack alerts and used for notifications."
+      "labels_help": "Added to pack alerts and used for notifications.",
+      "inheritance_help": "Each field inherits from the device, then the pack. Empty numeric fields inherit; 0 means immediate. Global exclusions and a disabled pack always block automatic monitoring.",
+      "inherit": "Inherited",
+      "monitoring_enabled": "Enabled",
+      "monitoring_disabled": "Disabled",
+      "restore_inheritance": "Restore inheritance",
+      "no_exceptions": "No exceptions",
+      "source_context": "Source settings",
+      "all_sources": "Defaults for all sources",
+      "source_enabled": "Monitor this source",
+      "inherited_value": "{value} — {origin}",
+      "origin_pack": "pack default",
+      "origin_source": "source default",
+      "origin_device": "device setting",
+      "origin_entity": "entity setting",
+      "origin_source_device": "source device setting",
+      "origin_source_entity": "source entity setting",
+      "orphan_target": "This target is missing. Its settings are retained; edit or remove the exception.",
+      "inapplicable_target": "This target is not currently eligible for this pack. Its settings are retained.",
+      "blocked_label": "A global exclusion label blocks this target. An exception cannot override that exclusion.",
+      "blocked_global": "Automatic monitoring is paused globally.",
+      "blocked_source": "The source pack is disabled or unavailable.",
+      "unavailable_pack": "Required integration is unavailable. Saved settings are retained.",
+      "configure_monitoring": "Configure this monitoring",
+      "administrative_resolution": "Monitoring disabled or excluded (not a recovery)",
+      "hours_short": "h",
+      "minutes_short": "min"
     },
     "buttons": {
       "add": "Add",
@@ -635,7 +676,7 @@
       "duplicate_delay_save": "Entity {entity_id} appears twice in entity-specific delays.",
       "entity_delay": "Entity-specific delays",
       "entity_exclusions": "Excluded entities",
-      "exclusions": "Monitoring exclusions",
+      "exclusions": "Automatic monitoring exclusions",
       "explicit_exclusions": "Explicit exclusions",
       "general": "General settings",
       "global_delay": "Global delay",
@@ -655,7 +696,7 @@
       "transfer_title": "Configuration export and import",
       "export": "Export YAML",
       "import": "Import YAML",
-      "import_confirm": "The current configuration will be completely replaced.\n\nRules: {rules}\nEnabled packs: {packs}\nEntity-specific delays: {delays}\n\nContinue?",
+      "import_confirm": "The current configuration will be completely replaced.\n\nRules: {rules}\nEnabled packs: {packs}\nPack exceptions: {exceptions}\n\nContinue?",
       "import_read_error": "Unable to read the selected file.",
       "yaml_help": "Only this panel’s settings are edited. Durations are in seconds. Changes are saved with Save.",
       "yaml_invalid": "Invalid configuration: {error}",

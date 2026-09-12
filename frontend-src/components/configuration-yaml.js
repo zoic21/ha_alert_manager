@@ -65,16 +65,35 @@ export function configurationFieldToYaml(fieldId, value) {
   return `${mapping({ [fieldId]: value })}\n`;
 }
 
+function convertAutomaticFields(fields, value, toDraft) {
+  const result = structuredClone(value ?? {});
+  for (const field of fields ?? []) {
+    const item = value?.[field.id] ?? field.default;
+    if (field.type === "pack_settings_map") {
+      result[field.id] = Object.fromEntries(Object.entries(item ?? {}).map(([id, settings]) => [id, convertAutomaticFields(field.fields, settings, toDraft)]));
+    } else if (field.type.endsWith("_settings_map")) {
+      result[field.id] = toDraft ? configurationValueToDraft(item ?? {}, field.type) : configurationDraftToValue(item ?? [], field.type);
+    }
+  }
+  return result;
+}
+
+export function automaticPackToDraft(pack, value) {
+  return convertAutomaticFields(pack.config_fields, value, true);
+}
+
+export function automaticDraftToPack(pack, draft) {
+  return convertAutomaticFields(pack.config_fields, draft, false);
+}
+
 function configurationFieldContext(panel) {
   const drawer = panel._configurationDrawer;
   if (drawer?.kind === "automatic") {
-    const field = panel._packs.find((pack) => pack.id === drawer.id)
-      ?.config_fields.find((field) => field.id === drawer.fieldId);
+    const pack = panel._packs.find((pack) => pack.id === drawer.id);
     return {
-      fieldId: drawer.fieldId,
-      fieldType: field?.type,
-      draft: panel._automaticMapDraft[drawer.id][drawer.fieldId],
-      apply: (value) => { panel._automaticMapDraft[drawer.id][drawer.fieldId] = value; },
+      fieldId: "pack", fieldType: "pack",
+      draft: automaticDraftToPack(pack, panel._automaticMapDraft[drawer.id]),
+      apply: (value) => { panel._automaticMapDraft[drawer.id] = automaticPackToDraft(pack, value); },
     };
   }
   return {

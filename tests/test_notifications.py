@@ -337,9 +337,9 @@ def test_yaml_round_trip_preserves_rule_labels_and_label_exceptions() -> None:
 
     imported_rule_id = imported["rules"][0]["id"]
     label_exception = imported["notification_profiles"][0]["exceptions"][0]
-    assert "id: freezer" not in exported
+    assert "id: freezer" in exported
     assert "@rule:" not in exported
-    assert imported_rule_id != "freezer"
+    assert imported_rule_id == "freezer"
     assert imported["rules"][0]["label_ids"] == ["important"]
     assert imported["automatic"]["battery"]["label_ids"] == ["important"]
     assert label_exception["selector_ids"] == ["important"]

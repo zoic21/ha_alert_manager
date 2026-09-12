@@ -127,32 +127,32 @@ DEFAULT_CONFIG: Final = {
     "coherence_scan_esphome": DEFAULT_COHERENCE_SCAN_ESPHOME,
     "coherence_alert_enabled": False,
     "coherence_ignored_entity_references": [],
-    "global_delay": DEFAULT_DELAY,
+    "pack_config_version": 2,
     "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
     "excluded_labels": [],
-    "excluded_entities": [],
-    "excluded_devices": [],
-    "entity_delays": {},
     "automatic": {
         CATEGORY_UNAVAILABLE: {
             "enabled": True,
             "label_ids": [],
-            "delay": None,
+            "delay": DEFAULT_DELAY,
         },
-        CATEGORY_CONNECTIVITY: {"enabled": True, "label_ids": [], "delay": None},
-        CATEGORY_UNIFI: {"enabled": True, "label_ids": [], "delay": None},
+        CATEGORY_CONNECTIVITY: {
+            "enabled": True,
+            "label_ids": [],
+            "delay": DEFAULT_DELAY,
+        },
+        CATEGORY_UNIFI: {"enabled": True, "label_ids": [], "delay": DEFAULT_DELAY},
         CATEGORY_BATTERY: {
             "enabled": True,
             "label_ids": [],
-            "delay": None,
+            "delay": DEFAULT_DELAY,
             "threshold": DEFAULT_BATTERY_THRESHOLD,
-            "device_thresholds": {},
         },
         "execution_errors": {
             "enabled": True,
             "label_ids": [],
             "delay": 0,
-            "failure_thresholds": {},
+            "failure_threshold": 1,
         },
         CATEGORY_FLAPPING: {
             "enabled": False,
@@ -179,6 +179,10 @@ DEFAULT_CONFIG: Final = {
     "notification_profiles": [],
     "notification_batch_delay": NOTIFICATION_BATCH_SECONDS,
 }
+
+for _pack_defaults in DEFAULT_CONFIG["automatic"].values():
+    _pack_defaults["device_overrides"] = {}
+    _pack_defaults["entity_overrides"] = {}
 
 MIN_DELAY: Final = 0
 MAX_DELAY: Final = 31_536_000

@@ -246,6 +246,30 @@ class Registry:
         self.entries = {}
         self.deleted_entities = {}
         self.labels = {}
+        self.saved = None
+        self._store = SimpleNamespace(async_save=self._save)
+
+    async def _save(self, data):
+        from copy import deepcopy
+
+        self.saved = deepcopy(data)
+
+    def _data_to_save(self):
+        return {"entries": self.entries, "labels": self.labels}
+
+    def async_create(self, name, **kwargs):
+        label = SimpleNamespace(label_id=util.slugify(name), name=name, **kwargs)
+        self.labels[name] = label
+        return label
+
+    def async_update_entity(self, entity_id, **kwargs):
+        item = self.entries[entity_id]
+        for key, value in kwargs.items():
+            setattr(item, key, value)
+        return item
+
+    def async_update_device(self, device_id, **kwargs):
+        return self.async_update_entity(device_id, **kwargs)
 
     def async_get(self, item_id):
         return self.entries.get(item_id)

@@ -8,6 +8,7 @@ from math import isfinite
 from typing import Any
 
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.hass_dict import HassKey
 
 from ..const import (
@@ -15,6 +16,7 @@ from ..const import (
     DEFAULT_FLAPPING_RECOVERY,
     DEFAULT_FLAPPING_WINDOW,
 )
+from ..pack_settings import resolve_settings
 from .base import (
     AutomaticPack,
     PackConfigField,
@@ -61,28 +63,43 @@ def _source_overrides(
             "window": rule.get("flapping_window"),
             "recovery": rule.get("flapping_recovery"),
         }
-    return config["automatic"][PACK_ID]["source_packs"].get(occurrence.source.type)
+    settings = config["automatic"][PACK_ID]["source_packs"].get(occurrence.source.type)
+    return (
+        None if settings is not None and settings.get("enabled") is False else settings
+    )
 
 
 def _settings(
     occurrence: PackOccurrence,
     config: dict[str, Any],
     rules_by_id: dict[str, dict[str, Any]],
+    device_id: str | None = None,
 ) -> tuple[int, int, int] | None:
     """Resolve source, entity and global settings in descending priority."""
     source_settings = _source_overrides(occurrence, config, rules_by_id)
     if source_settings is None:
         return None
     pack_config = config["automatic"][PACK_ID]
-    entity_settings = pack_config["entity_overrides"].get(occurrence.source.entity_id)
-    if entity_settings is not None and not entity_settings["enabled"]:
-        return None
-    defaults = entity_settings or pack_config
-    return (
-        source_settings.get("occurrences") or defaults["occurrences"],
-        source_settings.get("window") or defaults["window"],
-        source_settings.get("recovery") or defaults["recovery"],
+    if occurrence.source.rule_id is not None:
+        # Explicit custom rule settings retain their own opt-in and priority.
+        defaults, _ = resolve_settings(
+            pack_config, occurrence.source.entity_id, device_id
+        )
+        if not defaults["enabled"]:
+            return None
+        return tuple(
+            source_settings.get(key) or defaults[key]
+            for key in ("occurrences", "window", "recovery")
+        )
+    defaults, _ = resolve_settings(
+        pack_config,
+        occurrence.source.entity_id,
+        device_id,
+        source_id=occurrence.source.type,
     )
+    if not defaults["enabled"]:
+        return None
+    return tuple(defaults[key] for key in ("occurrences", "window", "recovery"))
 
 
 def _timestamps(raw: Any) -> list[float]:
@@ -110,15 +127,11 @@ def _compact_duration(seconds: int) -> str:
 def _largest_limits(config: dict[str, Any]) -> tuple[int, int]:
     """Return conservative retention limits across all possible overrides."""
     pack_config = config["automatic"][PACK_ID]
-    settings = [
-        pack_config,
-        *(
-            setting
-            for setting in pack_config["entity_overrides"].values()
-            if setting["enabled"]
-        ),
-    ]
-    settings.extend(pack_config["source_packs"].values())
+    settings = [pack_config]
+    for scope in (pack_config, *pack_config["source_packs"].values()):
+        settings.append(scope)
+        for kind in ("device", "entity"):
+            settings.extend(scope.get(f"{kind}_overrides", {}).values())
     settings.extend(
         {
             "occurrences": rule.get("flapping_occurrences"),
@@ -203,7 +216,10 @@ def _process_occurrences(
         now = occurrence.occurred_at.astimezone(UTC)
         now_timestamp = now.timestamp()
         source_id = occurrence.source.id
-        settings = _settings(occurrence, config, rules_by_id)
+        entry = er.async_get(hass).async_get(occurrence.source.entity_id)
+        settings = _settings(
+            occurrence, config, rules_by_id, entry.device_id if entry else None
+        )
         if settings is None:
             data.pop(source_id, None)
             continue
@@ -308,18 +324,6 @@ PACK = AutomaticPack(
                 "connectivity": dict.fromkeys(("occurrences", "window", "recovery")),
             },
             fields=_SOURCE_FIELDS,
-        ),
-        PackConfigField(
-            id="entity_overrides",
-            type="entity_settings_map",
-            translation_key="flapping_entity_overrides",
-            default={},
-            fields=(
-                _ENABLED_FIELD,
-                _OCCURRENCES_FIELD,
-                _WINDOW_FIELD,
-                _RECOVERY_FIELD,
-            ),
         ),
     ),
 )

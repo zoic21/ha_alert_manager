@@ -15,22 +15,24 @@ from custom_components.alert_manager.yaml_io import parse_configuration_field_ya
 @pytest.mark.parametrize(
     ("field", "pack", "value"),
     [
-        ("excluded_entities", None, ["sensor.b", "sensor.a"]),
         (
-            "excluded_devices",
-            None,
-            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+            "entity_overrides",
+            "unavailable",
+            {"sensor.b": {"delay": 0}, "sensor.a": {"delay": 86400}},
         ),
-        ("entity_delays", None, {"sensor.b": 0, "sensor.a": 86400}),
         (
-            "device_thresholds",
+            "device_overrides",
             "battery",
             {
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": 15,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": 20,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {"threshold": 15},
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {"threshold": 20},
             },
         ),
-        ("failure_thresholds", "execution_errors", {"automation.test": 3}),
+        (
+            "entity_overrides",
+            "execution_errors",
+            {"automation.test": {"failure_threshold": 3}},
+        ),
         (
             "entity_overrides",
             "flapping",
@@ -108,7 +110,7 @@ def test_every_declared_pack_drawer_accepts_its_default():
         ("source_packs: {unknown: {}}", "source_packs", "flapping"),
         ("source_packs: {unavailable: {typo: 5}}", "source_packs", "flapping"),
         (
-            "entity_overrides: {sensor.a: {enabled: false}}",
+            "entity_overrides: {sensor.a: {enabled: nope}}",
             "entity_overrides",
             "flapping",
         ),
@@ -140,9 +142,11 @@ def test_scoped_yaml_validation_runs_in_executor_without_mutation(
     monkeypatch.setattr(hass, "async_add_executor_job", executor)
     result = asyncio.run(
         manager.async_validate_configuration_field_yaml(
-            "entity_delays: {sensor.a: 120}", "entity_delays"
+            "entity_overrides: {sensor.a: {delay: 120}}",
+            "entity_overrides",
+            "unavailable",
         )
     )
-    assert result == {"sensor.a": 120}
+    assert result == {"sensor.a": {"delay": 120}}
     assert manager.config == original_config
     assert calls == [parse_configuration_field_yaml]
