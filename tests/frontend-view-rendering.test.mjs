@@ -683,12 +683,13 @@ for (const id of ["unavailable", "connectivity", "unifi", "battery", "execution_
     assert.doesNotMatch(markup, /drawer-enabled/);
     assert.match(markup, new RegExp(`id="auto-${id}-enabled"`));
     assert.match(markup, /class="automatic-pack-settings"/);
-    const row = markup.slice(markup.indexOf(`id="auto-${id}-entity_overrides-target-0"`));
-    const monitoring = row.slice(row.indexOf('class="field pack-setting-field pack-monitoring-field"'), row.indexOf('</div>', row.indexOf('class="field pack-setting-field pack-monitoring-field"')));
+    const row = markup.slice(markup.indexOf('data-pack-exception="entity_overrides"'));
+    const monitoring = row.match(/<div slot="icons" class="automatic-exception-actions">[\s\S]*?<\/div>/)[0];
     assert.match(monitoring, new RegExp(`entity_overrides-0-enabled`));
-    assert.doesNotMatch(monitoring, /<small>/);
+    assert.doesNotMatch(monitoring, /<small>|field-label/);
+    assert.ok(monitoring.indexOf("<ha-switch") < monitoring.indexOf("<ha-icon-button"));
     assert.doesNotMatch(row, /automatic.inherited_value/);
-    assert.match(monitoring, /<ha-switch[^>]*checked/);
+    assert.match(monitoring, /<ha-switch[^>]*aria-label="automatic.monitor_target"[^>]*checked/);
     if (id === "execution_errors") {
       assert.doesNotMatch(markup, /data-field-id="device_overrides"/);
       assert.match(markup, /auto-execution_errors-delay[\s\S]*auto-execution_errors-failure_threshold/);
@@ -750,6 +751,7 @@ test("pack exceptions summarize escaped targets and explicit values, with compac
   assert.match(header, /secondary="automatic.monitoring_enabled · automatic.fields.trigger_delay.label: 5 automatic.minutes_short · automatic.fields.threshold.label: 12 %"/);
   assert.match(markup, /automatic.fields.device_overrides.label \(1\)/);
   assert.match(markup, /automatic.exceptions_help/);
+  assert.match(markup, /<ha-expansion-panel[^>]*data-pack-exception="device_overrides"[^>]*>\s*<div slot="icons" class="automatic-exception-actions">/);
   drawer.expandedExceptions.add(row);
   row.enabled = false;
   markup = renderAutomatic(context);
@@ -767,11 +769,13 @@ test("exception hydration preserves expansion and captures edits on collapse wit
   const packs = automaticPacks().filter((pack) => pack.id === "battery");
   const row = { target_id: "dev", delay: 300 };
   const listeners = new Set();
+  const remove = {};
+  const monitoring = { disabled: false };
   const expansion = {
     expanded: true, hasAttribute: () => true,
     addEventListener(type, listener) { assert.equal(type, "expanded-changed"); listeners.add(listener); },
     removeEventListener(type, listener) { listeners.delete(listener); },
-    querySelector: () => ({ disabled: false }),
+    querySelector: (selector) => selector === '[data-action="remove-pack-map-row"]' ? remove : monitoring,
   };
   const input = { dataset: { packSetting: "battery", packField: "device_overrides", packIndex: "0", settingId: "delay" }, value: 600 };
   const panel = {
@@ -786,6 +790,15 @@ test("exception hydration preserves expansion and captures edits on collapse wit
   hydrateAutomaticControls.call(panel);
   hydrateAutomaticControls.call(panel);
   assert.equal(listeners.size, 1);
+  let prevented = false;
+  remove.onclick({ preventDefault() { prevented = true; } });
+  assert.equal(prevented, true, "delete suppresses expansion without stopping delegated click");
+  let stopped = false;
+  remove.onkeydown({ stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true, "delete keyboard input does not toggle the summary");
+  stopped = false;
+  monitoring.onclick({ stopPropagation() { stopped = true; } });
+  assert.equal(stopped, true, "monitoring click does not toggle the summary or prevent the switch default");
   const handler = [...listeners][0];
   assert.ok(panel._configurationDrawer.expandedExceptions.has(row));
   handler({ target: expansion, detail: { expanded: false } });

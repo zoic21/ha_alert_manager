@@ -5559,3 +5559,11 @@ test("page save feedback remains on the page while a configuration drawer has it
   assert.doesNotMatch(panel._pageMessagesContent(), /Drawer error/);
   assert.equal(panel._notice.text, "Drawer error");
 });
+
+
+test("pack exception headers retain the card background and use native centered deletion", () => {
+  const styles = compactCss(readFileSync(new URL("../frontend-src/styles/settings-styles.js", import.meta.url), "utf8"));
+  assert.match(styles, /\.automatic-exception>ha-expansion-panel::part\(summary\)\{[^}]*background:var\(--card-background-color\)/);
+  assert.match(styles, /\.automatic-exception-actions\{[^}]*align-items:center/);
+  assert.doesNotMatch(styles, /\.automatic-exception>\.configuration-remove\{/);
+});

@@ -246,12 +246,12 @@ export function markConfigurationDirty(kind) {
 }
 
 export function markConfigurationControlDirty(control) {
-    if (!control?.closest || (control.closest(".configuration-drawer") && this._configurationDrawer?.kind === "notification")) return;
-    const drawerKind = control.closest(".configuration-drawer")
-      ? this._configurationDrawer?.kind : null;
-    if (control.closest("#automatic-form") || drawerKind === "automatic") {
+    // Drawer drafts have their own Save/discard lifecycle. Only page controls
+    // should reveal the general configuration Save button.
+    if (!control?.closest || control.closest(".configuration-drawer")) return;
+    if (control.closest("#automatic-form")) {
       this._markConfigurationDirty("automatic");
-    } else if (control.closest("#settings-form") || drawerKind === "settings") {
+    } else if (control.closest("#settings-form")) {
       this._markConfigurationDirty("settings");
     }
 }
@@ -412,7 +412,6 @@ export async function saveSettings(additionalChanges = {}, { preserveDrawer = fa
       }
       if (preserveDrawer) {
         this._settingsDirty = false;
-        if (this._configurationDrawer) this._configurationDrawer.wasDirty = false;
       } else {
         this._resetSettingsDraft({ preserveNotification: true });
         this._configurationDrawer = null;
@@ -651,7 +650,6 @@ export async function handleSettingsAction(action, button) {
       id: button.dataset.configurationId,
       original: JSON.stringify(button.dataset.configurationId === "entity_delays"
         ? this._entityDelayDraft : this._settingsDraft[button.dataset.configurationId]),
-      wasDirty: this._settingsDirty,
 
     };
     refreshSettingsConfigurationDrawer.call(this);
@@ -661,14 +659,13 @@ export async function handleSettingsAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "settings"
   ) {
-    const { id, original, wasDirty } = this._configurationDrawer;
+    const { id, original } = this._configurationDrawer;
     this._captureEntityDelayValues();
     const value = id === "entity_delays" ? this._entityDelayDraft : this._settingsDraft[id];
     if (!confirmConfigurationDiscard(this, value, original)) return true;
     if (original !== undefined) {
       if (id === "entity_delays") this._entityDelayDraft = JSON.parse(original);
       else this._settingsDraft[id] = JSON.parse(original);
-      this._settingsDirty = wasDirty;
       this._updateConfigurationSaveButton();
     }
     this._configurationDrawer = null;
@@ -697,7 +694,6 @@ export async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
-    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this, ".delay-row:last-child");
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -705,7 +701,6 @@ export async function handleSettingsAction(action, button) {
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
-    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;

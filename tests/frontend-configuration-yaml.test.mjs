@@ -133,7 +133,8 @@ test("native editor hydration is idempotent and keeps unsaved YAML after remount
   hydrateConfigurationYaml(p);
   hydrateConfigurationYaml(p);
   let updates = 0;
-  p._markConfigurationDirty = () => { updates++; };
+  p._markConfigurationDirty = () => { assert.fail("YAML drawer edits must not dirty the page"); };
+  p._refreshUiState = () => { updates++; };
   editor.dispatchEvent(Object.assign(new Event("value-changed"), { detail: { value: "edited" } }));
   assert.equal(updates, 1);
   hydrateConfigurationYaml(p);

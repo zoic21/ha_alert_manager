@@ -191,7 +191,6 @@ export function hydrateConfigurationYaml(panel) {
         if (yaml === drawer.yaml) return;
         drawer.yaml = yaml;
         drawer.notice = null;
-        panel._markConfigurationDirty(drawer.kind);
         panel._refreshUiState();
       });
       editor.dataset.configured = "true";

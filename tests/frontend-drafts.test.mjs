@@ -182,8 +182,7 @@ test("pack labels use a native multi-selector and retain an independent draft", 
   p._configurationDrawer = { kind: "automatic", id: "battery" };
   p._hydrateAutomaticControls();
   updateLabels(["cold", "technical"]);
-  p._markConfigurationDirty("automatic");
-  assert.equal(p._automaticDirty, true);
+  assert.equal(p._automaticDirty, false);
   assert.deepEqual(p._config.automatic.battery.label_ids, ["old"]);
   assert.deepEqual(p._automaticMapDraft.battery.label_ids, ["cold", "technical"]);
   assert.match(p._renderAutomatic(), /<ha-selector id="auto-battery-labels"/);
@@ -202,7 +201,7 @@ test("notification batch delay input survives navigation", () => {
 });
 
 
-test("detached configuration drawer inputs still capture and mark the correct draft", () => {
+test("detached configuration drawer inputs capture their draft without dirtying the page", () => {
   for (const kind of ["automatic", "settings"]) {
     const p = panel();
     p._configurationDrawer = { kind };
@@ -211,8 +210,8 @@ test("detached configuration drawer inputs still capture and mark the correct dr
     p._captureAutomaticConfigurationValues = () => { captures += 1; };
     const c = control(p, "#drawer-field", {}, ".configuration-drawer");
     c.dispatchEvent(new Event("input"));
-    assert.equal(p._automaticDirty, kind === "automatic");
-    assert.equal(p._settingsDirty, kind === "settings");
+    assert.equal(p._automaticDirty, false);
+    assert.equal(p._settingsDirty, false);
     assert.equal(captures, kind === "automatic" ? 1 : 0);
   }
 });
@@ -356,3 +355,46 @@ test("pack-declared boolean, text and choice fields survive drafts and sparse ov
   assert.equal(changes.message, "door open");
   assert.deepEqual(changes.entity_overrides["sensor.a"], { mode: "slow", message: "check device" });
 });
+
+
+test("pack drawer actions and monitoring switch do not reveal the general Save button", async () => {
+  const p = panel();
+  p._render = () => {};
+  p._ensureAutomaticDraft();
+  p._configurationDrawer = { kind: "automatic", id: "battery" };
+  const row = p._automaticMapDraft.battery.device_overrides[0];
+  const toggle = control(p, "#auto-battery-device_overrides-0-enabled", { checked: true }, ".configuration-drawer");
+  p._hydrateAutomaticControls();
+  toggle.checked = false;
+  toggle.onchange();
+  assert.equal(row.enabled, false);
+  assert.equal(p._automaticDirty, false);
+  await handleAutomaticAction.call(p, "add-pack-map-row", { dataset: { packId: "battery", fieldId: "device_overrides" } });
+  assert.equal(p._automaticMapDraft.battery.device_overrides.length, 2);
+  assert.equal(p._automaticDirty, false);
+  await handleAutomaticAction.call(p, "remove-pack-map-row", { dataset: { packId: "battery", fieldId: "device_overrides", index: "1" } });
+  assert.equal(p._automaticMapDraft.battery.device_overrides.length, 1);
+  assert.equal(p._automaticDirty, false);
+  assert.equal(p._settingsDirty, false);
+});
+
+for (const drawerEdited of [false, true]) {
+  test(`closing a pack drawer preserves page edits made after opening (drawer edited=${drawerEdited})`, async () => {
+    const p = panel();
+    p._render = () => {};
+    await handleAutomaticAction.call(p, "open-automatic-configuration", { dataset: { packId: "battery" } });
+    control(p, "#auto-battery-enabled", { checked: false }).dispatchEvent(new Event("change"));
+    control(p, "#history-limit", { value: "123" }, "#settings-form").dispatchEvent(new Event("input"));
+    if (drawerEdited) p._automaticMapDraft.battery.device_overrides[0].threshold = 99;
+    let prompts = 0;
+    window.confirm = () => { prompts++; return true; };
+    try {
+      await handleAutomaticAction.call(p, "close-configuration-drawer", {});
+      assert.equal(prompts, drawerEdited ? 1 : 0);
+      assert.equal(p._automaticDirty, true);
+      assert.equal(p._settingsDirty, true);
+      assert.equal(p._automaticMapDraft.battery.enabled, false);
+      assert.equal(p._automaticMapDraft.battery.device_overrides[0].threshold, 20);
+    } finally { window.confirm = () => false; }
+  });
+}

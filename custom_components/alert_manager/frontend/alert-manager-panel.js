@@ -3449,7 +3449,6 @@ function hydrateConfigurationYaml(panel) {
         if (yaml === drawer.yaml) return;
         drawer.yaml = yaml;
         drawer.notice = null;
-        panel._markConfigurationDirty(drawer.kind);
         panel._refreshUiState();
       });
       editor.dataset.configured = "true";
@@ -6587,7 +6586,7 @@ function renderSetting(field, value, id, attributes, t, sparse = false, disabled
   const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
   if (field.id === "enabled" && attributes["data-pack-setting"]) {
     const label = t("automatic.monitor_target");
-    return `<div class="field pack-setting-field pack-monitoring-field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" ${attrs} aria-label="${esc(label)}" ${value !== false ? "checked" : ""}></ha-switch></div></div>`;
+    return `<ha-switch id="${id}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}" ${value !== false ? "checked" : ""}></ha-switch>`;
   }
   const control = ["boolean", "select"].includes(field.type)
     ? `<ha-selector id="${id}" ${attrs} aria-label="${esc(label)}"></ha-selector>`
@@ -6628,14 +6627,16 @@ function renderPackField(pack, field, config, context) {
       const renderField = (setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false));
       return `<div class="pack-map-row automatic-exception" data-exception-index="${index}">
         <ha-expansion-panel left-chevron data-pack-exception="${field.id}" data-pack-index="${index}" header="${esc(title)}" secondary="${esc(exceptionSummary(row, field.fields, blocked, t))}" ${expanded ? "expanded" : ""}>
+          <div slot="icons" class="automatic-exception-actions">
+            ${field.fields.filter((setting) => setting.id === "enabled").map(renderField).join("")}
+            ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
+          </div>
           <div class="automatic-exception-content">
             <div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></div>
             ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
-            ${field.fields.filter((setting) => setting.id === "enabled").map(renderField).join("")}
             <div class="pack-settings-values" ${row.enabled === false || blocked ? "hidden" : ""}>${field.fields.filter((setting) => setting.id !== "enabled").map(renderField).join("")}</div>
           </div>
         </ha-expansion-panel>
-        ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
       </div>`;
     }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
@@ -6722,7 +6723,7 @@ async function saveAutomatic() {
   this._config = config;
   for (const pack of this._packs.filter((pack) => Object.hasOwn(changes.automatic, pack.id))) this._automaticMapDraft[pack.id] = automaticPackToDraft(pack, config.automatic[pack.id]);
   this._configurationDrawer = null;
-  this._automaticDirty = this._packs.some((pack) => JSON.stringify(automaticDraftToPack(pack, this._automaticMapDraft[pack.id])) !== JSON.stringify(config.automatic[pack.id]));
+  this._automaticDirty = this._packs.some((pack) => this._automaticMapDraft[pack.id].enabled !== config.automatic[pack.id].enabled);
   this._render();
   return true;
 }
@@ -6741,7 +6742,6 @@ function hydratePackChoice(panel, id, field, values, sparse) {
       if (control.disabled || control.hasAttribute?.("disabled")) return;
       captureAutomaticMapValues.call(panel);
       values.enabled = control.checked;
-      panel._markConfigurationDirty("automatic");
       refreshAutomaticConfigurationDrawer.call(panel);
     };
     return;
@@ -6756,7 +6756,6 @@ function hydratePackChoice(panel, id, field, values, sparse) {
     captureAutomaticMapValues.call(panel);
     if (selected == null || (sparse && ["", "inherit"].includes(selected))) delete values[field.id];
     else values[field.id] = boolean ? selected === "enabled" : JSON.parse(selected);
-    panel._markConfigurationDirty("automatic");
   });
 }
 
@@ -6782,7 +6781,7 @@ function hydrateAutomaticControls() {
       captureAutomaticMapValues.call(this);
       draft.source_packs[drawer.sourceId] ??= { device_overrides: [], entity_overrides: [] };
       draft.source_packs[drawer.sourceId].enabled = sourceEnabled.checked;
-      this._markConfigurationDirty("automatic"); refreshAutomaticConfigurationDrawer.call(this);
+      refreshAutomaticConfigurationDrawer.call(this);
     };
     if (scope) {
       for (const setting of settingFields(pack).filter((setting) => ["boolean", "select"].includes(setting.type))) {
@@ -6793,6 +6792,17 @@ function hydrateAutomaticControls() {
       (scope?.[field.id] ?? []).forEach((row, index) => {
         const expansion = this.shadowRoot.querySelector(`[data-pack-exception="${field.id}"][data-pack-index="${index}"]`);
         if (expansion) {
+          const remove = expansion.querySelector('[data-action="remove-pack-map-row"]');
+          if (remove) {
+            // Keep the delegated delete action, but do not toggle the summary.
+            remove.onclick = (event) => event.preventDefault();
+            remove.onkeydown = (event) => event.stopPropagation();
+          }
+          const monitoring = expansion.querySelector("ha-switch[data-pack-setting]");
+          if (monitoring) {
+            monitoring.onclick = (event) => event.stopPropagation();
+            monitoring.onkeydown = (event) => event.stopPropagation();
+          }
           drawer.expandedExceptions ??= new WeakSet();
           if (expansion.expanded || expansion.hasAttribute("expanded")) drawer.expandedExceptions.add(row);
           if (expansion._automaticExpansionHandler) expansion.removeEventListener("expanded-changed", expansion._automaticExpansionHandler);
@@ -6802,7 +6812,7 @@ function hydrateAutomaticControls() {
             else {
               drawer.expandedExceptions.delete(row);
               captureAutomaticMapValues.call(this);
-              const blocked = expansion.querySelector(".pack-monitoring-field ha-switch")?.disabled;
+              const blocked = expansion.querySelector("ha-switch[data-pack-setting]")?.disabled;
               expansion.secondary = exceptionSummary(row, field.fields, blocked, (key) => this._t(key));
             }
           };
@@ -6830,7 +6840,7 @@ async function handleAutomaticAction(action, button) {
     this._ensureAutomaticDraft(); captureAutomaticConfigurationValues.call(this);
     const id = button.dataset.packId;
     if (!this._packs.some((pack) => pack.id === id)) return true;
-    this._configurationDrawer = { kind: "automatic", id, fieldId: "pack", sourceId: button.dataset.sourceId ?? "", original: JSON.stringify(this._automaticMapDraft[id]), wasDirty: this._automaticDirty };
+    this._configurationDrawer = { kind: "automatic", id, fieldId: "pack", sourceId: button.dataset.sourceId ?? "", original: JSON.stringify(this._automaticMapDraft[id]) };
     // A contextual target is a draft only; opening never calls the save API.
     if (button.dataset.entityId) {
       const draft = this._automaticMapDraft[id];
@@ -6845,10 +6855,12 @@ async function handleAutomaticAction(action, button) {
     refreshAutomaticConfigurationDrawer.call(this); return true;
   }
   if (action === "close-configuration-drawer" && this._configurationDrawer?.kind === "automatic") {
-    const { id, original, wasDirty } = this._configurationDrawer;
+    const { id, original } = this._configurationDrawer;
     captureAutomaticConfigurationValues.call(this);
-    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[id], original)) return true;
-    this._automaticMapDraft[id] = JSON.parse(original); this._automaticDirty = wasDirty;
+    const restored = JSON.parse(original);
+    restored.enabled = this.shadowRoot.querySelector(`#auto-${id}-enabled`)?.checked ?? restored.enabled;
+    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[id], JSON.stringify(restored))) return true;
+    this._automaticMapDraft[id] = restored;
     this._configurationDrawer = null; this._render(); return true;
   }
   if (!["add-pack-map-row", "remove-pack-map-row"].includes(action)) return false;
@@ -6865,7 +6877,6 @@ async function handleAutomaticAction(action, button) {
       this._configurationDrawer.expandedExceptions.add(row);
     }
   } else if (action === "remove-pack-map-row") rows.splice(index, 1);
-  this._markConfigurationDirty("automatic");
   refreshAutomaticConfigurationDrawer.call(this);
   if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), `[data-pack-exception="${button.dataset.fieldId}"][data-pack-index="${rows.length - 1}"]`);
   return true;
@@ -7094,12 +7105,12 @@ function markConfigurationDirty(kind) {
 }
 
 function markConfigurationControlDirty(control) {
-    if (!control?.closest || (control.closest(".configuration-drawer") && this._configurationDrawer?.kind === "notification")) return;
-    const drawerKind = control.closest(".configuration-drawer")
-      ? this._configurationDrawer?.kind : null;
-    if (control.closest("#automatic-form") || drawerKind === "automatic") {
+    // Drawer drafts have their own Save/discard lifecycle. Only page controls
+    // should reveal the general configuration Save button.
+    if (!control?.closest || control.closest(".configuration-drawer")) return;
+    if (control.closest("#automatic-form")) {
       this._markConfigurationDirty("automatic");
-    } else if (control.closest("#settings-form") || drawerKind === "settings") {
+    } else if (control.closest("#settings-form")) {
       this._markConfigurationDirty("settings");
     }
 }
@@ -7260,7 +7271,6 @@ async function saveSettings(additionalChanges = {}, { preserveDrawer = false } =
       }
       if (preserveDrawer) {
         this._settingsDirty = false;
-        if (this._configurationDrawer) this._configurationDrawer.wasDirty = false;
       } else {
         this._resetSettingsDraft({ preserveNotification: true });
         this._configurationDrawer = null;
@@ -7499,7 +7509,6 @@ async function handleSettingsAction(action, button) {
       id: button.dataset.configurationId,
       original: JSON.stringify(button.dataset.configurationId === "entity_delays"
         ? this._entityDelayDraft : this._settingsDraft[button.dataset.configurationId]),
-      wasDirty: this._settingsDirty,
 
     };
     refreshSettingsConfigurationDrawer.call(this);
@@ -7509,14 +7518,13 @@ async function handleSettingsAction(action, button) {
     action === "close-configuration-drawer"
     && this._configurationDrawer?.kind === "settings"
   ) {
-    const { id, original, wasDirty } = this._configurationDrawer;
+    const { id, original } = this._configurationDrawer;
     this._captureEntityDelayValues();
     const value = id === "entity_delays" ? this._entityDelayDraft : this._settingsDraft[id];
     if (!confirmConfigurationDiscard(this, value, original)) return true;
     if (original !== undefined) {
       if (id === "entity_delays") this._entityDelayDraft = JSON.parse(original);
       else this._settingsDraft[id] = JSON.parse(original);
-      this._settingsDirty = wasDirty;
       this._updateConfigurationSaveButton();
     }
     this._configurationDrawer = null;
@@ -7545,7 +7553,6 @@ async function handleSettingsAction(action, button) {
     this._ensureSettingsDraft();
     this._captureEntityDelayValues();
     this._entityDelayDraft.push({ entity_id: "", delay: 900 });
-    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this, ".delay-row:last-child");
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -7553,7 +7560,6 @@ async function handleSettingsAction(action, button) {
   if (action === "remove-entity-delay") {
     this._captureEntityDelayValues();
     this._entityDelayDraft.splice(Number(button.dataset.index), 1);
-    this._markConfigurationDirty("settings");
     refreshSettingsConfigurationDrawer.call(this);
     updateSettingsConfigurationCount.call(this, "entity_delays");
     return true;
@@ -8854,10 +8860,6 @@ const settingsStyles = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
   }
-  .automatic-exception .pack-monitoring-field {
-    grid-column: 1 / -1;
-    justify-content: center;
-  }
   .pack-setting-field:has([disabled]) {
     opacity: .6;
   }
@@ -8869,7 +8871,6 @@ const settingsStyles = `
   }
   .pack-map-field > .configuration-section-heading { align-items: center; }
   .pack-map-row.automatic-exception {
-    position: relative;
     display: block;
     padding: 0;
     width: 100%;
@@ -8881,14 +8882,18 @@ const settingsStyles = `
     --ha-card-border-radius: 8px;
   }
   .automatic-exception > ha-expansion-panel::part(summary) {
-    padding-inline-end: 48px;
     min-width: 0;
+    background: var(--card-background-color);
+    border-radius: inherit;
   }
-  .automatic-exception > .configuration-remove {
-    position: absolute;
-    top: 8px;
-    inset-inline-end: 4px;
+  .automatic-exception-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: 8px;
   }
+  .automatic-exception-actions .configuration-remove { margin: 0; }
   .automatic-exception-content {
     display: grid;
     gap: 8px;
@@ -8896,7 +8901,6 @@ const settingsStyles = `
   }
   .automatic-exception .pack-settings-values[hidden] { display: none; }
   .automatic-exception .pack-setting-field > .field-label { min-height: 0; }
-  .automatic-exception .switch-field-row { min-height: 40px; }
   .automatic-exceptions-help small { display: block; padding: 0 12px 12px; }
   .automatic-exception-target {
     display: flex;

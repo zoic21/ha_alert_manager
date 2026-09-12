@@ -813,10 +813,6 @@ export const settingsStyles = `
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
   }
-  .automatic-exception .pack-monitoring-field {
-    grid-column: 1 / -1;
-    justify-content: center;
-  }
   .pack-setting-field:has([disabled]) {
     opacity: .6;
   }
@@ -828,7 +824,6 @@ export const settingsStyles = `
   }
   .pack-map-field > .configuration-section-heading { align-items: center; }
   .pack-map-row.automatic-exception {
-    position: relative;
     display: block;
     padding: 0;
     width: 100%;
@@ -840,14 +835,18 @@ export const settingsStyles = `
     --ha-card-border-radius: 8px;
   }
   .automatic-exception > ha-expansion-panel::part(summary) {
-    padding-inline-end: 48px;
     min-width: 0;
+    background: var(--card-background-color);
+    border-radius: inherit;
   }
-  .automatic-exception > .configuration-remove {
-    position: absolute;
-    top: 8px;
-    inset-inline-end: 4px;
+  .automatic-exception-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: 8px;
   }
+  .automatic-exception-actions .configuration-remove { margin: 0; }
   .automatic-exception-content {
     display: grid;
     gap: 8px;
@@ -855,7 +854,6 @@ export const settingsStyles = `
   }
   .automatic-exception .pack-settings-values[hidden] { display: none; }
   .automatic-exception .pack-setting-field > .field-label { min-height: 0; }
-  .automatic-exception .switch-field-row { min-height: 40px; }
   .automatic-exceptions-help small { display: block; padding: 0 12px 12px; }
   .automatic-exception-target {
     display: flex;
