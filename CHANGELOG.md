@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.5**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.6**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -18,8 +18,9 @@ This is a prerelease for testing, not a stable release.
 - Added administrator-only contextual configuration from automatic alert details.
 - Compacted pack configuration drawers with monitoring switches and
   side-by-side settings. Execution-error configuration offers automation/script
-  entity targets only, including source-specific flapping configuration. Source
-  toggles align with their labels. Empty numeric fields inherit their parent settings;
+  entity targets only, including source-specific flapping configuration. Exception
+  monitoring switches occupy a full row with the toggle aligned to the right.
+  Empty numeric fields inherit their parent settings;
   a disabled pack or device cannot be reactivated by an entity exception.
 - Simplified notification exceptions with the same switches and reminder input as
   the profile defaults, preserving effective values when editing existing exceptions.

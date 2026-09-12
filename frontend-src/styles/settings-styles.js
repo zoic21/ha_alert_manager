@@ -814,6 +814,7 @@ export const settingsStyles = `
     align-items: center;
   }
   .automatic-exception .pack-monitoring-field {
+    grid-column: 1 / -1;
     justify-content: center;
   }
   .pack-setting-field:has([disabled]) {
