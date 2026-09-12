@@ -5549,3 +5549,13 @@ test("flapping evidence is collapsed, grouped by local day and retained on refre
   panel._alertDetailsDialog.alertId = "another-alert";
   assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-flapping-occurrences expanded/);
 });
+
+
+test("page save feedback remains on the page while a configuration drawer has its own notice", () => {
+  const panel = tablePanel();
+  panel._configurationDrawer = { kind: "automatic", notice: { kind: "error", text: "Drawer error" } };
+  panel._pageNotice = { kind: "success", text: "Page saved" };
+  assert.match(panel._pageMessagesContent(), /Page saved/);
+  assert.doesNotMatch(panel._pageMessagesContent(), /Drawer error/);
+  assert.equal(panel._notice.text, "Drawer error");
+});

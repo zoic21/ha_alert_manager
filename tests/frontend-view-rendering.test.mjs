@@ -3,7 +3,7 @@ import { automaticPackToDraft } from "../frontend-src/components/configuration-y
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { handleAutomaticAction, renderAutomatic } from "../frontend-src/views/automatic.js";
+import { handleAutomaticAction, hydrateAutomaticControls, renderAutomatic } from "../frontend-src/views/automatic.js";
 import {
   renderBackupRestoreDialog, renderConfigBackups,
 } from "../frontend-src/components/config-backups.js";
@@ -569,11 +569,12 @@ for (const [packId, fieldId, fieldType] of [
     const calls = [];
     const addedRow = { scrollIntoView: options => calls.push(options) };
     const drawer = { querySelector: selector => {
-      assert.equal(selector, ".automatic-exception:last-child");
+      assert.equal(selector, `[data-pack-exception="${fieldId}"][data-pack-index="1"]`);
       assert.equal(rows.length, 2);
       return addedRow;
     } };
     const panel = {
+      _configurationDrawer: { kind: "automatic", id: packId },
       _packs: [{ id: packId, config_fields: [{ id: fieldId, type: fieldType, fields: [] }] }],
       _automaticMapDraft: { [packId]: { [fieldId]: rows } },
       _ensureAutomaticDraft() {},
@@ -589,6 +590,8 @@ for (const [packId, fieldId, fieldType] of [
     });
     assert.equal(rows[0].target_id, "existing");
     assert.equal(rows[1].target_id, "");
+    assert.ok(panel._configurationDrawer.expandedExceptions.has(rows[1]));
+    assert.ok(!panel._configurationDrawer.expandedExceptions.has(rows[0]));
     assert.deepEqual(calls, [{ block: "nearest" }]);
   });
 }
@@ -709,7 +712,7 @@ test("flapping respects the selected source's exception targets without losing s
 });
 
 
-test("disabled device blocks entity switches and retains greyed settings until reenabled", () => {
+test("disabled device blocks entity switches and retains hidden settings until reenabled", () => {
   const packs = automaticPacks();
   const config = { automatic: automaticConfig() };
   config.automatic.battery.device_overrides = { dev: { enabled: false } };
@@ -729,4 +732,66 @@ test("disabled device blocks entity switches and retains greyed settings until r
   assert.doesNotMatch(markup.match(/id="auto-battery-entity_overrides-0-enabled"[^>]*>/)[0], /checked|disabled/);
   assert.match(markup, /id="auto-battery-entity_overrides-0-delay"[^>]*data-duration-value="42"[^>]*disabled=""/);
   assert.equal(draft.battery.entity_overrides[0].threshold, 12);
+});
+
+
+test("pack exceptions summarize escaped targets and explicit values, with compact hidden settings", () => {
+  const packs = automaticPacks();
+  const config = { automatic: automaticConfig() };
+  config.automatic.battery.device_overrides = { dev: { delay: 300, threshold: 12 } };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const row = draft.battery.device_overrides[0];
+  const drawer = { kind: "automatic", id: "battery", expandedExceptions: new WeakSet() };
+  const context = { availablePacks: packs, config, draft, configurationDrawer: drawer, hass: { devices: { dev: { name_by_user: 'NAS <test> "home"' } } }, t };
+  let markup = renderAutomatic(context);
+  const header = markup.match(/<ha-expansion-panel[^>]*data-pack-exception="device_overrides"[^>]*>/)[0];
+  assert.doesNotMatch(header, /\bexpanded\b/);
+  assert.match(header, /header="NAS &lt;test&gt; &quot;home&quot;"/);
+  assert.match(header, /secondary="automatic.monitoring_enabled · automatic.fields.trigger_delay.label: 5 automatic.minutes_short · automatic.fields.threshold.label: 12 %"/);
+  assert.match(markup, /automatic.fields.device_overrides.label \(1\)/);
+  assert.match(markup, /automatic.exceptions_help/);
+  drawer.expandedExceptions.add(row);
+  row.enabled = false;
+  markup = renderAutomatic(context);
+  assert.match(markup, /data-pack-exception="device_overrides"[^>]*secondary="automatic.monitoring_disabled" expanded/);
+  assert.match(markup, /class="pack-settings-values" hidden/);
+  assert.equal(row.delay, 300);
+  assert.equal(row.threshold, 12);
+  row.enabled = true;
+  markup = renderAutomatic(context);
+  assert.match(markup, /device_overrides-0-delay"[^>]*data-duration-value="300"/);
+  assert.doesNotMatch(markup, /class="pack-settings-values" hidden/);
+});
+
+test("exception hydration preserves expansion and captures edits on collapse without stacking handlers", () => {
+  const packs = automaticPacks().filter((pack) => pack.id === "battery");
+  const row = { target_id: "dev", delay: 300 };
+  const listeners = new Set();
+  const expansion = {
+    expanded: true, hasAttribute: () => true,
+    addEventListener(type, listener) { assert.equal(type, "expanded-changed"); listeners.add(listener); },
+    removeEventListener(type, listener) { listeners.delete(listener); },
+    querySelector: () => ({ disabled: false }),
+  };
+  const input = { dataset: { packSetting: "battery", packField: "device_overrides", packIndex: "0", settingId: "delay" }, value: 600 };
+  const panel = {
+    _packs: packs, _automaticMapDraft: { battery: { device_overrides: [row] } },
+    _configurationDrawer: { kind: "automatic", id: "battery" },
+    _ensureAutomaticDraft() {}, _configureSelector() {}, _t: t,
+    shadowRoot: {
+      querySelector: (selector) => selector === '[data-pack-exception="device_overrides"][data-pack-index="0"]' ? expansion : null,
+      querySelectorAll: () => [input],
+    },
+  };
+  hydrateAutomaticControls.call(panel);
+  hydrateAutomaticControls.call(panel);
+  assert.equal(listeners.size, 1);
+  const handler = [...listeners][0];
+  assert.ok(panel._configurationDrawer.expandedExceptions.has(row));
+  handler({ target: expansion, detail: { expanded: false } });
+  assert.ok(!panel._configurationDrawer.expandedExceptions.has(row));
+  assert.equal(row.delay, 600);
+  assert.match(expansion.secondary, /10 automatic.minutes_short/);
+  handler({ target: expansion, detail: { expanded: true } });
+  assert.ok(panel._configurationDrawer.expandedExceptions.has(row));
 });

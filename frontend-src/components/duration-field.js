@@ -86,7 +86,7 @@ export function reportFormValidity(form, { includeDrawer = true } = {}) {
       this._captureRuleDraft(form);
       this._refreshRuleEditor();
     } else {
-      this._notice = { kind: "error", text: this._t("errors.duration_field_range") };
+      this[includeDrawer ? "_notice" : "_pageNotice"] = { kind: "error", text: this._t("errors.duration_field_range") };
     }
     this._refreshUiState();
     valid = false;

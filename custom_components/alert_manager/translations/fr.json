@@ -107,6 +107,8 @@
       "save": "Enregistrer la surveillance automatique",
       "labels": "Étiquettes",
       "labels_help": "Ajoutées aux alertes du pack et utilisées pour les notifications.",
+      "exceptions_help": "Comment fonctionnent les exceptions ?",
+      "new_exception": "Nouvelle exception",
       "inheritance_help": "Les champs numériques vides héritent de l’appareil, puis du pack. 0 signifie immédiat pour un délai. La désactivation du pack ou de l’appareil reste prioritaire.",
       "inherit": "Hérité",
       "monitoring_enabled": "Activée",

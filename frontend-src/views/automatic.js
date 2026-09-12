@@ -111,22 +111,44 @@ function renderSetting(field, value, id, attributes, t, sparse = false, disabled
   return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}</div>`;
 }
 
+function exceptionSummary(row, fields, blocked, t) {
+  const enabled = row.enabled !== false && !blocked;
+  return [t(enabled ? "automatic.monitoring_enabled" : "automatic.monitoring_disabled"),
+    ...(enabled ? fields.filter((field) => field.id !== "enabled" && row[field.id] != null)
+      .map((field) => `${t(`automatic.fields.${field.translation_key}.label`)}: ${formatSetting(row[field.id], field, t)}`) : []),
+  ].join(" · ");
+}
+
 export function renderPackField(pack, field, config, context) {
   const { draft, configurationDrawer, hass, t } = context;
   const sourceId = configurationDrawer?.sourceId ?? "";
   const scope = scopeFor(draft[pack.id], sourceId);
   if (!EXCEPTION_FIELDS.includes(field.id)) return "";
   const rows = scope?.[field.id] ?? [];
-  return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))}</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+  return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))} (${rows.length})</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     ${rows.length ? rows.map((row, index) => {
       const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities);
       const parentBlocked = parent.value === false;
       const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
       const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);
-      return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
-        ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
-        <div class="pack-settings-values">${field.fields.map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false))).join("")}</div>
-      </ha-card>`;
+      const entity = hass?.entities?.[row.target_id];
+      const device = hass?.devices?.[row.target_id];
+      const name = field.id === "device_overrides" ? device?.name_by_user || device?.name
+        : hass?.states?.[row.target_id]?.attributes?.friendly_name || entity?.name || entity?.original_name;
+      const title = name || row.target_id || t("automatic.new_exception");
+      const expanded = configurationDrawer?.expandedExceptions?.has(row) ?? !row.target_id;
+      const renderField = (setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false));
+      return `<div class="pack-map-row automatic-exception" data-exception-index="${index}">
+        <ha-expansion-panel left-chevron data-pack-exception="${field.id}" data-pack-index="${index}" header="${esc(title)}" secondary="${esc(exceptionSummary(row, field.fields, blocked, t))}" ${expanded ? "expanded" : ""}>
+          <div class="automatic-exception-content">
+            <div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></div>
+            ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
+            ${field.fields.filter((setting) => setting.id === "enabled").map(renderField).join("")}
+            <div class="pack-settings-values" ${row.enabled === false || blocked ? "hidden" : ""}>${field.fields.filter((setting) => setting.id !== "enabled").map(renderField).join("")}</div>
+          </div>
+        </ha-expansion-panel>
+        ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
+      </div>`;
     }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
 
@@ -141,7 +163,7 @@ export function renderAutomaticConfigurationDrawer(context) {
   const fields = [...(pack.uses_delay === false ? [] : [{ id: "delay", type: "number", translation_key: "trigger_delay", unit: "s", minimum: 0 }]), ...settingFields(pack)];
   const title = t(`packs.${pack.translation_key || pack.id}.name`);
   const content = `<div class="fields configuration-drawer-fields automatic-configuration-fields">
-    <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
+    <ha-expansion-panel left-chevron class="field full automatic-exceptions-help" header="${esc(t("automatic.exceptions_help"))}"><small>${esc(t("automatic.inheritance_help"))}</small></ha-expansion-panel>
     ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
     ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
     ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, Boolean(sourceId))).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
@@ -281,6 +303,23 @@ export function hydrateAutomaticControls() {
     }
     for (const field of exceptionFields(pack, this._packs, drawer.sourceId)) {
       (scope?.[field.id] ?? []).forEach((row, index) => {
+        const expansion = this.shadowRoot.querySelector(`[data-pack-exception="${field.id}"][data-pack-index="${index}"]`);
+        if (expansion) {
+          drawer.expandedExceptions ??= new WeakSet();
+          if (expansion.expanded || expansion.hasAttribute("expanded")) drawer.expandedExceptions.add(row);
+          if (expansion._automaticExpansionHandler) expansion.removeEventListener("expanded-changed", expansion._automaticExpansionHandler);
+          expansion._automaticExpansionHandler = (event) => {
+            if (event.target !== expansion) return;
+            if (event.detail.expanded) drawer.expandedExceptions.add(row);
+            else {
+              drawer.expandedExceptions.delete(row);
+              captureAutomaticMapValues.call(this);
+              const blocked = expansion.querySelector(".pack-monitoring-field ha-switch")?.disabled;
+              expansion.secondary = exceptionSummary(row, field.fields, blocked, (key) => this._t(key));
+            }
+          };
+          expansion.addEventListener("expanded-changed", expansion._automaticExpansionHandler);
+        }
         const filterPack = this._packs.find((source) => source.id === drawer.sourceId) ?? pack;
         const filter = filterPack.target_filter ?? {};
         this._configureSelector(`auto-${pack.id}-${field.id}-target-${index}`, field.id === "entity_overrides" ? { entity: Object.keys(filter).length ? { filter } : {} } : { device: Object.keys(filter).length ? { entity: filter } : {} }, row.target_id, (value) => { captureAutomaticMapValues.call(this); row.target_id = typeof value === "string" ? value : ""; refreshAutomaticConfigurationDrawer.call(this); });
@@ -311,7 +350,9 @@ export async function handleAutomaticAction(action, button) {
       if (sourceId) draft.source_packs[sourceId] ??= { device_overrides: [], entity_overrides: [] };
       const scope = scopeFor(draft, sourceId);
       scope.entity_overrides ??= [];
-      if (!scope.entity_overrides.some((row) => row.target_id === button.dataset.entityId)) scope.entity_overrides.push({ target_id: button.dataset.entityId });
+      let row = scope.entity_overrides.find((row) => row.target_id === button.dataset.entityId);
+      if (!row) { row = { target_id: button.dataset.entityId }; scope.entity_overrides.push(row); }
+      this._configurationDrawer.expandedExceptions = new WeakSet([row]);
     }
     refreshAutomaticConfigurationDrawer.call(this); return true;
   }
@@ -328,10 +369,16 @@ export async function handleAutomaticAction(action, button) {
   if (!scope || !EXCEPTION_FIELDS.includes(button.dataset.fieldId)) return true;
   const rows = scope[button.dataset.fieldId] ??= [];
   const index = Number(button.dataset.index);
-  if (action === "add-pack-map-row") rows.push({ target_id: "" });
-  else if (action === "remove-pack-map-row") rows.splice(index, 1);
+  if (action === "add-pack-map-row") {
+    const row = { target_id: "" };
+    rows.push(row);
+    if (this._configurationDrawer) {
+      this._configurationDrawer.expandedExceptions ??= new WeakSet();
+      this._configurationDrawer.expandedExceptions.add(row);
+    }
+  } else if (action === "remove-pack-map-row") rows.splice(index, 1);
   this._markConfigurationDirty("automatic");
   refreshAutomaticConfigurationDrawer.call(this);
-  if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), ".automatic-exception:last-child");
+  if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), `[data-pack-exception="${button.dataset.fieldId}"][data-pack-index="${rows.length - 1}"]`);
   return true;
 }

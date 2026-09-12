@@ -203,6 +203,11 @@ for (const kind of ["settings", "automatic", "notification"]) {
       p._notificationProfileDraft = { name: "", targets: [], exceptions: [{}] };
       Object.assign(p._configurationDrawer, { mode, yaml: "invalid: [", wasDirty: true });
       const drawer = p._configurationDrawer;
+      drawer.notice = { kind: "info", text: "Drawer feedback" };
+      Object.defineProperty(p, "_notice", {
+        get() { return this._configurationDrawer?.notice ?? this._pageNotice; },
+        set(value) { if (this._configurationDrawer) this._configurationDrawer.notice = value; else this._pageNotice = value; },
+      });
       if (kind === "automatic") drawer.original = JSON.stringify({ ...p._automaticMapDraft.flapping, entity_overrides: [] });
       const exceptions = structuredClone(p._automaticMapDraft.flapping.entity_overrides);
       const notifications = structuredClone(p._notificationProfileDraft);
@@ -234,6 +239,14 @@ for (const kind of ["settings", "automatic", "notification"]) {
       assert.equal(calls[0].config.pending_display_delay, 15);
       assert.equal(calls[0].config.notification_profiles, undefined);
       assert.equal(p._configurationDrawer, drawer);
+      assert.deepEqual(p._pageNotice, { kind: "success", text: "success.settings_saved" });
+      assert.deepEqual(drawer.notice, { kind: "info", text: "Drawer feedback" });
+      p._automaticDirty = true;
+      p._api.call = async () => { throw new Error("Save failed"); };
+      assert.equal(await saveConfiguration.call(p), false);
+      assert.deepEqual(p._pageNotice, { kind: "error", text: "Save failed" });
+      assert.deepEqual(drawer.notice, { kind: "info", text: "Drawer feedback" });
+      p._automaticDirty = false;
       assert.equal(drawer.yaml, "invalid: [");
       if (kind === "automatic") {
         assert.equal(JSON.parse(drawer.original).enabled, true);

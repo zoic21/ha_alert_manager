@@ -826,14 +826,37 @@ export const settingsStyles = `
     display: flex;
     align-items: end;
   }
+  .pack-map-field > .configuration-section-heading { align-items: center; }
   .pack-map-row.automatic-exception {
-    padding: 12px;
+    position: relative;
+    display: block;
+    padding: 0;
     width: 100%;
+    border: 1px solid var(--divider-color);
+    border-radius: 8px;
     box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
   }
+  .automatic-exception > ha-expansion-panel {
+    --ha-card-border-radius: 8px;
+  }
+  .automatic-exception > ha-expansion-panel::part(summary) {
+    padding-inline-end: 48px;
+    min-width: 0;
+  }
+  .automatic-exception > .configuration-remove {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 4px;
+  }
+  .automatic-exception-content {
+    display: grid;
+    gap: 8px;
+    padding: 0 12px 12px;
+  }
+  .automatic-exception .pack-settings-values[hidden] { display: none; }
+  .automatic-exception .pack-setting-field > .field-label { min-height: 0; }
+  .automatic-exception .switch-field-row { min-height: 40px; }
+  .automatic-exceptions-help small { display: block; padding: 0 12px 12px; }
   .automatic-exception-target {
     display: flex;
     width: 100%;

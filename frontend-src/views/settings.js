@@ -270,7 +270,7 @@ export async function saveConfiguration() {
     return this._saveSettings({ automatic }, { preserveDrawer: true });
 }
 
-export function commitIgnoredReferenceInput() {
+export function commitIgnoredReferenceInput(noticeKey = "_notice") {
     const input = this.shadowRoot.querySelector("#ignored-reference-input");
     const rawReference = String(input?.value ?? this._ignoredReferenceDraft);
     this._ignoredReferenceDraft = rawReference;
@@ -278,7 +278,7 @@ export function commitIgnoredReferenceInput() {
     if (!reference) return true;
     if (!/^[a-z_][a-z0-9_]*\.[a-z0-9_]+$/.test(reference)
       && !/^(?:[0-9a-f]{2}:){7}[0-9a-f]{2}$/.test(reference)) {
-      this._notice = {
+      this[noticeKey] = {
         kind: "error",
         text: this._t("settings.coherence_ignored_entity_reference_validation"),
       };
@@ -351,15 +351,16 @@ export async function handleImportSelection(event) {
 
 export async function saveSettings(additionalChanges = {}, { preserveDrawer = false } = {}) {
     if (!preserveDrawer && !await validateConfigurationYaml(this)) return false;
+    const noticeKey = preserveDrawer ? "_pageNotice" : "_notice";
     this._ensureSettingsDraft();
-    if (!this._commitIgnoredReferenceInput()) {
+    if (!this._commitIgnoredReferenceInput(noticeKey)) {
       this._refreshUiState();
       return false;
     }
     if (!preserveDrawer) this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
-      this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
+      this[noticeKey] = { kind: "error", text: this._t("settings.history_limit_validation") };
       this._refreshUiState();
       return false;
     }
@@ -379,7 +380,7 @@ export async function saveSettings(additionalChanges = {}, { preserveDrawer = fa
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
-    this._notice = null;
+    this[noticeKey] = null;
     this._refreshUiState();
     let saved = false;
     try {
@@ -417,10 +418,10 @@ export async function saveSettings(additionalChanges = {}, { preserveDrawer = fa
         this._configurationDrawer = null;
         replaceConfigurationDrawer(this.shadowRoot, "");
       }
-      this._notice = { kind: "success", text: this._t("success.settings_saved") };
+      this[noticeKey] = { kind: "success", text: this._t("success.settings_saved") };
       saved = true;
     } catch (error) {
-      this._notice = { kind: "error", text: this._errorText(error) };
+      this[noticeKey] = { kind: "error", text: this._errorText(error) };
     } finally {
       this._busy = false;
       this._refreshUiState();

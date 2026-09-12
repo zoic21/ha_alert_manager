@@ -454,7 +454,7 @@ class AlertManagerPanel extends HTMLElement {
   }
   _pageMessagesContent() {
     return `${!this._monitoringEnabled && !this._configRecovery?.active ? `<ha-alert class="page-alert" alert-type="warning"><span>${esc(this._t("monitoring.disabled"))}</span>${!this._readOnly ? `<ha-button slot="action" size="s" appearance="accent" variant="brand" data-action="enable-monitoring" ${this._busy ? "disabled" : ""}>${esc(this._t("monitoring.enable"))}</ha-button>` : ""}</ha-alert>` : ""}
-      ${!this._noticeTarget() && !this._editingRule && this._notice ? `<ha-alert class="page-alert" alert-type="${esc(this._notice.kind)}">${esc(this._notice.text)}</ha-alert>` : ""}`;
+      ${(!this._noticeTarget() || this._configurationDrawer) && !this._editingRule && this._pageNotice ? `<ha-alert class="page-alert" alert-type="${esc(this._pageNotice.kind)}">${esc(this._pageNotice.text)}</ha-alert>` : ""}`;
   }
 
   _refreshUiState() {

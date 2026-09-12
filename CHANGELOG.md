@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.7**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.8**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -17,11 +17,14 @@ This is a prerelease for testing, not a stable release.
   Missing targets remain excluded without modifying Home Assistant registries.
 - Separate page saves from drawer saves: incomplete visual or YAML drawer drafts
   remain open and do not block or get included in the main configuration save.
+  Page-save feedback stays on the main page even while a drawer is open.
 - Added administrator-only contextual configuration from automatic alert details.
 - Compacted pack configuration drawers with monitoring switches and
   side-by-side settings. Execution-error configuration offers automation/script
   entity targets only, including source-specific flapping configuration. Exception
-  monitoring switches occupy a full row with the toggle aligned to the right.
+  rows collapse to readable summaries with direct deletion and automatic expansion
+  on addition. Monitoring switches remain compact; disabled parameters are hidden
+  without losing their values.
   Empty numeric fields inherit their parent settings;
   a disabled pack or device cannot be reactivated by an entity exception.
 - Simplified notification exceptions with the same switches and reminder input as
@@ -30,7 +33,8 @@ This is a prerelease for testing, not a stable release.
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
 - Added a YAML blueprint generator for editable custom rules, with on-demand entity
-  discovery and built-in System Monitor CPU, memory, disk and temperature recipes.
+  discovery and built-in CPU, memory, disk and temperature recipes, including
+  compatible device CPU/memory sensors alongside System Monitor.
   Its action is grouped beside manual rule creation with a dedicated icon.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
