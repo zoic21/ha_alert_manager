@@ -99,5 +99,9 @@ test("visual payload and YAML preserve structured provenance", async () => {
   const { ruleToYaml } = await import("../frontend-src/utils/formatting.js");
   const rule = { name: "Renamed", entity_ids: ["sensor.cpu"], source: "value", operator: "above", value: 90, duration: 300, blueprint: { id: "cpu", version: 1, managed: false } };
   assert.deepEqual(serializeRuleDraft(rule).blueprint, rule.blueprint);
-  assert.match(ruleToYaml(rule), /blueprint: \{"id":"cpu","version":1,"managed":false\}/);
+  assert.ok(ruleToYaml(rule).endsWith('blueprint:\n  id: "cpu"\n  version: 1\n  managed: false\n'));
+  const { blueprint, ...manualRule } = rule;
+  assert.doesNotMatch(ruleToYaml(manualRule), /^blueprint:/m);
+  assert.ok(ruleToYaml({ ...rule, blueprint: { ...blueprint, id: 'cpu: "test"' } })
+    .includes('  id: "cpu: \\"test\\""\n'));
 });
