@@ -6,6 +6,8 @@ import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
+from pack_test_helpers import automatic_settings
+
 from custom_components.alert_manager.const import (
     DEFAULT_HISTORY_LIMIT,
     EVENT_ALERT_RESOLVED,
@@ -202,7 +204,7 @@ def test_clear_history_preserves_all_runtime_partitions(hass, entry, set_now):
     run(
         manager.async_update_config(
             {
-                "entity_delays": {"sensor.pending": 900},
+                **automatic_settings(delays={"sensor.pending": 900}),
                 "pending_display_delay": 0,
             }
         )

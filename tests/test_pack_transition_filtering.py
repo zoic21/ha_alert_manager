@@ -13,6 +13,7 @@ from custom_components.alert_manager.const import (
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
+from custom_components.alert_manager.pack_settings import resolve_settings
 from custom_components.alert_manager.packs import (
     PackNeutral,
     battery,
@@ -72,7 +73,7 @@ def test_battery_filter_leaves_threshold_matching_to_evaluate(hass, registry_ent
     config = {
         "enabled": True,
         "threshold": 15,
-        "device_thresholds": {device_id: 30},
+        "device_overrides": {device_id: {"threshold": 30}},
     }
 
     assert _should_evaluate(battery.PACK, hass, _battery_state(hass, "40"), config)
@@ -191,21 +192,42 @@ def test_battery_threshold_follows_config_and_device_changes(hass, registry_entr
     config = {
         "enabled": True,
         "threshold": 15,
-        "device_thresholds": {"device-a": 30, "device-b": 50},
+        "device_overrides": {
+            "device-a": {"threshold": 30},
+            "device-b": {"threshold": 50},
+        },
     }
     state = _battery_state(hass, "40")
 
-    assert battery.PACK.evaluate(hass, state, config) is None
-    assert battery.PACK.evaluate(hass, state, config) is None
+    assert (
+        battery.PACK.evaluate(
+            hass,
+            state,
+            resolve_settings(config, state.entity_id, registry.device_id)[0],
+        )
+        is None
+    )
+    assert (
+        battery.PACK.evaluate(
+            hass,
+            state,
+            resolve_settings(config, state.entity_id, registry.device_id)[0],
+        )
+        is None
+    )
 
-    config["device_thresholds"]["device-a"] = 45
-    match = battery.PACK.evaluate(hass, state, config)
+    config["device_overrides"]["device-a"]["threshold"] = 45
+    match = battery.PACK.evaluate(
+        hass, state, resolve_settings(config, state.entity_id, registry.device_id)[0]
+    )
     assert match is not None
     assert match.condition_params == {"threshold": "45"}
 
-    config["device_thresholds"]["device-a"] = 30
+    config["device_overrides"]["device-a"]["threshold"] = 30
     registry.device_id = "device-b"
-    match = battery.PACK.evaluate(hass, state, config)
+    match = battery.PACK.evaluate(
+        hass, state, resolve_settings(config, state.entity_id, registry.device_id)[0]
+    )
     assert match is not None
     assert match.condition_params == {"threshold": "50"}
 
@@ -219,7 +241,9 @@ def test_runtime_battery_filter_evaluates_states(hass, entry, registry_entry):
         _battery_state(hass, "40")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
-        manager.config["automatic"]["battery"]["device_thresholds"] = {device_id: 30}
+        manager.config["automatic"]["battery"]["device_overrides"] = {
+            device_id: {"threshold": 30}
+        }
 
         old_state = _battery_state(hass, "40")
         new_state = _battery_state(hass, "35")
@@ -394,14 +418,15 @@ def test_same_primary_state_attribute_rule_is_not_filtered(hass, entry):
     asyncio.run(scenario())
 
 
-def test_entity_exclusion_only_applies_to_automatic_packs(hass, entry):
+def test_entity_exclusion_only_applies_to_automatic_packs(hass, entry, registry_entry):
     """Explicit entity exclusions must not disable user-created custom rules."""
 
     async def scenario():
         _battery_state(hass, "10")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
-        manager.config["excluded_entities"] = ["sensor.battery"]
+        registry_entry(hass, "sensor.battery", labels={"excluded"})
+        manager.config["excluded_labels"] = ["excluded"]
         manager._refresh_config_caches()
         created = await manager.async_create_rule(
             {
@@ -434,7 +459,8 @@ def test_device_exclusion_only_applies_to_automatic_packs(
         _battery_state(hass, "10")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
-        manager.config["excluded_devices"] = [device_id]
+        hass.device_registry.entries[device_id].labels = {"excluded"}
+        manager.config["excluded_labels"] = ["excluded"]
         manager._refresh_config_caches()
         created = await manager.async_create_rule(
             {

@@ -511,6 +511,7 @@ const ruleToYaml = (rule) => {
     `flapping_window: ${yamlValue(rule.flapping_window)}`,
     `flapping_recovery: ${yamlValue(rule.flapping_recovery)}`,
   );
+  if (rule.blueprint) lines.push(`blueprint: ${JSON.stringify(rule.blueprint)}`);
   return `${lines.join("\n")}\n`;
 };
 
@@ -631,6 +632,10 @@ function syncRuntimeMetadata(states) {
 
 // Source: frontend-src/utils/translations.js
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Blueprint selection contains equivalent rules", "blueprint_duplicates"],
+  ["Invalid blueprint selection", "blueprint_selection"],
+  ["Blueprint selection is no longer available", "blueprint_stale"],
+  ["Invalid rule blueprint provenance", "blueprint_provenance"],
   ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
   ["Transition departure and arrival must differ", "transition_distinct"],
   ["Transition values cannot be unknown or unavailable", "transition_unavailable"],
@@ -1027,6 +1032,7 @@ async function call(message, successText) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
+    refreshRuleGeneratorState(this);
     try {
       const result = await this._api.call(message);
       this._notice = successText ? { kind: "success", text: successText } : null;
@@ -1037,6 +1043,7 @@ async function call(message, successText) {
     } finally {
       this._busy = false;
       this._refreshUiState();
+      refreshRuleGeneratorState(this);
     }
 }
 
@@ -2049,7 +2056,19 @@ function alertDetailsItems(kind, row) {
       .filter((value) => typeof value === "number" && Number.isFinite(value)
         && Number.isFinite(new Date(value * 1000).getTime()))
       .map((value) => new Date(value * 1000).toISOString());
+    const monitoringPack = !row.source?.rule_id && (this._packs ?? []).find((pack) => pack.id === row.source?.type);
+    const monitoringSource = flapping ? (row.source?.source ?? row.source?.id?.replace(/^flapping:/, "") ?? "").split(":")[0] : "";
+    const targetPack = flapping ? (this._packs ?? []).find((pack) => pack.id === monitoringSource) : monitoringPack;
+    const targetState = this._hass?.states?.[row.entityId];
+    const targetEntry = this._hass?.entities?.[row.entityId];
+    const targetFilter = targetPack?.target_filter ?? {};
+    const targetExists = Boolean(targetState || targetEntry);
+    const targetMatches = (!targetFilter.domain || [].concat(targetFilter.domain).includes(row.entityId?.split(".")[0]))
+      && (!targetFilter.device_class || !targetState?.attributes?.device_class || [].concat(targetFilter.device_class).includes(targetState.attributes.device_class));
+    const canConfigureMonitoring = targetExists && targetMatches && !this._readOnly && monitoringPack && monitoringPack.available !== false && (!flapping || (this._packs ?? []).some((pack) => pack.id === monitoringSource && pack.available !== false));
     const items = [
+      ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
+      ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
@@ -2771,6 +2790,17 @@ async function handleAlertTableAction(action, button, event) {
     this._closeAlertDetailsDialog(() => this._navigate(path));
     return true;
   }
+  if (action === "configure-alert-monitoring") {
+    event.preventDefault?.(); event.stopPropagation?.();
+    if (this._readOnly) return true;
+    this._closeAlertDetailsDialog(() => {
+      this._activeTab = "settings";
+      this._navigate("/alert-manager/settings");
+      this._render();
+      void handleAutomaticAction.call(this, "open-automatic-configuration", button);
+    });
+    return true;
+  }
   if (action === "open-alert-rule") {
     event.preventDefault?.();
     event.stopPropagation?.();
@@ -3000,6 +3030,7 @@ function renderConfigurationRemove(label, action, attributes = {}) {
 
 const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
+  "open-rule-generator",
   "open-automatic-configuration",
   "open-deleted-entities",
   "open-settings-configuration",
@@ -3287,16 +3318,35 @@ function configurationFieldToYaml(fieldId, value) {
   return `${mapping({ [fieldId]: value })}\n`;
 }
 
+function convertAutomaticFields(fields, value, toDraft) {
+  const result = structuredClone(value ?? {});
+  for (const field of fields ?? []) {
+    const item = value?.[field.id] ?? field.default;
+    if (field.type === "pack_settings_map") {
+      result[field.id] = Object.fromEntries(Object.entries(item ?? {}).map(([id, settings]) => [id, convertAutomaticFields(field.fields, settings, toDraft)]));
+    } else if (field.type.endsWith("_settings_map")) {
+      result[field.id] = toDraft ? configurationValueToDraft(item ?? {}, field.type) : configurationDraftToValue(item ?? [], field.type);
+    }
+  }
+  return result;
+}
+
+function automaticPackToDraft(pack, value) {
+  return convertAutomaticFields(pack.config_fields, value, true);
+}
+
+function automaticDraftToPack(pack, draft) {
+  return convertAutomaticFields(pack.config_fields, draft, false);
+}
+
 function configurationFieldContext(panel) {
   const drawer = panel._configurationDrawer;
   if (drawer?.kind === "automatic") {
-    const field = panel._packs.find((pack) => pack.id === drawer.id)
-      ?.config_fields.find((field) => field.id === drawer.fieldId);
+    const pack = panel._packs.find((pack) => pack.id === drawer.id);
     return {
-      fieldId: drawer.fieldId,
-      fieldType: field?.type,
-      draft: panel._automaticMapDraft[drawer.id][drawer.fieldId],
-      apply: (value) => { panel._automaticMapDraft[drawer.id][drawer.fieldId] = value; },
+      fieldId: "pack", fieldType: "pack",
+      draft: automaticDraftToPack(pack, panel._automaticMapDraft[drawer.id]),
+      apply: (value) => { panel._automaticMapDraft[drawer.id] = automaticPackToDraft(pack, value); },
     };
   }
   return {
@@ -4137,6 +4187,7 @@ function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
+      ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
@@ -4560,6 +4611,7 @@ async function duplicateRuleDraft() {
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
+    delete duplicate.blueprint;
     this._editingRule = duplicate;
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -4951,6 +5003,113 @@ function hydrateRuleEditorControls() {
       if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
+}
+
+// Source: frontend-src/components/rule-generator.js
+function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
+  // Available groups precede unavailable groups, including across categories.
+  const groups = new Map();
+  for (const row of drawer.rows) {
+    const group = `${row.status === "available" ? "available" : "unavailable"}:${row.category}`;
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  const content = drawer.loading ? `<p role="status">${esc(t("loading"))}</p>`
+    : [...groups.values()].map((rows) => `<section class="generator-category">
+        <h3>${esc(t(`generator.categories.${rows[0].category}`))}</h3>
+        ${rows.map((row) => `<div class="generator-row">
+          <ha-checkbox data-blueprint-id="${esc(row.blueprint_id)}" aria-label="${esc(t(row.name_key))}" ${row.status !== "available" || busy ? "disabled" : ""}></ha-checkbox>
+          <div><strong>${esc(t(row.name_key))}</strong><p>${esc(t(row.description_key))}</p>
+            <small>${esc(t("generator.entity_count", { count: row.entity_count }))}${row.status === "available" ? "" : ` · ${esc(t(`generator.status.${row.status}`))}`}${row.replaced_by ? ` · ${esc(t("generator.replacement", { id: row.replaced_by }))}` : ""}</small>
+          </div>
+        </div>`).join("")}
+      </section>`).join("");
+  return renderConfigurationDrawer({
+    title: t("generator.title"), ariaLabel: t("generator.title"),
+    resizeLabel: t("rules.aria_resize"),
+    headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}>${esc(t("generator.refresh"))}</ha-button>`,
+    banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
+    content, saveAction: "generate-rules", saveLabel: t("generator.create"),
+    busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,
+  });
+}
+
+function hydrateRuleGenerator(root, panel) {
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return;
+  root?.querySelectorAll?.("ha-checkbox[data-blueprint-id]").forEach((checkbox) => {
+    checkbox.checked = drawer.selected.has(checkbox.dataset.blueprintId);
+    // Property assignment keeps repeated hydration idempotent.
+    checkbox.onchange = () => {
+      if (checkbox.disabled || panel._busy) return;
+      const id = checkbox.dataset.blueprintId;
+      if (checkbox.checked) drawer.selected.add(id);
+      else drawer.selected.delete(id);
+      const create = root.querySelector('[data-action="generate-rules"]');
+      if (create) create.disabled = !drawer.selected.size || panel._busy;
+    };
+  });
+}
+
+async function handleRuleGeneratorAction(panel, action) {
+  if (action === "open-rule-generator") {
+    if (panel._busy) return true;
+    if (panel._ruleDirty && !window.confirm(panel._t("rules.discard_confirm"))) return true;
+    panel._editingRule = null;
+    panel._ruleDirty = false;
+    panel._configurationDrawer = { kind: "generator", rows: [], selected: new Set(), loading: false };
+    action = "refresh-rule-generator";
+  }
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return false;
+  if (action === "close-configuration-drawer") {
+    if (panel._busy) return true;
+    panel._configurationDrawer = null;
+    panel._render();
+    return true;
+  }
+  if (action === "refresh-rule-generator") {
+    if (panel._busy || drawer.loading) return true;
+    drawer.loading = true;
+    drawer.selected.clear();
+    panel._render();
+    const rows = await panel._call({ type: "alert_manager/rules/blueprints/list" });
+    if (panel._configurationDrawer !== drawer) return true;
+    drawer.rows = rows ?? [];
+    drawer.loading = false;
+    panel._render();
+    return true;
+  }
+  if (action === "generate-rules") {
+    if (panel._busy || drawer.loading || !drawer.selected.size) return true;
+    const result = await panel._call({
+      type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
+    }, panel._t("generator.created"));
+    if (result) {
+      for (const rule of result) {
+        const index = panel._config.rules.findIndex((existing) => existing.id === rule.id);
+        if (index < 0) panel._config.rules.push(rule);
+        else panel._config.rules[index] = rule;
+      }
+      if (panel._configurationDrawer === drawer) {
+        panel._configurationDrawer = null;
+        panel._notice = { kind: "success", text: panel._t("generator.created") };
+      }
+    }
+    panel._render();
+    return true;
+  }
+  return false;
+}
+
+function refreshRuleGeneratorState(panel) {
+  const drawer = panel._configurationDrawer;
+  if (drawer?.kind !== "generator") return;
+  for (const action of ["generate-rules", "refresh-rule-generator"]) {
+    const button = panel.shadowRoot?.querySelector?.(`[data-action="${action}"]`);
+    if (button) button.disabled = panel._busy || drawer.loading
+      || (action === "generate-rules" && !drawer.selected.size);
+  }
 }
 
 // Source: frontend-src/views/overview.js
@@ -5995,6 +6154,7 @@ function hydrateRules(root, context) {
 }
 
 function hydrateRuleTable() {
+    hydrateRuleGenerator(this.shadowRoot, this);
     if (!this._config) return;
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
@@ -6109,6 +6269,7 @@ function renderRules(context) {
           <ha-card outlined class="panel rules-list-panel">
             <div class="rules-header">
               <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
+              <ha-button data-action="open-rule-generator">${esc(t("generator.title"))}</ha-button>
               <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
             </div>
           </ha-card>
@@ -6123,10 +6284,14 @@ function renderRules(context) {
 
 function renderRulesPanel() {
     this._ensureRulesTableState();
-    const editorOpen = this._editingRule !== null;
+    const generator = this._configurationDrawer?.kind === "generator";
+    const editorOpen = generator || this._editingRule !== null;
     return renderRules({
       editorOpen,
-      editor: editorOpen ? this._renderRuleEditor() : "",
+      editor: generator ? renderRuleGenerator({
+        drawer: this._configurationDrawer, busy: this._busy,
+        useBottomSheet: this._useNativeBottomSheet(), t: (key, params) => this._t(key, params),
+      }) : editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),
       t: (key, replacements) => this._t(key, replacements),
@@ -6210,6 +6375,8 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
     }
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -6217,7 +6384,7 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleEditorError = null;
     this._clearRuleTestResult();
     this._ruleDirty = false;
-    if (navigate) this._render();
+    if (navigate || generatorOpen) this._render();
     else this._refreshRuleEditor();
     return true;
 }
@@ -6285,15 +6452,19 @@ function replaceRule(rule) {
 }
 
 async function handleRulesAction(action, button) {
+  if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
+    const generatorOpen = this._configurationDrawer?.kind === "generator";
+    this._configurationDrawer = null;
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
-    this._refreshRuleEditor();
+    if (generatorOpen) this._render();
+    else this._refreshRuleEditor();
     return true;
   }
   if (action === "cancel-rule") {
@@ -6352,596 +6523,315 @@ async function handleRulesAction(action, button) {
 }
 
 // Source: frontend-src/views/automatic.js
-const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
-const SETTINGS_MAP_FIELD_TYPES = new Set([
-  "device_settings_map",
-  "entity_settings_map",
-]);
-const MAP_FIELD_TYPES = new Set([
-  ...NUMBER_MAP_FIELD_TYPES,
-  ...SETTINGS_MAP_FIELD_TYPES,
-  "pack_settings_map",
-]);
+const EXCEPTION_FIELDS = ["device_overrides", "entity_overrides"];
+const settingFields = (pack) => (pack.config_fields ?? []).filter((field) => ["number", "boolean", "text", "select"].includes(field.type));
+const sourceField = (pack) => (pack.config_fields ?? []).find((field) => field.id === "source_packs");
+const exceptionCount = (settings) => EXCEPTION_FIELDS.reduce((count, key) => count + (settings?.[key]?.length ?? 0), 0);
+const totalExceptions = (settings) => exceptionCount(settings) + Object.values(settings?.source_packs ?? {}).reduce((count, source) => count + exceptionCount(source), 0);
+const scopeFor = (draft, sourceId) => sourceId ? draft.source_packs?.[sourceId] : draft;
 
-function isNumberMapField(field) {
-  return NUMBER_MAP_FIELD_TYPES.has(field.type);
+function automaticContext(panel) {
+  return {
+    availablePacks: panel._packs, config: panel._config, draft: panel._automaticMapDraft,
+    configurationDrawer: panel._configurationDrawer, busy: panel._busy,
+    useBottomSheet: panel._useNativeBottomSheet(), hass: panel._hass,
+    t: (key, replacements) => panel._t(key, replacements),
+  };
 }
 
-function isSettingsMapField(field) {
-  return SETTINGS_MAP_FIELD_TYPES.has(field.type);
-}
-
-function drawerFields(pack) {
-  return (pack.config_fields ?? []).filter((field) => MAP_FIELD_TYPES.has(field.type));
-}
-
-function fieldConfigurationCount(pack, field, config, draft) {
-  const value = draft?.[pack.id]?.[field.id];
-  return Array.isArray(value)
-    ? value.filter((row) => row.target_id).length
-    : Object.keys(value ?? config[field.id] ?? {}).length;
+function formatSetting(value, field, t) {
+  if (field.type === "boolean") return t(field.id === "enabled" ? value ? "automatic.monitoring_enabled" : "automatic.monitoring_disabled" : value ? "automatic.boolean_true" : "automatic.boolean_false");
+  if (field.unit === "s") {
+    if (value && value % 3600 === 0) return `${value / 3600} ${t("automatic.hours_short")}`;
+    if (value && value % 60 === 0) return `${value / 60} ${t("automatic.minutes_short")}`;
+  }
+  return `${value ?? ""}${field.unit ? ` ${field.unit}` : ""}`;
 }
 
 function renderAutomatic(context) {
-    const {
-      availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-      renderNumberField, t,
-    } = context;
-    return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
-      <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
-      <form id="automatic-form" class="automatic-grid">
-      ${availablePacks.map((pack) => {
-        const packConfig = draft[pack.id];
-        const packKey = pack.translation_key || pack.id;
-        const packName = t(`packs.${packKey}.name`);
-        const configurableFields = drawerFields(pack);
-        const configurationButtons = configurableFields.map((field) => {
-          const fieldName = t(`automatic.fields.${field.translation_key}.label`);
-          const count = fieldConfigurationCount(pack, field, packConfig, draft);
-          const label = configurableFields.length === 1
-            ? t("buttons.configuration", { count })
-            : t("buttons.configuration_named", { name: fieldName, count });
-          return `<ha-button id="auto-${pack.id}-${field.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" aria-label="${esc(t("automatic.configure_aria", { name: fieldName }))}">${esc(label)}</ha-button>`;
-        }).join("");
-        return `<section class="category-card">
-          <div class="category-header">
-            <h2>${esc(packName)}</h2>
-            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
-          </div>
-          <p>${esc(t(`packs.${packKey}.description`))}</p>
-          <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
-            <div class="fields">
-              <div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector><small>${esc(t("automatic.labels_help"))}</small></div>
-              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
-              ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
-                pack,
-                field,
-                packConfig,
-                { availablePacks, draft, renderNumberField, t },
-              )).join("")}
-            </div>
-            ${configurationButtons ? `<div class="configuration-entry automatic-configuration-entry${configurableFields.length > 1 ? " has-multiple-configurations" : ""}">${configurationButtons}</div>` : ""}
-          </div>
-        </section>`;
-      }).join("")}
-      ${renderAutomaticConfigurationDrawer({
-        availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-        renderNumberField, t,
-      })}
-      </form>
-    </ha-card>`;
+  const { availablePacks, draft, t } = context;
+  return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
+    <h2>${esc(t("tabs.automatic"))}</h2><form id="automatic-form" class="automatic-grid">
+    ${availablePacks.map((pack) => {
+      const settings = draft[pack.id];
+      const name = t(`packs.${pack.translation_key || pack.id}.name`);
+      const summary = [pack.uses_delay === false ? "" : `${t("automatic.pack_delay")}: ${formatSetting(settings.delay, { unit: "s" }, t)}`, ...settingFields(pack).map((field) => `${t(`automatic.fields.${field.translation_key}.label`)}: ${formatSetting(settings[field.id], field, t)}`)].filter(Boolean).join(" · ");
+      return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
+        <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
+        <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
+    }).join("")}${renderAutomaticConfigurationDrawer(context)}</form></ha-card>`;
 }
 
 function renderAutomaticPanel() {
-    this._ensureAutomaticDraft();
-    return renderAutomatic({
-      availablePacks: this._packs.filter((pack) => pack.available),
-      config: this._config,
-      draft: this._automaticMapDraft,
-      configurationDrawer: this._configurationDrawer,
-      busy: this._busy,
-      useBottomSheet: this._useNativeBottomSheet(),
-      renderNumberField: (...args) => this._numberField(...args),
-      t: (key, replacements) => this._t(key, replacements),
-    });
+  this._ensureAutomaticDraft();
+  return renderAutomatic(automaticContext(this));
 }
 
-function renderAutomaticConfigurationDrawer(context) {
-  const {
-    availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-    renderNumberField, t,
-  } = context;
-  if (configurationDrawer?.kind !== "automatic") return "";
-  const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
-  const fields = pack ? drawerFields(pack) : [];
-  const field = fields.find((item) => item.id === configurationDrawer.fieldId)
-    ?? (fields.length === 1 ? fields[0] : null);
-  if (!field) return "";
-  const packConfig = draft[pack.id];
-  const fieldName = t(`automatic.fields.${field.translation_key}.label`);
-  const content = `<div class="fields configuration-drawer-fields">${renderPackField(
-    pack,
-    field,
-    packConfig,
-    { availablePacks, draft, renderNumberField, t },
-  )}</div>`;
-  return renderConfigurationDrawer({
-    resizeLabel: t("rules.aria_resize"),
-    title: fieldName,
-    ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
-    headerAction: renderConfigurationYamlMenu(configurationDrawer, t),
-    content: renderConfigurationYamlContent(configurationDrawer, content, t),
-    saveAction: "save-automatic",
-    saveLabel: t("buttons.save"),
-    busy,
-    useBottomSheet,
-  });
+// Presentation-only counterpart of the backend field resolver; values are always
+// validated and evaluated on the server. Missing fields remain missing in drafts.
+function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities = {}) {
+  let value = draft[fieldId];
+  let origin = "pack";
+  const source = sourceId ? draft.source_packs?.[sourceId] : null;
+  if (source?.[fieldId] != null) { value = source[fieldId]; origin = "source"; }
+  const deviceId = kind === "entity_overrides" ? entities[targetId]?.device_id : targetId;
+  for (const [key, id] of [["device_overrides", deviceId], ["entity_overrides", targetId]]) {
+    if (key === "entity_overrides" && kind === "device_overrides") continue;
+    for (const [scope, prefix] of [[draft, ""], [source, "source_"]]) {
+      // Exclude the field currently edited: its inherited value is its parent.
+      if (key === kind && ((!sourceId && scope === draft) || (sourceId && scope === source))) continue;
+      const row = scope?.[key]?.find((row) => row.target_id === id);
+      if (row && Object.hasOwn(row, fieldId)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
+    }
+  }
+  return { value, origin };
+}
+
+function targetWarning(pack, row, kind, config, hass, sourceId) {
+  const entity = hass?.entities?.[row.target_id];
+  const state = hass?.states?.[row.target_id];
+  const device = hass?.devices?.[kind === "device_overrides" ? row.target_id : entity?.device_id];
+  if (!row.target_id) return null;
+  if (kind === "device_overrides" ? !device : !entity && !state) return "automatic.orphan_target";
+  const excluded = config?.excluded_labels ?? [];
+  if ([...(entity?.labels ?? []), ...(device?.labels ?? [])].some((id) => excluded.includes(id))) return "automatic.blocked_label";
+  if (config?.monitoring_enabled === false) return "automatic.blocked_global";
+  if (config?.automatic?.[pack.id]?.enabled === false) return "automatic.blocked_source";
+  if (pack.available === false || (sourceId && config?.automatic?.[sourceId]?.enabled === false)) return "automatic.blocked_source";
+  const filter = pack.target_filter ?? {};
+  if (kind === "entity_overrides" && filter.domain && ![].concat(filter.domain).includes(row.target_id.split(".")[0])) return "automatic.inapplicable_target";
+  if (kind === "entity_overrides" && filter.device_class && state?.attributes?.device_class && ![].concat(filter.device_class).includes(state.attributes.device_class)) return "automatic.inapplicable_target";
+  return null;
+}
+
+function renderSetting(field, value, id, attributes, t, inherited = null) {
+  const label = t(`automatic.fields.${field.translation_key}.label`);
+  const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  const control = ["boolean", "select"].includes(field.type)
+    ? `<ha-selector id="${id}" ${attrs} aria-label="${esc(label)}"></ha-selector>`
+    : field.type === "text"
+      ? `<ha-input id="${id}" type="text" value="${esc(value ?? "")}" ${attrs} aria-label="${esc(label)}"></ha-input>`
+    : field.unit === "s"
+      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: inherited === null })
+      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${inherited === null ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
+  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}${inherited ? `<small>${esc(t("automatic.inherited_value", { value: formatSetting(inherited.value, field, t), origin: t(`automatic.origin_${inherited.origin}`) }))}</small>` : ""}</div>`;
 }
 
 function renderPackField(pack, field, config, context) {
-    const { availablePacks = [], draft, renderNumberField, t } = context;
-    const label = t(`automatic.fields.${field.translation_key}.label`);
-    if (field.type === "number") {
-      return renderNumberField(
-        `auto-${pack.id}-${field.id}`,
-        label,
-        draft[pack.id]?.[field.id] ?? config[field.id],
-        field.unit ?? "",
-        field.minimum ?? -1000000000,
-        field.maximum ?? 1000000000,
-        { step: field.step ?? "any", help: field.translation_key === "flapping_recovery" ? t("automatic.fields.flapping_recovery.help") : undefined },
-      );
-    }
-    if (field.type === "pack_settings_map") {
-      const configured = draft[pack.id]?.[field.id] ?? {};
-      return `<div class="field full pack-source-field">
-        <div class="configuration-section-heading pack-map-heading"><div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div></div>
-        <div class="pack-source-list">${availablePacks.filter((sourcePack) => sourcePack.id !== pack.id).map((sourcePack) => {
-          const enabled = Object.hasOwn(configured, sourcePack.id);
-          const settings = configured[sourcePack.id] ?? {};
-          const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
-          return `<div class="pack-source-row">
-            <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
-            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, settings[setting.id], t, { "data-pack-source-setting": pack.id, "data-pack-field": field.id, "data-source-pack-id": sourcePack.id, "data-setting-id": setting.id }, false)}</label>`).join("")}</div>
-          </div>`;
-        }).join("")}</div>
-      </div>`;
-    }
-    if (isSettingsMapField(field)) {
-      const rows = draft[pack.id]?.[field.id] ?? [];
-      const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
-      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean");
-      return `<div class="field full pack-map-field">
-        <div class="configuration-section-heading pack-map-heading">
-          <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
-          <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
-        </div>
-        <div class="pack-map-list">
-          ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
-            <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            ${toggle ? `<ha-switch class="pack-setting-toggle" aria-label="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" title="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch>` : ""}
-            <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
-            ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
-          </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
-        </div>
-      </div>`;
-    }
-    if (!isNumberMapField(field)) return "";
-    const batteryThresholds = pack.id === "battery" && field.id === "device_thresholds";
-    const rows = draft[pack.id]?.[field.id] ?? [];
-    return `<div class="field full pack-map-field">
-      <div class="configuration-section-heading pack-map-heading">
-        <div>${batteryThresholds ? "" : `<span class="field-label">${esc(label)}</span>`}<small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
-        <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
-      </div>
-      <div class="pack-map-list">
-        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-number-row${batteryThresholds ? " battery-threshold-row" : ""}">
-          <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
-          <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
-        </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
-      </div>
-    </div>`;
+  const { draft, configurationDrawer, hass, t } = context;
+  const sourceId = configurationDrawer?.sourceId ?? "";
+  const scope = scopeFor(draft[pack.id], sourceId);
+  if (!EXCEPTION_FIELDS.includes(field.id)) return "";
+  const rows = scope?.[field.id] ?? [];
+  return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))}</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+    ${rows.length ? rows.map((row, index) => {
+      const warning = targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, context.config, hass, sourceId);
+      return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
+        ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
+        <div class="pack-settings-values">${field.fields.filter((setting) => setting.type === "boolean" || row.enabled !== false).map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, inheritedPackSetting(draft[pack.id], setting.id, row.target_id, field.id, sourceId, hass?.entities))).join("")}</div>
+        <ha-button appearance="plain" data-action="inherit-pack-row" data-pack-id="${pack.id}" data-field-id="${field.id}" data-index="${index}">${esc(t("automatic.restore_inheritance"))}</ha-button>
+      </ha-card>`;
+    }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
 
-function renderPackSettingControl(setting, value, t, attributes, required = true) {
-  const label = t(`automatic.fields.${setting.translation_key}.label`);
-  const min = setting.minimum ?? -1000000000;
-  const max = setting.maximum ?? 1000000000;
-  if (setting.unit === "s") {
-    return renderDurationControl("", label, value, min, max, { attributes, required })
-      + (setting.translation_key === "flapping_recovery" ? `<small>${esc(t("automatic.fields.flapping_recovery.help"))}</small>` : "");
-  }
-  const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
-  return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;
-}
-
-function collectAutomaticChanges() {
-    this._ensureAutomaticDraft();
-    captureAutomaticConfigurationValues.call(this);
-    const automatic = {};
-    for (const pack of this._packs.filter((item) => item.available)) {
-      automatic[pack.id] = {
-        enabled: this._automaticMapDraft[pack.id].enabled,
-        label_ids: [...(this._automaticMapDraft[pack.id].label_ids ?? [])],
-      };
-      if (pack.uses_delay !== false) {
-        automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
-      }
-      for (const field of pack.config_fields ?? []) {
-        if (field.type === "number") {
-          automatic[pack.id][field.id] = Number(
-            this._automaticMapDraft[pack.id]?.[field.id] ?? field.default,
-          );
-          continue;
-        }
-        if (isSettingsMapField(field)) {
-          const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-          const values = {};
-          for (const row of rows) {
-            const settingsValid = (field.fields ?? []).every(
-              (setting) => setting.type === "boolean"
-                ? typeof row[setting.id] === "boolean"
-                : Number.isFinite(row[setting.id]),
-            );
-            if (!row.target_id || !settingsValid || Object.hasOwn(values, row.target_id)) {
-              this._notice = {
-                kind: "error",
-                text: this._t(
-                  `automatic.fields.${field.translation_key}.${row.target_id && settingsValid ? "duplicate" : "validation"}`,
-                ),
-              };
-              this._refreshUiState();
-              return false;
-            }
-            values[row.target_id] = Object.fromEntries(
-              (field.fields ?? []).map((setting) => [setting.id, row[setting.id]]),
-            );
-          }
-          automatic[pack.id][field.id] = values;
-          continue;
-        }
-        if (field.type === "pack_settings_map") {
-          const configured = this._automaticMapDraft[pack.id]?.[field.id] ?? {};
-          const values = {};
-          for (const [sourcePackId, settings] of Object.entries(configured)) {
-            if ((field.fields ?? []).some(
-              (setting) => settings[setting.id] !== null
-                && !Number.isFinite(settings[setting.id]),
-            )) {
-              this._notice = {
-                kind: "error",
-                text: this._t(`automatic.fields.${field.translation_key}.validation`),
-              };
-              this._refreshUiState();
-              return false;
-            }
-            values[sourcePackId] = { ...settings };
-          }
-          automatic[pack.id][field.id] = values;
-          continue;
-        }
-        if (!isNumberMapField(field)) continue;
-        const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-        const values = {};
-        for (const row of rows) {
-          if (!row.target_id || !Number.isFinite(row.value)) {
-            this._notice = {
-              kind: "error",
-              text: this._t(
-                `automatic.fields.${field.translation_key}.validation`,
-              ),
-            };
-            this._refreshUiState();
-            return false;
-          }
-          if (Object.hasOwn(values, row.target_id)) {
-            this._notice = {
-              kind: "error",
-              text: this._t(
-                `automatic.fields.${field.translation_key}.duplicate`,
-              ),
-            };
-            this._refreshUiState();
-            return false;
-          }
-          values[row.target_id] = row.value;
-        }
-        automatic[pack.id][field.id] = values;
-      }
-    }
-    return { automatic };
-}
-
-async function saveAutomatic() {
-    if (!await validateConfigurationYaml(this)) return false;
-    const changes = collectAutomaticChanges.call(this);
-    if (!changes) return false;
-    const config = await this._call(
-      { type: "alert_manager/config/update", config: changes },
-      this._t("success.automatic_saved"),
-    );
-    if (config) {
-      this._config = config;
-      this._configurationDrawer = null;
-      this._resetAutomaticDraft();
-      replaceConfigurationDrawer(
-        this.shadowRoot,
-        "",
-      );
-      this._refreshUiState();
-      return true;
-    }
-    return false;
-}
-
-function resetAutomaticDraft() {
-    this._automaticDirty = false;
-    this._automaticMapDraft = null;
-    this._ensureAutomaticDraft();
+function renderAutomaticConfigurationDrawer(context) {
+  const { availablePacks, draft, configurationDrawer: drawer, busy, useBottomSheet, t } = context;
+  if (drawer?.kind !== "automatic") return "";
+  const pack = availablePacks.find((pack) => pack.id === drawer.id);
+  if (!pack) return "";
+  const settings = draft[pack.id];
+  const sourceId = drawer.sourceId ?? "";
+  const scope = scopeFor(settings, sourceId);
+  const fields = [...(pack.uses_delay === false ? [] : [{ id: "delay", type: "number", translation_key: "trigger_delay", unit: "s", minimum: 0 }]), ...settingFields(pack)];
+  const title = t(`packs.${pack.translation_key || pack.id}.name`);
+  const content = `<div class="fields configuration-drawer-fields">
+    <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
+    <div class="field full"><span class="field-label">${esc(t("automatic.fields.monitoring.label"))}</span><ha-switch id="auto-${pack.id}-drawer-enabled" aria-label="${esc(t("automatic.fields.monitoring.label"))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
+    ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
+    ${sourceId ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
+    ${scope ? fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, sourceId ? { value: settings[field.id], origin: "pack" } : null)).join("") + (pack.config_fields ?? []).filter((field) => EXCEPTION_FIELDS.includes(field.id)).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
+  </div>`;
+  return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
 }
 
 function ensureAutomaticDraft() {
-    if (this._automaticMapDraft || !this._config) return;
-    this._automaticMapDraft = {};
-    for (const pack of this._packs) {
-      const fields = { ...this._config.automatic?.[pack.id] };
-      fields.label_ids = [...(fields.label_ids ?? [])];
-      for (const field of pack.config_fields ?? []) {
-        const configured = this._config.automatic?.[pack.id]?.[field.id]
-          ?? field.default;
-        fields[field.id] = configurationValueToDraft(configured, field.type);
-      }
-      this._automaticMapDraft[pack.id] = fields;
-    }
+  if (this._automaticMapDraft || !this._config) return;
+  this._automaticMapDraft = Object.fromEntries(this._packs.map((pack) => [pack.id, automaticPackToDraft(pack, this._config.automatic[pack.id])]));
 }
+function resetAutomaticDraft() { this._automaticDirty = false; this._automaticMapDraft = null; this._ensureAutomaticDraft(); }
 
 function captureAutomaticMapValues() {
-    if (!this._automaticMapDraft) return;
-    this.shadowRoot.querySelectorAll("[data-pack-map]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packMap]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row.value = Number(durationFieldValue(input));
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-setting]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packSetting]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packSettingToggle]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = input.checked;
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
-      const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
-        input.dataset.packField
-      ]?.[input.dataset.sourcePackId];
-      if (settings) {
-        settings[input.dataset.settingId] = durationFieldValue(input) === "" ? null : Number(durationFieldValue(input));
-      }
-    });
+  if (!this._automaticMapDraft || this._configurationDrawer?.mode === "yaml") return;
+  const sourceId = this._configurationDrawer?.sourceId ?? "";
+  this.shadowRoot.querySelectorAll("[data-pack-setting], [data-pack-default]").forEach((input) => {
+    if (input.tagName?.toLowerCase() === "ha-selector" && input.dataset.durationValue === undefined) return;
+    const scope = scopeFor(this._automaticMapDraft[input.dataset.packSetting ?? input.dataset.packDefault], sourceId);
+    const row = input.dataset.packField ? scope?.[input.dataset.packField]?.[Number(input.dataset.packIndex)] : scope;
+    if (!row) return;
+    const value = durationFieldValue(input);
+    if (value === "" && input.dataset.packDefault && !sourceId) row[input.dataset.settingId] = null;
+    else if (value === "") delete row[input.dataset.settingId];
+    else row[input.dataset.settingId] = input.type === "text" ? value : Number(value);
+  });
 }
-
 function captureAutomaticConfigurationValues() {
   this._ensureAutomaticDraft();
+  if (this._configurationDrawer?.mode === "yaml") return;
   captureAutomaticMapValues.call(this);
   for (const pack of this._packs) {
-    const draft = this._automaticMapDraft?.[pack.id];
-    if (!draft) continue;
+    const draft = this._automaticMapDraft[pack.id];
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
-    const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
     if (enabled) draft.enabled = enabled.checked;
-    if (delay) draft.delay = durationFieldValue(delay) === "" ? null : Number(durationFieldValue(delay));
-    for (const field of pack.config_fields ?? []) {
-      if (field.type !== "number") continue;
+    const scope = scopeFor(draft, this._configurationDrawer?.id === pack.id ? this._configurationDrawer.sourceId : "");
+    for (const field of [{ id: "delay", type: "number" }, ...settingFields(pack)]) {
+      if (!["number", "text"].includes(field.type)) continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
-      if (input && this._automaticMapDraft?.[pack.id]) {
-        this._automaticMapDraft[pack.id][field.id] = Number(durationFieldValue(input));
-      }
+      if (!input || !scope) continue;
+      const value = durationFieldValue(input);
+      if (value === "" && this._configurationDrawer?.sourceId) delete scope[field.id];
+      else scope[field.id] = field.type === "text" ? value : value === "" ? null : Number(value);
     }
   }
+}
+
+function collectAutomaticChanges(allPacks = false) {
+  captureAutomaticConfigurationValues.call(this);
+  try {
+    const activePack = !allPacks && this._configurationDrawer?.kind === "automatic" ? this._configurationDrawer.id : null;
+    return { automatic: Object.fromEntries(this._packs.filter((pack) => !activePack || pack.id === activePack).map((pack) => [pack.id, automaticDraftToPack(pack, this._automaticMapDraft[pack.id])])) };
+  } catch (_error) {
+    this._notice = { kind: "error", text: this._t("settings.yaml_rows_invalid") };
+    this._refreshUiState();
+    return false;
+  }
+}
+
+async function saveAutomatic() {
+  if (!await validateConfigurationYaml(this)) return false;
+  const changes = collectAutomaticChanges.call(this);
+  if (!changes) return false;
+  const config = await this._call({ type: "alert_manager/config/update", config: changes }, this._t("success.automatic_saved"));
+  if (!config) return false;
+  this._config = config;
+  for (const pack of this._packs.filter((pack) => Object.hasOwn(changes.automatic, pack.id))) this._automaticMapDraft[pack.id] = automaticPackToDraft(pack, config.automatic[pack.id]);
+  this._configurationDrawer = null;
+  this._automaticDirty = this._packs.some((pack) => JSON.stringify(automaticDraftToPack(pack, this._automaticMapDraft[pack.id])) !== JSON.stringify(config.automatic[pack.id]));
+  this._render();
+  return true;
 }
 
 function refreshAutomaticConfigurationDrawer(revealSelector) {
-  const form = this.shadowRoot?.querySelector?.("#automatic-form");
-  if (!form) {
-    this._render();
-    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
-    return;
-  }
-  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
-    availablePacks: this._packs.filter((pack) => pack.available),
-    config: this._config,
-    draft: this._automaticMapDraft,
-    configurationDrawer: this._configurationDrawer,
-    busy: this._busy,
-    useBottomSheet: this._useNativeBottomSheet(),
-    renderNumberField: (...args) => this._numberField(...args),
-    t: (key, replacements) => this._t(key, replacements),
-  }), revealSelector);
-  this._hydrateSelectors();
-  if (this._configurationDrawer?.kind === "automatic") {
-    updateAutomaticConfigurationCount.call(this, this._configurationDrawer.id);
-  }
-  this._decorateActionIcons();
-  this._refreshUiState();
+  if (!this.shadowRoot?.querySelector?.("#automatic-form")) { this._render(); return; }
+  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer(automaticContext(this)), revealSelector);
+  this._hydrateSelectors(); this._decorateActionIcons(); this._refreshUiState();
 }
+function updateAutomaticConfigurationCount() { /* Counts refresh with the saved page. */ }
 
-function updateAutomaticConfigurationCount(packId) {
-  const pack = this._packs.find((item) => item.id === packId);
-  if (!pack) return;
-  const fields = drawerFields(pack);
-  fields.forEach((field) => {
-    const button = this.shadowRoot?.querySelector?.(
-      `#auto-${packId}-${field.id}-configuration`,
-    );
-    if (!button) return;
-    const count = fieldConfigurationCount(
-      pack, field, this._config.automatic[pack.id], this._automaticMapDraft,
-    );
-    button.textContent = fields.length === 1
-      ? this._t("buttons.configuration", { count })
-      : this._t("buttons.configuration_named", {
-        name: this._t(`automatic.fields.${field.translation_key}.label`), count,
-      });
+function hydratePackChoice(panel, id, field, values, sparse) {
+  const boolean = field.type === "boolean";
+  const options = boolean
+    ? [{ value: "enabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_enabled" : "automatic.boolean_true") }, { value: "disabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_disabled" : "automatic.boolean_false") }]
+    : (field.options ?? []).map((value) => ({ value: JSON.stringify(value), label: value }));
+  if (sparse) options.unshift({ value: "", label: panel._t("automatic.inherit") });
+  const value = values[field.id] == null ? "" : boolean ? values[field.id] ? "enabled" : "disabled" : JSON.stringify(values[field.id]);
+  panel._configureSelector(id, { select: { options } }, value, (selected) => {
+    captureAutomaticMapValues.call(panel);
+    if (selected == null || (sparse && selected === "")) delete values[field.id];
+    else values[field.id] = boolean ? selected === "enabled" : JSON.parse(selected);
+    panel._markConfigurationDirty("automatic");
+    if (field.id === "enabled") refreshAutomaticConfigurationDrawer.call(panel);
   });
 }
 
 function hydrateAutomaticControls() {
   hydrateConfigurationYaml(this);
   this._ensureAutomaticDraft();
-  for (const pack of this._packs.filter((item) => item.available)) {
+  const drawer = this._configurationDrawer;
+  for (const pack of this._packs) {
     const draft = this._automaticMapDraft[pack.id];
-    this._configureSelector(
-      `auto-${pack.id}-labels`,
-      { label: { multiple: true } },
-      draft.label_ids,
-      (value) => {
-        draft.label_ids = this._multipleSelectorValue(value, draft.label_ids);
+    for (const suffix of ["enabled", "drawer-enabled"]) {
+      const control = this.shadowRoot.querySelector(`#auto-${pack.id}-${suffix}`);
+      if (control) control.onchange = () => {
+        draft.enabled = control.checked;
         this._markConfigurationDirty("automatic");
-      },
-    );
-    const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
-    if (enabled) {
-      enabled.onchange = () => {
-        this._automaticMapDraft[pack.id].enabled = enabled.checked;
-        const configuration = this.shadowRoot.querySelector(
-          `[data-pack-configuration="${pack.id}"]`,
-        );
-        if (configuration) configuration.hidden = !enabled.checked;
+        for (const other of ["enabled", "drawer-enabled"]) {
+          const element = this.shadowRoot.querySelector(`#auto-${pack.id}-${other}`);
+          if (element) element.checked = draft.enabled;
+        }
       };
     }
-    for (const field of pack.config_fields ?? []) {
-      if (!MAP_FIELD_TYPES.has(field.type) || field.type === "pack_settings_map") {
-        continue;
+    if (drawer?.kind !== "automatic" || drawer.id !== pack.id || drawer.mode === "yaml") continue;
+    const scope = scopeFor(draft, drawer.sourceId);
+    this._configureSelector(`auto-${pack.id}-labels`, { label: { multiple: true } }, draft.label_ids, (value) => { draft.label_ids = this._multipleSelectorValue(value, draft.label_ids); });
+    this._configureSelector(`auto-${pack.id}-source-context`, { select: { options: [{ value: "", label: this._t("automatic.all_sources") }, ...this._packs.filter((source) => source.id !== pack.id).map((source) => ({ value: source.id, label: this._t(`packs.${source.translation_key || source.id}.name`) }))] } }, drawer.sourceId ?? "", (value) => { captureAutomaticMapValues.call(this); drawer.sourceId = value; refreshAutomaticConfigurationDrawer.call(this); });
+    const sourceEnabled = this.shadowRoot.querySelector(`#auto-${pack.id}-source-enabled`);
+    if (sourceEnabled) sourceEnabled.onchange = () => {
+      captureAutomaticMapValues.call(this);
+      draft.source_packs[drawer.sourceId] ??= { device_overrides: [], entity_overrides: [] };
+      draft.source_packs[drawer.sourceId].enabled = sourceEnabled.checked;
+      this._markConfigurationDirty("automatic"); refreshAutomaticConfigurationDrawer.call(this);
+    };
+    if (scope) {
+      for (const setting of settingFields(pack).filter((setting) => ["boolean", "select"].includes(setting.type))) {
+        hydratePackChoice(this, `auto-${pack.id}-${setting.id}`, setting, scope, Boolean(drawer.sourceId));
       }
-      const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-      rows.forEach((row, index) => {
-        this._configureSelector(
-          `auto-${pack.id}-${field.id}-target-${index}`,
-          field.type === "entity_number_map" || field.type === "entity_settings_map"
-            ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
-            : { device: pack.id === "battery" && field.id === "device_thresholds"
-              ? { entity: { domain: "sensor", device_class: "battery" } }
-              : {} },
-          row.target_id,
-          (value) => { row.target_id = typeof value === "string" ? value : ""; },
-        );
+    }
+    for (const field of (pack.config_fields ?? []).filter((field) => EXCEPTION_FIELDS.includes(field.id))) {
+      (scope?.[field.id] ?? []).forEach((row, index) => {
+        const filterPack = this._packs.find((source) => source.id === drawer.sourceId) ?? pack;
+        const filter = filterPack.target_filter ?? {};
+        this._configureSelector(`auto-${pack.id}-${field.id}-target-${index}`, field.id === "entity_overrides" ? { entity: Object.keys(filter).length ? { filter } : {} } : { device: Object.keys(filter).length ? { entity: filter } : {} }, row.target_id, (value) => { captureAutomaticMapValues.call(this); row.target_id = typeof value === "string" ? value : ""; refreshAutomaticConfigurationDrawer.call(this); });
+        for (const setting of field.fields.filter((setting) => ["boolean", "select"].includes(setting.type))) {
+          hydratePackChoice(this, `auto-${pack.id}-${field.id}-${index}-${setting.id}`, setting, row, true);
+        }
       });
     }
   }
-  this.shadowRoot.querySelectorAll("[data-pack-source-toggle]").forEach((toggle) => {
-    toggle.onchange = () => {
-      captureAutomaticMapValues.call(this);
-      const sources = this._automaticMapDraft[toggle.dataset.packSourceToggle]?.[
-        toggle.dataset.packField
-      ];
-      const field = this._packs.find(
-        (pack) => pack.id === toggle.dataset.packSourceToggle,
-      )?.config_fields?.find((item) => item.id === toggle.dataset.packField);
-      if (!sources || !field) return;
-      if (toggle.checked) {
-        sources[toggle.dataset.sourcePackId] ??= Object.fromEntries(
-          (field.fields ?? []).map((setting) => [setting.id, null]),
-        );
-      } else {
-        delete sources[toggle.dataset.sourcePackId];
-      }
-      const values = toggle.closest?.(".pack-source-row")?.querySelector?.(
-        "[data-pack-source-values]",
-      );
-      if (values) values.hidden = !toggle.checked;
-    };
-  });
-  this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((toggle) => {
-    toggle.onchange = () => {
-      const row = this._automaticMapDraft[toggle.dataset.packSettingToggle]?.[
-        toggle.dataset.packField
-      ]?.[Number(toggle.dataset.packIndex)];
-      if (!row) return;
-      row[toggle.dataset.settingId] = toggle.checked;
-      const values = toggle.closest?.(".pack-settings-row")?.querySelector?.(
-        ".pack-settings-values",
-      );
-      if (values) values.hidden = !toggle.checked;
-    };
-  });
 }
 
 async function handleAutomaticAction(action, button) {
+  if (this._readOnly) return false;
   if (action === "save-automatic") {
     const form = this.shadowRoot.querySelector("#automatic-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveAutomatic();
     return true;
   }
   if (action === "open-automatic-configuration") {
-    this._ensureAutomaticDraft();
-    captureAutomaticConfigurationValues.call(this);
-    this._configurationDrawer = {
-      kind: "automatic",
-      id: button.dataset.packId,
-      fieldId: button.dataset.fieldId,
-      original: JSON.stringify(this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId]),
-      wasDirty: this._automaticDirty,
-
-    };
-    refreshAutomaticConfigurationDrawer.call(this);
-    return true;
-  }
-  if (
-    action === "close-configuration-drawer"
-    && this._configurationDrawer?.kind === "automatic"
-  ) {
-    const { id: packId, fieldId, original, wasDirty } = this._configurationDrawer;
-    captureAutomaticConfigurationValues.call(this);
-    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[packId]?.[fieldId], original)) return true;
-    if (original !== undefined) {
-      this._automaticMapDraft[packId][fieldId] = JSON.parse(original);
-      this._automaticDirty = wasDirty;
-      this._updateConfigurationSaveButton();
+    this._ensureAutomaticDraft(); captureAutomaticConfigurationValues.call(this);
+    const id = button.dataset.packId;
+    if (!this._packs.some((pack) => pack.id === id)) return true;
+    this._configurationDrawer = { kind: "automatic", id, fieldId: "pack", sourceId: button.dataset.sourceId ?? "", original: JSON.stringify(this._automaticMapDraft[id]), wasDirty: this._automaticDirty };
+    // A contextual target is a draft only; opening never calls the save API.
+    if (button.dataset.entityId) {
+      const draft = this._automaticMapDraft[id];
+      const sourceId = this._configurationDrawer.sourceId;
+      if (sourceId) draft.source_packs[sourceId] ??= { device_overrides: [], entity_overrides: [] };
+      const scope = scopeFor(draft, sourceId);
+      scope.entity_overrides ??= [];
+      if (!scope.entity_overrides.some((row) => row.target_id === button.dataset.entityId)) scope.entity_overrides.push({ target_id: button.dataset.entityId });
     }
-    this._configurationDrawer = null;
-    refreshAutomaticConfigurationDrawer.call(this);
-    updateAutomaticConfigurationCount.call(this, packId);
-    return true;
+    refreshAutomaticConfigurationDrawer.call(this); return true;
   }
-  if (action === "add-pack-map-row") {
-    this._ensureAutomaticDraft();
+  if (action === "close-configuration-drawer" && this._configurationDrawer?.kind === "automatic") {
+    const { id, original, wasDirty } = this._configurationDrawer;
     captureAutomaticConfigurationValues.call(this);
-    const rows = this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId];
-    const field = this._packs.find((pack) => pack.id === button.dataset.packId)
-      ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
-    if (rows) {
-      if (field && isSettingsMapField(field)) {
-        rows.push({
-          target_id: "",
-          ...Object.fromEntries((field.fields ?? []).map(
-            (setting) => [setting.id, setting.default],
-          )),
-        });
-      } else {
-        const minimum = Number(field?.minimum ?? -1000000000);
-        const maximum = Number(field?.maximum ?? 1000000000);
-        rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
-      }
-      this._markConfigurationDirty("automatic");
-    }
-    refreshAutomaticConfigurationDrawer.call(this, rows ? ".pack-map-row:last-child" : undefined);
-    return true;
+    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[id], original)) return true;
+    this._automaticMapDraft[id] = JSON.parse(original); this._automaticDirty = wasDirty;
+    this._configurationDrawer = null; this._render(); return true;
   }
-  if (action === "remove-pack-map-row") {
-    captureAutomaticConfigurationValues.call(this);
-    const rows = this._automaticMapDraft?.[button.dataset.packId]?.[button.dataset.fieldId];
-    rows?.splice(Number(button.dataset.index), 1);
-    this._markConfigurationDirty("automatic");
-    refreshAutomaticConfigurationDrawer.call(this);
-    return true;
-  }
-  return false;
+  if (!["add-pack-map-row", "remove-pack-map-row", "inherit-pack-row"].includes(action)) return false;
+  captureAutomaticConfigurationValues.call(this);
+  const scope = scopeFor(this._automaticMapDraft[button.dataset.packId], this._configurationDrawer?.sourceId);
+  if (!scope || !EXCEPTION_FIELDS.includes(button.dataset.fieldId)) return true;
+  const rows = scope[button.dataset.fieldId] ??= [];
+  const index = Number(button.dataset.index);
+  if (action === "add-pack-map-row") rows.push({ target_id: "" });
+  else if (action === "remove-pack-map-row") rows.splice(index, 1);
+  else if (rows[index]) rows[index] = { target_id: rows[index].target_id };
+  this._markConfigurationDirty("automatic");
+  refreshAutomaticConfigurationDrawer.call(this);
+  if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), ".automatic-exception:last-child");
+  return true;
 }
 
 // Source: frontend-src/views/settings.js
@@ -6952,7 +6842,6 @@ const SETTINGS_SECTIONS = [
   ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
   ["notifications", "notifications.title", "mdi:bell-outline"],
   ["history", "settings.history_settings", "mdi:history"],
-  ["entity-delay", "settings.entity_delay", "mdi:timer-cog-outline"],
   ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
   ["diagnostics", "statistics.title", "mdi:speedometer"],
 ];
@@ -6975,7 +6864,6 @@ function renderSettings(context) {
       ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
       <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
@@ -6993,8 +6881,6 @@ function renderSettings(context) {
       <ha-card id="settings-section-exclusions" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
         <div class="settings-wide settings-configuration-actions">
-          ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
-          ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
         </div>
       </div></ha-card>
       ${renderNotificationProfiles({
@@ -7012,9 +6898,6 @@ function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
-      </ha-card>
-      <ha-card id="settings-section-entity-delay" outlined class="panel settings-card settings-scroll-section"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
-        ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
@@ -7208,7 +7091,7 @@ async function saveConfiguration() {
     if (saveAutomaticChanges && this._configurationDrawer?.kind === "automatic"
       && !await validateConfigurationYaml(this)) return false;
     const automaticChanges = saveAutomaticChanges
-      ? collectAutomaticChanges.call(this) : {};
+      ? collectAutomaticChanges.call(this, true) : {};
     if (!automaticChanges) return false;
     return this._saveSettings(automaticChanges);
 }
@@ -7282,7 +7165,7 @@ async function handleImportSelection(event) {
     const prompt = this._t("settings.import_confirm", {
       rules: summary.rules,
       packs: summary.enabled_packs,
-      delays: summary.entity_delays,
+      exceptions: summary.pack_exceptions,
     });
     if (!window.confirm(prompt)) return;
     const result = await this._call(
@@ -7309,26 +7192,8 @@ async function saveSettings(additionalChanges = {}) {
       this._refreshUiState();
       return false;
     }
-    const entityDelays = {};
-    for (const row of this._entityDelayDraft) {
-      if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
-        this._notice = { kind: "error", text: this._t("settings.delay_validation") };
-        this._refreshUiState();
-        return false;
-      }
-      if (row.entity_id in entityDelays) {
-        this._notice = {
-          kind: "error",
-          text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
-        };
-        this._refreshUiState();
-        return false;
-      }
-      entityDelays[row.entity_id] = row.delay;
-    }
     const changes = {
       ...additionalChanges,
-      global_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#global-delay"))),
       pending_display_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#pending-display-delay"))),
       notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
@@ -7340,9 +7205,6 @@ async function saveSettings(additionalChanges = {}) {
         ...this._settingsDraft.coherence_ignored_entity_references,
       ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
-      excluded_entities: [...this._settingsDraft.excluded_entities],
-      excluded_devices: [...this._settingsDraft.excluded_devices],
-      entity_delays: entityDelays,
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
@@ -8952,10 +8814,22 @@ const settingsStyles = `
     border: 1px solid var(--divider-color, #ddd);
     border-radius: 12px;
   }
+  .automatic-pack-row { gap: 8px; }
+  .automatic-exception { padding: 12px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
+  .automatic-exception-target { display: flex; align-items: center; gap: 8px; }
+  .automatic-exception-target ha-selector { flex: 1; min-width: 0; }
+  .automatic-exception .pack-settings-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .automatic-exception .pack-setting-field { min-width: 0; }
 `;
 
 // Source: frontend-src/styles/rule-editor-styles.js
 const ruleEditorStyles = `
+      .generator-category { margin-bottom: 24px; }
+      .generator-row { display: flex; gap: 12px; padding: 12px 0; align-items: flex-start; }
+      .generator-row > div { min-width: 0; overflow-wrap: anywhere; }
+      .generator-row p { margin: 4px 0; color: var(--secondary-text-color); }
+      .generator-row small { color: var(--secondary-text-color); }
+
   /* Rule editor */
   .actions {
     display: flex;

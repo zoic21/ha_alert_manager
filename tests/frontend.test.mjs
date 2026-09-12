@@ -1,3 +1,4 @@
+import { automaticConfig, automaticPacks } from "./automatic-fixtures.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -652,17 +653,7 @@ const completeConfig = () => ({
   coherence_schedule: "none",
   coherence_scan_esphome: true,
   coherence_ignored_entity_references: [],
-  automatic: {
-    unavailable: { enabled: true, delay: 900 },
-    connectivity: { enabled: true, delay: 900 },
-    unifi: { enabled: true, delay: 900 },
-    battery: { enabled: true, delay: 900, threshold: 15, device_thresholds: {} },
-    execution_errors: {
-      enabled: true,
-      delay: 0,
-      failure_thresholds: { "automation.test": 3 },
-    },
-  },
+  automatic: automaticConfig(),
   rules: [],
   global_delay: 900,
   pending_display_delay: 10,
@@ -984,72 +975,7 @@ test("disabled monitoring warning can turn the switch back on", async () => {
   assert.doesNotMatch(panel._pageMessagesContent(), /alert-type="warning"/);
 });
 
-const completePacks = () => [
-  {
-    id: "unavailable",
-    translation_key: "unavailable",
-    prerequisites: [],
-    available: true,
-  },
-  {
-    id: "connectivity",
-    translation_key: "connectivity",
-    prerequisites: [],
-    available: true,
-  },
-  {
-    id: "unifi",
-    translation_key: "unifi",
-    prerequisites: ["unifi"],
-    available: true,
-  },
-  {
-    id: "battery",
-    translation_key: "battery",
-    prerequisites: [],
-    available: true,
-    config_fields: [
-      {
-        id: "threshold",
-        type: "number",
-        translation_key: "threshold",
-        default: 15,
-        minimum: -1000000000,
-        maximum: 1000000000,
-        step: "any",
-        unit: "%",
-      },
-      {
-        id: "device_thresholds",
-        type: "device_number_map",
-        translation_key: "device_thresholds",
-        default: {},
-        minimum: -1000000000,
-        maximum: 1000000000,
-        step: "any",
-        unit: "%",
-      },
-    ],
-  },
-  {
-    id: "execution_errors",
-    translation_key: "execution_errors",
-    prerequisites: [],
-    available: true,
-    config_fields: [
-      {
-        id: "failure_thresholds",
-        type: "entity_number_map",
-        translation_key: "failure_thresholds",
-        default: {},
-        minimum: 1,
-        maximum: 100,
-        step: 1,
-        entity_domains: ["automation", "script"],
-      },
-    ],
-  },
-];
+const completePacks = () => automaticPacks().filter((pack) => pack.id !== "flapping");
 
 const form = (values) => ({
   elements: {
@@ -2497,41 +2423,30 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   panel._config = completeConfig();
   panel._config.coherence_ignored_entity_references = ["toto.plop"];
   panel._packs = completePacks();
+  panel._configurationDrawer = { kind: "automatic", id: "unavailable" };
   const automatic = panel._renderAutomatic();
+  panel._configurationDrawer = null;
   panel._ensureSettingsDraft();
   const settings = panel._renderSettings();
   const styles = compactCss(panel._styles());
 
   assert.match(automatic, /<ha-selector[^>]+id="auto-unavailable-delay"[^>]*data-duration-value=/);
   assert.match(automatic, /<ha-switch id="auto-unavailable-enabled"/);
-  assert.doesNotMatch(automatic, /data-action="save-automatic"/);
+  assert.match(automatic, /data-action="save-automatic"/);
   assert.match(automatic, /^<ha-card id="settings-section-automatic" outlined/);
-  assert.match(automatic, /<section class="category-card">/);
-  assert.match(automatic, /<div class="category-header">[\s\S]*<h2>Entités indisponibles<\/h2>[\s\S]*<ha-switch id="auto-unavailable-enabled"[\s\S]*<\/div>\s*<p>Surveille l’état unavailable/);
-  assert.doesNotMatch(automatic, /Délai actuel/);
+  assert.match(automatic, /<section class="category-card automatic-pack-row">/);
   assert.match(automatic, /<form id="automatic-form" class="automatic-grid">/);
-  const batteryDelay = automatic.indexOf('id="auto-battery-delay"');
-  const batteryDelayHelp = automatic.indexOf(
-    "Laisser le délai vide pour utiliser le délai global.",
-    batteryDelay,
-  );
-  const batteryThreshold = automatic.indexOf('id="auto-battery-threshold"');
-  const batteryConfiguration = automatic.indexOf(
-    'id="auto-battery-device_thresholds-configuration"',
-  );
-  assert.ok(batteryDelay < batteryDelayHelp);
-  assert.ok(batteryDelayHelp < batteryThreshold);
-  assert.ok(batteryThreshold < batteryConfiguration);
+  assert.match(automatic, /data-action="open-automatic-configuration"/);
   assert.doesNotMatch(automatic, /low_battery_level/);
-  assert.match(settings, /<ha-selector[^>]+id="global-delay"[^>]*data-duration-value=/);
+  assert.doesNotMatch(settings, /id="global-delay"/);
   assert.match(settings, /id="settings-section-automatic"/);
-  assert.match(settings, /<h2 class="automatic-section-title">Surveillance automatique<\/h2>/);
+  assert.match(settings, /<h2>Surveillance automatique<\/h2>/);
   assert.match(settings, /<ha-select id="coherence-schedule"/);
   assert.match(settings, /<ha-switch id="coherence-scan-esphome"[^>]+checked/);
   assert.match(settings, /<form id="settings-form" class="stack settings-form"/);
   assert.match(settings, /<h2>Affichage des alertes<\/h2>/);
   assert.match(settings, /<h2>Analyse de cohérence<\/h2>/);
-  assert.match(settings, /<h2>Exclusions de la surveillance<\/h2>/);
+  assert.match(settings, /<h2>Exclusions de la surveillance automatique<\/h2>/);
   assert.match(settings, /<h2>Historique<\/h2>/);
   assert.match(settings, /<ha-chip-set class="ignored-reference-chips">[\s\S]*<ha-input-chip[^>]+data-ignored-reference="toto\.plop"/);
   assert.match(settings, /<ha-input id="ignored-reference-input"[^>]+placeholder="Exemple : toto\.plop"/);
@@ -2544,17 +2459,10 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
   assert.match(settings, /<div class="field settings-wide"><span class="field-label">Labels exclus des surveillances automatiques<\/span><ha-selector id="excluded-labels"/);
-  assert.match(settings, /id="settings-excluded_entities-configuration"[^>]+data-action="open-settings-configuration"/);
-  assert.match(settings, /id="settings-excluded_devices-configuration"[^>]+data-action="open-settings-configuration"/);
-  assert.match(settings, /class="settings-wide settings-configuration-actions">[\s\S]*settings-excluded_entities-configuration[\s\S]*settings-excluded_devices-configuration[\s\S]*<\/div>/);
-  assert.match(settings, /id="settings-entity_delays-configuration"[^>]+data-action="open-settings-configuration"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.equal((settings.match(/data-action="save-configuration"/g) ?? []).length, 1);
   assert.match(settings, /slot="fab" size="l" class=""[^>]*data-action="save-configuration"/);
   assert.doesNotMatch(settings, /class="actions settings-save-actions"/);
-  assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf('id="excluded-labels"'));
-  assert.ok(settings.indexOf('id="global-delay"') < settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini."));
-  assert.ok(settings.indexOf("Ce délai est utilisé lorsqu’aucun délai particulier d’entité ou de pack n’est défini.") < settings.indexOf('id="excluded-labels"'));
   assert.ok(settings.indexOf('id="excluded-labels"') < settings.indexOf('class="history-settings"'));
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
@@ -2881,7 +2789,7 @@ test("automatic monitoring action serializes all category controls", async () =>
     "#auto-battery-delay": { value: "240" },
     "#auto-battery-threshold": { value: "12" },
     "#auto-execution_errors-enabled": { checked: true },
-    "#auto-execution_errors-delay": { value: "" },
+    "#auto-execution_errors-delay": { value: "0" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
   let call;
@@ -2889,18 +2797,10 @@ test("automatic monitoring action serializes all category controls", async () =>
 
   await panel._saveAutomatic();
 
-  assert.deepEqual(call.config.automatic, {
-    unavailable: { label_ids: [], enabled: true, delay: 60 },
-    connectivity: { label_ids: [], enabled: false, delay: 120 },
-    unifi: { label_ids: [], enabled: true, delay: 180 },
-    battery: { label_ids: [], enabled: true, delay: 240, threshold: 12, device_thresholds: {} },
-    execution_errors: {
-      enabled: true,
-      label_ids: [],
-      delay: null,
-      failure_thresholds: { "automation.test": 3 },
-    },
-  });
+  const expected = automaticConfig(); delete expected.flapping;
+  for (const [id, delay] of [["unavailable", 60], ["connectivity", 120], ["unifi", 180], ["battery", 240]]) expected[id].delay = delay;
+  expected.connectivity.enabled = false; expected.battery.threshold = 12;
+  assert.deepEqual(call.config.automatic, expected);
 });
 
 test("execution failure thresholds select automations and scripts", async () => {
@@ -2910,27 +2810,28 @@ test("execution failure thresholds select automations and scripts", async () => 
   panel._packs = completePacks();
   panel._render = () => {};
   panel._automaticMapDraft = {
-    execution_errors: { failure_thresholds: [] },
+    execution_errors: { entity_overrides: [] },
   };
 
   await panel._handleClick(actionEvent("add-pack-map-row", null, {
     packId: "execution_errors",
-    fieldId: "failure_thresholds",
+    fieldId: "entity_overrides",
   }));
-  assert.deepEqual(panel._automaticMapDraft.execution_errors.failure_thresholds, [
-    { target_id: "", value: 1 },
+  assert.deepEqual(panel._automaticMapDraft.execution_errors.entity_overrides, [
+    { target_id: "" },
   ]);
 
   let selector;
-  panel._configureSelector = (...args) => { selector = args; };
+  panel._configureSelector = (...args) => { if (args[0].includes("-target-")) selector = args; };
   for (const pack of panel._packs) panel._automaticMapDraft[pack.id] ??= { label_ids: [] };
+  panel._configurationDrawer = { kind: "automatic", id: "execution_errors" };
   panel._hydrateAutomaticControls();
   assert.equal(
     selector[0],
-    "auto-execution_errors-failure_thresholds-target-0",
+    "auto-execution_errors-entity_overrides-target-0",
   );
   assert.deepEqual(selector[1], {
-    entity: { domain: ["automation", "script"] },
+    entity: { filter: { domain: ["automation", "script"] } },
   });
 });
 
@@ -2939,20 +2840,21 @@ test("battery thresholds use the native battery sensor device filter", () => {
   const panel = new Panel();
   panel._config = completeConfig();
   panel._packs = completePacks().filter((pack) => pack.id === "battery");
-  panel._automaticMapDraft = { battery: { device_thresholds: [{ target_id: "", value: 15 }] } };
+  panel._automaticMapDraft = { battery: { device_overrides: [{ target_id: "", value: 15 }] } };
   panel.shadowRoot.querySelector = () => null;
   panel.shadowRoot.querySelectorAll = () => [];
   let selector;
-  panel._configureSelector = (...args) => { selector = args; };
+  panel._configureSelector = (...args) => { if (args[0].includes("-target-")) selector = args; };
 
+  panel._configurationDrawer = { kind: "automatic", id: "battery" };
   panel._hydrateAutomaticControls();
 
-  assert.equal(selector[0], "auto-battery-device_thresholds-target-0");
+  assert.equal(selector[0], "auto-battery-device_overrides-target-0");
   assert.deepEqual(selector[1], {
     device: { entity: { domain: "sensor", device_class: "battery" } },
   });
   selector[3]("battery-device");
-  assert.equal(panel._automaticMapDraft.battery.device_thresholds[0].target_id, "battery-device");
+  assert.equal(panel._automaticMapDraft.battery.device_overrides[0].target_id, "battery-device");
 });
 
 test("flapping entity overrides hydrate an entity selector", () => {
@@ -2977,8 +2879,9 @@ test("flapping entity overrides hydrate an entity selector", () => {
   panel.shadowRoot.querySelector = () => null;
   panel.shadowRoot.querySelectorAll = () => [];
   let selector;
-  panel._configureSelector = (...args) => { selector = args; };
+  panel._configureSelector = (...args) => { if (args[0].includes("-target-")) selector = args; };
 
+  panel._configurationDrawer = { kind: "automatic", id: "flapping" };
   panel._hydrateAutomaticControls();
 
   assert.equal(selector[0], "auto-flapping-entity_overrides-target-0");
@@ -3037,6 +2940,7 @@ test("flapping saves global and per-entity values without a pack delay", async (
   }];
   panel._automaticMapDraft = {
     flapping: {
+      label_ids: [],
       occurrences: 4,
       window: 900,
       recovery: 300,
@@ -3058,17 +2962,12 @@ test("flapping saves global and per-entity values without a pack delay", async (
     "#auto-flapping-recovery": { value: "300" },
   };
   panel.shadowRoot.querySelector = (selector) => controls[selector];
-  panel.shadowRoot.querySelectorAll = (selector) => selector === "[data-pack-setting-toggle]"
-    ? [{
-      checked: false,
-      dataset: {
-        packSettingToggle: "flapping",
-        packField: "entity_overrides",
-        packIndex: "0",
-        settingId: "enabled",
-      },
-    }]
-    : [];
+  panel.shadowRoot.querySelectorAll = () => [];
+  panel._configurationDrawer = { kind: "automatic", id: "flapping" };
+  panel._configureSelector = (id, _selector, _value, change) => {
+    if (id.endsWith("-0-enabled")) change("disabled");
+  };
+  panel._hydrateAutomaticControls();
   let call;
   panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
 
@@ -3095,6 +2994,7 @@ test("custom rule flapping options appear only with the pack and serialize overr
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
   panel._config = completeConfig();
+  delete panel._config.automatic.flapping;
   panel._editingRule = { ...newRuleDefaults(), entity_ids: ["sensor.test"] };
   const editorWithoutFlapping = panel._renderRuleEditor();
   assert.doesNotMatch(editorWithoutFlapping, /rule-flapping-enabled/);
@@ -3187,119 +3087,58 @@ test("automatic packs are rendered only from available backend metadata", () => 
   assert.match(html, /auto-unavailable-enabled/);
   assert.match(html, /auto-connectivity-enabled/);
   assert.match(html, /auto-battery-enabled/);
-  assert.doesNotMatch(html, /auto-unifi-enabled|Équipements UniFi/);
+  assert.match(html, /auto-unifi-enabled/);
   assert.doesNotMatch(html, /CATEGORIES|État unavailable sur toutes les entités/);
 });
 
-test("disabled automatic packs hide their configuration without rerendering", () => {
+test("disabled packs remain configurable and switches preserve their exceptions", () => {
   const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
+  const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
   panel._config.automatic.battery.enabled = false;
-  panel._packs = completePacks();
-
-  const html = panel._renderAutomatic();
-  assert.match(
-    html,
-    /data-pack-configuration="battery" hidden[\s\S]*auto-battery-threshold/,
-  );
-  assert.match(
-    html,
-    /data-pack-configuration="unavailable" [^>]*>[\s\S]*auto-unavailable-delay/,
-  );
-
-  const switchControl = { checked: false };
-  const configuration = { hidden: true };
-  panel.shadowRoot.querySelector = (selector) => {
-    if (selector === "#auto-battery-enabled") return switchControl;
-    if (selector === '[data-pack-configuration="battery"]') return configuration;
-    return null;
-  };
-  panel._hydrateAutomaticControls();
-  switchControl.checked = true;
-  switchControl.onchange();
-  assert.equal(configuration.hidden, false);
-  switchControl.checked = false;
-  switchControl.onchange();
-  assert.equal(configuration.hidden, true);
-});
-
-test("configuration buttons count automatic and settings entries", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
-  panel._packs = completePacks();
-
-  const automatic = panel._renderAutomatic();
-  assert.match(
-    automatic,
-    /id="auto-battery-device_thresholds-configuration"[\s\S]*?>Configuration \(0\)<\/ha-button>/,
-  );
-  assert.match(
-    automatic,
-    /id="auto-execution_errors-failure_thresholds-configuration"[\s\S]*?>Configuration \(1\)<\/ha-button>/,
-  );
-  assert.doesNotMatch(automatic, /automatic-configuration-entry[^>]*><span/);
-
-  panel._config.excluded_entities = ["sensor.one", "sensor.two"];
-  panel._config.excluded_devices = ["a".repeat(32)];
-  panel._config.entity_delays = { "sensor.one": 30 };
-  panel._resetSettingsDraft();
-  const settings = panel._renderSettings();
-  assert.match(settings, /id="settings-excluded_entities-configuration"[\s\S]*?>Entités exclues \(2\)<\/ha-button>/);
-  assert.match(settings, /id="settings-excluded_devices-configuration"[\s\S]*?>Appareils exclus \(1\)<\/ha-button>/);
-  assert.match(settings, /id="settings-entity_delays-configuration"[\s\S]*?>Délais particuliers par entité \(1\)<\/ha-button>/);
-  assert.doesNotMatch(settings, /settings-configuration-entry[^>]*><span/);
-});
-
-test("automatic and settings configuration render in the shared side drawer", () => {
-  const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
-  panel._packs = completePacks();
-  panel._configurationDrawer = { kind: "automatic", id: "execution_errors" };
-  const automatic = panel._renderAutomatic();
-  assert.match(automatic, /class="side-drawer configuration-drawer"/);
-  assert.match(automatic, /auto-execution_errors-failure_thresholds-target-0/);
-  assert.match(automatic, /pack-map-heading[\s\S]*pack-map-list/);
-
   panel._configurationDrawer = { kind: "automatic", id: "battery" };
-  const battery = panel._renderAutomatic();
-  assert.match(battery, /Aucun seuil particulier par appareil\./);
-  assert.match(battery, /class="empty compact pack-map-empty"/);
-
-  panel._configurationDrawer = { kind: "settings", id: "entity_delays" };
-  panel._resetSettingsDraft();
-  panel._config.entity_delays = { "sensor.one": 30 };
-  const delays = panel._renderSettings();
-  assert.match(delays, /class="side-drawer configuration-drawer"/);
-  assert.match(delays, /data-duration-value="30"[^>]*data-delay-index="0"/);
-
-  panel._configurationDrawer = { kind: "settings", id: "excluded_entities" };
-  assert.match(panel._renderSettings(), /<ha-selector id="excluded-entities"><\/ha-selector>/);
-  panel._configurationDrawer = { kind: "settings", id: "excluded_devices" };
-  assert.match(panel._renderSettings(), /<ha-selector id="excluded-devices"><\/ha-selector>/);
+  assert.match(panel._renderAutomatic(), /auto-battery-threshold/);
+  const control = { checked: false };
+  panel.shadowRoot.querySelector = (id) => id === "#auto-battery-enabled" ? control : null;
+  panel._hydrateAutomaticControls();
+  control.checked = true; control.onchange();
+  assert.equal(panel._automaticMapDraft.battery.enabled, true);
+  control.checked = false; control.onchange();
+  assert.equal(panel._automaticMapDraft.battery.enabled, false);
+  assert.equal(panel._automaticMapDraft.battery.threshold, 15);
 });
 
-test("an empty pack delay serializes as the global fallback", async () => {
+test("one configuration button counts all pack exceptions and global settings expose labels", () => {
   const Panel = customElements.get("alert-manager-panel");
-  const panel = new Panel();
-  panel._config = completeConfig();
-  panel._packs = completePacks().filter((pack) => pack.id === "unavailable");
-  panel._render = () => {};
-  const controls = {
-    "#auto-unavailable-enabled": { checked: true },
-    "#auto-unavailable-delay": { value: "" },
-  };
-  panel.shadowRoot.querySelector = (selector) => controls[selector];
-  let call;
-  panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
+  const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
+  const automatic = panel._renderAutomatic();
+  assert.equal((automatic.match(/data-action="open-automatic-configuration"/g) ?? []).length, 5);
+  assert.match(automatic, /data-pack-id="battery">Configuration \(0\)/);
+  assert.match(automatic, /data-pack-id="execution_errors">Configuration \(1\)/);
+  const settings = panel._renderSettings();
+  assert.match(settings, /id="excluded-labels"/);
+  assert.doesNotMatch(settings, /id="global-delay"|settings-entity_delays-configuration|settings-excluded_entities-configuration|settings-excluded_devices-configuration/);
+});
 
+test("pack defaults and both exception levels share one side drawer", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
+  panel._configurationDrawer = { kind: "automatic", id: "execution_errors" };
+  const html = panel._renderAutomatic();
+  assert.equal((html.match(/class="side-drawer configuration-drawer"/g) ?? []).length, 1);
+  assert.match(html, /auto-execution_errors-failure_threshold/);
+  assert.match(html, /auto-execution_errors-entity_overrides-target-0/);
+  assert.match(html, /data-field-id="device_overrides"/);
+  assert.match(html, /data-configuration-yaml-menu/);
+});
+
+test("an explicit zero pack delay is saved without a global fallback", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks().filter((pack) => pack.id === "unavailable"); panel._render = () => {};
+  panel.shadowRoot.querySelector = (id) => id === "#auto-unavailable-delay" ? { value: "0" } : null;
+  let call; panel._hass = { callWS: async (message) => { call = message; return panel._config; } };
   await panel._saveAutomatic();
-
-  assert.deepEqual(call.config.automatic, {
-    unavailable: { label_ids: [], enabled: true, delay: null },
-  });
+  assert.equal(call.config.automatic.unavailable.delay, 0);
+  assert.equal(call.config.global_delay, undefined);
 });
 
 test("submit keeps the form identity across an asynchronous rerender", async () => {
@@ -3383,7 +3222,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   assert.deepEqual(calls, [{
     type: "alert_manager/config/update",
     config: {
-      global_delay: 300,
+
       pending_display_delay: 15,
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
@@ -3391,9 +3230,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
-      excluded_entities: ["sensor.skip", "light.skip"],
-      excluded_devices: ["a".repeat(32), "b".repeat(32)],
-      entity_delays: { "sensor.one": 30, "light.two": 60 },
+
     },
   }, {
     type: "alert_manager/history/config/update",
@@ -3515,7 +3352,7 @@ test("settings scalar drafts survive a structural rerender", () => {
   panel._settingsDraft.coherence_schedule = "weekly";
 
   const settings = panel._renderSettings();
-  assert.match(settings, /id="global-delay"[^>]+value="321"/);
+  assert.doesNotMatch(settings, /id="global-delay"/);
   assert.match(settings, /id="pending-display-delay"[^>]+value="12"/);
   assert.match(settings, /id="history-limit"[^>]+value="42"/);
   const select = { addEventListener() {} };
@@ -4646,7 +4483,7 @@ test("combined settings save sends one configuration update and preserves drafts
     type: "alert_manager/config/update",
     config: {
       automatic: { battery: { label_ids: [], enabled: true, delay: 42 } },
-      global_delay: 300,
+
       pending_display_delay: 15,
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
@@ -4654,9 +4491,7 @@ test("combined settings save sends one configuration update and preserves drafts
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
-      excluded_entities: ["sensor.skip", "light.skip"],
-      excluded_devices: ["a".repeat(32), "b".repeat(32)],
-      entity_delays: { "sensor.one": 30, "light.two": 60 },
+
     },
   }, {
     type: "alert_manager/history/config/update",

@@ -32,7 +32,6 @@ const SETTINGS_SECTIONS = [
   ["exclusions", "settings.exclusions", "mdi:shield-off-outline"],
   ["notifications", "notifications.title", "mdi:bell-outline"],
   ["history", "settings.history_settings", "mdi:history"],
-  ["entity-delay", "settings.entity_delay", "mdi:timer-cog-outline"],
   ["transfer", "settings.transfer_title", "mdi:file-swap-outline"],
   ["diagnostics", "statistics.title", "mdi:speedometer"],
 ];
@@ -55,7 +54,6 @@ export function renderSettings(context) {
       ${automaticMarkup}
       <form id="settings-form" class="stack settings-form">
       <ha-card id="settings-section-alert-display" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.alert_display"))}</h2><div class="settings-grid">
-        ${renderNumberField("global-delay", t("settings.global_delay"), settingsDraft.global_delay ?? config.global_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.global_delay_help") })}
         ${renderNumberField("pending-display-delay", t("settings.pending_display_delay"), settingsDraft.pending_display_delay ?? config.pending_display_delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { help: t("settings.pending_display_delay_help") })}
       </div></ha-card>
       <ha-card id="settings-section-coherence" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.coherence_settings"))}</h2><div class="settings-grid">
@@ -73,8 +71,6 @@ export function renderSettings(context) {
       <ha-card id="settings-section-exclusions" outlined class="panel settings-card settings-scroll-section"><h2>${esc(t("settings.exclusions"))}</h2><div class="settings-grid">
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.label_exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
         <div class="settings-wide settings-configuration-actions">
-          ${renderSettingsConfigurationEntry("excluded_entities", t("settings.entity_exclusions"), (settingsDraft.excluded_entities ?? []).length, t)}
-          ${renderSettingsConfigurationEntry("excluded_devices", t("settings.device_exclusions"), (settingsDraft.excluded_devices ?? []).length, t)}
         </div>
       </div></ha-card>
       ${renderNotificationProfiles({
@@ -92,9 +88,6 @@ export function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
-      </ha-card>
-      <ha-card id="settings-section-entity-delay" outlined class="panel settings-card settings-scroll-section"><div><h2>${esc(t("settings.entity_delay"))}</h2><small>${esc(t("settings.delay_help"))}</small></div>
-        ${renderSettingsConfigurationEntry("entity_delays", t("settings.entity_delay"), entityDelayDraft.length, t)}
       </ha-card>
       <ha-card id="settings-section-transfer" outlined class="panel configuration-transfer settings-scroll-section"><div><h2>${esc(t("settings.transfer_title"))}</h2><small>${esc(t("settings.transfer_help"))}</small></div>
         <div class="actions transfer-actions"><ha-button type="button" appearance="plain" data-action="export-config" ${busy || recoveryActive ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_DOWNLOAD}"></ha-svg-icon>${esc(t("settings.export"))}</ha-button><ha-button type="button" appearance="accent" variant="brand" data-action="choose-config-import" ${busy ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_UPLOAD}"></ha-svg-icon>${esc(t("settings.import"))}</ha-button></div>
@@ -288,7 +281,7 @@ export async function saveConfiguration() {
     if (saveAutomaticChanges && this._configurationDrawer?.kind === "automatic"
       && !await validateConfigurationYaml(this)) return false;
     const automaticChanges = saveAutomaticChanges
-      ? collectAutomaticChanges.call(this) : {};
+      ? collectAutomaticChanges.call(this, true) : {};
     if (!automaticChanges) return false;
     return this._saveSettings(automaticChanges);
 }
@@ -362,7 +355,7 @@ export async function handleImportSelection(event) {
     const prompt = this._t("settings.import_confirm", {
       rules: summary.rules,
       packs: summary.enabled_packs,
-      delays: summary.entity_delays,
+      exceptions: summary.pack_exceptions,
     });
     if (!window.confirm(prompt)) return;
     const result = await this._call(
@@ -389,26 +382,8 @@ export async function saveSettings(additionalChanges = {}) {
       this._refreshUiState();
       return false;
     }
-    const entityDelays = {};
-    for (const row of this._entityDelayDraft) {
-      if (!row.entity_id || !Number.isInteger(row.delay) || row.delay < 0) {
-        this._notice = { kind: "error", text: this._t("settings.delay_validation") };
-        this._refreshUiState();
-        return false;
-      }
-      if (row.entity_id in entityDelays) {
-        this._notice = {
-          kind: "error",
-          text: this._t("settings.duplicate_delay_save", { entity_id: row.entity_id }),
-        };
-        this._refreshUiState();
-        return false;
-      }
-      entityDelays[row.entity_id] = row.delay;
-    }
     const changes = {
       ...additionalChanges,
-      global_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#global-delay"))),
       pending_display_delay: Number(durationFieldValue(this.shadowRoot.querySelector("#pending-display-delay"))),
       notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
@@ -420,9 +395,6 @@ export async function saveSettings(additionalChanges = {}) {
         ...this._settingsDraft.coherence_ignored_entity_references,
       ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
-      excluded_entities: [...this._settingsDraft.excluded_entities],
-      excluded_devices: [...this._settingsDraft.excluded_devices],
-      entity_delays: entityDelays,
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;

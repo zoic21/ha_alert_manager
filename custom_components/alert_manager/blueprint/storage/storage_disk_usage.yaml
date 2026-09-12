@@ -1,0 +1,30 @@
+blueprint_id: storage_disk_usage
+schema_version: 1
+blueprint_version: 1
+category: storage
+name_key: generator.storage_disk_usage.name
+description_key: generator.storage_disk_usage.description
+requirements:
+  integrations:
+  - systemmonitor
+discovery:
+  all:
+  - field: integration
+    equals: systemmonitor
+  - field: domain
+    equals: sensor
+  - any:
+    - field: translation_key
+      equals: disk_use_percent
+    - field: unique_id
+      equals: disk_use_percent
+    - field: unique_id
+      glob: disk_use_percent_*
+  - field: unit_of_measurement
+    equals: '%'
+rule:
+  name: 'Storage: high disk usage'
+  source: value
+  operator: above
+  value: 90
+  duration: 300

@@ -21,6 +21,7 @@ const filenames = [
   "components/configuration-yaml.js",
   "components/notification-profiles.js",
   "components/rule-editor.js",
+  "components/rule-generator.js",
   "styles/base-styles.js",
   "styles/table-styles.js",
   "styles/settings-styles.js",

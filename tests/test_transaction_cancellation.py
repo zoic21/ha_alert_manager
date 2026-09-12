@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from homeassistant.core import CoreState, Event
 from homeassistant.util import dt as dt_util
+from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import STORAGE_KEY
 from custom_components.alert_manager.manager import AlertManager
@@ -84,7 +85,9 @@ def test_cancellation_before_mutation_lock_changes_nothing(hass, entry):
         await manager._config_mutation_lock.acquire()
         update_task = asyncio.create_task(
             manager.async_update_config(
-                {"global_delay": before_config["global_delay"] + 1}
+                automatic_settings(
+                    delay=before_config["automatic"]["unavailable"]["delay"] + 1
+                )
             )
         )
         await asyncio.sleep(0)
@@ -495,7 +498,7 @@ def test_cancellation_during_primary_config_store_finishes_commit(hass, entry):
     async def scenario() -> None:
         manager = AlertManager(hass, entry)
         assert await manager.async_setup() is True
-        new_delay = manager.config["global_delay"] + 1
+        new_delay = manager.config["automatic"]["unavailable"]["delay"] + 1
         original_save = manager.storage.async_save
         save_started = asyncio.Event()
         release_save = asyncio.Event()
@@ -507,7 +510,7 @@ def test_cancellation_during_primary_config_store_finishes_commit(hass, entry):
 
         manager.storage.async_save = blocked_save
         update_task = asyncio.create_task(
-            manager.async_update_config({"global_delay": new_delay})
+            manager.async_update_config(automatic_settings(delay=new_delay))
         )
         await save_started.wait()
         update_task.cancel()
@@ -518,8 +521,11 @@ def test_cancellation_during_primary_config_store_finishes_commit(hass, entry):
         with pytest.raises(asyncio.CancelledError):
             await update_task
 
-        assert manager.config["global_delay"] == new_delay
-        assert hass.stores["alert_manager"]["config"]["global_delay"] == new_delay
+        assert manager.config["automatic"]["unavailable"]["delay"] == new_delay
+        assert (
+            hass.stores["alert_manager"]["config"]["automatic"]["unavailable"]["delay"]
+            == new_delay
+        )
         manager.storage.async_save = original_save
         await manager.async_unload()
 
@@ -532,7 +538,7 @@ def test_cancellation_after_primary_store_keeps_committed_snapshot(hass, entry):
     async def scenario() -> None:
         manager = AlertManager(hass, entry)
         assert await manager.async_setup() is True
-        new_delay = manager.config["global_delay"] + 1
+        new_delay = manager.config["automatic"]["unavailable"]["delay"] + 1
         original_flush = manager._async_flush_history
         flush_started = asyncio.Event()
         release_flush = asyncio.Event()
@@ -543,10 +549,13 @@ def test_cancellation_after_primary_store_keeps_committed_snapshot(hass, entry):
 
         manager._async_flush_history = blocked_flush
         update_task = asyncio.create_task(
-            manager.async_update_config({"global_delay": new_delay})
+            manager.async_update_config(automatic_settings(delay=new_delay))
         )
         await flush_started.wait()
-        assert hass.stores["alert_manager"]["config"]["global_delay"] == new_delay
+        assert (
+            hass.stores["alert_manager"]["config"]["automatic"]["unavailable"]["delay"]
+            == new_delay
+        )
 
         update_task.cancel()
         await asyncio.sleep(0)
@@ -555,8 +564,11 @@ def test_cancellation_after_primary_store_keeps_committed_snapshot(hass, entry):
         with pytest.raises(asyncio.CancelledError):
             await update_task
 
-        assert manager.config["global_delay"] == new_delay
-        assert hass.stores["alert_manager"]["config"]["global_delay"] == new_delay
+        assert manager.config["automatic"]["unavailable"]["delay"] == new_delay
+        assert (
+            hass.stores["alert_manager"]["config"]["automatic"]["unavailable"]["delay"]
+            == new_delay
+        )
         manager._async_flush_history = original_flush
         await manager.async_unload()
 
@@ -647,29 +659,34 @@ def test_cancelled_history_limit_finishes_both_stores(hass, entry, blocked_store
 
 
 def test_cancelled_import_between_stores_finishes_complete_import(hass, entry):
-    """A cancelled import cannot leave cleared history with the old config."""
+    """Admitted import finishes atomically and preserves existing history."""
 
     async def scenario() -> None:
         manager, alert_id = await _active_rule_manager(hass, entry)
         await _seed_history(manager, alert_id)
         candidate = manager.get_config()
-        candidate["global_delay"] += 1
+        candidate["automatic"]["unavailable"]["delay"] += 1
         raw_yaml = dump_config_yaml(candidate)
-        new_delay = candidate["global_delay"]
-        original_history_save = manager.history_storage.async_save
+        new_delay = candidate["automatic"]["unavailable"]["delay"]
+        original_save = manager.storage.async_save
+        previous_history = list(manager.history)
+        previous_events = deepcopy(hass.stores["alert_manager.history"]["events"])
         history_cleared = asyncio.Event()
         release_import = asyncio.Event()
 
         async def blocked_after_history_save(*args, **kwargs):
-            await original_history_save(*args, **kwargs)
+            await original_save(*args, **kwargs)
             history_cleared.set()
             await release_import.wait()
 
-        manager.history_storage.async_save = blocked_after_history_save
+        manager.storage.async_save = blocked_after_history_save
         import_task = asyncio.create_task(manager.async_import_config(raw_yaml))
         await history_cleared.wait()
-        assert hass.stores["alert_manager.history"]["events"] == []
-        assert hass.stores["alert_manager"]["config"]["global_delay"] != new_delay
+        assert hass.stores["alert_manager.history"]["events"] == previous_events
+        assert (
+            hass.stores["alert_manager"]["config"]["automatic"]["unavailable"]["delay"]
+            == new_delay
+        )
 
         import_task.cancel()
         await asyncio.sleep(0)
@@ -678,11 +695,14 @@ def test_cancelled_import_between_stores_finishes_complete_import(hass, entry):
         with pytest.raises(asyncio.CancelledError):
             await import_task
 
-        assert manager.config["global_delay"] == new_delay
-        assert manager.history == []
-        assert hass.stores["alert_manager"]["config"]["global_delay"] == new_delay
-        assert hass.stores["alert_manager.history"]["events"] == []
-        manager.history_storage.async_save = original_history_save
+        assert manager.config["automatic"]["unavailable"]["delay"] == new_delay
+        assert manager.history == previous_history
+        assert (
+            hass.stores["alert_manager"]["config"]["automatic"]["unavailable"]["delay"]
+            == new_delay
+        )
+        assert hass.stores["alert_manager.history"]["events"] == previous_events
+        manager.storage.async_save = original_save
         await manager.async_unload()
 
     asyncio.run(scenario())

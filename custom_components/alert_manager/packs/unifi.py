@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
 from ..const import CATEGORY_UNIFI
-from .base import AutomaticPack, PackMatch, PackNeutral
+from .base import AutomaticPack, PackMatch, PackNeutral, configuration_fields
 
 
 def _is_unifi_tracker(hass: HomeAssistant, state: State) -> bool:
@@ -58,6 +58,9 @@ def _evaluate(
 
 
 PACK = AutomaticPack(
+    config_fields=configuration_fields(),
+    target_filter={"integration": "unifi"},
+    order=2,
     id=CATEGORY_UNIFI,
     translation_key="unifi",
     prerequisites=("unifi",),

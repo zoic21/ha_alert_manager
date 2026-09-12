@@ -1,603 +1,316 @@
-import { configurationValueToDraft, hydrateConfigurationYaml, renderConfigurationYamlMenu, renderConfigurationYamlContent, validateConfigurationYaml } from "../components/configuration-yaml.js";
+import { automaticPackToDraft, automaticDraftToPack, hydrateConfigurationYaml, renderConfigurationYamlMenu, renderConfigurationYamlContent, validateConfigurationYaml } from "../components/configuration-yaml.js";
 import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
-import {
-  confirmConfigurationDiscard,
-  renderConfigurationDrawer,
-  renderConfigurationRemove,
-  replaceConfigurationDrawer,
-  revealAddedRow,
-} from "../components/configuration-drawer.js";
+import { confirmConfigurationDiscard, renderConfigurationDrawer, renderConfigurationRemove, replaceConfigurationDrawer, revealAddedRow } from "../components/configuration-drawer.js";
 
-const NUMBER_MAP_FIELD_TYPES = new Set(["device_number_map", "entity_number_map"]);
-const SETTINGS_MAP_FIELD_TYPES = new Set([
-  "device_settings_map",
-  "entity_settings_map",
-]);
-const MAP_FIELD_TYPES = new Set([
-  ...NUMBER_MAP_FIELD_TYPES,
-  ...SETTINGS_MAP_FIELD_TYPES,
-  "pack_settings_map",
-]);
+const EXCEPTION_FIELDS = ["device_overrides", "entity_overrides"];
+const settingFields = (pack) => (pack.config_fields ?? []).filter((field) => ["number", "boolean", "text", "select"].includes(field.type));
+const sourceField = (pack) => (pack.config_fields ?? []).find((field) => field.id === "source_packs");
+const exceptionCount = (settings) => EXCEPTION_FIELDS.reduce((count, key) => count + (settings?.[key]?.length ?? 0), 0);
+const totalExceptions = (settings) => exceptionCount(settings) + Object.values(settings?.source_packs ?? {}).reduce((count, source) => count + exceptionCount(source), 0);
+const scopeFor = (draft, sourceId) => sourceId ? draft.source_packs?.[sourceId] : draft;
 
-function isNumberMapField(field) {
-  return NUMBER_MAP_FIELD_TYPES.has(field.type);
+function automaticContext(panel) {
+  return {
+    availablePacks: panel._packs, config: panel._config, draft: panel._automaticMapDraft,
+    configurationDrawer: panel._configurationDrawer, busy: panel._busy,
+    useBottomSheet: panel._useNativeBottomSheet(), hass: panel._hass,
+    t: (key, replacements) => panel._t(key, replacements),
+  };
 }
 
-function isSettingsMapField(field) {
-  return SETTINGS_MAP_FIELD_TYPES.has(field.type);
-}
-
-function drawerFields(pack) {
-  return (pack.config_fields ?? []).filter((field) => MAP_FIELD_TYPES.has(field.type));
-}
-
-function fieldConfigurationCount(pack, field, config, draft) {
-  const value = draft?.[pack.id]?.[field.id];
-  return Array.isArray(value)
-    ? value.filter((row) => row.target_id).length
-    : Object.keys(value ?? config[field.id] ?? {}).length;
+function formatSetting(value, field, t) {
+  if (field.type === "boolean") return t(field.id === "enabled" ? value ? "automatic.monitoring_enabled" : "automatic.monitoring_disabled" : value ? "automatic.boolean_true" : "automatic.boolean_false");
+  if (field.unit === "s") {
+    if (value && value % 3600 === 0) return `${value / 3600} ${t("automatic.hours_short")}`;
+    if (value && value % 60 === 0) return `${value / 60} ${t("automatic.minutes_short")}`;
+  }
+  return `${value ?? ""}${field.unit ? ` ${field.unit}` : ""}`;
 }
 
 export function renderAutomatic(context) {
-    const {
-      availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-      renderNumberField, t,
-    } = context;
-    return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
-      <h2 class="automatic-section-title">${esc(t("tabs.automatic"))}</h2>
-      <form id="automatic-form" class="automatic-grid">
-      ${availablePacks.map((pack) => {
-        const packConfig = draft[pack.id];
-        const packKey = pack.translation_key || pack.id;
-        const packName = t(`packs.${packKey}.name`);
-        const configurableFields = drawerFields(pack);
-        const configurationButtons = configurableFields.map((field) => {
-          const fieldName = t(`automatic.fields.${field.translation_key}.label`);
-          const count = fieldConfigurationCount(pack, field, packConfig, draft);
-          const label = configurableFields.length === 1
-            ? t("buttons.configuration", { count })
-            : t("buttons.configuration_named", { name: fieldName, count });
-          return `<ha-button id="auto-${pack.id}-${field.id}-configuration" appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}" aria-label="${esc(t("automatic.configure_aria", { name: fieldName }))}">${esc(label)}</ha-button>`;
-        }).join("");
-        return `<section class="category-card">
-          <div class="category-header">
-            <h2>${esc(packName)}</h2>
-            <ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name: packName }))}" ${packConfig.enabled ? "checked" : ""}></ha-switch>
-          </div>
-          <p>${esc(t(`packs.${packKey}.description`))}</p>
-          <div class="pack-configuration" data-pack-configuration="${esc(pack.id)}" ${packConfig.enabled ? "" : "hidden"}>
-            <div class="fields">
-              <div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector><small>${esc(t("automatic.labels_help"))}</small></div>
-              ${pack.uses_delay === false ? "" : renderNumberField(`auto-${pack.id}-delay`, t("automatic.pack_delay"), packConfig.delay, t("units.seconds"), 0, MAX_DURATION_SECONDS, { required: false, help: t("automatic.empty_delay_help") })}
-              ${(pack.config_fields ?? []).filter((field) => field.type === "number").map((field) => renderPackField(
-                pack,
-                field,
-                packConfig,
-                { availablePacks, draft, renderNumberField, t },
-              )).join("")}
-            </div>
-            ${configurationButtons ? `<div class="configuration-entry automatic-configuration-entry${configurableFields.length > 1 ? " has-multiple-configurations" : ""}">${configurationButtons}</div>` : ""}
-          </div>
-        </section>`;
-      }).join("")}
-      ${renderAutomaticConfigurationDrawer({
-        availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-        renderNumberField, t,
-      })}
-      </form>
-    </ha-card>`;
+  const { availablePacks, draft, t } = context;
+  return `<ha-card id="settings-section-automatic" outlined class="panel settings-card automatic-section settings-scroll-section">
+    <h2>${esc(t("tabs.automatic"))}</h2><form id="automatic-form" class="automatic-grid">
+    ${availablePacks.map((pack) => {
+      const settings = draft[pack.id];
+      const name = t(`packs.${pack.translation_key || pack.id}.name`);
+      const summary = [pack.uses_delay === false ? "" : `${t("automatic.pack_delay")}: ${formatSetting(settings.delay, { unit: "s" }, t)}`, ...settingFields(pack).map((field) => `${t(`automatic.fields.${field.translation_key}.label`)}: ${formatSetting(settings[field.id], field, t)}`)].filter(Boolean).join(" · ");
+      return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
+        <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
+        <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
+    }).join("")}${renderAutomaticConfigurationDrawer(context)}</form></ha-card>`;
 }
 
 export function renderAutomaticPanel() {
-    this._ensureAutomaticDraft();
-    return renderAutomatic({
-      availablePacks: this._packs.filter((pack) => pack.available),
-      config: this._config,
-      draft: this._automaticMapDraft,
-      configurationDrawer: this._configurationDrawer,
-      busy: this._busy,
-      useBottomSheet: this._useNativeBottomSheet(),
-      renderNumberField: (...args) => this._numberField(...args),
-      t: (key, replacements) => this._t(key, replacements),
-    });
+  this._ensureAutomaticDraft();
+  return renderAutomatic(automaticContext(this));
 }
 
-export function renderAutomaticConfigurationDrawer(context) {
-  const {
-    availablePacks, config, draft, configurationDrawer, busy, useBottomSheet,
-    renderNumberField, t,
-  } = context;
-  if (configurationDrawer?.kind !== "automatic") return "";
-  const pack = availablePacks.find((item) => item.id === configurationDrawer.id);
-  const fields = pack ? drawerFields(pack) : [];
-  const field = fields.find((item) => item.id === configurationDrawer.fieldId)
-    ?? (fields.length === 1 ? fields[0] : null);
-  if (!field) return "";
-  const packConfig = draft[pack.id];
-  const fieldName = t(`automatic.fields.${field.translation_key}.label`);
-  const content = `<div class="fields configuration-drawer-fields">${renderPackField(
-    pack,
-    field,
-    packConfig,
-    { availablePacks, draft, renderNumberField, t },
-  )}</div>`;
-  return renderConfigurationDrawer({
-    resizeLabel: t("rules.aria_resize"),
-    title: fieldName,
-    ariaLabel: t("automatic.close_configuration_aria", { name: fieldName }),
-    headerAction: renderConfigurationYamlMenu(configurationDrawer, t),
-    content: renderConfigurationYamlContent(configurationDrawer, content, t),
-    saveAction: "save-automatic",
-    saveLabel: t("buttons.save"),
-    busy,
-    useBottomSheet,
-  });
+// Presentation-only counterpart of the backend field resolver; values are always
+// validated and evaluated on the server. Missing fields remain missing in drafts.
+export function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities = {}) {
+  let value = draft[fieldId];
+  let origin = "pack";
+  const source = sourceId ? draft.source_packs?.[sourceId] : null;
+  if (source?.[fieldId] != null) { value = source[fieldId]; origin = "source"; }
+  const deviceId = kind === "entity_overrides" ? entities[targetId]?.device_id : targetId;
+  for (const [key, id] of [["device_overrides", deviceId], ["entity_overrides", targetId]]) {
+    if (key === "entity_overrides" && kind === "device_overrides") continue;
+    for (const [scope, prefix] of [[draft, ""], [source, "source_"]]) {
+      // Exclude the field currently edited: its inherited value is its parent.
+      if (key === kind && ((!sourceId && scope === draft) || (sourceId && scope === source))) continue;
+      const row = scope?.[key]?.find((row) => row.target_id === id);
+      if (row && Object.hasOwn(row, fieldId)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
+    }
+  }
+  return { value, origin };
+}
+
+function targetWarning(pack, row, kind, config, hass, sourceId) {
+  const entity = hass?.entities?.[row.target_id];
+  const state = hass?.states?.[row.target_id];
+  const device = hass?.devices?.[kind === "device_overrides" ? row.target_id : entity?.device_id];
+  if (!row.target_id) return null;
+  if (kind === "device_overrides" ? !device : !entity && !state) return "automatic.orphan_target";
+  const excluded = config?.excluded_labels ?? [];
+  if ([...(entity?.labels ?? []), ...(device?.labels ?? [])].some((id) => excluded.includes(id))) return "automatic.blocked_label";
+  if (config?.monitoring_enabled === false) return "automatic.blocked_global";
+  if (config?.automatic?.[pack.id]?.enabled === false) return "automatic.blocked_source";
+  if (pack.available === false || (sourceId && config?.automatic?.[sourceId]?.enabled === false)) return "automatic.blocked_source";
+  const filter = pack.target_filter ?? {};
+  if (kind === "entity_overrides" && filter.domain && ![].concat(filter.domain).includes(row.target_id.split(".")[0])) return "automatic.inapplicable_target";
+  if (kind === "entity_overrides" && filter.device_class && state?.attributes?.device_class && ![].concat(filter.device_class).includes(state.attributes.device_class)) return "automatic.inapplicable_target";
+  return null;
+}
+
+function renderSetting(field, value, id, attributes, t, inherited = null) {
+  const label = t(`automatic.fields.${field.translation_key}.label`);
+  const attrs = Object.entries(attributes).map(([key, value]) => `${key}="${esc(value)}"`).join(" ");
+  const control = ["boolean", "select"].includes(field.type)
+    ? `<ha-selector id="${id}" ${attrs} aria-label="${esc(label)}"></ha-selector>`
+    : field.type === "text"
+      ? `<ha-input id="${id}" type="text" value="${esc(value ?? "")}" ${attrs} aria-label="${esc(label)}"></ha-input>`
+    : field.unit === "s"
+      ? renderDurationControl(id, label, value ?? "", field.minimum ?? 0, field.maximum ?? MAX_DURATION_SECONDS, { attributes, required: inherited === null })
+      : `<ha-input id="${id}" type="number" value="${esc(value ?? "")}" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" ${attrs} ${inherited === null ? "required" : ""} aria-label="${esc(label)}">${field.unit ? `<span slot="end">${esc(field.unit)}</span>` : ""}</ha-input>`;
+  return `<div class="field pack-setting-field"><span class="field-label">${esc(label)}</span>${control}${inherited ? `<small>${esc(t("automatic.inherited_value", { value: formatSetting(inherited.value, field, t), origin: t(`automatic.origin_${inherited.origin}`) }))}</small>` : ""}</div>`;
 }
 
 export function renderPackField(pack, field, config, context) {
-    const { availablePacks = [], draft, renderNumberField, t } = context;
-    const label = t(`automatic.fields.${field.translation_key}.label`);
-    if (field.type === "number") {
-      return renderNumberField(
-        `auto-${pack.id}-${field.id}`,
-        label,
-        draft[pack.id]?.[field.id] ?? config[field.id],
-        field.unit ?? "",
-        field.minimum ?? -1000000000,
-        field.maximum ?? 1000000000,
-        { step: field.step ?? "any", help: field.translation_key === "flapping_recovery" ? t("automatic.fields.flapping_recovery.help") : undefined },
-      );
-    }
-    if (field.type === "pack_settings_map") {
-      const configured = draft[pack.id]?.[field.id] ?? {};
-      return `<div class="field full pack-source-field">
-        <div class="configuration-section-heading pack-map-heading"><div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div></div>
-        <div class="pack-source-list">${availablePacks.filter((sourcePack) => sourcePack.id !== pack.id).map((sourcePack) => {
-          const enabled = Object.hasOwn(configured, sourcePack.id);
-          const settings = configured[sourcePack.id] ?? {};
-          const sourceName = t(`packs.${sourcePack.translation_key || sourcePack.id}.name`);
-          return `<div class="pack-source-row">
-            <div class="switch-field-row"><span class="field-label">${esc(sourceName)}</span><ha-switch data-pack-source-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-source-pack-id="${esc(sourcePack.id)}" aria-label="${esc(t("automatic.enable_source_pack", { name: sourceName }))}" ${enabled ? "checked" : ""}></ha-switch></div>
-            <div class="pack-settings-values" data-pack-source-values="${esc(sourcePack.id)}" ${enabled ? "" : "hidden"}>${(field.fields ?? []).map((setting) => `<label class="pack-setting-field"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, settings[setting.id], t, { "data-pack-source-setting": pack.id, "data-pack-field": field.id, "data-source-pack-id": sourcePack.id, "data-setting-id": setting.id }, false)}</label>`).join("")}</div>
-          </div>`;
-        }).join("")}</div>
-      </div>`;
-    }
-    if (isSettingsMapField(field)) {
-      const rows = draft[pack.id]?.[field.id] ?? [];
-      const toggle = (field.fields ?? []).find((setting) => setting.type === "boolean");
-      const settings = (field.fields ?? []).filter((setting) => setting.type !== "boolean");
-      return `<div class="field full pack-map-field">
-        <div class="configuration-section-heading pack-map-heading">
-          <div><span class="field-label">${esc(label)}</span><small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
-          <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
-        </div>
-        <div class="pack-map-list">
-          ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-settings-row">
-            <label class="field pack-target-field"><span class="field-label">${esc(t(field.type === "entity_settings_map" ? "automatic.entity" : "automatic.device"))}</span><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector></label>
-            ${toggle ? `<ha-switch class="pack-setting-toggle" aria-label="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" title="${esc(t(`automatic.fields.${toggle.translation_key}.label`))}" data-pack-setting-toggle="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" data-setting-id="${esc(toggle.id)}" ${row[toggle.id] ? "checked" : ""}></ha-switch>` : ""}
-            <div class="pack-settings-values" ${toggle && !row[toggle.id] ? "hidden" : ""}>${settings.map((setting) => `<label class="pack-setting-field${setting.unit === "s" ? " pack-duration-setting" : ""}"><span class="field-label">${esc(t(`automatic.fields.${setting.translation_key}.label`))}</span>${renderPackSettingControl(setting, row[setting.id], t, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id })}</label>`).join("")}</div>
-            ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
-          </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
-        </div>
-      </div>`;
-    }
-    if (!isNumberMapField(field)) return "";
-    const batteryThresholds = pack.id === "battery" && field.id === "device_thresholds";
-    const rows = draft[pack.id]?.[field.id] ?? [];
-    return `<div class="field full pack-map-field">
-      <div class="configuration-section-heading pack-map-heading">
-        <div>${batteryThresholds ? "" : `<span class="field-label">${esc(label)}</span>`}<small>${esc(t(`automatic.fields.${field.translation_key}.help`))}</small></div>
-        <ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${esc(pack.id)}" data-field-id="${esc(field.id)}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button>
-      </div>
-      <div class="pack-map-list">
-        ${rows.length ? rows.map((row, index) => `<div class="pack-map-row pack-number-row${batteryThresholds ? " battery-threshold-row" : ""}">
-          <ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>
-          <ha-input type="number" min="${field.minimum ?? -1000000000}" max="${field.maximum ?? 1000000000}" step="${field.step ?? "any"}" value="${esc(row.value)}" data-pack-map="${esc(pack.id)}" data-pack-field="${esc(field.id)}" data-pack-index="${index}" required aria-label="${esc(label)}"><span slot="end">${esc(field.unit ?? "")}</span></ha-input>
-          ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
-        </div>`).join("") : `<div class="empty compact pack-map-empty">${esc(t(`automatic.fields.${field.translation_key}.empty`))}</div>`}
-      </div>
-    </div>`;
+  const { draft, configurationDrawer, hass, t } = context;
+  const sourceId = configurationDrawer?.sourceId ?? "";
+  const scope = scopeFor(draft[pack.id], sourceId);
+  if (!EXCEPTION_FIELDS.includes(field.id)) return "";
+  const rows = scope?.[field.id] ?? [];
+  return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))}</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
+    ${rows.length ? rows.map((row, index) => {
+      const warning = targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, context.config, hass, sourceId);
+      return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
+        ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
+        <div class="pack-settings-values">${field.fields.filter((setting) => setting.type === "boolean" || row.enabled !== false).map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, inheritedPackSetting(draft[pack.id], setting.id, row.target_id, field.id, sourceId, hass?.entities))).join("")}</div>
+        <ha-button appearance="plain" data-action="inherit-pack-row" data-pack-id="${pack.id}" data-field-id="${field.id}" data-index="${index}">${esc(t("automatic.restore_inheritance"))}</ha-button>
+      </ha-card>`;
+    }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
 
-function renderPackSettingControl(setting, value, t, attributes, required = true) {
-  const label = t(`automatic.fields.${setting.translation_key}.label`);
-  const min = setting.minimum ?? -1000000000;
-  const max = setting.maximum ?? 1000000000;
-  if (setting.unit === "s") {
-    return renderDurationControl("", label, value, min, max, { attributes, required })
-      + (setting.translation_key === "flapping_recovery" ? `<small>${esc(t("automatic.fields.flapping_recovery.help"))}</small>` : "");
-  }
-  const attrs = Object.entries(attributes).map(([key, item]) => `${key}="${esc(item)}"`).join(" ");
-  return `<ha-input type="number" min="${min}" max="${max}" step="${setting.step ?? "any"}" value="${esc(value)}" ${attrs} ${required ? "required" : ""} aria-label="${esc(label)}">${setting.unit ? `<span slot="end">${esc(setting.unit)}</span>` : ""}</ha-input>`;
-}
-
-export function collectAutomaticChanges() {
-    this._ensureAutomaticDraft();
-    captureAutomaticConfigurationValues.call(this);
-    const automatic = {};
-    for (const pack of this._packs.filter((item) => item.available)) {
-      automatic[pack.id] = {
-        enabled: this._automaticMapDraft[pack.id].enabled,
-        label_ids: [...(this._automaticMapDraft[pack.id].label_ids ?? [])],
-      };
-      if (pack.uses_delay !== false) {
-        automatic[pack.id].delay = this._automaticMapDraft[pack.id].delay;
-      }
-      for (const field of pack.config_fields ?? []) {
-        if (field.type === "number") {
-          automatic[pack.id][field.id] = Number(
-            this._automaticMapDraft[pack.id]?.[field.id] ?? field.default,
-          );
-          continue;
-        }
-        if (isSettingsMapField(field)) {
-          const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-          const values = {};
-          for (const row of rows) {
-            const settingsValid = (field.fields ?? []).every(
-              (setting) => setting.type === "boolean"
-                ? typeof row[setting.id] === "boolean"
-                : Number.isFinite(row[setting.id]),
-            );
-            if (!row.target_id || !settingsValid || Object.hasOwn(values, row.target_id)) {
-              this._notice = {
-                kind: "error",
-                text: this._t(
-                  `automatic.fields.${field.translation_key}.${row.target_id && settingsValid ? "duplicate" : "validation"}`,
-                ),
-              };
-              this._refreshUiState();
-              return false;
-            }
-            values[row.target_id] = Object.fromEntries(
-              (field.fields ?? []).map((setting) => [setting.id, row[setting.id]]),
-            );
-          }
-          automatic[pack.id][field.id] = values;
-          continue;
-        }
-        if (field.type === "pack_settings_map") {
-          const configured = this._automaticMapDraft[pack.id]?.[field.id] ?? {};
-          const values = {};
-          for (const [sourcePackId, settings] of Object.entries(configured)) {
-            if ((field.fields ?? []).some(
-              (setting) => settings[setting.id] !== null
-                && !Number.isFinite(settings[setting.id]),
-            )) {
-              this._notice = {
-                kind: "error",
-                text: this._t(`automatic.fields.${field.translation_key}.validation`),
-              };
-              this._refreshUiState();
-              return false;
-            }
-            values[sourcePackId] = { ...settings };
-          }
-          automatic[pack.id][field.id] = values;
-          continue;
-        }
-        if (!isNumberMapField(field)) continue;
-        const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-        const values = {};
-        for (const row of rows) {
-          if (!row.target_id || !Number.isFinite(row.value)) {
-            this._notice = {
-              kind: "error",
-              text: this._t(
-                `automatic.fields.${field.translation_key}.validation`,
-              ),
-            };
-            this._refreshUiState();
-            return false;
-          }
-          if (Object.hasOwn(values, row.target_id)) {
-            this._notice = {
-              kind: "error",
-              text: this._t(
-                `automatic.fields.${field.translation_key}.duplicate`,
-              ),
-            };
-            this._refreshUiState();
-            return false;
-          }
-          values[row.target_id] = row.value;
-        }
-        automatic[pack.id][field.id] = values;
-      }
-    }
-    return { automatic };
-}
-
-export async function saveAutomatic() {
-    if (!await validateConfigurationYaml(this)) return false;
-    const changes = collectAutomaticChanges.call(this);
-    if (!changes) return false;
-    const config = await this._call(
-      { type: "alert_manager/config/update", config: changes },
-      this._t("success.automatic_saved"),
-    );
-    if (config) {
-      this._config = config;
-      this._configurationDrawer = null;
-      this._resetAutomaticDraft();
-      replaceConfigurationDrawer(
-        this.shadowRoot,
-        "",
-      );
-      this._refreshUiState();
-      return true;
-    }
-    return false;
-}
-
-export function resetAutomaticDraft() {
-    this._automaticDirty = false;
-    this._automaticMapDraft = null;
-    this._ensureAutomaticDraft();
+export function renderAutomaticConfigurationDrawer(context) {
+  const { availablePacks, draft, configurationDrawer: drawer, busy, useBottomSheet, t } = context;
+  if (drawer?.kind !== "automatic") return "";
+  const pack = availablePacks.find((pack) => pack.id === drawer.id);
+  if (!pack) return "";
+  const settings = draft[pack.id];
+  const sourceId = drawer.sourceId ?? "";
+  const scope = scopeFor(settings, sourceId);
+  const fields = [...(pack.uses_delay === false ? [] : [{ id: "delay", type: "number", translation_key: "trigger_delay", unit: "s", minimum: 0 }]), ...settingFields(pack)];
+  const title = t(`packs.${pack.translation_key || pack.id}.name`);
+  const content = `<div class="fields configuration-drawer-fields">
+    <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
+    <div class="field full"><span class="field-label">${esc(t("automatic.fields.monitoring.label"))}</span><ha-switch id="auto-${pack.id}-drawer-enabled" aria-label="${esc(t("automatic.fields.monitoring.label"))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
+    ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
+    ${sourceId ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
+    ${scope ? fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, sourceId ? { value: settings[field.id], origin: "pack" } : null)).join("") + (pack.config_fields ?? []).filter((field) => EXCEPTION_FIELDS.includes(field.id)).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
+  </div>`;
+  return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
 }
 
 export function ensureAutomaticDraft() {
-    if (this._automaticMapDraft || !this._config) return;
-    this._automaticMapDraft = {};
-    for (const pack of this._packs) {
-      const fields = { ...this._config.automatic?.[pack.id] };
-      fields.label_ids = [...(fields.label_ids ?? [])];
-      for (const field of pack.config_fields ?? []) {
-        const configured = this._config.automatic?.[pack.id]?.[field.id]
-          ?? field.default;
-        fields[field.id] = configurationValueToDraft(configured, field.type);
-      }
-      this._automaticMapDraft[pack.id] = fields;
-    }
+  if (this._automaticMapDraft || !this._config) return;
+  this._automaticMapDraft = Object.fromEntries(this._packs.map((pack) => [pack.id, automaticPackToDraft(pack, this._config.automatic[pack.id])]));
 }
+export function resetAutomaticDraft() { this._automaticDirty = false; this._automaticMapDraft = null; this._ensureAutomaticDraft(); }
 
 export function captureAutomaticMapValues() {
-    if (!this._automaticMapDraft) return;
-    this.shadowRoot.querySelectorAll("[data-pack-map]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packMap]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row.value = Number(durationFieldValue(input));
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-setting]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packSetting]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = Number(durationFieldValue(input));
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((input) => {
-      const row = this._automaticMapDraft[input.dataset.packSettingToggle]?.[
-        input.dataset.packField
-      ]?.[Number(input.dataset.packIndex)];
-      if (row) row[input.dataset.settingId] = input.checked;
-    });
-    this.shadowRoot.querySelectorAll("[data-pack-source-setting]").forEach((input) => {
-      const settings = this._automaticMapDraft[input.dataset.packSourceSetting]?.[
-        input.dataset.packField
-      ]?.[input.dataset.sourcePackId];
-      if (settings) {
-        settings[input.dataset.settingId] = durationFieldValue(input) === "" ? null : Number(durationFieldValue(input));
-      }
-    });
+  if (!this._automaticMapDraft || this._configurationDrawer?.mode === "yaml") return;
+  const sourceId = this._configurationDrawer?.sourceId ?? "";
+  this.shadowRoot.querySelectorAll("[data-pack-setting], [data-pack-default]").forEach((input) => {
+    if (input.tagName?.toLowerCase() === "ha-selector" && input.dataset.durationValue === undefined) return;
+    const scope = scopeFor(this._automaticMapDraft[input.dataset.packSetting ?? input.dataset.packDefault], sourceId);
+    const row = input.dataset.packField ? scope?.[input.dataset.packField]?.[Number(input.dataset.packIndex)] : scope;
+    if (!row) return;
+    const value = durationFieldValue(input);
+    if (value === "" && input.dataset.packDefault && !sourceId) row[input.dataset.settingId] = null;
+    else if (value === "") delete row[input.dataset.settingId];
+    else row[input.dataset.settingId] = input.type === "text" ? value : Number(value);
+  });
 }
-
 export function captureAutomaticConfigurationValues() {
   this._ensureAutomaticDraft();
+  if (this._configurationDrawer?.mode === "yaml") return;
   captureAutomaticMapValues.call(this);
   for (const pack of this._packs) {
-    const draft = this._automaticMapDraft?.[pack.id];
-    if (!draft) continue;
+    const draft = this._automaticMapDraft[pack.id];
     const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
-    const delay = this.shadowRoot.querySelector(`#auto-${pack.id}-delay`);
     if (enabled) draft.enabled = enabled.checked;
-    if (delay) draft.delay = durationFieldValue(delay) === "" ? null : Number(durationFieldValue(delay));
-    for (const field of pack.config_fields ?? []) {
-      if (field.type !== "number") continue;
+    const scope = scopeFor(draft, this._configurationDrawer?.id === pack.id ? this._configurationDrawer.sourceId : "");
+    for (const field of [{ id: "delay", type: "number" }, ...settingFields(pack)]) {
+      if (!["number", "text"].includes(field.type)) continue;
       const input = this.shadowRoot.querySelector(`#auto-${pack.id}-${field.id}`);
-      if (input && this._automaticMapDraft?.[pack.id]) {
-        this._automaticMapDraft[pack.id][field.id] = Number(durationFieldValue(input));
-      }
+      if (!input || !scope) continue;
+      const value = durationFieldValue(input);
+      if (value === "" && this._configurationDrawer?.sourceId) delete scope[field.id];
+      else scope[field.id] = field.type === "text" ? value : value === "" ? null : Number(value);
     }
   }
+}
+
+export function collectAutomaticChanges(allPacks = false) {
+  captureAutomaticConfigurationValues.call(this);
+  try {
+    const activePack = !allPacks && this._configurationDrawer?.kind === "automatic" ? this._configurationDrawer.id : null;
+    return { automatic: Object.fromEntries(this._packs.filter((pack) => !activePack || pack.id === activePack).map((pack) => [pack.id, automaticDraftToPack(pack, this._automaticMapDraft[pack.id])])) };
+  } catch (_error) {
+    this._notice = { kind: "error", text: this._t("settings.yaml_rows_invalid") };
+    this._refreshUiState();
+    return false;
+  }
+}
+
+export async function saveAutomatic() {
+  if (!await validateConfigurationYaml(this)) return false;
+  const changes = collectAutomaticChanges.call(this);
+  if (!changes) return false;
+  const config = await this._call({ type: "alert_manager/config/update", config: changes }, this._t("success.automatic_saved"));
+  if (!config) return false;
+  this._config = config;
+  for (const pack of this._packs.filter((pack) => Object.hasOwn(changes.automatic, pack.id))) this._automaticMapDraft[pack.id] = automaticPackToDraft(pack, config.automatic[pack.id]);
+  this._configurationDrawer = null;
+  this._automaticDirty = this._packs.some((pack) => JSON.stringify(automaticDraftToPack(pack, this._automaticMapDraft[pack.id])) !== JSON.stringify(config.automatic[pack.id]));
+  this._render();
+  return true;
 }
 
 export function refreshAutomaticConfigurationDrawer(revealSelector) {
-  const form = this.shadowRoot?.querySelector?.("#automatic-form");
-  if (!form) {
-    this._render();
-    revealAddedRow(this.shadowRoot?.querySelector?.(".configuration-drawer"), revealSelector);
-    return;
-  }
-  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer({
-    availablePacks: this._packs.filter((pack) => pack.available),
-    config: this._config,
-    draft: this._automaticMapDraft,
-    configurationDrawer: this._configurationDrawer,
-    busy: this._busy,
-    useBottomSheet: this._useNativeBottomSheet(),
-    renderNumberField: (...args) => this._numberField(...args),
-    t: (key, replacements) => this._t(key, replacements),
-  }), revealSelector);
-  this._hydrateSelectors();
-  if (this._configurationDrawer?.kind === "automatic") {
-    updateAutomaticConfigurationCount.call(this, this._configurationDrawer.id);
-  }
-  this._decorateActionIcons();
-  this._refreshUiState();
+  if (!this.shadowRoot?.querySelector?.("#automatic-form")) { this._render(); return; }
+  replaceConfigurationDrawer(this.shadowRoot, renderAutomaticConfigurationDrawer(automaticContext(this)), revealSelector);
+  this._hydrateSelectors(); this._decorateActionIcons(); this._refreshUiState();
 }
+export function updateAutomaticConfigurationCount() { /* Counts refresh with the saved page. */ }
 
-export function updateAutomaticConfigurationCount(packId) {
-  const pack = this._packs.find((item) => item.id === packId);
-  if (!pack) return;
-  const fields = drawerFields(pack);
-  fields.forEach((field) => {
-    const button = this.shadowRoot?.querySelector?.(
-      `#auto-${packId}-${field.id}-configuration`,
-    );
-    if (!button) return;
-    const count = fieldConfigurationCount(
-      pack, field, this._config.automatic[pack.id], this._automaticMapDraft,
-    );
-    button.textContent = fields.length === 1
-      ? this._t("buttons.configuration", { count })
-      : this._t("buttons.configuration_named", {
-        name: this._t(`automatic.fields.${field.translation_key}.label`), count,
-      });
+function hydratePackChoice(panel, id, field, values, sparse) {
+  const boolean = field.type === "boolean";
+  const options = boolean
+    ? [{ value: "enabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_enabled" : "automatic.boolean_true") }, { value: "disabled", label: panel._t(field.id === "enabled" ? "automatic.monitoring_disabled" : "automatic.boolean_false") }]
+    : (field.options ?? []).map((value) => ({ value: JSON.stringify(value), label: value }));
+  if (sparse) options.unshift({ value: "", label: panel._t("automatic.inherit") });
+  const value = values[field.id] == null ? "" : boolean ? values[field.id] ? "enabled" : "disabled" : JSON.stringify(values[field.id]);
+  panel._configureSelector(id, { select: { options } }, value, (selected) => {
+    captureAutomaticMapValues.call(panel);
+    if (selected == null || (sparse && selected === "")) delete values[field.id];
+    else values[field.id] = boolean ? selected === "enabled" : JSON.parse(selected);
+    panel._markConfigurationDirty("automatic");
+    if (field.id === "enabled") refreshAutomaticConfigurationDrawer.call(panel);
   });
 }
 
 export function hydrateAutomaticControls() {
   hydrateConfigurationYaml(this);
   this._ensureAutomaticDraft();
-  for (const pack of this._packs.filter((item) => item.available)) {
+  const drawer = this._configurationDrawer;
+  for (const pack of this._packs) {
     const draft = this._automaticMapDraft[pack.id];
-    this._configureSelector(
-      `auto-${pack.id}-labels`,
-      { label: { multiple: true } },
-      draft.label_ids,
-      (value) => {
-        draft.label_ids = this._multipleSelectorValue(value, draft.label_ids);
+    for (const suffix of ["enabled", "drawer-enabled"]) {
+      const control = this.shadowRoot.querySelector(`#auto-${pack.id}-${suffix}`);
+      if (control) control.onchange = () => {
+        draft.enabled = control.checked;
         this._markConfigurationDirty("automatic");
-      },
-    );
-    const enabled = this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`);
-    if (enabled) {
-      enabled.onchange = () => {
-        this._automaticMapDraft[pack.id].enabled = enabled.checked;
-        const configuration = this.shadowRoot.querySelector(
-          `[data-pack-configuration="${pack.id}"]`,
-        );
-        if (configuration) configuration.hidden = !enabled.checked;
+        for (const other of ["enabled", "drawer-enabled"]) {
+          const element = this.shadowRoot.querySelector(`#auto-${pack.id}-${other}`);
+          if (element) element.checked = draft.enabled;
+        }
       };
     }
-    for (const field of pack.config_fields ?? []) {
-      if (!MAP_FIELD_TYPES.has(field.type) || field.type === "pack_settings_map") {
-        continue;
+    if (drawer?.kind !== "automatic" || drawer.id !== pack.id || drawer.mode === "yaml") continue;
+    const scope = scopeFor(draft, drawer.sourceId);
+    this._configureSelector(`auto-${pack.id}-labels`, { label: { multiple: true } }, draft.label_ids, (value) => { draft.label_ids = this._multipleSelectorValue(value, draft.label_ids); });
+    this._configureSelector(`auto-${pack.id}-source-context`, { select: { options: [{ value: "", label: this._t("automatic.all_sources") }, ...this._packs.filter((source) => source.id !== pack.id).map((source) => ({ value: source.id, label: this._t(`packs.${source.translation_key || source.id}.name`) }))] } }, drawer.sourceId ?? "", (value) => { captureAutomaticMapValues.call(this); drawer.sourceId = value; refreshAutomaticConfigurationDrawer.call(this); });
+    const sourceEnabled = this.shadowRoot.querySelector(`#auto-${pack.id}-source-enabled`);
+    if (sourceEnabled) sourceEnabled.onchange = () => {
+      captureAutomaticMapValues.call(this);
+      draft.source_packs[drawer.sourceId] ??= { device_overrides: [], entity_overrides: [] };
+      draft.source_packs[drawer.sourceId].enabled = sourceEnabled.checked;
+      this._markConfigurationDirty("automatic"); refreshAutomaticConfigurationDrawer.call(this);
+    };
+    if (scope) {
+      for (const setting of settingFields(pack).filter((setting) => ["boolean", "select"].includes(setting.type))) {
+        hydratePackChoice(this, `auto-${pack.id}-${setting.id}`, setting, scope, Boolean(drawer.sourceId));
       }
-      const rows = this._automaticMapDraft[pack.id]?.[field.id] ?? [];
-      rows.forEach((row, index) => {
-        this._configureSelector(
-          `auto-${pack.id}-${field.id}-target-${index}`,
-          field.type === "entity_number_map" || field.type === "entity_settings_map"
-            ? { entity: field.entity_domains ? { domain: field.entity_domains } : {} }
-            : { device: pack.id === "battery" && field.id === "device_thresholds"
-              ? { entity: { domain: "sensor", device_class: "battery" } }
-              : {} },
-          row.target_id,
-          (value) => { row.target_id = typeof value === "string" ? value : ""; },
-        );
+    }
+    for (const field of (pack.config_fields ?? []).filter((field) => EXCEPTION_FIELDS.includes(field.id))) {
+      (scope?.[field.id] ?? []).forEach((row, index) => {
+        const filterPack = this._packs.find((source) => source.id === drawer.sourceId) ?? pack;
+        const filter = filterPack.target_filter ?? {};
+        this._configureSelector(`auto-${pack.id}-${field.id}-target-${index}`, field.id === "entity_overrides" ? { entity: Object.keys(filter).length ? { filter } : {} } : { device: Object.keys(filter).length ? { entity: filter } : {} }, row.target_id, (value) => { captureAutomaticMapValues.call(this); row.target_id = typeof value === "string" ? value : ""; refreshAutomaticConfigurationDrawer.call(this); });
+        for (const setting of field.fields.filter((setting) => ["boolean", "select"].includes(setting.type))) {
+          hydratePackChoice(this, `auto-${pack.id}-${field.id}-${index}-${setting.id}`, setting, row, true);
+        }
       });
     }
   }
-  this.shadowRoot.querySelectorAll("[data-pack-source-toggle]").forEach((toggle) => {
-    toggle.onchange = () => {
-      captureAutomaticMapValues.call(this);
-      const sources = this._automaticMapDraft[toggle.dataset.packSourceToggle]?.[
-        toggle.dataset.packField
-      ];
-      const field = this._packs.find(
-        (pack) => pack.id === toggle.dataset.packSourceToggle,
-      )?.config_fields?.find((item) => item.id === toggle.dataset.packField);
-      if (!sources || !field) return;
-      if (toggle.checked) {
-        sources[toggle.dataset.sourcePackId] ??= Object.fromEntries(
-          (field.fields ?? []).map((setting) => [setting.id, null]),
-        );
-      } else {
-        delete sources[toggle.dataset.sourcePackId];
-      }
-      const values = toggle.closest?.(".pack-source-row")?.querySelector?.(
-        "[data-pack-source-values]",
-      );
-      if (values) values.hidden = !toggle.checked;
-    };
-  });
-  this.shadowRoot.querySelectorAll("[data-pack-setting-toggle]").forEach((toggle) => {
-    toggle.onchange = () => {
-      const row = this._automaticMapDraft[toggle.dataset.packSettingToggle]?.[
-        toggle.dataset.packField
-      ]?.[Number(toggle.dataset.packIndex)];
-      if (!row) return;
-      row[toggle.dataset.settingId] = toggle.checked;
-      const values = toggle.closest?.(".pack-settings-row")?.querySelector?.(
-        ".pack-settings-values",
-      );
-      if (values) values.hidden = !toggle.checked;
-    };
-  });
 }
 
 export async function handleAutomaticAction(action, button) {
+  if (this._readOnly) return false;
   if (action === "save-automatic") {
     const form = this.shadowRoot.querySelector("#automatic-form");
     if (form && this._reportFormValidity(form) && !this._busy) await this._saveAutomatic();
     return true;
   }
   if (action === "open-automatic-configuration") {
-    this._ensureAutomaticDraft();
-    captureAutomaticConfigurationValues.call(this);
-    this._configurationDrawer = {
-      kind: "automatic",
-      id: button.dataset.packId,
-      fieldId: button.dataset.fieldId,
-      original: JSON.stringify(this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId]),
-      wasDirty: this._automaticDirty,
-
-    };
-    refreshAutomaticConfigurationDrawer.call(this);
-    return true;
-  }
-  if (
-    action === "close-configuration-drawer"
-    && this._configurationDrawer?.kind === "automatic"
-  ) {
-    const { id: packId, fieldId, original, wasDirty } = this._configurationDrawer;
-    captureAutomaticConfigurationValues.call(this);
-    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[packId]?.[fieldId], original)) return true;
-    if (original !== undefined) {
-      this._automaticMapDraft[packId][fieldId] = JSON.parse(original);
-      this._automaticDirty = wasDirty;
-      this._updateConfigurationSaveButton();
+    this._ensureAutomaticDraft(); captureAutomaticConfigurationValues.call(this);
+    const id = button.dataset.packId;
+    if (!this._packs.some((pack) => pack.id === id)) return true;
+    this._configurationDrawer = { kind: "automatic", id, fieldId: "pack", sourceId: button.dataset.sourceId ?? "", original: JSON.stringify(this._automaticMapDraft[id]), wasDirty: this._automaticDirty };
+    // A contextual target is a draft only; opening never calls the save API.
+    if (button.dataset.entityId) {
+      const draft = this._automaticMapDraft[id];
+      const sourceId = this._configurationDrawer.sourceId;
+      if (sourceId) draft.source_packs[sourceId] ??= { device_overrides: [], entity_overrides: [] };
+      const scope = scopeFor(draft, sourceId);
+      scope.entity_overrides ??= [];
+      if (!scope.entity_overrides.some((row) => row.target_id === button.dataset.entityId)) scope.entity_overrides.push({ target_id: button.dataset.entityId });
     }
-    this._configurationDrawer = null;
-    refreshAutomaticConfigurationDrawer.call(this);
-    updateAutomaticConfigurationCount.call(this, packId);
-    return true;
+    refreshAutomaticConfigurationDrawer.call(this); return true;
   }
-  if (action === "add-pack-map-row") {
-    this._ensureAutomaticDraft();
+  if (action === "close-configuration-drawer" && this._configurationDrawer?.kind === "automatic") {
+    const { id, original, wasDirty } = this._configurationDrawer;
     captureAutomaticConfigurationValues.call(this);
-    const rows = this._automaticMapDraft[button.dataset.packId]?.[button.dataset.fieldId];
-    const field = this._packs.find((pack) => pack.id === button.dataset.packId)
-      ?.config_fields?.find((item) => item.id === button.dataset.fieldId);
-    if (rows) {
-      if (field && isSettingsMapField(field)) {
-        rows.push({
-          target_id: "",
-          ...Object.fromEntries((field.fields ?? []).map(
-            (setting) => [setting.id, setting.default],
-          )),
-        });
-      } else {
-        const minimum = Number(field?.minimum ?? -1000000000);
-        const maximum = Number(field?.maximum ?? 1000000000);
-        rows.push({ target_id: "", value: Math.min(maximum, Math.max(minimum, 0)) });
-      }
-      this._markConfigurationDirty("automatic");
-    }
-    refreshAutomaticConfigurationDrawer.call(this, rows ? ".pack-map-row:last-child" : undefined);
-    return true;
+    if (!confirmConfigurationDiscard(this, this._automaticMapDraft[id], original)) return true;
+    this._automaticMapDraft[id] = JSON.parse(original); this._automaticDirty = wasDirty;
+    this._configurationDrawer = null; this._render(); return true;
   }
-  if (action === "remove-pack-map-row") {
-    captureAutomaticConfigurationValues.call(this);
-    const rows = this._automaticMapDraft?.[button.dataset.packId]?.[button.dataset.fieldId];
-    rows?.splice(Number(button.dataset.index), 1);
-    this._markConfigurationDirty("automatic");
-    refreshAutomaticConfigurationDrawer.call(this);
-    return true;
-  }
-  return false;
+  if (!["add-pack-map-row", "remove-pack-map-row", "inherit-pack-row"].includes(action)) return false;
+  captureAutomaticConfigurationValues.call(this);
+  const scope = scopeFor(this._automaticMapDraft[button.dataset.packId], this._configurationDrawer?.sourceId);
+  if (!scope || !EXCEPTION_FIELDS.includes(button.dataset.fieldId)) return true;
+  const rows = scope[button.dataset.fieldId] ??= [];
+  const index = Number(button.dataset.index);
+  if (action === "add-pack-map-row") rows.push({ target_id: "" });
+  else if (action === "remove-pack-map-row") rows.splice(index, 1);
+  else if (rows[index]) rows[index] = { target_id: rows[index].target_id };
+  this._markConfigurationDirty("automatic");
+  refreshAutomaticConfigurationDrawer.call(this);
+  if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), ".automatic-exception:last-child");
+  return true;
 }

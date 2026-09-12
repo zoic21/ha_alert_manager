@@ -1,4 +1,10 @@
 export const ruleEditorStyles = `
+      .generator-category { margin-bottom: 24px; }
+      .generator-row { display: flex; gap: 12px; padding: 12px 0; align-items: flex-start; }
+      .generator-row > div { min-width: 0; overflow-wrap: anywhere; }
+      .generator-row p { margin: 4px 0; color: var(--secondary-text-color); }
+      .generator-row small { color: var(--secondary-text-color); }
+
   /* Rule editor */
   .actions {
     display: flex;

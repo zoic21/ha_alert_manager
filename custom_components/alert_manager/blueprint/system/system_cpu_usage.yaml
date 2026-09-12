@@ -1,0 +1,30 @@
+blueprint_id: system_cpu_usage
+schema_version: 1
+blueprint_version: 1
+category: system
+name_key: generator.system_cpu_usage.name
+description_key: generator.system_cpu_usage.description
+requirements:
+  integrations:
+  - systemmonitor
+discovery:
+  all:
+  - field: integration
+    equals: systemmonitor
+  - field: domain
+    equals: sensor
+  - any:
+    - field: translation_key
+      equals: processor_use
+    - field: unique_id
+      equals: processor_use
+    - field: unique_id
+      glob: processor_use_*
+  - field: unit_of_measurement
+    equals: '%'
+rule:
+  name: 'System: high CPU usage'
+  source: value
+  operator: above
+  value: 90
+  duration: 300

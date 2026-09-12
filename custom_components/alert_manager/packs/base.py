@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, State
 
+from ..const import DEFAULT_DELAY, MAX_DELAY
 from ..models import AlertDetails
 
 
@@ -48,12 +50,16 @@ class PackConfigField:
     unit: str | None = None
     entity_domains: tuple[str, ...] | None = None
     fields: tuple[PackConfigField, ...] = ()
+    sparse: bool = False
+    options: tuple[str, ...] = ()
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
         return {
             key: value
             for key, value in {
+                "sparse": self.sparse,
+                "options": list(self.options) if self.options else None,
                 "id": self.id,
                 "type": self.type,
                 "translation_key": self.translation_key,
@@ -71,6 +77,38 @@ class PackConfigField:
             }.items()
             if value is not None
         }
+
+
+def exception_fields(
+    *settings: PackConfigField, delay: bool = True
+) -> tuple[PackConfigField, ...]:
+    """Build sparse target maps for exactly the settings declared by a pack."""
+    fields = (PackConfigField("enabled", "boolean", "monitoring", True),)
+    if delay:
+        fields += (
+            PackConfigField(
+                "delay", "number", "trigger_delay", 0, 0, MAX_DELAY, 1, "s"
+            ),
+        )
+    fields += settings
+    return tuple(
+        PackConfigField(
+            f"{kind}_overrides",
+            f"{kind}_settings_map",
+            f"{kind}_overrides",
+            {},
+            fields=fields,
+            sparse=True,
+        )
+        for kind in ("device", "entity")
+    )
+
+
+def configuration_fields(
+    *settings: PackConfigField, delay: bool = True
+) -> tuple[PackConfigField, ...]:
+    """Opt into common target exceptions without changing a pack's schema."""
+    return (*settings, *exception_fields(*settings, delay=delay))
 
 
 PackShouldEvaluate = Callable[
@@ -128,9 +166,26 @@ class AutomaticPack:
     evaluate: Callable[[HomeAssistant, State, dict[str, Any]], PackEvaluation]
     should_evaluate: PackShouldEvaluate | None = None
     reset_handler: PackResetHandler | None = None
+    snapshot_handler: Callable[[HomeAssistant], Any] | None = None
+    restore_handler: Callable[[HomeAssistant, Any], None] | None = None
+    reset_entity_handler: Callable[[HomeAssistant, str], None] | None = None
     config_fields: tuple[PackConfigField, ...] = ()
     uses_delay: bool = True
+    default_delay: int = DEFAULT_DELAY
+    default_enabled: bool = True
+    order: int = 100
+    target_filter: dict[str, Any] = field(default_factory=dict)
     occurrence_batch_handler: PackOccurrenceBatchHandler | None = None
+
+    def default_config(self) -> dict[str, Any]:
+        """Create independent defaults from this pack's own declarations."""
+        result = {"enabled": self.default_enabled, "label_ids": []}
+        if self.uses_delay:
+            result["delay"] = self.default_delay
+        result.update(
+            {setting.id: deepcopy(setting.default) for setting in self.config_fields}
+        )
+        return result
 
     def reset_runtime(self, hass: HomeAssistant) -> None:
         """Discard optional transient state owned by this pack."""
@@ -158,6 +213,7 @@ class AutomaticPack:
             "translation_key": self.translation_key,
             "prerequisites": list(self.prerequisites),
             "available": self.available(hass),
+            "target_filter": deepcopy(self.target_filter),
         }
         if not self.uses_delay:
             result["uses_delay"] = False

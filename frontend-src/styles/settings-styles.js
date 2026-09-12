@@ -807,4 +807,10 @@ export const settingsStyles = `
     border: 1px solid var(--divider-color, #ddd);
     border-radius: 12px;
   }
+  .automatic-pack-row { gap: 8px; }
+  .automatic-exception { padding: 12px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
+  .automatic-exception-target { display: flex; align-items: center; gap: 8px; }
+  .automatic-exception-target ha-selector { flex: 1; min-width: 0; }
+  .automatic-exception .pack-settings-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .automatic-exception .pack-setting-field { min-width: 0; }
 `;

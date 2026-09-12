@@ -8,12 +8,11 @@ from typing import Any
 
 from homeassistant.core import valid_entity_id
 
+from .config_defaults import CATEGORIES, DEFAULT_CONFIG
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
-    CATEGORIES,
     COHERENCE_SCHEDULES,
     CUSTOM_RULE_ALLOWED_ENTITY_IDS,
-    DEFAULT_CONFIG,
     MAX_DELAY,
     MAX_HISTORY_LIMIT,
     MAX_RULE_ENTITY_IDS,
@@ -28,7 +27,6 @@ from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
-    "global_delay",
     # Accepted temporarily so a cached dev14 panel can update during upgrade.
     "active_display_delay",
     "pending_display_delay",
@@ -39,9 +37,6 @@ _CONFIG_UPDATE_KEYS = {
     "excluded_labels",
     # Accepted only so a cached V1 panel can update safely during migration.
     "exclusion_label",
-    "excluded_entities",
-    "excluded_devices",
-    "entity_delays",
     "automatic",
     "rules",
     "notification_profiles",
@@ -59,6 +54,7 @@ _AUTOMATIC_KEYS = {
 # Accepted only so a cached V1 panel can finish one safe migration update.
 _AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
+    "blueprint",
     "from_value",
     "to_value",
     "auto_resolve",
@@ -111,6 +107,18 @@ def validate_config(config: Any) -> dict[str, Any]:
     if not isinstance(config, dict):
         raise ValueError("Configuration must be an object")
 
+    if config.get("excluded_entities") or config.get("excluded_devices"):
+        raise ValueError(
+            "Legacy exclusions require registry migration before validation"
+        )
+    unknown = _unknown_keys(config, set(DEFAULT_CONFIG) | {"active_display_delay"})
+    if unknown:
+        raise ValueError(f"Unknown configuration field: {sorted(unknown)[0]}")
+    if config.get("pack_config_version", 2) != 2:
+        raise ValueError("Unsupported pack configuration version")
+    validate_config_update(
+        {key: value for key, value in config.items() if key in _CONFIG_UPDATE_KEYS}
+    )
     result = deepcopy(DEFAULT_CONFIG)
     monitoring_enabled = config.get("monitoring_enabled", result["monitoring_enabled"])
     if not isinstance(monitoring_enabled, bool):
@@ -146,9 +154,6 @@ def validate_config(config: Any) -> dict[str, Any]:
             config.get("coherence_ignored_entity_references", [])
         )
     )
-    result["global_delay"] = validate_delay(
-        config.get("global_delay", result["global_delay"]), "global_delay"
-    )
     result["pending_display_delay"] = validate_delay(
         config.get(
             "pending_display_delay",
@@ -158,31 +163,6 @@ def validate_config(config: Any) -> dict[str, Any]:
     )
 
     result["excluded_labels"] = validate_label_list(config.get("excluded_labels", []))
-
-    result["excluded_entities"] = validate_entity_list(
-        config.get("excluded_entities", [])
-    )
-    if any(
-        entity_id in ALERT_MANAGER_ENTITY_IDS
-        for entity_id in result["excluded_entities"]
-    ):
-        raise ValueError("Alert Manager entities cannot be configured")
-    result["excluded_devices"] = validate_device_list(
-        config.get("excluded_devices", [])
-    )
-
-    entity_delays = config.get("entity_delays", {})
-    if not isinstance(entity_delays, dict):
-        raise ValueError("entity_delays must be an object")
-    normalized_delays: dict[str, int] = {}
-    for entity_id, delay in entity_delays.items():
-        validate_entity_id(entity_id)
-        if entity_id in ALERT_MANAGER_ENTITY_IDS:
-            raise ValueError("Alert Manager entities cannot be configured")
-        normalized_delays[entity_id] = validate_delay(
-            delay, f"entity_delays.{entity_id}"
-        )
-    result["entity_delays"] = normalized_delays
 
     automatic = config.get("automatic", {})
     if not isinstance(automatic, dict):
@@ -202,10 +182,8 @@ def validate_config(config: Any) -> dict[str, Any]:
         pack = PACKS_BY_ID[category]
         if pack.uses_delay:
             pack_delay = incoming.get("delay", category_config["delay"])
-            category_config["delay"] = (
-                None
-                if pack_delay is None
-                else validate_delay(pack_delay, f"automatic.{category}.delay")
+            category_config["delay"] = validate_delay(
+                pack_delay, f"automatic.{category}.delay"
             )
 
         for field in pack.config_fields:
@@ -261,12 +239,20 @@ def _normalize_pack_field(
     """Normalize one backend-declared pack field."""
     path = f"automatic.{pack_id}.{field.id}"
     if field.type == "number":
+        if field.id == "delay":
+            return validate_delay(value, path)
         return _validate_pack_number(
             value, path, field.minimum, field.maximum, field.step
         )
     if field.type == "boolean":
         if not isinstance(value, bool):
             raise ValueError(f"{path} must be a boolean")
+        return value
+    if field.type in ("text", "select"):
+        if not isinstance(value, str):
+            raise ValueError(f"{path} must be a string")
+        if field.type == "select" and value not in field.options:
+            raise ValueError(f"{path} must be one of {field.options}")
         return value
     if field.type in ("device_number_map", "entity_number_map"):
         if not isinstance(value, dict):
@@ -302,7 +288,7 @@ def _normalize_pack_field(
     if field.type in ("device_settings_map", "entity_settings_map"):
         if not isinstance(value, dict):
             raise ValueError(f"{path} must be an object")
-        normalized_settings: dict[str, dict[str, bool | float | int]] = {}
+        normalized_settings: dict[str, dict[str, Any]] = {}
         allowed = {item.id: item for item in field.fields}
         for target_id, raw_settings in value.items():
             if field.type == "device_settings_map":
@@ -323,10 +309,15 @@ def _normalize_pack_field(
                     f"Unknown {path}.{target_id} field: {sorted(unknown)[0]}"
                 )
             missing = set(allowed) - raw_settings.keys()
-            if missing:
+            if missing and not field.sparse:
                 raise ValueError(
                     f"Missing {path}.{target_id} field: {sorted(missing)[0]}"
                 )
+            if (
+                field.type == "entity_settings_map"
+                and target_id in ALERT_MANAGER_ENTITY_IDS
+            ):
+                raise ValueError("Alert Manager entities cannot be configured")
             normalized_settings[target_id] = {
                 setting_id: _normalize_pack_field(
                     pack_id,
@@ -342,7 +333,7 @@ def _normalize_pack_field(
             raise ValueError(f"{path} must be an object")
         allowed_settings = {item.id: item for item in field.fields}
         allowed_packs = set(PACKS_BY_ID) - {pack_id}
-        normalized_packs: dict[str, dict[str, float | int | None]] = {}
+        normalized_packs: dict[str, dict[str, Any]] = {}
         for source_pack_id, raw_settings in value.items():
             if source_pack_id not in allowed_packs:
                 raise ValueError(f"{path} contains an invalid source pack")
@@ -356,12 +347,14 @@ def _normalize_pack_field(
             normalized_packs[source_pack_id] = {
                 setting_id: None
                 if raw_settings.get(setting_id) is None
+                and not setting.type.endswith("_map")
                 else _normalize_pack_field(
                     pack_id,
                     setting,
-                    raw_settings[setting_id],
+                    raw_settings.get(setting_id, {}),
                 )
                 for setting_id, setting in allowed_settings.items()
+                if setting_id in raw_settings
             }
         return normalized_packs
     raise ValueError(f"Unsupported pack configuration field type: {field.type}")

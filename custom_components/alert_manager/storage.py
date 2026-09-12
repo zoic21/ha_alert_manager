@@ -16,13 +16,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.storage import Store
 
+from .config_defaults import DEFAULT_CONFIG
 from .const import (
     CONFIG_BACKUP_LIMIT,
     CONFIG_BACKUP_STORAGE_KEY,
     CONFIG_BACKUP_STORAGE_VERSION,
     DEFAULT_COHERENCE_SCAN_ESPHOME,
     DEFAULT_COHERENCE_SCHEDULE,
-    DEFAULT_CONFIG,
     DEFAULT_EXCLUSION_LABEL,
     DEFAULT_HISTORY_LIMIT,
     HISTORY_STORAGE_KEY,
@@ -34,6 +34,11 @@ from .const import (
     STORAGE_VERSION,
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, normalize_rule_source
+from .pack_migration import (
+    async_migrate_exclusions,
+    migrate_flapping_precedence,
+    migrate_pack_config,
+)
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,6 +46,10 @@ _LOGGER = logging.getLogger(__name__)
 
 class ConfigStorageError(ValueError):
     """Report an unusable main store without discarding its configuration."""
+
+
+class ConfigMigrationError(ConfigStorageError):
+    """Require paused recovery when legacy automatic settings cannot be retained."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +143,7 @@ class AlertManagerStorage:
             self.persisted_alert_ids = set()
             self._staged_durable_alert_ids = None
             self._force_next_save = False
-            config, migrated = self._migrate_config({})
+            config, migrated = await self._async_migrate_config({})
             return _merge_dict(deepcopy(DEFAULT_CONFIG), config), {}, migrated
 
         self.has_stored_snapshot = True
@@ -145,7 +154,7 @@ class AlertManagerStorage:
             raise ConfigStorageError("Stored configuration must be an object")
         loaded_payload = deepcopy(raw)
 
-        migrated_config, migrated = self._migrate_config(stored_config)
+        migrated_config, migrated = await self._async_migrate_config(stored_config)
         self.variation_baselines, baselines_migrated = _load_variation_baselines(
             raw.get("variation_baselines", {})
         )
@@ -253,7 +262,7 @@ class AlertManagerStorage:
         except AttributeError, OSError, UnicodeError:
             return None
 
-    def _migrate_config(self, stored: Any) -> tuple[dict[str, Any], bool]:
+    async def _async_migrate_config(self, stored: Any) -> tuple[dict[str, Any], bool]:
         """Apply idempotent migrations that may consult Home Assistant registries."""
         config, changed = _migrate_config_shape(stored)
         if "excluded_labels" not in config:
@@ -268,7 +277,16 @@ class AlertManagerStorage:
         if "exclusion_label" in config:
             config.pop("exclusion_label")
             changed = True
-        return config, changed
+        try:
+            config = await async_migrate_exclusions(self._hass, config)
+        except Exception as err:
+            error_type = (
+                ConfigMigrationError
+                if config.get("excluded_entities") or config.get("excluded_devices")
+                else ConfigStorageError
+            )
+            raise error_type(str(err)) from err
+        return config, changed or config != stored
 
     def _snapshot_section(self, key: str, value: dict[str, Any]) -> dict[str, Any]:
         """Reuse detached durable data until a section's contents change."""
@@ -651,6 +669,17 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
         if isinstance(unavailable, dict) and "domains" in unavailable:
             unavailable.pop("domains")
             changed = True
+    version = config.get("pack_config_version", 1)
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version not in (1, 2)
+    ):
+        raise ConfigStorageError("Unsupported pack configuration version")
+    if version < 2:
+        config = migrate_flapping_precedence(migrate_pack_config(config))
+        config["pack_config_version"] = 2
+        changed = True
     return config, changed
 
 

@@ -547,8 +547,6 @@ class _TemplatesMixin:
 
     def _refresh_config_caches(self) -> None:
         """Cache exclusion membership used for every state change."""
-        self._excluded_entities = frozenset(self.config.get("excluded_entities", ()))
-        self._excluded_devices = frozenset(self.config.get("excluded_devices", ()))
         self._excluded_labels = frozenset(self.config.get("excluded_labels", ()))
 
     def _enrich_rule_metadata(self) -> bool:

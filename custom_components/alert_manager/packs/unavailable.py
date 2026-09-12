@@ -8,7 +8,7 @@ from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, State
 
 from ..const import CATEGORY_UNAVAILABLE
-from .base import AutomaticPack, PackMatch
+from .base import AutomaticPack, PackMatch, configuration_fields
 
 
 def _applies(_hass: HomeAssistant, _state: State) -> bool:
@@ -38,6 +38,8 @@ def _evaluate(
 
 
 PACK = AutomaticPack(
+    config_fields=configuration_fields(),
+    order=0,
     id=CATEGORY_UNAVAILABLE,
     translation_key="unavailable",
     prerequisites=(),
