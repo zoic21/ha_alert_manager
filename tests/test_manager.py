@@ -342,12 +342,6 @@ def test_reconciliation_collision_prefers_oldest_restored_clock(hass, entry, set
 
 def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
     """The sensor platform exposes alert partitions and coherence issues."""
-    registry_entry(
-        hass,
-        "sensor.legacy_alerts",
-        platform="alert_manager",
-        unique_id="alert_manager",
-    )
     manager = make_manager(hass, entry)
     hass.data[DATA_MANAGER] = manager
     entities = []
@@ -398,7 +392,6 @@ def test_creation_of_partitioned_sensors(hass, entry, registry_entry):
         entity._attr_device_info["identifiers"] == {("alert_manager", "main")}
         for entity in entities
     )
-    assert "sensor.legacy_alerts" not in hass.entity_registry.entries
 
 
 @pytest.mark.parametrize(
@@ -3628,6 +3621,7 @@ def test_disabled_entity_and_device_are_ignored(
 def test_entity_label_exclusion(hass, entry, registry_entry):
     """The configured label on an entity excludes it."""
     hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    hass.stores["alert_manager"] = {"config": {"excluded_labels": ["skip"]}}
     registry_entry(hass, "sensor.test", labels={"skip"})
     hass.states.set("sensor.test", "unavailable")
     assert make_manager(hass, entry).records == {}
@@ -3636,6 +3630,7 @@ def test_entity_label_exclusion(hass, entry, registry_entry):
 def test_device_label_exclusion(hass, entry, registry_entry, device_entry):
     """The configured label on an associated device excludes its entities."""
     hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    hass.stores["alert_manager"] = {"config": {"excluded_labels": ["skip"]}}
     device = device_entry(hass, labels={"skip"})
     registry_entry(hass, "sensor.test", device_id=device.id)
     hass.states.set("sensor.test", "unavailable")
@@ -4995,6 +4990,7 @@ def test_tracked_count_combines_custom_instances_and_automatic_entities(
 ):
     """Tracked total counts rule/entity pairs plus unique automatic sources."""
     hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
+    hass.stores["alert_manager"] = {"config": {"excluded_labels": ["skip"]}}
     hass.states.set("sensor.one", "ok")
     hass.states.set("sensor.two", "ok")
     registry_entry(hass, "sensor.excluded", labels={"skip"})
@@ -5315,32 +5311,33 @@ def test_custom_rules_ignore_selected_exclusion_labels(hass, entry, registry_ent
     assert f"rule:{rule['id']}:sensor.test" in manager.records
 
 
-def test_legacy_rule_and_label_configuration_migrate_idempotently(hass, entry):
-    """V1 entity_id and exclusion-label names become V1.1 registry ids."""
+def test_22_rule_and_label_configuration_migrate_idempotently(hass, entry):
+    """2.2 rules keep their identity, labels and pending deadline across upgrade."""
     hass.label_registry.labels["pas_d_alerte"] = SimpleNamespace(label_id="skip")
     hass.states.set("sensor.test", "on", {"friendly_name": "Legacy sensor"})
     detected_at = datetime(2026, 8, 24, 12, tzinfo=UTC)
     hass.stores["alert_manager"] = {
         "config": {
-            "exclusion_label": "pas_d_alerte",
-            "active_display_delay": 7,
-            "automatic": {"unavailable": {"domains": ["sensor"]}},
+            "excluded_labels": ["skip"],
+            "pending_display_delay": 7,
+            "automatic": {"unavailable": {"delay": None}},
             "rules": [
                 {
                     "id": "legacy",
                     "name": "Legacy",
-                    "entity_id": "sensor.test",
+                    "entity_ids": ["sensor.test"],
+                    "source": "state",
                     "operator": "equals",
                     "value": "on",
                     "duration": 60,
-                    "version": 1,
+                    "version": 2,
                 }
             ],
         },
         "alerts": {
-            "rule:legacy": {
+            "rule:legacy:sensor.test": {
                 "details": {
-                    "id": "rule:legacy",
+                    "id": "rule:legacy:sensor.test",
                     "type": "rule",
                     "entity_id": "sensor.test",
                     "name": "Legacy sensor",

@@ -416,7 +416,7 @@ def test_storage_migration_renames_legacy_sources_idempotently() -> None:
     assert changed is True
     assert migrated["rules"][0]["source"] == "jinja"
     assert migrated["rules"][1]["source"] == "value_variation"
-    assert migrated["rules"][0]["update_message_when_active"] is False
+    assert Rule.from_dict(migrated["rules"][0]).update_message_when_active is False
     remigrated, changed_again = _migrate_config_shape(migrated)
     assert changed_again is False
     assert remigrated["rules"][0]["source"] == "jinja"
@@ -609,7 +609,7 @@ def test_legacy_severity_is_removed_from_stored_alerts_and_rules():
         {
             "id": "legacy-rule",
             "name": "Legacy",
-            "entity_id": "sensor.test",
+            "entity_ids": ["sensor.test"],
             "operator": "equals",
             "value": "on",
             "duration": 60,

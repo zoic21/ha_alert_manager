@@ -27,16 +27,12 @@ from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CONFIG_UPDATE_KEYS = {
-    # Accepted temporarily so a cached dev14 panel can update during upgrade.
-    "active_display_delay",
     "pending_display_delay",
     "coherence_schedule",
     "coherence_scan_esphome",
     "coherence_alert_enabled",
     "coherence_ignored_entity_references",
     "excluded_labels",
-    # Accepted only so a cached V1 panel can update safely during migration.
-    "exclusion_label",
     "automatic",
     "rules",
     "notification_profiles",
@@ -51,8 +47,6 @@ _AUTOMATIC_KEYS = {
     }
     for pack in PACKS
 }
-# Accepted only so a cached V1 panel can finish one safe migration update.
-_AUTOMATIC_KEYS["unavailable"].add("domains")
 _RULE_CLIENT_KEYS = {
     "blueprint",
     "from_value",
@@ -111,7 +105,7 @@ def validate_config(config: Any) -> dict[str, Any]:
         raise ValueError(
             "Legacy exclusions require registry migration before validation"
         )
-    unknown = _unknown_keys(config, set(DEFAULT_CONFIG) | {"active_display_delay"})
+    unknown = _unknown_keys(config, set(DEFAULT_CONFIG))
     if unknown:
         raise ValueError(f"Unknown configuration field: {sorted(unknown)[0]}")
     if config.get("pack_config_version", 2) != 2:
@@ -155,10 +149,7 @@ def validate_config(config: Any) -> dict[str, Any]:
         )
     )
     result["pending_display_delay"] = validate_delay(
-        config.get(
-            "pending_display_delay",
-            config.get("active_display_delay", result["pending_display_delay"]),
-        ),
+        config.get("pending_display_delay", result["pending_display_delay"]),
         "pending_display_delay",
     )
 

@@ -107,6 +107,8 @@ Initial discovery, reloads and startup grace never infer a transition. Unknown/u
 
 ## Installation
 
+Starting with 2.4, direct upgrades and configuration imports are supported from Alert Manager 2.2 or newer. For an older installation, first start version 2.2 successfully so it can migrate the stored data, then upgrade. Refresh open browser tabs after updating.
+
 ### HACS
 
 Until Alert Manager is available in the default HACS catalog:

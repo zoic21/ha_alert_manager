@@ -710,13 +710,10 @@ class Rule:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Rule:
-        """Deserialize, migrating the V1 entity_id field idempotently."""
+        """Deserialize a rule using the supported multi-entity schema."""
         if not isinstance(data, dict):
             raise ValueError("Rule must be an object")
         normalized = normalize_rule_source(data)
-        if "entity_ids" not in normalized and "entity_id" in normalized:
-            normalized["entity_ids"] = [normalized["entity_id"]]
-        normalized.pop("entity_id", None)
         if normalized.get("source") in TRANSITION_SOURCES:
             normalized.setdefault("duration", 0)
             normalized["operator"] = "equals"
@@ -736,9 +733,6 @@ class Rule:
             normalized["attribute"] = None
         elif normalized.get("operator") == "unchanged":
             normalized["value"] = ""
-        version = normalized.get("version", 2)
-        if isinstance(version, int) and not isinstance(version, bool):
-            normalized["version"] = max(version, 2)
         known = cls.__dataclass_fields__
         values = {
             key: normalized[key]

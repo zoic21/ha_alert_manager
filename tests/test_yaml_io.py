@@ -390,13 +390,15 @@ def test_older_flapping_export_without_source_selection_uses_defaults() -> None:
     }
 
 
-def test_dev14_active_display_delay_import_is_migrated() -> None:
-    """The short-lived dev14 YAML key keeps its value with corrected semantics."""
-    exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))
-    legacy = exported.replace("pending_display_delay", "active_display_delay")
-    imported = parse_config_yaml(legacy)
-    assert imported["pending_display_delay"] == 10
-    assert "active_display_delay" not in imported
+@pytest.mark.parametrize("version", [1, 2])
+def test_pre_22_display_delay_alias_is_rejected(version) -> None:
+    """Unsupported dev payloads must fail explicitly rather than change defaults."""
+    exported = yaml.safe_load(dump_config_yaml(deepcopy(DEFAULT_CONFIG)))
+    exported["version"] = version
+    config = exported["config"]
+    config["active_display_delay"] = config.pop("pending_display_delay")
+    with pytest.raises(ValueError, match="active_display_delay"):
+        parse_config_yaml(yaml.safe_dump(exported))
 
 
 def test_config_import_accepts_legacy_ids_and_rejects_duplicates_and_runtime() -> None:

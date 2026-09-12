@@ -1,0 +1,66 @@
+{
+  "monitoring_enabled": true,
+  "history_limit": 100,
+  "coherence_schedule": "none",
+  "coherence_scan_esphome": true,
+  "coherence_ignored_entity_references": [],
+  "global_delay": 900,
+  "pending_display_delay": 10,
+  "excluded_labels": [],
+  "excluded_entities": [],
+  "excluded_devices": [],
+  "entity_delays": {},
+  "automatic": {
+    "unavailable": {
+      "enabled": true,
+      "label_ids": [],
+      "delay": null
+    },
+    "connectivity": {
+      "enabled": true,
+      "label_ids": [],
+      "delay": null
+    },
+    "unifi": {
+      "enabled": true,
+      "label_ids": [],
+      "delay": null
+    },
+    "battery": {
+      "enabled": true,
+      "label_ids": [],
+      "delay": null,
+      "threshold": 15.0,
+      "device_thresholds": {}
+    },
+    "execution_errors": {
+      "enabled": true,
+      "label_ids": [],
+      "delay": 0,
+      "failure_thresholds": {}
+    },
+    "flapping": {
+      "enabled": false,
+      "label_ids": [],
+      "occurrences": 5,
+      "window": 3600,
+      "recovery": 1800,
+      "source_packs": {
+        "unavailable": {
+          "occurrences": null,
+          "window": null,
+          "recovery": null
+        },
+        "connectivity": {
+          "occurrences": null,
+          "window": null,
+          "recovery": null
+        }
+      },
+      "entity_overrides": {}
+    }
+  },
+  "rules": [],
+  "notification_profiles": [],
+  "notification_batch_delay": 30
+}

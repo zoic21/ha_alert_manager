@@ -106,6 +106,8 @@ La découverte initiale, le rechargement et la période de démarrage ne déduis
 
 ## Installation
 
+À partir de la 2.4, les mises à jour directes et les imports de configuration sont pris en charge depuis Alert Manager 2.2 ou une version plus récente. Pour une installation plus ancienne, démarrez d’abord la version 2.2 avec succès afin de migrer les données enregistrées, puis effectuez la mise à jour. Actualisez les onglets ouverts après la mise à jour.
+
 ### HACS
 
 Tant qu’Alert Manager n’est pas disponible dans le catalogue HACS par défaut :

@@ -844,10 +844,6 @@ class _ApiMixin:
         """Validate, atomically persist and immediately apply config changes."""
         validate_config_update(changes)
         changes = dict(changes)
-        if "active_display_delay" in changes:
-            changes.setdefault(
-                "pending_display_delay", changes.pop("active_display_delay")
-            )
         if "rules" in changes:
             raise ValueError("Rules must be changed through the rules API")
         candidate = _deep_merge(self.get_config(), changes)

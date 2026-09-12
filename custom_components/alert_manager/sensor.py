@@ -63,12 +63,11 @@ async def async_setup_entry(
 ) -> None:
     """Remove obsolete sensors and set up lifecycle and coherence sensors."""
     entity_registry = er.async_get(hass)
-    for unique_id in ("alert_manager", "alert_manager_device_main_active"):
-        legacy_entity_id = entity_registry.async_get_entity_id(
-            "sensor", DOMAIN, unique_id
-        )
-        if legacy_entity_id is not None:
-            entity_registry.async_remove(legacy_entity_id)
+    obsolete_entity_id = entity_registry.async_get_entity_id(
+        "sensor", DOMAIN, "alert_manager_device_main_active"
+    )
+    if obsolete_entity_id is not None:
+        entity_registry.async_remove(obsolete_entity_id)
 
     manager: AlertManager = hass.data[DATA_MANAGER]
     sensors = [AlertManagerSensor(manager, *description) for description in _SENSORS]
