@@ -752,10 +752,11 @@ test("pack exceptions summarize escaped targets and explicit values, with compac
   const header = markup.match(/<ha-expansion-panel[^>]*data-pack-exception="device_overrides"[^>]*>/)[0];
   assert.doesNotMatch(header, /\bexpanded\b/);
   assert.match(header, /header="NAS &lt;test&gt; &quot;home&quot;"/);
+  assert.match(markup, /slot="header" class="automatic-exception-header"><div>NAS &lt;test&gt; &quot;home&quot;<\/div><div class="automatic-exception-summary">/);
   assert.match(header, /secondary="automatic.monitoring_enabled · automatic.fields.trigger_delay.label: 5 automatic.minutes_short · automatic.fields.threshold.label: 12 %"/);
   assert.match(markup, /automatic.fields.device_overrides.label \(1\)/);
   assert.match(markup, /automatic.exceptions_help/);
-  assert.match(markup, /<ha-expansion-panel[^>]*data-pack-exception="device_overrides"[^>]*>\s*<div slot="icons" class="automatic-exception-actions">/);
+  assert.match(markup, /<ha-expansion-panel[^>]*data-pack-exception="device_overrides"[^>]*>\s*<div slot="header" class="automatic-exception-header"><div>[^<]*<\/div><div class="automatic-exception-summary">[^<]*<\/div><\/div>\s*<div slot="icons" class="automatic-exception-actions">/);
   drawer.expandedExceptions.add(row);
   row.enabled = false;
   markup = renderAutomatic(context);
@@ -775,11 +776,13 @@ test("exception hydration preserves expansion and captures edits on collapse wit
   const listeners = new Set();
   const remove = {};
   const monitoring = { disabled: false };
+  const summary = {};
   const expansion = {
     expanded: true, hasAttribute: () => true,
     addEventListener(type, listener) { assert.equal(type, "expanded-changed"); listeners.add(listener); },
     removeEventListener(type, listener) { listeners.delete(listener); },
-    querySelector: (selector) => selector === '[data-action="remove-pack-map-row"]' ? remove : monitoring,
+    querySelector: (selector) => selector === '[data-action="remove-pack-map-row"]' ? remove
+      : selector === ".automatic-exception-summary" ? summary : monitoring,
   };
   const input = { dataset: { packSetting: "battery", packField: "device_overrides", packIndex: "0", settingId: "delay" }, value: 600 };
   const panel = {
@@ -809,6 +812,7 @@ test("exception hydration preserves expansion and captures edits on collapse wit
   assert.ok(!panel._configurationDrawer.expandedExceptions.has(row));
   assert.equal(row.delay, 600);
   assert.match(expansion.secondary, /10 automatic.minutes_short/);
+  assert.equal(summary.textContent, expansion.secondary);
   handler({ target: expansion, detail: { expanded: true } });
   assert.ok(panel._configurationDrawer.expandedExceptions.has(row));
 });

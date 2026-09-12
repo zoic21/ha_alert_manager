@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.11**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.12**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -34,6 +34,8 @@ This is a prerelease for testing, not a stable release.
   direct deletion and preserved drag/keyboard ordering; new exceptions open automatically.
   Headers use compact native colored label badges with icons and no removal action,
   wrap on mobile, and keep reorder/delete controls close together. Fixed summary translations.
+  Pack and notification exceptions hide their header text and badges while expanded,
+  retaining the chevron and action controls; updated summaries return on collapse.
   The generated-rule refresh action now includes an icon.
 - Simplified notification exceptions with the same switches and reminder input as
   the profile defaults, preserving effective values when editing existing exceptions.

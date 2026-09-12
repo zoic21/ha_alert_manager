@@ -320,9 +320,19 @@ export const settingsStyles = `
     margin-inline-start: 8px;
   }
   .notification-exception-heading .configuration-remove { margin: 0; }
+  .automatic-exception-header,
   .notification-exception-header { min-width: 0; flex: 1; padding-block: 8px; }
+  [data-pack-exception][expanded] > .automatic-exception-header,
+  [data-notification-expansion][expanded] > .notification-exception-header {
+    padding-block: 0;
+  }
+  [data-pack-exception][expanded] > .automatic-exception-header > *,
+  [data-notification-expansion][expanded] > .notification-exception-header > * {
+    display: none;
+  }
   .notification-exception-labels > span { flex-wrap: wrap; }
   .notification-exception-labels ha-label { max-width: 100%; }
+  .automatic-exception-summary,
   .notification-exception-summary {
     color: var(--secondary-text-color);
     font-size: 12px;

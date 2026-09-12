@@ -6691,6 +6691,7 @@ function renderPackField(pack, field, config, context) {
       const renderField = (setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false));
       return `<div class="pack-map-row automatic-exception" data-exception-index="${index}">
         <ha-expansion-panel left-chevron data-pack-exception="${field.id}" data-pack-index="${index}" header="${esc(title)}" secondary="${esc(exceptionSummary(row, field.fields, blocked, t))}" ${expanded ? "expanded" : ""}>
+          <div slot="header" class="automatic-exception-header"><div>${esc(title)}</div><div class="automatic-exception-summary">${esc(exceptionSummary(row, field.fields, blocked, t))}</div></div>
           <div slot="icons" class="automatic-exception-actions">
             ${field.fields.filter((setting) => setting.id === "enabled").map(renderField).join("")}
             ${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}
@@ -6878,6 +6879,8 @@ function hydrateAutomaticControls() {
               captureAutomaticMapValues.call(this);
               const blocked = expansion.querySelector("ha-switch[data-pack-setting]")?.disabled;
               expansion.secondary = exceptionSummary(row, field.fields, blocked, (key) => this._t(key));
+              const summary = expansion.querySelector(".automatic-exception-summary");
+              if (summary) summary.textContent = expansion.secondary;
             }
           };
           expansion.addEventListener("expanded-changed", expansion._automaticExpansionHandler);
@@ -8435,9 +8438,19 @@ const settingsStyles = `
     margin-inline-start: 8px;
   }
   .notification-exception-heading .configuration-remove { margin: 0; }
+  .automatic-exception-header,
   .notification-exception-header { min-width: 0; flex: 1; padding-block: 8px; }
+  [data-pack-exception][expanded] > .automatic-exception-header,
+  [data-notification-expansion][expanded] > .notification-exception-header {
+    padding-block: 0;
+  }
+  [data-pack-exception][expanded] > .automatic-exception-header > *,
+  [data-notification-expansion][expanded] > .notification-exception-header > * {
+    display: none;
+  }
   .notification-exception-labels > span { flex-wrap: wrap; }
   .notification-exception-labels ha-label { max-width: 100%; }
+  .automatic-exception-summary,
   .notification-exception-summary {
     color: var(--secondary-text-color);
     font-size: 12px;

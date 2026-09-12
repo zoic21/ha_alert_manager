@@ -29,6 +29,17 @@ test("notification exception actions have no extra gap and retain native button 
   assert.doesNotMatch(styles, /(?:width|height|--mdc-icon-button-size)\s*:/);
 });
 
+test("expanded pack and notification headers hide only summary content, not actions", () => {
+  const rule = settingsStyles.match(/\[data-pack-exception\]\[expanded\] > \.automatic-exception-header > \*,\s*\[data-notification-expansion\]\[expanded\] > \.notification-exception-header > \*\s*\{([^}]+)\}/);
+  assert.ok(rule);
+  assert.match(rule[1], /display:\s*none/);
+  const markup = renderNotificationProfileDrawer({ draft: profile, t });
+  assert.match(markup, /slot="header" class="notification-exception-header"/);
+  assert.match(markup, /<\/div>\s*<div slot="icons" class="notification-exception-heading">/);
+  assert.match(markup, /data-action="remove-notification-exception"/);
+  assert.match(markup, /class="notification-exception-reorder"/);
+});
+
 const profile = {
   id: "owner",
   name: "Owner",
