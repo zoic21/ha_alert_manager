@@ -221,10 +221,12 @@ On desktop, the rule editor and configuration drawers can be resized in width. T
 
 In **Custom rules → Generate rules**, select built-in blueprints and click
 **Create selected rules**. The generator shows matching entity counts and explains
-unavailable choices. The initial catalog uses System Monitor sensors: CPU,
-memory and disk usage above 90%, and CPU temperature above 80 °C, each for five
-minutes. Enable the relevant System Monitor sensors first; temperature discovery
-requires Celsius units.
+unavailable choices. CPU and memory usage above 90%, and CPU temperature above
+80 °C, are detected for System Monitor and compatible device sensors (including
+UniFi), each for five minutes. Discovery also recognizes CPU/memory entity names
+and requires percentage or Celsius units. Home Assistant Supervisor apps/add-ons
+are excluded. Disk usage above 90% for five minutes remains System Monitor only.
+Enable the relevant sensors first.
 
 Each selection creates one editable custom rule with all compatible entities
 (up to 50). Rules are created together or not at all, and remain independent of

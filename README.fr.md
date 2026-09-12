@@ -224,10 +224,13 @@ Sur ordinateur, la largeur des volets de règles et de configuration est redimen
 
 Dans **Règles personnalisées → Générer des règles**, cochez les blueprints puis
 cliquez sur **Créer les règles sélectionnées**. Le générateur indique le nombre
-d’entités compatibles et explique les choix indisponibles. Le catalogue initial
-utilise les capteurs System Monitor : CPU, mémoire et disque au-dessus de 90 %,
-et température CPU au-dessus de 80 °C, pendant cinq minutes. Activez d’abord les
-capteurs System Monitor concernés ; la température doit être exprimée en Celsius.
+d’entités compatibles et explique les choix indisponibles. Les blueprints CPU et
+mémoire au-dessus de 90 %, et température CPU au-dessus de 80 °C, pendant cinq
+minutes, reconnaissent System Monitor et les capteurs d’appareils compatibles
+(dont UniFi). La détection reconnaît aussi les noms d’entités CPU/mémoire et exige
+des pourcentages ou des degrés Celsius. Les applications/add-ons du Supervisor
+Home Assistant sont exclus. Le disque au-dessus de 90 % pendant cinq minutes reste
+limité à System Monitor. Activez d’abord les capteurs concernés.
 
 Chaque sélection crée une règle personnalisée modifiable contenant toutes les
 entités compatibles (50 au maximum). Le lot est créé entièrement ou pas du tout.

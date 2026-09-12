@@ -1,27 +1,37 @@
 blueprint_id: system_memory_usage
 schema_version: 1
-blueprint_version: 1
+blueprint_version: 2
 category: system
 name_key: generator.system_memory_usage.name
 description_key: generator.system_memory_usage.description
-requirements:
-  integrations:
-  - systemmonitor
 discovery:
   all:
-  - field: integration
-    equals: systemmonitor
   - field: domain
     equals: sensor
-  - any:
-    - field: translation_key
-      equals: memory_use_percent
-    - field: unique_id
-      equals: memory_use_percent
-    - field: unique_id
-      glob: memory_use_percent_*
+  - not:
+      field: integration
+      equals: hassio
   - field: unit_of_measurement
     equals: '%'
+  - any:
+    - all:
+      - field: integration
+        equals: systemmonitor
+      - any:
+        - field: translation_key
+          equals: memory_use_percent
+        - field: unique_id
+          equals: memory_use_percent
+        - field: unique_id
+          glob: memory_use_percent_*
+    - field: entity_id
+      glob: sensor.*_memory_utilization
+    - field: entity_id
+      glob: sensor.*_memory_usage
+    - field: entity_id
+      glob: sensor.*_memory_use_percent
+    - field: entity_id
+      glob: sensor.*_utilisation_de_la_memoire
 rule:
   name: 'System: high memory usage'
   source: value

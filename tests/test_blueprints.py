@@ -45,7 +45,10 @@ def test_catalog_is_valid_and_localized():
     assert len(catalog) == 4
     for blueprint in catalog:
         assert "error" not in blueprint
-        assert blueprint["schema_version"] == blueprint["blueprint_version"] == 1
+        assert blueprint["schema_version"] == 1
+        assert blueprint["blueprint_version"] == (
+            2 if blueprint["category"] == "system" else 1
+        )
         for language in ("en", "fr"):
             data = json.loads(
                 (
@@ -92,7 +95,9 @@ def test_discovery_renamed_unavailable_disabled_and_units(hass, registry_entry):
 
 
 def test_requirements_lifecycle_limits_and_explanation():
-    recipe = load_blueprints()[0]
+    recipe = next(
+        b for b in load_blueprints() if b["blueprint_id"] == "storage_disk_usage"
+    )
     empty = {"integrations": set(), "entities": []}
     assert discover_blueprint(recipe, empty)["status"] == "missing_integration"
     empty["integrations"].add("systemmonitor")
@@ -178,7 +183,7 @@ def test_generation_batch_edit_yaml_and_duplicates(hass, entry, registry_entry):
     assert rule["name"] == "Système : utilisation CPU élevée"
     assert rule["blueprint"] == {
         "id": "system_cpu_usage",
-        "version": 1,
+        "version": 2,
         "managed": False,
     }
     updated = run(
@@ -351,3 +356,93 @@ def test_equivalent_blueprints_in_batch_are_rejected_atomically(
     assert manager.config == before
     assert not manager.rules
     assert not manager.records
+
+
+@pytest.mark.parametrize(
+    ("blueprint_id", "unit", "entity_ids"),
+    [
+        (
+            "system_cpu_usage",
+            "%",
+            [
+                "sensor.dream_machine_pro_cpu_utilization",
+                "sensor.u5g_backup_cpu_utilization",
+                "sensor.u7_outdoor_cpu_utilization",
+                "sensor.u7_pro_xg_etage_cpu_utilization",
+                "sensor.unas_cpu_usage",
+                "sensor.ups_2u_cpu_utilization",
+                "sensor.usw_24_poe_1_cpu_utilization",
+                "sensor.usw_24_poe_2_cpu_utilization",
+                "sensor.usw_flex_cpu_utilization",
+            ],
+        ),
+        (
+            "system_memory_usage",
+            "%",
+            [
+                "sensor.dream_machine_pro_memory_utilization",
+                "sensor.u5g_backup_memory_utilization",
+                "sensor.u7_outdoor_memory_utilization",
+                "sensor.u7_pro_xg_etage_memory_utilization",
+                "sensor.unvr_memory_utilization",
+                "sensor.ups_2u_memory_utilization",
+                "sensor.usw_24_poe_1_memory_utilization",
+                "sensor.usw_24_poe_2_memory_utilization",
+                "sensor.usw_flex_memory_utilization",
+            ],
+        ),
+        (
+            "system_cpu_temperature",
+            "°C",
+            [
+                "sensor.dream_machine_pro_dream_machine_pro_cpu_temperature",
+                "sensor.system_monitor_temperature_du_processeur",
+                "sensor.unvr_temperature_du_processeur",
+            ],
+        ),
+    ],
+)
+def test_device_discovery_excludes_addons_and_wrong_units(
+    hass, registry_entry, blueprint_id, unit, entity_ids
+):
+    """Discover the supplied device names without System Monitor installed."""
+    recipe = next(b for b in load_blueprints() if b["blueprint_id"] == blueprint_id)
+    for entity_id in entity_ids:
+        registry_entry(hass, entity_id, platform="unifi")
+        hass.states.set(entity_id, "unavailable", {"unit_of_measurement": unit})
+        # Supervisor entities must be excluded even with a matching English name.
+        addon_id = entity_id.replace("sensor.", "sensor.addon_")
+        registry_entry(hass, addon_id, platform="hassio")
+        hass.states.set(addon_id, "95", {"unit_of_measurement": unit})
+        wrong_id = entity_id.replace("sensor.", "sensor.wrong_unit_")
+        hass.states.set(wrong_id, "95", {"unit_of_measurement": "MB"})
+    for suffix in ("pourcentage_du_processeur", "pourcentage_de_memoire"):
+        for app in ("advanced_ssh_web_terminal", "browser"):
+            entity_id = f"sensor.{app}_{suffix}"
+            registry_entry(hass, entity_id, platform="hassio")
+            hass.states.set(entity_id, "0", {"unit_of_measurement": "%"})
+    # Similar names are not sufficient: CPU frequency, free memory and unrelated
+    # temperatures must never enter these rules.
+    for suffix in ("cpu_frequency", "memory_free", "disk_temperature"):
+        hass.states.set(f"sensor.device_{suffix}", "95", {"unit_of_measurement": unit})
+    result = discover_blueprint(
+        recipe, snapshot_installation(hass, hass.entity_registry, set())
+    )
+    assert result == {"status": "available", "entity_ids": sorted(entity_ids)}
+
+
+def test_device_discovery_supports_unregistered_sensors(hass):
+    """Template/REST device metrics need no integration or registry identity."""
+    hass.states.set("sensor.unas_cpu_usage", "4", {"unit_of_measurement": "%"})
+    hass.states.set("sensor.unas_memory_usage", "40", {"unit_of_measurement": "%"})
+    snapshot = snapshot_installation(hass, hass.entity_registry, set())
+    for metric in ("cpu", "memory"):
+        recipe = next(
+            b
+            for b in load_blueprints()
+            if b["blueprint_id"] == f"system_{metric}_usage"
+        )
+        assert discover_blueprint(recipe, snapshot) == {
+            "status": "available",
+            "entity_ids": [f"sensor.unas_{metric}_usage"],
+        }

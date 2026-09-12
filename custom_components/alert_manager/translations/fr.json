@@ -907,15 +907,15 @@
       },
       "system_cpu_usage": {
         "name": "Système : utilisation CPU élevée",
-        "description": "Utilisation CPU System Monitor supérieure à 90 % pendant 5 minutes."
+        "description": "Utilisation CPU des appareils supérieure à 90 % pendant 5 minutes (System Monitor et capteurs compatibles, hors applications/add-ons Home Assistant)."
       },
       "system_memory_usage": {
         "name": "Système : utilisation mémoire élevée",
-        "description": "Utilisation mémoire System Monitor supérieure à 90 % pendant 5 minutes."
+        "description": "Utilisation mémoire des appareils supérieure à 90 % pendant 5 minutes (System Monitor et capteurs compatibles, hors applications/add-ons Home Assistant)."
       },
       "system_cpu_temperature": {
         "name": "Système : température CPU élevée",
-        "description": "Température CPU System Monitor supérieure à 80 °C pendant 5 minutes (capteurs en Celsius)."
+        "description": "Température CPU des appareils supérieure à 80 °C pendant 5 minutes (System Monitor et capteurs compatibles en Celsius, hors applications/add-ons Home Assistant)."
       },
       "storage_disk_usage": {
         "name": "Stockage : utilisation disque élevée",

@@ -1,27 +1,37 @@
 blueprint_id: system_cpu_usage
 schema_version: 1
-blueprint_version: 1
+blueprint_version: 2
 category: system
 name_key: generator.system_cpu_usage.name
 description_key: generator.system_cpu_usage.description
-requirements:
-  integrations:
-  - systemmonitor
 discovery:
   all:
-  - field: integration
-    equals: systemmonitor
   - field: domain
     equals: sensor
-  - any:
-    - field: translation_key
-      equals: processor_use
-    - field: unique_id
-      equals: processor_use
-    - field: unique_id
-      glob: processor_use_*
+  - not:
+      field: integration
+      equals: hassio
   - field: unit_of_measurement
     equals: '%'
+  - any:
+    - all:
+      - field: integration
+        equals: systemmonitor
+      - any:
+        - field: translation_key
+          equals: processor_use
+        - field: unique_id
+          equals: processor_use
+        - field: unique_id
+          glob: processor_use_*
+    - field: entity_id
+      glob: sensor.*_cpu_utilization
+    - field: entity_id
+      glob: sensor.*_cpu_usage
+    - field: entity_id
+      glob: sensor.*_processor_use
+    - field: entity_id
+      glob: sensor.*_utilisation_du_processeur
 rule:
   name: 'System: high CPU usage'
   source: value

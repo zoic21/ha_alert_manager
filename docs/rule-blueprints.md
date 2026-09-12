@@ -72,6 +72,15 @@ of each predicate for diagnostics/tests; the UI only consumes summary statuses.
 Discovery returns unique sorted entity IDs and only runs on opening/refreshing
 the generator or explicitly creating rules. There are no listeners or timers.
 
+The CPU usage, memory usage and CPU temperature recipes also accept explicit
+entity-ID suffixes such as `_cpu_utilization`, `_cpu_usage`,
+`_memory_utilization`, `_memory_usage`, `_cpu_temperature` and
+`_temperature_du_processeur`, without requiring System Monitor. The original
+System Monitor registry matching remains available for renamed sensors. Units
+are still required, and `hassio` entities are excluded before name matching so
+Supervisor apps/add-ons cannot be selected. Other renamed device sensors must
+retain a supported suffix. Disk discovery remains System Monitor only.
+
 ## Creation and provenance
 
 The server rechecks the selected IDs under the existing configuration mutation

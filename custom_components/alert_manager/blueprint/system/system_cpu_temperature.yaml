@@ -1,27 +1,37 @@
 blueprint_id: system_cpu_temperature
 schema_version: 1
-blueprint_version: 1
+blueprint_version: 2
 category: system
 name_key: generator.system_cpu_temperature.name
 description_key: generator.system_cpu_temperature.description
-requirements:
-  integrations:
-  - systemmonitor
 discovery:
   all:
-  - field: integration
-    equals: systemmonitor
   - field: domain
     equals: sensor
-  - any:
-    - field: translation_key
-      equals: processor_temperature
-    - field: unique_id
-      equals: processor_temperature
-    - field: unique_id
-      glob: processor_temperature_*
+  - not:
+      field: integration
+      equals: hassio
   - field: unit_of_measurement
     equals: °C
+  - any:
+    - all:
+      - field: integration
+        equals: systemmonitor
+      - any:
+        - field: translation_key
+          equals: processor_temperature
+        - field: unique_id
+          equals: processor_temperature
+        - field: unique_id
+          glob: processor_temperature_*
+    - field: entity_id
+      glob: sensor.*_cpu_temperature
+    - field: entity_id
+      glob: sensor.*_processor_temperature
+    - field: entity_id
+      glob: sensor.*_temperature_cpu
+    - field: entity_id
+      glob: sensor.*_temperature_du_processeur
 rule:
   name: 'System: high CPU temperature'
   source: value
