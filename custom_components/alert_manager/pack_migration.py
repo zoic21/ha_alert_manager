@@ -5,22 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import label_registry as lr
-
 from .config_defaults import DEFAULT_CONFIG
 from .const import DEFAULT_DELAY
-
-_MIGRATION_LABEL = "Alert Manager - migrated automatic exclusions"
-_MIGRATION_DESCRIPTION = "alert_manager:automatic-exclusions:2.4"
 
 
 def migrate_pack_config(raw: dict[str, Any]) -> dict[str, Any]:
     """Convert sparse legacy fields without accessing registries or mutating input.
 
-    Direct exclusions remain solely for the registry boundary to convert. A
+    Direct exclusions remain for the final validated exception conversion. A
     failed conversion must retain the original persisted/exported source intact.
     """
     from .validation import validate_delay
@@ -103,87 +95,31 @@ def migrate_flapping_precedence(raw: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-async def async_migrate_exclusions(
-    hass: HomeAssistant, raw: dict[str, Any]
-) -> dict[str, Any]:
-    """Assign a dedicated label on the HA event loop, with fail-closed retries.
-
-    Validate all target identities before changing any registry. Never replace
-    existing labels, adopt a same-name user label, or drop missing targets.
-    """
+def migrate_exclusions(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert legacy exclusions to disabled exceptions without registry writes."""
+    from .packs import PACKS
     from .validation import validate_config, validate_device_list, validate_entity_list
 
     config = deepcopy(raw)
-    entities = config.get("excluded_entities", [])
-    devices = config.get("excluded_devices", [])
+    entities = config.pop("excluded_entities", [])
+    devices = config.pop("excluded_devices", [])
     if not isinstance(entities, list) or not isinstance(devices, list):
         raise ValueError("Legacy exclusions must be lists")
     entities = validate_entity_list(entities)
     devices = validate_device_list(devices)
-    validate_config(
-        {
-            key: value
-            for key, value in config.items()
-            if key not in ("excluded_entities", "excluded_devices")
-        }
-    )
-    if entities or devices:
-        entity_registry, device_registry = er.async_get(hass), dr.async_get(hass)
-        targets = []
-        for kind, ids, registry in (
-            ("entity", entities, entity_registry),
-            ("device", devices, device_registry),
-        ):
-            for target_id in ids:
-                entry = (
-                    registry.async_get(target_id)
-                    if isinstance(target_id, str)
-                    else None
-                )
-                if entry is None:
-                    raise ValueError(
-                        f"Cannot migrate excluded {kind} {target_id!r}: "
-                        "registry target missing; restore it or explicitly remove "
-                        "this exclusion from the source configuration"
-                    )
-                targets.append((kind, target_id, entry))
-        labels = lr.async_get(hass)
-        label = labels.async_get_label_by_name(_MIGRATION_LABEL)
-        if label is not None and label.description != _MIGRATION_DESCRIPTION:
-            raise ValueError(
-                f"Migration label name is already in use: {_MIGRATION_LABEL}"
-            )
-        if label is None:
-            label = labels.async_create(
-                _MIGRATION_LABEL,
-                description=_MIGRATION_DESCRIPTION,
-                icon="mdi:bell-off",
-            )
-        for kind, target_id, entry in targets:
-            if label.label_id in entry.labels:
+    # Validate before merging, then validate the resulting map sizes and fields.
+    # Keep orphan targets: they must stay excluded if they reappear later.
+    validated = validate_config(config)
+    if not entities and not devices:
+        return config
+    for pack in PACKS:
+        settings = validated["automatic"][pack.id]
+        fields = {field.id for field in pack.config_fields}
+        for kind, targets in (("entity", entities), ("device", devices)):
+            key = f"{kind}_overrides"
+            if key not in fields:
                 continue
-            try:
-                if kind == "entity":
-                    entity_registry.async_update_entity(
-                        target_id, labels=set(entry.labels) | {label.label_id}
-                    )
-                else:
-                    device_registry.async_update_device(
-                        target_id, labels=set(entry.labels) | {label.label_id}
-                    )
-            except Exception as err:
-                raise ValueError(
-                    f"Cannot migrate excluded {kind} {target_id!r}: "
-                    f"label assignment failed: {err}"
-                ) from err
-        # HA registries defer writes. Flush their native stores before allowing
-        # the source exclusions to disappear from our own durable snapshot.
-        # Keep this narrow compatibility boundary fail-closed on HA API changes.
-        for registry in (labels, entity_registry, device_registry):
-            await registry._store.async_save(registry._data_to_save())
-        config["excluded_labels"] = list(
-            dict.fromkeys([*config.get("excluded_labels", []), label.label_id])
-        )
-    config.pop("excluded_entities", None)
-    config.pop("excluded_devices", None)
-    return config
+            overrides = settings.setdefault(key, {})
+            for target_id in targets:
+                overrides.setdefault(target_id, {})["enabled"] = False
+    return validate_config(validated)

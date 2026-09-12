@@ -48,7 +48,7 @@ export function renderAutomatic(context) {
       return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
         <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
         <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
-    }).join("")}${renderAutomaticConfigurationDrawer(context)}</form></ha-card>`;
+    }).join("")}</form>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
 }
 
 export function renderAutomaticPanel() {

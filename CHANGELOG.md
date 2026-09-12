@@ -7,14 +7,16 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.6**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.7**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
   explicit defaults, and sparse device/entity exceptions.
-- Kept global automatic exclusions by label; migrate old direct exclusions to a dedicated
-  Home Assistant label and preserve effective delays, thresholds and flapping precedence.
-  Missing registry targets or failed writes stop conversion with recoverable source data.
+- Kept global automatic exclusions by label; migrate old direct exclusions to disabled
+  exceptions in each pack, preserving delays, thresholds and flapping precedence.
+  Missing targets remain excluded without modifying Home Assistant registries.
+- Separate page saves from drawer saves: incomplete visual or YAML drawer drafts
+  remain open and do not block or get included in the main configuration save.
 - Added administrator-only contextual configuration from automatic alert details.
 - Compacted pack configuration drawers with monitoring switches and
   side-by-side settings. Execution-error configuration offers automation/script

@@ -35,7 +35,7 @@ from .const import (
 )
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, normalize_rule_source
 from .pack_migration import (
-    async_migrate_exclusions,
+    migrate_exclusions,
     migrate_flapping_precedence,
     migrate_pack_config,
 )
@@ -278,7 +278,7 @@ class AlertManagerStorage:
             config.pop("exclusion_label")
             changed = True
         try:
-            config = await async_migrate_exclusions(self._hass, config)
+            config = migrate_exclusions(config)
         except Exception as err:
             error_type = (
                 ConfigMigrationError

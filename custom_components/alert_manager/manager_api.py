@@ -48,7 +48,6 @@ from .const import (
 )
 from .history_statistics import aggregate_history
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
-from .pack_migration import async_migrate_exclusions
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
 from .storage import StorageDurabilitySnapshot, sort_history
@@ -972,9 +971,6 @@ class _ApiMixin:
         """Replace configuration through one validated, recoverable transaction."""
         candidate = await self.hass.async_add_executor_job(
             parse_config_yaml, raw_yaml, deepcopy(self.config["rules"])
-        )
-        candidate = validate_config(
-            await async_migrate_exclusions(self.hass, candidate)
         )
         candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)

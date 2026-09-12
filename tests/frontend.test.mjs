@@ -3961,7 +3961,6 @@ test("floating configuration save validates and saves both dirty forms", async (
 
   assert.equal(await panel._saveConfiguration(), true);
   assert.deepEqual(calls, [
-    "validate:automatic-form",
     "validate:settings-form",
     "save:settings",
   ]);
@@ -4482,7 +4481,7 @@ test("combined settings save sends one configuration update and preserves drafts
   assert.deepEqual(calls, [{
     type: "alert_manager/config/update",
     config: {
-      automatic: { battery: { label_ids: [], enabled: true, delay: 42 } },
+      automatic: { battery: { ...completeConfig().automatic.battery } },
 
       pending_display_delay: 15,
       notification_batch_delay: 30,

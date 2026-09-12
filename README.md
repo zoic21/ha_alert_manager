@@ -173,7 +173,7 @@ Open **Configuration → Automatic monitoring** to enable and configure the pack
 | Automation and script errors | an `automation` or `script` execution finishes with an error |
 | Flapping / instability | the same anomaly occurs repeatedly within a detection window |
 
-Each pack has one **Configure** drawer for defaults, labels and device/entity exceptions. The main card shows its defaults and exception count. The **Monitor** switch is on by default. A disabled pack or device blocks its entity exceptions. Delay and pack parameters inherit independently: **entity → device → pack**. Clearing a numeric field restores inheritance; an explicit zero delay triggers immediately. Disabled exceptions keep their parameters visible but greyed out. Device exceptions automatically cover newly added eligible entities.
+Each pack has one **Configure** drawer for defaults, labels and device/entity exceptions. The main card shows its defaults and exception count. The **Monitor** switch is on by default. A disabled pack or device blocks its entity exceptions. Delay and pack parameters inherit independently: **entity → device → pack**. Clearing a numeric field restores inheritance; an explicit zero delay triggers immediately. Disabled exceptions keep their parameters visible but greyed out. Device exceptions automatically cover newly added eligible entities. The main Save button saves only page settings and pack activation; each drawer has its own Save button. An unfinished drawer stays open and does not block saving the page.
 
 Global exclusions use **Home Assistant labels** on entities or devices, and affect automatic monitoring only. Custom rules remain independent. An enabled exception cannot bypass the global monitoring switch, a disabled pack, an exclusion label or the pack’s eligibility checks. Trigger delays belong to individual packs; the separate pending-alert display delay only controls visibility.
 
@@ -302,7 +302,7 @@ If the stored configuration cannot be loaded at startup, Alert Manager starts sa
 
 Loading an older configuration, version-1 YAML or backup converts shared trigger delays into explicit pack defaults and old per-entity delays into pack exceptions, including disabled packs. Battery thresholds and failed-cycle counts retain their targets and values. Old source-priority flapping values become explicit source-scoped exceptions where necessary to preserve behavior.
 
-Direct entity/device exclusions become the dedicated **Alert Manager - migrated automatic exclusions** label, added alongside existing labels and selected as a global automatic exclusion. Registry writes complete before the source exclusions are removed. Interrupted retries reuse the same marked label. If a target is missing or has no registry entry, a same-name user label conflicts, or a registry/write operation fails, conversion stops with the exact error and the source data remains recoverable. Restore the missing target or explicitly correct/remove that exclusion in the original YAML, then import again. Do not delete the migration label while its exclusions are still needed.
+Direct entity/device exclusions become disabled exceptions in every pack, preserving existing thresholds and delays. Existing global label exclusions remain unchanged. No Home Assistant labels or registry entries are created or modified. Missing targets remain in the exception maps so they stay excluded if they reappear. Invalid source data leaves the original configuration recoverable.
 
 ## Alert lifecycle
 

@@ -193,42 +193,56 @@ test("raw YAML survives navigation, then the regular save sends validated pack v
 });
 
 
-for (const kind of ["settings", "automatic"]) {
-  test(`combined Save validates ${kind} YAML once before sending the complete draft`, async () => {
-    const p = kind === "settings" ? panel() : panel("automatic", "flapping", "entity_overrides");
-    p._packs[0].available = true;
-    p._packs[0].uses_delay = false;
-    p._packs[0].config_fields[0].fields = ["enabled", "occurrences", "window", "recovery"].map(
-      (id) => ({ id, type: id === "enabled" ? "boolean" : "number" }),
-    );
-    Object.assign(p._settingsDraft, { excluded_labels: [], coherence_ignored_entity_references: [] });
-    p._automaticDirty = p._settingsDirty = true;
-    p._ensureAutomaticDraft = p._ensureSettingsDraft = p._resetSettingsDraft = p._resetAutomaticDraft = () => {};
-    p._commitIgnoredReferenceInput = p._reportFormValidity = () => true;
-    p._historyConfig = { retention_limit: 100 };
-    const controls = {
-      "#automatic-form": {}, "#settings-form": {}, "#history-limit": { value: 100 },
-      "#global-delay": { value: 60 }, "#pending-display-delay": { value: 0 },
-      "#coherence-schedule": { value: "none" }, "#coherence-scan-esphome": { checked: true },
-    };
-    p.shadowRoot = { querySelector: (id) => controls[id] ?? null, querySelectorAll: () => [] };
-    await switchConfigurationYaml(p);
-    const calls = [];
-    const value = kind === "settings" ? { "sensor.new": 500 }
-      : { "sensor.new": { enabled: false, occurrences: 3, window: 300, recovery: 60 } };
-    p._api.call = async (request) => {
-      calls.push(request);
-      return request.type.endsWith("/validate") ? { value: kind === "automatic" ? { ...p._automaticMapDraft.flapping, entity_overrides: value } : value } : {};
-    };
-    p._saveSettings = saveSettings.bind(p);
-    assert.equal(await saveConfiguration.call(p), true);
-    assert.deepEqual(calls.map((call) => call.type), [
-      "alert_manager/config/field/yaml/validate", "alert_manager/config/update",
-    ]);
-    const config = calls[1].config;
-    if (kind === "automatic") assert.deepEqual(config.automatic.flapping.entity_overrides, value);
-    else { assert.equal(config.entity_delays, undefined); assert.deepEqual(p._entityDelayDraft, configurationValueToDraft(value, "entity_delays")); }
-    assert.equal(config.automatic.flapping.enabled, false);
-    assert.deepEqual(config.automatic.flapping.label_ids, ["b", "a"]);
-  });
+for (const kind of ["settings", "automatic", "notification"]) {
+  for (const mode of ["visual", "yaml"]) {
+    test(`page Save ignores and preserves an incomplete ${kind} ${mode} drawer`, async () => {
+      const p = kind === "automatic" ? panel("automatic", "flapping", "entity_overrides") : panel(kind);
+      p._config = { automatic: { flapping: { enabled: false, label_ids: [], entity_overrides: {} } } };
+      Object.assign(p._settingsDraft, { excluded_labels: [], coherence_ignored_entity_references: [] });
+      p._automaticMapDraft.flapping.entity_overrides.push({ target_id: "" });
+      p._notificationProfileDraft = { name: "", targets: [], exceptions: [{}] };
+      Object.assign(p._configurationDrawer, { mode, yaml: "invalid: [", wasDirty: true });
+      const drawer = p._configurationDrawer;
+      if (kind === "automatic") drawer.original = JSON.stringify({ ...p._automaticMapDraft.flapping, entity_overrides: [] });
+      const exceptions = structuredClone(p._automaticMapDraft.flapping.entity_overrides);
+      const notifications = structuredClone(p._notificationProfileDraft);
+      p._automaticDirty = p._settingsDirty = true;
+      p._ensureSettingsDraft = () => {};
+      p._commitIgnoredReferenceInput = () => true;
+      p._reportFormValidity = (form, options) => {
+        assert.equal(form.id, "settings-form");
+        assert.equal(options.includeDrawer, false);
+        return true;
+      };
+      p._historyConfig = { retention_limit: 100 };
+      const controls = {
+        "#settings-form": { id: "settings-form" }, "#history-limit": { value: 100 },
+        "#pending-display-delay": { value: 15 }, "#auto-flapping-enabled": { checked: true },
+        "#coherence-schedule": { value: "none" }, "#coherence-scan-esphome": { checked: true },
+      };
+      p.shadowRoot = { querySelector: (id) => controls[id] ?? null, querySelectorAll: () => [] };
+      const calls = [];
+      p._api.call = async (request) => {
+        calls.push(request);
+        assert.equal(request.type, "alert_manager/config/update");
+        return { ...p._config, ...request.config };
+      };
+      p._saveSettings = saveSettings.bind(p);
+      assert.equal(await saveConfiguration.call(p), true);
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0].config.automatic.flapping, { enabled: true, label_ids: [], entity_overrides: {} });
+      assert.equal(calls[0].config.pending_display_delay, 15);
+      assert.equal(calls[0].config.notification_profiles, undefined);
+      assert.equal(p._configurationDrawer, drawer);
+      assert.equal(drawer.yaml, "invalid: [");
+      if (kind === "automatic") {
+        assert.equal(JSON.parse(drawer.original).enabled, true);
+        assert.deepEqual(JSON.parse(drawer.original).entity_overrides, []);
+      }
+      assert.deepEqual(p._automaticMapDraft.flapping.entity_overrides, exceptions);
+      assert.deepEqual(p._notificationProfileDraft, notifications);
+      assert.equal(p._automaticDirty, false);
+      assert.equal(p._settingsDirty, false);
+    });
+  }
 }

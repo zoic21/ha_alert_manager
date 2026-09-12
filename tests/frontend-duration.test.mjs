@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   durationFieldValue, durationSelectorValue, hydrateDurationFields,
-  renderDurationControl, validateDurationFields,
+  renderDurationControl, validateDurationFields, reportFormValidity,
 } from "../frontend-src/components/duration-field.js";
 import { captureNotificationProfileDraft } from "../frontend-src/components/notification-profiles.js";
 import { captureRuleDraftFromForm } from "../frontend-src/components/rule-editor.js";
@@ -141,4 +141,20 @@ test("transition editor preserves separate hold and expiration durations", async
   assert.match(html, /name="to_value"/);
   assert.match(html, /data-duration-value="600"/);
   assert.doesNotMatch(html, /id="rule-operator"/);
+});
+
+
+test("page validation skips the open drawer while drawer Save still validates it", () => {
+  const form = { id: "settings-form", reportValidity: () => true, querySelectorAll: () => [] };
+  const drawer = {};
+  let validations = 0;
+  const panel = {
+    _configurationDrawer: { kind: "settings" },
+    shadowRoot: { querySelector: () => drawer },
+    _reportFormValidity: (element) => { assert.equal(element, drawer); validations++; return false; },
+  };
+  assert.equal(reportFormValidity.call(panel, form, { includeDrawer: false }), true);
+  assert.equal(validations, 0);
+  assert.equal(reportFormValidity.call(panel, form), false);
+  assert.equal(validations, 1);
 });

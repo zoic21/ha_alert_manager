@@ -307,6 +307,7 @@ test("automatic rendering is pure and places defaults with sparse exceptions", (
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold/);
   assert.match(markup, /auto-battery-device_overrides-target-0/);
+  assert.ok(markup.indexOf("</form>") < markup.indexOf('class="side-drawer configuration-drawer"'));
   assert.match(markup, /data-action="remove-pack-map-row"/);
   assert.doesNotMatch(markup, /data-action="inherit-pack-row"/);
   assert.doesNotMatch(markup, /automatic.inherited_value/);
@@ -370,6 +371,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(markup, new RegExp(`ha-icon-button[^>]*path="${MDI_CLOSE}"`));
   assert.match(markup, /configuration-section-heading[\s\S]*data-action="add-entity-delay"[\s\S]*class="delay-list"/);
   assert.match(markup, /data-duration-value="60"[^>]*data-delay-index="0"/);
+  assert.ok(markup.indexOf("</form>") < markup.indexOf('class="side-drawer configuration-drawer"'));
   assert.match(markup, /slot="fab" size="l" class="dirty"[^>]*data-action="save-configuration"/);
 });
 

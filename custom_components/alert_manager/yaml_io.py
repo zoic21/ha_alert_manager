@@ -16,7 +16,11 @@ from .config_defaults import CATEGORIES, DEFAULT_CONFIG
 from .const import ATTRIBUTE_SOURCES, TRANSITION_SOURCES
 from .models import Rule, normalize_rule_source
 from .notifications import validate_notification_profiles
-from .pack_migration import migrate_flapping_precedence, migrate_pack_config
+from .pack_migration import (
+    migrate_exclusions,
+    migrate_flapping_precedence,
+    migrate_pack_config,
+)
 from .packs import PACKS_BY_ID
 from .validation import validate_config, validate_rule_payload
 
@@ -380,24 +384,8 @@ def parse_config_yaml(
     candidate = {**deepcopy(config), "rules": normalized_rules}
     if document.get("version") == 1:
         candidate = migrate_flapping_precedence(migrate_pack_config(candidate))
-    # Parsing runs in the executor. Registry conversion belongs to the admitted
-    # import transaction; preserve unresolved targets in the preview until then.
-    exclusions = {
-        key: candidate.pop(key)
-        for key in ("excluded_entities", "excluded_devices")
-        if key in candidate
-    }
-    from .validation import validate_device_list, validate_entity_list
-
-    if "excluded_entities" in exclusions:
-        exclusions["excluded_entities"] = validate_entity_list(
-            exclusions["excluded_entities"]
-        )
-    if "excluded_devices" in exclusions:
-        exclusions["excluded_devices"] = validate_device_list(
-            exclusions["excluded_devices"]
-        )
-    return {**validate_config(candidate), **exclusions}
+    # Pure conversion makes the preview identical to the configuration imported.
+    return validate_config(migrate_exclusions(candidate))
 
 
 def import_summary(config: Mapping[str, Any]) -> dict[str, Any]:

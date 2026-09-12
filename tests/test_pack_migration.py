@@ -11,11 +11,15 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 
 from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
-from custom_components.alert_manager.pack_migration import async_migrate_exclusions
+from custom_components.alert_manager.pack_migration import migrate_exclusions
 from custom_components.alert_manager.pack_settings import resolve_settings
 from custom_components.alert_manager.storage import _migrate_config_shape
 from custom_components.alert_manager.validation import validate_config
-from custom_components.alert_manager.yaml_io import dump_config_yaml, parse_config_yaml
+from custom_components.alert_manager.yaml_io import (
+    dump_config_yaml,
+    import_summary,
+    parse_config_yaml,
+)
 
 
 def legacy_config():
@@ -82,79 +86,75 @@ def test_conversion_preserves_effective_values_and_sparse_inheritance():
     assert repeated == config and not changed
 
 
-def test_labels_are_additive_durable_and_idempotent(hass):
+def test_exclusions_become_disabled_pack_exceptions_without_registry_writes(hass):
     add_targets(hass)
     converted, _ = _migrate_config_shape(legacy_config())
-    config = asyncio.run(async_migrate_exclusions(hass, converted))
-    label_id = config["excluded_labels"][-1]
-    assert config["excluded_labels"][0] == "existing"
+    before = deepcopy(converted)
+    config = migrate_exclusions(converted)
+    assert converted == before
+    assert config["excluded_labels"] == ["existing"]
     assert "excluded_entities" not in config and "excluded_devices" not in config
-    assert er.async_get(hass).entries["sensor.battery"].labels == {"keep", label_id}
-    assert dr.async_get(hass).entries["a" * 32].labels == {"device_keep", label_id}
-    for registry in (lr.async_get(hass), er.async_get(hass), dr.async_get(hass)):
-        assert registry.saved is not None
-    assert asyncio.run(async_migrate_exclusions(hass, converted)) == config
-    assert len(lr.async_get(hass).labels) == 1
-    assert parse_config_yaml(
-        dump_config_yaml(validate_config(config))
-    ) == validate_config(config)
-
-
-@pytest.mark.parametrize("kind", ["entity", "device"])
-def test_missing_registry_targets_fail_before_label_mutation(hass, kind):
-    add_targets(hass)
-    registry = er.async_get(hass) if kind == "entity" else dr.async_get(hass)
-    registry.entries.clear()
-    converted, _ = _migrate_config_shape(legacy_config())
-    before = deepcopy(converted)
-    with pytest.raises(ValueError, match=f"Cannot migrate excluded {kind}"):
-        asyncio.run(async_migrate_exclusions(hass, converted))
-    assert converted == before
-    assert not lr.async_get(hass).labels
-
-
-@pytest.mark.parametrize("stage", ["assign", "durability", "cancel"])
-def test_failed_or_interrupted_label_conversion_retains_source_for_retry(
-    hass, monkeypatch, stage
-):
-    add_targets(hass)
-    converted, _ = _migrate_config_shape(legacy_config())
-    before = deepcopy(converted)
-    registry = dr.async_get(hass)
-    if stage == "assign":
-
-        def fail(*args, **kwargs):
-            raise OSError("registry denied")
-
-        monkeypatch.setattr(registry, "async_update_device", fail)
-    else:
-
-        async def fail(*args, **kwargs):
-            if stage == "cancel":
-                raise asyncio.CancelledError
-            raise OSError("disk full")
-
-        monkeypatch.setattr(registry._store, "async_save", fail)
-    with pytest.raises(
-        asyncio.CancelledError if stage == "cancel" else (ValueError, OSError)
-    ):
-        asyncio.run(async_migrate_exclusions(hass, converted))
-    assert converted == before
-    monkeypatch.undo()
-    config = asyncio.run(async_migrate_exclusions(hass, converted))
-    assert len(lr.async_get(hass).labels) == 1
-    assert config["excluded_labels"][-1] in registry.entries["a" * 32].labels
-
-
-def test_user_label_collision_is_not_adopted(hass):
-    from custom_components.alert_manager.pack_migration import _MIGRATION_LABEL
-
-    add_targets(hass)
-    lr.async_get(hass).async_create(_MIGRATION_LABEL, description="user label")
-    converted, _ = _migrate_config_shape(legacy_config())
-    with pytest.raises(ValueError, match="already in use"):
-        asyncio.run(async_migrate_exclusions(hass, converted))
+    for pack in config["automatic"].values():
+        assert pack["entity_overrides"]["sensor.battery"]["enabled"] is False
+        assert pack["device_overrides"]["a" * 32]["enabled"] is False
+    assert (
+        config["automatic"]["battery"]["device_overrides"]["a" * 32]["threshold"] == 20
+    )
+    assert (
+        config["automatic"]["unavailable"]["entity_overrides"]["sensor.battery"][
+            "delay"
+        ]
+        == 0
+    )
     assert er.async_get(hass).entries["sensor.battery"].labels == {"keep"}
+    assert dr.async_get(hass).entries["a" * 32].labels == {"device_keep"}
+    assert not lr.async_get(hass).labels
+    for registry in (lr.async_get(hass), er.async_get(hass), dr.async_get(hass)):
+        assert registry.saved is None
+    assert migrate_exclusions(converted) == config
+    assert migrate_exclusions(config) == config
+    assert parse_config_yaml(dump_config_yaml(config)) == config
+
+
+def test_orphan_exclusions_are_retained_and_override_enabled_exceptions():
+    converted, _ = _migrate_config_shape(legacy_config())
+    converted["automatic"]["unavailable"]["entity_overrides"]["sensor.battery"][
+        "enabled"
+    ] = True
+    converted["automatic"]["flapping"]["source_packs"]["unavailable"][
+        "entity_overrides"
+    ]["sensor.battery"]["enabled"] = True
+    config = migrate_exclusions(converted)
+    for pack in config["automatic"].values():
+        assert resolve_settings(pack, "sensor.battery", None)[0]["enabled"] is False
+        assert resolve_settings(pack, "sensor.future", "a" * 32)[0]["enabled"] is False
+    assert (
+        resolve_settings(
+            config["automatic"]["flapping"],
+            "sensor.battery",
+            None,
+            source_id="unavailable",
+        )[0]["enabled"]
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("excluded_entities", "sensor.a"),
+        ("excluded_entities", ["not-an-entity"]),
+        ("excluded_devices", {}),
+        ("excluded_devices", [None]),
+    ],
+)
+def test_invalid_exclusions_preserve_original_for_retry(field, value):
+    converted, _ = _migrate_config_shape(legacy_config())
+    converted[field] = value
+    before = deepcopy(converted)
+    with pytest.raises(ValueError):
+        migrate_exclusions(converted)
+    assert converted == before
 
 
 def test_old_yaml_uses_the_same_boundary_conversion(hass):
@@ -165,10 +165,13 @@ def test_old_yaml_uses_the_same_boundary_conversion(hass):
     imported = parse_config_yaml(
         yaml.safe_dump({"version": 1, "config": raw, "rules": []})
     )
+    assert "excluded_entities" not in imported
+    assert "excluded_devices" not in imported
+    assert import_summary(imported)["pack_exceptions"] >= 12
     loaded, _ = _migrate_config_shape(raw)
-    assert validate_config(
-        asyncio.run(async_migrate_exclusions(hass, imported))
-    ) == validate_config(asyncio.run(async_migrate_exclusions(hass, loaded)))
+    assert validate_config(migrate_exclusions(imported)) == validate_config(
+        migrate_exclusions(loaded)
+    )
 
 
 def test_canonical_ui_rejects_legacy_fields_and_duplicate_yaml_targets():
@@ -194,6 +197,7 @@ def test_failed_startup_migration_keeps_original_store_without_reconciliation(
     from custom_components.alert_manager.manager import AlertManager
 
     original = {"config": legacy_config(), "alerts": {}}
+    original["config"]["excluded_entities"] = ["invalid entity id"]
     hass.stores["alert_manager"] = deepcopy(original)
     hass.states.set("sensor.battery", "unavailable")
     manager = AlertManager(hass, entry)

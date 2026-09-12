@@ -71,7 +71,7 @@ export function validateDurationFields(root, panel) {
   return valid;
 }
 
-export function reportFormValidity(form) {
+export function reportFormValidity(form, { includeDrawer = true } = {}) {
   let valid = form.reportValidity?.() ?? true;
   form.querySelectorAll?.("ha-input").forEach((field) => {
     if (typeof field.reportValidity === "function") {
@@ -92,7 +92,7 @@ export function reportFormValidity(form) {
     valid = false;
   }
   const kind = this._configurationDrawer?.kind;
-  if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
+  if (includeDrawer && ["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
     const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
     if (drawer) valid = this._reportFormValidity(drawer) && valid;
   }

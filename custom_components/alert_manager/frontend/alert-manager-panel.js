@@ -1170,7 +1170,7 @@ function validateDurationFields(root, panel) {
   return valid;
 }
 
-function reportFormValidity(form) {
+function reportFormValidity(form, { includeDrawer = true } = {}) {
   let valid = form.reportValidity?.() ?? true;
   form.querySelectorAll?.("ha-input").forEach((field) => {
     if (typeof field.reportValidity === "function") {
@@ -1191,7 +1191,7 @@ function reportFormValidity(form) {
     valid = false;
   }
   const kind = this._configurationDrawer?.kind;
-  if (["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
+  if (includeDrawer && ["automatic", "settings"].includes(kind) && form.id === `${kind}-form`) {
     const drawer = this.shadowRoot?.querySelector?.(".configuration-drawer");
     if (drawer) valid = this._reportFormValidity(drawer) && valid;
   }
@@ -6536,7 +6536,7 @@ function renderAutomatic(context) {
       return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
         <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
         <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
-    }).join("")}${renderAutomaticConfigurationDrawer(context)}</form></ha-card>`;
+    }).join("")}</form>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
 }
 
 function renderAutomaticPanel() {
@@ -6895,12 +6895,12 @@ function renderSettings(context) {
         ${configBackupsMarkup}
       </ha-card>
       <ha-card id="settings-section-diagnostics" outlined class="panel settings-card settings-scroll-section">${renderRuntimeStatistics({ statistics, date, t })}</ha-card>
+      </form>
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError, notificationEditorMode,
         busy, useBottomSheet, t,
       })}
-      </form>
       <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </div>`;
 }
@@ -7050,7 +7050,7 @@ function markConfigurationDirty(kind) {
 }
 
 function markConfigurationControlDirty(control) {
-    if (!control?.closest || this._configurationDrawer?.kind === "notification") return;
+    if (!control?.closest || (control.closest(".configuration-drawer") && this._configurationDrawer?.kind === "notification")) return;
     const drawerKind = control.closest(".configuration-drawer")
       ? this._configurationDrawer?.kind : null;
     if (control.closest("#automatic-form") || drawerKind === "automatic") {
@@ -7061,29 +7061,17 @@ function markConfigurationControlDirty(control) {
 }
 
 async function saveConfiguration() {
-    if (this._busy) return false;
-    const saveAutomaticChanges = Boolean(this._automaticDirty);
-    const saveSettingsChanges = Boolean(this._settingsDirty);
-    if (!saveAutomaticChanges && !saveSettingsChanges) return false;
-
-    const automaticForm = this.shadowRoot.querySelector("#automatic-form");
+    if (this._busy || (!this._automaticDirty && !this._settingsDirty)) return false;
     const settingsForm = this.shadowRoot.querySelector("#settings-form");
-    if (
-      saveAutomaticChanges
-      && (!automaticForm || !this._reportFormValidity(automaticForm))
-    ) return false;
-    if (
-      saveSettingsChanges
-      && (!settingsForm || !this._reportFormValidity(settingsForm))
-    ) return false;
-
-    if (!saveSettingsChanges) return this._saveAutomatic();
-    if (saveAutomaticChanges && this._configurationDrawer?.kind === "automatic"
-      && !await validateConfigurationYaml(this)) return false;
-    const automaticChanges = saveAutomaticChanges
-      ? collectAutomaticChanges.call(this, true) : {};
-    if (!automaticChanges) return false;
-    return this._saveSettings(automaticChanges);
+    if (!settingsForm || !this._reportFormValidity(settingsForm, { includeDrawer: false })) return false;
+    // The page owns only pack activation. Defaults and exceptions belong to the
+    // drawer Save action, including when its YAML or target rows are incomplete.
+    const automatic = Object.fromEntries(this._packs.map((pack) => [pack.id, {
+      ...this._config.automatic[pack.id],
+      enabled: this.shadowRoot.querySelector(`#auto-${pack.id}-enabled`)?.checked
+        ?? this._config.automatic[pack.id].enabled,
+    }]));
+    return this._saveSettings({ automatic }, { preserveDrawer: true });
 }
 
 function commitIgnoredReferenceInput() {
@@ -7165,17 +7153,14 @@ async function handleImportSelection(event) {
     if (result?.config) await this._applyCompleteConfiguration(result);
 }
 
-async function saveSettings(additionalChanges = {}) {
-    // Combined saves already validated the automatic YAML before collecting it.
-    // Do not await a second validation after taking that payload snapshot.
-    if (!(additionalChanges.automatic && this._configurationDrawer?.kind === "automatic")
-      && !await validateConfigurationYaml(this)) return false;
+async function saveSettings(additionalChanges = {}, { preserveDrawer = false } = {}) {
+    if (!preserveDrawer && !await validateConfigurationYaml(this)) return false;
     this._ensureSettingsDraft();
     if (!this._commitIgnoredReferenceInput()) {
       this._refreshUiState();
       return false;
     }
-    this._captureEntityDelayValues();
+    if (!preserveDrawer) this._captureEntityDelayValues();
     const historyLimit = Number(this.shadowRoot.querySelector("#history-limit").value);
     if (!Number.isInteger(historyLimit) || historyLimit < 0 || historyLimit > 1000) {
       this._notice = { kind: "error", text: this._t("settings.history_limit_validation") };
@@ -7207,7 +7192,19 @@ async function saveSettings(additionalChanges = {}) {
         config: changes,
       });
       this._config = config;
-      if (additionalChanges.automatic) this._resetAutomaticDraft();
+      if (additionalChanges.automatic) {
+        if (preserveDrawer) {
+          for (const [id, pack] of Object.entries(config.automatic)) {
+            if (this._automaticMapDraft?.[id]) this._automaticMapDraft[id].enabled = pack.enabled;
+          }
+          this._automaticDirty = false;
+          if (this._configurationDrawer?.kind === "automatic" && this._configurationDrawer.original) {
+            const original = JSON.parse(this._configurationDrawer.original);
+            original.enabled = config.automatic[this._configurationDrawer.id].enabled;
+            this._configurationDrawer.original = JSON.stringify(original);
+          }
+        } else this._resetAutomaticDraft();
+      }
       if (historyChanged) {
         this._historyConfig = await this._api.call({
           type: "alert_manager/history/config/update",
@@ -7216,12 +7213,14 @@ async function saveSettings(additionalChanges = {}) {
         this._config = { ...this._config, history_limit: historyLimit };
         if (this._historyLoaded) await this._refreshHistory();
       }
-      this._resetSettingsDraft({ preserveNotification: true });
-      this._configurationDrawer = null;
-      replaceConfigurationDrawer(
-        this.shadowRoot,
-        "",
-      );
+      if (preserveDrawer) {
+        this._settingsDirty = false;
+        if (this._configurationDrawer) this._configurationDrawer.wasDirty = false;
+      } else {
+        this._resetSettingsDraft({ preserveNotification: true });
+        this._configurationDrawer = null;
+        replaceConfigurationDrawer(this.shadowRoot, "");
+      }
       this._notice = { kind: "success", text: this._t("success.settings_saved") };
       saved = true;
     } catch (error) {
