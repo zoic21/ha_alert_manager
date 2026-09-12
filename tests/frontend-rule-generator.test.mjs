@@ -12,6 +12,7 @@ test("generator uses native drawer, escaped labels and disabled reasons", () => 
   draft.rows.push({ ...row, blueprint_id: 'bad"<', name_key: '<script>', status: "no_entities" });
   const html = render(draft);
   assert.match(html, /configuration-drawer/);
+  assert.match(html, /data-action="refresh-rule-generator"[^>]*><ha-icon slot="start" icon="mdi:refresh"><\/ha-icon>generator.refresh/);
   assert.match(html, /ha-checkbox/);
   assert.match(html, /generator.status.no_entities/);
   assert.match(html, /&lt;script&gt;/);

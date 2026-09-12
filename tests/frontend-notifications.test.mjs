@@ -799,3 +799,57 @@ test("notification exceptions preserve effective legacy values and save explicit
   assert.equal(draft.exceptions[0].notify_on_start, true);
   assert.equal(draft.exceptions[0].reminder_interval, 600);
 });
+
+test("exception summaries escape label names, inherit policy and preserve expansion through reordering", () => {
+  const draft = structuredClone(profile);
+  const exception = draft.exceptions[0];
+  const summaryT = (key, params) => key === "notifications.exception_summary"
+    ? `${params.start} / ${params.resolved} / ${params.reminder}` : t(key, params);
+  const context = { draft, labels: [{ label_id: "battery", name: 'Battery <low>' }], t: summaryT };
+  let markup = renderNotificationProfileDrawer(context);
+  assert.match(markup, /header="Battery &lt;low&gt;" secondary="notifications.yes \/ notifications.yes \/ duration.minutes"/);
+  assert.doesNotMatch(markup, /data-notification-expansion="0"[^>]*\bexpanded\b/);
+  assert.match(markup, /slot="icons" class="notification-exception-heading"/);
+  context.expandedExceptions = new WeakSet([exception]);
+  draft.exceptions.unshift({ selector_ids: ["unknown"], reminder_interval: null });
+  markup = renderNotificationProfileDrawer(context);
+  assert.match(markup, /data-notification-expansion="1"[^>]* expanded/);
+  assert.match(markup, /header="unknown" secondary="notifications.yes \/ notifications.no \/ notifications.never"/);
+  assert.doesNotMatch(markup, /notification-exception-enabled/);
+});
+
+test("folding an exception captures edits and updates its summary without rerendering", () => {
+  const draft = structuredClone(profile);
+  let handler;
+  const expansion = {
+    expanded: true,
+    hasAttribute: () => true,
+    addEventListener: (name, callback) => { handler = callback; },
+    removeEventListener: () => { handler = null; },
+    querySelectorAll: () => [],
+  };
+  const controls = {
+    '[data-notification-expansion="0"]': expansion,
+    '#notification-profile-name': { value: draft.name },
+    '#notification-profile-enabled': { checked: true },
+    '#notification-exception-start-0': { checked: false },
+    '#notification-exception-resolved-0': { checked: true },
+    '#notification-exception-reminder-0': { value: "600" },
+  };
+  const panel = {
+    _notificationProfileDraft: draft,
+    _labels: [{ label_id: "battery", name: "Battery" }],
+    _configureSelector() {},
+    _t: (key, params) => key === "notifications.exception_summary" ? JSON.stringify(params) : t(key, params),
+    shadowRoot: { querySelector: (selector) => controls[selector] ?? null },
+  };
+  hydrateNotificationProfileControls(panel);
+  hydrateNotificationProfileControls(panel);
+  assert.ok(panel._notificationExpandedExceptions.has(draft.exceptions[0]));
+  handler({ target: expansion, detail: { expanded: false } });
+  assert.equal(panel._notificationExpandedExceptions.has(draft.exceptions[0]), false);
+  assert.equal(draft.exceptions[0].notify_on_start, false);
+  assert.equal(draft.exceptions[0].reminder_interval, 600);
+  assert.equal(expansion.header, "Battery");
+  assert.equal(JSON.parse(expansion.secondary).start, "notifications.no");
+});

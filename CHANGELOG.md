@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.9**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.10**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -30,6 +30,9 @@ This is a prerelease for testing, not a stable release.
   disabled parameters are hidden without losing their values.
   Empty numeric fields inherit their parent settings;
   a disabled pack or device cannot be reactivated by an entity exception.
+- Added collapsible notification exception summaries with label names, effective policies,
+  direct deletion and preserved drag/keyboard ordering; new exceptions open automatically.
+  The generated-rule refresh action now includes an icon.
 - Simplified notification exceptions with the same switches and reminder input as
   the profile defaults, preserving effective values when editing existing exceptions.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence

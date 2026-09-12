@@ -6,6 +6,7 @@ import {
   MDI_DOTS_VERTICAL,
   MIN_NOTIFICATION_REMINDER_SECONDS,
 } from "../utils/constants.js";
+import { durationText } from "../utils/formatting.js";
 import { esc } from "../utils/escaping.js";
 
 const exceptionLabelIds = (exception) => exception.selector_ids
@@ -89,7 +90,7 @@ export function updateNotificationProfileUsage(root, usage, t) {
 }
 
 export function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, validationError = null, mode = "visual", savedProfile = null, t,
+  draft, busy, useBottomSheet, validationError = null, mode = "visual", savedProfile = null, labels = [], expandedExceptions, t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
@@ -113,7 +114,7 @@ export function renderNotificationProfileDrawer({
   <section class="notification-profile-section">
   <div class="notification-exceptions-header"><div><h3>${esc(t("notifications.exceptions"))}</h3><small>${esc(t("notifications.exceptions_help"))}</small></div><ha-button type="button" appearance="plain" data-action="add-notification-exception"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
   <ha-sortable id="notification-exception-sortable" handle-selector=".notification-exception-reorder" draggable-selector=".notification-exception"><div class="notification-exception-list">${draft.exceptions.length
-    ? draft.exceptions.map((exception, index) => renderException(exception, index, t, draft.default_policy)).join("")
+    ? draft.exceptions.map((exception, index) => renderException(exception, index, t, draft.default_policy, labels, expandedExceptions)).join("")
     : `<div class="empty compact">${esc(t("notifications.no_exceptions"))}</div>`}</div></ha-sortable>
   </section>`;
   return renderConfigurationDrawer({
@@ -136,10 +137,27 @@ function renderPolicySwitch(id, label, checked) {
   return `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
 }
 
-function renderException(exception, index, t, defaults) {
+function notificationExceptionTitle(exception, labels, t) {
+  return exceptionLabelIds(exception).map((id) =>
+    labels.find((label) => label.label_id === id)?.name || id,
+  ).join(", ") || t("notifications.new_exception");
+}
+
+function notificationExceptionSummary(exception, defaults, t) {
+  const policy = { ...defaults, ...exception };
+  return t("notifications.exception_summary", {
+    start: t(policy.notify_on_start ? "notifications.yes" : "notifications.no"),
+    resolved: t(policy.notify_on_resolved ? "notifications.yes" : "notifications.no"),
+    reminder: policy.reminder_interval == null ? t("notifications.never")
+      : durationText.call({ _t: t }, policy.reminder_interval),
+  });
+}
+
+function renderException(exception, index, t, defaults, labels, expandedExceptions) {
   const policy = { ...defaults, ...exception };
   return `<ha-card outlined class="notification-exception" data-notification-exception="${index}">
-    <div class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
+    <ha-expansion-panel left-chevron data-notification-expansion="${index}" header="${esc(notificationExceptionTitle(exception, labels, t))}" secondary="${esc(notificationExceptionSummary(exception, defaults, t))}" ${(expandedExceptions?.has(exception) ?? !exceptionLabelIds(exception).length) ? "expanded" : ""}>
+    <div slot="icons" class="notification-exception-heading"><ha-icon-button class="notification-exception-reorder" data-index="${index}" aria-label="${esc(t("notifications.reorder_exception", { count: index + 1 }))}" title="${esc(t("notifications.reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button>${renderConfigurationRemove(t("buttons.delete"), "remove-notification-exception", { "data-index": index })}</div>
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       <div class="notification-policy-card full">
@@ -150,6 +168,7 @@ function renderException(exception, index, t, defaults) {
         <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
       </div>
     </div>
+    </ha-expansion-panel>
   </ha-card>`;
 }
 
@@ -204,6 +223,28 @@ export function hydrateNotificationProfileControls(panel) {
     (value) => { draft.label_ids = panel._multipleSelectorValue(value, draft.label_ids); },
   );
   draft.exceptions.forEach((exception, index) => {
+    const expansion = panel.shadowRoot?.querySelector(`[data-notification-expansion="${index}"]`);
+    if (expansion) {
+      panel._notificationExpandedExceptions ??= new WeakSet();
+      if (expansion.expanded || expansion.hasAttribute("expanded")) panel._notificationExpandedExceptions.add(exception);
+      if (expansion._notificationExpansionHandler) expansion.removeEventListener("expanded-changed", expansion._notificationExpansionHandler);
+      expansion._notificationExpansionHandler = (event) => {
+        if (event.target !== expansion) return;
+        if (event.detail.expanded) panel._notificationExpandedExceptions.add(exception);
+        else {
+          panel._notificationExpandedExceptions.delete(exception);
+          captureNotificationProfileDraft(panel);
+          expansion.header = notificationExceptionTitle(exception, panel._labels ?? [], (key) => panel._t(key));
+          expansion.secondary = notificationExceptionSummary(exception, draft.default_policy, (key, replacements) => panel._t(key, replacements));
+        }
+      };
+      expansion.addEventListener("expanded-changed", expansion._notificationExpansionHandler);
+      // Prevent the header toggle while keeping delegated deletion and keyboard sorting.
+      expansion.querySelectorAll(".notification-exception-heading ha-icon-button").forEach((button) => {
+        button.onclick = (event) => event.preventDefault();
+        if (button.dataset.action) button.onkeydown = (event) => event.stopPropagation();
+      });
+    }
     const selectorId = `notification-exception-selector-${index}`;
     panel._configureSelector(
       selectorId,
@@ -357,6 +398,7 @@ function openNotificationProfile(panel, profile = null) {
 
 function setNotificationProfileDraft(panel, draft, profileId) {
   panel._notificationProfileDraft = draft;
+  panel._notificationExpandedExceptions = undefined;
   panel._notificationEditorMode = "visual";
   panel._notificationYaml = "";
   panel._notificationYamlOriginal = "";
@@ -502,6 +544,8 @@ export async function handleNotificationProfileAction(action, button) {
       selector_ids: [],
       ...this._notificationProfileDraft.default_policy,
     });
+    this._notificationExpandedExceptions ??= new WeakSet();
+    this._notificationExpandedExceptions.add(this._notificationProfileDraft.exceptions.at(-1));
     this._refreshSettingsConfigurationDrawer(
       `[data-notification-exception="${this._notificationProfileDraft.exceptions.length - 1}"]`,
     );

@@ -92,6 +92,7 @@ export function renderSettings(context) {
       ${renderSettingsConfigurationDrawer({
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError, notificationEditorMode,
+        labels: context.labels, notificationExpandedExceptions: context.notificationExpandedExceptions,
         busy, useBottomSheet, t,
       })}
       <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
@@ -137,6 +138,8 @@ export function renderSettingsConfigurationDrawer(context) {
   if (configurationDrawer?.kind === "notification") {
     return renderNotificationProfileDrawer({
       draft: notificationProfileDraft,
+      labels: context.labels,
+      expandedExceptions: context.notificationExpandedExceptions,
       busy,
       useBottomSheet,
       validationError: context.notificationProfileValidationError,
@@ -194,6 +197,8 @@ export function renderSettingsPanel() {
       ignoredReferenceDraft: this._ignoredReferenceDraft,
       configurationDrawer: this._configurationDrawer,
       notificationProfileDraft: this._notificationProfileDraft,
+      labels: this._labels,
+      notificationExpandedExceptions: this._notificationExpandedExceptions,
       notificationProfileValidationError: this._notificationProfileValidationError,
       notificationEditorMode: this._notificationEditorMode,
       notificationUsage: this._notificationStats.last_24h,
@@ -596,6 +601,8 @@ export function refreshSettingsConfigurationDrawer(revealSelector) {
     entityDelayDraft: this._entityDelayDraft,
     configurationDrawer: this._configurationDrawer,
     notificationProfileDraft: this._notificationProfileDraft,
+    labels: this._labels,
+    notificationExpandedExceptions: this._notificationExpandedExceptions,
     notificationProfileValidationError: this._notificationProfileValidationError,
     notificationEditorMode: this._notificationEditorMode,
     busy: this._busy,

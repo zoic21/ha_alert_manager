@@ -22,7 +22,7 @@ export function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
   return renderConfigurationDrawer({
     title: t("generator.title"), ariaLabel: t("generator.title"),
     resizeLabel: t("rules.aria_resize"),
-    headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}>${esc(t("generator.refresh"))}</ha-button>`,
+    headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("generator.refresh"))}</ha-button>`,
     banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
     content, saveAction: "generate-rules", saveLabel: t("generator.create"),
     busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,

@@ -306,11 +306,16 @@ export const settingsStyles = `
   .ignored-reference-chips > :last-child {
     scroll-margin-block: 12px;
   }
-  .notification-exception {
-    display: grid;
-    gap: 4px;
-    padding: 4px 12px 12px;
+  .notification-exception { overflow: hidden; }
+  .notification-exception > ha-expansion-panel { --ha-card-border-radius: 8px; }
+  .notification-exception > ha-expansion-panel::part(summary) {
+    min-width: 0;
+    background: var(--card-background-color);
+    border-radius: inherit;
   }
+  .notification-exception-heading { flex: none; margin-inline-start: 8px; }
+  .notification-exception-heading .configuration-remove { margin: 0; }
+  .notification-exception-grid { padding: 0 12px 12px; }
   .notification-exception-grid > .field {
     justify-content: flex-end;
   }
