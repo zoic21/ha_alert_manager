@@ -5,7 +5,10 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.4 — Unreleased
+## 2.4 — Development prerelease
+
+Current development build: **2.4.0-dev.2**, published on **2026-09-12**.
+This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
   explicit defaults, and sparse device/entity exceptions with visible inheritance.
@@ -16,6 +19,8 @@ before a stable release are intentionally omitted.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
+- Added a YAML blueprint generator for editable custom rules, with on-demand entity
+  discovery and built-in System Monitor CPU, memory, disk and temperature recipes.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
   other targets and notification groups retain the existing title emojis.
