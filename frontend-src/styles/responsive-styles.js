@@ -166,8 +166,9 @@ export const responsiveStyles = `
       align-items: stretch;
       flex-direction: column;
     }
-    .rules-header ha-button {
-      width: 100%;
+    .rules-header .rules-header-actions ha-button {
+      width: auto;
+      flex: 1 1 auto;
     }
     .ignored-reference-add {
       align-items: stretch;

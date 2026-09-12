@@ -292,17 +292,13 @@ test("sparse inherited values show device origins and source overrides without f
   assert.deepEqual(draft.entity_overrides, [{ target_id: "sensor.a", threshold: 10 }]);
 });
 
-test("opening a contextual exception never saves and reset preserves only its target", async () => {
+test("opening a contextual exception never saves", async () => {
   const p = panel(); let saves = 0; p._call = async () => { saves++; };
   await handleAutomaticAction.call(p, "open-automatic-configuration", { dataset: { packId: "battery", entityId: "sensor.new" } });
   assert.equal(saves, 0);
   assert.deepEqual(p._config.automatic.battery.entity_overrides, {});
   assert.deepEqual(p._automaticMapDraft.battery.entity_overrides, [{ target_id: "sensor.new" }]);
-  p._automaticMapDraft.battery.entity_overrides[0].delay = 0;
-  p._automaticMapDraft.battery.entity_overrides[0].enabled = false;
-  await handleAutomaticAction.call(p, "inherit-pack-row", { dataset: { packId: "battery", fieldId: "entity_overrides", index: "0" } });
-  assert.deepEqual(p._automaticMapDraft.battery.entity_overrides, [{ target_id: "sensor.new" }]);
-  assert.equal(saves, 0);
+
 });
 
 test("contextual monitoring configuration requires an admin and a current applicable source", () => {

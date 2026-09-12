@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.3**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.4**, published on **2026-09-12**.
 This is a prerelease for testing, not a stable release.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
@@ -18,12 +18,14 @@ This is a prerelease for testing, not a stable release.
 - Added administrator-only contextual configuration from automatic alert details.
 - Compacted pack configuration drawers with dropdown monitoring overrides and
   side-by-side settings. Execution-error configuration offers automation/script
-  entity targets only, including source-specific flapping configuration.
+  entity targets only, including source-specific flapping configuration. Source
+  toggles align with their labels; inheritance is adjusted directly in each field.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
 - Added a YAML blueprint generator for editable custom rules, with on-demand entity
   discovery and built-in System Monitor CPU, memory, disk and temperature recipes.
+  Its action is grouped beside manual rule creation with a dedicated icon.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
   other targets and notification groups retain the existing title emojis.

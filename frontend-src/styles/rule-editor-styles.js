@@ -25,6 +25,12 @@ export const ruleEditorStyles = `
   .rules-header > div {
     min-width: 0;
   }
+  .rules-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
   .rules-header ha-button {
     flex: none;
   }

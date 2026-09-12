@@ -844,5 +844,4 @@ export const settingsStyles = `
   }
   .automatic-exception-target ha-selector { flex: 1; min-width: 0; }
   .automatic-exception .pack-setting-field { min-width: 0; }
-  .automatic-exception > ha-button { align-self: flex-start; margin-top: 0; }
 `;

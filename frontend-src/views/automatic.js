@@ -118,7 +118,6 @@ export function renderPackField(pack, field, config, context) {
       return `<ha-card outlined class="pack-map-row automatic-exception" data-exception-index="${index}"><div class="automatic-exception-target"><ha-selector id="auto-${pack.id}-${field.id}-target-${index}"></ha-selector>${renderConfigurationRemove(t("buttons.remove"), "remove-pack-map-row", { "data-pack-id": pack.id, "data-field-id": field.id, "data-index": index })}</div>
         ${warning ? `<ha-alert alert-type="info">${esc(t(warning))}</ha-alert>` : ""}
         <div class="pack-settings-values">${field.fields.filter((setting) => setting.id === "enabled" || row.enabled !== false).map((setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, inheritedPackSetting(draft[pack.id], setting.id, row.target_id, field.id, sourceId, hass?.entities))).join("")}</div>
-        <ha-button appearance="plain" data-action="inherit-pack-row" data-pack-id="${pack.id}" data-field-id="${field.id}" data-index="${index}">${esc(t("automatic.restore_inheritance"))}</ha-button>
       </ha-card>`;
     }).join("") : `<small>${esc(t("automatic.no_exceptions"))}</small>`}</section>`;
 }
@@ -136,7 +135,7 @@ export function renderAutomaticConfigurationDrawer(context) {
   const content = `<div class="fields configuration-drawer-fields automatic-configuration-fields">
     <small class="field full">${esc(t("automatic.inheritance_help"))}</small>
     ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
-    ${sourceId ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
+    ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
     ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, sourceId ? { value: settings[field.id], origin: "pack" } : null)).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
   </div>`;
   return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
@@ -301,7 +300,7 @@ export async function handleAutomaticAction(action, button) {
     this._automaticMapDraft[id] = JSON.parse(original); this._automaticDirty = wasDirty;
     this._configurationDrawer = null; this._render(); return true;
   }
-  if (!["add-pack-map-row", "remove-pack-map-row", "inherit-pack-row"].includes(action)) return false;
+  if (!["add-pack-map-row", "remove-pack-map-row"].includes(action)) return false;
   captureAutomaticConfigurationValues.call(this);
   const scope = scopeFor(this._automaticMapDraft[button.dataset.packId], this._configurationDrawer?.sourceId);
   if (!scope || !EXCEPTION_FIELDS.includes(button.dataset.fieldId)) return true;
@@ -309,7 +308,6 @@ export async function handleAutomaticAction(action, button) {
   const index = Number(button.dataset.index);
   if (action === "add-pack-map-row") rows.push({ target_id: "" });
   else if (action === "remove-pack-map-row") rows.splice(index, 1);
-  else if (rows[index]) rows[index] = { target_id: rows[index].target_id };
   this._markConfigurationDirty("automatic");
   refreshAutomaticConfigurationDrawer.call(this);
   if (action === "add-pack-map-row") revealAddedRow(this.shadowRoot.querySelector(".configuration-drawer"), ".automatic-exception:last-child");

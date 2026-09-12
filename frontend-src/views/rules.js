@@ -284,8 +284,10 @@ export function renderRules(context) {
           <ha-card outlined class="panel rules-list-panel">
             <div class="rules-header">
               <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
-              <ha-button data-action="open-rule-generator">${esc(t("generator.title"))}</ha-button>
-              <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
+              <div class="rules-header-actions">
+                <ha-button data-action="open-rule-generator"><ha-icon slot="start" icon="mdi:auto-fix"></ha-icon>${esc(t("generator.title"))}</ha-button>
+                <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
+              </div>
             </div>
           </ha-card>
         </div>

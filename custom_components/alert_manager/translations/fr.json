@@ -113,7 +113,6 @@
       "monitoring_disabled": "Désactivée",
       "boolean_true": "Oui",
       "boolean_false": "Non",
-      "restore_inheritance": "Rétablir l’héritage",
       "no_exceptions": "Aucune exception",
       "source_context": "Réglages de la source",
       "all_sources": "Valeurs par défaut pour toutes les sources",

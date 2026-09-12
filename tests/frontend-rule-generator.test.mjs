@@ -39,7 +39,7 @@ for (const [label, escaped] of [
 
 test("Custom rules exposes the generator action", () => {
   const html = renderRules({ editorOpen: false, editor: "", editorWidth: 560, pageMessages: "", t: (key) => key, renderFacetFilter: () => "" });
-  assert.match(html, /data-action="open-rule-generator"/);
+  assert.match(html, /class="rules-header-actions">\s*<ha-button data-action="open-rule-generator"><ha-icon slot="start" icon="mdi:auto-fix"><\/ha-icon>[\s\S]*?<\/ha-button>\s*<ha-button[^>]*data-action="new-rule"[\s\S]*?<\/ha-button>\s*<\/div>/);
 });
 
 test("checkbox hydration updates selection and create button without rerendering", () => {

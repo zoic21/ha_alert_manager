@@ -308,7 +308,7 @@ test("automatic rendering is pure and places defaults with sparse exceptions", (
   assert.match(markup, /auto-battery-threshold/);
   assert.match(markup, /auto-battery-device_overrides-target-0/);
   assert.match(markup, /data-action="remove-pack-map-row"/);
-  assert.match(markup, /data-action="inherit-pack-row"/);
+  assert.doesNotMatch(markup, /data-action="inherit-pack-row"/);
   assert.match(markup, /automatic.inherited_value/);
 });
 
@@ -319,7 +319,7 @@ test("flapping source contexts share one drawer without an ordinary delay", () =
   const markup = renderAutomatic({ availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id: "flapping", sourceId: "unavailable" }, t });
   assert.equal((markup.match(/class="side-drawer configuration-drawer"/g) ?? []).length, 1);
   assert.match(markup, /auto-flapping-source-context/);
-  assert.match(markup, /auto-flapping-source-enabled/);
+  assert.match(markup, /class="field full switch-field-row"><span[^>]*>[^<]*<\/span><ha-switch id="auto-flapping-source-enabled"/);
   assert.match(markup, /auto-flapping-entity_overrides-target-0/);
   assert.doesNotMatch(markup, /id="auto-flapping-delay"/);
 });
