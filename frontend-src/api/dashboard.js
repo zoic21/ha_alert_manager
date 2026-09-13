@@ -40,9 +40,13 @@ export function connectDashboard(hass, listener) {
     };
     state.update = (next, force = false) => {
       state.hass = next;
+      if (connection.connected === false) {
+        state.disconnected();
+        return;
+      }
       const sensor = next.states?.["sensor.alert_manager_main_active"];
       const monitoring = next.states?.["switch.alert_manager_main_monitoring"];
-      const status = connection.connected === false || !sensor || !monitoring
+      const status = !sensor || !monitoring
           || ["unavailable", "unknown"].includes(sensor.state)
           || ["unavailable", "unknown"].includes(monitoring.state) ? "unavailable"
           : monitoring.state === "off" ? "paused" : null;
@@ -62,7 +66,8 @@ export function connectDashboard(hass, listener) {
     state.disconnected = () => {
       state.generation += 1;
       state.requested = false;
-      state.publish({ status: "unavailable" });
+      // A transport reconnect is transient; retain the last successful snapshot.
+      if (state.value.status !== "ready") state.publish({ status: "unavailable" });
     };
     state.ready = () => state.update(state.hass, true);
     connection.addEventListener("disconnected", state.disconnected);

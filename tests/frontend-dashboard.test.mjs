@@ -339,3 +339,71 @@ test("startup replaces restored alerts and overflow until evaluation completes, 
   card._render();
   assert.equal(card.hidden, true);
 });
+
+for (const alerts of [[], [alert("retained")]]) {
+  test(`reattaching retains ${alerts.length ? "tiles" : "an empty card"} until refresh completes`, async () => {
+    const { hass, requests } = fixture();
+    const card = new AlertManagerCard();
+    card.isConnected = true;
+    card.hass = hass;
+    requests[0].resolve({ alerts });
+    await tick();
+    const markup = card.shadowRoot.innerHTML;
+    const hidden = card.hidden;
+    card.isConnected = false;
+    card.disconnectedCallback();
+    card.isConnected = true;
+    card.connectedCallback();
+    assert.equal(requests.length, 2);
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    assert.equal(card.hidden, hidden);
+    requests[1].resolve({ alerts: [alert("updated")] });
+    await tick();
+    assert.match(card.shadowRoot.innerHTML, /alert=updated/);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /alert=retained/);
+    card.disconnectedCallback();
+  });
+}
+
+test("WebSocket reconnect keeps tiles, discards in-flight data and exposes refresh errors", async () => {
+  const { hass, connection, requests, revise } = fixture();
+  const card = new AlertManagerCard();
+  card.isConnected = true;
+  card.hass = hass;
+  requests[0].resolve({ alerts: [alert("retained")] });
+  await tick();
+  const markup = card.shadowRoot.innerHTML;
+  revise(2); card.hass = hass;
+  connection.connected = false;
+  connection.dispatchEvent(new Event("disconnected"));
+  card.hass = hass;
+  requests[1].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  connection.connected = true;
+  connection.dispatchEvent(new Event("ready"));
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  requests[2].reject({ code: "not_loaded" });
+  await tick();
+  assert.match(card.shadowRoot.innerHTML, /indisponible/);
+  card._subscription.retry();
+  requests[3].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.hidden, true);
+  card.disconnectedCallback();
+});
+
+test("a different HA connection does not reuse the previous snapshot", async () => {
+  const first = fixture(), second = fixture();
+  const card = new AlertManagerCard();
+  card.isConnected = true;
+  card.hass = first.hass;
+  first.requests[0].resolve({ alerts: [alert("private")] });
+  await tick();
+  card.hass = second.hass;
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /alert=private/);
+  second.requests[0].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.hidden, true);
+  card.disconnectedCallback();
+});

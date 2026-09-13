@@ -411,9 +411,13 @@ function connectDashboard(hass, listener) {
     };
     state.update = (next, force = false) => {
       state.hass = next;
+      if (connection.connected === false) {
+        state.disconnected();
+        return;
+      }
       const sensor = next.states?.["sensor.alert_manager_main_active"];
       const monitoring = next.states?.["switch.alert_manager_main_monitoring"];
-      const status = connection.connected === false || !sensor || !monitoring
+      const status = !sensor || !monitoring
           || ["unavailable", "unknown"].includes(sensor.state)
           || ["unavailable", "unknown"].includes(monitoring.state) ? "unavailable"
           : monitoring.state === "off" ? "paused" : null;
@@ -433,7 +437,8 @@ function connectDashboard(hass, listener) {
     state.disconnected = () => {
       state.generation += 1;
       state.requested = false;
-      state.publish({ status: "unavailable" });
+      // A transport reconnect is transient; retain the last successful snapshot.
+      if (state.value.status !== "ready") state.publish({ status: "unavailable" });
     };
     state.ready = () => state.update(state.hass, true);
     connection.addEventListener("disconnected", state.disconnected);
@@ -669,6 +674,7 @@ class AlertManagerCard extends HTMLElement {
   set hass(hass) {
     const changed = hass?.locale?.language !== this._hass?.locale?.language
       || hass?.entities !== this._hass?.entities;
+    if (this._hass?.connection !== hass?.connection) this._lastReadyValue = null;
     this._hass = hass;
     this._language = hass?.locale?.language ?? "en";
     this._connect();
@@ -689,7 +695,6 @@ class AlertManagerCard extends HTMLElement {
     this._subscription?.disconnect();
     this._subscription = null;
     this._connection = null;
-    this._value = { status: "loading" };
   }
   _connect() {
     if (!this.isConnected || !this._hass?.connection) return;
@@ -697,6 +702,9 @@ class AlertManagerCard extends HTMLElement {
       this._subscription?.disconnect();
       this._connection = this._hass.connection;
       this._subscription = connectDashboard(this._hass, (value) => {
+        if (value.status !== "loading") {
+          this._lastReadyValue = value.status === "ready" ? value : null;
+        }
         this._value = value;
         this._render();
       });
@@ -735,7 +743,9 @@ class AlertManagerCard extends HTMLElement {
   }
   _render() {
     if (!this.shadowRoot) return;
-    const { status, snapshot } = this._value;
+    // Reattaching a card refreshes in the background, including an empty snapshot.
+    const { status, snapshot } = this._value.status === "loading" && this._lastReadyValue
+      ? this._lastReadyValue : this._value;
     const startup = status === "ready" && snapshot.startup?.in_progress;
     let groups = status === "ready" && !startup
       ? dashboardGroups(snapshot.alerts, this._config.label, this._hass) : [];
