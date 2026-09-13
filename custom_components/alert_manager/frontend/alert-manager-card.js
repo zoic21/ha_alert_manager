@@ -621,6 +621,9 @@ const dashboardStyles = `
     height: 44px; min-width: 64px; padding: 0 12px; color: var(--secondary-text-color); font-size: 16px; font-weight: 500; }
   .more ha-icon { color: inherit; background: none; padding: 0; }
   .status { padding: 12px; color: var(--secondary-text-color); font-size: 14px; }
+  @media (max-width: 600px) {
+    .tiles > ha-card:not(.overflow) { flex: 0 0 100%; }
+  }
 `;
 
 // Source: frontend-src/dashboard/card.js

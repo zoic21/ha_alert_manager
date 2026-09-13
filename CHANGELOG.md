@@ -5,6 +5,10 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.3.0-rc.2 — 2026-09-13 (prerelease)
+
+- Fixed mobile dashboard alerts to use the full available width, with one alert per row.
+
 ## 2.3.0 — Release candidate
 
 ### Major changes

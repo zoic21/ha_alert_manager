@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release/2.2
+      - release/2.3
     paths:
       - custom_components/alert_manager/manifest.json
 
