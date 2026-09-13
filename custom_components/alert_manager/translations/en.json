@@ -933,7 +933,7 @@
       "home_assistant_updates_available": {
         "name": "Updates available",
         "description": "One alert listing all available updates, with its message refreshed while active. Requires the Home Assistant Core update entity (Supervisor).",
-        "message": "{% set result = namespace(updates=[]) %}\n{% for item in states.update | selectattr('state', 'eq', 'on') %}\n  {% set result.updates = result.updates +\n    [item.name | replace(' Mise à jour', '') | replace(' Update', '')] %}\n{% endfor %}\nUpdates available: {{ result.updates | unique | join(', ') }}"
+        "message_prefix": "Updates available:"
       }
     }
   },

@@ -141,11 +141,16 @@ def load_blueprints(directory: Path = BLUEPRINT_DIRECTORY) -> list[dict[str, Any
                 raise ValueError("Invalid blueprint lifecycle")
             if "replaced_by" in data and not isinstance(data["replaced_by"], str):
                 raise ValueError("Invalid blueprint replacement")
-            if "message_key" in data and (
-                not isinstance(data["message_key"], str)
-                or not data["message_key"].strip()
+            if "message_prefix_key" in data and (
+                not isinstance(data["message_prefix_key"], str)
+                or not data["message_prefix_key"].strip()
             ):
-                raise ValueError("Invalid blueprint message key")
+                raise ValueError("Invalid blueprint message prefix key")
+            if "message_prefix_key" in data and (
+                not isinstance(data.get("message_prefix"), str)
+                or not data["message_prefix"].strip()
+            ):
+                raise ValueError("Invalid blueprint message prefix")
             validate_discovery(data.get("discovery"))
             validate_rule_payload(
                 {**data["rule"], "entity_ids": ["sensor.blueprint_validation"]}
@@ -307,11 +312,12 @@ def prepare_blueprints(
                 f"component.alert_manager.config_panel.{blueprint['name_key']}",
                 payload["name"],
             )
-            if message_key := blueprint.get("message_key"):
-                payload["message"] = translations.get(
-                    f"component.alert_manager.config_panel.{message_key}",
-                    payload.get("message"),
+            if message_prefix_key := blueprint.get("message_prefix_key"):
+                prefix = translations.get(
+                    f"component.alert_manager.config_panel.{message_prefix_key}",
+                    blueprint["message_prefix"],
                 )
+                payload["message"] = f"{prefix} {payload.get('message') or ''}"
             payload["entity_ids"] = row["entity_ids"]
             payload["blueprint"] = {
                 "id": blueprint["blueprint_id"],

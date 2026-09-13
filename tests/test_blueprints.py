@@ -63,9 +63,9 @@ def test_catalog_is_valid_and_localized():
                     value = value[key]
                 assert value
             assert data["generator"]["categories"][blueprint["category"]]
-            if "message_key" in blueprint:
+            if "message_prefix_key" in blueprint:
                 value = data
-                for key in blueprint["message_key"].split("."):
+                for key in blueprint["message_prefix_key"].split("."):
                     value = value[key]
                 assert value
 
@@ -605,5 +605,26 @@ def test_updates_blueprint_localizes_message(hass, registry_entry):
         }
         rule = prepare_blueprints([recipe], snapshot, [], translations)[0]["rule"]
         assert rule["name"] == localized["name"]
-        assert rule["message"] == localized["message"]
+        assert rule["message"] == (
+            f"{localized['message_prefix']} {recipe['rule']['message']}"
+        )
         assert "states.update" in rule["condition_template"]
+
+
+def test_blueprint_translation_placeholders_are_valid():
+    """Hassfest accepts identifier placeholders, not Jinja template statements."""
+    import json
+    from pathlib import Path
+    from string import Formatter
+
+    def validate(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                validate(child)
+        elif isinstance(value, str):
+            for _, field, _, _ in Formatter().parse(value):
+                assert not field or field.isidentifier(), value
+
+    for language in ("en", "fr"):
+        path = Path("custom_components/alert_manager/translations") / f"{language}.json"
+        validate(json.loads(path.read_text())["config_panel"]["generator"])

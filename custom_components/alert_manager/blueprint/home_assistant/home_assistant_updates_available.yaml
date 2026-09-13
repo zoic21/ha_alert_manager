@@ -4,7 +4,8 @@ blueprint_version: 1
 category: home_assistant
 name_key: generator.home_assistant_updates_available.name
 description_key: generator.home_assistant_updates_available.description
-message_key: generator.home_assistant_updates_available.message
+message_prefix: "Updates available:"
+message_prefix_key: generator.home_assistant_updates_available.message_prefix
 discovery:
   all:
     - field: domain
@@ -25,6 +26,6 @@ rule:
       {% set result.updates = result.updates +
         [item.name | replace(' Mise à jour', '') | replace(' Update', '')] %}
     {% endfor %}
-    Updates available: {{ result.updates | unique | join(', ') }}
+    {{ result.updates | unique | join(', ') }}
   update_message_when_active: true
   flapping_enabled: false
