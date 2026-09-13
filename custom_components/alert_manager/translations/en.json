@@ -820,6 +820,7 @@
       "admin": "Administrator access required",
       "paused": "Monitoring disabled",
       "startup": "Starting up…",
+      "startup_detail": "Starting up: known alerts are being reevaluated.",
       "retry": "Retry",
       "preview": "Example shown only in the editor",
       "preview_device": "Living room sensor",

@@ -123,7 +123,7 @@ export class AlertManagerCard extends HTMLElement {
     const { status, snapshot } = this._value.status === "loading" && this._lastReadyValue
       ? this._lastReadyValue : this._value;
     const startup = status === "ready" && snapshot.startup?.in_progress;
-    let groups = status === "ready" && !startup
+    let groups = status === "ready"
       ? dashboardGroups(snapshot.alerts, this._config.label, this._hass) : [];
     this._sample = this._preview && !startup && !groups.length;
     if (this._sample) {
@@ -132,7 +132,7 @@ export class AlertManagerCard extends HTMLElement {
         condition: this._t("dashboard.preview_message"), active_since: "2026-01-01T00:00:00Z",
       }]);
     }
-    const hidden = status === "ready" && !startup && !groups.length && !this._preview;
+    const hidden = status === "ready" && !groups.length && (startup || !this._preview);
     if (this.hidden !== hidden) {
       this.hidden = hidden;
       this.dispatchEvent(new CustomEvent("card-visibility-changed", {
@@ -140,21 +140,24 @@ export class AlertManagerCard extends HTMLElement {
       }));
     }
     this._tileCount = Math.min(groups.length, this._config.max_tiles);
-    let tiles = groups.slice(0, this._config.max_tiles).map((group) => this._tile(group)).join("");
-    if (groups.length > this._config.max_tiles) {
+    const visibleTiles = groups.slice(0, this._config.max_tiles).map((group) => this._tile(group));
+    if (groups.length && (startup || groups.length > this._config.max_tiles)) {
       const count = groups.slice(this._config.max_tiles).reduce((total, group) => total + group.alerts.length, 0);
-      const label = esc(this._t("dashboard.more_count", { count }));
+      const label = esc([
+        startup ? this._t("dashboard.startup_detail") : "",
+        count ? this._t("dashboard.more_count", { count }) : "",
+      ].filter(Boolean).join(" · "));
       const target = `/alert-manager/overview?${new URLSearchParams({ dashboard: "1", ...(this._config.label ? { label: this._config.label } : {}) })}`;
-      tiles += `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
-        <ha-ripple></ha-ripple><span aria-hidden="true">+${count}</span><ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>
+      const bubble = `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
+        <ha-ripple></ha-ripple>${startup ? '<ha-icon icon="mdi:timer-sand" aria-hidden="true"></ha-icon>' : ""}
+        ${count ? `<span aria-hidden="true">+${count}</span>` : ""}${startup ? "" : '<ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>'}
       </a></ha-card>`;
+      // Keep the bubble attached to the last alert when the row wraps.
+      visibleTiles.push(`<div class="tile-tail">${visibleTiles.pop()}${bubble}</div>`);
     }
+    const tiles = visibleTiles.join("");
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
-    else if (startup) content = `<div class="tiles"><ha-card><div class="tile startup" role="status">
-      <ha-icon icon="mdi:timer-sand" aria-hidden="true"></ha-icon>
-      <div class="content">${esc(this._t("dashboard.startup"))}</div>
-    </div></ha-card></div>`;
     else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
       ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";

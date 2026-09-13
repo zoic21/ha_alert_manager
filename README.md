@@ -156,8 +156,13 @@ alignment: left
 
 With no matching alerts the card hides using Home Assistant's native card visibility
 mechanism, including its wrapper in standard Sections and Masonry views. Custom layout
-cards may handle visibility differently. Loading, startup, disabled monitoring and
-unavailability remain visible. An empty-data example is displayed only in the editor.
+cards may handle visibility differently. During startup, known active alerts remain visible
+with a compact hourglass indicating that reevaluation is in progress. The hourglass shares
+the overflow bubble when more alerts are hidden; clicking it opens the filtered Overview.
+On mobile, the bubble stays beside the last visible alert, which narrows to make room.
+Startup with no matching alerts displays nothing. Loading, disabled monitoring and
+unavailability remain visible. An empty-data example is displayed only in the editor
+outside startup.
 
 
 ## Automatic monitoring

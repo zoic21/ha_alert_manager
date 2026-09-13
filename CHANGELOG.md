@@ -5,6 +5,13 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.3.0-rc.4 — 2026-09-13 (prerelease)
+
+- Show known alerts during startup with a compact hourglass in the overflow bubble;
+  keep the card hidden when no alerts match.
+- Keep the startup/overflow bubble beside the last alert on mobile, narrowing only
+  that alert instead of placing the bubble on its own row.
+
 ## 2.3.0-rc.3 — 2026-09-13 (prerelease)
 
 - Keep the dashboard card’s last alert tiles (or empty state) visible while refreshing
