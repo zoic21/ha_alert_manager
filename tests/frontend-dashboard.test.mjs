@@ -191,8 +191,8 @@ test("card enforces group limit, escapes names, translates conditions and shows 
   assert.match(card.shadowRoot.innerHTML, /2 alertes/);
   card._value = { status: "ready", snapshot: { alerts: [], startup: { in_progress: true } } };
   card._render();
-  assert.equal(card.hidden, false);
-  assert.match(card.shadowRoot.innerHTML, /Démarrage en cours/);
+  assert.equal(card.hidden, true);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /mdi:timer-sand/);
   card._value = { status: "unavailable" };
   card._render();
   assert.match(card.shadowRoot.innerHTML, /indisponible/);
@@ -293,7 +293,7 @@ test("overflow stays inside the tile row and counts hidden alerts after filterin
   assert.match(card.shadowRoot.innerHTML, /aria-label="Voir plus d’alertes : 2 supplémentaires"/);
   assert.match(card.shadowRoot.innerHTML, /dashboard=1&amp;label=a%26b/);
   assert.match(card.shadowRoot.innerHTML, /\+2<\/span>/);
-  assert.match(card.shadowRoot.innerHTML, /<\/a><\/ha-card><\/div><\/div>$/);
+  assert.match(card.shadowRoot.innerHTML, /<\/a><\/ha-card><\/div><\/div><\/div>$/);
   card.setConfig({ max_tiles: 2, label: "a&b" });
   assert.doesNotMatch(card.shadowRoot.innerHTML, /class="overflow"/);
 });
@@ -314,28 +314,132 @@ test("compact coherence text keeps full details and custom rule messages intact"
   assert.doesNotMatch(customTile, /Status on/);
 });
 
-test("startup replaces restored alerts and overflow until evaluation completes, including in preview", () => {
+test("startup retains restored alerts and combines the hourglass with overflow", () => {
   const card = new AlertManagerCard();
   card.hass = { locale: { language: "fr" } };
-  card.setConfig({ max_tiles: 1, alignment: "right" });
-  const snapshot = { alerts: [alert("restored-a"), alert("restored-b")], startup: { in_progress: true } };
+  card.setConfig({ max_tiles: 1, alignment: "right", label: "home" });
+  const snapshot = { alerts: [alert("restored-a", { labels: ["home"] }),
+    alert("restored-b", { labels: ["home"] })], startup: { in_progress: true } };
   card._value = { status: "ready", snapshot };
   for (const preview of [false, true]) {
     card.preview = preview;
     assert.equal(card.hidden, false);
-    assert.match(card.shadowRoot.innerHTML, /<div class="tiles"><ha-card><div class="tile startup" role="status">/);
-    assert.match(card.shadowRoot.innerHTML, /Démarrage en cours/);
+    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card>/);
     assert.match(card.shadowRoot.innerHTML, /data-alignment="right"/);
-    assert.doesNotMatch(card.shadowRoot.innerHTML, /restored-|class="overflow"|Capteur du salon/);
+    assert.match(card.shadowRoot.innerHTML, /alert=restored-a/);
+    assert.match(card.shadowRoot.innerHTML, /mdi:timer-sand/);
+    assert.match(card.shadowRoot.innerHTML, /Démarrage en cours : les alertes connues/);
+    assert.match(card.shadowRoot.innerHTML, /\+1<\/span>/);
+    assert.equal((card.shadowRoot.innerHTML.match(/class="overflow"/g) ?? []).length, 1);
+    assert.match(card.shadowRoot.innerHTML, /href="\/alert-manager\/overview\?dashboard=1&amp;label=home"/);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /Capteur du salon/);
   }
   card.preview = false;
   snapshot.startup.in_progress = false;
   card._render();
   assert.match(card.shadowRoot.innerHTML, /restored-a/);
-  assert.match(card.shadowRoot.innerHTML, /class="overflow"/);
   assert.match(card.shadowRoot.innerHTML, /<ha-ripple><\/ha-ripple>/);
-  assert.doesNotMatch(card.shadowRoot.innerHTML, /Démarrage en cours/);
+  assert.match(card.shadowRoot.innerHTML, /class="overflow"/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /mdi:timer-sand/);
   snapshot.alerts = [];
   card._render();
   assert.equal(card.hidden, true);
+});
+
+test("startup hourglass without overflow disappears when reevaluation completes", () => {
+  const card = new AlertManagerCard();
+  const snapshot = { alerts: [alert("known")], startup: { in_progress: true } };
+  card._value = { status: "ready", snapshot };
+  card._render();
+  assert.match(card.shadowRoot.innerHTML, /alert=known/);
+  assert.match(card.shadowRoot.innerHTML, /mdi:timer-sand/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /\+0<\/span>/);
+  assert.match(card.shadowRoot.innerHTML, /Starting up: known alerts are being reevaluated/);
+  snapshot.startup.in_progress = false;
+  card._render();
+  assert.match(card.shadowRoot.innerHTML, /alert=known/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /class="overflow"|class="tile-tail"|mdi:timer-sand/);
+});
+
+test("startup without matching active alerts uses no space, including in preview", () => {
+  const card = new AlertManagerCard();
+  card.setConfig({ label: "home" });
+  for (const alerts of [[], [alert("excluded"), alert("pending", { active_since: null, labels: ["home"] }),
+    alert("ack", { acknowledged: true, labels: ["home"] })]]) {
+    card._value = { status: "ready", snapshot: { alerts, startup: { in_progress: true } } };
+    for (const preview of [false, true]) {
+      card.preview = preview;
+      assert.equal(card.hidden, true);
+      assert.equal(card.getCardSize(), 0);
+      assert.doesNotMatch(card.shadowRoot.innerHTML, /<ha-card>|mdi:timer-sand|class="overflow"/);
+    }
+  }
+});
+
+for (const alerts of [[], [alert("retained")]]) {
+  test(`reattaching retains ${alerts.length ? "tiles" : "an empty card"} until refresh completes`, async () => {
+    const { hass, requests } = fixture();
+    const card = new AlertManagerCard();
+    card.isConnected = true;
+    card.hass = hass;
+    requests[0].resolve({ alerts });
+    await tick();
+    const markup = card.shadowRoot.innerHTML;
+    const hidden = card.hidden;
+    card.isConnected = false;
+    card.disconnectedCallback();
+    card.isConnected = true;
+    card.connectedCallback();
+    assert.equal(requests.length, 2);
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    assert.equal(card.hidden, hidden);
+    requests[1].resolve({ alerts: [alert("updated")] });
+    await tick();
+    assert.match(card.shadowRoot.innerHTML, /alert=updated/);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /alert=retained/);
+    card.disconnectedCallback();
+  });
+}
+
+test("WebSocket reconnect keeps tiles, discards in-flight data and exposes refresh errors", async () => {
+  const { hass, connection, requests, revise } = fixture();
+  const card = new AlertManagerCard();
+  card.isConnected = true;
+  card.hass = hass;
+  requests[0].resolve({ alerts: [alert("retained")] });
+  await tick();
+  const markup = card.shadowRoot.innerHTML;
+  revise(2); card.hass = hass;
+  connection.connected = false;
+  connection.dispatchEvent(new Event("disconnected"));
+  card.hass = hass;
+  requests[1].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  connection.connected = true;
+  connection.dispatchEvent(new Event("ready"));
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  requests[2].reject({ code: "not_loaded" });
+  await tick();
+  assert.match(card.shadowRoot.innerHTML, /indisponible/);
+  card._subscription.retry();
+  requests[3].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.hidden, true);
+  card.disconnectedCallback();
+});
+
+test("a different HA connection does not reuse the previous snapshot", async () => {
+  const first = fixture(), second = fixture();
+  const card = new AlertManagerCard();
+  card.isConnected = true;
+  card.hass = first.hass;
+  first.requests[0].resolve({ alerts: [alert("private")] });
+  await tick();
+  card.hass = second.hass;
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /alert=private/);
+  second.requests[0].resolve({ alerts: [] });
+  await tick();
+  assert.equal(card.hidden, true);
+  card.disconnectedCallback();
 });

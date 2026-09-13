@@ -7,8 +7,15 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.12**, published on **2026-09-12**.
+Current development build: **2.4.0-dev.13**, published on **2026-09-13**.
 This is a prerelease for testing, not a stable release.
+
+- Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
+  uses a compact hourglass beside the last alert, and mobile overflow stays on the
+  same row as the last tile. No matching alerts means no card during startup.
+- Added backup-age and available-update blueprints with English recipe documentation.
+- Deleting a custom rule resolves its ongoing alerts without sending recovery
+  notifications, including queued notification batches.
 
 - Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
   explicit defaults, and sparse device/entity exceptions.
@@ -50,6 +57,22 @@ This is a prerelease for testing, not a stable release.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
   other targets and notification groups retain the existing title emojis.
+
+## 2.3.0-rc.4 — 2026-09-13 (prerelease)
+
+- Show known alerts during startup with a compact hourglass in the overflow bubble;
+  keep the card hidden when no alerts match.
+- Keep the startup/overflow bubble beside the last alert on mobile, narrowing only
+  that alert instead of placing the bubble on its own row.
+
+## 2.3.0-rc.3 — 2026-09-13 (prerelease)
+
+- Keep the dashboard card’s last alert tiles (or empty state) visible while refreshing
+  after returning to the dashboard or reconnecting to Home Assistant.
+
+## 2.3.0-rc.2 — 2026-09-13 (prerelease)
+
+- Fixed mobile dashboard alerts to use the full available width, with one alert per row.
 
 ## 2.3.0 — Release candidate
 

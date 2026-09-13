@@ -865,6 +865,7 @@
       "admin": "Accès administrateur requis",
       "paused": "Surveillance désactivée",
       "startup": "Démarrage en cours…",
+      "startup_detail": "Démarrage en cours : les alertes connues sont en cours de réévaluation.",
       "retry": "Réessayer",
       "preview": "Exemple affiché uniquement dans l’éditeur",
       "preview_device": "Capteur du salon",
