@@ -449,6 +449,12 @@ class NotificationRuntime:
             return
         config = self._config_getter()
         now = dt_util.now().astimezone(UTC)
+        if item.rule_id is not None and not any(
+            rule.get("id") == item.rule_id for rule in config.get("rules", [])
+        ):
+            # Deletion may have discarded the alert while this event waited
+            # for the runtime lock. Never recreate its batches or reminders.
+            return
         labels = self._labels_for(item.entity_id, item.device_id, item.labels)
         changed = False
         for profile in config.get("notification_profiles", []):

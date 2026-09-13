@@ -1365,6 +1365,19 @@ def test_source_labels_route_start_reminders_and_resolution(
         record.details.type = source
         record.details.rule_id = "freezer" if source == "rule" else None
         record.details.labels = ["cold"]
+        if source == "rule":
+            config["rules"] = [
+                {
+                    "id": "freezer",
+                    "name": "Freezer",
+                    "entity_ids": [record.details.entity_id],
+                    "duration": 0,
+                    "operator": "above",
+                    "value": 8,
+                    "label_ids": ["cold"],
+                }
+            ]
+            config = validate_config(config)
         delivery = _DeliverySpy()
         runtime = NotificationRuntime(
             hass, entry, lambda: config, lambda: {record.details.id: record}, delivery

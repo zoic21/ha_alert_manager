@@ -11,6 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.const import (
+    EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
     MAX_NOTIFICATION_LABELS,
     MAX_NOTIFICATION_TARGETS,
@@ -310,6 +311,44 @@ def test_rule_deletion_cleans_runtime_and_preserves_label_exceptions(
             alert_id not in batch.items
             for batch in manager.notification_runtime._batches.values()
         )
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("event_type", [EVENT_ALERT_STARTED, EVENT_ALERT_RESOLVED])
+def test_deleted_rule_ignores_delayed_lifecycle_events(hass, entry, event_type):
+    """An event processed after deletion cannot recreate a notification batch."""
+
+    async def scenario():
+        hass.states.set("sensor.test", "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        profile = _profile()
+        profile["label_ids"] = []
+        await manager.async_update_config({"notification_profiles": [profile]})
+        rule = await manager.async_create_rule(
+            {
+                "name": "Hot sensor",
+                "entity_ids": ["sensor.test"],
+                "operator": "above",
+                "value": 8,
+                "duration": 0,
+            }
+        )
+        alert_id = f"rule:{rule['id']}:sensor.test"
+        event = manager.records[alert_id].as_public_dict()
+        runtime = manager.notification_runtime
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await manager.async_delete_rule(rule["id"])
+        assert alert_id not in manager.records
+
+        # A task queued before deletion may only acquire the runtime lock later.
+        await runtime._async_handle_event(
+            event_type, event, tracked_profile_ids=frozenset({"loic"})
+        )
+        assert all(alert_id not in batch.items for batch in runtime._batches.values())
+        assert all(alert_id not in entries for entries in runtime._runtime.values())
         await manager.async_unload()
 
     asyncio.run(scenario())
