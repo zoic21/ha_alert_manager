@@ -141,6 +141,11 @@ def load_blueprints(directory: Path = BLUEPRINT_DIRECTORY) -> list[dict[str, Any
                 raise ValueError("Invalid blueprint lifecycle")
             if "replaced_by" in data and not isinstance(data["replaced_by"], str):
                 raise ValueError("Invalid blueprint replacement")
+            if "message_key" in data and (
+                not isinstance(data["message_key"], str)
+                or not data["message_key"].strip()
+            ):
+                raise ValueError("Invalid blueprint message key")
             validate_discovery(data.get("discovery"))
             validate_rule_payload(
                 {**data["rule"], "entity_ids": ["sensor.blueprint_validation"]}
@@ -302,6 +307,11 @@ def prepare_blueprints(
                 f"component.alert_manager.config_panel.{blueprint['name_key']}",
                 payload["name"],
             )
+            if message_key := blueprint.get("message_key"):
+                payload["message"] = translations.get(
+                    f"component.alert_manager.config_panel.{message_key}",
+                    payload.get("message"),
+                )
             payload["entity_ids"] = row["entity_ids"]
             payload["blueprint"] = {
                 "id": blueprint["blueprint_id"],

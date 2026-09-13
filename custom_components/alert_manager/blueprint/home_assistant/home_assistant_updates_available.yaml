@@ -1,0 +1,30 @@
+blueprint_id: home_assistant_updates_available
+schema_version: 1
+blueprint_version: 1
+category: home_assistant
+name_key: generator.home_assistant_updates_available.name
+description_key: generator.home_assistant_updates_available.description
+message_key: generator.home_assistant_updates_available.message
+discovery:
+  all:
+    - field: domain
+      equals: update
+    - field: integration
+      equals: hassio
+    - field: unique_id
+      equals: home_assistant_core_version_latest
+rule:
+  name: Updates available
+  source: jinja
+  duration: 0
+  condition_template: >-
+    {{ states.update | selectattr('state', 'eq', 'on') | list | count > 0 }}
+  message: >-
+    {% set result = namespace(updates=[]) %}
+    {% for item in states.update | selectattr('state', 'eq', 'on') %}
+      {% set result.updates = result.updates +
+        [item.name | replace(' Mise à jour', '') | replace(' Update', '')] %}
+    {% endfor %}
+    Updates available: {{ result.updates | unique | join(', ') }}
+  update_message_when_active: true
+  flapping_enabled: false

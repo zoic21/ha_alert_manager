@@ -11,6 +11,7 @@ from custom_components.alert_manager.blueprints import (
     discovery_attributes,
     explain_match,
     load_blueprints,
+    prepare_blueprints,
     snapshot_installation,
     validate_discovery,
 )
@@ -42,7 +43,7 @@ def test_catalog_is_valid_and_localized():
     from pathlib import Path
 
     catalog = load_blueprints()
-    assert len(catalog) == 4
+    assert len(catalog) == 6
     for blueprint in catalog:
         assert "error" not in blueprint
         assert blueprint["schema_version"] == 1
@@ -62,6 +63,11 @@ def test_catalog_is_valid_and_localized():
                     value = value[key]
                 assert value
             assert data["generator"]["categories"][blueprint["category"]]
+            if "message_key" in blueprint:
+                value = data
+                for key in blueprint["message_key"].split("."):
+                    value = value[key]
+                assert value
 
 
 def test_discovery_renamed_unavailable_disabled_and_units(hass, registry_entry):
@@ -521,3 +527,83 @@ def test_regeneration_does_not_choose_between_duplicated_rules(
     with pytest.raises(ValueError, match="no longer available"):
         run(manager.async_generate_rules(["system_cpu_usage"], overwrite=True))
     assert manager.config == before
+
+
+@pytest.mark.parametrize(
+    ("blueprint_id", "domain", "platform", "key", "other_key"),
+    [
+        (
+            "home_assistant_backup_age",
+            "sensor",
+            "backup",
+            "last_successful_automatic_backup",
+            "last_attempted_automatic_backup",
+        ),
+        (
+            "home_assistant_updates_available",
+            "update",
+            "hassio",
+            "home_assistant_core_version_latest",
+            "home_assistant_supervisor_version_latest",
+        ),
+    ],
+)
+def test_home_assistant_blueprints_discover_renamed_anchor(
+    hass, registry_entry, blueprint_id, domain, platform, key, other_key
+):
+    anchor = f"{domain}.renamed"
+    registry_entry(hass, anchor, platform=platform, unique_id=key)
+    hass.states.set(anchor, "unavailable")
+    registry_entry(hass, f"{domain}.other", platform=platform, unique_id=other_key)
+    registry_entry(
+        hass, f"{domain}.disabled", platform=platform, unique_id=key, disabled_by="user"
+    )
+    registry_entry(hass, f"{domain}.unrelated", platform="template", unique_id=key)
+    recipe = next(b for b in load_blueprints() if b["blueprint_id"] == blueprint_id)
+    snapshot = snapshot_installation(hass, hass.entity_registry, set())
+    assert discover_blueprint(recipe, snapshot) == {
+        "status": "available",
+        "entity_ids": [anchor],
+    }
+    rows = prepare_blueprints([recipe], snapshot, [], {})
+    rule = rows[0]["rule"]
+    assert rule["entity_ids"] == [anchor]
+    assert rule["source"] == "jinja"
+    assert rule["duration"] == 0
+    assert rule["flapping_enabled"] is False
+    assert rule["update_message_when_active"] == (domain == "update")
+
+
+def test_updates_blueprint_localizes_message(hass, registry_entry):
+    import json
+    from pathlib import Path
+
+    registry_entry(
+        hass,
+        "update.core",
+        platform="hassio",
+        unique_id="home_assistant_core_version_latest",
+    )
+    recipe = next(
+        b
+        for b in load_blueprints()
+        if b["blueprint_id"] == "home_assistant_updates_available"
+    )
+    snapshot = snapshot_installation(hass, hass.entity_registry, set())
+    for language in ("en", "fr"):
+        data = json.loads(
+            (
+                Path("custom_components/alert_manager/translations")
+                / f"{language}.json"
+            ).read_text()
+        )["config_panel"]["generator"]
+        localized = data["home_assistant_updates_available"]
+        prefix = "component.alert_manager.config_panel.generator"
+        translations = {
+            f"{prefix}.home_assistant_updates_available.{key}": value
+            for key, value in localized.items()
+        }
+        rule = prepare_blueprints([recipe], snapshot, [], translations)[0]["rule"]
+        assert rule["name"] == localized["name"]
+        assert rule["message"] == localized["message"]
+        assert "states.update" in rule["condition_template"]

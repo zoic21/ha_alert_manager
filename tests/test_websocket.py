@@ -793,7 +793,7 @@ def test_blueprint_commands_require_admin_and_validate_batch(hass, entry):
             hass, admin, {"id": 203, "type": "alert_manager/rules/blueprints/list"}
         )
     )
-    assert len(admin.results[0][1]) == 4
+    assert len(admin.results[0][1]) == 6
     asyncio.run(
         websocket_rule_blueprints_create(
             hass,

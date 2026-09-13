@@ -925,6 +925,15 @@
       "storage_disk_usage": {
         "name": "Storage: high disk usage",
         "description": "System Monitor disk usage above 90% for 5 minutes."
+      },
+      "home_assistant_backup_age": {
+        "name": "Backup alert",
+        "description": "Alerts when the last successful automatic Home Assistant backup is more than 25 hours old. Unknown or unavailable dates are ignored."
+      },
+      "home_assistant_updates_available": {
+        "name": "Updates available",
+        "description": "One alert listing all available updates, with its message refreshed while active. Requires the Home Assistant Core update entity (Supervisor).",
+        "message": "{% set result = namespace(updates=[]) %}\n{% for item in states.update | selectattr('state', 'eq', 'on') %}\n  {% set result.updates = result.updates +\n    [item.name | replace(' Mise à jour', '') | replace(' Update', '')] %}\n{% endfor %}\nUpdates available: {{ result.updates | unique | join(', ') }}"
       }
     }
   },
