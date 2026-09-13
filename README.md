@@ -233,6 +233,8 @@ Each selection creates one editable custom rule with all compatible entities
 their blueprint afterward. No automatic synchronization or periodic scan is
 added. Renaming a rule does not make the generator forget its origin.
 See [the blueprint contributor guide](docs/rule-blueprints.md) for the YAML format.
+See [the blueprint documentation index](docs/blueprints/README.md) for each
+blueprint's requirements, discovery criteria, defaults and limitations.
 An already generated rule can be regenerated after confirmation: this overwrites its customizations with the blueprint defaults and currently discovered entities while preserving its identifier.
 
 ### Examples

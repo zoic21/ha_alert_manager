@@ -1,5 +1,8 @@
 # Built-in rule blueprints
 
+For setup instructions and a page for each bundled blueprint, see the
+[blueprint documentation index](blueprints/README.md).
+
 A blueprint creates one ordinary custom rule containing all matching entities.
 It does not run a detector or synchronize that rule afterward. Automatic packs
 remain responsible for broad monitoring and specialized lifecycle behavior.
