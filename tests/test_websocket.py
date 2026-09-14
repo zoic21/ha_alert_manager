@@ -176,6 +176,7 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
         "battery",
         "execution_errors",
         "flapping",
+        "update_available",
     ]
     assert all(pack["translation_key"] == pack["id"] for pack in packs)
     assert all("name" not in pack and "description" not in pack for pack in packs)
@@ -184,6 +185,14 @@ def test_websocket_exposes_backend_pack_metadata(hass, entry):
     assert unifi["prerequisites"] == ["unifi"]
     for pack in packs:
         fields = {field["id"]: field for field in pack["config_fields"]}
+        if pack["id"] == "update_available":
+            assert set(fields) == {"entity_overrides"}
+            field = fields["entity_overrides"]
+            assert field["entity_domains"] == ["update"]
+            assert field["sparse"] is False
+            assert len(field["fields"]) == 1
+            assert field["fields"][0]["options"] == [False]
+            continue
         for kind in ("device", "entity"):
             field = fields[f"{kind}_overrides"]
             assert field["type"] == f"{kind}_settings_map"

@@ -51,7 +51,7 @@ class PackConfigField:
     entity_domains: tuple[str, ...] | None = None
     fields: tuple[PackConfigField, ...] = ()
     sparse: bool = False
-    options: tuple[str, ...] = ()
+    options: tuple[str | bool, ...] = ()
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""
@@ -170,6 +170,8 @@ class AutomaticPack:
     restore_handler: Callable[[HomeAssistant, Any], None] | None = None
     reset_entity_handler: Callable[[HomeAssistant, str], None] | None = None
     config_fields: tuple[PackConfigField, ...] = ()
+    # Opt in when an unknown observation must reach the pack's neutral handling.
+    evaluate_unknown: bool = False
     uses_delay: bool = True
     default_delay: int = DEFAULT_DELAY
     default_enabled: bool = True

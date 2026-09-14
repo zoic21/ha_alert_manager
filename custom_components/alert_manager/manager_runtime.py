@@ -1795,6 +1795,12 @@ class _RuntimeMixin:
             return result, indeterminate_ids
 
         if state.state == STATE_UNKNOWN:
+            if automatic_eligible:
+                for pack in PACKS:
+                    if pack.evaluate_unknown and self._add_pack_candidate(
+                        result, state, pack.id
+                    ):
+                        indeterminate_ids.add(f"{pack.id}:{entity_id}")
             return result, indeterminate_ids
 
         if automatic_eligible:

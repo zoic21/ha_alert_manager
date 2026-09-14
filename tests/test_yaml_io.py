@@ -455,7 +455,7 @@ def test_import_replaces_config_and_rebuilds_independent_rule_instances(hass, en
     assert imported_rule_id == "stable-multi-rule"
     assert result["summary"] == {
         "rules": 1,
-        "enabled_packs": 5,
+        "enabled_packs": 6,
         "pack_exceptions": 0,
         "warnings": [],
     }
