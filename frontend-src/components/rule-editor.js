@@ -383,6 +383,7 @@ export function renderRuleEditor(context) {
       busy,
       editorError,
       yamlError,
+      notice,
       testResult,
       testLoading,
       t,
@@ -413,7 +414,7 @@ export function renderRuleEditor(context) {
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
       </form>
-        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}><ha-icon slot="start" icon="mdi:flask-outline"></ha-icon>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:content-save"></ha-icon>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${notice?.kind === "success" ? `<ha-alert class="rule-editor-success" alert-type="success" role="status">${esc(notice.text)}</ha-alert>` : ""}${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}><ha-icon slot="start" icon="mdi:flask-outline"></ha-icon>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:content-save"></ha-icon>${esc(t("buttons.save"))}</ha-button></div>
     </ha-card>`;
     return renderSideDrawer({
       drawer,
@@ -430,6 +431,7 @@ export function renderRuleEditorPanel() {
       busy: this._busy,
       editorError: this._ruleEditorError,
       yamlError: this._ruleYamlError,
+      notice: this._notice?.ruleId === this._editingRule?.id ? this._notice : null,
       testResult: this._ruleTestResult,
       testLoading: this._ruleTestLoading,
       proposal: this._managedBlueprints?.[this._editingRule?.id],
@@ -613,11 +615,19 @@ export async function switchRuleEditor() {
     this._clearRuleTestResult();
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
-      this._ruleYaml = this._editingRule?.blueprint?.managed
-        ? Object.entries(ruleDraftUpdate(this._editingRule))
-          .filter(([key]) => key !== "value" || (!["jinja", "unchanged"].includes(this._editingRule.source) && this._editingRule.operator !== "unchanged"))
-          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n") + "\n"
-        : ruleToYaml(this._editingRule ?? newRuleDefaults());
+      if (this._editingRule?.blueprint?.managed) {
+        const { value, duration, ...settings } = ruleDraftUpdate(this._editingRule);
+        const overrides = { duration };
+        if (!["jinja", "unchanged"].includes(this._editingRule.source)
+          && this._editingRule.operator !== "unchanged") overrides.value = value;
+        this._ruleYaml = [
+          ...Object.entries(settings).map(([key, item]) => `${key}: ${JSON.stringify(item)}`),
+          "override:",
+          ...Object.entries(overrides).map(([key, item]) => `  ${key}: ${JSON.stringify(item)}`),
+        ].join("\n") + "\n";
+      } else {
+        this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
+      }
       this._ruleYamlError = null;
       this._ruleEditorMode = "yaml";
       this._refreshRuleEditor();

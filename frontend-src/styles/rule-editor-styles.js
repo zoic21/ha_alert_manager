@@ -180,7 +180,7 @@ export const ruleEditorStyles = `
     border-end-start-radius: var(--ha-card-border-radius);
     border-end-end-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-error {
+  .rule-editor-success, .rule-editor-error {
     flex: 1 0 100%;
     width: 100%;
     margin: 0 0 4px;

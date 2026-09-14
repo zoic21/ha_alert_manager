@@ -426,3 +426,52 @@ def test_managed_jinja_yaml_and_tester_keep_blueprint_templates(
     assert len(result["results"]) == 1
     assert result["results"][0]["source"] == "jinja"
     assert manager.config == before
+
+
+def test_managed_yaml_nested_overrides_round_trip(hass, entry, registry_entry):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    raw = 'name: "My CPU"\noverride:\n  duration: 60\n  value: 82\n'
+    validated = run(manager.async_validate_rule_yaml(raw, rule_id=rule["id"]))
+    assert validated["duration"] == 60
+    assert validated["value"] == 82
+    updated = run(manager.async_update_rule_yaml(rule["id"], raw))
+    assert updated["blueprint"]["managed"] is True
+    assert updated["blueprint"]["overrides"] == {"duration": 60, "value": 82}
+    assert updated["entity_ids"] == rule["entity_ids"]
+    assert "override" not in updated
+    renamed = run(manager.async_update_rule_yaml(rule["id"], 'name: "Renamed"'))
+    assert renamed["blueprint"]["overrides"] == updated["blueprint"]["overrides"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "override: null",
+        "override: []",
+        "override: 123",
+        "override:\n  source: jinja",
+        "override:\n  entity_ids: []",
+        "duration: 60\noverride:\n  duration: 120",
+        "override:\n  duration: 60\n  duration: 120",
+    ],
+)
+def test_managed_yaml_invalid_overrides_do_not_mutate(hass, entry, registry_entry, raw):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    before = deepcopy(manager.config)
+    for request in (
+        manager.async_validate_rule_yaml(raw, rule_id=rule["id"]),
+        manager.async_update_rule_yaml(rule["id"], raw),
+    ):
+        with pytest.raises(ValueError):
+            run(request)
+    assert manager.config == before
+
+
+def test_override_yaml_is_reserved_for_managed_rules(hass, entry, registry_entry):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    run(manager.async_detach_blueprint(rule["id"]))
+    raw = "override:\n  duration: 42"
+    with pytest.raises(ValueError, match="Unknown rule field: override"):
+        run(manager.async_validate_rule_yaml(raw, rule_id=rule["id"]))
+    with pytest.raises(ValueError, match="Unknown rule field: override"):
+        run(manager.async_update_rule_yaml(rule["id"], raw))

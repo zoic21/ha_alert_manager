@@ -1,4 +1,5 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Invalid blueprint YAML overrides", "managed_yaml_overrides"],
   ["Rules changed; review the blueprint again", "managed_stale"],
   ["Detach the rule before editing blueprint-owned fields", "managed_owned"],
   ["Generate the blueprint to enable management", "managed_generate"],

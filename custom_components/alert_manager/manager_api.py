@@ -643,8 +643,14 @@ class _ApiMixin:
         self, raw_yaml: str, *, rule_id: str | None = None
     ) -> dict[str, Any]:
         """Parse one YAML rule through the same validator as the visual form."""
+        existing = self.config["rules"][self._rule_index(rule_id)] if rule_id else {}
         data = await self.hass.async_add_executor_job(
-            partial(parse_rule_yaml_data, raw_yaml, rule_id=rule_id)
+            partial(
+                parse_rule_yaml_data,
+                raw_yaml,
+                rule_id=rule_id,
+                allow_override=bool((existing.get("blueprint") or {}).get("managed")),
+            )
         )
         if rule_id is not None:
             existing = self.config["rules"][self._rule_index(rule_id)]
@@ -1397,8 +1403,14 @@ class _ApiMixin:
         self, rule_id: str, raw_yaml: str
     ) -> dict[str, Any]:
         """Update one rule from YAML while preserving its immutable id."""
+        existing = self.config["rules"][self._rule_index(rule_id)] if rule_id else {}
         data = await self.hass.async_add_executor_job(
-            partial(parse_rule_yaml_data, raw_yaml, rule_id=rule_id)
+            partial(
+                parse_rule_yaml_data,
+                raw_yaml,
+                rule_id=rule_id,
+                allow_override=bool((existing.get("blueprint") or {}).get("managed")),
+            )
         )
         existing = self.config["rules"][self._rule_index(rule_id)]
         if not (existing.get("blueprint") or {}).get("managed"):

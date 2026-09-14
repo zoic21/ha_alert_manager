@@ -120,6 +120,9 @@ export async function handleManagedBlueprintAction(panel, action) {
     panel._blueprintReview = null;
     panel._replaceRule(updated);
     panel._editingRule = updated;
+    if (action === "apply-blueprint") {
+      panel._notice = { kind: "success", text: panel._t("managed.applied"), ruleId: updated.id };
+    }
     panel._refreshRuleEditor();
     panel._refreshTabData("rules");
   } else {

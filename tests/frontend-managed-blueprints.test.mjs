@@ -285,3 +285,35 @@ test("applying a reviewed selection sends it without another confirmation", asyn
     assert.deepEqual(sent.excluded_entities, ["sensor.new"]);
   } finally { globalThis.window = previous; }
 });
+
+test("managed YAML separates blueprint overrides from rule settings", async () => {
+  const panel = { _editingRule: { ...managedDraft, source: "value", operator: "above", value: 90, duration: 300 }, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {} };
+  await editor.switchRuleEditor.call(panel);
+  assert.match(panel._ruleYaml, /^name: /m);
+  assert.match(panel._ruleYaml, /^override:\n  duration: 300\n  value: "90"\n$/m);
+  assert.doesNotMatch(panel._ruleYaml, /^(duration|value):/m);
+});
+
+test("applying blueprint changes displays a success message inside the drawer", async () => {
+  const panel = {
+    _editingRule: rule, _t: t,
+    _blueprintReview: { proposal, selected: new Set(["sensor.cpu"]), keptExclusions: new Set() },
+    _call: async () => ({ ...rule }), _replaceRule() {}, _refreshRuleEditor() {}, _refreshTabData() {},
+  };
+  await handleManagedBlueprintAction(panel, "apply-blueprint");
+  assert.deepEqual(panel._notice, { kind: "success", text: "managed.applied", ruleId: rule.id });
+  const html = editor.renderRuleEditor({ rule: managedDraft, mode: "visual", t, notice: panel._notice, renderTextField: () => "", renderNumberField: () => "" });
+  assert.match(html, /class="rule-editor-success" alert-type="success" role="status">managed.applied/);
+});
+
+test("failed blueprint application never reports success", async () => {
+  const panel = {
+    _editingRule: rule, _t: t,
+    _blueprintReview: { proposal, selected: new Set(["sensor.cpu"]), keptExclusions: new Set() },
+    _call: async () => null, _refreshRuleEditor() {},
+  };
+  await handleManagedBlueprintAction(panel, "apply-blueprint");
+  assert.equal(panel._notice, null);
+  assert.equal(panel._ruleEditorError, "errors.unknown");
+  assert.notEqual(panel._blueprintReview, null);
+});

@@ -285,7 +285,8 @@
       "managed_generate": "Generate the rule from its blueprint to enable managed mode.",
       "managed_settings": "Invalid blueprint overrides or exclusions (maximum 50 exclusions).",
       "managed_selection": "Select only current or discovered entities; an entity cannot also be excluded.",
-      "rule_level_invalid": "Level must be Alert or Information."
+      "rule_level_invalid": "Level must be Alert or Information.",
+      "managed_yaml_overrides": "override must contain only duration and/or value, without repeating these fields at the top level."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -981,7 +982,8 @@
       "invalid": "The new blueprint is incompatible with the saved overrides. Adjust them or take control before applying.",
       "monitored": "To monitor",
       "excluded": "To exclude",
-      "yaml_help": "Only customizable settings are shown. The rule remains managed by its blueprint; omitted fields keep their current values."
+      "yaml_help": "Fields under override replace blueprint settings (duration and threshold when applicable). The rule remains managed by its blueprint; omitted fields keep their current values.",
+      "applied": "Blueprint changes were applied successfully."
     }
   },
   "services": {
