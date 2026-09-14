@@ -14,6 +14,12 @@ When a condition clears, the alert is resolved and can be retained in History. A
 
 Tables support search, filters, sorting, device grouping, customizable columns and multiple selection. Open an alert to see its triggering and current values, contextual access to the entity, notification deliveries and previous occurrences. Numeric display follows Home Assistant's entity precision and the user's number format without changing stored values.
 
+Alert details show Home Assistant labels below the status, including labels from the
+rule or automatic pack, entity and device. Active, pending and acknowledged alerts
+use current labels. On resolution, their IDs, names, colors and icons are saved in
+history and retained across restarts, even if a label is later edited or deleted.
+Older history entries retain only the label information originally recorded.
+
 A clickable previous-occurrence count opens History filtered to the same stable alert ID. The filter can be changed or cleared. Flapping alerts also show their count/threshold and a collapsible list of retained occurrence times.
 
 ### Reevaluate an alert

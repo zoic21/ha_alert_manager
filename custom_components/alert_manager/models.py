@@ -161,6 +161,7 @@ class AlertHistoryEntry:
     acknowledged_by: str | None
     notifications: dict[str, Any] | None = None
     labels: list[str] = field(default_factory=list)
+    label_metadata: list[dict[str, str]] | None = None
 
     @classmethod
     def resolved(cls, record: AlertRecord, resolved_at: datetime) -> AlertHistoryEntry:
@@ -341,6 +342,24 @@ class AlertHistoryEntry:
             **durations,
         )
         values["labels"] = validate_label_list(data.get("labels", []), path="labels")
+        metadata = data.get("label_metadata")
+        values["label_metadata"] = (
+            [
+                {
+                    key: item.get(key, "")
+                    for key in ("id", "name", "color", "icon", "description")
+                }
+                for item in metadata
+                if isinstance(item, dict)
+                and item.get("id") in values["labels"]
+                and all(
+                    isinstance(item.get(key, ""), str)
+                    for key in ("id", "name", "color", "icon", "description")
+                )
+            ]
+            if isinstance(metadata, list)
+            else None
+        )
         values["notifications"] = _notification_summary(data.get("notifications"))
         return cls(**values)
 

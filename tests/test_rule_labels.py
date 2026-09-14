@@ -12,6 +12,7 @@ from custom_components.alert_manager.config_defaults import DEFAULT_CONFIG
 from custom_components.alert_manager.const import (
     EVENT_ALERT_RESOLVED,
     EVENT_ALERT_STARTED,
+    HISTORY_STORAGE_KEY,
 )
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import Rule
@@ -222,3 +223,71 @@ def test_automatic_labels_survive_restart(hass, entry, monkeypatch):
     run(manager._async_finish_startup_reconciliation())
     assert manager.records[key].details.labels == ["updates"]
     assert manager.records[key].active_since == record.active_since
+
+
+@pytest.mark.parametrize("duration", [0, 60])
+def test_live_labels_and_resolution_snapshot(hass, entry, duration):
+    from types import SimpleNamespace
+
+    from custom_components.alert_manager.models import AlertHistoryEntry
+
+    hass.states.set("sensor.test", "on")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    manager.config["pending_display_delay"] = 0
+    rule = run(
+        manager.async_create_rule(payload(duration=duration, label_ids=["rule"]))
+    )
+    key = f"rule:{rule['id']}:sensor.test"
+    entity = SimpleNamespace(
+        labels={"entity"},
+        device_id="device",
+        disabled_by=None,
+        area_id=None,
+        platform="test",
+    )
+    hass.entity_registry.entries["sensor.test"] = entity
+    hass.device_registry.entries["device"] = SimpleNamespace(
+        labels={"device"},
+        disabled_by=None,
+        area_id=None,
+        name="Device",
+        name_by_user=None,
+    )
+    hass.label_registry.labels["entity"] = SimpleNamespace(
+        name="Original", color="red", icon="mdi:home", description="Before"
+    )
+    # Populate the notification cache before changing the registry.
+    manager.notification_runtime._labels_for("sensor.test", None)
+    entity.labels.add("added")
+    partition = "pending" if duration else "alerts"
+    assert manager.public_snapshot()[partition][0]["labels"] == [
+        "added",
+        "device",
+        "entity",
+        "rule",
+    ]
+    assert manager.records[key].details.labels == ["rule"]
+    if duration:
+        return
+    # Exercise the ordinary resolution and persistent history path.
+    hass.states.set("sensor.test", "off")
+    run(manager.async_evaluate_entity("sensor.test"))
+    assert key not in manager.records
+    saved = manager.history_snapshot()["events"][0]
+    assert hass.stores[HISTORY_STORAGE_KEY]["events"][0] == saved
+    entity.labels.clear()
+    hass.label_registry.labels["entity"].name = "Renamed"
+    hass.label_registry.labels.clear()
+    restored = AlertHistoryEntry.from_dict(saved)
+    assert restored.as_dict() == saved
+    assert restored.labels == ["added", "device", "entity", "rule"]
+    assert next(item for item in restored.label_metadata if item["id"] == "entity") == {
+        "id": "entity",
+        "name": "Original",
+        "color": "red",
+        "icon": "mdi:home",
+        "description": "Before",
+    }
+    saved.pop("label_metadata")
+    assert AlertHistoryEntry.from_dict(saved).label_metadata is None

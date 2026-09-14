@@ -909,7 +909,7 @@ class NotificationRuntime:
     ) -> frozenset[str]:
         """Cache the union of native entity and device labels without scans."""
         cache_key = f"{entity_id}|{device_id or ''}"
-        if cache_key in self._label_cache:
+        if cache and cache_key in self._label_cache:
             return self._label_cache[cache_key].union(rule_labels)
         labels: set[str] = set()
         entity_entry = self._entity_registry.async_get(entity_id)

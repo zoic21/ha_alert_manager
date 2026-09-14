@@ -5591,3 +5591,34 @@ test("alert states retain their native presentation in the table and details", (
     assert.equal(cell.style.cssText.includes("--error-color"), status === "active");
   }
 });
+
+test("alert details show labels below status and history keeps frozen metadata", () => {
+  const panel = tablePanel();
+  panel._labels = [{ label_id: "saved", name: "Renamed", color: "blue" }];
+  const source = { ...panel._alerts.alerts[0], labels: ["saved"] };
+  panel._alerts.alerts = [source];
+  const live = panel._tableRows("overview")[0];
+  const markup = panel._renderAlertDetails("overview", live);
+  assert.match(markup, /alert-details-status-label[\s\S]*alert-details-labels[\s\S]*Renamed/);
+  const historical = { ...source, resolved_at: "2026-09-14T12:00:00Z",
+    label_metadata: [{ id: "saved", name: "Original <name>", color: "red", icon: "mdi:home" }],
+  };
+  const metadata = panel._entityMetadata(historical, new Map());
+  assert.deepEqual(metadata.labels, historical.label_metadata);
+  const historyMarkup = panel._renderAlertDetails("history", { ...live, labels: metadata.labels });
+  assert.match(historyMarkup, /Original &lt;name&gt;/);
+  assert.match(historyMarkup, /color="red"/);
+  assert.doesNotMatch(historyMarkup, /Renamed/);
+});
+
+
+test("historical label IDs never include present-day entity labels", async () => {
+  const { alertLabelIds } = await import("../frontend-src/utils/alert-labels.js");
+  const hass = { entities: { "sensor.test": { labels: ["today"] } } };
+  const source = { entity_id: "sensor.test", labels: ["saved"], resolved_at: "2026-09-14" };
+  assert.deepEqual(alertLabelIds(source, hass), ["saved"]);
+  assert.deepEqual(alertLabelIds({ ...source, labels: [] }, hass), []);
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, labels: [] }), /alert-details-labels/);
+});

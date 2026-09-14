@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.core import CoreState, callback
+from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
@@ -144,6 +145,42 @@ class _StateMixin:
         if not record_ids:
             self._record_ids_by_entity.pop(entity_id, None)
 
+    def _current_alert_labels(self, record: AlertRecord) -> list[str]:
+        """Read effective labels through indexed registries, without stale caches."""
+        return sorted(
+            self.notification_runtime._labels_for(
+                record.details.entity_id,
+                record.details.device_id,
+                record.details.labels,
+                cache=False,
+            )
+        )
+
+    def _resolved_history_entry(
+        self, record: AlertRecord, now: datetime
+    ) -> AlertHistoryEntry:
+        """Freeze effective labels and their presentation at resolution."""
+        entry = AlertHistoryEntry.resolved(record, now)
+        labels = self._current_alert_labels(record)
+        registry = lr.async_get(self.hass)
+        metadata = []
+        for label_id in labels:
+            label = registry.labels.get(label_id)
+            metadata.append(
+                {
+                    "id": label_id,
+                    "name": getattr(label, "name", None) or label_id,
+                    "color": getattr(label, "color", None) or "",
+                    "icon": getattr(label, "icon", None) or "",
+                    "description": getattr(label, "description", None) or "",
+                }
+            )
+        return replace(entry, labels=labels, label_metadata=metadata)
+
+    def _public_alert_record(self, record: AlertRecord) -> dict[str, Any]:
+        """Expose current labels without changing persisted detection details."""
+        return {**record.as_public_dict(), "labels": self._current_alert_labels(record)}
+
     def _build_public_snapshot(self) -> dict[str, Any]:
         """Build the public alert partitions and runtime status."""
         now = dt_util.now()
@@ -172,8 +209,8 @@ class _StateMixin:
         acknowledged: list[dict[str, Any]] = []
         for record in active_records:
             target = acknowledged if record.acknowledged else unacknowledged
-            target.append(record.as_public_dict())
-        pending = [record.as_public_dict() for record in pending_records]
+            target.append(self._public_alert_record(record))
+        pending = [self._public_alert_record(record) for record in pending_records]
         return {
             "active_count": len(unacknowledged),
             "acknowledge_count": len(acknowledged),
@@ -581,7 +618,7 @@ class _StateMixin:
                 }
                 self._administratively_removed.add(alert_id)
             if archive_resolutions:
-                self._pending_history.append(AlertHistoryEntry.resolved(record, now))
+                self._pending_history.append(self._resolved_history_entry(record, now))
             if emit_events and enabled:
                 self._fire_resolved(record, now)
             self._immediate_state_save_required = True

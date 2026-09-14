@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.25**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.26**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
 ### Major changes
@@ -21,9 +21,8 @@ This is a prerelease for testing, not a stable release.
   do not interfere with unrelated configuration changes.
 - Simplified notification exceptions while preserving routing precedence and existing values,
   and added native Companion notification icons for new alerts, reminders and recoveries.
-- Centralized the Information presentation around configurable Home Assistant labels shared by
-  custom rules and automatic packs. Classification changes preserve alert states, timers and
-  history without generating lifecycle notifications.
+- Alert details display current Home Assistant labels; resolved history preserves labels,
+  names, colors and icons as they were at resolution.
 - Deleting a custom rule resolves its active alerts without sending recovery notifications,
   including already queued batches.
 - Improved configuration and runtime compatibility: alert identities, acknowledgements,

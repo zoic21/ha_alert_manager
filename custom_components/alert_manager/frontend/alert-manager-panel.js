@@ -118,7 +118,7 @@ function panelTabs() {
 function alertLabelIds(source, hass) {
   return [...new Set([
     ...(Array.isArray(source.labels) ? source.labels : []),
-    ...(Array.isArray(hass?.entities?.[source.entity_id]?.labels)
+    ...(!source.resolved_at && Array.isArray(hass?.entities?.[source.entity_id]?.labels)
       ? hass.entities[source.entity_id].labels : []),
   ].map(String).filter(Boolean))];
 }
@@ -1514,7 +1514,8 @@ function entityMetadata(source, labelRegistry) {
     const domain = entityId.includes(".") ? entityId.split(".", 1)[0] : "";
     const integration = source.integration || entity?.platform || "";
     const labelIds = alertLabelIds(source, this._hass);
-    const labels = labelMetadata(labelIds, labelRegistry);
+    const labels = source.resolved_at && Array.isArray(source.label_metadata)
+      ? source.label_metadata : labelMetadata(labelIds, labelRegistry);
     return { domain, integration, labels };
 }
 
@@ -2271,6 +2272,7 @@ function renderAlertDetails(context) {
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
+    ${summary.labels?.length ? `<div class="alert-details-labels">${summary.labels.map((label) => `<ha-label dense${label.color ? ` color="${esc(label.color)}"` : ""} title="${esc(label.description || label.name)}">${esc(label.name)}${label.icon ? `<ha-icon slot="icon" icon="${esc(label.icon)}"></ha-icon>` : ""}</ha-label>`).join("")}</div>` : ""}
     ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
     ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl>
       ${occurrences ? occurrences.groups.length ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-flapping-occurrences ${summary.occurrencesExpanded ? "expanded" : ""}>
@@ -2293,6 +2295,7 @@ function renderAlertDetails(context) {
 
 function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
     if (!globalThis.document?.createElement || !root) return;
+    if (root.querySelector?.(".alert-details-labels")) void loadNativeLabels(this._hass);
     const targets = [
       ...(root.matches?.("[data-timestamp]") ? [root] : []),
       ...(root.querySelectorAll?.("[data-timestamp]") ?? []),
@@ -2349,6 +2352,7 @@ function renderAlertDetailsPanel(kind, row) {
           : "",
         status: row.status,
         statusLabel: row.statusLabel,
+        labels: row.labels,
       },
     });
 }
@@ -7745,6 +7749,12 @@ const tableStyles = `
     display: block;
     flex: none;
     margin-bottom: var(--ha-space-2, 8px);
+  }
+  .alert-details-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: var(--ha-space-4, 16px);
   }
   .alert-details-summary {
     display: flex;

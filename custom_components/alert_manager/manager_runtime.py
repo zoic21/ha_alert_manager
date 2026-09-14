@@ -39,7 +39,6 @@ from .const import (
 )
 from .models import (
     AlertDetails,
-    AlertHistoryEntry,
     AlertRecord,
     AlertStatus,
     Rule,
@@ -522,7 +521,9 @@ class _RuntimeMixin:
                         **(previous.details.condition_params or {}),
                         "resolution_reason": "monitoring_disabled",
                     }
-                self._pending_history.append(AlertHistoryEntry.resolved(previous, now))
+                self._pending_history.append(
+                    self._resolved_history_entry(previous, now)
+                )
                 if enabled:
                     self._fire_resolved(previous, now)
                 else:
@@ -1489,7 +1490,7 @@ class _RuntimeMixin:
             if record.status is AlertStatus.ACTIVE:
                 if archive_resolutions:
                     self._pending_history.append(
-                        AlertHistoryEntry.resolved(record, now)
+                        self._resolved_history_entry(record, now)
                     )
                 if emit_events and not administrative:
                     self._fire_resolved(record, now)
@@ -1655,7 +1656,7 @@ class _RuntimeMixin:
             if record.status is AlertStatus.ACTIVE:
                 if archive_resolutions:
                     self._pending_history.append(
-                        AlertHistoryEntry.resolved(record, now)
+                        self._resolved_history_entry(record, now)
                     )
                 if emit_events:
                     self._fire_resolved(record, now)

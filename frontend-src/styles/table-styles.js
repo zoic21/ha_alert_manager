@@ -148,6 +148,12 @@ export const tableStyles = `
     flex: none;
     margin-bottom: var(--ha-space-2, 8px);
   }
+  .alert-details-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: var(--ha-space-4, 16px);
+  }
   .alert-details-summary {
     display: flex;
     flex-shrink: 0;
