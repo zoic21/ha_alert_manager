@@ -284,7 +284,8 @@
       "managed_owned": "Take control before editing fields owned by the blueprint.",
       "managed_generate": "Generate the rule from its blueprint to enable managed mode.",
       "managed_settings": "Invalid blueprint overrides or exclusions (maximum 50 exclusions).",
-      "managed_selection": "Select only current or discovered entities; an entity cannot also be excluded."
+      "managed_selection": "Select only current or discovered entities; an entity cannot also be excluded.",
+      "rule_level_invalid": "Level must be Alert or Information."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -420,7 +421,16 @@
       "yaml_title": "Notification profile YAML",
       "duplicate": "Duplicate",
       "copy": "copy",
-      "test_saved_help": "Tests the saved profile. Save changes before testing."
+      "test_saved_help": "Tests the saved profile. Save changes before testing.",
+      "info_started_title": "New information",
+      "info_started_title_plural": "{count} new information items",
+      "info_reminder_title": "Information reminder",
+      "info_reminder_title_plural": "Reminder: {count} information items",
+      "info_resolved_title": "Information resolved",
+      "info_resolved_title_plural": "{count} information items resolved",
+      "info_grouped_alerts": "{count} information items",
+      "info_grouped_resolved": "{count} information items resolved",
+      "info_on_resolved": "Information resolved"
     },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",
@@ -652,7 +662,11 @@
       "automatic_resolution": "Automatic expiration",
       "source_value": "Value",
       "source_value_variation": "Variation",
-      "source_value_transition": "Transition"
+      "source_value_transition": "Transition",
+      "level": "Level",
+      "level_alert": "Alert",
+      "level_info": "Information",
+      "level_help": "Presentation only: does not change conditions or notification policies."
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",
@@ -811,7 +825,10 @@
       "status": {
         "acknowledged": "Acknowledged alert",
         "active": "Active alert",
-        "pending": "Upcoming alert"
+        "pending": "Upcoming alert",
+        "info_active": "Active information",
+        "info_pending": "Upcoming information",
+        "info_acknowledged": "Acknowledged information"
       },
       "toolbar": "Alert table tools",
       "visible_count": "{visible} of {total}"
@@ -885,7 +902,9 @@
       "more_count": "View more alerts: {count} additional",
       "coherence": "Coherence",
       "coherence_one": "1 issue detected",
-      "coherence_count": "{count} issues detected"
+      "coherence_count": "{count} issues detected",
+      "information": "Information",
+      "information_count": "{count} information items"
     },
     "generator": {
       "title": "Generate rules",

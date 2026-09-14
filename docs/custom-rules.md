@@ -4,6 +4,35 @@
 
 Custom rules monitor situations specific to your installation: a fridge drawing too much power, heating that does not warm a room, a stale sensor, an error message or a completed appliance cycle. Create them from **Custom rules** using the visual editor or YAML.
 
+## Alert or Information
+
+The **Level** field is presentation metadata for custom rules: `alert` (default)
+keeps the usual appearance; `info` uses an information icon and a theme blue accent.
+Set it in the visual editor or YAML:
+
+```yaml
+level: info
+```
+
+Information follows the same pending, active, acknowledged and resolved lifecycle.
+It contributes to the same counters and statistics. Conditions, delays, flapping,
+automatic resolution and notification policies are unchanged. Changing only the
+level preserves the current occurrence, timers and acknowledgement. Resolved
+history keeps the level captured at resolution, even if the rule later changes or
+is deleted. Older data without a level is treated as Alert.
+
+To notify only when an information starts, assign a Home Assistant label such as
+`information` to the rule and add a notification profile exception for that label:
+enable starts, disable resolutions and set reminders to never. The label and level
+are independent; no label is created or interpreted automatically.
+
+Mixed notification batches retain their alert presentation and remain a single
+batch. Information-only notifications use informative titles and the existing
+native icon path where supported, or an information symbol in the title otherwise.
+Reminder and resolution titles retain their meaning. Dashboard groups use the
+Information appearance only when all their active members are informative;
+explicit card icon color settings still take precedence.
+
 ## Create and test a rule
 
 Choose a name, select the entities, choose an operation and configure its comparison or condition. Set a trigger delay when brief anomalies should be ignored. An optional Jinja message explains the problem when the alert activates.

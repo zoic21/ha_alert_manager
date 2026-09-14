@@ -10,6 +10,7 @@ const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
   label_ids: [],
+  level: "alert",
   enabled: true,
   source: "value",
   attribute: "",
@@ -54,6 +55,7 @@ const ruleToYaml = (rule) => {
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
+    `level: ${yamlValue(rule.level ?? "alert")}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
     `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,

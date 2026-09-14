@@ -9,6 +9,7 @@ import pytest
 from custom_components.alert_manager.notifications import NotificationManager
 
 
+@pytest.mark.parametrize("level", ["alert", "info"])
 @pytest.mark.parametrize(
     ("kind", "icon", "emoji"),
     [
@@ -18,9 +19,13 @@ from custom_components.alert_manager.notifications import NotificationManager
     ],
 )
 def test_native_icon_for_mobile_and_emoji_fallback(
-    hass, registry_entry, config_entry, kind, icon, emoji
+    hass, registry_entry, config_entry, kind, icon, emoji, level
 ) -> None:
     """Use native Companion icons while generic targets retain title emojis."""
+    if level == "info":
+        emoji = "\u2139\ufe0f"
+        if kind == "started":
+            icon = "mdi:information-outline"
     entry = config_entry(hass, "mobile_app")
     entry.data = {"device_name": "Phone"}
     registry_entry(
@@ -44,6 +49,7 @@ def test_native_icon_for_mobile_and_emoji_fallback(
             message="Message",
             click_url="/alert-manager",
             kind=kind,
+            level=level,
         )
     )
 

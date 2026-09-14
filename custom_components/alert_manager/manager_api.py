@@ -1285,6 +1285,15 @@ class _ApiMixin:
     async def _async_apply_rule_update(self, old_rule: Rule, rule: Rule) -> set[str]:
         """Apply one validated replacement inside the caller's transaction."""
         rule_id = rule.id
+        if old_rule.level != rule.level:
+            for entity_id in rule.entity_ids:
+                if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
+                    record.details.level = rule.level
+            previous_definition = old_rule.as_dict()
+            previous_definition["level"] = rule.level
+            if previous_definition == rule.as_dict():
+                # Presentation edits must not evaluate conditions or advance timers.
+                return set()
         variation_definition_changed = (
             old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
         ) and (

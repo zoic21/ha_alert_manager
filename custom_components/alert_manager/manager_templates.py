@@ -575,6 +575,7 @@ class _TemplatesMixin:
                 record.details.rule_name = rule.name
                 changed = True
             metadata = [
+                ("level", rule.level),
                 ("source", rule.source),
                 (
                     "operator",

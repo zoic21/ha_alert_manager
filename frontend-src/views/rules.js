@@ -325,6 +325,7 @@ export function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
+        level: rule.level ?? "alert",
         managed: Boolean(rule.blueprint?.managed),
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
@@ -369,6 +370,14 @@ export function nativeRuleNameCell(row, narrow = false) {
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
     const primary = document.createElement("span");
     primary.textContent = row.name;
+    if (row.level === "info") {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:information-outline");
+      icon.setAttribute("aria-label", this._t("rules.level_info"));
+      icon.title = this._t("rules.level_info");
+      icon.style.cssText = "--mdc-icon-size:18px;margin-inline-end:4px;color:var(--info-color, var(--primary-color))";
+      primary.prepend(icon);
+    }
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     const proposal = this._managedBlueprints?.[row.id];
     if (row.managed && proposal?.update_available) {

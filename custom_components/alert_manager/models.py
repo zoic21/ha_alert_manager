@@ -43,6 +43,13 @@ def validate_label_list(value: Any, *, path: str = "excluded_labels") -> list[st
     return result
 
 
+def validate_level(value: Any) -> str:
+    """Validate presentation metadata without interpreting historical severity."""
+    if value not in ("alert", "info"):
+        raise ValueError("Rule level must be alert or info")
+    return value
+
+
 class AlertStatus(StrEnum):
     """Internal alert status."""
 
@@ -76,6 +83,7 @@ class AlertDetails:
     comparison_value: Any = None
     attribute: str | None = None
     labels: list[str] = field(default_factory=list)
+    level: str = "alert"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AlertDetails:
@@ -114,6 +122,7 @@ class AlertDetails:
             data["condition_params"], dict
         ):
             raise ValueError("Alert detail condition_params must be an object or null")
+        data["level"] = validate_level(data.get("level", "alert"))
         data["labels"] = validate_label_list(data.get("labels", []), path="labels")
         allowed = cls.__dataclass_fields__
         values = {key: data[key] for key in allowed if key in data}
@@ -161,6 +170,7 @@ class AlertHistoryEntry:
     acknowledged_by: str | None
     notifications: dict[str, Any] | None = None
     labels: list[str] = field(default_factory=list)
+    level: str = "alert"
 
     @classmethod
     def resolved(cls, record: AlertRecord, resolved_at: datetime) -> AlertHistoryEntry:
@@ -225,6 +235,7 @@ class AlertHistoryEntry:
             acknowledged_by=record.acknowledged_by,
             notifications=_json_safe(record.notifications),
             labels=list(record.details.labels),
+            level=record.details.level,
         )
 
     @classmethod
@@ -340,6 +351,7 @@ class AlertHistoryEntry:
             acknowledged_at=parsed_acknowledged_at,
             **durations,
         )
+        values["level"] = validate_level(data.get("level", "alert"))
         values["labels"] = validate_label_list(data.get("labels", []), path="labels")
         values["notifications"] = _notification_summary(data.get("notifications"))
         return cls(**values)
@@ -681,6 +693,7 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
+    level: str = "alert"
     update_message_when_active: bool = False
     condition_template: str | None = None
     flapping_enabled: bool = False
@@ -787,6 +800,7 @@ class Rule:
                 if value != getattr(self, key):
                     raise ValueError("Blueprint override must match effective rule")
 
+        validate_level(self.level)
         self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")
