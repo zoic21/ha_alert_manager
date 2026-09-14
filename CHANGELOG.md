@@ -10,54 +10,23 @@ before a stable release are intentionally omitted.
 Current development build: **2.4.0-dev.24**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
-- Keep custom-rule information icons after the title with 10 px spacing,
-  vertical centering and consistent sizing.
-- Keep grouped dashboard icons beside the text and open the matching device alerts
-  with a correctly selected device filter, including devices sharing the same name.
-- Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
-  uses a compact hourglass beside the last alert, and mobile overflow stays on the
-  same row as the last tile. No matching alerts means no card during startup.
-- Custom rules can use an Information presentation with a blue accent and information
-  icon in the panel, history, dashboard and notifications, without a duplicate icon
-  beside the entity name in alert tables. Alert remains the default;
-  detection, acknowledgement, notification policies and batching are unchanged.
-- Deleting a custom rule resolves its ongoing alerts without sending recovery
-  notifications, including queued notification batches.
+### Major changes
 
-- Consolidated automatic monitoring into autonomous packs with one visual/YAML drawer,
-  explicit defaults, and sparse device/entity exceptions.
-- Kept global automatic exclusions by label; migrate old direct exclusions to disabled
-  exceptions in each pack, preserving delays, thresholds and flapping precedence.
-  Missing targets remain excluded without modifying Home Assistant registries.
-- Separate page saves from drawer saves: incomplete visual or YAML drawer drafts
-  remain open and do not block or get included in the main configuration save.
-  Page-save feedback stays on the main page even while a drawer is open; drawer
-  edits do not reveal the general Save button.
-- Grouped alert display, history retention and automatic label exclusions in a
-  General section at the top of Configuration, with matching quick access.
-- Added administrator-only contextual configuration from automatic alert details.
-- Compacted pack configuration drawers with monitoring switches and
-  side-by-side settings. Execution-error configuration offers automation/script
-  entity targets only, including source-specific flapping configuration. Exception
-  rows collapse to readable summaries with direct deletion and automatic expansion
-  on addition. Monitoring switches sit beside deletion in the summary header;
-  disabled parameters are hidden without losing their values.
-  Empty numeric fields inherit their parent settings;
-  a disabled pack or device cannot be reactivated by an entity exception.
-- Added collapsible notification exception summaries with label names, effective policies,
-  direct deletion and preserved drag/keyboard ordering; new exceptions open automatically.
-  Headers use compact native colored label badges with icons and no removal action,
-  wrap on mobile, and keep reorder/delete controls close together. Fixed summary translations.
-  Pack and notification exceptions hide their header text and badges while expanded,
-  retaining the chevron and action controls; updated summaries return on collapse.
-- Simplified notification exceptions with the same switches and reminder input as
-  the profile defaults, preserving effective values when editing existing exceptions.
-- Preserve compatible alert identities, acknowledgements, history and occurrence evidence
-  during edits/imports. Disabled monitoring cancels affected notifications and timers
-  without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
-- Added native Companion notification icons for new alerts, reminders and recoveries,
-  including batches and profile tests. Supported mobile targets use text-only titles;
-  other targets and notification groups retain the existing title emojis.
+- Reworked automatic monitoring around autonomous packs with explicit defaults,
+  compact visual/YAML configuration and per-device/per-entity exceptions. Global label
+  exclusions remain available, while previous direct exclusions are represented as disabled
+  pack exceptions without changing existing monitoring behavior.
+- Simplified Configuration with shared General settings, contextual access from automatic
+  alerts, inherited pack/device values and independent page/drawer saves so incomplete drafts
+  do not interfere with unrelated configuration changes.
+- Simplified notification exceptions while preserving routing precedence and existing values,
+  and added native Companion notification icons for new alerts, reminders and recoveries.
+- Added an Information presentation for custom rules and ensured deleting a custom rule resolves
+  its active alerts without sending recovery notifications, including already queued batches.
+- Improved configuration and runtime compatibility: alert identities, acknowledgements,
+  history and occurrence evidence are preserved across compatible edits/imports; disabling
+  monitoring cancels affected timers and notifications without false recoveries; configuration
+  exports now retain rule IDs using format version 2.
 
 ## 2.3.0-rc.4 — 2026-09-13 (prerelease)
 
