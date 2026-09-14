@@ -110,7 +110,7 @@ test("review checkboxes hydrate idempotently and allow forgetting missing exclus
   assert.equal(panel._blueprintReview.keptExclusions.size, 0);
 });
 
-test("table update icon precedes the name and opens review without mutation", () => {
+test("table status icons follow the name with consistent spacing and alignment; update opens review without mutation", () => {
   const previous = globalThis.document;
   globalThis.document = { createElement: (tag) => ({ tag, children: [], attrs: {}, style: {}, append(...items) { this.children.push(...items); }, setAttribute(key, value) { this.attrs[key] = value; }, addEventListener(key, fn) { this[key] = fn; } }) };
   try {
@@ -121,7 +121,7 @@ test("table update icon precedes the name and opens review without mutation", ()
       _openRuleEditor: (id) => { opened = id; },
     };
     const name = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: true });
-    const [icon, title] = name.children[0].children;
+    const [title, icon] = name.children[0].children;
     assert.equal(icon.tag, "ha-icon-button");
     assert.equal(icon.children[0].attrs.icon, "mdi:sync");
     assert.match(icon.children[0].style.cssText, /--mdc-icon-size:20px/);
@@ -131,7 +131,10 @@ test("table update icon precedes the name and opens review without mutation", ()
     assert.equal(opened, "r");
     for (const narrow of [false, true]) {
       const info = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: true, level: "info" }, narrow);
-      const [update, information, label] = info.children[0].children;
+      const [label, update, information] = info.children[0].children;
+      assert.match(info.children[0].style.cssText, /align-items:center;gap:10px/);
+      assert.match(information.style.cssText, /display:flex;align-items:center;justify-content:center;line-height:0/);
+      assert.match(update.style.cssText, /--mdc-icon-button-size:20px/);
       assert.equal(information.attrs.icon, "mdi:information-outline");
       assert.ok(information.style.cssText.startsWith(update.children[0].style.cssText));
       assert.equal(information.title, "rules.level_info");
@@ -139,7 +142,7 @@ test("table update icon precedes the name and opens review without mutation", ()
       assert.match(label.style.cssText, /min-width:0/);
       const infoOnly = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", level: "info" }, narrow);
       assert.equal(infoOnly.children[0].children.length, 2);
-      assert.equal(infoOnly.children[0].children[0].attrs.icon, "mdi:information-outline");
+      assert.equal(infoOnly.children[0].children[1].attrs.icon, "mdi:information-outline");
     }
     const unmanaged = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: false });
     assert.equal(unmanaged.children[0].textContent, "CPU");

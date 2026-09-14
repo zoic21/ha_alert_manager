@@ -376,13 +376,14 @@ export function nativeRuleNameCell(row, narrow = false) {
     if (hasUpdate || row.level === "info") {
       const line = document.createElement("span");
       // Native table cells live in HA's shadow root, outside the panel stylesheet.
-      line.style.cssText = "display:flex;align-items:center;gap:4px;min-width:0";
-      const iconStyle = "--mdc-icon-size:20px;width:20px;height:20px;flex:0 0 20px;color:var(--info-color,var(--primary-color))";
+      line.style.cssText = "display:flex;align-items:center;gap:10px;min-width:0";
+      line.append(primary);
+      const iconStyle = "display:flex;align-items:center;justify-content:center;line-height:0;--mdc-icon-size:20px;width:20px;height:20px;flex:0 0 20px;color:var(--info-color,var(--primary-color))";
       if (hasUpdate) {
         const icon = document.createElement("ha-icon-button");
         icon.setAttribute("aria-label", this._t("managed.available"));
         icon.title = this._t("managed.available");
-        icon.style.cssText = "--mdc-icon-button-size:32px;--mdc-icon-size:20px;width:32px;height:32px;flex:0 0 32px;color:var(--info-color,var(--primary-color))";
+        icon.style.cssText = `${iconStyle};--mdc-icon-button-size:20px;--ha-icon-button-size:20px;padding:0`;
         const glyph = document.createElement("ha-icon");
         glyph.setAttribute("icon", "mdi:sync");
         glyph.style.cssText = iconStyle;
@@ -398,10 +399,9 @@ export function nativeRuleNameCell(row, narrow = false) {
         icon.setAttribute("icon", "mdi:information-outline");
         icon.setAttribute("aria-label", this._t("rules.level_info"));
         icon.title = this._t("rules.level_info");
-        icon.style.cssText = `${iconStyle};margin-inline:6px`;
+        icon.style.cssText = iconStyle;
         line.append(icon);
       }
-      line.append(primary);
       content.append(line);
     } else content.append(primary);
     if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
