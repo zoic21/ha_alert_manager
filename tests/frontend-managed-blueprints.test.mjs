@@ -249,3 +249,39 @@ test("managed test sends editable overrides and updates the shared result surfac
   assert.equal(scrolled, true);
   assert.equal(panel._ruleTestLoading, false);
 });
+
+for (const [operator, current, candidate, changed] of [
+  ["above", "90", 90, false],
+  ["below", "90.0", 90, false],
+  ["between", ["80", "90"], [80, 90], false],
+  ["outside", ["80", "90"], [90, 80], true],
+  ["above", "90", 95, true],
+  ["above", "", 0, true],
+  ["above", null, 0, true],
+  ["equals", "090", 90, true],
+]) {
+  test(`blueprint review preserves semantic threshold changes: ${operator} ${JSON.stringify(current)} → ${JSON.stringify(candidate)}`, () => {
+    const currentRule = { ...rule, source: "value", operator, value: current };
+    const next = { ...proposal, candidate: { ...currentRule, value: candidate } };
+    const html = renderManagedBlueprint({ rule: currentRule, review: { proposal: next }, t });
+    assert.equal(html.includes("<h4>managed.changes</h4>"), changed);
+  });
+}
+
+test("applying a reviewed selection sends it without another confirmation", async () => {
+  const previous = globalThis.window;
+  globalThis.window = { confirm() { assert.fail("redundant confirmation"); } };
+  try {
+    let sent;
+    const panel = {
+      _editingRule: rule, _t: t,
+      _blueprintReview: { proposal, selected: new Set(["sensor.cpu"]), keptExclusions: new Set() },
+      _call: async (message) => { sent = message; return { ...rule }; },
+      _replaceRule() {}, _refreshRuleEditor() {}, _refreshTabData() {},
+    };
+    await handleManagedBlueprintAction(panel, "apply-blueprint");
+    assert.equal(sent.type, "alert_manager/rules/blueprints/apply");
+    assert.deepEqual(sent.entity_ids, ["sensor.cpu"]);
+    assert.deepEqual(sent.excluded_entities, ["sensor.new"]);
+  } finally { globalThis.window = previous; }
+});

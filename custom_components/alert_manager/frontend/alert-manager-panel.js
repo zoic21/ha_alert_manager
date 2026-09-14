@@ -4153,6 +4153,17 @@ async function switchNotificationEditor(panel) {
 }
 
 // Source: frontend-src/components/managed-blueprints.js
+function comparableBlueprintValue(rule, key, value) {
+  if (key !== "value" || !["above", "below", "between", "outside"].includes(rule.operator)) return value;
+  // The visual editor stores thresholds as strings; recipes may use numbers.
+  // Preserve empty/invalid values and range order so real changes stay visible.
+  return (Array.isArray(value) ? value : [value]).map((item) => {
+    if (typeof item !== "number" && (typeof item !== "string" || !item.trim())) return item;
+    const number = Number(item);
+    return Number.isFinite(number) ? number : item;
+  });
+}
+
 function renderManagedBlueprint({ rule, proposal, review, t }) {
   if (!rule?.blueprint?.managed) return "";
   const notice = proposal?.update_available
@@ -4163,7 +4174,8 @@ function renderManagedBlueprint({ rule, proposal, review, t }) {
   const missingExclusions = review ? (rule.blueprint.excluded_entities ?? []).filter((id) => !choices.includes(id)) : [];
   const changes = review ? Object.entries(review.proposal.candidate).filter(([key, value]) => (
     !["id", "blueprint", "entity_ids", "version"].includes(key)
-    && JSON.stringify(value) !== JSON.stringify(rule[key])
+    && JSON.stringify(comparableBlueprintValue(review.proposal.candidate, key, value))
+      !== JSON.stringify(comparableBlueprintValue(rule, key, rule[key]))
   )) : [];
   return `<section class="rule-editor-section">
     <strong>${esc(t("managed.source", { id: rule.blueprint.id, version: rule.blueprint.version }))}</strong>
@@ -4241,7 +4253,6 @@ async function handleManagedBlueprintAction(panel, action) {
       panel._refreshRuleEditor();
       return true;
     }
-    if (!window.confirm(panel._t("managed.apply_confirm"))) return true;
     const excluded = [...new Set([
       ...review.keptExclusions, ...review.proposal.discovered,
       ...rule.entity_ids,

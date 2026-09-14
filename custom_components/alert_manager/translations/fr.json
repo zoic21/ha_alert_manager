@@ -975,7 +975,6 @@
       "removed": "Ne correspond plus",
       "changes": "Changements des réglages (actuel → proposé)",
       "apply": "Appliquer les changements sélectionnés",
-      "apply_confirm": "Appliquer les réglages du blueprint et les entités sélectionnées ?",
       "save_first": "Enregistrez ou annulez les modifications de la règle avant d’utiliser les actions du blueprint.",
       "empty": "Sélectionnez au moins une entité à surveiller. Pour arrêter cette surveillance, désactivez la règle.",
       "keep_exclusions": "Conserver les exclusions des entités actuellement absentes (décochez pour les oublier) :",

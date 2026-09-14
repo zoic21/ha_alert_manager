@@ -975,7 +975,6 @@
       "removed": "No longer matches",
       "changes": "Setting changes (current → proposed)",
       "apply": "Apply selected changes",
-      "apply_confirm": "Apply the reviewed blueprint settings and selected entities?",
       "save_first": "Save or cancel your rule edits before using blueprint actions.",
       "empty": "Select at least one entity to monitor. To stop monitoring, disable the rule.",
       "keep_exclusions": "Keep exclusions for currently missing entities (uncheck to forget):",
