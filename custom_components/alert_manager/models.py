@@ -693,7 +693,8 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
-    level: str = "alert"
+    # Presentation must not invalidate a pending/confirmed transition observation.
+    level: str = field(default="alert", compare=False)
     update_message_when_active: bool = False
     condition_template: str | None = None
     flapping_enabled: bool = False

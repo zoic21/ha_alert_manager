@@ -287,3 +287,73 @@ def test_information_label_exception_is_independent_of_visual_level(hass, entry,
         await runtime.async_unload()
 
     run(scenario())
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+def test_level_edit_preserves_unprocessed_transition(hass, entry, set_now, confirmed):
+    from test_transitions import expire
+
+    manager, key, rule = setup(hass, entry, duration=0 if confirmed else 30)
+    edge(manager, hass, "B", flush=not confirmed)
+    observations = (
+        manager._transition_confirmed if confirmed else manager._transition_observations
+    )
+    observation = observations[key]
+    run(manager.async_update_rule(rule["id"], {"level": "info"}))
+    assert observations[key] is observation
+    set_now(observation.due_at)
+    if confirmed:
+        run(manager._async_flush_queued_evaluations())
+    else:
+        expire(manager, key)
+    assert manager.records[key].active_since == observation.due_at
+    assert manager.records[key].details.level == "info"
+    assert sum(event == EVENT_ALERT_STARTED for event, _ in hass.bus.fired) == 1
+
+
+@pytest.mark.parametrize("other_change", [False, True])
+def test_import_updates_level_of_preserved_transition_record(hass, entry, other_change):
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    manager, key, _rule = setup(hass, entry)
+    edge(manager, hass, "B")
+    config = deepcopy(manager.get_config())
+    config["rules"][0]["level"] = "info"
+    if other_change:
+        config["notification_batch_delay"] = 60
+    run(manager.async_import_config(dump_config_yaml(config)))
+    assert manager.records[key].details.level == "info"
+
+
+@pytest.mark.parametrize("via_import", [False, True])
+def test_level_only_save_keeps_template_timers_and_notification_batches(
+    hass, entry, monkeypatch, via_import
+):
+    from unittest.mock import Mock
+
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    manager, key, rule = setup(hass, entry, duration=30)
+    edge(manager, hass, "B")
+    cancel = Mock()
+    dependency = ("condition", rule["id"], "sensor.edge")
+    manager._template_rate_limit_timers[dependency] = cancel
+    timers = dict(manager._timers)
+    rebuild = Mock(side_effect=AssertionError("Do not rebuild all rule indexes"))
+    monkeypatch.setattr(manager, "_rebuild_rule_index", rebuild)
+    discard = Mock(side_effect=AssertionError("Do not discard notification batches"))
+    monkeypatch.setattr(manager.notification_runtime, "discard_batches", discard)
+    if via_import:
+        config = deepcopy(manager.get_config())
+        config["rules"][0]["level"] = "info"
+        run(manager.async_import_config(dump_config_yaml(config)))
+    else:
+        run(manager.async_update_rule(rule["id"], {"level": "info"}))
+    cancel.assert_not_called()
+    discard.assert_not_called()
+    rebuild.assert_not_called()
+    assert manager._timers == timers
+    assert manager._template_rate_limit_timers[dependency] is cancel
+    assert manager.records[key].details.level == "info"
+    assert manager._transition_rules_by_id[rule["id"]].level == "info"
+    assert manager._rules_by_entity["sensor.edge"][0].level == "info"

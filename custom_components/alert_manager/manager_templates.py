@@ -112,6 +112,19 @@ class _TemplatesMixin:
             f"{expected}{suffix}{duration}"
         )
 
+    def _replace_rule_presentation(self, index: int, rule: Rule) -> None:
+        """Replace a visually edited rule without invalidating template timers."""
+        self._rules[index] = rule
+        if rule.id in self._transition_rules_by_id:
+            self._transition_rules_by_id[rule.id] = rule
+        for entity_id in rule.entity_ids:
+            self._rules_by_entity[entity_id] = [
+                rule if cached.id == rule.id else cached
+                for cached in self._rules_by_entity[entity_id]
+            ]
+            if record := self.records.get(f"rule:{rule.id}:{entity_id}"):
+                record.details.level = rule.level
+
     def _rebuild_rule_index(self) -> None:
         """Cache enabled rules and rebuild template dependency indexes."""
         self._refresh_config_caches()
@@ -167,6 +180,9 @@ class _TemplatesMixin:
         for rule in self._rules:
             for entity_id in rule.entity_ids:
                 self._rules_by_entity.setdefault(entity_id, []).append(rule)
+                # Imports and paused/ephemeral records also retain current presentation.
+                if record := self.records.get(f"rule:{rule.id}:{entity_id}"):
+                    record.details.level = rule.level
         self._refresh_custom_tracking()
         self._rebuild_template_dependency_index()
 
