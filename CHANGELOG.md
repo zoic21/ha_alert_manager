@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.13**, published on **2026-09-13**.
+Current development build: **2.4.0-dev.15**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
 - Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
