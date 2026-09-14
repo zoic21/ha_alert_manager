@@ -12,23 +12,39 @@
 
 Alert Manager rassemble les problèmes de Home Assistant : équipements indisponibles, batteries faibles, automatisations en erreur, valeurs anormales ou références cassées dans la configuration. Chaque alerte est suivie de sa détection à sa résolution, plutôt que de se limiter à une notification facile à manquer.
 
-[Installation](#installation) · [Guide utilisateur](docs/user-guide.fr.md) · [Signaler un problème](https://github.com/zoic21/ha_alert_manager/issues)
+Utilisez la surveillance automatique pour les problèmes courants et les règles personnalisées pour vos équipements. Un problème reste visible tant qu’il nécessite votre attention ; l’acquitter indique que vous en avez connaissance, pas qu’il est corrigé. Les occurrences résolues peuvent être conservées dans l’historique pour repérer les problèmes récurrents.
+
+[Installation](#installation) · [Documentation](docs/user-guide.md) · [Signaler un problème](https://github.com/zoic21/ha_alert_manager/issues)
 
 <p align="center">
   <img src="docs/assets/screenshots/dashboard.png" alt="Accueil Alert Manager avec les alertes en cours">
 </p>
 
-## Fonctionnalités
+## Possibilités
 
-| Domaine | Possibilités |
-| --- | --- |
-| Surveillance automatique | Détecter les entités indisponibles, pertes de connectivité, batteries faibles, équipements UniFi absents, erreurs d’automatisation ou de script et instabilités répétées. Ajuster les délais et exclusions pour éviter le bruit. |
-| Règles personnalisées | Surveiller états, attributs, seuils, plages, absence de changement, variations, transitions et conditions Jinja. Éditer visuellement ou en YAML, dupliquer et tester sur les valeurs réelles, avec les profils de notification correspondants. |
-| Gestion des alertes | Rechercher, filtrer et regrouper les alertes ; les acquitter sans limite ou temporairement ; consulter leurs détails, notifications et occurrences précédentes. Explorer l’historique et les statistiques de récurrence. |
-| Carte de dashboard | Afficher une vue compacte adaptée au mobile, regroupée par équipement, avec filtre par étiquette, limite de tuiles, alignement et couleur des icônes. La carte se masque sans alerte correspondante et ouvre les détails au clic. |
-| Notifications | Configurer des profils facultatifs avec plusieurs destinataires, nouvelles alertes, retours à la normale, rappels, regroupement et exceptions ordonnées par étiquette. Éditer en YAML, dupliquer ou envoyer un test. |
-| Cohérence de la configuration | Retrouver les références statiques vers des entités absentes et les références d’appareils ZHA invalides, analyser à la demande ou selon un planning, et créer une alerte pour les problèmes non résolus. |
-| Configuration et automatisations | Utiliser les étiquettes Home Assistant, l’import/export YAML, les sauvegardes automatiques de configuration, les entités de surveillance et les événements pour vos propres automatisations. |
+### Surveiller automatiquement les problèmes courants
+
+Activez les packs d’entités indisponibles, pertes de connectivité, batteries faibles, équipements UniFi absents, erreurs d’exécution d’automatisation/script et instabilités répétées. Adaptez les délais, seuils et exclusions pour qu’une situation attendue ou une micro-coupure ne produise pas d’alertes inutiles.
+
+Tout se configure depuis le panneau. Les étiquettes servent à organiser les alertes et sélectionner les notifications ; les entités de surveillance et événements restent disponibles pour vos propres automatisations.
+
+### Définir des règles propres à votre installation
+
+Surveillez un réfrigérateur consommant plus de 200 W pendant deux heures, une température hors plage, un chauffage sans hausse de température suffisante, un capteur qui ne change plus ou la fin d’un cycle d’appareil.
+
+Les règles prennent en charge états, attributs imbriqués, comparaisons numériques et textuelles, absence de changement, variations, transitions et conditions Jinja. Une règle peut surveiller plusieurs entités indépendamment. Éditez visuellement ou en YAML, dupliquez une règle et testez un brouillon sur les valeurs réelles, avec les profils de notification correspondants. Les messages Jinja expliquent le problème et peuvent rester actualisés tant que l’alerte est active.
+
+### Suivre les alertes du dashboard à l’historique
+
+L’Accueil distingue les alertes actives, à venir et acquittées, avec recherche, filtres, tri, groupement par équipement, colonnes personnalisables et sélection multiple. Ouvrez une alerte pour consulter ses valeurs au déclenchement et actuelles, ses notifications et ses occurrences précédentes. L’acquittement peut être illimité ou temporaire.
+
+La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez une limite de tuiles, un filtre par étiquette, l’alignement et la couleur des icônes ; elle se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
+
+### Choisir les notifications et vérifier la configuration
+
+Les profils de notification facultatifs gèrent plusieurs destinataires, nouvelles alertes, retours à la normale, rappels, regroupement et exceptions ordonnées par étiquette. Ils peuvent être testés, dupliqués et édités en YAML. Vos automatisations basées sur les événements restent utilisables à la place.
+
+L’analyse de cohérence retrouve les références statiques vers des entités et appareils ZHA absents dans les sources de configuration prises en charge. Lancez-la à la demande ou selon un planning, ouvrez la configuration concernée lorsque c’est possible et conservez éventuellement une alerte tant que des problèmes subsistent. L’import/export YAML et les sauvegardes automatiques permettent aussi de récupérer la configuration.
 
 L’interface est disponible en **français et en anglais**, sur ordinateur et mobile. Tous les utilisateurs connectés peuvent consulter la carte, l’Accueil et l’Historique ; la configuration et toutes les actions, dont l’acquittement, sont réservées aux administrateurs.
 
@@ -90,11 +106,20 @@ max_tiles: 5
 alignment: left
 ```
 
-## Utilisation
+## Documentation
 
-Commencez dans **Configuration → Surveillance automatique**, adaptez les packs activés et leurs délais, puis ajoutez des règles personnalisées pour les situations propres à votre installation. Les profils de notification sont facultatifs ; vos automatisations basées sur les événements restent utilisables.
+Commencez dans **Configuration → Surveillance automatique**, vérifiez les packs activés et leurs délais, puis ajoutez des règles propres à votre installation. Les profils de notification sont facultatifs.
 
-Le **[guide utilisateur](docs/user-guide.fr.md)** détaille les exemples de règles, transitions, options de la carte et comportement au démarrage, notifications, acquittement temporaire, statistiques historiques, analyses de cohérence, YAML et récupération. Un **[guide en anglais](docs/user-guide.md)** est également disponible.
+La documentation détaillée est maintenue **uniquement en anglais** :
+
+| Guide | Contenu |
+| --- | --- |
+| [Règles personnalisées](docs/custom-rules.md) | Opérations, attributs, Jinja, variations, transitions, testeur et exemples YAML. |
+| [Configuration](docs/configuration.md) | Packs, délais, exclusions, profils de notification, YAML, sauvegardes et diagnostics. |
+| [Cohérence de la configuration](docs/coherence.md) | Références, vérifications ZHA, exclusions, planification et alertes de cohérence. |
+| [Dashboard et historique](docs/dashboard-and-history.md) | Accueil, carte, acquittement, démarrage, historique et statistiques de récurrence. |
+
+L’[index de documentation](docs/user-guide.md) donne accès aux quatre guides. La documentation suit la branche consultée ; utilisez la branche de release ou le tag correspondant à votre version installée.
 
 Questions, bugs et idées de surveillance sont les bienvenus dans les **[issues GitHub](https://github.com/zoic21/ha_alert_manager/issues)**.
 
