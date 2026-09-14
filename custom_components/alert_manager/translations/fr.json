@@ -411,16 +411,7 @@
       "yaml_title": "YAML du profil de notification",
       "duplicate": "Dupliquer",
       "copy": "copie",
-      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test.",
-      "info_started_title": "Nouvelle information",
-      "info_started_title_plural": "{count} nouvelles informations",
-      "info_reminder_title": "Rappel d’information",
-      "info_reminder_title_plural": "Rappel : {count} informations",
-      "info_resolved_title": "Information résolue",
-      "info_resolved_title_plural": "{count} informations résolues",
-      "info_grouped_alerts": "{count} informations",
-      "info_grouped_resolved": "{count} informations résolues",
-      "info_on_resolved": "Information résolue"
+      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test."
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",
@@ -652,10 +643,7 @@
       "automatic_resolution": "Expiration automatique",
       "source_value": "Valeur",
       "source_value_variation": "Variation",
-      "source_value_transition": "Transition",
-      "level": "Niveau",
-      "level_alert": "Alerte",
-      "level_info": "Information"
+      "source_value_transition": "Transition"
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",
@@ -712,9 +700,7 @@
       "import_read_error": "Impossible de lire le fichier sélectionné.",
       "yaml_help": "Seuls les réglages de ce volet sont modifiés. Les durées sont en secondes. Utilisez Enregistrer pour appliquer les changements.",
       "yaml_invalid": "Configuration invalide : {error}",
-      "yaml_rows_invalid": "Complétez chaque ligne et supprimez les doublons avant de passer en YAML.",
-      "information_labels": "Labels de niveau Information",
-      "information_labels_help": "Les alertes sont des Informations si leur règle ou pack porte au moins un des labels sélectionnés. Sinon, elles restent des Alertes."
+      "yaml_rows_invalid": "Complétez chaque ligne et supprimez les doublons avant de passer en YAML."
     },
     "success": {
       "alert_acknowledged": "Alerte acquittée",
@@ -816,10 +802,7 @@
       "status": {
         "acknowledged": "Alerte acquittée",
         "active": "Alerte active",
-        "pending": "Alerte à venir",
-        "info_active": "Information active",
-        "info_pending": "Information à venir",
-        "info_acknowledged": "Information acquittée"
+        "pending": "Alerte à venir"
       },
       "toolbar": "Outils du tableau des alertes",
       "visible_count": "{visible} sur {total}"
@@ -893,9 +876,7 @@
       "more_count": "Voir plus d’alertes : {count} supplémentaires",
       "coherence": "Cohérence",
       "coherence_one": "1 problème détecté",
-      "coherence_count": "{count} problèmes détectés",
-      "information": "Information",
-      "information_count": "{count} informations"
+      "coherence_count": "{count} problèmes détectés"
     }
   },
   "services": {

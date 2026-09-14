@@ -134,7 +134,6 @@ class AlertManager(
         self._last_public_snapshot: dict[str, Any] | None = None
         self._pack_availability: dict[str, bool] = {}
         self._excluded_labels: frozenset[str] = frozenset()
-        self._information_labels: frozenset[str] = frozenset()
         self._rule_templates: dict[str, Template] = {}
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
         self._rule_message_templates: dict[str, Template] = {}
@@ -247,7 +246,6 @@ class AlertManager(
         if self._remove_own_records():
             migrated = True
         self._rebuild_rule_index()
-        self._refresh_information_levels()
         if self._enrich_rule_metadata():
             migrated = True
         # From this point, config and records form a validated snapshot that can

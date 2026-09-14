@@ -23,7 +23,6 @@ DEFAULT_CONFIG: Final = {
     "pack_config_version": 2,
     "pending_display_delay": DEFAULT_PENDING_DISPLAY_DELAY,
     "excluded_labels": [],
-    "information_labels": [],
     "automatic": {pack.id: pack.default_config() for pack in PACKS},
     "rules": [],
     "notification_profiles": [],

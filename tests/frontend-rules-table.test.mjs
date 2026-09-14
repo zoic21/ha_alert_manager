@@ -309,15 +309,13 @@ test("opening custom rules does not request rule discovery or maintenance", asyn
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
 
-test("information rules display their title without a status icon on desktop and mobile", () => {
+test("rules display their title without a status icon on desktop and mobile", () => {
   const panel = new Panel();
   for (const narrow of [false, true]) {
-    for (const level of ["alert", "info"]) {
-      const cell = panel._nativeRuleNameCell({ name: "Updates", level }, narrow);
-      assert.equal(cell.children[0].textContent, "Updates");
-      assert.equal(cell.children[0].tagName, "SPAN");
-      assert.equal(cell.children[0].children.length, 0);
-      assert.ok(cell.children.every((child) => child.tagName !== "HA-ICON"));
-    }
+    const cell = panel._nativeRuleNameCell({ name: "Updates" }, narrow);
+    assert.equal(cell.children[0].textContent, "Updates");
+    assert.equal(cell.children[0].tagName, "SPAN");
+    assert.equal(cell.children[0].children.length, 0);
+    assert.ok(cell.children.every((child) => child.tagName !== "HA-ICON"));
   }
 });

@@ -317,7 +317,6 @@ export function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
-        level: rule.level ?? "alert",
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),

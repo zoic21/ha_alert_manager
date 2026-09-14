@@ -2177,7 +2177,6 @@ class _RuntimeMixin:
             condition_params=condition_params,
             rule_id=rule_id,
             rule_name=rule_name,
-            level=self._level_for_labels(labels or []),
             labels=list(labels or []),
             message=message,
             source=source,

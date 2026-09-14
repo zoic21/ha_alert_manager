@@ -22,7 +22,7 @@ from .const import (
     TRANSITION_SOURCES,
     VARIATION_SOURCES,
 )
-from .models import AlertStatus, Rule, extract_attribute_value, information_level
+from .models import AlertStatus, Rule, extract_attribute_value
 from .runtime_phase import RuntimePhase
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,7 +124,6 @@ class _TemplatesMixin:
             ]
             if record := self.records.get(f"rule:{rule.id}:{entity_id}"):
                 record.details.labels = list(rule.label_ids)
-                record.details.level = self._level_for_labels(rule.label_ids)
 
     def _rebuild_rule_index(self) -> None:
         """Cache enabled rules and rebuild template dependency indexes."""
@@ -184,7 +183,6 @@ class _TemplatesMixin:
                 # Imports and paused/ephemeral records also retain current presentation.
                 if record := self.records.get(f"rule:{rule.id}:{entity_id}"):
                     record.details.labels = list(rule.label_ids)
-                    record.details.level = self._level_for_labels(rule.label_ids)
         self._refresh_custom_tracking()
         self._rebuild_template_dependency_index()
 
@@ -566,16 +564,6 @@ class _TemplatesMixin:
     def _refresh_config_caches(self) -> None:
         """Cache exclusion membership used for every state change."""
         self._excluded_labels = frozenset(self.config.get("excluded_labels", ()))
-        self._information_labels = frozenset(self.config.get("information_labels", ()))
-
-    def _level_for_labels(self, labels: list[str]) -> str:
-        """Classify presentation from Alert Manager labels, never from detection."""
-        return information_level(labels, self._information_labels)
-
-    def _refresh_information_levels(self) -> None:
-        """Refresh present records on configuration changes, without evaluation."""
-        for record in self.records.values():
-            record.details.level = self._level_for_labels(record.details.labels)
 
     def _enrich_rule_metadata(self) -> bool:
         """Add V1.5.5 rule identity fields to persisted runtime records."""
@@ -603,7 +591,6 @@ class _TemplatesMixin:
                 record.details.rule_name = rule.name
                 changed = True
             metadata = [
-                ("level", self._level_for_labels(rule.label_ids)),
                 ("source", rule.source),
                 (
                     "operator",

@@ -1338,10 +1338,9 @@ def test_delivery_waiting_for_archive_is_counted_once(hass, entry) -> None:
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("level", ["alert", "info"])
 @pytest.mark.parametrize("source", ["rule", "battery"])
 def test_source_labels_route_start_reminders_and_resolution(
-    hass, entry, set_now, source, level
+    hass, entry, set_now, source
 ):
     """Rule and pack labels route every notification lifecycle step."""
 
@@ -1363,7 +1362,6 @@ def test_source_labels_route_start_reminders_and_resolution(
             {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )
         record = _active_record(now)
-        record.details.level = level
         record.details.type = source
         record.details.rule_id = "freezer" if source == "rule" else None
         record.details.labels = ["cold"]
@@ -1400,7 +1398,6 @@ def test_source_labels_route_start_reminders_and_resolution(
         await runtime._async_flush_batch("profile", "resolved")
         assert runtime.usage_snapshot() == {"last_24h": {"profile": 3}}
         assert len(delivery.calls) == 3
-        assert all(call["level"] == level for call in delivery.calls)
         await runtime.async_unload()
 
     asyncio.run(scenario())

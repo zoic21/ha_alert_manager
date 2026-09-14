@@ -38,7 +38,6 @@ const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41
 
 const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 
-const MDI_INFORMATION_OUTLINE = "M11,9H13V7H11M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M11,17H13V11H11V17Z";
 
 const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
 
@@ -1552,9 +1551,7 @@ function tableRows(kind, historyEvents = []) {
         source,
         status,
         statusGroupLabel: finalLabel,
-        statusLabel: source.level === "info"
-          ? (history ? `${this._t("rules.level_info")} · ${finalLabel}` : this._t(`table.status.info_${status}`)) : finalLabel,
-        level: source.level === "info" ? "info" : "alert",
+        statusLabel: finalLabel,
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
         deviceId: source.device_id || "",
@@ -1953,8 +1950,8 @@ function nativeTableCell(kind, row, column) {
 
 function nativeStatusCell(row, kind) {
     if (!globalThis.document?.createElement) return row.statusLabel;
-    let path = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
-    let color = row.level === "info" ? "var(--info-color, var(--primary-color))" : "var(--error-color,#db4437)";
+    let path = MDI_ALERT_CIRCLE_OUTLINE;
+    let color = "var(--error-color,#db4437)";
     let background = `color-mix(in srgb,${color} 12%,transparent)`;
     if (row.status === "pending") {
       path = MDI_CLOCK_OUTLINE;
@@ -2072,7 +2069,6 @@ function alertDetailsItems(kind, row) {
       ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
-      { key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) },
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -2271,7 +2267,7 @@ function renderAlertDetails(context) {
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
     ${renderAlertDetailsNotice(notice)}
-    <section class="alert-details-summary alert-details-status-${esc(summary.status)}${summary.level === "info" ? " alert-details-info" : ""}">
+    <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
@@ -2318,7 +2314,7 @@ function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
 }
 
 function renderAlertDetailsPanel(kind, row) {
-    let iconPath = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
+    let iconPath = MDI_ALERT_CIRCLE_OUTLINE;
     if (row.status === "pending") iconPath = MDI_CLOCK_OUTLINE;
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
@@ -2352,7 +2348,6 @@ function renderAlertDetailsPanel(kind, row) {
           ? this._t(`overview.${menuAction}`)
           : "",
         status: row.status,
-        level: row.level,
         statusLabel: row.statusLabel,
       },
     });
@@ -4105,7 +4100,6 @@ function normalizeRuleDraft(rule = {}) {
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
       label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
-    delete normalized.level;
     if (VARIATION_RULE_SOURCES.has(normalized.source)
       && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
       normalized.operator = "above";
@@ -6219,7 +6213,6 @@ function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
-        level: rule.level ?? "alert",
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
@@ -6861,7 +6854,6 @@ function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
-        <div class="field settings-wide"><span class="field-label">${esc(t("settings.information_labels"))}</span><ha-selector id="information-labels"></ha-selector><small>${esc(t("settings.information_labels_help"))}</small></div>
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
       </div></ha-card>
       ${automaticMarkup}
@@ -7183,7 +7175,6 @@ async function saveSettings(additionalChanges = {}, { preserveDrawer = false } =
         ...this._settingsDraft.coherence_ignored_entity_references,
       ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
-      information_labels: [...(this._settingsDraft.information_labels ?? [])],
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
@@ -7262,7 +7253,6 @@ function ensureSettingsDraft() {
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
       excluded_labels: [...(this._config.excluded_labels ?? [])],
-      information_labels: [...(this._config.information_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
       notification_profiles: (this._config.notification_profiles ?? []).map(
@@ -7349,16 +7339,6 @@ function hydrateSettingsControls() {
     });
     this._configuredControls.add(chip);
   });
-  this._configureSelector(
-    "information-labels",
-    { label: { multiple: true } },
-    this._settingsDraft.information_labels,
-    (value) => {
-      this._settingsDraft.information_labels = this._multipleSelectorValue(
-        value, this._settingsDraft.information_labels,
-      );
-    },
-  );
   this._configureSelector(
     "excluded-labels",
     { label: { multiple: true } },
@@ -7776,10 +7756,6 @@ const tableStyles = `
     border-radius: var(--ha-border-radius-lg, 12px);
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
-  }
-  .alert-details-status-active.alert-details-info {
-    background: color-mix(in srgb, var(--info-color, var(--primary-color)) 10%, var(--card-background-color));
-    color: var(--info-color, var(--primary-color));
   }
   .alert-details-status-pending {
     background: color-mix(in srgb, var(--warning-color, #f5a623) 12%, var(--card-background-color, #fff));

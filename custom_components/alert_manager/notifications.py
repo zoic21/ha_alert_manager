@@ -116,7 +116,6 @@ class NotificationManager:
         message: str,
         click_url: str | None = None,
         kind: str | None = None,
-        level: str = "alert",
     ) -> dict[str, Any]:
         """Send plain title text; select native icons or emoji per target and kind."""
         delivered, failed = await self._async_send_targets(
@@ -125,7 +124,6 @@ class NotificationManager:
             message=message,
             click_url=click_url,
             kind=kind,
-            level=level,
         )
         return {
             "success": bool(delivered),
@@ -141,7 +139,6 @@ class NotificationManager:
         message: str,
         click_url: str | None,
         kind: str | None,
-        level: str,
     ) -> tuple[list[str], list[dict[str, str]]]:
         """Deliver one batch concurrently and isolate known HA service failures."""
         results = await asyncio.gather(
@@ -152,7 +149,6 @@ class NotificationManager:
                     message=message,
                     click_url=click_url,
                     kind=kind,
-                    level=level,
                 )
                 for target in targets
             )
@@ -174,15 +170,10 @@ class NotificationManager:
         message: str,
         click_url: str | None,
         kind: str | None,
-        level: str,
     ) -> str | None:
         """Call one native notify entity and return a bounded known error."""
         try:
             icon, emoji = _NOTIFICATION_ICONS.get(kind or "", (None, ""))
-            if level == "info" and kind in ("started", "reminder", "resolved"):
-                if kind == "started":
-                    icon = "mdi:information-outline"
-                emoji = "\u2139\ufe0f"
             mobile_service = (
                 self._mobile_notify_service(target) if click_url or icon else None
             )

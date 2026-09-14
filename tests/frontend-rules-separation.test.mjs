@@ -379,14 +379,3 @@ test("optional attributes serialize consistently for every unified operation", (
     }
   }
 });
-
-test("computed information is displayed but excluded from rule drafts and YAML", () => {
-  const draft = normalizeRuleDraft(rule({ level: "info" }));
-  assert.equal(draft.level, undefined);
-  assert.equal(serializeRuleDraft(draft).level, undefined);
-  assert.doesNotMatch(ruleToYaml(draft), /level:/);
-  const form = { querySelector: (selector) => selector === '[data-field="level"]' ? { value: "alert" } : null };
-  assert.equal(captureRuleDraftFromForm(form, draft).level, undefined);
-  const [row] = buildRuleTableRows([{ ...draft, level: "info" }], { t, summarizeRule: () => "", formatDuration: () => "" });
-  assert.equal(row.level, "info");
-});

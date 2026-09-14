@@ -159,10 +159,6 @@ export const tableStyles = `
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
   }
-  .alert-details-status-active.alert-details-info {
-    background: color-mix(in srgb, var(--info-color, var(--primary-color)) 10%, var(--card-background-color));
-    color: var(--info-color, var(--primary-color));
-  }
   .alert-details-status-pending {
     background: color-mix(in srgb, var(--warning-color, #f5a623) 12%, var(--card-background-color, #fff));
     color: var(--warning-color, #9a6b00);

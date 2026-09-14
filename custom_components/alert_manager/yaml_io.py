@@ -58,7 +58,6 @@ _CONFIG_YAML_KEY_ORDER = (
     "coherence_ignored_entity_references",
     "pending_display_delay",
     "excluded_labels",
-    "information_labels",
     "automatic",
     "notification_profiles",
     "notification_batch_delay",
@@ -305,7 +304,6 @@ def parse_config_yaml(
             "pending_display_delay",
             "notification_profiles",
             "notification_batch_delay",
-            "information_labels",
         }
         - set(config)
     )

@@ -60,7 +60,6 @@ class _NotificationItem:
     condition: str | None
     detected_at: str | None = None
     labels: tuple[str, ...] = ()
-    level: str = "alert"
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
@@ -83,7 +82,6 @@ class _NotificationItem:
             message=_optional_text(data.get("message")),
             condition=_optional_text(data.get("condition")),
             labels=tuple(data.get("labels", ())),
-            level="info" if data.get("level") == "info" else "alert",
         )
 
 
@@ -589,11 +587,6 @@ class NotificationRuntime:
         except ValueError:
             return
         items = list(batch.items.values())
-        if kind != "resolved":
-            records = self._records_getter()
-            for item in items:
-                if record := records.get(item.alert_id):
-                    item.level = record.details.level
         title, message = self._render_batch(kind, items)
         url = self._batch_url(kind, items)
         if self._unloading:
@@ -604,7 +597,6 @@ class NotificationRuntime:
             message=message,
             click_url=url,
             kind=kind,
-            level="info" if all(item.level == "info" for item in items) else "alert",
         )
         await self._async_record_delivery(profile, kind, items, result)
 
@@ -623,9 +615,6 @@ class NotificationRuntime:
                 message=message,
                 click_url=url,
                 kind="reminder",
-                level="info"
-                if all(item.level == "info" for item in items)
-                else "alert",
             )
             await self._async_record_delivery(profile, "reminder", items, result)
 
@@ -839,19 +828,6 @@ class NotificationRuntime:
             "resolved": "Back to normal" if count == 1 else "{count} alerts resolved",
             "reminder": "Alert reminder" if count == 1 else "Reminder: {count} alerts",
         }[kind]
-        if all(item.level == "info" for item in items):
-            title_key = f"info_{title_key}"
-            fallback = {
-                "started": "New information"
-                if count == 1
-                else "{count} new information items",
-                "resolved": "Information resolved"
-                if count == 1
-                else "{count} information items resolved",
-                "reminder": "Information reminder"
-                if count == 1
-                else "Reminder: {count} information items",
-            }[kind]
         title = self._delivery.text(title_key, fallback).replace("{count}", str(count))
         grouped: dict[str, list[_NotificationItem]] = {}
         for item in items:
@@ -865,18 +841,15 @@ class NotificationRuntime:
         for grouped_items in grouped.values():
             first = grouped_items[0]
             name = first.device_name or first.name
-            informational = all(item.level == "info" for item in grouped_items)
             if len(grouped_items) > 1:
                 summary = self._delivery.text(
-                    ("info_" if informational else "")
-                    + ("grouped_resolved" if kind == "resolved" else "grouped_alerts"),
-                    ("{count} information items" if informational else "{count} alerts")
-                    + (" resolved" if kind == "resolved" else ""),
+                    "grouped_resolved" if kind == "resolved" else "grouped_alerts",
+                    "{count} alerts" + (" resolved" if kind == "resolved" else ""),
                 ).replace("{count}", str(len(grouped_items)))
             elif kind == "resolved":
                 summary = self._delivery.text(
-                    "info_on_resolved" if informational else "on_resolved",
-                    "Information resolved" if informational else "Return to normal",
+                    "on_resolved",
+                    "Return to normal",
                 )
             else:
                 summary = first.message or first.condition or first.alert_type

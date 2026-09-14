@@ -19,7 +19,6 @@ export function normalizeRuleDraft(rule = {}) {
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
       label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
-    delete normalized.level;
     if (VARIATION_RULE_SOURCES.has(normalized.source)
       && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
       normalized.operator = "above";

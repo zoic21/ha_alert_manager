@@ -2461,7 +2461,6 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
-  assert.match(settings, /<ha-selector id="information-labels"/);
   assert.match(settings, /<div class="field settings-wide"><span class="field-label">Exclusions de la surveillance automatique<\/span><ha-selector id="excluded-labels"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.equal((settings.match(/data-action="save-configuration"/g) ?? []).length, 1);
@@ -3233,7 +3232,6 @@ test("settings action serializes exclusions and entity delays", async () => {
       coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
-      information_labels: [],
       excluded_labels: ["sans_alerte"],
 
     },
@@ -3298,7 +3296,6 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   const selectors = Object.fromEntries(
     [
       "#excluded-labels",
-      "#information-labels",
       "#excluded-entities",
       "#excluded-devices",
     ].map((id) => [
@@ -3312,7 +3309,6 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
-  assert.deepEqual(selectors["#information-labels"].selector, { label: { multiple: true } });
   assert.equal(selectors["#coherence-schedule"].value, "none");
   assert.deepEqual(
     selectors["#coherence-schedule"].options.map((option) => option.value),
@@ -4496,7 +4492,6 @@ test("combined settings save sends one configuration update and preserves drafts
       coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
-      information_labels: [],
       excluded_labels: ["sans_alerte"],
 
     },
@@ -5576,38 +5571,23 @@ test("pack exception headers retain the card background and use native centered 
   assert.doesNotMatch(styles, /\.automatic-exception>\.configuration-remove\{/);
 });
 
-test("information retains distinct active, pending, acknowledged and historical presentation", () => {
+test("alert states retain their native presentation in the table and details", () => {
   const panel = tablePanel();
   for (const [status, changes, expected] of [
-    ["active", {}, "Information active"],
-    ["pending", { active_since: null }, "Information à venir"],
-    ["acknowledged", { acknowledged: true }, "Information acquittée"],
+    ["active", {}, "Alerte active"],
+    ["pending", { active_since: null }, "Alerte à venir"],
+    ["acknowledged", { acknowledged: true }, "Alerte acquittée"],
   ]) {
     panel._alerts.alerts = [];
     panel._alerts.pending = [];
     panel._alerts.acknowledge = [];
-    panel._alerts[status === "active" ? "alerts" : status === "pending" ? "pending" : "acknowledge"] = [currentAlert({ ...changes, level: "info" })];
+    panel._alerts[status === "active" ? "alerts" : status === "pending" ? "pending" : "acknowledge"] = [currentAlert(changes)];
     const row = panel._tableRows("overview")[0];
     assert.equal(row.status, status);
     assert.equal(row.statusLabel, expected);
-    const html = panel._renderAlertDetails("overview", row);
-    assert.match(html, new RegExp(`alert-details-status-${status} alert-details-info`));
-    assert.match(html, /data-detail-key="level"/);
+    assert.match(panel._renderAlertDetails("overview", row), new RegExp(`alert-details-status-${status}`));
     const cell = panel._nativeStatusCell(row, "overview");
     assert.equal(cell.attributes["aria-label"], expected);
-    assert.equal(cell.style.cssText.includes("--info-color"), status === "active");
+    assert.equal(cell.style.cssText.includes("--error-color"), status === "active");
   }
-  const event = { ...currentAlert({ level: "info" }), event_id: "history-info", resolved_at: "2026-08-26T12:15:30Z" };
-  const row = panel._tableRows("history", [event])[0];
-  assert.equal(row.level, "info");
-  assert.match(panel._renderAlertDetails("history", row), /alert-details-status-resolved alert-details-info/);
-  assert.doesNotMatch(panel._nativeStatusCell(row, "history").style.cssText, /--info-color/);
-});
-
-test("visual information labels do not split existing status groups", () => {
-  const panel = tablePanel();
-  panel._alerts = { alerts: [currentAlert({ level: "info" }), currentAlert({ id: "other", level: "alert" })] };
-  const rows = panel._nativeTableData("overview", panel._tableRows("overview"));
-  assert.equal(rows[0].status_group, rows[1].status_group);
-  assert.notEqual(rows[0].statusLabel, rows[1].statusLabel);
 });

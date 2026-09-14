@@ -39,7 +39,7 @@ async def websocket_config_get(
 ) -> None:
     """Return complete configuration to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(msg["id"], manager.get_config(include_presentation=True))
+        connection.send_result(msg["id"], manager.get_config())
 
 
 @websocket_api.require_admin
@@ -61,7 +61,7 @@ async def websocket_config_update(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    connection.send_result(msg["id"], manager.get_config(include_presentation=True))
+    connection.send_result(msg["id"], manager.get_config())
 
 
 @websocket_api.async_response
@@ -270,9 +270,7 @@ async def websocket_rules_list(
 ) -> None:
     """Return custom rules to an administrator."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(
-            msg["id"], manager.get_config(include_presentation=True)["rules"]
-        )
+        connection.send_result(msg["id"], manager.get_config()["rules"])
 
 
 @websocket_api.require_admin
@@ -358,7 +356,7 @@ async def websocket_rule_create(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    connection.send_result(msg["id"], manager.rule_snapshot(rule))
+    connection.send_result(msg["id"], rule)
 
 
 @websocket_api.require_admin
@@ -381,7 +379,7 @@ async def websocket_rule_update(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    connection.send_result(msg["id"], manager.rule_snapshot(rule))
+    connection.send_result(msg["id"], rule)
 
 
 @websocket_api.require_admin
@@ -479,7 +477,7 @@ async def websocket_rule_yaml_create(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    connection.send_result(msg["id"], manager.rule_snapshot(rule))
+    connection.send_result(msg["id"], rule)
 
 
 @websocket_api.require_admin
@@ -502,7 +500,7 @@ async def websocket_rule_yaml_update(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    connection.send_result(msg["id"], manager.rule_snapshot(rule))
+    connection.send_result(msg["id"], rule)
 
 
 @websocket_api.require_admin
@@ -577,7 +575,7 @@ async def websocket_config_backup_restore(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    result["config"] = manager.get_config(include_presentation=True)
+    result["config"] = manager.get_config()
     connection.send_result(msg["id"], result)
 
 
@@ -623,7 +621,7 @@ async def websocket_config_import(
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
-    result["config"] = manager.get_config(include_presentation=True)
+    result["config"] = manager.get_config()
     connection.send_result(msg["id"], result)
 
 

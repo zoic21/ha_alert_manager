@@ -4,32 +4,6 @@
 
 Custom rules monitor situations specific to your installation: a fridge drawing too much power, heating that does not warm a room, a stale sensor, an error message or a completed appliance cycle. Create them from **Custom rules** using the visual editor or YAML.
 
-## Alert or Information
-
-All alerts use the **Alert** presentation by default. In **Configuration → General**,
-select one or more **Information labels**, then assign at least one of those Home
-Assistant labels to a custom rule or automatic pack. Its alerts use the Information
-icon and theme blue accent. There is no per-rule or per-pack level field.
-
-Information follows the same pending, active, acknowledged and resolved lifecycle
-and contributes to the same counters and statistics. Changing only the labels or
-the global Information-label selection preserves current occurrences, timers and
-acknowledgements without evaluating conditions or generating lifecycle notifications.
-Resolved history keeps the presentation captured at resolution.
-
-Notification policies continue to use the existing label exceptions. For example,
-an exception for your Information label can enable starts, disable resolutions and
-set reminders to never. No label is created automatically. Entity/device labels
-remain available for notification routing; presentation uses the labels explicitly
-assigned to the rule or pack.
-
-Mixed notification batches retain their alert presentation and remain a single
-batch. Information-only notifications use informative titles and the existing
-native icon path where supported, or an information symbol in the title otherwise.
-Reminder and resolution titles retain their meaning. Dashboard groups use the
-Information appearance only when all their active members are informative;
-explicit card icon color settings still take precedence.
-
 ## Create and test a rule
 
 Choose a name, select the entities, choose an operation and configure its comparison or condition. Set a trigger delay when brief anomalies should be ignored. An optional Jinja message explains the problem when the alert activates.

@@ -40,7 +40,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .history_statistics import aggregate_history
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule, information_level
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
 from .storage import StorageDurabilitySnapshot, sort_history
@@ -158,23 +158,14 @@ def _inactivity_reference_signature(
 class _ApiMixin:
     """Expose the manager contract consumed by WebSocket, services and sensors."""
 
-    def get_config(self, *, include_presentation: bool = False) -> dict[str, Any]:
-        """Copy configuration, optionally adding read-only rule presentation."""
+    def get_config(self) -> dict[str, Any]:
+        """Return an independent configuration snapshot."""
         source = (
             self._startup_reconciliation_snapshot.config
             if self._startup_reconciliation_snapshot is not None
             else self.config
         )
-        config = deepcopy(source)
-        if include_presentation:
-            labels = frozenset(config["information_labels"])
-            for rule in config["rules"]:
-                rule["level"] = information_level(rule["label_ids"], labels)
-        return config
-
-    def rule_snapshot(self, rule: dict[str, Any]) -> dict[str, Any]:
-        """Add computed presentation to a saved rule's API response."""
-        return {**rule, "level": self._level_for_labels(rule["label_ids"])}
+        return deepcopy(source)
 
     def public_snapshot(self) -> dict[str, Any]:
         """Return active and pending lists without resolved history."""
@@ -902,7 +893,6 @@ class _ApiMixin:
                 "notification_profiles",
                 "notification_batch_delay",
                 "history_limit",
-                "information_labels",
             }
         )
         coherence_schedule_changed = (
@@ -950,8 +940,6 @@ class _ApiMixin:
                             record.details.labels = list(
                                 candidate["automatic"][record.details.type]["label_ids"]
                             )
-                if labels_changed or "information_labels" in changed_keys:
-                    self._refresh_information_levels()
                 if "pending_display_delay" in changed_keys:
                     self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self._async_save_state()
@@ -993,14 +981,14 @@ class _ApiMixin:
             and all(
                 candidate[key] == self.config[key]
                 for key in candidate
-                if key not in {"rules", "information_labels"}
+                if key != "rules"
             )
             and (
                 imported_rules := [Rule.from_dict(rule) for rule in candidate["rules"]]
             )
             == self._rules
         ):
-            # A classification-only import is one metadata transaction; do not
+            # A label-only import is one metadata transaction; do not
             # reconcile conditions, template dependencies or lifecycle timers.
             replacements = [
                 (index, old_rule, rule)
@@ -1015,7 +1003,6 @@ class _ApiMixin:
                 self._refresh_config_caches()
                 for index, _old_rule, rule in replacements:
                     self._replace_rule_presentation(index, rule)
-                self._refresh_information_levels()
                 await self._async_save_state()
             except BaseException:
                 self._restore_configuration_snapshot(previous)
@@ -1037,7 +1024,6 @@ class _ApiMixin:
                 self._refresh_config_caches()
                 self.storage.pack_runtime = self._pack_runtime
                 self._rebuild_rule_index()
-                self._refresh_information_levels()
                 self._reconcile_flapping_settings()
                 self._refresh_pack_entry_listeners()
                 self._pack_availability = self._current_pack_availability()
@@ -1212,7 +1198,6 @@ class _ApiMixin:
             for entity_id in rule.entity_ids:
                 if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
                     record.details.labels = list(rule.label_ids)
-                    record.details.level = self._level_for_labels(rule.label_ids)
         if old_rule.message != rule.message:
             for entity_id in rule.entity_ids:
                 self._refresh_active_rule_message(rule, entity_id)

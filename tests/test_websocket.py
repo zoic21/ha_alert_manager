@@ -226,7 +226,7 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     assert connection.errors == []
     created = connection.results[-1][1]
     assert created["name"] == "Liste vide"
-    assert manager.get_config(include_presentation=True)["rules"] == [created]
+    assert manager.get_config()["rules"] == [created]
     assert "level" not in manager.config["rules"][0]
 
     asyncio.run(
@@ -761,8 +761,8 @@ def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
     )
 
 
-def test_classification_payload_is_computed_after_update_and_import(hass, entry):
-    """Panel responses expose levels while saved configuration and YAML omit them."""
+def test_label_configuration_payload_after_update_and_import(hass, entry):
+    """Panel responses preserve labels through configuration updates and imports."""
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
@@ -770,7 +770,7 @@ def test_classification_payload_is_computed_after_update_and_import(hass, entry)
     created = asyncio.run(
         manager.async_create_rule(
             {
-                "name": "Information",
+                "name": "Maintenance",
                 "entity_ids": ["sensor.test"],
                 "operator": "equals",
                 "value": "on",
@@ -785,13 +785,13 @@ def test_classification_payload_is_computed_after_update_and_import(hass, entry)
             connection,
             {
                 "id": 1,
-                "config": {"information_labels": ["maintenance"]},
+                "config": {"excluded_labels": ["maintenance"]},
             },
         )
     )
-    assert connection.results[-1][1]["rules"][0]["level"] == "info"
+    assert connection.results[-1][1]["excluded_labels"] == ["maintenance"]
     config = manager.get_config()
-    config["information_labels"] = ["other"]
+    config["excluded_labels"] = ["other"]
     asyncio.run(
         websocket_config_import(
             hass,
@@ -804,7 +804,7 @@ def test_classification_payload_is_computed_after_update_and_import(hass, entry)
         )
     )
     assert connection.errors == []
-    assert connection.results[-1][1]["config"]["rules"][0]["level"] == "alert"
+    assert connection.results[-1][1]["config"]["excluded_labels"] == ["other"]
     assert manager.config["rules"][0]["id"] == created["id"]
     assert "level" not in manager.config["rules"][0]
     assert "level:" not in asyncio.run(manager.async_export_config_yaml())
