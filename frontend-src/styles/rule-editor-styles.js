@@ -296,10 +296,9 @@ export const ruleEditorStyles = `
     justify-content: flex-start;
   }
 
-    .managed-rule-name { display: flex; align-items: center; min-width: 0; }
-    .managed-rule-name ha-icon-button { --mdc-icon-button-size: 32px; flex: 0 0 32px; }
     .managed-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
-    .managed-entity { display: flex; align-items: center; gap: 4px; }
+    .managed-entity { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-block: 4px; }
+    .managed-entity ha-checkbox { flex: 0 0 auto; }
     .managed-entity span, .managed-review dd, .rule-editor-section dd { overflow-wrap: anywhere; min-width: 0; }
     .managed-review dd, .rule-editor-section dd { margin-inline-start: 12px; }
 `;

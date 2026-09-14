@@ -123,10 +123,24 @@ test("table update icon precedes the name and opens review without mutation", ()
     const name = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: true });
     const [icon, title] = name.children[0].children;
     assert.equal(icon.tag, "ha-icon-button");
+    assert.equal(icon.children[0].attrs.icon, "mdi:sync");
+    assert.match(icon.children[0].style.cssText, /--mdc-icon-size:20px/);
     assert.equal(icon.attrs["aria-label"], "managed.available");
     assert.equal(title.textContent, "CPU");
     icon.click({ stopPropagation() {} });
     assert.equal(opened, "r");
+    for (const narrow of [false, true]) {
+      const info = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: true, level: "info" }, narrow);
+      const [update, information, label] = info.children[0].children;
+      assert.equal(information.attrs.icon, "mdi:information-outline");
+      assert.ok(information.style.cssText.startsWith(update.children[0].style.cssText));
+      assert.equal(information.title, "rules.level_info");
+      assert.equal(label.textContent, "CPU");
+      assert.match(label.style.cssText, /min-width:0/);
+      const infoOnly = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", level: "info" }, narrow);
+      assert.equal(infoOnly.children[0].children.length, 2);
+      assert.equal(infoOnly.children[0].children[0].attrs.icon, "mdi:information-outline");
+    }
     const unmanaged = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: false });
     assert.equal(unmanaged.children[0].textContent, "CPU");
   } finally { globalThis.document = previous; }

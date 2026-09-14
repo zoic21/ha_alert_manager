@@ -370,30 +370,38 @@ export function nativeRuleNameCell(row, narrow = false) {
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
     const primary = document.createElement("span");
     primary.textContent = row.name;
-    if (row.level === "info") {
-      const icon = document.createElement("ha-icon");
-      icon.setAttribute("icon", "mdi:information-outline");
-      icon.setAttribute("aria-label", this._t("rules.level_info"));
-      icon.title = this._t("rules.level_info");
-      icon.style.cssText = "--mdc-icon-size:18px;margin-inline-end:4px;color:var(--info-color, var(--primary-color))";
-      primary.prepend(icon);
-    }
-    primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
+    primary.style.cssText = "min-width:0;overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     const proposal = this._managedBlueprints?.[row.id];
-    if (row.managed && proposal?.update_available) {
+    const hasUpdate = row.managed && proposal?.update_available;
+    if (hasUpdate || row.level === "info") {
       const line = document.createElement("span");
-      line.className = "managed-rule-name";
-      const icon = document.createElement("ha-icon-button");
-      icon.setAttribute("aria-label", this._t("managed.available"));
-      icon.title = this._t("managed.available");
-      const glyph = document.createElement("ha-icon");
-      glyph.setAttribute("icon", "mdi:update");
-      icon.append(glyph);
-      icon.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this._openRuleEditor(row.id);
-      });
-      line.append(icon, primary);
+      // Native table cells live in HA's shadow root, outside the panel stylesheet.
+      line.style.cssText = "display:flex;align-items:center;gap:4px;min-width:0";
+      const iconStyle = "--mdc-icon-size:20px;width:20px;height:20px;flex:0 0 20px;color:var(--info-color,var(--primary-color))";
+      if (hasUpdate) {
+        const icon = document.createElement("ha-icon-button");
+        icon.setAttribute("aria-label", this._t("managed.available"));
+        icon.title = this._t("managed.available");
+        icon.style.cssText = "--mdc-icon-button-size:32px;--mdc-icon-size:20px;width:32px;height:32px;flex:0 0 32px;color:var(--info-color,var(--primary-color))";
+        const glyph = document.createElement("ha-icon");
+        glyph.setAttribute("icon", "mdi:sync");
+        glyph.style.cssText = iconStyle;
+        icon.append(glyph);
+        icon.addEventListener("click", (event) => {
+          event.stopPropagation();
+          this._openRuleEditor(row.id);
+        });
+        line.append(icon);
+      }
+      if (row.level === "info") {
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("icon", "mdi:information-outline");
+        icon.setAttribute("aria-label", this._t("rules.level_info"));
+        icon.title = this._t("rules.level_info");
+        icon.style.cssText = `${iconStyle};margin-inline:6px`;
+        line.append(icon);
+      }
+      line.append(primary);
       content.append(line);
     } else content.append(primary);
     if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
