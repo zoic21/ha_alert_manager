@@ -1787,28 +1787,14 @@ class _RuntimeMixin:
                 if pack.reset_entity_handler is not None:
                     pack.reset_entity_handler(self.hass, entity_id)
 
-        if state.state == STATE_UNAVAILABLE:
-            if automatic_eligible:
-                for pack in PACKS:
-                    if self._add_pack_candidate(result, state, pack.id):
-                        indeterminate_ids.add(f"{pack.id}:{entity_id}")
-            return result, indeterminate_ids
-
-        if state.state == STATE_UNKNOWN:
-            if automatic_eligible:
-                for pack in PACKS:
-                    if pack.evaluate_unknown and self._add_pack_candidate(
-                        result, state, pack.id
-                    ):
-                        indeterminate_ids.add(f"{pack.id}:{entity_id}")
-            return result, indeterminate_ids
-
         if automatic_eligible:
             for pack in PACKS:
-                if pack.id != CATEGORY_UNAVAILABLE and self._add_pack_candidate(
-                    result, state, pack.id
-                ):
+                if self._add_pack_candidate(result, state, pack.id):
                     indeterminate_ids.add(f"{pack.id}:{entity_id}")
+
+        # Packs own uncertain-state semantics; custom rules retain their existing gate.
+        if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return result, indeterminate_ids
 
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled or rule.source in TRANSITION_SOURCES:

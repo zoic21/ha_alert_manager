@@ -43,7 +43,6 @@ PACK = AutomaticPack(
     prerequisites=(),
     applies=_applies,
     evaluate=_evaluate,
-    evaluate_unknown=True,
     default_delay=0,
     order=5,
     target_filter={"domain": "update"},

@@ -170,8 +170,6 @@ class AutomaticPack:
     restore_handler: Callable[[HomeAssistant, Any], None] | None = None
     reset_entity_handler: Callable[[HomeAssistant, str], None] | None = None
     config_fields: tuple[PackConfigField, ...] = ()
-    # Opt in when an unknown observation must reach the pack's neutral handling.
-    evaluate_unknown: bool = False
     uses_delay: bool = True
     default_delay: int = DEFAULT_DELAY
     default_enabled: bool = True

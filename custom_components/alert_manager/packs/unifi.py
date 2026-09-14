@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE
+from homeassistant.const import STATE_HOME, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
@@ -27,7 +27,7 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
     # source_type can disappear while the integration is unavailable. Keep the
     # source tracked during that neutral state; it still cannot create an alert.
     return (
-        state.state == STATE_UNAVAILABLE
+        state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         or state.attributes.get("source_type") == "router"
     )
 
@@ -48,7 +48,7 @@ def _evaluate(
     """Return alert, neutral or healthy UniFi tracker status."""
     if not _applies(hass, state):
         return None
-    if state.state == STATE_UNAVAILABLE:
+    if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
         return PackNeutral()
     if state.state == STATE_HOME:
         return None

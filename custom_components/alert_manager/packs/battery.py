@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
+from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 
 from ..const import (
@@ -45,7 +45,7 @@ def _evaluate(
     hass: HomeAssistant, state: State, config: dict[str, Any]
 ) -> PackMatch | PackNeutral | None:
     """Match low batteries while preserving them through unavailability."""
-    if state.state == STATE_UNAVAILABLE:
+    if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
         return PackNeutral()
     if not _applies(hass, state):
         return None
