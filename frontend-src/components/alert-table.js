@@ -812,14 +812,6 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     if (row.entityId) name.title = row.entityId;
-    if (row.level === "info") {
-      const marker = document.createElement("ha-icon");
-      marker.setAttribute("icon", "mdi:information-outline");
-      marker.setAttribute("aria-label", this._t("rules.level_info"));
-      marker.title = this._t("rules.level_info");
-      marker.style.cssText = `--mdc-icon-size:16px;margin-inline-end:4px;color:${row.status === "active" ? "var(--info-color, var(--primary-color))" : "var(--secondary-text-color)"}`;
-      name.prepend(marker);
-    }
     content.append(name);
     if (!narrow && row.labels?.length) {
       content.append(nativeLabelBadges(row.labels, this._hass));

@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.17**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.18**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
 - Simplify managed blueprint generation and editing, add scoped YAML editing,
@@ -18,7 +18,8 @@ This is a prerelease for testing, not a stable release.
   uses a compact hourglass beside the last alert, and mobile overflow stays on the
   same row as the last tile. No matching alerts means no card during startup.
 - Custom rules can use an Information presentation with a blue accent and information
-  icon in the panel, history, dashboard and notifications. Alert remains the default;
+  icon in the panel, history, dashboard and notifications, without a duplicate icon
+  beside the entity name in alert tables. Alert remains the default;
   detection, acknowledgement, notification policies and batching are unchanged.
 - Added backup-age and available-update blueprints with English recipe documentation.
 - Deleting a custom rule resolves its ongoing alerts without sending recovery
