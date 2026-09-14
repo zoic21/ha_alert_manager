@@ -423,7 +423,7 @@ export function tableRows(kind, historyEvents = []) {
 
 export function filterCount(kind) {
     const filters = this._tableState[kind].filters;
-    const facets = ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
+    const facets = ["status", "device", "area", "rule", "integration", "labels", "exclude_labels", "domain", "entity", "alert", "profile"]
       .filter((key) => this._filterValues(filters[key]).length > 0).length;
     const detected = filters.detectedFrom || filters.detectedTo ? 1 : 0;
     const resolved = kind === "history" && (filters.resolvedFrom || filters.resolvedTo) ? 1 : 0;
@@ -449,7 +449,7 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
     const query = includeSearch ? state.search.trim().toLocaleLowerCase(this._language) : "";
     const filters = state.filters;
     const selected = Object.fromEntries(
-      ["status", "device", "area", "rule", "integration", "labels", "domain", "entity", "alert", "profile"]
+      ["status", "device", "area", "rule", "integration", "labels", "exclude_labels", "domain", "entity", "alert", "profile"]
         .map((key) => [key, new Set(this._filterValues(filters[key]))]),
     );
     const filtered = rows.filter((row) => {
@@ -467,6 +467,7 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
       if (selected.integration.size && !selected.integration.has(row.integration)
         && !(kind === "history" && selected.integration.has(historyFacetValue(row, "integration")))) return false;
       if (selected.labels.size && !row.labelIds.some((label) => selected.labels.has(label))) return false;
+      if (selected.exclude_labels.size && row.labelIds.some((label) => selected.exclude_labels.has(label))) return false;
       if (selected.domain.size && !selected.domain.has(row.domain)) return false;
       if (selected.entity.size && !selected.entity.has(row.entityId)
         && !(kind === "history" && selected.entity.has(historyFacetValue(row, "entity")))) return false;
@@ -654,6 +655,8 @@ export function renderFilterPane(kind, rows) {
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
       ${this._renderFacetFilter(kind, "labels", this._t("table.filters.labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()])}
+      ${kind === "overview" && this._filterValues(this._tableState[kind].filters.exclude_labels).length
+        ? this._renderFacetFilter(kind, "exclude_labels", this._t("dashboard.exclude_labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()]) : ""}
       ${this._renderFacetFilter(kind, "domain", this._t("table.filters.domain"), this._facetOptions(rows, "domain"))}
       ${this._renderFacetFilter(kind, "area", this._t("table.columns.area"), this._facetOptions(rows, "area"))}
       ${this._renderFacetFilter(kind, "entity", this._t("table.columns.entity"), kind === "history" ? historyFacetOptions(rows, "entity", (key) => this._t(key)) : this._facetOptions(rows, "entityId").map((entityId) => ({ value: entityId, label: rows.find((row) => row.entityId === entityId)?.entityName || entityId })))}
@@ -1226,7 +1229,9 @@ export function openAlertDeepLink() {
       this._resetTableFilters("overview");
       this._tableState.overview.search = "";
       this._tableState.overview.filters.device = deviceId ? [`id:${deviceId}`] : [];
-      this._tableState.overview.filters.labels = params.get("label") ? [params.get("label")] : [];
+      this._tableState.overview.filters.status = ["active"];
+      this._tableState.overview.filters.labels = params.getAll("label").filter(Boolean);
+      this._tableState.overview.filters.exclude_labels = params.getAll("exclude_label").filter(Boolean);
       this._activeTab = "overview";
       this._render();
     }

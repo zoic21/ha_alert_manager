@@ -12,6 +12,9 @@ This is a prerelease for testing, not a stable release.
 
 ### Major changes
 
+- Dashboard cards support separate mobile limits, deterministic sorting, multiple label
+  inclusions/exclusions, optional alert age and optional device grouping.
+
 - Reworked automatic monitoring around autonomous packs with explicit defaults,
   compact visual/YAML configuration and per-device/per-entity exceptions. Global label
   exclusions remain available, while previous direct exclusions are represented as disabled

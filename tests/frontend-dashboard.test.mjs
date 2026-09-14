@@ -185,7 +185,7 @@ test("card enforces group limit, escapes names, translates conditions and shows 
   ] } };
   card._render();
   assert.equal((card.shadowRoot.innerHTML.match(/class="tile"/g) ?? []).length, 1);
-  assert.match(card.shadowRoot.innerHTML, /Voir plus d’alertes/);
+  assert.match(card.shadowRoot.innerHTML, /Voir plus d’appareils/);
   assert.doesNotMatch(card.shadowRoot.innerHTML, /<img/);
   assert.match(card.shadowRoot.innerHTML, /&lt;img/);
   assert.match(card.shadowRoot.innerHTML, /2 alertes/);
@@ -207,7 +207,7 @@ test("editor validates YAML and emits native config-changed events", () => {
   let config;
   editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
   editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { max_tiles: 3, label: "home" } } }));
-  assert.deepEqual(config, { type: "custom:alert-manager-card", max_tiles: 3, label: "home" });
+  assert.deepEqual(config, { type: "custom:alert-manager-card", max_tiles: 3, labels: ["home"] });
 });
 
 test("device deep links replace stale filters, retain the label and allow another visit", () => {
@@ -217,7 +217,7 @@ test("device deep links replace stale filters, retain the label and allow anothe
   };
   window.location = { search: "?device=one&label=home" };
   openAlertDeepLink.call(panel);
-  assert.deepEqual(panel._tableState.overview.filters, { status: ["active"], device: ["id:one"], labels: ["home"] });
+  assert.deepEqual(panel._tableState.overview.filters, { status: ["active"], device: ["id:one"], labels: ["home"], exclude_labels: [] });
   assert.equal(panel._tableState.overview.search, "");
   window.location.search = "";
   openAlertDeepLink.call(panel);
@@ -237,7 +237,7 @@ test("appearance settings reject invalid YAML and preserve existing configuratio
   for (const icon_color of ["red; display:none", [], [0, 1], [0, 1, 256], [-1, 0, 0], [0.5, 0, 0], ["0", 0, 0]]) {
     assert.throws(() => validateDashboardConfig({ icon_color }, "en"), /color/);
   }
-  assert.deepEqual(validateDashboardConfig({ max_tiles: 3, label: "home" }), { max_tiles: 3, label: "home" });
+  assert.deepEqual(validateDashboardConfig({ max_tiles: 3, label: "home" }), { max_tiles: 3, labels: ["home"] });
   const card = new AlertManagerCard();
   card.preview = true;
   for (const alignment of ["left", "center", "right"]) {
@@ -258,7 +258,7 @@ test("editor translates appearance controls and allows clearing the custom color
   let config;
   editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
   editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { icon_color: undefined, alignment: "right" } } }));
-  assert.deepEqual(config, { max_tiles: 5, label: "home", alignment: "right" });
+  assert.deepEqual(config, { max_tiles: 5, labels: ["home"], alignment: "right" });
 });
 
 test("native palette colors resolve through the theme and previous RGB colors remain editable", () => {
@@ -279,7 +279,7 @@ test("native palette colors resolve through the theme and previous RGB colors re
   }
 });
 
-test("overflow stays inside the tile row and counts hidden alerts after filtering and grouping", () => {
+test("overflow stays inside the tile row and counts hidden tiles after filtering and grouping", () => {
   const card = new AlertManagerCard();
   card.hass = { locale: { language: "fr" } };
   card.setConfig({ max_tiles: 1, label: "a&b", alignment: "center" });
@@ -291,9 +291,9 @@ test("overflow stays inside the tile row and counts hidden alerts after filterin
   ] } };
   card._render();
   assert.match(card.shadowRoot.innerHTML, /<ha-card class="overflow">/);
-  assert.match(card.shadowRoot.innerHTML, /aria-label="Voir plus d’alertes : 2 supplémentaires"/);
+  assert.match(card.shadowRoot.innerHTML, /aria-label="Voir plus d’appareils : 1 supplémentaires"/);
   assert.match(card.shadowRoot.innerHTML, /dashboard=1&amp;label=a%26b/);
-  assert.match(card.shadowRoot.innerHTML, /\+2<\/span>/);
+  assert.match(card.shadowRoot.innerHTML, /\+1<\/span>/);
   assert.match(card.shadowRoot.innerHTML, /<\/a><\/ha-card><\/div><\/div><\/div>$/);
   card.setConfig({ max_tiles: 2, label: "a&b" });
   assert.doesNotMatch(card.shadowRoot.innerHTML, /class="overflow"/);
@@ -457,7 +457,7 @@ test("group link selects device IDs with matching facet and preserves label filt
   };
   openAlertDeepLink.call(panel);
   const rows = [
-    ...items.map((source) => ({ id: source.id, source, device: source.device_name, labelIds: ["home"] })),
+    ...items.map((source) => ({ id: source.id, source, status: "active", device: source.device_name, labelIds: ["home"] })),
     { id: "same-name", source: { device_id: "two" }, device: "Cloudflared", labelIds: ["home"] },
     { id: "other-label", source: { device_id: "one" }, device: "Cloudflared", labelIds: [] },
   ];
@@ -471,4 +471,174 @@ test("group link selects device IDs with matching facet and preserves label filt
   panel._tableState.overview.filters = { device: ["Cloudflared"] };
   assert.equal(filteredTableRows.call(panel, "overview", rows).length, 4);
   assert.match(renderFilterPane.call(panel, "overview", rows), /<ha-checkbox[^>]*data-filter-value="Cloudflared" checked/);
+});
+
+test("card options normalize legacy labels and reject malformed YAML", () => {
+  assert.deepEqual(validateDashboardConfig({ label: "home" }).labels, ["home"]);
+  assert.deepEqual(validateDashboardConfig({ label: "home", labels: [] }).labels, []);
+  assert.deepEqual(validateDashboardConfig({ labels: ["home", "home"] }).labels, ["home"]);
+  for (const max_tiles_mobile of [0, 101, 2.5, "2", false]) {
+    assert.throws(() => validateDashboardConfig({ max_tiles_mobile }));
+  }
+  for (const max_tiles_mobile of [undefined, null, ""]) {
+    assert.equal(validateDashboardConfig({ max_tiles_mobile }).max_tiles_mobile, undefined);
+  }
+  for (const config of [{ labels: "home" }, { labels: [2] }, { exclude_labels: [""] },
+    { exclude_labels: null }, { show_age: "true" }, { group_by_device: 0 }, { sort: "priority" }]) {
+    assert.throws(() => validateDashboardConfig(config));
+  }
+  const editor = new AlertManagerCardEditor();
+  editor.setConfig({ type: "custom:alert-manager-card", label: "home", max_tiles_mobile: 2 });
+  assert.deepEqual(editor._form.data.labels, ["home"]);
+  for (const name of ["labels", "exclude_labels"]) {
+    assert.deepEqual(editor._form.schema.find((field) => field.name === name).selector, { label: { multiple: true } });
+  }
+  let emitted;
+  editor.addEventListener("config-changed", (event) => { emitted = event.detail.config; });
+  const edited = { ...editor._form.data, labels: [], exclude_labels: ["maintenance"],
+    max_tiles_mobile: null, sort: "oldest", show_age: true, group_by_device: false };
+  editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: edited } }));
+  assert.equal(emitted.label, undefined);
+  assert.equal(emitted.max_tiles_mobile, undefined);
+  assert.deepEqual(emitted.labels, []);
+  editor.setConfig(JSON.parse(JSON.stringify(emitted)));
+  for (const key of ["labels", "exclude_labels", "sort", "show_age", "group_by_device"]) {
+    assert.deepEqual(editor._form.data[key], edited[key]);
+  }
+});
+
+test("multi-label inclusion is OR and exclusions precede grouping and age", () => {
+  const items = [
+    alert("a", { device_id: "d", labels: ["home"], active_since: "2026-09-02T00:00:00Z" }),
+    alert("b", { device_id: "d", labels: ["outside"], active_since: "2026-09-03T00:00:00Z" }),
+    alert("excluded-old", { device_id: "d", labels: ["home", "maintenance"], active_since: "2020-01-01T00:00:00Z" }),
+    alert("excluded-group", { device_id: "gone", labels: ["outside", "maintenance"] }),
+    alert("ack", { labels: ["home"], acknowledged: true }),
+    alert("pending", { labels: ["home"], active_since: null }),
+    alert("resolved", { labels: ["home"], resolved_at: "2026-09-03T00:00:00Z" }),
+    alert("entity-label"), alert("other"),
+  ];
+  const config = { labels: ["home", "outside"], exclude_labels: ["maintenance"] };
+  const hass = { entities: { "sensor.entity-label": { labels: ["outside"] } } };
+  const groups = dashboardGroups(items, config, hass);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups[0].alerts.map((item) => item.id), ["a", "b"]);
+  assert.equal(groups[0].oldest, Date.parse("2026-09-02T00:00:00Z"));
+  assert.deepEqual(dashboardGroups(items, { ...config, group_by_device: false }, hass)
+    .map((group) => group.alerts[0].id), ["b", "a", "entity-label"]);
+  assert.equal(dashboardGroups(items, { exclude_labels: ["home", "outside"] }, hass).length, 1);
+});
+
+test("all sort orders use retained activations or displayed names with stable ties", () => {
+  const items = [alert("a", { device_id: "d", device_name: "Zulu", active_since: "2026-09-01T00:00:00Z" }),
+    alert("b", { device_id: "d", device_name: "Zulu", active_since: "2026-09-05T00:00:00Z" }),
+    alert("c", { name: "Alpha", active_since: "2026-09-03T00:00:00Z" }),
+    alert("z", { name: "Alpha", active_since: "2026-09-03T00:00:00Z" }),
+    alert("invalid", { name: "Other", active_since: "invalid" })];
+  const keys = (config) => dashboardGroups(items, config).map((group) => group.key);
+  assert.deepEqual(keys({ sort: "newest" }), ["device:d", "alert:c", "alert:z", "alert:invalid"]);
+  assert.deepEqual(keys({ sort: "oldest" }), ["device:d", "alert:c", "alert:z", "alert:invalid"]);
+  assert.deepEqual(keys({ sort: "alphabetical" }), ["alert:c", "alert:z", "alert:invalid", "device:d"]);
+  assert.deepEqual(keys({ sort: "oldest", group_by_device: false }), ["alert:a", "alert:c", "alert:z", "alert:b", "alert:invalid"]);
+  assert.deepEqual(keys({ sort: "newest", group_by_device: false }), ["alert:b", "alert:c", "alert:z", "alert:a", "alert:invalid"]);
+  for (const sort of ["newest", "oldest", "alphabetical"]) {
+    const before = dashboardGroups(items, { sort });
+    items.reverse();
+    assert.deepEqual(dashboardGroups(items, { sort }), before);
+  }
+  const before = keys({});
+  items[0].message = "updated";
+  items[0].updated_at = "2030-01-01T00:00:00Z";
+  assert.deepEqual(keys({}), before);
+});
+
+test("mobile limits follow the layout breakpoint and release listeners on disconnect", () => {
+  const queries = [];
+  globalThis.matchMedia = (query) => {
+    assert.equal(query, "(max-width: 600px)");
+    const media = new EventTarget();
+    media.matches = false;
+    queries.push(media);
+    return media;
+  };
+  try {
+    const card = new AlertManagerCard();
+    card.connectedCallback();
+    card.setConfig({ max_tiles: 5, max_tiles_mobile: 2 });
+    card._value = { status: "ready", snapshot: { alerts: ["a", "b", "c", "d", "e", "f"].map((id) => alert(id)) } };
+    card._render();
+    assert.equal(card._tileCount, 5);
+    const media = queries[0];
+    media.matches = true;
+    media.dispatchEvent(new Event("change"));
+    assert.equal(card._tileCount, 2);
+    assert.match(card.shadowRoot.innerHTML, /\+4<\/span>/);
+    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card>/);
+    const other = new AlertManagerCard();
+    other.connectedCallback();
+    other.setConfig({ max_tiles: 3 });
+    other._value = card._value;
+    queries[1].matches = true;
+    other._render();
+    assert.equal(other._tileCount, 3);
+    card.setConfig({ max_tiles: 5 });
+    assert.equal(card._tileCount, 5);
+    card.setConfig({ max_tiles: 5, max_tiles_mobile: 2 });
+    media.matches = false;
+    media.dispatchEvent(new Event("change"));
+    assert.equal(card._tileCount, 5);
+    card.disconnectedCallback();
+    media.matches = true;
+    media.dispatchEvent(new Event("change"));
+    assert.equal(card._tileCount, 5);
+    card.connectedCallback();
+    assert.equal(queries.length, 3);
+    card.disconnectedCallback();
+    other.disconnectedCallback();
+  } finally { delete globalThis.matchMedia; }
+});
+
+test("age uses native relative time with the oldest eligible activation, independently of sort", () => {
+  const card = new AlertManagerCard();
+  const items = [alert("a", { device_id: "d", active_since: "2026-09-03T00:00:00Z" }),
+    alert("b", { device_id: "d", active_since: "2026-09-01T00:00:00Z" }),
+    alert("bad", { active_since: "not-a-date" })];
+  card._value = { status: "ready", snapshot: { alerts: items } };
+  card.setConfig({});
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /<ha-relative-time/);
+  const native = { dataset: { age: "2026-09-01T00:00:00.000Z" } };
+  card.shadowRoot.querySelectorAll = (query) => query === "ha-relative-time[data-age]" ? [native] : [];
+  for (const sort of ["newest", "oldest", "alphabetical"]) {
+    card.setConfig({ sort, show_age: true });
+    assert.equal((card.shadowRoot.innerHTML.match(/<ha-relative-time /g) ?? []).length, 1);
+    assert.match(card.shadowRoot.innerHTML, /data-age="2026-09-01T00:00:00.000Z"/);
+    assert.match(card.shadowRoot.innerHTML, /message-text">2 alerts/);
+    assert.equal(native.datetime, native.dataset.age);
+  }
+  card.setConfig({ group_by_device: false, show_age: true, max_tiles: 1 });
+  assert.match(card.shadowRoot.innerHTML, /href="\/alert-manager\/overview\?alert=a"/);
+  assert.match(card.shadowRoot.innerHTML, /data-age="2026-09-03T00:00:00.000Z"/);
+  assert.match(card.shadowRoot.innerHTML, /View more alerts: 2/);
+});
+
+test("group and overflow links preserve OR inclusion and priority exclusions in Overview", () => {
+  const items = [alert("a", { device_id: "d", labels: ["home"] }),
+    alert("b", { device_id: "d", labels: ["outside"] })];
+  const config = { labels: ["home", "outside"], exclude_labels: ["maintenance&test"] };
+  const group = dashboardGroups(items, config)[0];
+  const panel = { _tableState: { overview: { search: "stale", filters: {} } },
+    _resetTableFilters() { this._tableState.overview.filters = {}; }, _render() {},
+    _filterValues: filterValues, _dateMatches: () => true, _compareTableRows: () => 0 };
+  const rows = [...items, alert("excluded", { device_id: "d", labels: ["home", "maintenance&test"] }),
+    alert("other", { device_id: "another", labels: ["home"] }), alert("unrelated", { device_id: "d" }),
+    alert("ack", { device_id: "d", labels: ["home"], acknowledged: true })]
+    .map((source) => ({ id: source.id, source, status: source.acknowledged ? "acknowledged" : "active",
+      labelIds: source.labels ?? [] }));
+  window.location = { search: dashboardTarget(group, config).split("?")[1] };
+  openAlertDeepLink.call(panel);
+  assert.deepEqual(filteredTableRows.call(panel, "overview", rows).map((row) => row.id), ["a", "b"]);
+  window.location.search = dashboardTarget(null, config).split("?")[1];
+  openAlertDeepLink.call(panel);
+  assert.deepEqual(filteredTableRows.call(panel, "overview", rows).map((row) => row.id), ["a", "b", "other"]);
+  assert.deepEqual(panel._tableState.overview.filters.exclude_labels, ["maintenance&test"]);
 });

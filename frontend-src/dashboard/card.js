@@ -3,9 +3,9 @@ import { navigate } from "../utils/navigation.js";
 import { connectDashboard } from "../api/dashboard.js";
 import { esc } from "../utils/escaping.js";
 import { conditionText, date, durationText } from "../utils/formatting.js";
-import { dashboardStyles } from "../styles/dashboard-styles.js";
+import { DASHBOARD_MOBILE_QUERY, dashboardStyles } from "../styles/dashboard-styles.js";
 import { dashboardText } from "./translations.js";
-import { DASHBOARD_ICONS, dashboardGroups, dashboardTarget } from "./groups.js";
+import { DASHBOARD_ICONS, dashboardGroups, dashboardName, dashboardTarget } from "./groups.js";
 import { AlertManagerCardEditor, dashboardIconColor, validateDashboardConfig } from "./editor.js";
 
 export class AlertManagerCard extends HTMLElement {
@@ -64,10 +64,17 @@ export class AlertManagerCard extends HTMLElement {
   }
   getGridOptions() { return { columns: 12, min_columns: 3 }; }
   connectedCallback() {
+    if (!this._mobileQuery && globalThis.matchMedia) {
+      this._mobileQuery = globalThis.matchMedia(DASHBOARD_MOBILE_QUERY);
+      this._onWidthChange = () => this._render();
+      this._mobileQuery.addEventListener("change", this._onWidthChange);
+    }
     this._connect();
     this._render();
   }
   disconnectedCallback() {
+    this._mobileQuery?.removeEventListener("change", this._onWidthChange);
+    this._mobileQuery = null;
     this._subscription?.disconnect();
     this._subscription = null;
     this._connection = null;
@@ -102,18 +109,20 @@ export class AlertManagerCard extends HTMLElement {
     const fullName = alert.device_name || alert.name || alert.rule_name || alert.entity_id || this._t("dashboard.alert");
     const multiple = group.alerts.length > 1;
     const coherence = !multiple && alert.type === "coherence";
-    const name = coherence ? this._t("dashboard.coherence") : fullName;
+    const name = dashboardName(alert, this._t);
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
     const message = multiple ? this._t("dashboard.count", { count: group.alerts.length })
       : coherence && Number.isInteger(count) && count >= 0
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
-    return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
+    const age = this._config.show_age && group.oldest !== null && Number.isFinite(group.oldest)
+      ? `<span class="age">· <ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
+    return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config))}">
       <ha-ripple></ha-ripple>
       ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type)).join("")}</div>` : this._icon(alert.type)}
       <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div></div>
+      <div class="message${age ? " with-age" : ""}" title="${esc(multiple ? message : fullMessage)}">${age ? `<span class="message-text">${esc(message)}</span>${age}` : esc(message)}</div></div>
     </a></ha-card>`;
   }
   _render() {
@@ -123,7 +132,7 @@ export class AlertManagerCard extends HTMLElement {
       ? this._lastReadyValue : this._value;
     const startup = status === "ready" && snapshot.startup?.in_progress;
     let groups = status === "ready"
-      ? dashboardGroups(snapshot.alerts, this._config.label, this._hass) : [];
+      ? dashboardGroups(snapshot.alerts, this._config, this._hass, this._t) : [];
     this._sample = this._preview && !startup && !groups.length;
     if (this._sample) {
       groups = dashboardGroups([{
@@ -138,15 +147,17 @@ export class AlertManagerCard extends HTMLElement {
         detail: { value: !hidden }, bubbles: true, composed: true,
       }));
     }
-    this._tileCount = Math.min(groups.length, this._config.max_tiles);
-    const visibleTiles = groups.slice(0, this._config.max_tiles).map((group) => this._tile(group));
-    if (groups.length && (startup || groups.length > this._config.max_tiles)) {
-      const count = groups.slice(this._config.max_tiles).reduce((total, group) => total + group.alerts.length, 0);
+    const mobile = this._mobileQuery?.matches ?? globalThis.matchMedia?.(DASHBOARD_MOBILE_QUERY).matches ?? false;
+    const limit = mobile ? this._config.max_tiles_mobile ?? this._config.max_tiles : this._config.max_tiles;
+    this._tileCount = Math.min(groups.length, limit);
+    const visibleTiles = groups.slice(0, limit).map((group) => this._tile(group));
+    if (groups.length && (startup || groups.length > limit)) {
+      const count = Math.max(0, groups.length - limit);
       const label = esc([
         startup ? this._t("dashboard.startup_detail") : "",
-        count ? this._t("dashboard.more_count", { count }) : "",
+        count ? this._t(this._config.group_by_device === false ? "dashboard.more_count" : "dashboard.more_devices", { count }) : "",
       ].filter(Boolean).join(" · "));
-      const target = `/alert-manager/overview?${new URLSearchParams({ dashboard: "1", ...(this._config.label ? { label: this._config.label } : {}) })}`;
+      const target = dashboardTarget(null, this._config);
       const bubble = `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
         <ha-ripple></ha-ripple>${startup ? '<ha-icon icon="mdi:timer-sand" aria-hidden="true"></ha-icon>' : ""}
         ${count ? `<span aria-hidden="true">+${count}</span>` : ""}${startup ? "" : '<ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>'}
@@ -162,12 +173,26 @@ export class AlertManagerCard extends HTMLElement {
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
     const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;
-    if (markup === this._markup) return;
+    if (markup === this._markup) {
+      // Locale settings can change without changing the surrounding markup.
+      this._hydrateAge();
+      return;
+    }
     const focused = this.shadowRoot.activeElement?.dataset?.key;
     this._markup = markup;
     this.shadowRoot.innerHTML = markup;
+    this._hydrateAge();
     if (focused) [...this.shadowRoot.querySelectorAll("[data-key]")].find((node) => node.dataset.key === focused)?.focus();
     this.dispatchEvent(new CustomEvent("card-updated", { bubbles: true, composed: true }));
+  }
+  _hydrateAge() {
+    for (const relative of this.shadowRoot.querySelectorAll("ha-relative-time[data-age]")) {
+      relative.hass = this._hass;
+      if (relative.datetime !== relative.dataset.age) {
+        relative.datetime = relative.dataset.age;
+        relative.textContent = this._date(relative.dataset.age);
+      }
+    }
   }
 }
 

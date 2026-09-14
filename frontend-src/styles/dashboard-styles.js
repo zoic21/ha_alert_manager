@@ -1,3 +1,5 @@
+export const DASHBOARD_MOBILE_QUERY = "(max-width: 600px)";
+
 export const dashboardStyles = `
   :host { display: block; }
   :host([hidden]) { display: none !important; }
@@ -18,6 +20,9 @@ export const dashboardStyles = `
   .content { min-width: 0; flex: 1; }
   .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .message { color: var(--secondary-text-color); font-size: 14px; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .message.with-age { display: flex; gap: 4px; }
+  .message-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .age { flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
   .types { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; max-width: 60px; align-items: center; }
   ha-icon { color: var(--alert-icon-color); flex: none; border-radius: 50%; padding: 8px;
     background: color-mix(in srgb, var(--alert-icon-color) 12%, transparent); }
@@ -30,7 +35,7 @@ export const dashboardStyles = `
     height: 44px; min-width: 64px; padding: 0 12px; color: var(--secondary-text-color); font-size: 16px; font-weight: 500; }
   .more ha-icon { color: inherit; background: none; padding: 0; }
   .status { padding: 12px; color: var(--secondary-text-color); font-size: 14px; }
-  @media (max-width: 600px) {
+  @media ${DASHBOARD_MOBILE_QUERY} {
     .tiles > ha-card, .tiles > .tile-tail { flex: 0 0 100%; }
     .tile-tail > ha-card:not(.overflow) { flex: 1 1 0; width: 0; }
   }

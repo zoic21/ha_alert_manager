@@ -1,4 +1,5 @@
 import "./frontend-ready.js";
+import { dashboardLabels } from "./groups.js";
 import { dashboardText } from "./translations.js";
 
 // Home Assistant's UI palette maps to theme variables, not fixed RGB values.
@@ -20,6 +21,14 @@ export function validateDashboardConfig(config, language) {
     || (config.label !== undefined && typeof config.label !== "string")) {
     throw new Error(dashboardText(language, "dashboard.invalid_config"));
   }
+  const mobile = config.max_tiles_mobile;
+  if ((mobile != null && mobile !== "" && (!Number.isInteger(mobile) || mobile < 1 || mobile > 100))
+    || ["labels", "exclude_labels"].some((key) => config[key] !== undefined
+      && (!Array.isArray(config[key]) || config[key].some((label) => typeof label !== "string" || !label.trim())))
+    || ["group_by_device", "show_age"].some((key) => config[key] !== undefined && typeof config[key] !== "boolean")
+    || (config.sort !== undefined && !["newest", "oldest", "alphabetical"].includes(config.sort))) {
+    throw new Error(dashboardText(language, "dashboard.invalid_config"));
+  }
   if (config.alignment !== undefined && !["left", "center", "right"].includes(config.alignment)) {
     throw new Error(dashboardText(language, "dashboard.invalid_alignment"));
   }
@@ -35,7 +44,15 @@ export function validateDashboardConfig(config, language) {
       || (!/[;{}<>"']/u.test(color) && globalThis.CSS?.supports?.("color", color))))) {
     throw new Error(dashboardText(language, "dashboard.invalid_icon_color"));
   }
-  return { ...config, max_tiles: max, ...(color !== undefined ? { icon_color: color } : {}) };
+  const normalized = { ...config, max_tiles: max, ...(color !== undefined ? { icon_color: color } : {}) };
+  if (mobile == null || mobile === "") delete normalized.max_tiles_mobile;
+  // Normalize old YAML in memory; explicit empty inclusions override the legacy label.
+  if (config.labels !== undefined || config.label) {
+    normalized.labels = [...new Set(dashboardLabels(config).include)];
+    delete normalized.label;
+  }
+  if (config.exclude_labels !== undefined) normalized.exclude_labels = [...new Set(config.exclude_labels)];
+  return normalized;
 }
 
 export class AlertManagerCardEditor extends HTMLElement {
@@ -65,10 +82,17 @@ export class AlertManagerCardEditor extends HTMLElement {
   }
   _update() {
     this._form.hass = this._hass;
-    this._form.data = { alignment: "left", ...this._config };
+    this._form.data = { alignment: "left", sort: "newest", group_by_device: true, show_age: false, ...this._config };
     this._form.schema = [
       { name: "max_tiles", required: true, selector: { number: { min: 1, max: 100, mode: "box" } } },
-      { name: "label", selector: { label: {} } },
+      { name: "max_tiles_mobile", selector: { number: { min: 1, max: 100, mode: "box" } } },
+      { name: "sort", selector: { select: { mode: "dropdown", options: ["newest", "oldest", "alphabetical"].map((value) => ({
+        value, label: dashboardText(this._hass?.locale?.language, `dashboard.sort_${value}`),
+      })) } } },
+      { name: "labels", selector: { label: { multiple: true } } },
+      { name: "exclude_labels", selector: { label: { multiple: true } } },
+      { name: "show_age", selector: { boolean: {} } },
+      { name: "group_by_device", selector: { boolean: {} } },
       { name: "icon_color", selector: { ui_color: { include_state: true, default_color: "state" } } },
       { name: "alignment", selector: { select: { mode: "dropdown", options: ["left", "center", "right"].map((value) => ({
         value, label: dashboardText(this._hass?.locale?.language, `dashboard.align_${value}`),

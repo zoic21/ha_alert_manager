@@ -45,19 +45,36 @@ type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
 # icon_color: red
-# label: maintenance
+# max_tiles_mobile: 2
+# labels: [home, outdoors]
+# exclude_labels: [maintenance]
+# sort: oldest
+# show_age: true
+# group_by_device: false
 ```
 
 | Option | Behavior |
 | --- | --- |
 | `max_tiles` | Maximum tile count, from 1 to 100; default 5. |
+| `max_tiles_mobile` | Optional mobile limit, from 1 to 100; when absent or cleared, uses `max_tiles`. |
+| `sort` | `newest` (default), `oldest` or `alphabetical`, by the displayed name. |
+| `labels` | Include alerts matching any selected label ID; an empty list includes all labels. |
+| `exclude_labels` | Exclude alerts matching any selected label ID; exclusion takes precedence. |
+| `show_age` | Show localized relative activation time next to the message; default `false`. |
+| `group_by_device` | Group matching alerts by device; default `true`. Without a device, each alert remains separate. |
 | `alignment` | `left`, `center` or `right`; default `left`. |
 | `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. |
-| `label` | Optional Home Assistant label ID used to filter alerts. |
+| `label` | Legacy single label ID, normalized to `labels` when read. An explicit `labels` list takes precedence. |
 
-These options are also available in the visual editor. Label filtering uses the same alert-label matching as the panel. Matching active, unacknowledged alerts are grouped by device **before** applying the tile limit.
+These settings belong to each card and are also available in the native visual editor. They do not change monitoring, notifications, global counters or History. Label filtering uses the existing alert-label resolution and runs before grouping. A filtered-out alert never contributes to a group, its count, age or sorting.
 
-A single-alert tile opens its details; a grouped tile opens the device-filtered list. The **+N** bubble opens matching alerts and counts remaining **alerts**, not devices. Tiles wrap on narrow screens and are capped at 300 px.
+Sorting runs before the tile limit. Grouped cards use the newest or oldest retained activation time for date sorting; equal values are ordered by stable identifiers. Updating an alert message does not change its activation date. Alphabetical sorting follows the Home Assistant language and the displayed name.
+
+When enabled, age uses the oldest active, unacknowledged alert retained in the tile, regardless of sort order. Invalid or missing dates do not produce an age. Home Assistant's native relative-time component updates the display without backend polling.
+
+A single-alert tile opens its details; a grouped tile opens the device-filtered list. The **+N** bubble counts remaining **tiles** after filtering and grouping: devices in grouped mode (with separate tiles for alerts without a device), or alerts in individual mode. Group and overflow links preserve label inclusions and exclusions; these filters can be cleared in Overview.
+
+The mobile limit uses the same **600 px viewport breakpoint** as the layout and responds to width/orientation changes. A limit of two does not force two tiles side by side: mobile keeps one tile per row. Tiles are capped at 300 px on wider screens. The overflow bubble and hourglass do not consume a tile slot.
 
 ### Visibility, startup and mobile layout
 
