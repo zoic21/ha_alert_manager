@@ -51,7 +51,7 @@ class PackConfigField:
     entity_domains: tuple[str, ...] | None = None
     fields: tuple[PackConfigField, ...] = ()
     sparse: bool = False
-    options: tuple[str, ...] = ()
+    options: tuple[str | bool, ...] = ()
 
     def as_public_dict(self) -> dict[str, Any]:
         """Expose a serializable description without frontend pack special cases."""

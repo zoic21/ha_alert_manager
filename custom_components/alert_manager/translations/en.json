@@ -100,6 +100,9 @@
         },
         "entity_overrides": {
           "label": "Entity exceptions"
+        },
+        "excluded_update_entities": {
+          "label": "Excluded entities"
         }
       },
       "enable_source_pack": "Enable source pack {name}",
@@ -130,7 +133,8 @@
       "hours_short": "h",
       "minutes_short": "min",
       "monitor_target": "Monitor",
-      "blocked_device": "Monitoring is disabled for this device."
+      "blocked_device": "Monitoring is disabled for this device.",
+      "exclusions_help": "All update entities are monitored except those selected here. Adding an entity excludes it from the pack after saving."
     },
     "buttons": {
       "add": "Add",
@@ -151,7 +155,10 @@
         "battery": "Battery less than or equal to {threshold}%",
         "connectivity": "Connectivity is off",
         "unavailable": "State is unavailable",
-        "unifi": "UniFi device is away"
+        "unifi": "UniFi device is away",
+        "update_available": "Update available",
+        "update_available_version": "Update {latest_version} available",
+        "update_available_version_installed": "Update {latest_version} available (installed: {installed_version})"
       },
       "fragments": {
         "duration": "for {duration}"
@@ -498,6 +505,9 @@
       "unifi": {
         "description": "Monitors devices tracked by a UniFi router.",
         "name": "UniFi devices"
+      },
+      "update_available": {
+        "name": "Available updates"
       }
     },
     "rules": {

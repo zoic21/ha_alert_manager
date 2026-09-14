@@ -237,6 +237,8 @@ def _normalize_pack_field(
     if field.type == "boolean":
         if not isinstance(value, bool):
             raise ValueError(f"{path} must be a boolean")
+        if field.options and value not in field.options:
+            raise ValueError(f"{path} must be one of {field.options}")
         return value
     if field.type in ("text", "select"):
         if not isinstance(value, str):
@@ -291,6 +293,15 @@ def _normalize_pack_field(
                     validate_entity_id(target_id)
                 except ValueError as err:
                     raise ValueError(f"{path} contains an invalid entity id") from err
+            if (
+                field.type == "entity_settings_map"
+                and field.entity_domains is not None
+                and target_id.partition(".")[0] not in field.entity_domains
+            ):
+                raise ValueError(
+                    f"{path} contains an entity outside the "
+                    f"{', '.join(field.entity_domains)} domains"
+                )
             if not isinstance(raw_settings, dict):
                 raise ValueError(f"{path}.{target_id} must be an object")
             unknown = _unknown_keys(raw_settings, set(allowed))

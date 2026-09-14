@@ -29,7 +29,7 @@ def _should_evaluate(
 def _evaluate(
     _hass: HomeAssistant, state: State, _config: dict[str, Any]
 ) -> PackMatch | None:
-    """Match only unavailable, for every entity domain."""
+    """Match only unavailable; any other state, including unknown, ends the outage."""
     if state.state != STATE_UNAVAILABLE:
         return None
     return PackMatch(

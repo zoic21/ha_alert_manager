@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from homeassistant.components.automation import DATA_COMPONENT
 from homeassistant.components.trace.const import DATA_TRACE
+from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 from homeassistant.util.hass_dict import HassKey
 
@@ -92,6 +93,8 @@ def _applies(_hass: HomeAssistant, state: State) -> bool:
 
 def _current(state: State) -> int | None:
     """Return a valid non-negative execution count."""
+    if state.state == STATE_UNKNOWN:
+        return None
     value = state.attributes.get("current")
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None

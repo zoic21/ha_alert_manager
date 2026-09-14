@@ -100,6 +100,9 @@
         },
         "entity_overrides": {
           "label": "Exceptions par entité"
+        },
+        "excluded_update_entities": {
+          "label": "Entités exclues"
         }
       },
       "enable_source_pack": "Activer le pack source {name}",
@@ -130,7 +133,8 @@
       "hours_short": "h",
       "minutes_short": "min",
       "monitor_target": "Surveiller",
-      "blocked_device": "Surveillance désactivée pour cet appareil."
+      "blocked_device": "Surveillance désactivée pour cet appareil.",
+      "exclusions_help": "Toutes les entités de mise à jour sont surveillées sauf celles sélectionnées ici. Ajouter une entité l’exclut du pack après enregistrement."
     },
     "buttons": {
       "add": "Ajouter",
@@ -151,7 +155,10 @@
         "battery": "Batterie inférieure ou égale à {threshold} %",
         "connectivity": "Connectivité désactivée",
         "unavailable": "État indisponible",
-        "unifi": "Équipement UniFi absent"
+        "unifi": "Équipement UniFi absent",
+        "update_available": "Mise à jour disponible",
+        "update_available_version": "Mise à jour {latest_version} disponible",
+        "update_available_version_installed": "Mise à jour {latest_version} disponible (installée : {installed_version})"
       },
       "fragments": {
         "duration": "pendant {duration}"
@@ -498,6 +505,9 @@
       "unifi": {
         "description": "Surveille les équipements suivis par un routeur UniFi.",
         "name": "Équipements UniFi"
+      },
+      "update_available": {
+        "name": "Mises à jour disponibles"
       }
     },
     "rules": {

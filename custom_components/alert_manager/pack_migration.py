@@ -114,12 +114,19 @@ def migrate_exclusions(raw: dict[str, Any]) -> dict[str, Any]:
         return config
     for pack in PACKS:
         settings = validated["automatic"][pack.id]
-        fields = {field.id for field in pack.config_fields}
+        fields = {field.id: field for field in pack.config_fields}
         for kind, targets in (("entity", entities), ("device", devices)):
             key = f"{kind}_overrides"
             if key not in fields:
                 continue
             overrides = settings.setdefault(key, {})
             for target_id in targets:
+                domains = fields[key].entity_domains
+                if (
+                    kind == "entity"
+                    and domains is not None
+                    and target_id.partition(".")[0] not in domains
+                ):
+                    continue
                 overrides.setdefault(target_id, {})["enabled"] = False
     return validate_config(validated)

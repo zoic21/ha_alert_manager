@@ -67,6 +67,10 @@ def test_conversion_preserves_effective_values_and_sparse_inheritance():
         converted.pop(key)
     config = validate_config(converted)
     for pack_id, pack in config["automatic"].items():
+        if pack_id == "update_available":
+            assert pack["delay"] == 0
+            assert pack["entity_overrides"] == {}
+            continue
         if pack_id == "flapping":
             continue
         assert pack["delay"] == (0 if pack_id == "execution_errors" else 123)
@@ -94,7 +98,11 @@ def test_exclusions_become_disabled_pack_exceptions_without_registry_writes(hass
     assert converted == before
     assert config["excluded_labels"] == ["existing"]
     assert "excluded_entities" not in config and "excluded_devices" not in config
-    for pack in config["automatic"].values():
+    for pack_id, pack in config["automatic"].items():
+        if pack_id == "update_available":
+            assert pack["entity_overrides"] == {}
+            assert "device_overrides" not in pack
+            continue
         assert pack["entity_overrides"]["sensor.battery"]["enabled"] is False
         assert pack["device_overrides"]["a" * 32]["enabled"] is False
     assert (
@@ -125,7 +133,11 @@ def test_orphan_exclusions_are_retained_and_override_enabled_exceptions():
         "entity_overrides"
     ]["sensor.battery"]["enabled"] = True
     config = migrate_exclusions(converted)
-    for pack in config["automatic"].values():
+    for pack_id, pack in config["automatic"].items():
+        if pack_id == "update_available":
+            assert pack["entity_overrides"] == {}
+            assert "device_overrides" not in pack
+            continue
         assert resolve_settings(pack, "sensor.battery", None)[0]["enabled"] is False
         assert resolve_settings(pack, "sensor.future", "a" * 32)[0]["enabled"] is False
     assert (

@@ -6435,6 +6435,9 @@ async function handleRulesAction(action, button) {
 
 // Source: frontend-src/views/automatic.js
 const EXCEPTION_FIELDS = ["device_overrides", "entity_overrides"];
+const exclusionField = (field) => field.id === "entity_overrides" && field.fields?.length === 1
+  && field.fields[0].id === "enabled" && field.fields[0].options?.length === 1 && field.fields[0].options[0] === false;
+const exclusionOnly = (pack) => (pack.config_fields ?? []).some(exclusionField);
 const settingFields = (pack) => (pack.config_fields ?? []).filter((field) => ["number", "boolean", "text", "select"].includes(field.type));
 const sourceField = (pack) => (pack.config_fields ?? []).find((field) => field.id === "source_packs");
 const exceptionCount = (settings) => EXCEPTION_FIELDS.reduce((count, key) => count + (settings?.[key]?.length ?? 0), 0);
@@ -6555,6 +6558,7 @@ function renderPackField(pack, field, config, context) {
   const scope = scopeFor(draft[pack.id], sourceId);
   if (!EXCEPTION_FIELDS.includes(field.id)) return "";
   const rows = scope?.[field.id] ?? [];
+  if (exclusionField(field)) return `<section class="field full"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))} (${rows.length})</span><ha-selector id="auto-${pack.id}-${field.id}-exclusions" aria-label="${esc(t(`automatic.fields.${field.translation_key}.label`))}"></ha-selector><small>${esc(t("automatic.exclusions_help"))}</small></section>`;
   return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))} (${rows.length})</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     ${rows.length ? rows.map((row, index) => {
       const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities);
@@ -6596,7 +6600,7 @@ function renderAutomaticConfigurationDrawer(context) {
   const fields = [...(pack.uses_delay === false ? [] : [{ id: "delay", type: "number", translation_key: "trigger_delay", unit: "s", minimum: 0 }]), ...settingFields(pack)];
   const title = t(`packs.${pack.translation_key || pack.id}.name`);
   const content = `<div class="fields configuration-drawer-fields automatic-configuration-fields">
-    <ha-expansion-panel left-chevron class="field full automatic-exceptions-help" header="${esc(t("automatic.exceptions_help"))}"><small>${esc(t("automatic.inheritance_help"))}</small></ha-expansion-panel>
+    ${exclusionOnly(pack) ? "" : `<ha-expansion-panel left-chevron class="field full automatic-exceptions-help" header="${esc(t("automatic.exceptions_help"))}"><small>${esc(t("automatic.inheritance_help"))}</small></ha-expansion-panel>`}
     ${sourceField(pack) ? `<div class="field full"><span class="field-label">${esc(t("automatic.source_context"))}</span><ha-selector id="auto-${pack.id}-source-context"></ha-selector></div>` : ""}
     ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
     ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, Boolean(sourceId))).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
@@ -6733,6 +6737,14 @@ function hydrateAutomaticControls() {
       }
     }
     for (const field of exceptionFields(pack, this._packs, drawer.sourceId)) {
+      if (exclusionField(field)) {
+        this._configureSelector(`auto-${pack.id}-${field.id}-exclusions`, { entity: { multiple: true, filter: pack.target_filter ?? {} } }, (scope?.[field.id] ?? []).map((row) => row.target_id), (value) => {
+          captureAutomaticMapValues.call(this);
+          scope[field.id] = this._multipleSelectorValue(value, (scope[field.id] ?? []).map((row) => row.target_id)).map((target_id) => ({ target_id, enabled: false }));
+          refreshAutomaticConfigurationDrawer.call(this);
+        });
+        continue;
+      }
       (scope?.[field.id] ?? []).forEach((row, index) => {
         const expansion = this.shadowRoot.querySelector(`[data-pack-exception="${field.id}"][data-pack-index="${index}"]`);
         if (expansion) {
@@ -6788,7 +6800,7 @@ async function handleAutomaticAction(action, button) {
     if (!this._packs.some((pack) => pack.id === id)) return true;
     this._configurationDrawer = { kind: "automatic", id, fieldId: "pack", sourceId: button.dataset.sourceId ?? "", original: JSON.stringify(this._automaticMapDraft[id]) };
     // A contextual target is a draft only; opening never calls the save API.
-    if (button.dataset.entityId) {
+    if (button.dataset.entityId && !exclusionOnly(this._packs.find((pack) => pack.id === id))) {
       const draft = this._automaticMapDraft[id];
       const sourceId = this._configurationDrawer.sourceId;
       if (sourceId) draft.source_packs[sourceId] ??= { device_overrides: [], entity_overrides: [] };
