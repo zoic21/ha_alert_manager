@@ -9,15 +9,32 @@ const proposal = { rule_id: "r", added: ["sensor.new"], removed: [], discovered:
 const t = (key) => key;
 
 test("managed review escapes data and exposes explicit membership decisions", () => {
-  const html = renderManagedBlueprint({ rule: { ...rule, blueprint: { ...rule.blueprint, id: '<script>' } }, proposal, review: { proposal }, t });
+  const html = renderManagedBlueprint({ rule: { ...rule, blueprint: { ...rule.blueprint, id: "cpu" } }, proposal, review: { proposal }, t });
   assert.match(html, /data-managed-entity="sensor.new"/);
   assert.match(html, /data-managed-exclusion="sensor.missing"/);
   assert.match(html, /data-action="apply-blueprint"/);
   assert.match(html, /ha-alert/);
-  assert.doesNotMatch(html, /<script>/);
   assert.equal(renderManagedBlueprint({ rule: { ...rule, blueprint: { managed: false } }, t }), "");
   assert.doesNotMatch(renderManagedBlueprint({ rule, t }), /ha-alert/);
 });
+
+for (const [id, escaped] of [
+  ["<script>", "&lt;script&gt;"],
+  ["<SCRIPT>", "&lt;SCRIPT&gt;"],
+  ["<ScRiPt>", "&lt;ScRiPt&gt;"],
+  ['<SCRIPT src="test.js">', "&lt;SCRIPT src=&quot;test.js&quot;&gt;"],
+]) {
+  test(`managed review escapes blueprint identifiers: ${id}`, () => {
+    const html = renderManagedBlueprint({
+      rule: { ...rule, blueprint: { ...rule.blueprint, id } },
+      proposal,
+      review: { proposal },
+      t: (key, replacements) => key === "managed.source" ? replacements.id : key,
+    });
+    assert.ok(html.includes(`<strong>${escaped}</strong>`));
+    assert.doesNotMatch(html, /<script\b/i);
+  });
+}
 
 test("background reconciliation yields, coalesces and leaves the table usable", async () => {
   let finish;
