@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from .const import (
     ATTRIBUTE_SOURCES,
-    BLUEPRINT_OVERRIDE_FIELDS,
     LEGACY_ATTRIBUTE_SOURCES,
     LEGACY_RULE_SOURCES,
     MAX_DELAY,
@@ -707,8 +706,6 @@ class Rule:
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
     version: int = 2
-    # Blueprint metadata does not change the effective detection definition.
-    blueprint: dict[str, Any] | None = field(default=None, compare=False)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -772,46 +769,6 @@ class Rule:
             raise ValueError("Rule name is required")
         if len(self.name) > MAX_RULE_NAME_LENGTH:
             raise ValueError("Rule name is too long")
-        if self.blueprint is not None:
-            provenance = self.blueprint
-            if (
-                not isinstance(provenance, dict)
-                or set(provenance)
-                - {
-                    "id",
-                    "version",
-                    "managed",
-                    "overrides",
-                    "excluded_entities",
-                    "defaults",
-                }
-                or not isinstance(provenance.get("id"), str)
-                or not 1 <= len(provenance["id"].strip()) <= 128
-                or type(provenance.get("version")) is not int
-                or provenance["version"] < 1
-                or type(provenance.get("managed")) is not bool
-            ):
-                raise ValueError("Invalid rule blueprint provenance")
-            overrides = provenance.get("overrides", {})
-            exclusions = provenance.get("excluded_entities", [])
-            if (
-                not isinstance(overrides, dict)
-                or set(overrides) - BLUEPRINT_OVERRIDE_FIELDS
-                or not isinstance(provenance.get("defaults", {}), dict)
-                or set(provenance.get("defaults", {})) - BLUEPRINT_OVERRIDE_FIELDS
-                or not isinstance(exclusions, list)
-                or len(exclusions) > MAX_RULE_ENTITY_IDS
-                or any(
-                    not isinstance(item, str) or len(item) > 255 or "." not in item
-                    for item in exclusions
-                )
-                or len(set(exclusions)) != len(exclusions)
-            ):
-                raise ValueError("Invalid managed blueprint settings")
-            for key, value in overrides.items():
-                if value != getattr(self, key):
-                    raise ValueError("Blueprint override must match effective rule")
-
         validate_level(self.level)
         self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:

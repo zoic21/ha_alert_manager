@@ -298,3 +298,25 @@ test("native labels load once through HA's entities route and retain pending bad
     customElements._items.delete("ha-panel-config");
   }
 });
+
+test("opening custom rules does not request rule discovery or maintenance", async () => {
+  const { refreshTabData } = await import("../frontend-src/api/alert-manager-api.js");
+  const panel = {
+    _hass: {}, _config: { rules: rules() },
+    _api: { call() { assert.fail("opening rules must use the loaded configuration"); } },
+  };
+  refreshTabData.call(panel, "rules");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+test("information icon remains after the rule title on desktop and mobile", () => {
+  const panel = new Panel();
+  for (const narrow of [false, true]) {
+    const cell = panel._nativeRuleNameCell({ name: "Updates", level: "info" }, narrow);
+    const line = cell.children[0];
+    assert.equal(line.children.length, 2);
+    assert.equal(line.children[0].textContent, "Updates");
+    assert.equal(line.children[1].attributes.icon, "mdi:information-outline");
+    assert.match(line.style.cssText, /align-items:center;gap:10px/);
+  }
+});

@@ -501,3 +501,40 @@ def test_import_write_failure_rolls_back_configuration_and_runtime(hass, entry):
         run(manager.async_import_config(dump_config_yaml(deepcopy(DEFAULT_CONFIG))))
     assert manager.get_config() == before_config
     assert manager.records == before_records
+
+
+def test_rule_yaml_mutations_parse_in_executor(hass, entry, monkeypatch):
+    """Creating and updating pasted rules never parses YAML on the event loop."""
+    from custom_components.alert_manager import manager_api
+
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    original_executor = hass.async_add_executor_job
+    original_parser = manager_api.parse_rule_yaml
+    in_executor = False
+    parses = 0
+
+    async def executor(function, *args):
+        nonlocal in_executor
+        in_executor = True
+        try:
+            return await original_executor(function, *args)
+        finally:
+            in_executor = False
+
+    def parser(*args, **kwargs):
+        nonlocal parses
+        assert in_executor
+        parses += 1
+        return original_parser(*args, **kwargs)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    monkeypatch.setattr(manager_api, "parse_rule_yaml", parser)
+    created = run(manager.async_create_rule_yaml(rule_yaml()))
+    updated = run(
+        manager.async_update_rule_yaml(created["id"], rule_yaml(name="Edited"))
+    )
+    assert parses == 2
+    assert updated["id"] == created["id"]
+    assert updated["name"] == "Edited"
+    assert len(manager.config["rules"]) == 1

@@ -1,9 +1,4 @@
 export const ruleEditorStyles = `
-      .generator-category { margin-bottom: 24px; }
-      .generator-row { display: flex; gap: 12px; padding: 12px 0; align-items: flex-start; }
-      .generator-row > div { min-width: 0; overflow-wrap: anywhere; }
-      .generator-row p { margin: 4px 0; color: var(--secondary-text-color); }
-      .generator-row small { color: var(--secondary-text-color); }
 
   /* Rule editor */
   .actions {
@@ -180,7 +175,7 @@ export const ruleEditorStyles = `
     border-end-start-radius: var(--ha-card-border-radius);
     border-end-end-radius: var(--ha-card-border-radius);
   }
-  .rule-editor-success, .rule-editor-error {
+  .rule-editor-error {
     flex: 1 0 100%;
     width: 100%;
     margin: 0 0 4px;
@@ -296,9 +291,4 @@ export const ruleEditorStyles = `
     justify-content: flex-start;
   }
 
-    .managed-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
-    .managed-entity { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-block: 4px; }
-    .managed-entity ha-checkbox { flex: 0 0 auto; }
-    .managed-entity span, .managed-review dd, .rule-editor-section dd { overflow-wrap: anywhere; min-width: 0; }
-    .managed-review dd, .rule-editor-section dd { margin-inline-start: 12px; }
 `;

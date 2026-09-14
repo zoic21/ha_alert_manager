@@ -87,16 +87,6 @@ Use the canonical sources in the table above for new YAML. Imports migrate earli
 
 Rules can also opt into [flapping detection](configuration.md#flapping-and-instability) when repeated short anomalies matter even though they do not last long enough to become ordinary alerts.
 
-## Generate rules from blueprints
-
-In **Custom rules → Generate rules**, select built-in blueprints and choose **Create selected rules**. The generator shows matching entity counts and explains unavailable choices. CPU/memory usage and CPU temperature cover System Monitor and compatible device sensors, including UniFi, with matching units and names; Supervisor apps/add-ons are excluded. Disk usage remains System Monitor only. Enable the relevant sensors first.
-
-Each selection creates one editable rule containing up to 50 compatible entities. The selected rules are created together or not at all. New rules remain managed by their blueprint. The editor allows changing the name, enabled state (in YAML or the rules table), presentation level, labels, comparison value (when applicable) and duration. The menu offers YAML editing of those settings only. The YAML always keeps `enabled` at the top level. Only explicit customizations appear under `override:`: `name`, `level`, `label_ids`, `duration` and, when applicable, `value`. Unmodified rules have no `override` block. Removing a field from that block restores its inherited blueprint value; removing the whole block restores all inherited settings while preserving `enabled`. Returning to a default in the visual editor also clears its override. Legacy YAML with top-level fields remains accepted as a partial edit. Blueprint-owned conditions and templates stay hidden, and managed rules cannot be duplicated. **Test** evaluates the effective rule, including its blueprint condition. **Take control** detaches it for full manual editing.
-
-Opening the rules tab checks for proposed blueprint updates without automatic synchronization or periodic scanning. **Review / Update** shows the proposed entity selection: checked means monitor, unchecked means exclude from this rule and future proposals. Keep at least one entity selected, or disable the rule to stop monitoring. Click **Apply selected changes** to save the reviewed selection directly. A success message in the rule drawer confirms that the changes were saved. Renaming keeps the blueprint origin. Regenerating an existing rule requires confirmation, overwrites customizations with defaults and currently discovered entities, and preserves its identifier.
-
-See the [blueprint documentation index](blueprints/README.md) for requirements, discovery, defaults and limitations, including Home Assistant backup/update checks. The [contributor guide](rule-blueprints.md) describes the blueprint YAML format.
-
 ## Examples
 
 Replace the entity IDs with your own and paste an example into a rule's YAML editor. Use **Test** before saving to check the selected entities and template output.

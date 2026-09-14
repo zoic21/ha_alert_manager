@@ -1,4 +1,3 @@
-import { hydrateManagedBlueprint, renderManagedBlueprint } from "./managed-blueprints.js";
 import { durationFieldValue } from "./duration-field.js";
 import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
@@ -128,7 +127,6 @@ export function serializeRuleDraft(draft) {
     return {
       name: String(draft.name ?? "").trim(),
       level: draft.level ?? "alert",
-      ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
@@ -148,14 +146,6 @@ export function serializeRuleDraft(draft) {
       flapping_window: draft.flapping_window ?? null,
       flapping_recovery: draft.flapping_recovery ?? null,
     };
-}
-
-export function ruleDraftUpdate(draft) {
-    const rule = serializeRuleDraft(draft);
-    return draft.blueprint?.managed
-      ? Object.fromEntries(["name", "enabled", "level", "label_ids", "value", "duration"]
-        .map((key) => [key, rule[key]]))
-      : rule;
 }
 
 export function validateRuleDraft(draft) {
@@ -383,7 +373,6 @@ export function renderRuleEditor(context) {
       busy,
       editorError,
       yamlError,
-      notice,
       testResult,
       testLoading,
       t,
@@ -395,9 +384,7 @@ export function renderRuleEditor(context) {
     } = context;
     const yamlMode = mode === "yaml";
     const editorContent = yamlMode
-      ? renderRuleYamlEditor({ yamlError, t, managed: rule.blueprint?.managed })
-      : rule.blueprint?.managed
-      ? renderManagedRuleEditor(context)
+      ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({
         rule, t, renderTextField, renderNumberField, flappingAvailable,
         testResult,
@@ -409,12 +396,12 @@ export function renderRuleEditor(context) {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id && !rule.blueprint?.managed ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item>` : ""}${rule.id ? `<ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item>` : ""}${rule.id ? `<ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
       </form>
-        <div class="actions side-drawer-actions rule-editor-actions">${notice?.kind === "success" ? `<ha-alert class="rule-editor-success" alert-type="success" role="status">${esc(notice.text)}</ha-alert>` : ""}${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}><ha-icon slot="start" icon="mdi:flask-outline"></ha-icon>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:content-save"></ha-icon>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}><ha-icon slot="start" icon="mdi:flask-outline"></ha-icon>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:content-save"></ha-icon>${esc(t("buttons.save"))}</ha-button></div>
     </ha-card>`;
     return renderSideDrawer({
       drawer,
@@ -431,11 +418,8 @@ export function renderRuleEditorPanel() {
       busy: this._busy,
       editorError: this._ruleEditorError,
       yamlError: this._ruleYamlError,
-      notice: this._notice?.ruleId === this._editingRule?.id ? this._notice : null,
       testResult: this._ruleTestResult,
       testLoading: this._ruleTestLoading,
-      proposal: this._managedBlueprints?.[this._editingRule?.id],
-      review: this._blueprintReview,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
       useBottomSheet: this._useNativeBottomSheet(),
@@ -499,9 +483,9 @@ export function renderRuleConditionSection({ rule, t, renderTextField, renderNum
       </section></div>`;
 }
 
-export function renderRuleYamlEditor({ yamlError, t, managed = false }) {
+export function renderRuleYamlEditor({ yamlError, t }) {
     return `<section class="rule-editor-section yaml-rule-section">
-      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t(managed ? "managed.yaml_help" : "rules.yaml_help"))}</small></div></div>
+      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t("rules.yaml_help"))}</small></div></div>
       <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(t("rules.yaml_title"))}"></ha-code-editor>
       ${yamlError ? `<div class="yaml-error" role="alert">${esc(yamlError)}</div>` : ""}
     </section>`;
@@ -555,7 +539,7 @@ export function duplicateRuleLabel() {
 }
 
 export async function duplicateRuleDraft() {
-    if (!this._editingRule?.id || this._editingRule.blueprint?.managed) return;
+    if (!this._editingRule?.id) return;
     if (this._ruleEditorMode === "yaml") {
       await this._switchRuleEditor();
       if (this._ruleEditorMode !== "visual" || !this._editingRule?.id) return;
@@ -571,7 +555,6 @@ export async function duplicateRuleDraft() {
       value: Array.isArray(source.value) ? [...source.value] : source.value,
     };
     delete duplicate.id;
-    delete duplicate.blueprint;
     this._editingRule = duplicate;
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -585,7 +568,6 @@ export async function duplicateRuleDraft() {
 export function handleRuleInput(event) {
     if (this._editingRule === null) return;
     const target = event.target;
-    if (target?.closest?.(".managed-review")) return;
     if (target?.closest?.("#rule-form")) {
       this._captureRuleDraft();
       this._clearRuleEditorError();
@@ -615,28 +597,7 @@ export async function switchRuleEditor() {
     this._clearRuleTestResult();
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
-      if (this._editingRule?.blueprint?.managed) {
-        const draft = this._editingRule;
-        const payload = ruleDraftUpdate(draft);
-        const validated = await this._call({
-          type: "alert_manager/rules/yaml/validate", rule_id: draft.id,
-          yaml: Object.entries(payload).map(([key, item]) => `${key}: ${JSON.stringify(item)}`).join("\n"),
-        }, "");
-        if (this._editingRule !== draft || this.isConnected === false) return;
-        if (!validated) {
-          this._ruleEditorError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
-          this._refreshRuleEditor();
-          return;
-        }
-        this._editingRule = { ...validated, id: draft.id };
-        const overrides = Object.entries(validated.blueprint?.overrides ?? {});
-        this._ruleYaml = [
-          `enabled: ${JSON.stringify(validated.enabled ?? true)}`,
-          ...(overrides.length ? ["override:", ...overrides.map(([key, item]) => `  ${key}: ${JSON.stringify(item)}`)] : []),
-        ].join("\n") + "\n";
-      } else {
-        this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
-      }
+      this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
       this._ruleYamlError = null;
       this._ruleEditorMode = "yaml";
       this._refreshRuleEditor();
@@ -740,9 +701,9 @@ export async function saveRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    const rule = ruleDraftUpdate(draft);
+    const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
-    const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
+    const validation = validateRuleDraft(rule);
     if (!validation.valid) {
       this._ruleEditorError = this._t(validation.errorKey);
       this._refreshRuleEditor();
@@ -770,9 +731,9 @@ export async function testRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    const rule = ruleDraftUpdate(draft);
+    const rule = serializeRuleDraft(draft);
     const id = String(this._editingRule?.id ?? "");
-    const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
+    const validation = validateRuleDraft(rule);
     if (!validation.valid) {
       this._ruleTestResult = { request_error: this._t(validation.errorKey) };
       this._updateRuleTestDisplay({ scroll: true });
@@ -880,7 +841,6 @@ export function hydrateRuleEditorMenu(root, onSelected) {
 }
 
 export function hydrateRuleEditorControls() {
-  hydrateManagedBlueprint(this);
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
     mode: this._ruleEditorMode,
@@ -994,17 +954,4 @@ export function hydrateRuleEditorControls() {
       if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
-}
-
-
-export function renderManagedRuleEditor(context) {
-    const { rule, t, renderTextField, renderNumberField, testResult, renderTestResult = () => "" } = context;
-    return `<div class="rule-test-result" data-rule-test-result>${renderTestResult(testResult)}</div>${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
-      ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
-      ${renderRuleLevel(t)}
-      <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector></div>
-      <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><p>${rule.entity_ids.map(esc).join(", ")}</p></div>
-      ${!["jinja", "unchanged"].includes(rule.source) ? renderRuleValues({ rule, t }) : ""}
-      ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
-    </div></section>`;
 }

@@ -1,5 +1,3 @@
-import { handleManagedBlueprintAction } from "../components/managed-blueprints.js";
-import { handleRuleGeneratorAction, hydrateRuleGenerator, renderRuleGenerator } from "../components/rule-generator.js";
 import { revealAddedRow } from "../components/configuration-drawer.js";
 import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
 import { MDI_PLUS } from "../utils/constants.js";
@@ -170,7 +168,6 @@ export function hydrateRules(root, context) {
 }
 
 export function hydrateRuleTable() {
-    hydrateRuleGenerator(this.shadowRoot, this);
     if (!this._config) return;
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
@@ -286,7 +283,6 @@ export function renderRules(context) {
             <div class="rules-header">
               <div><h2>${esc(t("rules.title"))}</h2><p>${esc(t("rules.description"))}</p></div>
               <div class="rules-header-actions">
-                <ha-button data-action="open-rule-generator"><ha-icon slot="start" icon="mdi:auto-fix"></ha-icon>${esc(t("generator.title"))}</ha-button>
                 <ha-button appearance="accent" variant="brand" data-action="new-rule"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.new"))}</ha-button>
               </div>
             </div>
@@ -302,14 +298,10 @@ export function renderRules(context) {
 
 export function renderRulesPanel() {
     this._ensureRulesTableState();
-    const generator = this._configurationDrawer?.kind === "generator";
-    const editorOpen = generator || this._editingRule !== null;
+    const editorOpen = this._editingRule !== null;
     return renderRules({
       editorOpen,
-      editor: generator ? renderRuleGenerator({
-        drawer: this._configurationDrawer, busy: this._busy,
-        useBottomSheet: this._useNativeBottomSheet(), t: (key, params) => this._t(key, params),
-      }) : editorOpen ? this._renderRuleEditor() : "",
+      editor: editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),
       t: (key, replacements) => this._t(key, replacements),
@@ -326,7 +318,6 @@ export function buildRuleTableRows(rules, context) {
         id: rule.id,
         name: rule.name,
         level: rule.level ?? "alert",
-        managed: Boolean(rule.blueprint?.managed),
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
@@ -371,29 +362,12 @@ export function nativeRuleNameCell(row, narrow = false) {
     const primary = document.createElement("span");
     primary.textContent = row.name;
     primary.style.cssText = "min-width:0;overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
-    const proposal = this._managedBlueprints?.[row.id];
-    const hasUpdate = row.managed && proposal?.update_available;
-    if (hasUpdate || row.level === "info") {
+    if (row.level === "info") {
       const line = document.createElement("span");
       // Native table cells live in HA's shadow root, outside the panel stylesheet.
       line.style.cssText = "display:flex;align-items:center;gap:10px;min-width:0";
       line.append(primary);
       const iconStyle = "display:flex;align-items:center;justify-content:center;line-height:0;--mdc-icon-size:20px;width:20px;height:20px;flex:0 0 20px;color:var(--info-color,var(--primary-color))";
-      if (hasUpdate) {
-        const icon = document.createElement("ha-icon-button");
-        icon.setAttribute("aria-label", this._t("managed.available"));
-        icon.title = this._t("managed.available");
-        icon.style.cssText = `${iconStyle};--mdc-icon-button-size:20px;--ha-icon-button-size:20px;padding:0`;
-        const glyph = document.createElement("ha-icon");
-        glyph.setAttribute("icon", "mdi:sync");
-        glyph.style.cssText = iconStyle;
-        icon.append(glyph);
-        icon.addEventListener("click", (event) => {
-          event.stopPropagation();
-          this._openRuleEditor(row.id);
-        });
-        line.append(icon);
-      }
       if (row.level === "info") {
         const icon = document.createElement("ha-icon");
         icon.setAttribute("icon", "mdi:information-outline");
@@ -427,9 +401,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
       this._navigate("/alert-manager/rules");
       this._activeTab = "rules";
     }
-    const generatorOpen = this._configurationDrawer?.kind === "generator";
     this._configurationDrawer = null;
-    this._blueprintReview = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -437,7 +409,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
     this._ruleEditorError = null;
     this._clearRuleTestResult();
     this._ruleDirty = false;
-    if (navigate || generatorOpen) this._render();
+    if (navigate) this._render();
     else this._refreshRuleEditor();
     return true;
 }
@@ -493,8 +465,6 @@ export async function toggleRule(ruleId) {
 }
 
 export function replaceRule(rule) {
-    if (this._managedBlueprints) delete this._managedBlueprints[rule.id];
-    if (this._blueprintReview?.proposal.rule_id === rule.id) this._blueprintReview = null;
     const index = this._config.rules.findIndex((item) => item.id === rule.id);
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;
@@ -507,20 +477,16 @@ export function replaceRule(rule) {
 }
 
 export async function handleRulesAction(action, button) {
-  if (await handleManagedBlueprintAction(this, action)) return true;
-  if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
     this._clearRuleTestResult();
-    const generatorOpen = this._configurationDrawer?.kind === "generator";
     this._configurationDrawer = null;
     this._editingRule = {};
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
     this._ruleYamlError = null;
     this._ruleDirty = false;
-    if (generatorOpen) this._render();
-    else this._refreshRuleEditor();
+    this._refreshRuleEditor();
     return true;
   }
   if (action === "cancel-rule") {

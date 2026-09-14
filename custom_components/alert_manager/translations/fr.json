@@ -276,17 +276,7 @@
       "transition_unavailable": "Les valeurs unknown et unavailable ne sont pas acceptées pour une transition.",
       "transition_distinct": "Le départ et l’arrivée doivent être différents.",
       "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours.",
-      "blueprint_duplicates": "La sélection contient des blueprints créant des règles équivalentes. Sélectionnez-en un seul.",
-      "blueprint_selection": "Sélection de blueprints invalide.",
-      "blueprint_stale": "Ces blueprints ne sont plus disponibles. Actualisez la liste avant de réessayer.",
-      "blueprint_provenance": "Métadonnées de provenance du blueprint invalides.",
-      "managed_stale": "La règle ou l’installation a changé. Vérifiez à nouveau le blueprint.",
-      "managed_owned": "Prenez le contrôle avant de modifier les champs gérés par le blueprint.",
-      "managed_generate": "Générez la règle depuis son blueprint pour activer le mode géré.",
-      "managed_settings": "Surcharges ou exclusions invalides (50 exclusions maximum).",
-      "managed_selection": "Sélectionnez uniquement des entités actuelles ou découvertes ; une entité ne peut pas être également exclue.",
-      "rule_level_invalid": "Le niveau doit être Alerte ou Information.",
-      "managed_yaml_overrides": "override accepte uniquement name, level, label_ids, duration et value, sans les répéter à la racine. enabled reste à la racine."
+      "rule_level_invalid": "Le niveau doit être Alerte ou Information."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -906,84 +896,6 @@
       "coherence_count": "{count} problèmes détectés",
       "information": "Information",
       "information_count": "{count} informations"
-    },
-    "generator": {
-      "title": "Générer des règles",
-      "overwrite_confirm": "Cela écrasera la règle déjà existante pour chaque blueprint concerné, y compris vos modifications. Continuer ?",
-      "refresh": "Actualiser",
-      "create": "Créer les règles sélectionnées",
-      "created": "Les règles sélectionnées ont été créées.",
-      "help": "Sélectionnez des blueprints prêts à l’emploi. Les règles créées restent modifiables dans Règles personnalisées, sans synchronisation automatique.",
-      "invalid": "Blueprint invalide",
-      "entity_count": "{count} entités",
-      "replacement": "Remplacé par {id}",
-      "categories": {
-        "system": "Système",
-        "storage": "Stockage",
-        "network": "Réseau",
-        "home_assistant": "Home Assistant",
-        "integrations": "Intégrations",
-        "other": "Autres"
-      },
-      "status": {
-        "invalid": "Configuration du blueprint invalide",
-        "deprecated": "Blueprint obsolète",
-        "missing_integration": "Intégration requise non configurée",
-        "missing_domain": "Domaine d’entité requis introuvable",
-        "no_entities": "Aucune entité activée compatible",
-        "too_many_entities": "Plus de 50 entités correspondent ; affiner la découverte du blueprint",
-        "multiple_generated": "Plusieurs règles utilisent ce blueprint ; supprimez les doublons avant de régénérer",
-        "already_generated": "Cela écrasera la règle déjà existante",
-        "matching_rule": "Une règle équivalente existe déjà"
-      },
-      "system_cpu_usage": {
-        "name": "Système : utilisation CPU élevée",
-        "description": "Utilisation CPU des appareils supérieure à 90 % pendant 5 minutes (System Monitor et capteurs compatibles, hors applications/add-ons Home Assistant)."
-      },
-      "system_memory_usage": {
-        "name": "Système : utilisation mémoire élevée",
-        "description": "Utilisation mémoire des appareils supérieure à 90 % pendant 5 minutes (System Monitor et capteurs compatibles, hors applications/add-ons Home Assistant)."
-      },
-      "system_cpu_temperature": {
-        "name": "Système : température CPU élevée",
-        "description": "Température CPU des appareils supérieure à 80 °C pendant 5 minutes (System Monitor et capteurs compatibles en Celsius, hors applications/add-ons Home Assistant)."
-      },
-      "storage_disk_usage": {
-        "name": "Stockage : utilisation disque élevée",
-        "description": "Utilisation disque System Monitor supérieure à 90 % pendant 5 minutes."
-      },
-      "home_assistant_backup_age": {
-        "name": "Alerte sauvegarde",
-        "description": "Alerte lorsque la dernière sauvegarde automatique Home Assistant réussie date de plus de 25 heures. Les dates inconnues ou indisponibles sont ignorées."
-      },
-      "home_assistant_updates_available": {
-        "name": "Mises à jour disponibles",
-        "description": "Une seule alerte listant toutes les mises à jour disponibles, avec un message actualisé tant qu’elle est active. Nécessite l’entité de mise à jour du Core Home Assistant (Supervisor).",
-        "message_prefix": "Mises à jour disponibles:"
-      }
-    },
-    "managed": {
-      "source": "Gérée par {id} · v{version}",
-      "help": "Les changements du blueprint sont proposés pour validation. Aucune entité n’est ajoutée ou retirée automatiquement.",
-      "available": "Mise à jour disponible",
-      "summary": "{added} nouvelles entités compatibles · {removed} entités ne correspondent plus",
-      "version": "Nouvelle version du blueprint disponible",
-      "review": "Vérifier / Mettre à jour",
-      "detach": "Prendre le contrôle",
-      "detach_confirm": "Détacher cette règle de son blueprint ? Ses réglages et entités actuels seront conservés.",
-      "selection_help": "Cochée : l’entité sera surveillée après application. Décochée : elle sera exclue de cette règle et des prochaines propositions. Gardez au moins une entité cochée.",
-      "added": "Nouvelle",
-      "removed": "Ne correspond plus",
-      "changes": "Changements des réglages (actuel → proposé)",
-      "apply": "Appliquer les changements sélectionnés",
-      "save_first": "Enregistrez ou annulez les modifications de la règle avant d’utiliser les actions du blueprint.",
-      "empty": "Sélectionnez au moins une entité à surveiller. Pour arrêter cette surveillance, désactivez la règle.",
-      "keep_exclusions": "Conserver les exclusions des entités actuellement absentes (décochez pour les oublier) :",
-      "invalid": "Le nouveau blueprint est incompatible avec les surcharges enregistrées. Ajustez-les ou prenez le contrôle avant d’appliquer.",
-      "monitored": "À surveiller",
-      "excluded": "À exclure",
-      "yaml_help": "enabled reste indépendant. override contient uniquement vos personnalisations (name, level, label_ids, duration, value). Retirez un champ de ce bloc pour rétablir sa valeur héritée du blueprint.",
-      "applied": "Les changements du blueprint ont bien été appliqués."
     }
   },
   "services": {

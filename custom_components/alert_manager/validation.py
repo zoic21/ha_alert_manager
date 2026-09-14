@@ -48,7 +48,6 @@ _AUTOMATIC_KEYS = {
     for pack in PACKS
 }
 _RULE_CLIENT_KEYS = {
-    "blueprint",
     "from_value",
     "to_value",
     "auto_resolve",

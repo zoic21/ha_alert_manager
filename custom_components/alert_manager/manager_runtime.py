@@ -943,16 +943,6 @@ class _RuntimeMixin:
                 continue
 
             for raw_rule in self.config.get("rules", []):
-                metadata = raw_rule.get("blueprint") or {}
-                exclusions = metadata.get("excluded_entities", [])
-                if old_entity_id in exclusions:
-                    metadata["excluded_entities"] = list(
-                        dict.fromkeys(
-                            new_entity_id if item == old_entity_id else item
-                            for item in exclusions
-                        )
-                    )
-                    changed = True
                 entity_ids = raw_rule.get("entity_ids")
                 if not isinstance(entity_ids, list) or old_entity_id not in entity_ids:
                     continue

@@ -15,7 +15,6 @@ export function renderConfigurationRemove(label, action, attributes = {}) {
 
 export const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
-  "open-rule-generator",
   "open-automatic-configuration",
   "open-deleted-entities",
   "open-settings-configuration",

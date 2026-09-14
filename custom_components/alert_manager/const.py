@@ -7,14 +7,10 @@ from typing import Final
 from homeassistant.const import Platform
 from homeassistant.util.hass_dict import HassKey
 
-BLUEPRINT_OVERRIDE_FIELDS: Final = frozenset(
-    {"name", "level", "label_ids", "value", "duration"}
-)
-
 DOMAIN: Final = "alert_manager"
 # This version is also used as the frontend module cache key. It must change
 # whenever the distributed panel bundle changes.
-INTEGRATION_VERSION: Final = "2.4.0-dev.23"
+INTEGRATION_VERSION: Final = "2.4.0-dev.24"
 FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.34"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 

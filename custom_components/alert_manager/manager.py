@@ -131,9 +131,6 @@ class AlertManager(
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
-        self._blueprint_reconciliation_task: (
-            asyncio.Task[list[dict[str, Any]]] | None
-        ) = None
         self._last_public_snapshot: dict[str, Any] | None = None
         self._pack_availability: dict[str, bool] = {}
         self._excluded_labels: frozenset[str] = frozenset()
@@ -369,8 +366,6 @@ class AlertManager(
         """Remove listeners and timers, persisting a final snapshot."""
         self._begin_shutdown()
         self._unloading = True
-        if self._blueprint_reconciliation_task is not None:
-            self._blueprint_reconciliation_task.cancel()
 
         async def persist_final_snapshot() -> None:
             """Drain any in-flight mutation and persist its rolled-back result."""

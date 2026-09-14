@@ -7,20 +7,14 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.23**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.24**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
-- Space blueprint entity checkboxes and align custom-rule information and update
-  icons after the title with 10 px spacing, vertical centering, consistent sizing
-  and a clearer synchronization indicator.
-- Store only explicit blueprint overrides (including name, level and labels), keep
-  enabled independent, and restore inherited values when YAML overrides are removed.
-- Confirm applied blueprint changes inside the editor and group editable blueprint
-  settings under `override` in the managed rule YAML editor.
-- Avoid recurring blueprint threshold changes caused only by number/string formatting,
-  and apply reviewed selections without a second confirmation dialog.
-- Simplify managed blueprint generation and editing, add scoped YAML editing,
-  clarify entity selections, and fix applying selections and displaying rule tests.
+- Removed the experimental custom-rule blueprint feature entirely, including generation,
+  update checks, managed overrides, interface and documentation. Use the visual or
+  YAML editor to create and edit ordinary custom rules; no migration is introduced.
+- Keep custom-rule information icons after the title with 10 px spacing,
+  vertical centering and consistent sizing.
 - Keep grouped dashboard icons beside the text and open the matching device alerts
   with a correctly selected device filter, including devices sharing the same name.
 - Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
@@ -30,7 +24,6 @@ This is a prerelease for testing, not a stable release.
   icon in the panel, history, dashboard and notifications, without a duplicate icon
   beside the entity name in alert tables. Alert remains the default;
   detection, acknowledgement, notification policies and batching are unchanged.
-- Added backup-age and available-update blueprints with English recipe documentation.
 - Deleting a custom rule resolves its ongoing alerts without sending recovery
   notifications, including queued notification batches.
 
@@ -60,7 +53,6 @@ This is a prerelease for testing, not a stable release.
   wrap on mobile, and keep reorder/delete controls close together. Fixed summary translations.
   Pack and notification exceptions hide their header text and badges while expanded,
   retaining the chevron and action controls; updated summaries return on collapse.
-  The generated-rule refresh action now includes an icon.
 - Simplified notification exceptions with the same switches and reminder input as
   the profile defaults, preserving effective values when editing existing exceptions.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence

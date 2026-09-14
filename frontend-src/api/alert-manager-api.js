@@ -1,4 +1,3 @@
-import { refreshRuleGeneratorState } from "../components/rule-generator.js";
 import { refreshHistoryOccurrenceDetails } from "../components/alert-table.js";
 import { syncRuntimeMetadata } from "../utils/formatting.js";
 
@@ -103,9 +102,7 @@ export function setHass(value) {
 
 export function refreshTabData(tab) {
     if (!this._hass || !this._config || (this._readOnly && !["overview", "history"].includes(tab))) return;
-    if (tab === "rules") {
-      void refreshManagedBlueprints(this);
-    } else if (tab === "history") {
+    if (tab === "history") {
       void this._refreshHistory();
     } else if (tab === "coherence") {
       void this._refreshCoherence();
@@ -298,7 +295,6 @@ export async function call(message, successText) {
     this._busy = true;
     this._notice = null;
     this._refreshUiState();
-    refreshRuleGeneratorState(this);
     try {
       const result = await this._api.call(message);
       this._notice = successText ? { kind: "success", text: successText } : null;
@@ -309,7 +305,6 @@ export async function call(message, successText) {
     } finally {
       this._busy = false;
       this._refreshUiState();
-      refreshRuleGeneratorState(this);
     }
 }
 
@@ -357,43 +352,4 @@ export function syncSensor() {
       }
     }
     return alertsChanged;
-}
-
-
-export async function refreshManagedBlueprints(panel) {
-    if (panel._managedBlueprintRequest) return panel._managedBlueprintRequest;
-    const rules = JSON.stringify(panel._config?.rules ?? []);
-    const config = panel._config;
-    panel._managedBlueprints = {};
-    panel._managedBlueprintRequest = (async () => {
-      // Yield to the browser so the regular table renders before maintenance starts.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      try {
-        const rows = await panel._api.call({ type: "alert_manager/rules/blueprints/reconcile" });
-        if (!panel.isConnected || panel._activeTab !== "rules"
-          || config !== panel._config
-          || rules !== JSON.stringify(panel._config?.rules ?? [])) return;
-        rememberManagedBlueprints(panel, rows);
-        panel._refreshRulesData();
-        if (panel._editingRule && !panel._ruleDirty && !panel._blueprintReview) panel._refreshRuleEditor();
-      } catch (error) {
-        // Maintenance errors must never turn the table into an error/loading page.
-        if (panel.isConnected && panel._activeTab === "rules") {
-          panel._notice = { kind: "error", text: panel._errorText(error) };
-          panel._refreshUiState();
-        }
-      } finally {
-        panel._managedBlueprintRequest = null;
-      }
-    })();
-    return panel._managedBlueprintRequest;
-}
-
-
-export function rememberManagedBlueprints(panel, rows) {
-    const rules = new Map((panel._config?.rules ?? []).map((rule) => [rule.id, rule]));
-    const checkedAt = Date.now();
-    panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, {
-      ...row, checkedAt, ruleSignature: JSON.stringify(rules.get(row.rule_id)),
-    }]));
 }
