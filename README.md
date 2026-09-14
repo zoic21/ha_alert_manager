@@ -38,7 +38,7 @@ Rules support states, nested attributes, numeric and text comparisons, inactivit
 
 Overview separates active, upcoming and acknowledged alerts, with search, filters, sorting, device grouping, customizable columns and multiple selection. Open an alert to inspect its triggering/current values, notification deliveries and previous occurrences. Acknowledgement can be indefinite or temporary.
 
-The included dashboard card presents a compact view grouped by device. Choose a tile limit, label filter, alignment and icon color; it hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
+The included dashboard card presents a compact view grouped by device. Choose desktop/mobile tile limits, sorting, label inclusions/exclusions, optional age and grouping, alignment and icon color; it hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
 
 ### Choose when to notify and check configuration health
 

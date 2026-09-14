@@ -861,7 +861,7 @@
       "description": "Alertes actives regroupées par équipement.",
       "max_tiles": "Nombre maximal de tuiles",
       "label": "Étiquette (facultatif)",
-      "invalid_config": "Utilisez de 1 à 100 tuiles et un identifiant d’étiquette.",
+      "invalid_config": "Utilisez des limites entières de 1 à 100, des listes de labels, un ordre de tri valide et des options d’affichage booléennes.",
       "custom_rules": "Règles personnalisées",
       "alert": "Alerte",
       "count": "{count} alertes",
@@ -886,7 +886,17 @@
       "more_count": "Voir plus d’alertes : {count} supplémentaires",
       "coherence": "Cohérence",
       "coherence_one": "1 problème détecté",
-      "coherence_count": "{count} problèmes détectés"
+      "coherence_count": "{count} problèmes détectés",
+      "max_tiles_mobile": "Nombre maximal sur mobile (facultatif)",
+      "sort": "Ordre d’affichage",
+      "sort_newest": "Plus récentes",
+      "sort_oldest": "Plus anciennes",
+      "sort_alphabetical": "Alphabétique",
+      "labels": "Labels à afficher",
+      "exclude_labels": "Labels à masquer",
+      "show_age": "Afficher l’ancienneté de l’alerte",
+      "group_by_device": "Regrouper par appareil",
+      "more_devices": "Voir plus d’appareils : {count} supplémentaires"
     }
   },
   "services": {

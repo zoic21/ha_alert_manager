@@ -861,7 +861,7 @@
       "description": "Active alerts grouped by device.",
       "max_tiles": "Maximum number of tiles",
       "label": "Label (optional)",
-      "invalid_config": "Use 1 to 100 tiles and a label ID.",
+      "invalid_config": "Use integer tile limits from 1 to 100, label lists, a valid sort order and boolean display options.",
       "custom_rules": "Custom rules",
       "alert": "Alert",
       "count": "{count} alerts",
@@ -886,7 +886,17 @@
       "more_count": "View more alerts: {count} additional",
       "coherence": "Coherence",
       "coherence_one": "1 issue detected",
-      "coherence_count": "{count} issues detected"
+      "coherence_count": "{count} issues detected",
+      "max_tiles_mobile": "Maximum tiles on mobile (optional)",
+      "sort": "Display order",
+      "sort_newest": "Newest first",
+      "sort_oldest": "Oldest first",
+      "sort_alphabetical": "Alphabetical",
+      "labels": "Labels to show",
+      "exclude_labels": "Labels to hide",
+      "show_age": "Show alert age",
+      "group_by_device": "Group by device",
+      "more_devices": "Show more devices: {count} remaining"
     }
   },
   "services": {
