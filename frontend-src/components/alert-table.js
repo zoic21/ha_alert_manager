@@ -461,7 +461,7 @@ export function filteredTableRows(kind, rows, includeSearch = true) {
         && !Object.keys(historyAssociatedProfiles(row)).some((id) => selected.profile.has(`id:${id}`))) return false;
       if (selected.status.size && !selected.status.has(row.status)) return false;
       if (selected.device.size && !selected.device.has(row.device)
-        && !(kind === "history" && selected.device.has(historyFacetValue(row, "device")))) return false;
+        && !selected.device.has(historyFacetValue(row, "device"))) return false;
       if (selected.area.size && !selected.area.has(row.area)) return false;
       if (selected.rule.size && !selected.rule.has(row.rule)
         && !(kind === "history" && selected.rule.has(historyFacetValue(row, "rule")))) return false;
@@ -644,10 +644,14 @@ export function renderDateFilter(kind, prefix, label, rows) {
 export function renderFilterPane(kind, rows) {
     const statuses = ["active", "pending", "acknowledged"]
       .map((value) => ({ value, label: this._t(`overview.status_${value}`) }));
+    const selectedDevices = new Set(this._filterValues(this._tableState[kind].filters.device));
+    const devices = historyFacetOptions(rows, "device", (key) => this._t(key))
+      .map((option) => kind === "overview" && selectedDevices.has(option.label)
+        ? { ...option, value: option.label } : option);
     return `${kind === "overview" ? this._renderFacetFilter(kind, "status", this._t("table.columns.status"), statuses) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "alert", this._t("alert_details.alert_id"), [...new Set([...rows.map((row) => row.alertId).filter(Boolean), ...this._filterValues(this._tableState[kind].filters.alert)])]) : ""}
       ${kind === "history" ? this._renderFacetFilter(kind, "profile", this._t("history.statistics.profiles"), historyFacetOptions(rows, "profile", (key) => this._t(key))) : ""}
-      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), kind === "history" ? historyFacetOptions(rows, "device", (key) => this._t(key)) : this._facetOptions(rows, "device"))}
+      ${this._renderFacetFilter(kind, "device", this._t("table.columns.device"), devices)}
       ${this._renderFacetFilter(kind, "rule", this._t("table.columns.rule"), kind === "history" ? historyFacetOptions(rows, "rule", (key) => this._t(key)) : this._facetOptions(rows, "rule"))}
       ${this._renderFacetFilter(kind, "integration", this._t("table.filters.integration"), kind === "history" ? historyFacetOptions(rows, "integration", (key) => this._t(key)) : this._facetOptions(rows, "integration").map((integration) => ({ value: integration, label: rows.find((row) => row.integration === integration)?.integrationLabel || integration })))}
       ${this._renderFacetFilter(kind, "labels", this._t("table.filters.labels"), [...new Map(rows.flatMap((row) => row.labels).map((label) => [label.id, { value: label.id, label: label.name }])).values()])}
@@ -1229,7 +1233,7 @@ export function openAlertDeepLink() {
       this._handledDashboardDeepLink = search;
       this._resetTableFilters("overview");
       this._tableState.overview.search = "";
-      this._tableState.overview.filters.device = deviceId ? [deviceId] : [];
+      this._tableState.overview.filters.device = deviceId ? [`id:${deviceId}`] : [];
       this._tableState.overview.filters.labels = params.get("label") ? [params.get("label")] : [];
       this._activeTab = "overview";
       this._render();

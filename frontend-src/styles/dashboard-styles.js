@@ -18,7 +18,7 @@ export const dashboardStyles = `
   .content { min-width: 0; flex: 1; }
   .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .message { color: var(--secondary-text-color); font-size: 14px; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-  .types { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .types { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; max-width: 60px; align-items: center; }
   ha-icon { color: var(--alert-icon-color); flex: none; border-radius: 50%; padding: 8px;
     background: color-mix(in srgb, var(--alert-icon-color) 12%, transparent); }
   .types ha-icon { --mdc-icon-size: 20px; padding: 4px; }

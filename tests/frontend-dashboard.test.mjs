@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { connectDashboard } from "../frontend-src/api/dashboard.js";
 import { dashboardGroups, dashboardTarget } from "../frontend-src/dashboard/groups.js";
-import { openAlertDeepLink } from "../frontend-src/components/alert-table.js";
+import { openAlertDeepLink, filteredTableRows, filterValues, historyFacetOptions, renderFilterPane, renderFacetFilter } from "../frontend-src/components/alert-table.js";
 
 const alert = (id, extra = {}) => ({ id, entity_id: `sensor.${id}`, type: "battery",
   name: id, active_since: "2026-09-01T12:00:00Z", acknowledged: false, ...extra });
@@ -189,6 +189,7 @@ test("card enforces group limit, escapes names, translates conditions and shows 
   assert.doesNotMatch(card.shadowRoot.innerHTML, /<img/);
   assert.match(card.shadowRoot.innerHTML, /&lt;img/);
   assert.match(card.shadowRoot.innerHTML, /2 alertes/);
+  assert.match(card.shadowRoot.innerHTML, /<div class="types">(?:<ha-icon[^>]*><\/ha-icon>)+<\/div>\s*<div class="content">/);
   card._value = { status: "ready", snapshot: { alerts: [], startup: { in_progress: true } } };
   card._render();
   assert.equal(card.hidden, true);
@@ -216,13 +217,13 @@ test("device deep links replace stale filters, retain the label and allow anothe
   };
   window.location = { search: "?device=one&label=home" };
   openAlertDeepLink.call(panel);
-  assert.deepEqual(panel._tableState.overview.filters, { status: ["active"], device: ["one"], labels: ["home"] });
+  assert.deepEqual(panel._tableState.overview.filters, { status: ["active"], device: ["id:one"], labels: ["home"] });
   assert.equal(panel._tableState.overview.search, "");
   window.location.search = "";
   openAlertDeepLink.call(panel);
   window.location.search = "?device=two";
   openAlertDeepLink.call(panel);
-  assert.deepEqual(panel._tableState.overview.filters.device, ["two"]);
+  assert.deepEqual(panel._tableState.overview.filters.device, ["id:two"]);
   window.location.search = "?dashboard=1&label=home";
   openAlertDeepLink.call(panel);
   assert.deepEqual(panel._tableState.overview.filters.device, []);
@@ -455,4 +456,31 @@ test("information groups retain membership and order with alert visual precedenc
   assert.equal(dashboardTarget(mixed), dashboardTarget(informative));
   assert.equal(dashboardGroups([{ ...items[0], level: undefined }])[0].informational, false);
   assert.equal(dashboardGroups([{ ...items[0], type: "battery" }])[0].informational, false);
+});
+
+test("group link selects device IDs with matching facet and preserves label filtering", () => {
+  const items = [alert("a", { device_id: "one", device_name: "Cloudflared" }),
+    alert("b", { device_id: "one", device_name: "Cloudflared" })];
+  window.location = { search: dashboardTarget(dashboardGroups(items)[0], "home").split("?")[1] };
+  const panel = { _tableState: { overview: { search: "stale", filters: {} } },
+    _resetTableFilters() { this._tableState.overview.filters = {}; },
+    _render() {}, _filterValues: filterValues, _dateMatches: () => true,
+    _compareTableRows: () => 0,
+  };
+  openAlertDeepLink.call(panel);
+  const rows = [
+    ...items.map((source) => ({ id: source.id, source, device: source.device_name, labelIds: ["home"] })),
+    { id: "same-name", source: { device_id: "two" }, device: "Cloudflared", labelIds: ["home"] },
+    { id: "other-label", source: { device_id: "one" }, device: "Cloudflared", labelIds: [] },
+  ];
+  assert.deepEqual(filteredTableRows.call(panel, "overview", rows).map((row) => row.id), ["a", "b"]);
+  const options = historyFacetOptions(rows, "device", (key) => key);
+  assert.ok(options.some((option) => option.value === panel._tableState.overview.filters.device[0] && option.label === "Cloudflared"));
+  Object.assign(panel, { _t: (key) => key, _facetOptions: () => [],
+    _renderDateFilter: () => "", _renderFacetFilter: renderFacetFilter });
+  rows.forEach((row) => { row.labels = []; });
+  assert.match(renderFilterPane.call(panel, "overview", rows), /<ha-checkbox[^>]*data-filter-value="id:one" checked/);
+  panel._tableState.overview.filters = { device: ["Cloudflared"] };
+  assert.equal(filteredTableRows.call(panel, "overview", rows).length, 4);
+  assert.match(renderFilterPane.call(panel, "overview", rows), /<ha-checkbox[^>]*data-filter-value="Cloudflared" checked/);
 });

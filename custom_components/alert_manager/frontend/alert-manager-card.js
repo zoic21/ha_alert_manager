@@ -625,7 +625,7 @@ const dashboardStyles = `
   .content { min-width: 0; flex: 1; }
   .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .message { color: var(--secondary-text-color); font-size: 14px; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-  .types { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .types { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; max-width: 60px; align-items: center; }
   ha-icon { color: var(--alert-icon-color); flex: none; border-radius: 50%; padding: 8px;
     background: color-mix(in srgb, var(--alert-icon-color) 12%, transparent); }
   .types ha-icon { --mdc-icon-size: 20px; padding: 4px; }
@@ -747,10 +747,9 @@ class AlertManagerCard extends HTMLElement {
         : fullMessage;
     return `<ha-card><a class="tile"${group.informational && !this._config.icon_color ? ' style="--alert-icon-color:var(--info-color, var(--primary-color))"' : ""} data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
       <ha-ripple></ha-ripple>
-      ${multiple ? "" : this._icon(alert.type, group.informational)}
+      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type, group.informational)).join("")}</div>` : this._icon(alert.type, group.informational)}
       <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div>
-      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type, group.informational)).join("")}</div>` : ""}</div>
+      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div></div>
     </a></ha-card>`;
   }
   _render() {

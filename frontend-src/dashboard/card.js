@@ -111,10 +111,9 @@ export class AlertManagerCard extends HTMLElement {
         : fullMessage;
     return `<ha-card><a class="tile"${group.informational && !this._config.icon_color ? ' style="--alert-icon-color:var(--info-color, var(--primary-color))"' : ""} data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
       <ha-ripple></ha-ripple>
-      ${multiple ? "" : this._icon(alert.type, group.informational)}
+      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type, group.informational)).join("")}</div>` : this._icon(alert.type, group.informational)}
       <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div>
-      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type, group.informational)).join("")}</div>` : ""}</div>
+      <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div></div>
     </a></ha-card>`;
   }
   _render() {

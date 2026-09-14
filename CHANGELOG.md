@@ -7,9 +7,11 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.15**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.16**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
+- Keep grouped dashboard icons beside the text and open the matching device alerts
+  with a correctly selected device filter, including devices sharing the same name.
 - Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
   uses a compact hourglass beside the last alert, and mobile overflow stays on the
   same row as the last tile. No matching alerts means no card during startup.
