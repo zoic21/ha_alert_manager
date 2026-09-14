@@ -103,7 +103,9 @@ export function setHass(value) {
 
 export function refreshTabData(tab) {
     if (!this._hass || !this._config || (this._readOnly && !["overview", "history"].includes(tab))) return;
-    if (tab === "history") {
+    if (tab === "rules") {
+      void refreshManagedBlueprints(this);
+    } else if (tab === "history") {
       void this._refreshHistory();
     } else if (tab === "coherence") {
       void this._refreshCoherence();
@@ -165,7 +167,7 @@ export async function load() {
       this._syncSensor();
       this._notice = null;
       this._rememberPanelState();
-      if (["history", "coherence"].includes(this._activeTab)) {
+      if (["history", "coherence", "rules"].includes(this._activeTab)) {
         this._refreshTabData(this._activeTab);
       }
     } catch (error) {
@@ -355,4 +357,34 @@ export function syncSensor() {
       }
     }
     return alertsChanged;
+}
+
+
+export async function refreshManagedBlueprints(panel) {
+    if (panel._managedBlueprintRequest) return panel._managedBlueprintRequest;
+    const rules = JSON.stringify(panel._config?.rules ?? []);
+    const config = panel._config;
+    panel._managedBlueprints = {};
+    panel._managedBlueprintRequest = (async () => {
+      // Yield to the browser so the regular table renders before maintenance starts.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      try {
+        const rows = await panel._api.call({ type: "alert_manager/rules/blueprints/reconcile" });
+        if (!panel.isConnected || panel._activeTab !== "rules"
+          || config !== panel._config
+          || rules !== JSON.stringify(panel._config?.rules ?? [])) return;
+        panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
+        panel._refreshRulesData();
+        if (panel._editingRule && !panel._ruleDirty && !panel._blueprintReview) panel._refreshRuleEditor();
+      } catch (error) {
+        // Maintenance errors must never turn the table into an error/loading page.
+        if (panel.isConnected && panel._activeTab === "rules") {
+          panel._notice = { kind: "error", text: panel._errorText(error) };
+          panel._refreshUiState();
+        }
+      } finally {
+        panel._managedBlueprintRequest = null;
+      }
+    })();
+    return panel._managedBlueprintRequest;
 }

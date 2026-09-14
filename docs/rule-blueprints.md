@@ -4,8 +4,9 @@ For setup instructions and a page for each bundled blueprint, see the
 [blueprint documentation index](blueprints/README.md).
 
 A blueprint creates one ordinary custom rule containing all matching entities.
-It does not run a detector or synchronize that rule afterward. Automatic packs
-remain responsible for broad monitoring and specialized lifecycle behavior.
+It does not run a separate detector. Optional managed mode proposes maintenance
+changes for explicit review; automatic packs remain responsible for broad
+monitoring and specialized lifecycle behavior.
 
 ## Adding a recipe
 
@@ -112,9 +113,42 @@ in the editor creates an independent copy without blueprint provenance.
 Existing generated rules do not need their source YAML file. `deprecated: true`
 disables a recipe for new creation; optional `replaced_by` explains its successor.
 Neither deprecation nor removal updates existing rules. Never reuse an ID for a
-semantically different recipe. Managed rules and automatic reconciliation belong
-to issue #112; adding them later can extend the structured provenance and reuse
-this discovery implementation.
+semantically different recipe. Managed mode extends this provenance with explicit
+overrides and exclusions, using the same discovery implementation.
 
-The generator WebSocket list/create commands require an administrator. The
+The generator and managed-rule WebSocket commands require an administrator. The
 frontend only submits blueprint IDs and never interprets discovery definitions.
+
+## Managed rules
+
+Enable **Keep rules managed by their blueprint** in the generator to opt in.
+Existing generated rules remain ordinary, fully editable rules unless explicitly
+regenerated in managed mode.
+
+Opening **Custom rules** starts a shared comparison after the table renders.
+An update icon before a rule's name indicates new compatible entities, entities
+that no longer match, or a newer bundled blueprint version. There is no periodic
+scan, automatic scope expansion, or automatic blueprint update.
+
+Open the rule and choose **Review / Update**. The comparison shows membership and
+setting changes. Select the entities to monitor and explicitly apply the proposal.
+Unchecked entities remain excluded from later proposals. Missing exclusions can
+be retained or forgotten during review. Both monitored entities and exclusions
+are limited to 50 entries. A rule must retain at least one entity; if none should
+remain, disable or delete it instead.
+
+The blueprint controls discovery, source, operator, templates, and structural
+behavior. You can edit the rule's name, labels, enabled state, value and delay.
+Changing a value or delay records an explicit override. Accepted blueprint
+updates preserve these overrides; other defaults adopt the new blueprint values.
+Use **Take control** to detach the rule and freely edit all fields, including YAML.
+Detachment preserves its current entities, configuration and rule identifier.
+Regenerating is the supported way to opt back into managed mode.
+
+Comparisons run outside Home Assistant's event loop using a shared installation
+snapshot. Overlapping requests share their work. Applying a proposal performs a
+fresh check under the configuration transaction lock: if the rule, blueprint or
+matching entity list changed while the review was open, review again. Persistence
+failure rolls back the configuration and alert state. Registry-backed entity
+renames preserve references, including exclusions, through the existing rename
+handling.

@@ -1,4 +1,10 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Rules changed; review the blueprint again", "managed_stale"],
+  ["Detach the rule before editing blueprint-owned fields", "managed_owned"],
+  ["Generate the blueprint to enable management", "managed_generate"],
+  ["Invalid managed blueprint settings", "managed_settings"],
+  ["Blueprint override must match effective rule", "managed_settings"],
+  ["Invalid blueprint entity selection", "managed_selection"],
   ["Blueprint selection contains equivalent rules", "blueprint_duplicates"],
   ["Invalid blueprint selection", "blueprint_selection"],
   ["Blueprint selection is no longer available", "blueprint_stale"],

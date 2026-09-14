@@ -279,7 +279,12 @@
       "blueprint_duplicates": "La sélection contient des blueprints créant des règles équivalentes. Sélectionnez-en un seul.",
       "blueprint_selection": "Sélection de blueprints invalide.",
       "blueprint_stale": "Ces blueprints ne sont plus disponibles. Actualisez la liste avant de réessayer.",
-      "blueprint_provenance": "Métadonnées de provenance du blueprint invalides."
+      "blueprint_provenance": "Métadonnées de provenance du blueprint invalides.",
+      "managed_stale": "La règle ou l’installation a changé. Vérifiez à nouveau le blueprint.",
+      "managed_owned": "Prenez le contrôle avant de modifier les champs gérés par le blueprint.",
+      "managed_generate": "Générez la règle depuis son blueprint pour activer le mode géré.",
+      "managed_settings": "Surcharges ou exclusions invalides (50 exclusions maximum).",
+      "managed_selection": "Sélectionnez uniquement des entités actuelles ou découvertes ; une entité ne peut pas être également exclue."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -936,6 +941,28 @@
         "description": "Une seule alerte listant toutes les mises à jour disponibles, avec un message actualisé tant qu’elle est active. Nécessite l’entité de mise à jour du Core Home Assistant (Supervisor).",
         "message_prefix": "Mises à jour disponibles:"
       }
+    },
+    "managed": {
+      "opt_in": "Garder les règles gérées par leur blueprint",
+      "source": "Gérée par {id} · v{version}",
+      "help": "Les changements du blueprint sont proposés pour validation. Aucune entité n’est ajoutée ou retirée automatiquement.",
+      "available": "Mise à jour disponible",
+      "summary": "{added} nouvelles entités compatibles · {removed} entités ne correspondent plus",
+      "version": "Nouvelle version du blueprint disponible",
+      "review": "Vérifier / Mettre à jour",
+      "detach": "Prendre le contrôle",
+      "detach_confirm": "Détacher cette règle de son blueprint ? Ses réglages et entités actuels seront conservés.",
+      "selection_help": "Sélectionnez les entités à surveiller. Les entités décochées restent explicitement exclues des prochaines propositions. Conservez au moins une entité.",
+      "added": "Nouvelle",
+      "removed": "Ne correspond plus",
+      "changes": "Changements des réglages (actuel → proposé)",
+      "apply": "Appliquer les changements sélectionnés",
+      "apply_confirm": "Appliquer les réglages du blueprint et les entités sélectionnées ?",
+      "save_first": "Enregistrez ou annulez vos modifications avant de vérifier le blueprint.",
+      "empty": "Conservez au moins une entité, ou détachez et désactivez cette règle.",
+      "owned": "Ces champs sont gérés par le blueprint. Prenez le contrôle pour les modifier.",
+      "keep_exclusions": "Conserver les exclusions des entités actuellement absentes (décochez pour les oublier) :",
+      "invalid": "Le nouveau blueprint est incompatible avec les surcharges enregistrées. Ajustez-les ou prenez le contrôle avant d’appliquer."
     }
   },
   "services": {

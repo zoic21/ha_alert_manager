@@ -760,14 +760,33 @@ class Rule:
             provenance = self.blueprint
             if (
                 not isinstance(provenance, dict)
-                or set(provenance) != {"id", "version", "managed"}
+                or set(provenance)
+                - {"id", "version", "managed", "overrides", "excluded_entities"}
                 or not isinstance(provenance.get("id"), str)
                 or not 1 <= len(provenance["id"].strip()) <= 128
                 or type(provenance.get("version")) is not int
                 or provenance["version"] < 1
-                or provenance.get("managed") is not False
+                or type(provenance.get("managed")) is not bool
             ):
                 raise ValueError("Invalid rule blueprint provenance")
+            overrides = provenance.get("overrides", {})
+            exclusions = provenance.get("excluded_entities", [])
+            if (
+                not isinstance(overrides, dict)
+                or set(overrides) - {"value", "duration"}
+                or not isinstance(exclusions, list)
+                or len(exclusions) > MAX_RULE_ENTITY_IDS
+                or any(
+                    not isinstance(item, str) or len(item) > 255 or "." not in item
+                    for item in exclusions
+                )
+                or len(set(exclusions)) != len(exclusions)
+            ):
+                raise ValueError("Invalid managed blueprint settings")
+            for key, value in overrides.items():
+                if value != getattr(self, key):
+                    raise ValueError("Blueprint override must match effective rule")
+
         self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")

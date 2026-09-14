@@ -279,7 +279,12 @@
       "blueprint_duplicates": "The selection contains blueprints that create equivalent rules. Select only one.",
       "blueprint_selection": "Invalid blueprint selection.",
       "blueprint_stale": "These blueprints are no longer available. Refresh the list and try again.",
-      "blueprint_provenance": "Invalid blueprint provenance metadata."
+      "blueprint_provenance": "Invalid blueprint provenance metadata.",
+      "managed_stale": "The rule or installation changed. Review the blueprint again.",
+      "managed_owned": "Take control before editing fields owned by the blueprint.",
+      "managed_generate": "Generate the rule from its blueprint to enable managed mode.",
+      "managed_settings": "Invalid blueprint overrides or exclusions (maximum 50 exclusions).",
+      "managed_selection": "Select only current or discovered entities; an entity cannot also be excluded."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -936,6 +941,28 @@
         "description": "One alert listing all available updates, with its message refreshed while active. Requires the Home Assistant Core update entity (Supervisor).",
         "message_prefix": "Updates available:"
       }
+    },
+    "managed": {
+      "opt_in": "Keep rules managed by their blueprint",
+      "source": "Managed by {id} · v{version}",
+      "help": "Blueprint changes are proposed for review. Entities are never added or removed automatically.",
+      "available": "Update available",
+      "summary": "{added} new compatible entities · {removed} current entities no longer match",
+      "version": "New blueprint version available",
+      "review": "Review / Update",
+      "detach": "Take control",
+      "detach_confirm": "Detach this rule from its blueprint? Its current settings and entities will be preserved.",
+      "selection_help": "Select the entities to monitor. Unchecked entities remain explicitly excluded from future proposals. Keep at least one entity.",
+      "added": "New",
+      "removed": "No longer matches",
+      "changes": "Setting changes (current → proposed)",
+      "apply": "Apply selected changes",
+      "apply_confirm": "Apply the reviewed blueprint settings and selected entities?",
+      "save_first": "Save or cancel your edits before reviewing blueprint changes.",
+      "empty": "Keep at least one entity, or detach and disable this rule.",
+      "owned": "These fields are managed by the blueprint. Take control to edit them.",
+      "keep_exclusions": "Keep exclusions for currently missing entities (uncheck to forget):",
+      "invalid": "The new blueprint is incompatible with the saved overrides. Adjust them or take control before applying."
     }
   },
   "services": {

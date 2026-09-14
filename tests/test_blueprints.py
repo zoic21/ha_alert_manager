@@ -274,7 +274,7 @@ def test_concurrent_generation_rechecks_duplicates(hass, entry, registry_entry):
         "cpu",
         {},
         {"id": "x", "version": True, "managed": False},
-        {"id": "x", "version": 1, "managed": True},
+        {"id": "x", "version": 1, "managed": "true"},
     ],
 )
 def test_invalid_provenance_rejected(provenance):

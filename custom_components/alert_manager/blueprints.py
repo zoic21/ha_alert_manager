@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -307,23 +309,7 @@ def prepare_blueprints(
         existing_ids = generated.get(blueprint["blueprint_id"], [])
         row["existing_rule_ids"] = existing_ids
         if row["status"] == "available":
-            payload = deepcopy(blueprint["rule"])
-            payload["name"] = translations.get(
-                f"component.alert_manager.config_panel.{blueprint['name_key']}",
-                payload["name"],
-            )
-            if message_prefix_key := blueprint.get("message_prefix_key"):
-                prefix = translations.get(
-                    f"component.alert_manager.config_panel.{message_prefix_key}",
-                    blueprint["message_prefix"],
-                )
-                payload["message"] = f"{prefix} {payload.get('message') or ''}"
-            payload["entity_ids"] = row["entity_ids"]
-            payload["blueprint"] = {
-                "id": blueprint["blueprint_id"],
-                "version": blueprint["blueprint_version"],
-                "managed": False,
-            }
+            payload = blueprint_payload(blueprint, row["entity_ids"], translations)
             try:
                 candidate = validate_rule_payload(payload)
                 row["rule"] = candidate.as_dict()
@@ -369,3 +355,133 @@ def rule_signature(rule: Rule) -> dict[str, Any]:
         else:
             data["value"] = sorted({normalize_scalar(value) for value in values})
     return data
+
+
+def blueprint_payload(
+    blueprint: dict[str, Any], entity_ids: list[str], translations: dict[str, str]
+) -> dict[str, Any]:
+    """Resolve one recipe through the same generator and maintenance path."""
+    payload = deepcopy(blueprint["rule"])
+    payload["name"] = translations.get(
+        f"component.alert_manager.config_panel.{blueprint['name_key']}",
+        payload["name"],
+    )
+    if message_prefix_key := blueprint.get("message_prefix_key"):
+        prefix = translations.get(
+            f"component.alert_manager.config_panel.{message_prefix_key}",
+            blueprint["message_prefix"],
+        )
+        payload["message"] = f"{prefix} {payload.get('message') or ''}"
+    payload["entity_ids"] = entity_ids
+    payload["blueprint"] = {
+        "id": blueprint["blueprint_id"],
+        "version": blueprint["blueprint_version"],
+        "managed": False,
+    }
+    return payload
+
+
+def reconcile_blueprints(
+    catalog: list[dict[str, Any]],
+    installation: dict[str, Any],
+    rules: list[dict[str, Any]],
+    translations: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Compare managed rules in the executor, sharing discovery per recipe."""
+    recipes = {item["blueprint_id"]: item for item in catalog}
+    discovery = {}
+    results = []
+    for rule in rules:
+        metadata = rule.get("blueprint") or {}
+        if not metadata.get("managed"):
+            continue
+        recipe = recipes.get(metadata["id"])
+        if (
+            recipe is None
+            or "error" in recipe
+            or recipe.get("deprecated")
+            or recipe["blueprint_version"] < metadata["version"]
+        ):
+            continue
+        if metadata["id"] not in discovery:
+            discovery[metadata["id"]] = discover_blueprint(recipe, installation)
+        discovered = discovery[metadata["id"]]["entity_ids"]
+        excluded = set(metadata.get("excluded_entities", []))
+        desired = sorted(set(discovered) - excluded)
+        current = set(rule["entity_ids"])
+        candidate = blueprint_payload(recipe, desired, translations)
+        for key in ("id", "name", "enabled", "label_ids"):
+            candidate[key] = deepcopy(rule[key])
+        candidate.update(deepcopy(metadata.get("overrides", {})))
+        candidate["blueprint"].update(
+            managed=True,
+            overrides=deepcopy(metadata.get("overrides", {})),
+            excluded_entities=sorted(excluded),
+        )
+        # Normalize structural defaults even when discovery currently finds no
+        # entities (or more than the rule limit), so removals are visible too.
+        candidate["entity_ids"] = rule["entity_ids"]
+        invalid = False
+        try:
+            candidate = validate_rule_payload(candidate, rule_id=rule["id"]).as_dict()
+        except ValueError:
+            # Isolate incompatible overrides; application still validates them.
+            invalid = True
+        candidate["entity_ids"] = desired
+        result = {
+            "rule_id": rule["id"],
+            "added": sorted(set(desired) - current),
+            "removed": sorted(current - set(desired)),
+            "discovered": discovered,
+            "version_available": recipe["blueprint_version"] > metadata["version"],
+            "candidate": candidate,
+            "invalid": invalid,
+        }
+        result["update_available"] = bool(
+            result["added"] or result["removed"] or result["version_available"]
+        )
+        result["token"] = hashlib.sha256(
+            json.dumps([rule, result], sort_keys=True).encode()
+        ).hexdigest()
+        results.append(result)
+    return results
+
+
+def managed_rule_edit(existing: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Keep structural ownership authoritative for ordinary edits and YAML."""
+    metadata = existing.get("blueprint") or {}
+    if not metadata.get("managed"):
+        provided = data.get("blueprint")
+        if provided is not None and not isinstance(provided, dict):
+            raise ValueError("Invalid rule blueprint provenance")
+        if (provided or {}).get("managed"):
+            raise ValueError("Generate the blueprint to enable management")
+        return data
+    allowed = {"name", "enabled", "label_ids", "value", "duration"}
+    if any(
+        value != existing.get(key) for key, value in data.items() if key not in allowed
+    ):
+        raise ValueError("Detach the rule before editing blueprint-owned fields")
+    updated = deepcopy(data)
+    metadata = deepcopy(metadata)
+    overrides = metadata.setdefault("overrides", {})
+    for key in ("value", "duration"):
+        if key not in data:
+            continue
+        old, new = existing.get(key), data[key]
+        if key == "value":
+            normalize = (
+                safe_float
+                if existing.get("operator") in {"above", "below", "between", "outside"}
+                else normalize_scalar
+            )
+            old = [
+                normalize(item) for item in (old if isinstance(old, list) else [old])
+            ]
+            new = [
+                normalize(item) for item in (new if isinstance(new, list) else [new])
+            ]
+        if old != new or key in overrides:
+            overrides[key] = data[key]
+    updated["blueprint"] = metadata
+    return updated

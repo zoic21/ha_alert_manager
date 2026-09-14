@@ -1,3 +1,4 @@
+import { handleManagedBlueprintAction } from "../components/managed-blueprints.js";
 import { handleRuleGeneratorAction, hydrateRuleGenerator, renderRuleGenerator } from "../components/rule-generator.js";
 import { revealAddedRow } from "../components/configuration-drawer.js";
 import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
@@ -324,6 +325,7 @@ export function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
+        managed: Boolean(rule.blueprint?.managed),
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
@@ -368,7 +370,23 @@ export function nativeRuleNameCell(row, narrow = false) {
     const primary = document.createElement("span");
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
-    content.append(primary);
+    const proposal = this._managedBlueprints?.[row.id];
+    if (row.managed && proposal?.update_available) {
+      const line = document.createElement("span");
+      line.className = "managed-rule-name";
+      const icon = document.createElement("ha-icon-button");
+      icon.setAttribute("aria-label", this._t("managed.available"));
+      icon.title = this._t("managed.available");
+      const glyph = document.createElement("ha-icon");
+      glyph.setAttribute("icon", "mdi:update");
+      icon.append(glyph);
+      icon.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._openRuleEditor(row.id);
+      });
+      line.append(icon, primary);
+      content.append(line);
+    } else content.append(primary);
     if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
     if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
@@ -394,6 +412,7 @@ export function openRuleEditor(ruleId, { navigate = false } = {}) {
     }
     const generatorOpen = this._configurationDrawer?.kind === "generator";
     this._configurationDrawer = null;
+    this._blueprintReview = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -411,7 +430,7 @@ export async function handleSelected(event) {
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
     if (!ruleMenu) return;
-    if (ruleValue === "switch-editor") {
+    if (ruleValue === "switch-editor" && !this._editingRule?.blueprint?.managed) {
       await this._switchRuleEditor();
       return;
     }
@@ -457,6 +476,8 @@ export async function toggleRule(ruleId) {
 }
 
 export function replaceRule(rule) {
+    this._managedBlueprints = {};
+    this._blueprintReview = null;
     const index = this._config.rules.findIndex((item) => item.id === rule.id);
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;
@@ -469,6 +490,7 @@ export function replaceRule(rule) {
 }
 
 export async function handleRulesAction(action, button) {
+  if (await handleManagedBlueprintAction(this, action)) return true;
   if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;

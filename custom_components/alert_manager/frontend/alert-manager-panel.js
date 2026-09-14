@@ -637,6 +637,12 @@ function syncRuntimeMetadata(states) {
 
 // Source: frontend-src/utils/translations.js
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Rules changed; review the blueprint again", "managed_stale"],
+  ["Detach the rule before editing blueprint-owned fields", "managed_owned"],
+  ["Generate the blueprint to enable management", "managed_generate"],
+  ["Invalid managed blueprint settings", "managed_settings"],
+  ["Blueprint override must match effective rule", "managed_settings"],
+  ["Invalid blueprint entity selection", "managed_selection"],
   ["Blueprint selection contains equivalent rules", "blueprint_duplicates"],
   ["Invalid blueprint selection", "blueprint_selection"],
   ["Blueprint selection is no longer available", "blueprint_stale"],
@@ -844,7 +850,9 @@ function setHass(value) {
 
 function refreshTabData(tab) {
     if (!this._hass || !this._config || (this._readOnly && !["overview", "history"].includes(tab))) return;
-    if (tab === "history") {
+    if (tab === "rules") {
+      void refreshManagedBlueprints(this);
+    } else if (tab === "history") {
       void this._refreshHistory();
     } else if (tab === "coherence") {
       void this._refreshCoherence();
@@ -906,7 +914,7 @@ async function load() {
       this._syncSensor();
       this._notice = null;
       this._rememberPanelState();
-      if (["history", "coherence"].includes(this._activeTab)) {
+      if (["history", "coherence", "rules"].includes(this._activeTab)) {
         this._refreshTabData(this._activeTab);
       }
     } catch (error) {
@@ -1096,6 +1104,36 @@ function syncSensor() {
       }
     }
     return alertsChanged;
+}
+
+
+async function refreshManagedBlueprints(panel) {
+    if (panel._managedBlueprintRequest) return panel._managedBlueprintRequest;
+    const rules = JSON.stringify(panel._config?.rules ?? []);
+    const config = panel._config;
+    panel._managedBlueprints = {};
+    panel._managedBlueprintRequest = (async () => {
+      // Yield to the browser so the regular table renders before maintenance starts.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      try {
+        const rows = await panel._api.call({ type: "alert_manager/rules/blueprints/reconcile" });
+        if (!panel.isConnected || panel._activeTab !== "rules"
+          || config !== panel._config
+          || rules !== JSON.stringify(panel._config?.rules ?? [])) return;
+        panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
+        panel._refreshRulesData();
+        if (panel._editingRule && !panel._ruleDirty && !panel._blueprintReview) panel._refreshRuleEditor();
+      } catch (error) {
+        // Maintenance errors must never turn the table into an error/loading page.
+        if (panel.isConnected && panel._activeTab === "rules") {
+          panel._notice = { kind: "error", text: panel._errorText(error) };
+          panel._refreshUiState();
+        }
+      } finally {
+        panel._managedBlueprintRequest = null;
+      }
+    })();
+    return panel._managedBlueprintRequest;
 }
 
 // Source: frontend-src/components/duration-field.js
@@ -4091,6 +4129,115 @@ async function switchNotificationEditor(panel) {
   panel._refreshSettingsConfigurationDrawer();
 }
 
+// Source: frontend-src/components/managed-blueprints.js
+function renderManagedBlueprint({ rule, proposal, review, t }) {
+  if (!rule?.blueprint?.managed) return "";
+  const notice = proposal?.update_available
+    ? `<ha-alert alert-type="info">${esc(t("managed.summary", { added: proposal.added.length, removed: proposal.removed.length }))}${proposal.version_available ? ` · ${esc(t("managed.version"))}` : ""}</ha-alert>` : "";
+  const choices = review ? [...new Set([
+    ...review.proposal.discovered, ...rule.entity_ids,
+  ])].sort() : [];
+  const missingExclusions = review ? (rule.blueprint.excluded_entities ?? []).filter((id) => !choices.includes(id)) : [];
+  const changes = review ? Object.entries(review.proposal.candidate).filter(([key, value]) => (
+    !["id", "blueprint", "entity_ids", "version"].includes(key)
+    && JSON.stringify(value) !== JSON.stringify(rule[key])
+  )) : [];
+  return `<section class="rule-editor-section">
+    <strong>${esc(t("managed.source", { id: rule.blueprint.id, version: rule.blueprint.version }))}</strong>
+    <p>${esc(t("managed.help"))}</p>${notice}${proposal?.invalid ? `<ha-alert alert-type="warning">${esc(t("managed.invalid"))}</ha-alert>` : ""}
+    <ha-button data-action="review-blueprint">${esc(t("managed.review"))}</ha-button>
+    <ha-button data-action="detach-blueprint">${esc(t("managed.detach"))}</ha-button>
+    ${review ? `<div class="managed-review"><h3>${esc(t("managed.review"))}</h3><p>${esc(t("managed.selection_help"))}</p>
+      ${choices.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-entity="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}${review.proposal.added.includes(id) ? ` · ${esc(t("managed.added"))}` : review.proposal.removed.includes(id) ? ` · ${esc(t("managed.removed"))}` : ""}</span></div>`).join("")}
+      ${missingExclusions.length ? `<p>${esc(t("managed.keep_exclusions"))}</p>${missingExclusions.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-exclusion="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}</span></div>`).join("")}` : ""}
+      ${changes.length ? `<h4>${esc(t("managed.changes"))}</h4><dl>${changes.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(JSON.stringify(rule[key]))} → ${esc(JSON.stringify(value))}</dd>`).join("")}</dl>` : ""}
+      <ha-button data-action="apply-blueprint">${esc(t("managed.apply"))}</ha-button>
+    </div>` : ""}
+  </section>`;
+}
+
+function hydrateManagedBlueprint(panel) {
+  const review = panel._blueprintReview;
+  panel.shadowRoot?.querySelectorAll?.("[data-managed-exclusion]").forEach((checkbox) => {
+    checkbox.checked = review?.keptExclusions.has(checkbox.dataset.managedExclusion) ?? false;
+    checkbox.disabled = panel._busy;
+    checkbox.onchange = () => {
+      if (!review || panel._busy) return;
+      if (checkbox.checked) review.keptExclusions.add(checkbox.dataset.managedExclusion);
+      else review.keptExclusions.delete(checkbox.dataset.managedExclusion);
+    };
+  });
+  panel.shadowRoot?.querySelectorAll?.("[data-managed-entity]").forEach((checkbox) => {
+    checkbox.checked = review?.selected.has(checkbox.dataset.managedEntity) ?? false;
+    checkbox.disabled = panel._busy;
+    checkbox.onchange = () => {
+      if (!review || panel._busy) return;
+      if (checkbox.checked) review.selected.add(checkbox.dataset.managedEntity);
+      else review.selected.delete(checkbox.dataset.managedEntity);
+    };
+  });
+}
+
+async function handleManagedBlueprintAction(panel, action) {
+  if (!["review-blueprint", "apply-blueprint", "detach-blueprint"].includes(action)) return false;
+  const rule = panel._editingRule;
+  if (!rule?.blueprint?.managed || panel._busy) return true;
+  if (panel._ruleDirty) {
+    panel._ruleEditorError = panel._t("managed.save_first");
+    panel._refreshRuleEditor();
+    return true;
+  }
+  if (action === "review-blueprint") {
+    const rows = await panel._call({ type: "alert_manager/rules/blueprints/reconcile" });
+    if (panel._editingRule !== rule) return true;
+    const proposal = rows?.find((row) => row.rule_id === rule.id);
+    if (proposal) {
+      panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
+      panel._blueprintReview = { proposal, selected: new Set(proposal.candidate.entity_ids), keptExclusions: new Set(rule.blueprint.excluded_entities ?? []) };
+      panel._refreshRulesData();
+      panel._refreshRuleEditor();
+    }
+    return true;
+  }
+  let message;
+  if (action === "detach-blueprint") {
+    if (!window.confirm(panel._t("managed.detach_confirm"))) return true;
+    message = { type: "alert_manager/rules/blueprints/detach", rule_id: rule.id };
+  } else {
+    const review = panel._blueprintReview;
+    if (!review || review.proposal.rule_id !== rule.id) return true;
+    if (!review.selected.size) {
+      panel._ruleEditorError = panel._t("managed.empty");
+      panel._refreshRuleEditor();
+      return true;
+    }
+    if (!window.confirm(panel._t("managed.apply_confirm"))) return true;
+    const excluded = [...new Set([
+      ...review.keptExclusions, ...review.proposal.discovered,
+      ...rule.entity_ids,
+    ])].filter((id) => !review.selected.has(id));
+    message = {
+      type: "alert_manager/rules/blueprints/apply", rule_id: rule.id,
+      token: review.proposal.token, entity_ids: [...review.selected].sort(),
+      excluded_entities: excluded.sort(),
+    };
+  }
+  const updated = await panel._call(message, panel._t("success.rule_updated"));
+  if (updated) {
+    panel._blueprintReview = null;
+    panel._managedBlueprints = {};
+    panel._replaceRule(updated);
+    panel._editingRule = updated;
+    panel._refreshRuleEditor();
+    panel._refreshTabData("rules");
+  } else {
+    panel._ruleEditorError = panel._notice?.text || panel._t("errors.unknown");
+    panel._notice = null;
+    panel._refreshRuleEditor();
+  }
+  return true;
+}
+
 // Source: frontend-src/components/rule-editor.js
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -4470,7 +4617,9 @@ function renderRuleEditor(context) {
       flappingAvailable = false,
     } = context;
     const yamlMode = mode === "yaml";
-    const editorContent = yamlMode
+    const editorContent = rule.blueprint?.managed
+      ? renderManagedRuleEditor(context)
+      : yamlMode
       ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({
         rule, t, renderTextField, renderNumberField, flappingAvailable,
@@ -4483,7 +4632,7 @@ function renderRuleEditor(context) {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>${rule.blueprint?.managed ? "" : `<ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>`}${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
@@ -4507,6 +4656,8 @@ function renderRuleEditorPanel() {
       yamlError: this._ruleYamlError,
       testResult: this._ruleTestResult,
       testLoading: this._ruleTestLoading,
+      proposal: this._managedBlueprints?.[this._editingRule?.id],
+      review: this._blueprintReview,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
       useBottomSheet: this._useNativeBottomSheet(),
@@ -4784,9 +4935,13 @@ async function saveRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    const rule = serializeRuleDraft(draft);
+    let rule = serializeRuleDraft(draft);
+    if (draft.blueprint?.managed) {
+      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+        .map((key) => [key, rule[key]]));
+    }
     const id = String(this._editingRule?.id ?? "");
-    const validation = validateRuleDraft(rule);
+    const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {
       this._ruleEditorError = this._t(validation.errorKey);
       this._refreshRuleEditor();
@@ -4814,9 +4969,13 @@ async function testRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    const rule = serializeRuleDraft(draft);
+    let rule = serializeRuleDraft(draft);
+    if (draft.blueprint?.managed) {
+      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+        .map((key) => [key, rule[key]]));
+    }
     const id = String(this._editingRule?.id ?? "");
-    const validation = validateRuleDraft(rule);
+    const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {
       this._ruleTestResult = { request_error: this._t(validation.errorKey) };
       this._updateRuleTestDisplay({ scroll: true });
@@ -4921,6 +5080,7 @@ function hydrateRuleEditorMenu(root, onSelected) {
 }
 
 function hydrateRuleEditorControls() {
+  hydrateManagedBlueprint(this);
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
     mode: this._ruleEditorMode,
@@ -5031,6 +5191,21 @@ function hydrateRuleEditorControls() {
   });
 }
 
+
+function renderManagedRuleEditor(context) {
+    const { rule, t, renderTextField, renderNumberField } = context;
+    return `${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
+      ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+      <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector></div>
+      <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><p>${rule.entity_ids.map(esc).join(", ")}</p></div>
+      ${!["jinja", "unchanged"].includes(rule.source) ? renderRuleValues({ rule, t }) : ""}
+      ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
+      <div class="field full"><small>${esc(t("managed.owned"))}</small><dl>
+        ${["source", "attribute", "operator", "message", "condition_template"].filter((key) => rule[key]).map((key) => `<dt>${esc(t(`rules.${key === "condition_template" ? "condition_template_only" : key === "message" ? "message_optional" : key === "attribute" ? "attribute_name" : key}`))}</dt><dd>${esc(rule[key])}</dd>`).join("")}
+      </dl></div>
+    </div></section>`;
+}
+
 // Source: frontend-src/components/rule-generator.js
 function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
   // Available groups precede unavailable groups, including across categories.
@@ -5055,7 +5230,7 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
     resizeLabel: t("rules.aria_resize"),
     headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("generator.refresh"))}</ha-button>`,
     banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
-    content, saveAction: "generate-rules", saveLabel: t("generator.create"),
+    content: `<ha-formfield label="${esc(t("managed.opt_in"))}"><ha-switch data-managed-generation></ha-switch></ha-formfield>${content}`, saveAction: "generate-rules", saveLabel: t("generator.create"),
     busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,
   });
 }
@@ -5063,6 +5238,12 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
 function hydrateRuleGenerator(root, panel) {
   const drawer = panel._configurationDrawer;
   if (drawer?.kind !== "generator") return;
+  const managed = root?.querySelector?.("[data-managed-generation]");
+  if (managed) {
+    managed.checked = Boolean(drawer.managed);
+    managed.disabled = panel._busy;
+    managed.onchange = () => { drawer.managed = managed.checked; };
+  }
   root?.querySelectorAll?.("ha-checkbox[data-blueprint-id]").forEach((checkbox) => {
     checkbox.checked = drawer.selected.has(checkbox.dataset.blueprintId);
     // Property assignment keeps repeated hydration idempotent.
@@ -5114,6 +5295,7 @@ async function handleRuleGeneratorAction(panel, action) {
     const result = await panel._call({
       type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
       ...(overwrite ? { overwrite: true } : {}),
+      ...(drawer.managed ? { managed: true } : {}),
     }, panel._t("generator.created"));
     if (result) {
       for (const rule of result) {
@@ -6339,6 +6521,7 @@ function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
+        managed: Boolean(rule.blueprint?.managed),
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
         entities: (rule.entity_ids ?? []).join(", "),
@@ -6383,7 +6566,23 @@ function nativeRuleNameCell(row, narrow = false) {
     const primary = document.createElement("span");
     primary.textContent = row.name;
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
-    content.append(primary);
+    const proposal = this._managedBlueprints?.[row.id];
+    if (row.managed && proposal?.update_available) {
+      const line = document.createElement("span");
+      line.className = "managed-rule-name";
+      const icon = document.createElement("ha-icon-button");
+      icon.setAttribute("aria-label", this._t("managed.available"));
+      icon.title = this._t("managed.available");
+      const glyph = document.createElement("ha-icon");
+      glyph.setAttribute("icon", "mdi:update");
+      icon.append(glyph);
+      icon.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._openRuleEditor(row.id);
+      });
+      line.append(icon, primary);
+      content.append(line);
+    } else content.append(primary);
     if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
     if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");
@@ -6409,6 +6608,7 @@ function openRuleEditor(ruleId, { navigate = false } = {}) {
     }
     const generatorOpen = this._configurationDrawer?.kind === "generator";
     this._configurationDrawer = null;
+    this._blueprintReview = null;
     this._editingRule = { ...rule };
     this._ruleEditorMode = "visual";
     this._ruleYaml = "";
@@ -6426,7 +6626,7 @@ async function handleSelected(event) {
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
     if (!ruleMenu) return;
-    if (ruleValue === "switch-editor") {
+    if (ruleValue === "switch-editor" && !this._editingRule?.blueprint?.managed) {
       await this._switchRuleEditor();
       return;
     }
@@ -6472,6 +6672,8 @@ async function toggleRule(ruleId) {
 }
 
 function replaceRule(rule) {
+    this._managedBlueprints = {};
+    this._blueprintReview = null;
     const index = this._config.rules.findIndex((item) => item.id === rule.id);
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;
@@ -6484,6 +6686,7 @@ function replaceRule(rule) {
 }
 
 async function handleRulesAction(action, button) {
+  if (await handleManagedBlueprintAction(this, action)) return true;
   if (await handleRuleGeneratorAction(this, action)) return true;
   if (action === "new-rule") {
     if (this._ruleDirty && !window.confirm(this._t("rules.discard_confirm"))) return true;
@@ -9312,6 +9515,12 @@ const ruleEditorStyles = `
   .transfer-actions {
     justify-content: flex-start;
   }
+
+    .managed-rule-name { display: flex; align-items: center; min-width: 0; }
+    .managed-rule-name ha-icon-button { --mdc-icon-button-size: 32px; flex: 0 0 32px; }
+    .managed-entity { display: flex; align-items: center; gap: 4px; }
+    .managed-entity span, .managed-review dd, .rule-editor-section dd { overflow-wrap: anywhere; min-width: 0; }
+    .managed-review dd, .rule-editor-section dd { margin-inline-start: 12px; }
 `;
 
 // Source: frontend-src/styles/state-styles.js

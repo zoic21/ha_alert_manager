@@ -662,6 +662,7 @@ async def websocket_rule_blueprints_list(
     {
         vol.Required("type"): "alert_manager/rules/blueprints/create",
         vol.Optional("overwrite", default=False): bool,
+        vol.Optional("managed", default=False): bool,
         vol.Required("blueprint_ids"): vol.All(
             [vol.All(str, vol.Length(min=1, max=128))],
             vol.Length(min=1, max=50),
@@ -676,8 +677,80 @@ async def websocket_rule_blueprints_create(
         return
     try:
         result = await manager.async_generate_rules(
-            msg["blueprint_ids"], overwrite=msg.get("overwrite", False)
+            msg["blueprint_ids"],
+            overwrite=msg.get("overwrite", False),
+            managed=msg.get("managed", False),
         )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/blueprints/reconcile",
+    }
+)
+async def websocket_blueprint_reconcile(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Compare managed rules without delaying the regular rules table."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_reconcile_blueprints()
+    except (ValueError, RuntimeError) as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/blueprints/apply",
+        vol.Required("rule_id"): str,
+        vol.Required("token"): str,
+        vol.Required("entity_ids"): vol.All([str], vol.Length(min=1, max=50)),
+        vol.Required("excluded_entities"): vol.All([str], vol.Length(max=50)),
+    }
+)
+async def websocket_blueprint_apply(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Apply an explicitly reviewed proposal using ordinary rule transactions."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_apply_blueprint(
+            msg["rule_id"], msg["token"], msg["entity_ids"], msg["excluded_entities"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/rules/blueprints/detach",
+        vol.Required("rule_id"): str,
+    }
+)
+async def websocket_blueprint_detach(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Detach a managed rule without changing its effective behavior."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_detach_blueprint(msg["rule_id"])
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
@@ -706,6 +779,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_notification_test,
         websocket_notification_stats_get,
         websocket_rule_create,
+        websocket_blueprint_reconcile,
+        websocket_blueprint_apply,
+        websocket_blueprint_detach,
         websocket_rule_blueprints_list,
         websocket_rule_blueprints_create,
         websocket_rule_update,
