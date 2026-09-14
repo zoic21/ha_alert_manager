@@ -28,28 +28,14 @@ This is a prerelease for testing, not a stable release.
   monitoring cancels affected timers and notifications without false recoveries; configuration
   exports now retain rule IDs using format version 2.
 
-## 2.3.0-rc.4 — 2026-09-13 (prerelease)
-
-- Show known alerts during startup with a compact hourglass in the overflow bubble;
-  keep the card hidden when no alerts match.
-- Keep the startup/overflow bubble beside the last alert on mobile, narrowing only
-  that alert instead of placing the bubble on its own row.
-
-## 2.3.0-rc.3 — 2026-09-13 (prerelease)
-
-- Keep the dashboard card’s last alert tiles (or empty state) visible while refreshing
-  after returning to the dashboard or reconnecting to Home Assistant.
-
-## 2.3.0-rc.2 — 2026-09-13 (prerelease)
-
-- Fixed mobile dashboard alerts to use the full available width, with one alert per row.
-
-## 2.3.0 — Release candidate
+## 2.3.0 — September 14, 2026
 
 ### Major changes
 
 - Added a native Alert Manager dashboard card with compact device grouping, label filtering
-  and direct navigation to alert details or the filtered Overview.
+  and direct navigation to alert details or the filtered Overview. The card preserves known
+  alerts while refreshing, handles startup with a compact status indicator and uses a
+  responsive one-alert-per-row layout on narrow mobile screens.
 - Added transition alerts for short-lived state or attribute changes, with optional automatic
   resolution and no pending phase.
 - Added History insights for 7- and 30-day periods, including recurrence, affected entities and
@@ -62,10 +48,9 @@ This is a prerelease for testing, not a stable release.
   with an optional persistent alert while coherence issues remain.
 - Added read-only access for non-administrators to the dashboard card, Overview, History and
   alert details. Configuration and all actions remain administrator-only.
-- Redesigned alert details for a more compact desktop/mobile presentation, clearer timeline and
-  separate activation, reminder and resolution notification information.
-- Added the retained occurrence timestamps behind flapping alerts and direct access from an
-  alert to its matching History entries.
+- Redesigned alert details for a more compact desktop/mobile presentation, clearer timeline,
+  retained flapping occurrences, direct History access and separate activation, reminder and
+  resolution notification information.
 - Simplified custom-rule operations by using the optional Attribute field to determine whether
   an operation targets the entity state or an attribute. Existing rules and active alerts are
   migrated automatically.
