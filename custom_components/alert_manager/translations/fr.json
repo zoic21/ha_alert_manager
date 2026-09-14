@@ -962,7 +962,6 @@
       }
     },
     "managed": {
-      "opt_in": "Garder les règles gérées par leur blueprint",
       "source": "Gérée par {id} · v{version}",
       "help": "Les changements du blueprint sont proposés pour validation. Aucune entité n’est ajoutée ou retirée automatiquement.",
       "available": "Mise à jour disponible",
@@ -971,17 +970,19 @@
       "review": "Vérifier / Mettre à jour",
       "detach": "Prendre le contrôle",
       "detach_confirm": "Détacher cette règle de son blueprint ? Ses réglages et entités actuels seront conservés.",
-      "selection_help": "Sélectionnez les entités à surveiller. Les entités décochées restent explicitement exclues des prochaines propositions. Conservez au moins une entité.",
+      "selection_help": "Cochée : l’entité sera surveillée après application. Décochée : elle sera exclue de cette règle et des prochaines propositions. Gardez au moins une entité cochée.",
       "added": "Nouvelle",
       "removed": "Ne correspond plus",
       "changes": "Changements des réglages (actuel → proposé)",
       "apply": "Appliquer les changements sélectionnés",
       "apply_confirm": "Appliquer les réglages du blueprint et les entités sélectionnées ?",
-      "save_first": "Enregistrez ou annulez vos modifications avant de vérifier le blueprint.",
-      "empty": "Conservez au moins une entité, ou détachez et désactivez cette règle.",
-      "owned": "Ces champs sont gérés par le blueprint. Prenez le contrôle pour les modifier.",
+      "save_first": "Enregistrez ou annulez les modifications de la règle avant d’utiliser les actions du blueprint.",
+      "empty": "Sélectionnez au moins une entité à surveiller. Pour arrêter cette surveillance, désactivez la règle.",
       "keep_exclusions": "Conserver les exclusions des entités actuellement absentes (décochez pour les oublier) :",
-      "invalid": "Le nouveau blueprint est incompatible avec les surcharges enregistrées. Ajustez-les ou prenez le contrôle avant d’appliquer."
+      "invalid": "Le nouveau blueprint est incompatible avec les surcharges enregistrées. Ajustez-les ou prenez le contrôle avant d’appliquer.",
+      "monitored": "À surveiller",
+      "excluded": "À exclure",
+      "yaml_help": "Seuls les réglages personnalisables sont affichés. La règle reste gérée par son blueprint ; les champs omis conservent leur valeur actuelle."
     }
   },
   "services": {

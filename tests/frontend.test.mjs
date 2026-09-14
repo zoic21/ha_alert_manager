@@ -2634,7 +2634,7 @@ test("rule rows and editor use native Home Assistant components", () => {
   assert.match(editor, /<section class="rule-editor-section">[\s\S]*<h3>Condition<\/h3>/);
   assert.match(editor, /data-action="add-rule-value"/);
   assert.match(editor, /<ha-dropdown-item value="delete-rule" variant="danger">[\s\S]*Supprimer<\/ha-dropdown-item>/);
-  assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*>Enregistrer<\/ha-button>/);
+  assert.match(editor, /<ha-button appearance="accent" variant="brand" data-action="save-rule"[^>]*><ha-icon slot="start" icon="mdi:content-save"><\/ha-icon>Enregistrer<\/ha-button>/);
   assert.doesNotMatch(editor, /<ha-button[^>]*data-action="cancel-rule"[^>]*>Annuler<\/ha-button>/);
   assert.doesNotMatch(editor, /<aside|<input/);
   assert.match(settings, /class="configuration-remove" data-action="remove-entity-delay"/);

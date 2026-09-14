@@ -337,3 +337,92 @@ def test_create_rejects_non_object_rule_payloads(hass, entry, payload):
     manager = manager_for(hass, entry)
     with pytest.raises(ValueError, match="Rule must be an object"):
         run(manager.async_create_rule(payload))
+
+
+def test_managed_yaml_partial_edits_preserve_structure(hass, entry, registry_entry):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    raw = 'name: "My CPU"\nvalue: 82\nduration: 60\n'
+    before = deepcopy(manager.config)
+    validated = run(manager.async_validate_rule_yaml(raw, rule_id=rule["id"]))
+    assert validated["blueprint"]["managed"] is True
+    assert manager.config == before
+    updated = run(manager.async_update_rule_yaml(rule["id"], raw))
+    assert updated["name"] == "My CPU"
+    assert updated["value"] == 82
+    assert updated["duration"] == 60
+    for key in ("id", "entity_ids", "source", "operator", "condition_template"):
+        assert updated.get(key) == rule.get(key)
+    assert updated["blueprint"]["overrides"] == {"value": 82, "duration": 60}
+    renamed = run(manager.async_update_rule_yaml(rule["id"], 'name: "Renamed"'))
+    assert renamed["value"] == 82
+    assert renamed["duration"] == 60
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "source: jinja",
+        "entity_ids: [sensor.other]",
+        "blueprint: null",
+        "condition_template: '{{ false }}'",
+        "operator: below",
+    ],
+)
+def test_managed_yaml_rejects_structural_edits(hass, entry, registry_entry, raw):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    before = deepcopy(manager.config)
+    for request in (
+        manager.async_validate_rule_yaml(raw, rule_id=rule["id"]),
+        manager.async_update_rule_yaml(rule["id"], raw),
+    ):
+        with pytest.raises(ValueError, match="blueprint-owned"):
+            run(request)
+    assert manager.config == before
+
+
+def test_managed_yaml_parsing_runs_in_executor(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    original = manager_api.parse_rule_yaml_data
+    threads = []
+
+    def parse(*args, **kwargs):
+        threads.append(threading.get_ident())
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(manager_api, "parse_rule_yaml_data", parse)
+    main_thread = threading.get_ident()
+    run(manager.async_validate_rule_yaml("duration: 42", rule_id=rule["id"]))
+    run(manager.async_update_rule_yaml(rule["id"], "duration: 42"))
+    assert len(threads) == 2
+    assert all(thread != main_thread for thread in threads)
+
+
+def test_managed_jinja_yaml_and_tester_keep_blueprint_templates(
+    hass, entry, registry_entry
+):
+    registry_entry(
+        hass,
+        "sensor.backup",
+        platform="backup",
+        unique_id="last_successful_automatic_backup",
+    )
+    hass.states.set("sensor.backup", "2026-09-14T00:00:00+00:00")
+    manager = manager_for(hass, entry)
+    rule = run(
+        manager.async_generate_rules(["home_assistant_backup_age"], managed=True)
+    )[0]
+    updated = run(manager.async_update_rule_yaml(rule["id"], 'name: "My backup"'))
+    assert updated["condition_template"] == rule["condition_template"]
+    assert updated["source"] == "jinja"
+    assert updated["blueprint"]["managed"] is True
+    before = deepcopy(manager.config)
+    result = run(
+        manager.async_test_rule(
+            {"name": "Test backup", "duration": 0}, rule_id=rule["id"]
+        )
+    )
+    assert len(result["results"]) == 1
+    assert result["results"][0]["source"] == "jinja"
+    assert manager.config == before

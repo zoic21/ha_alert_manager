@@ -16,13 +16,13 @@ export function renderManagedBlueprint({ rule, proposal, review, t }) {
   return `<section class="rule-editor-section">
     <strong>${esc(t("managed.source", { id: rule.blueprint.id, version: rule.blueprint.version }))}</strong>
     <p>${esc(t("managed.help"))}</p>${notice}${proposal?.invalid ? `<ha-alert alert-type="warning">${esc(t("managed.invalid"))}</ha-alert>` : ""}
-    <ha-button data-action="review-blueprint">${esc(t("managed.review"))}</ha-button>
-    <ha-button data-action="detach-blueprint">${esc(t("managed.detach"))}</ha-button>
+    <div class="managed-actions"><ha-button data-action="review-blueprint"><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("managed.review"))}</ha-button>
+    <ha-button data-action="detach-blueprint"><ha-icon slot="start" icon="mdi:link-off"></ha-icon>${esc(t("managed.detach"))}</ha-button></div>
     ${review ? `<div class="managed-review"><h3>${esc(t("managed.review"))}</h3><p>${esc(t("managed.selection_help"))}</p>
-      ${choices.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-entity="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}${review.proposal.added.includes(id) ? ` · ${esc(t("managed.added"))}` : review.proposal.removed.includes(id) ? ` · ${esc(t("managed.removed"))}` : ""}</span></div>`).join("")}
+      ${choices.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-entity="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span><strong data-managed-membership="${esc(id)}">${esc(t(review.selected?.has(id) ? "managed.monitored" : "managed.excluded"))}</strong> · ${esc(id)}${review.proposal.added.includes(id) ? ` · ${esc(t("managed.added"))}` : review.proposal.removed.includes(id) ? ` · ${esc(t("managed.removed"))}` : ""}</span></div>`).join("")}
       ${missingExclusions.length ? `<p>${esc(t("managed.keep_exclusions"))}</p>${missingExclusions.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-exclusion="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}</span></div>`).join("")}` : ""}
       ${changes.length ? `<h4>${esc(t("managed.changes"))}</h4><dl>${changes.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(JSON.stringify(rule[key]))} → ${esc(JSON.stringify(value))}</dd>`).join("")}</dl>` : ""}
-      <ha-button data-action="apply-blueprint">${esc(t("managed.apply"))}</ha-button>
+      <div class="managed-actions"><ha-button data-action="apply-blueprint"><ha-icon slot="start" icon="mdi:check"></ha-icon>${esc(t("managed.apply"))}</ha-button></div>
     </div>` : ""}
   </section>`;
 }
@@ -45,6 +45,9 @@ export function hydrateManagedBlueprint(panel) {
       if (!review || panel._busy) return;
       if (checkbox.checked) review.selected.add(checkbox.dataset.managedEntity);
       else review.selected.delete(checkbox.dataset.managedEntity);
+      const label = checkbox.parentElement?.querySelector("[data-managed-membership]");
+      if (label) label.textContent = panel._t(checkbox.checked ? "managed.monitored" : "managed.excluded");
+      panel._clearRuleEditorError?.();
     };
   });
 }

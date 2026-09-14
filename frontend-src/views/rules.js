@@ -439,7 +439,7 @@ export async function handleSelected(event) {
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
     if (!ruleMenu) return;
-    if (ruleValue === "switch-editor" && !this._editingRule?.blueprint?.managed) {
+    if (ruleValue === "switch-editor") {
       await this._switchRuleEditor();
       return;
     }

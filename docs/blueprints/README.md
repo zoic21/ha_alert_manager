@@ -43,14 +43,18 @@ discovery, provided the required metadata is present. Matching is case-sensitive
 friendly names alone do not satisfy an entity-ID or registry criterion.
 
 Generated rules do not synchronize automatically with newly added entities or later
-blueprint changes. Edit the rule manually, or select the blueprint again to
-regenerate it. After confirmation, regeneration **overwrites the existing rule's
+blueprint changes. New rules remain managed by their blueprint. Use **Review /
+Update** to choose which proposed entities to monitor (checked) or exclude
+(unchecked), then apply the selection. Keep at least one entity selected; disable
+the rule to stop monitoring. The editor and its YAML mode expose only customizable
+settings. **Test** evaluates the effective blueprint rule. **Take control** detaches
+it for full manual editing. You can also select the blueprint again to regenerate it. After confirmation, regeneration **overwrites the existing rule's
 customizations** with the current blueprint defaults and discovered entities,
 while preserving the rule identifier.
 
 The generator recognizes existing generated rules even after renaming them. An
-equivalent manually created rule prevents duplicate creation. Duplicating a rule
-in the editor creates an independent copy without blueprint provenance.
+equivalent manually created rule prevents duplicate creation. Managed rules cannot be duplicated. After taking control, duplication creates an
+independent copy without blueprint provenance.
 
 ## When a blueprint is unavailable
 

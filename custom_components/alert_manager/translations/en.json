@@ -962,7 +962,6 @@
       }
     },
     "managed": {
-      "opt_in": "Keep rules managed by their blueprint",
       "source": "Managed by {id} · v{version}",
       "help": "Blueprint changes are proposed for review. Entities are never added or removed automatically.",
       "available": "Update available",
@@ -971,17 +970,19 @@
       "review": "Review / Update",
       "detach": "Take control",
       "detach_confirm": "Detach this rule from its blueprint? Its current settings and entities will be preserved.",
-      "selection_help": "Select the entities to monitor. Unchecked entities remain explicitly excluded from future proposals. Keep at least one entity.",
+      "selection_help": "Checked: the entity will be monitored after applying. Unchecked: it will be excluded from this rule and future proposals. Keep at least one entity checked.",
       "added": "New",
       "removed": "No longer matches",
       "changes": "Setting changes (current → proposed)",
       "apply": "Apply selected changes",
       "apply_confirm": "Apply the reviewed blueprint settings and selected entities?",
-      "save_first": "Save or cancel your edits before reviewing blueprint changes.",
-      "empty": "Keep at least one entity, or detach and disable this rule.",
-      "owned": "These fields are managed by the blueprint. Take control to edit them.",
+      "save_first": "Save or cancel your rule edits before using blueprint actions.",
+      "empty": "Select at least one entity to monitor. To stop monitoring, disable the rule.",
       "keep_exclusions": "Keep exclusions for currently missing entities (uncheck to forget):",
-      "invalid": "The new blueprint is incompatible with the saved overrides. Adjust them or take control before applying."
+      "invalid": "The new blueprint is incompatible with the saved overrides. Adjust them or take control before applying.",
+      "monitored": "To monitor",
+      "excluded": "To exclude",
+      "yaml_help": "Only customizable settings are shown. The rule remains managed by its blueprint; omitted fields keep their current values."
     }
   },
   "services": {

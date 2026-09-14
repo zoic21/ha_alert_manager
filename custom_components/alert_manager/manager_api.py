@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import wraps
+from functools import partial, wraps
 from typing import Any
 
 from homeassistant.components.persistent_notification import (
@@ -70,6 +70,7 @@ from .yaml_io import (
     parse_configuration_field_yaml,
     parse_notification_profile_yaml,
     parse_rule_yaml,
+    parse_rule_yaml_data,
     rule_to_yaml_data,
 )
 
@@ -638,11 +639,21 @@ class _ApiMixin:
         """Return the editable YAML form of one existing rule."""
         return dump_rule_yaml(self.config["rules"][self._rule_index(rule_id)])
 
-    def validate_rule_yaml(
+    async def async_validate_rule_yaml(
         self, raw_yaml: str, *, rule_id: str | None = None
     ) -> dict[str, Any]:
         """Parse one YAML rule through the same validator as the visual form."""
-        rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
+        data = await self.hass.async_add_executor_job(
+            partial(parse_rule_yaml_data, raw_yaml, rule_id=rule_id)
+        )
+        if rule_id is not None:
+            existing = self.config["rules"][self._rule_index(rule_id)]
+            if (existing.get("blueprint") or {}).get("managed"):
+                data = {**existing, **managed_rule_edit(existing, data)}
+        try:
+            rule = validate_rule_payload(data, rule_id=rule_id)
+        except TypeError as err:
+            raise ValueError(f"Invalid rule: {err}") from err
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
         return rule_to_yaml_data(rule)
@@ -1386,8 +1397,16 @@ class _ApiMixin:
         self, rule_id: str, raw_yaml: str
     ) -> dict[str, Any]:
         """Update one rule from YAML while preserving its immutable id."""
-        rule = parse_rule_yaml(raw_yaml, rule_id=rule_id)
-        return await self.async_update_rule(rule_id, rule_to_yaml_data(rule))
+        data = await self.hass.async_add_executor_job(
+            partial(parse_rule_yaml_data, raw_yaml, rule_id=rule_id)
+        )
+        existing = self.config["rules"][self._rule_index(rule_id)]
+        if not (existing.get("blueprint") or {}).get("managed"):
+            try:
+                data = rule_to_yaml_data(validate_rule_payload(data, rule_id=rule_id))
+            except TypeError as err:
+                raise ValueError(f"Invalid rule: {err}") from err
+        return await self.async_update_rule(rule_id, data)
 
     @_serialize_config_mutation
     async def async_delete_rule(self, rule_id: str) -> None:

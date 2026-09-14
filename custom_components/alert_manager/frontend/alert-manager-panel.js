@@ -4176,13 +4176,13 @@ function renderManagedBlueprint({ rule, proposal, review, t }) {
   return `<section class="rule-editor-section">
     <strong>${esc(t("managed.source", { id: rule.blueprint.id, version: rule.blueprint.version }))}</strong>
     <p>${esc(t("managed.help"))}</p>${notice}${proposal?.invalid ? `<ha-alert alert-type="warning">${esc(t("managed.invalid"))}</ha-alert>` : ""}
-    <ha-button data-action="review-blueprint">${esc(t("managed.review"))}</ha-button>
-    <ha-button data-action="detach-blueprint">${esc(t("managed.detach"))}</ha-button>
+    <div class="managed-actions"><ha-button data-action="review-blueprint"><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("managed.review"))}</ha-button>
+    <ha-button data-action="detach-blueprint"><ha-icon slot="start" icon="mdi:link-off"></ha-icon>${esc(t("managed.detach"))}</ha-button></div>
     ${review ? `<div class="managed-review"><h3>${esc(t("managed.review"))}</h3><p>${esc(t("managed.selection_help"))}</p>
-      ${choices.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-entity="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}${review.proposal.added.includes(id) ? ` · ${esc(t("managed.added"))}` : review.proposal.removed.includes(id) ? ` · ${esc(t("managed.removed"))}` : ""}</span></div>`).join("")}
+      ${choices.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-entity="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span><strong data-managed-membership="${esc(id)}">${esc(t(review.selected?.has(id) ? "managed.monitored" : "managed.excluded"))}</strong> · ${esc(id)}${review.proposal.added.includes(id) ? ` · ${esc(t("managed.added"))}` : review.proposal.removed.includes(id) ? ` · ${esc(t("managed.removed"))}` : ""}</span></div>`).join("")}
       ${missingExclusions.length ? `<p>${esc(t("managed.keep_exclusions"))}</p>${missingExclusions.map((id) => `<div class="managed-entity"><ha-checkbox data-managed-exclusion="${esc(id)}" aria-label="${esc(id)}"></ha-checkbox><span>${esc(id)}</span></div>`).join("")}` : ""}
       ${changes.length ? `<h4>${esc(t("managed.changes"))}</h4><dl>${changes.map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(JSON.stringify(rule[key]))} → ${esc(JSON.stringify(value))}</dd>`).join("")}</dl>` : ""}
-      <ha-button data-action="apply-blueprint">${esc(t("managed.apply"))}</ha-button>
+      <div class="managed-actions"><ha-button data-action="apply-blueprint"><ha-icon slot="start" icon="mdi:check"></ha-icon>${esc(t("managed.apply"))}</ha-button></div>
     </div>` : ""}
   </section>`;
 }
@@ -4205,6 +4205,9 @@ function hydrateManagedBlueprint(panel) {
       if (!review || panel._busy) return;
       if (checkbox.checked) review.selected.add(checkbox.dataset.managedEntity);
       else review.selected.delete(checkbox.dataset.managedEntity);
+      const label = checkbox.parentElement?.querySelector("[data-managed-membership]");
+      if (label) label.textContent = panel._t(checkbox.checked ? "managed.monitored" : "managed.excluded");
+      panel._clearRuleEditorError?.();
     };
   });
 }
@@ -4665,10 +4668,10 @@ function renderRuleEditor(context) {
       flappingAvailable = false,
     } = context;
     const yamlMode = mode === "yaml";
-    const editorContent = rule.blueprint?.managed
+    const editorContent = yamlMode
+      ? renderRuleYamlEditor({ yamlError, t, managed: rule.blueprint?.managed })
+      : rule.blueprint?.managed
       ? renderManagedRuleEditor(context)
-      : yamlMode
-      ? renderRuleYamlEditor({ yamlError, t })
       : renderRuleVisualEditor({
         rule, t, renderTextField, renderNumberField, flappingAvailable,
         testResult,
@@ -4680,12 +4683,12 @@ function renderRuleEditor(context) {
         <ha-icon-button id="rule-editor-close" slot="navigationIcon" data-action="cancel-rule"></ha-icon-button>
         <span slot="title">${esc(t(rule.id ? "rules.modify" : "rules.create"))}</span>
         ${rule.id ? "" : `<span slot="subtitle">${esc(t("rules.new_subtitle"))}</span>`}
-        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>${rule.blueprint?.managed ? "" : `<ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>`}${rule.id ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item><ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
+        <ha-dropdown slot="actionItems" data-rule-editor-menu size="m" placement="bottom-end"><ha-icon-button slot="trigger" aria-label="${esc(t("rules.aria_menu"))}" title="${esc(t("rules.aria_menu"))}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button><ha-dropdown-item value="switch-editor"><ha-icon slot="icon" icon="mdi:playlist-edit"></ha-icon>${esc(t(yamlMode ? "rules.edit_visually" : "rules.edit_yaml"))}</ha-dropdown-item>${rule.id && !rule.blueprint?.managed ? `<ha-dropdown-item value="duplicate-rule"><ha-icon slot="icon" icon="mdi:plus-circle-multiple-outline"></ha-icon>${esc(duplicateLabel)}</ha-dropdown-item>` : ""}${rule.id ? `<ha-dropdown-item value="delete-rule" variant="danger"><ha-icon slot="icon" icon="mdi:delete"></ha-icon>${esc(t("buttons.delete"))}</ha-dropdown-item>` : ""}</ha-dropdown>
       </ha-dialog-header>
       <form id="rule-form" class="side-drawer-form rule-editor-form">
         ${editorContent}
       </form>
-        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}>${esc(t("buttons.save"))}</ha-button></div>
+        <div class="actions side-drawer-actions rule-editor-actions">${mode === "visual" && editorError ? `<ha-alert class="rule-editor-error" alert-type="error" role="alert">${esc(editorError)}</ha-alert>` : ""}${mode === "visual" ? `<ha-button type="button" appearance="plain" data-action="test-rule" ${testLoading ? "disabled loading" : ""}><ha-icon slot="start" icon="mdi:flask-outline"></ha-icon>${esc(t("buttons.test"))}</ha-button>` : ""}<span class="action-spacer"></span><ha-button appearance="accent" variant="brand" data-action="save-rule" ${busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:content-save"></ha-icon>${esc(t("buttons.save"))}</ha-button></div>
     </ha-card>`;
     return renderSideDrawer({
       drawer,
@@ -4769,9 +4772,9 @@ function renderRuleConditionSection({ rule, t, renderTextField, renderNumberFiel
       </section></div>`;
 }
 
-function renderRuleYamlEditor({ yamlError, t }) {
+function renderRuleYamlEditor({ yamlError, t, managed = false }) {
     return `<section class="rule-editor-section yaml-rule-section">
-      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t("rules.yaml_help"))}</small></div></div>
+      <div class="rule-section-heading"><div><h3>${esc(t("rules.yaml_title"))}</h3><small>${esc(t(managed ? "managed.yaml_help" : "rules.yaml_help"))}</small></div></div>
       <ha-code-editor id="rule-yaml-editor" mode="yaml" aria-label="${esc(t("rules.yaml_title"))}"></ha-code-editor>
       ${yamlError ? `<div class="yaml-error" role="alert">${esc(yamlError)}</div>` : ""}
     </section>`;
@@ -4825,7 +4828,7 @@ function duplicateRuleLabel() {
 }
 
 async function duplicateRuleDraft() {
-    if (!this._editingRule?.id) return;
+    if (!this._editingRule?.id || this._editingRule.blueprint?.managed) return;
     if (this._ruleEditorMode === "yaml") {
       await this._switchRuleEditor();
       if (this._ruleEditorMode !== "visual" || !this._editingRule?.id) return;
@@ -4855,6 +4858,7 @@ async function duplicateRuleDraft() {
 function handleRuleInput(event) {
     if (this._editingRule === null) return;
     const target = event.target;
+    if (target?.closest?.(".managed-review")) return;
     if (target?.closest?.("#rule-form")) {
       this._captureRuleDraft();
       this._clearRuleEditorError();
@@ -4884,7 +4888,11 @@ async function switchRuleEditor() {
     this._clearRuleTestResult();
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
-      this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());
+      this._ruleYaml = this._editingRule?.blueprint?.managed
+        ? Object.entries(ruleDraftUpdate(this._editingRule))
+          .filter(([key]) => key !== "value" || (!["jinja", "unchanged"].includes(this._editingRule.source) && this._editingRule.operator !== "unchanged"))
+          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join("\n") + "\n"
+        : ruleToYaml(this._editingRule ?? newRuleDefaults());
       this._ruleYamlError = null;
       this._ruleEditorMode = "yaml";
       this._refreshRuleEditor();
@@ -5246,17 +5254,14 @@ function hydrateRuleEditorControls() {
 
 
 function renderManagedRuleEditor(context) {
-    const { rule, t, renderTextField, renderNumberField } = context;
-    return `${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
+    const { rule, t, renderTextField, renderNumberField, testResult, renderTestResult = () => "" } = context;
+    return `<div class="rule-test-result" data-rule-test-result>${renderTestResult(testResult)}</div>${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
       ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
       ${renderRuleLevel(t)}
       <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector></div>
       <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><p>${rule.entity_ids.map(esc).join(", ")}</p></div>
       ${!["jinja", "unchanged"].includes(rule.source) ? renderRuleValues({ rule, t }) : ""}
       ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
-      <div class="field full"><small>${esc(t("managed.owned"))}</small><dl>
-        ${["source", "attribute", "operator", "message", "condition_template"].filter((key) => rule[key]).map((key) => `<dt>${esc(t(`rules.${key === "condition_template" ? "condition_template_only" : key === "message" ? "message_optional" : key === "attribute" ? "attribute_name" : key}`))}</dt><dd>${esc(rule[key])}</dd>`).join("")}
-      </dl></div>
     </div></section>`;
 }
 
@@ -5284,7 +5289,7 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
     resizeLabel: t("rules.aria_resize"),
     headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("generator.refresh"))}</ha-button>`,
     banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
-    content: `<ha-formfield label="${esc(t("managed.opt_in"))}"><ha-switch data-managed-generation></ha-switch></ha-formfield>${content}`, saveAction: "generate-rules", saveLabel: t("generator.create"),
+    content, saveAction: "generate-rules", saveLabel: t("generator.create"),
     busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,
   });
 }
@@ -5292,12 +5297,6 @@ function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
 function hydrateRuleGenerator(root, panel) {
   const drawer = panel._configurationDrawer;
   if (drawer?.kind !== "generator") return;
-  const managed = root?.querySelector?.("[data-managed-generation]");
-  if (managed) {
-    managed.checked = Boolean(drawer.managed);
-    managed.disabled = panel._busy;
-    managed.onchange = () => { drawer.managed = managed.checked; };
-  }
   root?.querySelectorAll?.("ha-checkbox[data-blueprint-id]").forEach((checkbox) => {
     checkbox.checked = drawer.selected.has(checkbox.dataset.blueprintId);
     // Property assignment keeps repeated hydration idempotent.
@@ -5349,7 +5348,7 @@ async function handleRuleGeneratorAction(panel, action) {
     const result = await panel._call({
       type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
       ...(overwrite ? { overwrite: true } : {}),
-      ...(drawer.managed ? { managed: true } : {}),
+      managed: true,
     }, panel._t("generator.created"));
     if (result) {
       for (const rule of result) {
@@ -6689,7 +6688,7 @@ async function handleSelected(event) {
     const ruleMenu = path.find((node) => node?.dataset?.ruleEditorMenu !== undefined);
     const ruleValue = event.detail?.item?.value ?? event.detail?.value;
     if (!ruleMenu) return;
-    if (ruleValue === "switch-editor" && !this._editingRule?.blueprint?.managed) {
+    if (ruleValue === "switch-editor") {
       await this._switchRuleEditor();
       return;
     }
@@ -9585,6 +9584,7 @@ const ruleEditorStyles = `
 
     .managed-rule-name { display: flex; align-items: center; min-width: 0; }
     .managed-rule-name ha-icon-button { --mdc-icon-button-size: 32px; flex: 0 0 32px; }
+    .managed-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
     .managed-entity { display: flex; align-items: center; gap: 4px; }
     .managed-entity span, .managed-review dd, .rule-editor-section dd { overflow-wrap: anywhere; min-width: 0; }
     .managed-review dd, .rule-editor-section dd { margin-inline-start: 12px; }

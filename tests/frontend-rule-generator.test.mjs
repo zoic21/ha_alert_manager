@@ -66,7 +66,7 @@ test("creation submits IDs only, inserts returned rules and closes on success", 
   let message;
   const panel = { _configurationDrawer: draft, _config: { rules: [] }, _t: (key) => key, _render() {}, async _call(value) { message = value; return [{ id: "new", blueprint: { id: "cpu", version: 1, managed: false } }]; } };
   assert.equal(await handleRuleGeneratorAction(panel, "generate-rules"), true);
-  assert.deepEqual(message, { type: "alert_manager/rules/blueprints/create", blueprint_ids: ["cpu"] });
+  assert.deepEqual(message, { type: "alert_manager/rules/blueprints/create", blueprint_ids: ["cpu"], managed: true });
   assert.equal(panel._config.rules.length, 1);
   assert.equal(panel._configurationDrawer, null);
   assert.equal(panel._notice.kind, "success");
@@ -137,3 +137,9 @@ for (const confirmed of [false, true]) {
     }
   });
 }
+
+
+test("generator has no optional blueprint management switch", () => {
+  const html = renderRuleGenerator({ drawer: drawer(), busy: false, t: (key) => key });
+  assert.doesNotMatch(html, /data-managed-generation|managed.opt_in/);
+});

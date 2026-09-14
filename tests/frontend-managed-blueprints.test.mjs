@@ -190,3 +190,62 @@ test("editing one rule retains other rules' update indicators and reviews", () =
   assert.equal(panel._managedBlueprints.other.update_available, true);
   assert.equal(panel._blueprintReview, otherReview);
 });
+
+const editor = await import("../frontend-src/components/rule-editor.js");
+const managedDraft = { ...rule, source: "jinja", condition_template: "{{ true }}", message: "{{ secret }}", operator: "equals", value: "", duration: 0 };
+
+test("managed editor has YAML and action icons, hides structure and duplication, and renders test results", () => {
+  const context = { rule: managedDraft, mode: "visual", t, renderTextField: () => "", renderNumberField: () => "", renderTestResult: () => "test-result" };
+  const html = editor.renderRuleEditor(context);
+  assert.match(html, /value="switch-editor"/);
+  assert.doesNotMatch(html, /value="duplicate-rule"|\{\{ secret \}\}|\{\{ true \}\}|<dt>/);
+  assert.match(html, /data-rule-test-result>test-result/);
+  for (const icon of ["mdi:refresh", "mdi:link-off", "mdi:flask-outline", "mdi:content-save"]) assert.ok(html.includes(icon));
+  const yaml = editor.renderRuleEditor({ ...context, mode: "yaml" });
+  assert.match(yaml, /id="rule-yaml-editor"/);
+  assert.match(yaml, /managed.yaml_help/);
+  assert.doesNotMatch(yaml, /data-action="review-blueprint"|value="duplicate-rule"/);
+});
+
+test("membership changes never capture or dirty the rule form", () => {
+  const panel = { _editingRule: managedDraft, _ruleDirty: false, _captureRuleDraft() { assert.fail("review is not a rule edit"); } };
+  editor.handleRuleInput.call(panel, { target: { closest: (selector) => [".managed-review", "#rule-form"].includes(selector) } });
+  assert.equal(panel._ruleDirty, false);
+});
+
+test("real rule edits still block blueprint actions and empty membership has an actionable error", async () => {
+  for (const dirty of [true, false]) {
+    const panel = { _editingRule: managedDraft, _ruleDirty: dirty, _t: t, _blueprintReview: { proposal, selected: new Set() }, _refreshRuleEditor() {}, _call() { assert.fail("invalid apply sent"); } };
+    await handleManagedBlueprintAction(panel, "apply-blueprint");
+    assert.equal(panel._ruleEditorError, dirty ? "managed.save_first" : "managed.empty");
+  }
+});
+
+test("managed YAML contains only editable settings and switching back preserves provenance", async () => {
+  const panel = { _editingRule: managedDraft, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {}, _call: async () => managedDraft };
+  await editor.switchRuleEditor.call(panel);
+  assert.match(panel._ruleYaml, /^name:/);
+  assert.match(panel._ruleYaml, /duration: 0/);
+  assert.doesNotMatch(panel._ruleYaml, /blueprint|entity_ids|source|operator|value:|message|condition_template/);
+  await editor.switchRuleEditor.call(panel);
+  assert.equal(panel._ruleEditorMode, "visual");
+  assert.deepEqual(panel._editingRule.blueprint, managedDraft.blueprint);
+});
+
+test("managed duplication is guarded even when invoked directly", async () => {
+  const panel = { _editingRule: managedDraft, _captureRuleDraft() { assert.fail("duplicated managed rule"); } };
+  await editor.duplicateRuleDraft.call(panel);
+  assert.equal(panel._editingRule, managedDraft);
+});
+
+test("managed test sends editable overrides and updates the shared result surface", async () => {
+  let sent;
+  let scrolled;
+  const panel = { _editingRule: managedDraft, _ruleTestSequence: 0, _clearRuleEditorError() {}, _captureRuleDraft: () => managedDraft, _api: { testRule: async (payload, id) => { sent = { payload, id }; return { results: [] }; } }, _updateRuleTestDisplay(options) { scrolled = options?.scroll; } };
+  await editor.testRule.call(panel);
+  assert.equal(sent.id, managedDraft.id);
+  assert.equal(sent.payload.duration, 0);
+  assert.deepEqual(panel._ruleTestResult, { results: [] });
+  assert.equal(scrolled, true);
+  assert.equal(panel._ruleTestLoading, false);
+});

@@ -449,7 +449,9 @@ async def websocket_rule_yaml_validate(
     if (manager := _manager(hass, connection, msg["id"])) is None:
         return
     try:
-        rule = manager.validate_rule_yaml(msg["yaml"], rule_id=msg.get("rule_id"))
+        rule = await manager.async_validate_rule_yaml(
+            msg["yaml"], rule_id=msg.get("rule_id")
+        )
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))
         return
