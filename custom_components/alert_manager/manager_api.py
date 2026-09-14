@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
@@ -31,7 +32,9 @@ from homeassistant.util import dt as dt_util
 from .blueprints import (
     discovery_attributes,
     load_blueprints,
+    managed_rule_edit,
     prepare_blueprints,
+    reconcile_blueprints,
     rule_signature,
     snapshot_installation,
 )
@@ -233,6 +236,7 @@ class _ApiMixin:
             validate_rule_update_fields(data)
             existing = self.config["rules"][self._rule_index(rule_id)]
             existing_rule = Rule.from_dict(existing)
+            data = managed_rule_edit(existing, data)
             rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
@@ -1050,9 +1054,114 @@ class _ApiMixin:
             for row in await self._async_blueprint_candidates()
         ]
 
+    async def _async_reconcile_blueprints(
+        self, rule_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Snapshot relevant rules; keep discovery and preparation off-loop."""
+        _ensure_runtime_mutable(self)
+
+        def selected_rules() -> list[dict[str, Any]]:
+            return [
+                rule
+                for rule in self.config["rules"]
+                if (rule_id is None or rule["id"] == rule_id)
+                and (rule.get("blueprint") or {}).get("managed")
+            ]
+
+        rules = deepcopy(selected_rules())
+        ids = {rule["blueprint"]["id"] for rule in rules}
+        if not ids:
+            return []
+        catalog = await self.hass.async_add_executor_job(load_blueprints)
+        catalog = [item for item in catalog if item["blueprint_id"] in ids]
+        attributes = await self.hass.async_add_executor_job(
+            discovery_attributes, catalog
+        )
+        installation = snapshot_installation(
+            self.hass, self._entity_registry, attributes
+        )
+        result = await self.hass.async_add_executor_job(
+            reconcile_blueprints,
+            catalog,
+            installation,
+            rules,
+            dict(self._condition_translations),
+        )
+        _ensure_runtime_mutable(self)
+        if rules != selected_rules():
+            raise ValueError("Rules changed; review the blueprint again")
+        return result
+
+    async def async_reconcile_blueprints(self) -> list[dict[str, Any]]:
+        """Coalesce overlapping UI requests without a timer or a retained cache."""
+        task = self._blueprint_reconciliation_task
+        if task is None or task.done():
+            task = self._blueprint_reconciliation_task = asyncio.create_task(
+                self._async_reconcile_blueprints()
+            )
+
+            def completed(done: asyncio.Task) -> None:
+                # Consume errors even if the only requesting client disconnects,
+                # and release the potentially large result after this operation.
+                if not done.cancelled():
+                    done.exception()
+                if self._blueprint_reconciliation_task is done:
+                    self._blueprint_reconciliation_task = None
+
+            task.add_done_callback(completed)
+        return deepcopy(await asyncio.shield(task))
+
+    @_serialize_config_mutation
+    async def async_apply_blueprint(
+        self,
+        rule_id: str,
+        token: str,
+        entity_ids: list[str],
+        excluded_entities: list[str],
+    ) -> dict[str, Any]:
+        """Revalidate accepted membership under the existing mutation lock."""
+        proposals = await self._async_reconcile_blueprints(rule_id)
+        proposal = next((row for row in proposals if row["rule_id"] == rule_id), None)
+        if proposal is None or proposal["token"] != token:
+            raise ValueError("Rules changed; review the blueprint again")
+        existing = self.config["rules"][self._rule_index(rule_id)]
+        allowed = set(proposal["discovered"]) | set(existing["entity_ids"])
+        previous_exclusions = (existing.get("blueprint") or {}).get(
+            "excluded_entities", []
+        )
+        if (
+            not set(entity_ids) <= allowed
+            or not set(excluded_entities) <= allowed | set(previous_exclusions)
+            or set(entity_ids) & set(excluded_entities)
+        ):
+            raise ValueError("Invalid blueprint entity selection")
+        candidate = deepcopy(proposal["candidate"])
+        candidate["entity_ids"] = entity_ids
+        candidate["blueprint"]["excluded_entities"] = excluded_entities
+        rule = validate_rule_payload(candidate, rule_id=rule_id)
+        return (await self._async_create_validated_rules([rule]))[0]
+
+    @_serialize_config_mutation
+    async def async_detach_blueprint(self, rule_id: str) -> dict[str, Any]:
+        """Keep the resolved rule and identity when the user takes control."""
+        existing = deepcopy(self.config["rules"][self._rule_index(rule_id)])
+        if existing.get("blueprint"):
+            existing["blueprint"] = {
+                key: existing["blueprint"][key] for key in ("id", "version")
+            } | {"managed": False}
+        return (
+            await self._async_create_validated_rules(
+                [validate_rule_payload(existing, rule_id=rule_id)]
+            )
+        )[0]
+
     @_serialize_config_mutation
     async def async_generate_rules(
-        self, blueprint_ids: list[str], *, overwrite: bool = False
+        self,
+        blueprint_ids: list[str],
+        *,
+        overwrite: bool = False,
+        managed: bool = False,
     ) -> list[dict[str, Any]]:
         """Recheck selected recipes and create the whole batch in one transaction."""
         if (
@@ -1078,6 +1187,7 @@ class _ApiMixin:
                 for key, value in row["rule"].items()
                 if key not in {"id", "version"}
             }
+            payload["blueprint"]["managed"] = managed
             rule = validate_rule_payload(payload)
             signature = rule_signature(rule)
             if signature in signatures:
@@ -1096,6 +1206,7 @@ class _ApiMixin:
     @_serialize_config_mutation
     async def async_create_rule(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create and immediately evaluate a custom rule."""
+        data = managed_rule_edit({}, data)
         return (
             await self._async_create_validated_rules([validate_rule_payload(data)])
         )[0]
@@ -1153,6 +1264,7 @@ class _ApiMixin:
         validate_rule_update_fields(data)
         index = self._rule_index(rule_id)
         existing = self.config["rules"][index]
+        data = managed_rule_edit(existing, data)
         old_rule = Rule.from_dict(existing)
         rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
         self._validate_rule_sources(rule)

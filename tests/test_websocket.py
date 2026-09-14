@@ -807,3 +807,43 @@ def test_blueprint_commands_require_admin_and_validate_batch(hass, entry):
     )
     assert admin.errors[0][1] == "invalid_format"
     assert not manager.config["rules"]
+
+
+def test_managed_blueprint_commands_require_admin(hass, entry):
+    from custom_components.alert_manager.websocket import (
+        websocket_blueprint_apply,
+        websocket_blueprint_detach,
+        websocket_blueprint_reconcile,
+    )
+
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=False)
+    for command, suffix, fields in (
+        (websocket_blueprint_reconcile, "reconcile", {}),
+        (websocket_blueprint_detach, "detach", {"rule_id": "test"}),
+        (
+            websocket_blueprint_apply,
+            "apply",
+            {
+                "rule_id": "test",
+                "token": "stale",
+                "entity_ids": ["sensor.cpu"],
+                "excluded_entities": [],
+            },
+        ),
+    ):
+        asyncio.run(
+            command(
+                hass,
+                connection,
+                {
+                    "id": 300,
+                    "type": f"alert_manager/rules/blueprints/{suffix}",
+                    **fields,
+                },
+            )
+        )
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 3
+    assert not connection.results

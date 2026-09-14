@@ -19,6 +19,7 @@ const sourceNames = [
   "components/configuration-drawer.js",
   "components/configuration-yaml.js",
   "components/notification-profiles.js",
+  "components/managed-blueprints.js",
   "components/rule-editor.js",
   "components/rule-generator.js",
   "views/overview.js",

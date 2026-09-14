@@ -24,7 +24,7 @@ export function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
     resizeLabel: t("rules.aria_resize"),
     headerAction: `<ha-button slot="actionItems" data-action="refresh-rule-generator" ${busy || drawer.loading ? "disabled" : ""}><ha-icon slot="start" icon="mdi:refresh"></ha-icon>${esc(t("generator.refresh"))}</ha-button>`,
     banner: `<ha-alert alert-type="info">${esc(t("generator.help"))}</ha-alert>`,
-    content, saveAction: "generate-rules", saveLabel: t("generator.create"),
+    content: `<ha-formfield label="${esc(t("managed.opt_in"))}"><ha-switch data-managed-generation></ha-switch></ha-formfield>${content}`, saveAction: "generate-rules", saveLabel: t("generator.create"),
     busy: busy || drawer.loading || !drawer.selected.size, useBottomSheet,
   });
 }
@@ -32,6 +32,12 @@ export function renderRuleGenerator({ drawer, busy, useBottomSheet, t }) {
 export function hydrateRuleGenerator(root, panel) {
   const drawer = panel._configurationDrawer;
   if (drawer?.kind !== "generator") return;
+  const managed = root?.querySelector?.("[data-managed-generation]");
+  if (managed) {
+    managed.checked = Boolean(drawer.managed);
+    managed.disabled = panel._busy;
+    managed.onchange = () => { drawer.managed = managed.checked; };
+  }
   root?.querySelectorAll?.("ha-checkbox[data-blueprint-id]").forEach((checkbox) => {
     checkbox.checked = drawer.selected.has(checkbox.dataset.blueprintId);
     // Property assignment keeps repeated hydration idempotent.
@@ -83,6 +89,7 @@ export async function handleRuleGeneratorAction(panel, action) {
     const result = await panel._call({
       type: "alert_manager/rules/blueprints/create", blueprint_ids: [...drawer.selected],
       ...(overwrite ? { overwrite: true } : {}),
+      ...(drawer.managed ? { managed: true } : {}),
     }, panel._t("generator.created"));
     if (result) {
       for (const rule of result) {
