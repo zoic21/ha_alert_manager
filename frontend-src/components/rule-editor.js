@@ -148,6 +148,14 @@ export function serializeRuleDraft(draft) {
     };
 }
 
+export function ruleDraftUpdate(draft) {
+    const rule = serializeRuleDraft(draft);
+    return draft.blueprint?.managed
+      ? Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+        .map((key) => [key, rule[key]]))
+      : rule;
+}
+
 export function validateRuleDraft(draft) {
     const conditionTemplate = String(draft.condition_template ?? "").trim();
     if (conditionTemplate || (draft.source !== "jinja"
@@ -701,11 +709,7 @@ export async function saveRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    let rule = serializeRuleDraft(draft);
-    if (draft.blueprint?.managed) {
-      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
-        .map((key) => [key, rule[key]]));
-    }
+    const rule = ruleDraftUpdate(draft);
     const id = String(this._editingRule?.id ?? "");
     const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {
@@ -735,11 +739,7 @@ export async function testRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    let rule = serializeRuleDraft(draft);
-    if (draft.blueprint?.managed) {
-      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
-        .map((key) => [key, rule[key]]));
-    }
+    const rule = ruleDraftUpdate(draft);
     const id = String(this._editingRule?.id ?? "");
     const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {

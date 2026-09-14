@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderManagedBlueprint, handleManagedBlueprintAction, hydrateManagedBlueprint } from "../frontend-src/components/managed-blueprints.js";
 import { refreshManagedBlueprints } from "../frontend-src/api/alert-manager-api.js";
-import { nativeRuleNameCell } from "../frontend-src/views/rules.js";
+import { nativeRuleNameCell, replaceRule } from "../frontend-src/views/rules.js";
 
 const rule = { id: "r", name: "CPU", entity_ids: ["sensor.cpu"], blueprint: { id: "cpu", version: 1, managed: true, excluded_entities: ["sensor.missing"] } };
 const proposal = { rule_id: "r", added: ["sensor.new"], removed: [], discovered: ["sensor.cpu", "sensor.new"], update_available: true, candidate: { entity_ids: ["sensor.cpu", "sensor.new"] }, token: "fresh" };
@@ -130,4 +130,63 @@ test("table update icon precedes the name and opens review without mutation", ()
     const unmanaged = nativeRuleNameCell.call(panel, { id: "r", name: "CPU", managed: false });
     assert.equal(unmanaged.children[0].textContent, "CPU");
   } finally { globalThis.document = previous; }
+});
+
+for (const [label, cacheChanges, expectedCalls] of [
+  ["fresh", {}, 0],
+  ["expired", { checkedAt: 0 }, 1],
+  ["edited rule", { ruleSignature: "old draft" }, 1],
+]) {
+  test(`review uses ${label} comparison appropriately`, async () => {
+    let calls = 0;
+    const panel = {
+      _editingRule: rule, _config: { rules: [rule] },
+      _managedBlueprints: { r: { ...proposal, checkedAt: Date.now(), ruleSignature: JSON.stringify(rule), ...cacheChanges } },
+      _call: async () => { calls++; return [proposal]; },
+      _refreshRulesData() {}, _refreshRuleEditor() {},
+    };
+    await handleManagedBlueprintAction(panel, "review-blueprint");
+    assert.equal(calls, expectedCalls);
+    assert.equal(panel._blueprintReview.proposal.token, "fresh");
+    assert.deepEqual([...panel._blueprintReview.selected], ["sensor.cpu", "sensor.new"]);
+  });
+}
+
+for (const result of [null, { ...rule, blueprint: { ...rule.blueprint, managed: false } }]) {
+  test(`late ${result ? "successful" : "failed"} detach preserves the current editor`, async () => {
+    const previous = globalThis.window;
+    globalThis.window = { confirm: () => true };
+    try {
+      let finish;
+      let replaced;
+      const panel = {
+        _editingRule: rule, _t: t,
+        _call: () => new Promise((resolve) => { finish = resolve; }),
+        _replaceRule: (updated) => { replaced = updated; },
+        _refreshRuleEditor: () => assert.fail("late result reopened editor"),
+      };
+      const pending = handleManagedBlueprintAction(panel, "detach-blueprint");
+      const other = { id: "other" };
+      panel._editingRule = other;
+      finish(result);
+      await pending;
+      assert.equal(panel._editingRule, other);
+      assert.equal(replaced, result ?? undefined);
+    } finally { globalThis.window = previous; }
+  });
+}
+
+
+test("editing one rule retains other rules' update indicators and reviews", () => {
+  const otherReview = { proposal: { rule_id: "other" } };
+  const panel = {
+    _config: { rules: [rule] }, _editingRule: { id: "other" },
+    _managedBlueprints: { r: proposal, other: { update_available: true } },
+    _blueprintReview: otherReview,
+    _refreshRulesData() {},
+  };
+  replaceRule.call(panel, { ...rule, enabled: false });
+  assert.equal(panel._managedBlueprints.r, undefined);
+  assert.equal(panel._managedBlueprints.other.update_available, true);
+  assert.equal(panel._blueprintReview, otherReview);
 });

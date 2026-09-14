@@ -449,6 +449,8 @@ def reconcile_blueprints(
 
 def managed_rule_edit(existing: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
     """Keep structural ownership authoritative for ordinary edits and YAML."""
+    if not isinstance(data, dict):
+        raise ValueError("Rule must be an object")
     metadata = existing.get("blueprint") or {}
     if not metadata.get("managed"):
         provided = data.get("blueprint")

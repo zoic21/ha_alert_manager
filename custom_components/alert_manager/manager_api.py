@@ -1054,15 +1054,22 @@ class _ApiMixin:
             for row in await self._async_blueprint_candidates()
         ]
 
-    async def _async_reconcile_blueprints(self) -> list[dict[str, Any]]:
-        """Snapshot HA on-loop; do discovery, comparison and preparation off-loop."""
+    async def _async_reconcile_blueprints(
+        self, rule_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Snapshot relevant rules; keep discovery and preparation off-loop."""
         _ensure_runtime_mutable(self)
-        rules = deepcopy(self.config["rules"])
-        ids = {
-            rule["blueprint"]["id"]
-            for rule in rules
-            if (rule.get("blueprint") or {}).get("managed")
-        }
+
+        def selected_rules() -> list[dict[str, Any]]:
+            return [
+                rule
+                for rule in self.config["rules"]
+                if (rule_id is None or rule["id"] == rule_id)
+                and (rule.get("blueprint") or {}).get("managed")
+            ]
+
+        rules = deepcopy(selected_rules())
+        ids = {rule["blueprint"]["id"] for rule in rules}
         if not ids:
             return []
         catalog = await self.hass.async_add_executor_job(load_blueprints)
@@ -1081,7 +1088,7 @@ class _ApiMixin:
             dict(self._condition_translations),
         )
         _ensure_runtime_mutable(self)
-        if rules != self.config["rules"]:
+        if rules != selected_rules():
             raise ValueError("Rules changed; review the blueprint again")
         return result
 
@@ -1113,7 +1120,7 @@ class _ApiMixin:
         excluded_entities: list[str],
     ) -> dict[str, Any]:
         """Revalidate accepted membership under the existing mutation lock."""
-        proposals = await self._async_reconcile_blueprints()
+        proposals = await self._async_reconcile_blueprints(rule_id)
         proposal = next((row for row in proposals if row["rule_id"] == rule_id), None)
         if proposal is None or proposal["token"] != token:
             raise ValueError("Rules changed; review the blueprint again")

@@ -305,3 +305,35 @@ def test_same_blueprint_rules_share_one_discovery(hass, registry_entry, monkeypa
     rows = blueprints.reconcile_blueprints(catalog, installation, [rule, duplicate], {})
     assert len(rows) == 2
     assert calls == ["system_cpu_usage"]
+
+
+def test_apply_only_rediscovers_the_selected_blueprint(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, rule = create_managed(hass, entry, registry_entry)
+    add_sensor(hass, registry_entry, "sensor.memory", "memory_use_percent")
+    run(manager.async_generate_rules(["system_memory_usage"], managed=True))
+    row = next(
+        row
+        for row in run(manager.async_reconcile_blueprints())
+        if row["rule_id"] == rule["id"]
+    )
+    original = manager_api.reconcile_blueprints
+    snapshots = []
+
+    def capture(catalog, installation, rules, translations):
+        snapshots.append(([item["blueprint_id"] for item in catalog], rules))
+        return original(catalog, installation, rules, translations)
+
+    monkeypatch.setattr(manager_api, "reconcile_blueprints", capture)
+    run(apply(manager, row))
+    assert len(snapshots) == 1
+    assert snapshots[0][0] == ["system_cpu_usage"]
+    assert [item["id"] for item in snapshots[0][1]] == [rule["id"]]
+
+
+@pytest.mark.parametrize("payload", [None, [], "invalid", 1])
+def test_create_rejects_non_object_rule_payloads(hass, entry, payload):
+    manager = manager_for(hass, entry)
+    with pytest.raises(ValueError, match="Rule must be an object"):
+        run(manager.async_create_rule(payload))

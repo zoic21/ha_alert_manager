@@ -1120,7 +1120,7 @@ async function refreshManagedBlueprints(panel) {
         if (!panel.isConnected || panel._activeTab !== "rules"
           || config !== panel._config
           || rules !== JSON.stringify(panel._config?.rules ?? [])) return;
-        panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
+        rememberManagedBlueprints(panel, rows);
         panel._refreshRulesData();
         if (panel._editingRule && !panel._ruleDirty && !panel._blueprintReview) panel._refreshRuleEditor();
       } catch (error) {
@@ -1134,6 +1134,15 @@ async function refreshManagedBlueprints(panel) {
       }
     })();
     return panel._managedBlueprintRequest;
+}
+
+
+function rememberManagedBlueprints(panel, rows) {
+    const rules = new Map((panel._config?.rules ?? []).map((rule) => [rule.id, rule]));
+    const checkedAt = Date.now();
+    panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, {
+      ...row, checkedAt, ruleSignature: JSON.stringify(rules.get(row.rule_id)),
+    }]));
 }
 
 // Source: frontend-src/components/duration-field.js
@@ -4188,11 +4197,15 @@ async function handleManagedBlueprintAction(panel, action) {
     return true;
   }
   if (action === "review-blueprint") {
-    const rows = await panel._call({ type: "alert_manager/rules/blueprints/reconcile" });
-    if (panel._editingRule !== rule) return true;
-    const proposal = rows?.find((row) => row.rule_id === rule.id);
+    let proposal = panel._managedBlueprints?.[rule.id];
+    if (!proposal || Date.now() - proposal.checkedAt >= 15000
+      || proposal.ruleSignature !== JSON.stringify(rule)) {
+      const rows = await panel._call({ type: "alert_manager/rules/blueprints/reconcile" });
+      if (panel._editingRule !== rule || panel.isConnected === false || panel._ruleDirty) return true;
+      if (rows) rememberManagedBlueprints(panel, rows);
+      proposal = rows?.find((row) => row.rule_id === rule.id);
+    }
     if (proposal) {
-      panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
       panel._blueprintReview = { proposal, selected: new Set(proposal.candidate.entity_ids), keptExclusions: new Set(rule.blueprint.excluded_entities ?? []) };
       panel._refreshRulesData();
       panel._refreshRuleEditor();
@@ -4223,9 +4236,12 @@ async function handleManagedBlueprintAction(panel, action) {
     };
   }
   const updated = await panel._call(message, panel._t("success.rule_updated"));
+  if (panel._editingRule !== rule || panel.isConnected === false) {
+    if (updated) panel._replaceRule(updated);
+    return true;
+  }
   if (updated) {
     panel._blueprintReview = null;
-    panel._managedBlueprints = {};
     panel._replaceRule(updated);
     panel._editingRule = updated;
     panel._refreshRuleEditor();
@@ -4380,6 +4396,14 @@ function serializeRuleDraft(draft) {
       flapping_window: draft.flapping_window ?? null,
       flapping_recovery: draft.flapping_recovery ?? null,
     };
+}
+
+function ruleDraftUpdate(draft) {
+    const rule = serializeRuleDraft(draft);
+    return draft.blueprint?.managed
+      ? Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+        .map((key) => [key, rule[key]]))
+      : rule;
 }
 
 function validateRuleDraft(draft) {
@@ -4935,11 +4959,7 @@ async function saveRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    let rule = serializeRuleDraft(draft);
-    if (draft.blueprint?.managed) {
-      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
-        .map((key) => [key, rule[key]]));
-    }
+    const rule = ruleDraftUpdate(draft);
     const id = String(this._editingRule?.id ?? "");
     const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {
@@ -4969,11 +4989,7 @@ async function testRule(form) {
     this._clearRuleEditorError();
     const draft = this._captureRuleDraft(form);
     if (!draft) return;
-    let rule = serializeRuleDraft(draft);
-    if (draft.blueprint?.managed) {
-      rule = Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
-        .map((key) => [key, rule[key]]));
-    }
+    const rule = ruleDraftUpdate(draft);
     const id = String(this._editingRule?.id ?? "");
     const validation = validateRuleDraft(draft.blueprint?.managed ? { ...draft, ...rule } : rule);
     if (!validation.valid) {
@@ -6672,8 +6688,8 @@ async function toggleRule(ruleId) {
 }
 
 function replaceRule(rule) {
-    this._managedBlueprints = {};
-    this._blueprintReview = null;
+    if (this._managedBlueprints) delete this._managedBlueprints[rule.id];
+    if (this._blueprintReview?.proposal.rule_id === rule.id) this._blueprintReview = null;
     const index = this._config.rules.findIndex((item) => item.id === rule.id);
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;

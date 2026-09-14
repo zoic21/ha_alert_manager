@@ -1,3 +1,4 @@
+import { rememberManagedBlueprints } from "../api/alert-manager-api.js";
 import { esc } from "../utils/escaping.js";
 
 export function renderManagedBlueprint({ rule, proposal, review, t }) {
@@ -58,11 +59,15 @@ export async function handleManagedBlueprintAction(panel, action) {
     return true;
   }
   if (action === "review-blueprint") {
-    const rows = await panel._call({ type: "alert_manager/rules/blueprints/reconcile" });
-    if (panel._editingRule !== rule) return true;
-    const proposal = rows?.find((row) => row.rule_id === rule.id);
+    let proposal = panel._managedBlueprints?.[rule.id];
+    if (!proposal || Date.now() - proposal.checkedAt >= 15000
+      || proposal.ruleSignature !== JSON.stringify(rule)) {
+      const rows = await panel._call({ type: "alert_manager/rules/blueprints/reconcile" });
+      if (panel._editingRule !== rule || panel.isConnected === false || panel._ruleDirty) return true;
+      if (rows) rememberManagedBlueprints(panel, rows);
+      proposal = rows?.find((row) => row.rule_id === rule.id);
+    }
     if (proposal) {
-      panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
       panel._blueprintReview = { proposal, selected: new Set(proposal.candidate.entity_ids), keptExclusions: new Set(rule.blueprint.excluded_entities ?? []) };
       panel._refreshRulesData();
       panel._refreshRuleEditor();
@@ -93,9 +98,12 @@ export async function handleManagedBlueprintAction(panel, action) {
     };
   }
   const updated = await panel._call(message, panel._t("success.rule_updated"));
+  if (panel._editingRule !== rule || panel.isConnected === false) {
+    if (updated) panel._replaceRule(updated);
+    return true;
+  }
   if (updated) {
     panel._blueprintReview = null;
-    panel._managedBlueprints = {};
     panel._replaceRule(updated);
     panel._editingRule = updated;
     panel._refreshRuleEditor();

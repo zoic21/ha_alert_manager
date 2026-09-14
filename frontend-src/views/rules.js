@@ -476,8 +476,8 @@ export async function toggleRule(ruleId) {
 }
 
 export function replaceRule(rule) {
-    this._managedBlueprints = {};
-    this._blueprintReview = null;
+    if (this._managedBlueprints) delete this._managedBlueprints[rule.id];
+    if (this._blueprintReview?.proposal.rule_id === rule.id) this._blueprintReview = null;
     const index = this._config.rules.findIndex((item) => item.id === rule.id);
     if (index === -1) this._config.rules.push(rule);
     else this._config.rules[index] = rule;

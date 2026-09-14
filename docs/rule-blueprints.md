@@ -146,8 +146,10 @@ Detachment preserves its current entities, configuration and rule identifier.
 Regenerating is the supported way to opt back into managed mode.
 
 Comparisons run outside Home Assistant's event loop using a shared installation
-snapshot. Overlapping requests share their work. Applying a proposal performs a
-fresh check under the configuration transaction lock: if the rule, blueprint or
+snapshot. Overlapping requests share their work. Opening a review reuses a comparison made
+within the last 15 seconds if that rule has not changed. Applying a proposal
+always performs a fresh check of the selected rule under the configuration
+transaction lock: if the rule, blueprint or
 matching entity list changed while the review was open, review again. Persistence
 failure rolls back the configuration and alert state. Registry-backed entity
 renames preserve references, including exclusions, through the existing rename

@@ -373,7 +373,7 @@ export async function refreshManagedBlueprints(panel) {
         if (!panel.isConnected || panel._activeTab !== "rules"
           || config !== panel._config
           || rules !== JSON.stringify(panel._config?.rules ?? [])) return;
-        panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, row]));
+        rememberManagedBlueprints(panel, rows);
         panel._refreshRulesData();
         if (panel._editingRule && !panel._ruleDirty && !panel._blueprintReview) panel._refreshRuleEditor();
       } catch (error) {
@@ -387,4 +387,13 @@ export async function refreshManagedBlueprints(panel) {
       }
     })();
     return panel._managedBlueprintRequest;
+}
+
+
+export function rememberManagedBlueprints(panel, rows) {
+    const rules = new Map((panel._config?.rules ?? []).map((rule) => [rule.id, rule]));
+    const checkedAt = Date.now();
+    panel._managedBlueprints = Object.fromEntries(rows.map((row) => [row.rule_id, {
+      ...row, checkedAt, ruleSignature: JSON.stringify(rules.get(row.rule_id)),
+    }]));
 }
