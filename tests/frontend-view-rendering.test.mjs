@@ -816,3 +816,37 @@ test("exception hydration preserves expansion and captures edits on collapse wit
   handler({ target: expansion, detail: { expanded: true } });
   assert.ok(panel._configurationDrawer.expandedExceptions.has(row));
 });
+
+test("update pack shows only exclusions and saves disabled rows through the shared draft", () => {
+  const pack = { id: "update_available", target_filter: { domain: "update" }, exception_targets: ["entity"], config_fields: [
+    { id: "entity_overrides", type: "entity_settings_map", translation_key: "excluded_update_entities", sparse: false, fields: [{ id: "enabled", type: "boolean", default: false, options: [false] }] },
+  ] };
+  const config = { automatic: { [pack.id]: { enabled: true, delay: 0, label_ids: ["maintenance"], entity_overrides: { "update.core": { enabled: false } } } } };
+  const draft = { [pack.id]: automaticPackToDraft(pack, config.automatic[pack.id]) };
+  const drawer = { kind: "automatic", id: pack.id };
+  const context = { availablePacks: [pack], config, draft, configurationDrawer: drawer, t };
+  const markup = renderAutomatic(context);
+  assert.match(markup, /auto-update_available-entity_overrides-exclusions/);
+  assert.match(markup, /auto-update_available-labels/);
+  assert.match(markup, /auto-update_available-delay/);
+  assert.doesNotMatch(markup, /data-pack-setting|device_overrides|inheritance_help|add-pack-map-row/);
+  let selector;
+  const panel = {
+    _packs: [pack], _automaticMapDraft: draft, _configurationDrawer: drawer,
+    _ensureAutomaticDraft() {}, _render() {}, _t: t,
+    _multipleSelectorValue: (value) => value,
+    shadowRoot: { querySelector: () => null, querySelectorAll: () => [] },
+    _configureSelector(id, schema, value, callback) {
+      if (id.endsWith("-exclusions")) selector = { schema, value, callback };
+    },
+  };
+  hydrateAutomaticControls.call(panel);
+  assert.deepEqual(selector.schema, { entity: { multiple: true, filter: { domain: "update" } } });
+  assert.deepEqual(selector.value, ["update.core"]);
+  selector.callback(["update.os", "update.addon"]);
+  assert.deepEqual(draft[pack.id].entity_overrides, [
+    { target_id: "update.os", enabled: false }, { target_id: "update.addon", enabled: false },
+  ]);
+  selector.callback([]);
+  assert.deepEqual(draft[pack.id].entity_overrides, []);
+});

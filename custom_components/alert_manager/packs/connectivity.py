@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE
+from homeassistant.const import ATTR_DEVICE_CLASS, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
 
@@ -18,7 +18,7 @@ def _applies(hass: HomeAssistant, state: State) -> bool:
         return False
     if state.attributes.get(ATTR_DEVICE_CLASS) == "connectivity":
         return True
-    if state.state != STATE_UNAVAILABLE:
+    if state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
         return False
     registry_entry = er.async_get(hass).async_get(state.entity_id)
     return bool(
@@ -43,7 +43,7 @@ def _evaluate(
     """Return alert, neutral or healthy connectivity status."""
     if not _applies(hass, state):
         return None
-    if state.state == STATE_UNAVAILABLE:
+    if state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
         return PackNeutral()
     if state.state != "off":
         return None
