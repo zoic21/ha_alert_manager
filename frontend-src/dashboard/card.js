@@ -93,9 +93,9 @@ export class AlertManagerCard extends HTMLElement {
       : type === "coherence" ? "coherence.title"
         : Object.hasOwn(DASHBOARD_ICONS, type) ? `packs.${type}.name` : "dashboard.alert");
   }
-  _icon(type) {
-    const name = esc(this._typeName(type));
-    return `<ha-icon icon="${Object.hasOwn(DASHBOARD_ICONS, type) ? DASHBOARD_ICONS[type] : "mdi:alert-circle-outline"}" role="img" aria-label="${name}" title="${name}"></ha-icon>`;
+  _icon(type, informational = false) {
+    const name = esc(informational ? this._t("dashboard.information") : this._typeName(type));
+    return `<ha-icon icon="${informational ? "mdi:information-outline" : Object.hasOwn(DASHBOARD_ICONS, type) ? DASHBOARD_ICONS[type] : "mdi:alert-circle-outline"}" role="img" aria-label="${name}" title="${name}"></ha-icon>`;
   }
   _tile(group) {
     const alert = group.alerts[0];
@@ -105,16 +105,16 @@ export class AlertManagerCard extends HTMLElement {
     const name = coherence ? this._t("dashboard.coherence") : fullName;
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
-    const message = multiple ? this._t("dashboard.count", { count: group.alerts.length })
+    const message = multiple ? this._t(group.informational ? "dashboard.information_count" : "dashboard.count", { count: group.alerts.length })
       : coherence && Number.isInteger(count) && count >= 0
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
-    return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
+    return `<ha-card><a class="tile"${group.informational && !this._config.icon_color ? ' style="--alert-icon-color:var(--info-color, var(--primary-color))"' : ""} data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config.label))}">
       <ha-ripple></ha-ripple>
-      ${multiple ? "" : this._icon(alert.type)}
+      ${multiple ? "" : this._icon(alert.type, group.informational)}
       <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
       <div class="message" title="${esc(multiple ? message : fullMessage)}">${esc(message)}</div>
-      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type)).join("")}</div>` : ""}</div>
+      ${multiple ? `<div class="types">${group.types.map((type) => this._icon(type, group.informational)).join("")}</div>` : ""}</div>
     </a></ha-card>`;
   }
   _render() {

@@ -82,6 +82,7 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
     return {
       ...currentRule,
       name: String(value("name") ?? currentRule.name ?? ""),
+      level: value("level") ?? currentRule.level ?? "alert",
       entity_ids: Array.isArray(entityIds) ? [...entityIds] : [String(entityIds)],
       enabled: Boolean(currentRule.enabled ?? true),
       source,
@@ -126,6 +127,7 @@ export function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
+      level: draft.level ?? "alert",
       ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
@@ -151,7 +153,7 @@ export function serializeRuleDraft(draft) {
 export function ruleDraftUpdate(draft) {
     const rule = serializeRuleDraft(draft);
     return draft.blueprint?.managed
-      ? Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+      ? Object.fromEntries(["name", "enabled", "level", "label_ids", "value", "duration"]
         .map((key) => [key, rule[key]]))
       : rule;
 }
@@ -442,6 +444,10 @@ export function renderRuleEditorPanel() {
     });
 }
 
+function renderRuleLevel(t) {
+    return `<div class="field"><ha-select id="rule-level" name="level" label="${esc(t("rules.level"))}"></ha-select><small>${esc(t("rules.level_help"))}</small></div>`;
+}
+
 export function renderRuleVisualEditor(context) {
     const { rule, t, renderTextField, renderNumberField, flappingAvailable = false, testResult, renderTestResult = () => "" } = context;
     return `
@@ -450,6 +456,7 @@ export function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
             ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            ${renderRuleLevel(t)}
             <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector><small>${esc(t("rules.labels_help"))}</small></div>
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
@@ -788,6 +795,9 @@ export function hydrateRuleEditor(root, context) {
   }
   if (context.mode !== "visual") return;
   context.configureSelect(
+    "rule-level", context.levelOptions, context.draft.level ?? "alert", context.onLevelChanged,
+  );
+  context.configureSelect(
     "rule-source",
     context.sourceOptions,
     context.draft.source ?? "value",
@@ -879,6 +889,11 @@ export function hydrateRuleEditorControls() {
     configureSelect: (...args) => this._configureSelect(...args),
     configureSelector: (...args) => this._configureSelector(...args),
     onMenuSelected: (event) => this._handleSelected(event),
+    levelOptions: ["alert", "info"].map((value) => ({ value, label: this._t(`rules.level_${value}`) })),
+    onLevelChanged: (value) => {
+      this._editingRule.level = value;
+      this._ruleDirty = true;
+    },
     onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "value";
       this._captureRuleDraft();
@@ -962,6 +977,7 @@ export function renderManagedRuleEditor(context) {
     const { rule, t, renderTextField, renderNumberField } = context;
     return `${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
       ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+      ${renderRuleLevel(t)}
       <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector></div>
       <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><p>${rule.entity_ids.map(esc).join(", ")}</p></div>
       ${!["jinja", "unchanged"].includes(rule.source) ? renderRuleValues({ rule, t }) : ""}

@@ -62,6 +62,7 @@ _RULE_CLIENT_KEYS = {
     "value",
     "duration",
     "message",
+    "level",
     "update_message_when_active",
     "condition_template",
     "flapping_enabled",

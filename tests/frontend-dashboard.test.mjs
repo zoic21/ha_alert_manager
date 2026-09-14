@@ -443,3 +443,16 @@ test("a different HA connection does not reuse the previous snapshot", async () 
   assert.equal(card.hidden, true);
   card.disconnectedCallback();
 });
+
+test("information groups retain membership and order with alert visual precedence", () => {
+  const items = [alert("a", { type: "rule", level: "info", device_id: "device" }),
+    alert("b", { type: "rule", level: "info", device_id: "device" })];
+  const [informative] = dashboardGroups(items);
+  assert.equal(informative.informational, true);
+  const [mixed] = dashboardGroups([items[0], { ...items[1], level: "alert" }]);
+  assert.equal(mixed.informational, false);
+  assert.deepEqual(mixed.alerts.map((item) => item.id), informative.alerts.map((item) => item.id));
+  assert.equal(dashboardTarget(mixed), dashboardTarget(informative));
+  assert.equal(dashboardGroups([{ ...items[0], level: undefined }])[0].informational, false);
+  assert.equal(dashboardGroups([{ ...items[0], type: "battery" }])[0].informational, false);
+});

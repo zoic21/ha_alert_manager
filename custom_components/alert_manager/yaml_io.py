@@ -44,6 +44,7 @@ _RULE_YAML_KEYS = {
     "value",
     "duration",
     "message",
+    "level",
     "update_message_when_active",
     "condition_template",
     "flapping_enabled",
@@ -169,6 +170,7 @@ def rule_to_yaml_data(
     result: dict[str, Any] = {
         "name": data.get("name"),
         "enabled": data.get("enabled", True),
+        "level": data.get("level", "alert"),
         "entity_ids": data.get("entity_ids"),
         "label_ids": data.get("label_ids", []),
         "source": source,

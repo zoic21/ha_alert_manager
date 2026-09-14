@@ -13,6 +13,9 @@ This is a prerelease for testing, not a stable release.
 - Merged the 2.3 dashboard fixes: background refresh preserves known alerts, startup
   uses a compact hourglass beside the last alert, and mobile overflow stays on the
   same row as the last tile. No matching alerts means no card during startup.
+- Custom rules can use an Information presentation with a blue accent and information
+  icon in the panel, history, dashboard and notifications. Alert remains the default;
+  detection, acknowledgement, notification policies and batching are unchanged.
 - Added backup-age and available-update blueprints with English recipe documentation.
 - Deleting a custom rule resolves its ongoing alerts without sending recovery
   notifications, including queued notification batches.

@@ -975,6 +975,25 @@ class _ApiMixin:
         candidate["history_limit"] = self.config["history_limit"]
         self._validate_config_rule_sources(candidate)
         summary = import_summary(candidate)
+        if (
+            not self.recovery_active
+            and {key: value for key, value in candidate.items() if key != "rules"}
+            == {key: value for key, value in self.config.items() if key != "rules"}
+            and (
+                imported_rules := [Rule.from_dict(rule) for rule in candidate["rules"]]
+            )
+            == self._rules
+        ):
+            # Reuse transactional rule updates for visual-only imports/restores;
+            # full import reconciliation would reset timers and notification batches.
+            replacements = [
+                rule
+                for old_rule, rule in zip(self._rules, imported_rules, strict=True)
+                if old_rule.level != rule.level
+            ]
+            if replacements:
+                await self._async_create_validated_rules(replacements)
+                return {"config": self.get_config(), "summary": summary}
         previous = self._configuration_snapshot()
         previous_history = list(self.history)
         previous_recovery_active = self.recovery_active
@@ -1233,7 +1252,11 @@ class _ApiMixin:
                 updated.get(item["id"], item) for item in self.config["rules"]
             ]
             self.config["rules"].extend(rule.as_dict() for rule in additions)
-            self._rebuild_rule_index()
+            if additions or any(old_rule != rule for old_rule, rule in replacements):
+                self._rebuild_rule_index()
+            else:
+                for _, rule in replacements:
+                    self._replace_rule_presentation(self._rule_index(rule.id), rule)
             applied = []
             for old_rule, rule in replacements:
                 removed = await self._async_apply_rule_update(old_rule, rule)
@@ -1272,7 +1295,10 @@ class _ApiMixin:
         previous = self._configuration_snapshot()
         try:
             self.config["rules"][index] = rule.as_dict()
-            self._rebuild_rule_index()
+            if old_rule == rule:
+                self._replace_rule_presentation(index, rule)
+            else:
+                self._rebuild_rule_index()
             removed_entities = await self._async_apply_rule_update(old_rule, rule)
             await self._async_save_state()
         except BaseException:
@@ -1285,6 +1311,10 @@ class _ApiMixin:
     async def _async_apply_rule_update(self, old_rule: Rule, rule: Rule) -> set[str]:
         """Apply one validated replacement inside the caller's transaction."""
         rule_id = rule.id
+        if old_rule.level != rule.level and old_rule == rule:
+            # Rule equality excludes level; the cached metadata is already refreshed.
+            # Presentation edits must not evaluate conditions or advance timers.
+            return set()
         variation_definition_changed = (
             old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
         ) and (

@@ -3,7 +3,7 @@ export { navigate };
 import { alertLabelIds } from "../utils/alert-labels.js";
 import { handleAutomaticAction } from "../views/automatic.js";
 import { handleHistoryAction } from "../views/history.js";
-import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
+import { MAX_DURATION_SECONDS, MDI_INFORMATION_OUTLINE, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLINE, MDI_CLOCK_OUTLINE, MDI_DOTS_VERTICAL, MDI_FILTER_VARIANT_REMOVE, TABS } from "../utils/constants.js";
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_TABLE_STATE, REQUIRED_COLUMNS } from "../utils/table-preferences.js";
@@ -370,7 +370,10 @@ export function tableRows(kind, historyEvents = []) {
         alertId: source.id,
         source,
         status,
-        statusLabel: finalLabel,
+        statusGroupLabel: finalLabel,
+        statusLabel: source.type === "rule" && source.level === "info"
+          ? (history ? `${this._t("rules.level_info")} · ${finalLabel}` : this._t(`table.status.info_${status}`)) : finalLabel,
+        level: source.type === "rule" && source.level === "info" ? "info" : "alert",
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
         deviceId: source.device_id || "",
@@ -723,7 +726,7 @@ export function nativeTableData(kind, visibleRows) {
       device_group: row.device || this._t("table.groups.without_device"),
       area_group: row.area || this._t("table.groups.without_area"),
       rule_group: row.rule || "—",
-      status_group: row.statusLabel,
+      status_group: row.statusGroupLabel ?? row.statusLabel,
       search_index: row.search,
     }));
 }
@@ -765,9 +768,9 @@ export function nativeTableCell(kind, row, column) {
 
 export function nativeStatusCell(row, kind) {
     if (!globalThis.document?.createElement) return row.statusLabel;
-    let path = MDI_ALERT_CIRCLE_OUTLINE;
-    let color = "var(--error-color,#db4437)";
-    let background = "color-mix(in srgb,var(--error-color,#db4437) 12%,transparent)";
+    let path = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
+    let color = row.level === "info" ? "var(--info-color, var(--primary-color))" : "var(--error-color,#db4437)";
+    let background = `color-mix(in srgb,${color} 12%,transparent)`;
     if (row.status === "pending") {
       path = MDI_CLOCK_OUTLINE;
       color = "var(--warning-color,#f5a623)";
@@ -805,6 +808,14 @@ export function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     if (row.entityId) name.title = row.entityId;
+    if (row.level === "info") {
+      const marker = document.createElement("ha-icon");
+      marker.setAttribute("icon", "mdi:information-outline");
+      marker.setAttribute("aria-label", this._t("rules.level_info"));
+      marker.title = this._t("rules.level_info");
+      marker.style.cssText = `--mdc-icon-size:16px;margin-inline-end:4px;color:${row.status === "active" ? "var(--info-color, var(--primary-color))" : "var(--secondary-text-color)"}`;
+      name.prepend(marker);
+    }
     content.append(name);
     if (!narrow && row.labels?.length) {
       content.append(nativeLabelBadges(row.labels, this._hass));
@@ -884,6 +895,7 @@ export function alertDetailsItems(kind, row) {
       ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
+      ...(row.customRule ? [{ key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) }] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -1082,7 +1094,7 @@ export function renderAlertDetails(context) {
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
     ${renderAlertDetailsNotice(notice)}
-    <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
+    <section class="alert-details-summary alert-details-status-${esc(summary.status)}${summary.level === "info" ? " alert-details-info" : ""}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
@@ -1129,7 +1141,7 @@ export function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
 }
 
 export function renderAlertDetailsPanel(kind, row) {
-    let iconPath = MDI_ALERT_CIRCLE_OUTLINE;
+    let iconPath = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
     if (row.status === "pending") iconPath = MDI_CLOCK_OUTLINE;
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
@@ -1163,6 +1175,7 @@ export function renderAlertDetailsPanel(kind, row) {
           ? this._t(`overview.${menuAction}`)
           : "",
         status: row.status,
+        level: row.level,
         statusLabel: row.statusLabel,
       },
     });

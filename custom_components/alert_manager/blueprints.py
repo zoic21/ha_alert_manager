@@ -343,6 +343,7 @@ def rule_signature(rule: Rule) -> dict[str, Any]:
         "blueprint",
         "version",
         "message",
+        "level",
         "label_ids",
         "enabled",
     ):
@@ -412,6 +413,7 @@ def reconcile_blueprints(
         candidate = blueprint_payload(recipe, desired, translations)
         for key in ("id", "name", "enabled", "label_ids"):
             candidate[key] = deepcopy(rule[key])
+        candidate["level"] = rule.get("level", "alert")
         candidate.update(deepcopy(metadata.get("overrides", {})))
         candidate["blueprint"].update(
             managed=True,
@@ -459,7 +461,7 @@ def managed_rule_edit(existing: dict[str, Any], data: dict[str, Any]) -> dict[st
         if (provided or {}).get("managed"):
             raise ValueError("Generate the blueprint to enable management")
         return data
-    allowed = {"name", "enabled", "label_ids", "value", "duration"}
+    allowed = {"name", "enabled", "level", "label_ids", "value", "duration"}
     if any(
         value != existing.get(key) for key, value in data.items() if key not in allowed
     ):

@@ -38,6 +38,8 @@ const MDI_CLOSE = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41
 
 const MDI_PLUS = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 
+const MDI_INFORMATION_OUTLINE = "M11,9H13V7H11M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M11,17H13V11H11V17Z";
+
 const MDI_ALERT_CIRCLE_OUTLINE = "M13,14H11V10H13M13,18H11V16H13M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20Z";
 
 const MDI_CLOCK_OUTLINE = "M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12.5,7H11V13L16.25,16.15L17,14.92L12.5,12.25V7Z";
@@ -438,6 +440,7 @@ const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
   label_ids: [],
+  level: "alert",
   enabled: true,
   source: "value",
   attribute: "",
@@ -482,6 +485,7 @@ const ruleToYaml = (rule) => {
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
+    `level: ${yamlValue(rule.level ?? "alert")}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
     `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,
@@ -655,6 +659,7 @@ const VALIDATION_ERROR_KEYS = new Map([
   ["notification_batch_delay must be an integer between 10 and 300 seconds", "notification_batch_delay"],
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],
+  ["Rule level must be alert or info", "rule_level_invalid"],
   ["Rule entity_ids must be a non-empty list", "rule_entities_required"],
   ["Rule entity_ids must contain at most 50 items", "rule_entities_too_many"],
   ["An entity cannot be repeated in the same rule", "rule_entity_duplicate"],
@@ -1608,7 +1613,10 @@ function tableRows(kind, historyEvents = []) {
         alertId: source.id,
         source,
         status,
-        statusLabel: finalLabel,
+        statusGroupLabel: finalLabel,
+        statusLabel: source.type === "rule" && source.level === "info"
+          ? (history ? `${this._t("rules.level_info")} · ${finalLabel}` : this._t(`table.status.info_${status}`)) : finalLabel,
+        level: source.type === "rule" && source.level === "info" ? "info" : "alert",
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
         deviceId: source.device_id || "",
@@ -1961,7 +1969,7 @@ function nativeTableData(kind, visibleRows) {
       device_group: row.device || this._t("table.groups.without_device"),
       area_group: row.area || this._t("table.groups.without_area"),
       rule_group: row.rule || "—",
-      status_group: row.statusLabel,
+      status_group: row.statusGroupLabel ?? row.statusLabel,
       search_index: row.search,
     }));
 }
@@ -2003,9 +2011,9 @@ function nativeTableCell(kind, row, column) {
 
 function nativeStatusCell(row, kind) {
     if (!globalThis.document?.createElement) return row.statusLabel;
-    let path = MDI_ALERT_CIRCLE_OUTLINE;
-    let color = "var(--error-color,#db4437)";
-    let background = "color-mix(in srgb,var(--error-color,#db4437) 12%,transparent)";
+    let path = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
+    let color = row.level === "info" ? "var(--info-color, var(--primary-color))" : "var(--error-color,#db4437)";
+    let background = `color-mix(in srgb,${color} 12%,transparent)`;
     if (row.status === "pending") {
       path = MDI_CLOCK_OUTLINE;
       color = "var(--warning-color,#f5a623)";
@@ -2043,6 +2051,14 @@ function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
     name.textContent = row.entityName;
     name.style.cssText = "overflow:hidden;font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     if (row.entityId) name.title = row.entityId;
+    if (row.level === "info") {
+      const marker = document.createElement("ha-icon");
+      marker.setAttribute("icon", "mdi:information-outline");
+      marker.setAttribute("aria-label", this._t("rules.level_info"));
+      marker.title = this._t("rules.level_info");
+      marker.style.cssText = `--mdc-icon-size:16px;margin-inline-end:4px;color:${row.status === "active" ? "var(--info-color, var(--primary-color))" : "var(--secondary-text-color)"}`;
+      name.prepend(marker);
+    }
     content.append(name);
     if (!narrow && row.labels?.length) {
       content.append(nativeLabelBadges(row.labels, this._hass));
@@ -2122,6 +2138,7 @@ function alertDetailsItems(kind, row) {
       ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
+      ...(row.customRule ? [{ key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) }] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -2320,7 +2337,7 @@ function renderAlertDetails(context) {
       ${summary.reevaluateLabel ? `<ha-dropdown-item value="reevaluate"><ha-icon slot="icon" icon="mdi:refresh"></ha-icon>${esc(summary.reevaluateLabel)}</ha-dropdown-item>` : ""}
     </ha-dropdown>` : ""}
     ${renderAlertDetailsNotice(notice)}
-    <section class="alert-details-summary alert-details-status-${esc(summary.status)}">
+    <section class="alert-details-summary alert-details-status-${esc(summary.status)}${summary.level === "info" ? " alert-details-info" : ""}">
       <span class="alert-details-status-icon" aria-hidden="true"><ha-svg-icon path="${esc(summary.iconPath)}"></ha-svg-icon></span>
       <span class="alert-details-status-label">${esc(summary.statusLabel)}</span>
     </section>
@@ -2367,7 +2384,7 @@ function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
 }
 
 function renderAlertDetailsPanel(kind, row) {
-    let iconPath = MDI_ALERT_CIRCLE_OUTLINE;
+    let iconPath = row.level === "info" ? MDI_INFORMATION_OUTLINE : MDI_ALERT_CIRCLE_OUTLINE;
     if (row.status === "pending") iconPath = MDI_CLOCK_OUTLINE;
     if (row.status === "acknowledged" || kind === "history") {
       iconPath = MDI_CHECK_CIRCLE_OUTLINE;
@@ -2401,6 +2418,7 @@ function renderAlertDetailsPanel(kind, row) {
           ? this._t(`overview.${menuAction}`)
           : "",
         status: row.status,
+        level: row.level,
         statusLabel: row.statusLabel,
       },
     });
@@ -4332,6 +4350,7 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
     return {
       ...currentRule,
       name: String(value("name") ?? currentRule.name ?? ""),
+      level: value("level") ?? currentRule.level ?? "alert",
       entity_ids: Array.isArray(entityIds) ? [...entityIds] : [String(entityIds)],
       enabled: Boolean(currentRule.enabled ?? true),
       source,
@@ -4376,6 +4395,7 @@ function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
+      level: draft.level ?? "alert",
       ...(draft.blueprint ? { blueprint: { ...draft.blueprint } } : {}),
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
@@ -4401,7 +4421,7 @@ function serializeRuleDraft(draft) {
 function ruleDraftUpdate(draft) {
     const rule = serializeRuleDraft(draft);
     return draft.blueprint?.managed
-      ? Object.fromEntries(["name", "enabled", "label_ids", "value", "duration"]
+      ? Object.fromEntries(["name", "enabled", "level", "label_ids", "value", "duration"]
         .map((key) => [key, rule[key]]))
       : rule;
 }
@@ -4692,6 +4712,10 @@ function renderRuleEditorPanel() {
     });
 }
 
+function renderRuleLevel(t) {
+    return `<div class="field"><ha-select id="rule-level" name="level" label="${esc(t("rules.level"))}"></ha-select><small>${esc(t("rules.level_help"))}</small></div>`;
+}
+
 function renderRuleVisualEditor(context) {
     const { rule, t, renderTextField, renderNumberField, flappingAvailable = false, testResult, renderTestResult = () => "" } = context;
     return `
@@ -4700,6 +4724,7 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
             ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+            ${renderRuleLevel(t)}
             <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector><small>${esc(t("rules.labels_help"))}</small></div>
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
@@ -5038,6 +5063,9 @@ function hydrateRuleEditor(root, context) {
   }
   if (context.mode !== "visual") return;
   context.configureSelect(
+    "rule-level", context.levelOptions, context.draft.level ?? "alert", context.onLevelChanged,
+  );
+  context.configureSelect(
     "rule-source",
     context.sourceOptions,
     context.draft.source ?? "value",
@@ -5129,6 +5157,11 @@ function hydrateRuleEditorControls() {
     configureSelect: (...args) => this._configureSelect(...args),
     configureSelector: (...args) => this._configureSelector(...args),
     onMenuSelected: (event) => this._handleSelected(event),
+    levelOptions: ["alert", "info"].map((value) => ({ value, label: this._t(`rules.level_${value}`) })),
+    onLevelChanged: (value) => {
+      this._editingRule.level = value;
+      this._ruleDirty = true;
+    },
     onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "value";
       this._captureRuleDraft();
@@ -5212,6 +5245,7 @@ function renderManagedRuleEditor(context) {
     const { rule, t, renderTextField, renderNumberField } = context;
     return `${renderManagedBlueprint(context)}<section class="rule-editor-section"><div class="fields">
       ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
+      ${renderRuleLevel(t)}
       <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector></div>
       <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><p>${rule.entity_ids.map(esc).join(", ")}</p></div>
       ${!["jinja", "unchanged"].includes(rule.source) ? renderRuleValues({ rule, t }) : ""}
@@ -6537,6 +6571,7 @@ function buildRuleTableRows(rules, context) {
       const row = {
         id: rule.id,
         name: rule.name,
+        level: rule.level ?? "alert",
         managed: Boolean(rule.blueprint?.managed),
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
@@ -6581,6 +6616,14 @@ function nativeRuleNameCell(row, narrow = false) {
     content.style.cssText = "display:flex;min-width:0;flex-direction:column;line-height:1.35";
     const primary = document.createElement("span");
     primary.textContent = row.name;
+    if (row.level === "info") {
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:information-outline");
+      icon.setAttribute("aria-label", this._t("rules.level_info"));
+      icon.title = this._t("rules.level_info");
+      icon.style.cssText = "--mdc-icon-size:18px;margin-inline-end:4px;color:var(--info-color, var(--primary-color))";
+      primary.prepend(icon);
+    }
     primary.style.cssText = "overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
     const proposal = this._managedBlueprints?.[row.id];
     if (row.managed && proposal?.update_available) {
@@ -8105,6 +8148,10 @@ const tableStyles = `
     border-radius: var(--ha-border-radius-lg, 12px);
     background: color-mix(in srgb, var(--error-color, #db4437) 10%, var(--card-background-color, #fff));
     color: var(--error-color, #db4437);
+  }
+  .alert-details-status-active.alert-details-info {
+    background: color-mix(in srgb, var(--info-color, var(--primary-color)) 10%, var(--card-background-color));
+    color: var(--info-color, var(--primary-color));
   }
   .alert-details-status-pending {
     background: color-mix(in srgb, var(--warning-color, #f5a623) 12%, var(--card-background-color, #fff));

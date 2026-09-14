@@ -284,7 +284,8 @@
       "managed_owned": "Prenez le contrôle avant de modifier les champs gérés par le blueprint.",
       "managed_generate": "Générez la règle depuis son blueprint pour activer le mode géré.",
       "managed_settings": "Surcharges ou exclusions invalides (50 exclusions maximum).",
-      "managed_selection": "Sélectionnez uniquement des entités actuelles ou découvertes ; une entité ne peut pas être également exclue."
+      "managed_selection": "Sélectionnez uniquement des entités actuelles ou découvertes ; une entité ne peut pas être également exclue.",
+      "rule_level_invalid": "Le niveau doit être Alerte ou Information."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -420,7 +421,16 @@
       "yaml_title": "YAML du profil de notification",
       "duplicate": "Dupliquer",
       "copy": "copie",
-      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test."
+      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test.",
+      "info_started_title": "Nouvelle information",
+      "info_started_title_plural": "{count} nouvelles informations",
+      "info_reminder_title": "Rappel d’information",
+      "info_reminder_title_plural": "Rappel : {count} informations",
+      "info_resolved_title": "Information résolue",
+      "info_resolved_title_plural": "{count} informations résolues",
+      "info_grouped_alerts": "{count} informations",
+      "info_grouped_resolved": "{count} informations résolues",
+      "info_on_resolved": "Information résolue"
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",
@@ -652,7 +662,11 @@
       "automatic_resolution": "Expiration automatique",
       "source_value": "Valeur",
       "source_value_variation": "Variation",
-      "source_value_transition": "Transition"
+      "source_value_transition": "Transition",
+      "level": "Niveau",
+      "level_alert": "Alerte",
+      "level_info": "Information",
+      "level_help": "Présentation uniquement : ne change ni les conditions ni les notifications."
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",
@@ -811,7 +825,10 @@
       "status": {
         "acknowledged": "Alerte acquittée",
         "active": "Alerte active",
-        "pending": "Alerte à venir"
+        "pending": "Alerte à venir",
+        "info_active": "Information active",
+        "info_pending": "Information à venir",
+        "info_acknowledged": "Information acquittée"
       },
       "toolbar": "Outils du tableau des alertes",
       "visible_count": "{visible} sur {total}"
@@ -885,7 +902,9 @@
       "more_count": "Voir plus d’alertes : {count} supplémentaires",
       "coherence": "Cohérence",
       "coherence_one": "1 problème détecté",
-      "coherence_count": "{count} problèmes détectés"
+      "coherence_count": "{count} problèmes détectés",
+      "information": "Information",
+      "information_count": "{count} informations"
     },
     "generator": {
       "title": "Générer des règles",

@@ -568,6 +568,7 @@ test("new rules start enabled with safe defaults", () => {
     name: "",
     entity_ids: [],
     label_ids: [],
+    level: "alert",
     enabled: true,
     source: "value",
     attribute: "",
@@ -1250,6 +1251,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
       type: "alert_manager/rules/create",
       rule: {
         name: "Liste vide",
+        level: "alert",
       label_ids: [],
         entity_ids: ["todo.liste_d_achats"],
         enabled: true,
@@ -5569,4 +5571,40 @@ test("pack exception headers retain the card background and use native centered 
   assert.match(styles, /\.automatic-exception>ha-expansion-panel::part\(summary\)\{[^}]*background:var\(--card-background-color\)/);
   assert.match(styles, /\.automatic-exception-actions\{[^}]*align-items:center/);
   assert.doesNotMatch(styles, /\.automatic-exception>\.configuration-remove\{/);
+});
+
+test("information retains distinct active, pending, acknowledged and historical presentation", () => {
+  const panel = tablePanel();
+  for (const [status, changes, expected] of [
+    ["active", {}, "Information active"],
+    ["pending", { active_since: null }, "Information à venir"],
+    ["acknowledged", { acknowledged: true }, "Information acquittée"],
+  ]) {
+    panel._alerts.alerts = [];
+    panel._alerts.pending = [];
+    panel._alerts.acknowledge = [];
+    panel._alerts[status === "active" ? "alerts" : status === "pending" ? "pending" : "acknowledge"] = [currentAlert({ ...changes, level: "info" })];
+    const row = panel._tableRows("overview")[0];
+    assert.equal(row.status, status);
+    assert.equal(row.statusLabel, expected);
+    const html = panel._renderAlertDetails("overview", row);
+    assert.match(html, new RegExp(`alert-details-status-${status} alert-details-info`));
+    assert.match(html, /data-detail-key="level"/);
+    const cell = panel._nativeStatusCell(row, "overview");
+    assert.equal(cell.attributes["aria-label"], expected);
+    assert.equal(cell.style.cssText.includes("--info-color"), status === "active");
+  }
+  const event = { ...currentAlert({ level: "info" }), event_id: "history-info", resolved_at: "2026-08-26T12:15:30Z" };
+  const row = panel._tableRows("history", [event])[0];
+  assert.equal(row.level, "info");
+  assert.match(panel._renderAlertDetails("history", row), /alert-details-status-resolved alert-details-info/);
+  assert.doesNotMatch(panel._nativeStatusCell(row, "history").style.cssText, /--info-color/);
+});
+
+test("visual information labels do not split existing status groups", () => {
+  const panel = tablePanel();
+  panel._alerts = { alerts: [currentAlert({ level: "info" }), currentAlert({ id: "other", level: "alert" })] };
+  const rows = panel._nativeTableData("overview", panel._tableRows("overview"));
+  assert.equal(rows[0].status_group, rows[1].status_group);
+  assert.notEqual(rows[0].statusLabel, rows[1].statusLabel);
 });
