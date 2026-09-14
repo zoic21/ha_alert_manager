@@ -39,19 +39,23 @@ def payload(**changes):
     }
 
 
-@pytest.mark.parametrize("level", ["alert", "info"])
-def test_rule_level_validation_and_yaml(level):
-    rule = validate_rule_payload(payload(level=level))
-    assert Rule.from_dict(rule.as_dict()).level == level
-    assert parse_rule_yaml(dump_rule_yaml(rule)).level == level
-    assert Rule.create(payload(severity="critical")).level == "alert"
+@pytest.mark.parametrize("labels", [[], ["maintenance"], ["other", "maintenance"]])
+def test_rule_labels_validation_and_yaml(labels):
+    rule = validate_rule_payload(payload(label_ids=labels))
+    assert parse_rule_yaml(dump_rule_yaml(rule)).label_ids == labels
+    assert "level" not in rule.as_dict()
+    assert "level:" not in dump_rule_yaml(rule)
+    legacy = Rule.from_dict({**rule.as_dict(), "level": "info"})
+    assert "level" not in legacy.as_dict()
     assert "severity" not in Rule.create(payload(severity="critical")).as_dict()
 
 
-@pytest.mark.parametrize("level", [None, "warning", "critical", "", True, 1, [], {}])
-def test_invalid_level_rejected_by_common_validation(level):
+@pytest.mark.parametrize("level", ["alert", "info", None, "warning", True, 1, [], {}])
+def test_removed_level_rejected_by_client_validation(level):
     with pytest.raises(ValueError, match="level"):
         validate_rule_payload(payload(level=level))
+    with pytest.raises(ValueError, match="level"):
+        parse_rule_yaml(dump_rule_yaml(Rule.create(payload())) + "level: info\n")
 
 
 @pytest.mark.parametrize("status", ["pending", "active", "acknowledged"])
@@ -61,6 +65,7 @@ def test_level_edit_does_not_evaluate_or_touch_lifecycle(
     hass.states.set("sensor.test", "on")
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
+    run(manager.async_update_config({"information_labels": ["information"]}))
     rule = run(
         manager.async_create_rule(payload(duration=60 if status == "pending" else 0))
     )
@@ -76,11 +81,12 @@ def test_level_edit_does_not_evaluate_or_touch_lifecycle(
     monkeypatch.setattr(manager, "async_evaluate_entity", evaluate)
     # A changed state not yet evaluated must not be consumed by a visual edit.
     hass.states.set("sensor.test", "off")
-    run(manager.async_update_rule(rule["id"], {"level": "info"}))
+    run(manager.async_update_rule(rule["id"], {"label_ids": ["information"]}))
     assert manager.records[key] is record
     assert record.details.level == "info"
     expected = deepcopy(before)
     expected["details"]["level"] = "info"
+    expected["details"]["labels"] = ["information"]
     assert record.as_storage_dict() == expected
     assert manager._timers == timers
     assert hass.bus.fired == events
@@ -93,6 +99,7 @@ def test_level_edit_rollback_on_save_failure(hass, entry, monkeypatch):
     hass.states.set("sensor.test", "on")
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
+    run(manager.async_update_config({"information_labels": ["information"]}))
     rule = run(manager.async_create_rule(payload()))
     key = f"rule:{rule['id']}:sensor.test"
     before = manager.records[key].as_storage_dict()
@@ -100,24 +107,26 @@ def test_level_edit_rollback_on_save_failure(hass, entry, monkeypatch):
         manager, "_async_save_state", AsyncMock(side_effect=OSError("disk"))
     )
     with pytest.raises(OSError):
-        run(manager.async_update_rule(rule["id"], {"level": "info"}))
+        run(manager.async_update_rule(rule["id"], {"label_ids": ["information"]}))
     assert manager.records[key].as_storage_dict() == before
-    assert manager.config["rules"][0]["level"] == "alert"
+    assert manager.config["rules"][0]["label_ids"] == []
 
 
 def test_transition_level_edit_restart_and_history_snapshot(hass, entry, set_now):
-    manager, key, rule = setup(hass, entry, level="info")
+    manager, key, rule = setup(hass, entry, label_ids=["information"])
+    run(manager.async_update_config({"information_labels": ["information"]}))
     edge(manager, hass, "B")
     run(manager.async_acknowledge(key, "admin"))
     before = manager.records[key].as_storage_dict()
     timers = dict(manager._timers)
-    run(manager.async_update_rule(rule["id"], {"level": "alert"}))
-    run(manager.async_update_rule(rule["id"], {"level": "info"}))
+    run(manager.async_update_rule(rule["id"], {"label_ids": []}))
+    run(manager.async_update_rule(rule["id"], {"label_ids": ["information"]}))
     assert manager.records[key].as_storage_dict() == before
     assert manager._timers == timers
     run(manager.async_unload())
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
+    run(manager.async_update_config({"information_labels": ["information"]}))
     run(manager._async_finish_startup_reconciliation())
     record = manager.records[key]
     assert record.details.level == "info"
@@ -126,7 +135,7 @@ def test_transition_level_edit_restart_and_history_snapshot(hass, entry, set_now
     set_now(record.expires_at)
     expire(manager, key)
     archived = manager.history[-1].as_dict()
-    run(manager.async_update_rule(rule["id"], {"level": "alert"}))
+    run(manager.async_update_rule(rule["id"], {"label_ids": []}))
     run(manager.async_delete_rule(rule["id"]))
     assert manager.history[-1].as_dict() == archived
     assert AlertHistoryEntry.from_dict(archived).level == "info"
@@ -186,11 +195,11 @@ def test_information_configuration_export_import_preserves_identity(hass, entry)
         parse_config_yaml,
     )
 
-    rule = Rule.create(payload(level="info"))
+    rule = Rule.create(payload(label_ids=["information"]))
     config = validate_config({**deepcopy(DEFAULT_CONFIG), "rules": [rule.as_dict()]})
     restored = parse_config_yaml(dump_config_yaml(config), config["rules"])
     assert restored["rules"][0]["id"] == rule.id
-    assert restored["rules"][0]["level"] == "info"
+    assert restored["rules"][0]["label_ids"] == ["information"]
 
 
 def test_concurrent_level_saves_are_serialized(hass, entry):
@@ -198,16 +207,17 @@ def test_concurrent_level_saves_are_serialized(hass, entry):
         hass.states.set("sensor.test", "on")
         manager = AlertManager(hass, entry)
         await manager.async_setup()
+        await manager.async_update_config({"information_labels": ["information"]})
         rule = await manager.async_create_rule(payload())
         key = f"rule:{rule['id']}:sensor.test"
         before = manager.records[key].as_storage_dict()
         events = list(hass.bus.fired)
         await asyncio.gather(
-            manager.async_update_rule(rule["id"], {"level": "info"}),
-            manager.async_update_rule(rule["id"], {"level": "alert"}),
+            manager.async_update_rule(rule["id"], {"label_ids": ["information"]}),
+            manager.async_update_rule(rule["id"], {"label_ids": []}),
         )
         assert manager.records[key].as_storage_dict() == before
-        assert manager.config["rules"][0]["level"] == "alert"
+        assert manager.config["rules"][0]["label_ids"] == []
         assert hass.bus.fired == events
 
     run(scenario())
@@ -223,8 +233,15 @@ def test_information_and_alert_produce_identical_state_transitions(
     hass.states.set("sensor.test", "off")
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
+    run(manager.async_update_config({"information_labels": ["information"]}))
     rules = [
-        run(manager.async_create_rule(payload(level=level, duration=10)))
+        run(
+            manager.async_create_rule(
+                payload(
+                    label_ids=["information"] if level == "info" else [], duration=10
+                )
+            )
+        )
         for level in ("alert", "info")
     ]
     now = dt_util.now()
@@ -237,7 +254,7 @@ def test_information_and_alert_produce_identical_state_transitions(
         records = []
         for key in ids:
             record = manager.records[key].as_public_dict()
-            for field in ("id", "rule_id", "level"):
+            for field in ("id", "rule_id", "level", "labels"):
                 record.pop(field)
             records.append(record)
         assert records[0] == records[1]
@@ -294,12 +311,13 @@ def test_level_edit_preserves_unprocessed_transition(hass, entry, set_now, confi
     from test_transitions import expire
 
     manager, key, rule = setup(hass, entry, duration=0 if confirmed else 30)
+    run(manager.async_update_config({"information_labels": ["information"]}))
     edge(manager, hass, "B", flush=not confirmed)
     observations = (
         manager._transition_confirmed if confirmed else manager._transition_observations
     )
     observation = observations[key]
-    run(manager.async_update_rule(rule["id"], {"level": "info"}))
+    run(manager.async_update_rule(rule["id"], {"label_ids": ["information"]}))
     assert observations[key] is observation
     set_now(observation.due_at)
     if confirmed:
@@ -315,10 +333,10 @@ def test_level_edit_preserves_unprocessed_transition(hass, entry, set_now, confi
 def test_import_updates_level_of_preserved_transition_record(hass, entry, other_change):
     from custom_components.alert_manager.yaml_io import dump_config_yaml
 
-    manager, key, _rule = setup(hass, entry)
+    manager, key, _rule = setup(hass, entry, label_ids=["information"])
     edge(manager, hass, "B")
     config = deepcopy(manager.get_config())
-    config["rules"][0]["level"] = "info"
+    config["information_labels"] = ["information"]
     if other_change:
         config["notification_batch_delay"] = 60
     run(manager.async_import_config(dump_config_yaml(config)))
@@ -333,7 +351,7 @@ def test_level_only_save_keeps_template_timers_and_notification_batches(
 
     from custom_components.alert_manager.yaml_io import dump_config_yaml
 
-    manager, key, rule = setup(hass, entry, duration=30)
+    manager, key, rule = setup(hass, entry, duration=30, label_ids=["information"])
     edge(manager, hass, "B")
     cancel = Mock()
     dependency = ("condition", rule["id"], "sensor.edge")
@@ -345,15 +363,183 @@ def test_level_only_save_keeps_template_timers_and_notification_batches(
     monkeypatch.setattr(manager.notification_runtime, "discard_batches", discard)
     if via_import:
         config = deepcopy(manager.get_config())
-        config["rules"][0]["level"] = "info"
+        config["information_labels"] = ["information"]
         run(manager.async_import_config(dump_config_yaml(config)))
     else:
-        run(manager.async_update_rule(rule["id"], {"level": "info"}))
+        run(manager.async_update_config({"information_labels": ["information"]}))
     cancel.assert_not_called()
     discard.assert_not_called()
     rebuild.assert_not_called()
     assert manager._timers == timers
     assert manager._template_rate_limit_timers[dependency] is cancel
     assert manager.records[key].details.level == "info"
-    assert manager._transition_rules_by_id[rule["id"]].level == "info"
-    assert manager._rules_by_entity["sensor.edge"][0].level == "info"
+    assert manager._transition_rules_by_id[rule["id"]].label_ids == ["information"]
+    assert manager._rules_by_entity["sensor.edge"][0].label_ids == ["information"]
+
+
+@pytest.mark.parametrize("status", ["pending", "active", "acknowledged"])
+@pytest.mark.parametrize("via_import", [False, True])
+def test_global_classification_changes_only_presentation(
+    hass, entry, monkeypatch, status, via_import
+):
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    hass.states.set("sensor.test", "on")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    rule = run(
+        manager.async_create_rule(
+            payload(
+                duration=60 if status == "pending" else 0,
+                label_ids=["other", "maintenance"],
+            )
+        )
+    )
+    key = f"rule:{rule['id']}:sensor.test"
+    if status == "acknowledged":
+        run(manager.async_set_acknowledgements([key], True, "admin", duration=120))
+    record = manager.records[key]
+    before = record.as_storage_dict()
+    events = list(hass.bus.fired)
+    timers = dict(manager._timers)
+    stats = manager.statistics.snapshot()
+    evaluate = AsyncMock(side_effect=AssertionError("Do not evaluate classification"))
+    monkeypatch.setattr(manager, "async_evaluate_all", evaluate)
+    monkeypatch.setattr(manager, "async_evaluate_entity", evaluate)
+    hass.states.set("sensor.test", "off")
+    for labels, level in [
+        (["maintenance", "updates"], "info"),
+        (["updates"], "alert"),
+        (["other", "updates"], "info"),
+        ([], "alert"),
+    ]:
+        if via_import:
+            config = manager.get_config()
+            config["information_labels"] = labels
+            run(manager.async_import_config(dump_config_yaml(config)))
+        else:
+            run(manager.async_update_config({"information_labels": labels}))
+        expected = deepcopy(before)
+        expected["details"]["level"] = level
+        assert manager.records[key] is record
+        assert record.as_storage_dict() == expected
+        assert manager._timers == timers
+        assert hass.bus.fired == events
+        assert manager.statistics.snapshot() == stats
+        assert (
+            manager.get_config(include_presentation=True)["rules"][0]["level"] == level
+        )
+        assert "level" not in manager.get_config()["rules"][0]
+    evaluate.assert_not_called()
+
+
+def test_automatic_labels_and_global_classification_survive_restart(
+    hass, entry, monkeypatch
+):
+    hass.states.set("sensor.test", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(
+        manager.async_update_config(
+            {"automatic": {"unavailable": {"delay": 0, "label_ids": ["maintenance"]}}}
+        )
+    )
+    key = "unavailable:sensor.test"
+    record = manager.records[key]
+    assert record.details.level == "alert"
+    run(manager.async_update_config({"information_labels": ["maintenance", "updates"]}))
+    assert record.details.level == "info"
+    timers = dict(manager._timers)
+    events = list(hass.bus.fired)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            manager,
+            "async_evaluate_all",
+            AsyncMock(side_effect=AssertionError("No scan")),
+        )
+        run(
+            manager.async_update_config(
+                {"automatic": {"unavailable": {"label_ids": ["other"]}}}
+            )
+        )
+    assert record.details.level == "alert"
+    assert manager.records[key] is record
+    assert manager._timers == timers
+    assert hass.bus.fired == events
+    run(
+        manager.async_update_config(
+            {"automatic": {"unavailable": {"label_ids": ["updates"]}}}
+        )
+    )
+    assert record.details.level == "info"
+    run(manager.async_unload())
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(manager._async_finish_startup_reconciliation())
+    assert manager.records[key].details.level == "info"
+    assert manager.records[key].active_since == record.active_since
+
+
+def test_global_classification_rollback_restores_cached_policy(
+    hass, entry, monkeypatch
+):
+    hass.states.set("sensor.test", "on")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    rule = run(manager.async_create_rule(payload(label_ids=["information"])))
+    key = f"rule:{rule['id']}:sensor.test"
+    before = manager.records[key].as_storage_dict()
+    monkeypatch.setattr(
+        manager, "_async_save_state", AsyncMock(side_effect=OSError("disk"))
+    )
+    with pytest.raises(OSError):
+        run(manager.async_update_config({"information_labels": ["information"]}))
+    assert manager.config["information_labels"] == []
+    assert manager._level_for_labels(["information"]) == "alert"
+    assert manager.records[key].as_storage_dict() == before
+
+
+@pytest.mark.parametrize("source", ["rule", "unavailable"])
+def test_queued_notifications_use_current_level_without_resetting_batches(
+    hass, entry, source
+):
+    async def scenario():
+        hass.states.set("sensor.test", "on" if source == "rule" else "unavailable")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config(
+            {
+                "notification_profiles": [_profile()],
+                "automatic": {
+                    "unavailable": {"delay": 0, "label_ids": ["information"]}
+                },
+            }
+        )
+        if source == "rule":
+            rule = await manager.async_create_rule(payload(label_ids=["information"]))
+            key = f"rule:{rule['id']}:sensor.test"
+        else:
+            key = "unavailable:sensor.test"
+        delivery = _DeliverySpy()
+        runtime = manager.notification_runtime
+        runtime._delivery = delivery
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED, manager.records[key].as_public_dict()
+        )
+        batch = runtime._batches[("profile", "started")]
+        cancel = batch.cancel
+        await manager.async_update_config({"information_labels": ["information"]})
+        assert runtime._batches[("profile", "started")] is batch
+        assert batch.cancel is cancel
+        await runtime._async_flush_batch("profile", "started")
+        assert len(delivery.calls) == 1
+        assert delivery.calls[0]["level"] == "info"
+        await manager.async_unload()
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("labels", [None, "information", [1], [""]])
+def test_information_labels_reject_invalid_configuration(labels):
+    with pytest.raises(ValueError):
+        validate_config({**deepcopy(DEFAULT_CONFIG), "information_labels": labels})

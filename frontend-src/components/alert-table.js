@@ -371,9 +371,9 @@ export function tableRows(kind, historyEvents = []) {
         source,
         status,
         statusGroupLabel: finalLabel,
-        statusLabel: source.type === "rule" && source.level === "info"
+        statusLabel: source.level === "info"
           ? (history ? `${this._t("rules.level_info")} · ${finalLabel}` : this._t(`table.status.info_${status}`)) : finalLabel,
-        level: source.type === "rule" && source.level === "info" ? "info" : "alert",
+        level: source.level === "info" ? "info" : "alert",
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
         deviceId: source.device_id || "",
@@ -891,7 +891,7 @@ export function alertDetailsItems(kind, row) {
       ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
-      ...(row.customRule ? [{ key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) }] : []),
+      { key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) },
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),

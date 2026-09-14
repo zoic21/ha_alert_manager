@@ -4,6 +4,16 @@
 
 **Configuration** brings together automatic monitoring, notification profiles, alert display/history settings, coherence scheduling, YAML and backups. Configuration changes require an administrator.
 
+## Information labels
+
+In **Configuration → General**, select one or more Home Assistant **Information
+labels**. Alerts from a custom rule or automatic pack carrying any selected label
+use the Information presentation. With no matching label they remain Alert.
+Assign labels in the rule editor or pack configuration drawer. This setting changes
+presentation only: current states, timers, occurrences and notification policies
+are preserved. History keeps its recorded presentation. Configuration YAML stores
+this selection as `information_labels`.
+
 ## Automatic monitoring
 
 Open **Configuration → Automatic monitoring** to enable and configure the packs relevant to your installation. Packs identify common problems without creating a custom rule for every entity. Each pack can be enabled independently and can carry Home Assistant labels for filtering and notification routing.

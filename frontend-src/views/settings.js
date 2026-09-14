@@ -58,6 +58,7 @@ export function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
+        <div class="field settings-wide"><span class="field-label">${esc(t("settings.information_labels"))}</span><ha-selector id="information-labels"></ha-selector><small>${esc(t("settings.information_labels_help"))}</small></div>
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
       </div></ha-card>
       ${automaticMarkup}
@@ -379,6 +380,7 @@ export async function saveSettings(additionalChanges = {}, { preserveDrawer = fa
         ...this._settingsDraft.coherence_ignored_entity_references,
       ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
+      information_labels: [...(this._settingsDraft.information_labels ?? [])],
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
@@ -457,6 +459,7 @@ export function ensureSettingsDraft() {
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
       excluded_labels: [...(this._config.excluded_labels ?? [])],
+      information_labels: [...(this._config.information_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
       notification_profiles: (this._config.notification_profiles ?? []).map(
@@ -543,6 +546,16 @@ export function hydrateSettingsControls() {
     });
     this._configuredControls.add(chip);
   });
+  this._configureSelector(
+    "information-labels",
+    { label: { multiple: true } },
+    this._settingsDraft.information_labels,
+    (value) => {
+      this._settingsDraft.information_labels = this._multipleSelectorValue(
+        value, this._settingsDraft.information_labels,
+      );
+    },
+  );
   this._configureSelector(
     "excluded-labels",
     { label: { multiple: true } },

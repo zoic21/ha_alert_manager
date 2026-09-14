@@ -1400,10 +1400,7 @@ def test_source_labels_route_start_reminders_and_resolution(
         await runtime._async_flush_batch("profile", "resolved")
         assert runtime.usage_snapshot() == {"last_24h": {"profile": 3}}
         assert len(delivery.calls) == 3
-        assert all(
-            call["level"] == (level if source == "rule" else "alert")
-            for call in delivery.calls
-        )
+        assert all(call["level"] == level for call in delivery.calls)
         await runtime.async_unload()
 
     asyncio.run(scenario())

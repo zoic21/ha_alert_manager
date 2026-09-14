@@ -440,7 +440,6 @@ const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
   label_ids: [],
-  level: "alert",
   enabled: true,
   source: "value",
   attribute: "",
@@ -485,7 +484,6 @@ const ruleToYaml = (rule) => {
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
-    `level: ${yamlValue(rule.level ?? "alert")}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
     `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,
@@ -643,7 +641,6 @@ const VALIDATION_ERROR_KEYS = new Map([
   ["notification_batch_delay must be an integer between 10 and 300 seconds", "notification_batch_delay"],
   ["Rule name is required", "rule_name_required"],
   ["Rule name is too long", "rule_name_too_long"],
-  ["Rule level must be alert or info", "rule_level_invalid"],
   ["Rule entity_ids must be a non-empty list", "rule_entities_required"],
   ["Rule entity_ids must contain at most 50 items", "rule_entities_too_many"],
   ["An entity cannot be repeated in the same rule", "rule_entity_duplicate"],
@@ -1555,9 +1552,9 @@ function tableRows(kind, historyEvents = []) {
         source,
         status,
         statusGroupLabel: finalLabel,
-        statusLabel: source.type === "rule" && source.level === "info"
+        statusLabel: source.level === "info"
           ? (history ? `${this._t("rules.level_info")} · ${finalLabel}` : this._t(`table.status.info_${status}`)) : finalLabel,
-        level: source.type === "rule" && source.level === "info" ? "info" : "alert",
+        level: source.level === "info" ? "info" : "alert",
         entityId: source.entity_id || "",
         entityName: entityName || source.entity_id || "—",
         deviceId: source.device_id || "",
@@ -2075,7 +2072,7 @@ function alertDetailsItems(kind, row) {
       ...(canConfigureMonitoring ? [linked("monitoring", this._t("tabs.automatic"), this._t("automatic.configure_monitoring"), "configure-alert-monitoring", { packId: monitoringPack.id, sourceId: monitoringSource, entityId: row.entityId })] : []),
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
-      ...(row.customRule ? [{ key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) }] : []),
+      { key: "level", label: this._t("rules.level"), value: this._t(`rules.level_${row.level ?? "alert"}`) },
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
       ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
@@ -4108,6 +4105,7 @@ function normalizeRuleDraft(rule = {}) {
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
       label_ids: [...(rule.label_ids ?? defaults.label_ids)],
     };
+    delete normalized.level;
     if (VARIATION_RULE_SOURCES.has(normalized.source)
       && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
       normalized.operator = "above";
@@ -4170,7 +4168,6 @@ function captureRuleDraftFromForm(form, currentRule = {}, selectorValues = {}) {
     return {
       ...currentRule,
       name: String(value("name") ?? currentRule.name ?? ""),
-      level: value("level") ?? currentRule.level ?? "alert",
       entity_ids: Array.isArray(entityIds) ? [...entityIds] : [String(entityIds)],
       enabled: Boolean(currentRule.enabled ?? true),
       source,
@@ -4215,7 +4212,6 @@ function serializeRuleDraft(draft) {
       : String(draft.value ?? "");
     return {
       name: String(draft.name ?? "").trim(),
-      level: draft.level ?? "alert",
       entity_ids: [...(draft.entity_ids ?? [])],
       label_ids: [...(draft.label_ids ?? [])],
       enabled: Boolean(draft.enabled ?? true),
@@ -4519,10 +4515,6 @@ function renderRuleEditorPanel() {
     });
 }
 
-function renderRuleLevel(t) {
-    return `<div class="field"><ha-select id="rule-level" name="level" label="${esc(t("rules.level"))}"></ha-select><small>${esc(t("rules.level_help"))}</small></div>`;
-}
-
 function renderRuleVisualEditor(context) {
     const { rule, t, renderTextField, renderNumberField, flappingAvailable = false, testResult, renderTestResult = () => "" } = context;
     return `
@@ -4531,7 +4523,6 @@ function renderRuleVisualEditor(context) {
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_information"))}</h3><small>${esc(t("rules.editor_information_help"))}</small></div></div>
           <div class="fields">
             ${renderTextField("name", t("rules.name"), rule.name, true, "name", "full")}
-            ${renderRuleLevel(t)}
             <div class="field full"><span class="field-label">${esc(t("rules.labels"))}</span><ha-selector id="rule-label-ids"></ha-selector><small>${esc(t("rules.labels_help"))}</small></div>
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
@@ -4869,9 +4860,6 @@ function hydrateRuleEditor(root, context) {
   }
   if (context.mode !== "visual") return;
   context.configureSelect(
-    "rule-level", context.levelOptions, context.draft.level ?? "alert", context.onLevelChanged,
-  );
-  context.configureSelect(
     "rule-source",
     context.sourceOptions,
     context.draft.source ?? "value",
@@ -4962,11 +4950,6 @@ function hydrateRuleEditorControls() {
     configureSelect: (...args) => this._configureSelect(...args),
     configureSelector: (...args) => this._configureSelector(...args),
     onMenuSelected: (event) => this._handleSelected(event),
-    levelOptions: ["alert", "info"].map((value) => ({ value, label: this._t(`rules.level_${value}`) })),
-    onLevelChanged: (value) => {
-      this._editingRule.level = value;
-      this._ruleDirty = true;
-    },
     onSourceChanged: (value) => {
       const previousSource = this._editingRule.source ?? "value";
       this._captureRuleDraft();
@@ -6893,6 +6876,7 @@ function renderSettings(context) {
           </div>
           <small class="history-limit-help">${esc(t("settings.history_limit_help"))}</small>
         </div>
+        <div class="field settings-wide"><span class="field-label">${esc(t("settings.information_labels"))}</span><ha-selector id="information-labels"></ha-selector><small>${esc(t("settings.information_labels_help"))}</small></div>
         <div class="field settings-wide"><span class="field-label">${esc(t("settings.exclusions"))}</span><ha-selector id="excluded-labels"></ha-selector><small>${esc(t("settings.labels_help"))}</small></div>
       </div></ha-card>
       ${automaticMarkup}
@@ -7214,6 +7198,7 @@ async function saveSettings(additionalChanges = {}, { preserveDrawer = false } =
         ...this._settingsDraft.coherence_ignored_entity_references,
       ],
       excluded_labels: [...this._settingsDraft.excluded_labels],
+      information_labels: [...(this._settingsDraft.information_labels ?? [])],
     };
     const historyChanged = historyLimit !== Number(this._historyConfig.retention_limit);
     this._busy = true;
@@ -7292,6 +7277,7 @@ function ensureSettingsDraft() {
         ...(this._config.coherence_ignored_entity_references ?? []),
       ],
       excluded_labels: [...(this._config.excluded_labels ?? [])],
+      information_labels: [...(this._config.information_labels ?? [])],
       excluded_entities: [...(this._config.excluded_entities ?? [])],
       excluded_devices: [...(this._config.excluded_devices ?? [])],
       notification_profiles: (this._config.notification_profiles ?? []).map(
@@ -7378,6 +7364,16 @@ function hydrateSettingsControls() {
     });
     this._configuredControls.add(chip);
   });
+  this._configureSelector(
+    "information-labels",
+    { label: { multiple: true } },
+    this._settingsDraft.information_labels,
+    (value) => {
+      this._settingsDraft.information_labels = this._multipleSelectorValue(
+        value, this._settingsDraft.information_labels,
+      );
+    },
+  );
   this._configureSelector(
     "excluded-labels",
     { label: { multiple: true } },

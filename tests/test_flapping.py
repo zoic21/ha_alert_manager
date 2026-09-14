@@ -137,10 +137,11 @@ def test_flapping_owns_labels_on_creation_refresh_and_restart(
     run(
         manager.async_update_config(
             {
+                "information_labels": ["instability"],
                 "automatic": {
                     "flapping": {"label_ids": ["instability"]},
                     "unavailable": {"label_ids": ["availability"]},
-                }
+                },
             }
         )
     )
@@ -169,6 +170,7 @@ def test_flapping_owns_labels_on_creation_refresh_and_restart(
     alert_id = f"flapping:{source_id}"
     record = manager.records[alert_id]
     assert record.details.labels == ["instability"]
+    assert record.details.level == "info"
     detected_at = record.detected_at
     run(
         manager.async_update_config(
@@ -180,10 +182,12 @@ def test_flapping_owns_labels_on_creation_refresh_and_restart(
         )
     )
     assert record.details.labels == ["updated"]
+    assert record.details.level == "alert"
     set_now(start + timedelta(seconds=20))
     live_state(manager, hass, "sensor.test", bad_state)
     live_state(manager, hass, "sensor.test", "ok")
     assert record.details.labels == ["updated"]
+    assert record.details.level == "alert"
     assert record.detected_at == detected_at
     # Simulate an occurrence persisted by rc.16 with inherited source labels.
     record.details.labels = ["legacy_source"]

@@ -33,6 +33,7 @@ _CONFIG_UPDATE_KEYS = {
     "coherence_alert_enabled",
     "coherence_ignored_entity_references",
     "excluded_labels",
+    "information_labels",
     "automatic",
     "rules",
     "notification_profiles",
@@ -61,7 +62,6 @@ _RULE_CLIENT_KEYS = {
     "value",
     "duration",
     "message",
-    "level",
     "update_message_when_active",
     "condition_template",
     "flapping_enabled",
@@ -154,6 +154,9 @@ def validate_config(config: Any) -> dict[str, Any]:
     )
 
     result["excluded_labels"] = validate_label_list(config.get("excluded_labels", []))
+    result["information_labels"] = validate_label_list(
+        config.get("information_labels", []), path="information_labels"
+    )
 
     automatic = config.get("automatic", {})
     if not isinstance(automatic, dict):

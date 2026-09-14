@@ -320,7 +320,6 @@ test("rule editor hydration configures Home Assistant controls through callbacks
 
   assert.equal(closeButton.label, "Close");
   assert.deepEqual(calls.map((call) => call[1]), [
-    "rule-level",
     "rule-source",
     "rule-operator",
     "rule-entity-ids",
@@ -381,13 +380,13 @@ test("optional attributes serialize consistently for every unified operation", (
   }
 });
 
-test("information survives visual capture, YAML and rule table projection", () => {
+test("computed information is displayed but excluded from rule drafts and YAML", () => {
   const draft = normalizeRuleDraft(rule({ level: "info" }));
-  assert.equal(draft.level, "info");
-  assert.equal(serializeRuleDraft(draft).level, "info");
-  assert.match(ruleToYaml(draft), /level: "info"/);
+  assert.equal(draft.level, undefined);
+  assert.equal(serializeRuleDraft(draft).level, undefined);
+  assert.doesNotMatch(ruleToYaml(draft), /level:/);
   const form = { querySelector: (selector) => selector === '[data-field="level"]' ? { value: "alert" } : null };
-  assert.equal(captureRuleDraftFromForm(form, draft).level, "alert");
-  const [row] = buildRuleTableRows([draft], { t, summarizeRule: () => "", formatDuration: () => "" });
+  assert.equal(captureRuleDraftFromForm(form, draft).level, undefined);
+  const [row] = buildRuleTableRows([{ ...draft, level: "info" }], { t, summarizeRule: () => "", formatDuration: () => "" });
   assert.equal(row.level, "info");
 });

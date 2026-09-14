@@ -275,8 +275,7 @@
       "transition_finite": "Transition numbers must be finite.",
       "transition_unavailable": "Unknown and unavailable cannot be transition values.",
       "transition_distinct": "Departure and arrival must differ.",
-      "transition_expiration": "Automatic resolution must be between 1 second and 365 days.",
-      "rule_level_invalid": "Level must be Alert or Information."
+      "transition_expiration": "Automatic resolution must be between 1 second and 365 days."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -656,8 +655,7 @@
       "source_value_transition": "Transition",
       "level": "Level",
       "level_alert": "Alert",
-      "level_info": "Information",
-      "level_help": "Presentation only: does not change conditions or notification policies."
+      "level_info": "Information"
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",
@@ -714,7 +712,9 @@
       "import_read_error": "Unable to read the selected file.",
       "yaml_help": "Only this panel’s settings are edited. Durations are in seconds. Changes are saved with Save.",
       "yaml_invalid": "Invalid configuration: {error}",
-      "yaml_rows_invalid": "Complete each row and remove duplicate entries before switching to YAML."
+      "yaml_rows_invalid": "Complete each row and remove duplicate entries before switching to YAML.",
+      "information_labels": "Information labels",
+      "information_labels_help": "Alerts are Information when their rule or pack carries at least one selected label. Otherwise they remain Alert."
     },
     "success": {
       "alert_acknowledged": "Alert acknowledged",

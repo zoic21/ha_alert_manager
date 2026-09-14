@@ -568,7 +568,6 @@ test("new rules start enabled with safe defaults", () => {
     name: "",
     entity_ids: [],
     label_ids: [],
-    level: "alert",
     enabled: true,
     source: "value",
     attribute: "",
@@ -1251,8 +1250,7 @@ test("rule save button explicitly creates a rule and keeps typed values", async 
       type: "alert_manager/rules/create",
       rule: {
         name: "Liste vide",
-        level: "alert",
-      label_ids: [],
+        label_ids: [],
         entity_ids: ["todo.liste_d_achats"],
         enabled: true,
         source: "value",
@@ -2463,6 +2461,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(settings, /<section class="panel history-settings"/);
   assert.doesNotMatch(settings, /data-action="save-history-settings"|<h3>Historique<\/h3>|Les alertes actives résolues sont conservées séparément/);
   assert.match(settings, /<ha-selector id="excluded-labels"/);
+  assert.match(settings, /<ha-selector id="information-labels"/);
   assert.match(settings, /<div class="field settings-wide"><span class="field-label">Exclusions de la surveillance automatique<\/span><ha-selector id="excluded-labels"/);
   assert.doesNotMatch(settings, /id="excluded-entities"|id="excluded-devices"|data-action="add-entity-delay"/);
   assert.equal((settings.match(/data-action="save-configuration"/g) ?? []).length, 1);
@@ -3234,6 +3233,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
+      information_labels: [],
       excluded_labels: ["sans_alerte"],
 
     },
@@ -3298,6 +3298,7 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   const selectors = Object.fromEntries(
     [
       "#excluded-labels",
+      "#information-labels",
       "#excluded-entities",
       "#excluded-devices",
     ].map((id) => [
@@ -3311,6 +3312,7 @@ test("native Home Assistant selectors are configured for multiple values", () =>
   panel._hydrateSelectors();
 
   assert.deepEqual(selectors["#excluded-labels"].selector, { label: { multiple: true } });
+  assert.deepEqual(selectors["#information-labels"].selector, { label: { multiple: true } });
   assert.equal(selectors["#coherence-schedule"].value, "none");
   assert.deepEqual(
     selectors["#coherence-schedule"].options.map((option) => option.value),
@@ -4494,6 +4496,7 @@ test("combined settings save sends one configuration update and preserves drafts
       coherence_alert_enabled: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
+      information_labels: [],
       excluded_labels: ["sans_alerte"],
 
     },

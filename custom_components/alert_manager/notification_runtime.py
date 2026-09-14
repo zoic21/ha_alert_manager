@@ -83,9 +83,7 @@ class _NotificationItem:
             message=_optional_text(data.get("message")),
             condition=_optional_text(data.get("condition")),
             labels=tuple(data.get("labels", ())),
-            level="info"
-            if data.get("type") == "rule" and data.get("level") == "info"
-            else "alert",
+            level="info" if data.get("level") == "info" else "alert",
         )
 
 
@@ -591,6 +589,11 @@ class NotificationRuntime:
         except ValueError:
             return
         items = list(batch.items.values())
+        if kind != "resolved":
+            records = self._records_getter()
+            for item in items:
+                if record := records.get(item.alert_id):
+                    item.level = record.details.level
         title, message = self._render_batch(kind, items)
         url = self._batch_url(kind, items)
         if self._unloading:

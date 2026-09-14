@@ -151,7 +151,6 @@ const newRuleDefaults = () => ({
   name: "",
   entity_ids: [],
   label_ids: [],
-  level: "alert",
   enabled: true,
   source: "value",
   attribute: "",
@@ -196,7 +195,6 @@ const ruleToYaml = (rule) => {
   const lines = [
     `name: ${yamlValue(rule.name)}`,
     `enabled: ${yamlValue(rule.enabled ?? true)}`,
-    `level: ${yamlValue(rule.level ?? "alert")}`,
     "entity_ids:",
     ...(rule.entity_ids ?? []).map((entityId) => `  - ${yamlValue(entityId)}`),
     `label_ids: ${JSON.stringify(rule.label_ids ?? [])}`,
@@ -506,7 +504,7 @@ function dashboardGroups(alerts, label, hass) {
   const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
   return [...groups.values()].map((group) => {
     group.alerts.sort((a, b) => compare(a.id, b.id));
-    group.informational = group.alerts.every((alert) => alert.type === "rule" && alert.level === "info");
+    group.informational = group.alerts.every((alert) => alert.level === "info");
     group.types = [...new Set(group.alerts.map((alert) => alert.type))].sort(compare);
     return group;
   }).sort((a, b) => b.latest - a.latest || compare(a.key, b.key));

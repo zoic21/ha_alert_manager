@@ -6,25 +6,22 @@ Custom rules monitor situations specific to your installation: a fridge drawing 
 
 ## Alert or Information
 
-The **Level** field is presentation metadata for custom rules: `alert` (default)
-keeps the usual appearance; `info` uses an information icon and a theme blue accent.
-Set it in the visual editor or YAML:
+All alerts use the **Alert** presentation by default. In **Configuration → General**,
+select one or more **Information labels**, then assign at least one of those Home
+Assistant labels to a custom rule or automatic pack. Its alerts use the Information
+icon and theme blue accent. There is no per-rule or per-pack level field.
 
-```yaml
-level: info
-```
+Information follows the same pending, active, acknowledged and resolved lifecycle
+and contributes to the same counters and statistics. Changing only the labels or
+the global Information-label selection preserves current occurrences, timers and
+acknowledgements without evaluating conditions or generating lifecycle notifications.
+Resolved history keeps the presentation captured at resolution.
 
-Information follows the same pending, active, acknowledged and resolved lifecycle.
-It contributes to the same counters and statistics. Conditions, delays, flapping,
-automatic resolution and notification policies are unchanged. Changing only the
-level preserves the current occurrence, timers and acknowledgement. Resolved
-history keeps the level captured at resolution, even if the rule later changes or
-is deleted. Older data without a level is treated as Alert.
-
-To notify only when an information starts, assign a Home Assistant label such as
-`information` to the rule and add a notification profile exception for that label:
-enable starts, disable resolutions and set reminders to never. The label and level
-are independent; no label is created or interpreted automatically.
+Notification policies continue to use the existing label exceptions. For example,
+an exception for your Information label can enable starts, disable resolutions and
+set reminders to never. No label is created automatically. Entity/device labels
+remain available for notification routing; presentation uses the labels explicitly
+assigned to the rule or pack.
 
 Mixed notification batches retain their alert presentation and remain a single
 batch. Information-only notifications use informative titles and the existing

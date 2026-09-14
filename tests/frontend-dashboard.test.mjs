@@ -455,7 +455,7 @@ test("information groups retain membership and order with alert visual precedenc
   assert.deepEqual(mixed.alerts.map((item) => item.id), informative.alerts.map((item) => item.id));
   assert.equal(dashboardTarget(mixed), dashboardTarget(informative));
   assert.equal(dashboardGroups([{ ...items[0], level: undefined }])[0].informational, false);
-  assert.equal(dashboardGroups([{ ...items[0], type: "battery" }])[0].informational, false);
+  assert.equal(dashboardGroups([{ ...items[0], type: "battery" }])[0].informational, true);
 });
 
 test("group link selects device IDs with matching facet and preserves label filtering", () => {

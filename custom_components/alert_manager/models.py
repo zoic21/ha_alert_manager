@@ -43,6 +43,11 @@ def validate_label_list(value: Any, *, path: str = "excluded_labels") -> list[st
     return result
 
 
+def information_level(labels: list[str], information_labels: frozenset[str]) -> str:
+    """Resolve presentation from explicitly configured Information labels."""
+    return "info" if information_labels.intersection(labels) else "alert"
+
+
 def validate_level(value: Any) -> str:
     """Validate presentation metadata without interpreting historical severity."""
     if value not in ("alert", "info"):
@@ -693,15 +698,14 @@ class Rule:
     source: str = "state"
     attribute: str | None = None
     message: str | None = None
-    # Presentation must not invalidate a pending/confirmed transition observation.
-    level: str = field(default="alert", compare=False)
     update_message_when_active: bool = False
     condition_template: str | None = None
     flapping_enabled: bool = False
     flapping_occurrences: int | None = None
     flapping_window: int | None = None
     flapping_recovery: int | None = None
-    label_ids: list[str] = field(default_factory=list)
+    # Label edits must not invalidate pending/confirmed transition observations.
+    label_ids: list[str] = field(default_factory=list, compare=False)
     from_value: str | int | float | bool | None = None
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
@@ -755,7 +759,7 @@ class Rule:
         values["extra"] = {
             key: value
             for key, value in normalized.items()
-            if key not in known and key != "severity"
+            if key not in known and key not in {"severity", "level"}
         }
         rule = cls(**values)
         rule.validate()
@@ -769,7 +773,6 @@ class Rule:
             raise ValueError("Rule name is required")
         if len(self.name) > MAX_RULE_NAME_LENGTH:
             raise ValueError("Rule name is too long")
-        validate_level(self.level)
         self.label_ids = validate_label_list(self.label_ids, path="label_ids")
         if not isinstance(self.entity_ids, list) or not self.entity_ids:
             raise ValueError("Rule entity_ids must be a non-empty list")

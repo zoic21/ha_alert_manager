@@ -226,7 +226,8 @@ def test_websocket_rule_actions_create_update_and_delete(hass, entry):
     assert connection.errors == []
     created = connection.results[-1][1]
     assert created["name"] == "Liste vide"
-    assert manager.get_config()["rules"] == [created]
+    assert manager.get_config(include_presentation=True)["rules"] == [created]
+    assert "level" not in manager.config["rules"][0]
 
     asyncio.run(
         websocket_rule_update(
@@ -758,3 +759,52 @@ def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
     assert [error[1] for error in connection.errors] == ["unauthorized"] * len(
         protected
     )
+
+
+def test_classification_payload_is_computed_after_update_and_import(hass, entry):
+    """Panel responses expose levels while saved configuration and YAML omit them."""
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    connection = Connection(admin=True)
+    created = asyncio.run(
+        manager.async_create_rule(
+            {
+                "name": "Information",
+                "entity_ids": ["sensor.test"],
+                "operator": "equals",
+                "value": "on",
+                "duration": 0,
+                "label_ids": ["maintenance"],
+            }
+        )
+    )
+    asyncio.run(
+        websocket_config_update(
+            hass,
+            connection,
+            {
+                "id": 1,
+                "config": {"information_labels": ["maintenance"]},
+            },
+        )
+    )
+    assert connection.results[-1][1]["rules"][0]["level"] == "info"
+    config = manager.get_config()
+    config["information_labels"] = ["other"]
+    asyncio.run(
+        websocket_config_import(
+            hass,
+            connection,
+            {
+                "id": 2,
+                "yaml": dump_config_yaml(config),
+                "confirmed": True,
+            },
+        )
+    )
+    assert connection.errors == []
+    assert connection.results[-1][1]["config"]["rules"][0]["level"] == "alert"
+    assert manager.config["rules"][0]["id"] == created["id"]
+    assert "level" not in manager.config["rules"][0]
+    assert "level:" not in asyncio.run(manager.async_export_config_yaml())

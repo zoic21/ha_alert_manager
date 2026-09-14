@@ -43,7 +43,6 @@ _RULE_YAML_KEYS = {
     "value",
     "duration",
     "message",
-    "level",
     "update_message_when_active",
     "condition_template",
     "flapping_enabled",
@@ -59,6 +58,7 @@ _CONFIG_YAML_KEY_ORDER = (
     "coherence_ignored_entity_references",
     "pending_display_delay",
     "excluded_labels",
+    "information_labels",
     "automatic",
     "notification_profiles",
     "notification_batch_delay",
@@ -169,7 +169,6 @@ def rule_to_yaml_data(
     result: dict[str, Any] = {
         "name": data.get("name"),
         "enabled": data.get("enabled", True),
-        "level": data.get("level", "alert"),
         "entity_ids": data.get("entity_ids"),
         "label_ids": data.get("label_ids", []),
         "source": source,
@@ -306,6 +305,7 @@ def parse_config_yaml(
             "pending_display_delay",
             "notification_profiles",
             "notification_batch_delay",
+            "information_labels",
         }
         - set(config)
     )

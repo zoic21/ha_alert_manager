@@ -219,7 +219,6 @@ class _TransitionsMixin:
                     },
                     rule_id=rule.id,
                     rule_name=rule.name,
-                    level=rule.level,
                     labels=rule.label_ids,
                     message=self._render_rule_message(
                         rule, observation.state, observation.arrived
