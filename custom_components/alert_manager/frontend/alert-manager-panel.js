@@ -6264,22 +6264,7 @@ function nativeRuleNameCell(row, narrow = false) {
     const primary = document.createElement("span");
     primary.textContent = row.name;
     primary.style.cssText = "min-width:0;overflow:hidden;color:var(--primary-text-color,#212121);font-weight:var(--ha-font-weight-medium,500);text-overflow:ellipsis;white-space:nowrap";
-    if (row.level === "info") {
-      const line = document.createElement("span");
-      // Native table cells live in HA's shadow root, outside the panel stylesheet.
-      line.style.cssText = "display:flex;align-items:center;gap:10px;min-width:0";
-      line.append(primary);
-      const iconStyle = "display:flex;align-items:center;justify-content:center;line-height:0;--mdc-icon-size:20px;width:20px;height:20px;flex:0 0 20px;color:var(--info-color,var(--primary-color))";
-      if (row.level === "info") {
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", "mdi:information-outline");
-        icon.setAttribute("aria-label", this._t("rules.level_info"));
-        icon.title = this._t("rules.level_info");
-        icon.style.cssText = iconStyle;
-        line.append(icon);
-      }
-      content.append(line);
-    } else content.append(primary);
+    content.append(primary);
     if (row.labels?.length) content.append(nativeLabelBadges(row.labels, this._hass));
     if (narrow && secondaryColumns.length) {
       const secondary = document.createElement("span");

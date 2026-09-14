@@ -309,14 +309,15 @@ test("opening custom rules does not request rule discovery or maintenance", asyn
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
 
-test("information icon remains after the rule title on desktop and mobile", () => {
+test("information rules display their title without a status icon on desktop and mobile", () => {
   const panel = new Panel();
   for (const narrow of [false, true]) {
-    const cell = panel._nativeRuleNameCell({ name: "Updates", level: "info" }, narrow);
-    const line = cell.children[0];
-    assert.equal(line.children.length, 2);
-    assert.equal(line.children[0].textContent, "Updates");
-    assert.equal(line.children[1].attributes.icon, "mdi:information-outline");
-    assert.match(line.style.cssText, /align-items:center;gap:10px/);
+    for (const level of ["alert", "info"]) {
+      const cell = panel._nativeRuleNameCell({ name: "Updates", level }, narrow);
+      assert.equal(cell.children[0].textContent, "Updates");
+      assert.equal(cell.children[0].tagName, "SPAN");
+      assert.equal(cell.children[0].children.length, 0);
+      assert.ok(cell.children.every((child) => child.tagName !== "HA-ICON"));
+    }
   }
 });
