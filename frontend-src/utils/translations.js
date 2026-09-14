@@ -1,4 +1,5 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Unsupported transition resolution mode", "transition_resolution_mode"],
   ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
   ["Transition departure and arrival must differ", "transition_distinct"],
   ["Transition values cannot be unknown or unavailable", "transition_unavailable"],

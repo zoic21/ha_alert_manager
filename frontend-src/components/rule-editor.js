@@ -90,6 +90,7 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
       from_value: String(value("from_value") ?? currentRule.from_value ?? ""),
       to_value: String(value("to_value") ?? currentRule.to_value ?? ""),
       auto_resolve: Number(value("auto_resolve") ?? currentRule.auto_resolve ?? 600),
+      resolve_mode: value("resolve_mode") ?? currentRule.resolve_mode ?? "duration",
       duration: Number(value("duration") ?? currentRule.duration ?? 900),
       message: String(selectorValues.message || currentRule.message || ""),
       update_message_when_active: Boolean(
@@ -134,7 +135,7 @@ export function serializeRuleDraft(draft) {
         : null,
       operator,
       value: comparisonValue,
-      ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 600) } : {}),
+      ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 600), resolve_mode: draft.resolve_mode ?? "duration" } : {}),
       duration: Number(draft.duration),
       message: String(draft.message ?? "").trim() || null,
       update_message_when_active: Boolean(draft.update_message_when_active),
@@ -469,7 +470,7 @@ export function renderRuleConditionSection({ rule, t, renderTextField, renderNum
         <div class="fields">
           <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
           <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(["value_variation", "value_transition"].includes(rule.source) ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
-          ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}${renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
+          ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}<div class="field full"><span class="field-label">${esc(t("rules.resolve_mode"))}</span><ha-select id="rule-resolve-mode" data-field="resolve_mode"></ha-select></div>${rule.resolve_mode === "state" ? "" : renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
           ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
           <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
         </div>
@@ -772,6 +773,14 @@ export function hydrateRuleEditor(root, context) {
     closeButton.path = MDI_CLOSE;
   }
   if (context.mode !== "visual") return;
+  if (TRANSITION_RULE_SOURCES.has(context.draft.source)) {
+    context.configureSelect(
+      "rule-resolve-mode",
+      context.resolveModeOptions,
+      context.draft.resolve_mode ?? "duration",
+      context.onResolveModeChanged,
+    );
+  }
   context.configureSelect(
     "rule-source",
     context.sourceOptions,
@@ -860,6 +869,16 @@ export function hydrateRuleEditorControls() {
       { value: "unchanged", label: this._t("operators.unchanged") },
     ]),
     attributeOptions: this._ruleAttributeOptions(),
+    resolveModeOptions: [
+      { value: "duration", label: this._t("rules.resolve_mode_duration") },
+      { value: "state", label: this._t("rules.resolve_mode_state") },
+    ],
+    onResolveModeChanged: (value) => {
+      this._captureRuleDraft();
+      this._editingRule.resolve_mode = value;
+      this._ruleDirty = true;
+      this._refreshRuleConditionSection();
+    },
     configureSelect: (...args) => this._configureSelect(...args),
     configureSelector: (...args) => this._configureSelector(...args),
     onMenuSelected: (event) => this._handleSelected(event),

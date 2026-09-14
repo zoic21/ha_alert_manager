@@ -207,6 +207,9 @@ def test_rule_changes_discard_holds_and_stale_timer_cannot_activate(
         {"to_value": []},
         {"auto_resolve": 0},
         {"auto_resolve": True},
+        {"resolve_mode": "invalid"},
+        {"resolve_mode": None},
+        {"resolve_mode": []},
         {"from_value": "unknown"},
         {"to_value": "A"},
     ],
@@ -226,7 +229,8 @@ def test_transition_validation(changes):
         )
 
 
-def test_transition_yaml_round_trip():
+@pytest.mark.parametrize("resolve_mode", ["duration", "state"])
+def test_transition_yaml_round_trip(resolve_mode):
     rule = Rule.from_dict(
         {
             "id": "edge",
@@ -237,6 +241,7 @@ def test_transition_yaml_round_trip():
             "from_value": False,
             "to_value": True,
             "auto_resolve": 120,
+            "resolve_mode": resolve_mode,
         }
     )
     restored = parse_rule_yaml(dump_rule_yaml(rule))
@@ -244,6 +249,7 @@ def test_transition_yaml_round_trip():
     assert restored.to_value is True
     assert restored.duration == 0
     assert restored.auto_resolve == 120
+    assert restored.resolve_mode == resolve_mode
 
 
 def test_hold_completed_before_coalesced_departure(hass, entry, set_now):
@@ -320,3 +326,130 @@ def test_legacy_active_transition_survives_migration(hass, entry, set_now, attri
     expire(restored, key)
     assert key not in restored.records
     assert len(restored.history) == 1
+
+
+@pytest.mark.parametrize("attribute", [False, True])
+def test_state_resolution_keeps_ack_and_ignores_unrelated_updates(
+    hass, entry, set_now, attribute
+):
+    manager, key, _ = setup(
+        hass,
+        entry,
+        source="value_transition",
+        resolve_mode="state",
+        attribute="mode" if attribute else None,
+    )
+
+    def update(value, **attrs):
+        edge(
+            manager, hass, "available" if attribute else value, {"mode": value, **attrs}
+        )
+
+    update("B")
+    record = manager.records[key]
+    assert record.status is AlertStatus.ACTIVE
+    assert record.expires_at is None
+    run(manager.async_acknowledge(key, "admin"))
+    set_now(dt_util.now() + timedelta(seconds=120))
+    update("B", unrelated=1)
+    assert manager.records[key] is record
+    assert record.acknowledged
+    assert key not in manager._timers
+    update("C")
+    assert key not in manager.records
+    assert len(manager.history) == 1
+    assert manager.history[-1].condition_params.get("resolution_reason") != "automatic"
+    update("B")  # C → B is not the configured edge.
+    assert key not in manager.records
+    update("A")
+    update("B")
+    assert manager.records[key] is not record
+    assert not manager.records[key].acknowledged
+
+
+def test_state_resolution_waits_for_known_value(hass, entry):
+    manager, key, _ = setup(hass, entry, resolve_mode="state")
+    edge(manager, hass, "B")
+    record = manager.records[key]
+    for state in ("unknown", "unavailable", "B"):
+        edge(manager, hass, state)
+        assert manager.records[key] is record
+    edge(manager, hass, "C")
+    assert key not in manager.records
+
+
+@pytest.mark.parametrize("leave_before_confirmation", [False, True])
+def test_state_resolution_hold(hass, entry, set_now, leave_before_confirmation):
+    manager, key, _ = setup(hass, entry, resolve_mode="state", duration=30)
+    now = dt_util.now()
+    edge(manager, hass, "B")
+    assert manager.records[key].status is AlertStatus.PENDING
+    if leave_before_confirmation:
+        set_now(now + timedelta(seconds=10))
+        edge(manager, hass, "C")
+        assert not manager.history
+    else:
+        set_now(now + timedelta(seconds=30))
+        expire(manager, key)
+        assert manager.records[key].status is AlertStatus.ACTIVE
+        assert manager.records[key].expires_at is None
+        edge(manager, hass, "C")
+        assert len(manager.history) == 1
+    assert key not in manager.records
+
+
+def test_state_resolution_coalesced_activation_and_departure(hass, entry):
+    manager, key, _ = setup(hass, entry, resolve_mode="state")
+    edge(manager, hass, "B", flush=False)
+    edge(manager, hass, "C")
+    assert key not in manager.records
+    assert len(manager.history) == 1
+
+
+@pytest.mark.parametrize("arrival_maintained", [False, True])
+def test_state_resolution_restored_and_reconciled(hass, entry, arrival_maintained):
+    manager, key, _ = setup(hass, entry, resolve_mode="state")
+    edge(manager, hass, "B")
+    run(manager.async_acknowledge(key, "admin"))
+    run(manager.async_unload())
+    if not arrival_maintained:
+        hass.states.set("sensor.edge", "C")
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    run(restored._async_finish_startup_reconciliation())
+    assert (key in restored.records) is arrival_maintained
+    if arrival_maintained:
+        assert restored.records[key].expires_at is None
+        assert restored.records[key].acknowledged
+        edge(restored, hass, "C")
+        assert key not in restored.records
+
+
+def test_resolution_mode_edit_replaces_deadline(hass, entry, set_now):
+    manager, key, rule = setup(hass, entry)
+    edge(manager, hass, "B")
+    record = manager.records[key]
+    deadline = record.expires_at
+    run(manager.async_update_rule(rule["id"], {"resolve_mode": "state"}))
+    assert manager.records[key] is record
+    assert record.expires_at is None
+    set_now(deadline + timedelta(seconds=1))
+    expire(manager, key)
+    assert manager.records[key] is record
+    run(manager.async_update_rule(rule["id"], {"resolve_mode": "duration"}))
+    assert record.expires_at == dt_util.now() + timedelta(seconds=60)
+    set_now(record.expires_at)
+    expire(manager, key)
+    assert key not in manager.records
+
+
+def test_state_resolution_pause_rechecks_without_new_edge(hass, entry):
+    manager, key, _ = setup(hass, entry, resolve_mode="state")
+    edge(manager, hass, "B")
+    run(manager.async_set_monitoring(False))
+    edge(manager, hass, "C")
+    assert key in manager.records
+    run(manager.async_set_monitoring(True))
+    assert key not in manager.records
+    edge(manager, hass, "B")
+    assert key not in manager.records

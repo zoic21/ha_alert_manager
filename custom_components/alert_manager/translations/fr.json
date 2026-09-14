@@ -282,7 +282,8 @@
       "transition_finite": "Les nombres de transition doivent être finis.",
       "transition_unavailable": "Les valeurs unknown et unavailable ne sont pas acceptées pour une transition.",
       "transition_distinct": "Le départ et l’arrivée doivent être différents.",
-      "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours."
+      "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours.",
+      "transition_resolution_mode": "Choisissez un mode de résolution de transition valide."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -647,13 +648,16 @@
       "from_value": "Valeur de départ",
       "to_value": "Valeur d’arrivée",
       "auto_resolve": "Résolution automatique",
-      "transition_help": "Nécessite une transition départ → arrivée observée. Le délai de déclenchement impose le maintien à l’arrivée ; la résolution automatique part de l’activation. Les répétitions confirmées la prolongent sans retirer l’acquittement. Aucune notification de retour à la normale.",
+      "transition_help": "Nécessite un changement observé départ → arrivée. Le délai de déclenchement confirme le maintien à l’arrivée. Ensuite, résolution après une durée ou dès qu’une valeur connue quitte l’état d’arrivée.",
       "last_occurrence": "Dernière transition",
       "resolution_reason": "Motif de résolution",
       "automatic_resolution": "Expiration automatique",
       "source_value": "Valeur",
       "source_value_variation": "Variation",
-      "source_value_transition": "Transition"
+      "source_value_transition": "Transition",
+      "resolve_mode": "Mode de résolution",
+      "resolve_mode_duration": "Après une durée",
+      "resolve_mode_state": "Tant que l’état d’arrivée est maintenu"
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",

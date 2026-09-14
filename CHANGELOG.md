@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.26**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.27**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
 ### Major changes
+
+- Custom transition rules can resolve after a duration or remain active until a known
+  value leaves the arrival state, for both state and attribute transitions.
 
 - Dashboard cards support separate mobile limits, deterministic sorting, multiple label
   inclusions/exclusions, optional alert age and optional device grouping.

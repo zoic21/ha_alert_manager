@@ -212,6 +212,7 @@ const ruleToYaml = (rule) => {
   }
   if (TRANSITION_RULE_SOURCES.has(source)) {
     for (const key of ["from_value", "to_value", "auto_resolve"]) lines.push(`${key}: ${yamlValue(rule[key] ?? (key === "auto_resolve" ? 600 : ""))}`);
+    lines.push(`resolve_mode: ${yamlValue(rule.resolve_mode ?? "duration")}`);
   }
   lines.push(
     `duration: ${yamlValue(rule.duration)}`,

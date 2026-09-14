@@ -20,7 +20,7 @@ Home Assistant labels can be attached to a rule. They help organize rules and pa
 | --- | --- | --- |
 | Value | `value` | Compare the state or an attribute with an expected value, threshold or range, or check that this specific value has stopped changing. |
 | Variation | `value_variation` | Measure a numeric change from a baseline recorded when a Jinja condition becomes true. |
-| Transition | `value_transition` | Observe a specific `from_value` → `to_value` change and keep the resulting alert visible for a configured time. |
+| Transition | `value_transition` | Observe a specific `from_value` → `to_value` change and resolve the resulting alert after a duration or when the arrival value is left. |
 | No change | `unchanged` | Detect an entity with no state or attribute change for the configured duration. |
 | Jinja | `jinja` | Use a template as the complete rule condition. |
 
@@ -46,7 +46,12 @@ A transition requires an observed edge. Initial discovery, reloads and startup d
 
 With `duration` greater than zero, the arrival value must remain unchanged for the entire delay. Leaving it cancels the hold and requires a new matching edge; unrelated attribute changes do not restart it.
 
-After activation, the alert expires after `auto_resolve` seconds (**600 by default**, minimum 1). Leaving the arrival value after activation does not resolve it. Another confirmed transition extends the same alert's deadline and preserves its acknowledgement.
+Choose a resolution mode after activation:
+
+- **After a duration** (`resolve_mode: duration`, the default): the alert expires after `auto_resolve` seconds (**600 by default**, minimum 1). Leaving the arrival value does not resolve it. Another confirmed transition extends the same alert's deadline and preserves its acknowledgement.
+- **While the arrival value is maintained** (`resolve_mode: state`): the alert has no expiration deadline. A known value different from `to_value` resolves it through the normal lifecycle, including recovery notifications when enabled. Unknown/unavailable states and missing attributes preserve the active alert until a known value is observed. Unrelated attribute updates do not resolve it. This applies to both entity states and selected attributes.
+
+Existing rules keep the duration mode. Active alerts retain their acknowledgement across restarts; the state mode rechecks the current value on restart or monitoring resume. Changing the resolution mode keeps the current episode and removes its deadline or starts the configured expiration duration from the change.
 
 Automatic expiration is recorded in history but sends **no recovery notification**. New-alert notifications and reminders still apply. Unconfirmed holds do not survive a restart or monitoring pause; active/acknowledged expiration deadlines survive restarts. After a pause, a new activation requires a fresh edge.
 

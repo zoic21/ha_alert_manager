@@ -32,6 +32,7 @@ _RULE_YAML_KEYS = {
     "from_value",
     "to_value",
     "auto_resolve",
+    "resolve_mode",
     "id",
     "name",
     "enabled",
@@ -180,7 +181,10 @@ def rule_to_yaml_data(
             result["value"] = data.get("value")
     if source in TRANSITION_SOURCES:
         result.update(
-            {key: data.get(key) for key in ("from_value", "to_value", "auto_resolve")}
+            {
+                key: data.get(key)
+                for key in ("from_value", "to_value", "auto_resolve", "resolve_mode")
+            }
         )
     result.update(
         {

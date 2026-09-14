@@ -9,6 +9,7 @@ import {
   normalizeRuleDraft,
   refreshRuleConditionSection,
   renderRuleEditor,
+  renderRuleConditionSection,
   serializeRuleDraft,
   validateRuleDraft,
 } from "../frontend-src/components/rule-editor.js";
@@ -378,4 +379,56 @@ test("optional attributes serialize consistently for every unified operation", (
       assert.equal(serialized.attribute, attribute?.trim() || null);
     }
   }
+});
+
+test("transition resolution mode survives form capture, payload and YAML", () => {
+  const current = normalizeRuleDraft({ ...rule(), source: "value_transition", from_value: "A", to_value: "B", auto_resolve: 120 });
+  const form = { querySelector: (selector) => selector === '[data-field="resolve_mode"]' ? { value: "state" } : null };
+  const draft = captureRuleDraftFromForm(form, current);
+  assert.equal(draft.resolve_mode, "state");
+  assert.equal(draft.auto_resolve, 120);
+  assert.equal(serializeRuleDraft(draft).resolve_mode, "state");
+  assert.match(ruleToYaml(draft), /resolve_mode: "state"/);
+  assert.equal(serializeRuleDraft(current).resolve_mode, "duration");
+  assert.equal("resolve_mode" in serializeRuleDraft({ ...draft, source: "value" }), false);
+});
+
+test("transition resolution selector refreshes its duration control and keeps the draft", () => {
+  let changeMode;
+  let refreshes = 0;
+  const panel = {
+    _editingRule: { ...rule(), source: "value_transition", resolve_mode: "duration", auto_resolve: 120 },
+    _ruleEditorMode: "visual", _t: t, _ruleAttributeOptions: () => [],
+    _configureSelect(id, options, value, callback) {
+      if (id === "rule-resolve-mode") {
+        assert.deepEqual(options.map((option) => option.value), ["duration", "state"]);
+        assert.equal(value, "duration");
+        changeMode = callback;
+      }
+    },
+    _configureSelector() {}, _handleSelected() {},
+    _captureRuleDraft() {},
+    _refreshRuleConditionSection() { refreshes += 1; },
+    shadowRoot: { querySelector() { return null; } },
+  };
+  hydrateRuleEditorControls.call(panel);
+  changeMode("state");
+  assert.equal(panel._editingRule.resolve_mode, "state");
+  assert.equal(panel._editingRule.auto_resolve, 120);
+  assert.equal(panel._ruleDirty, true);
+  assert.equal(refreshes, 1);
+});
+
+test("state resolution hides only the expiration duration", () => {
+  const context = {
+    rule: { ...rule(), source: "value_transition", from_value: "A", to_value: "B" }, t,
+    renderTextField: (name) => `<ha-textfield name="${name}"></ha-textfield>`,
+    renderNumberField: (name) => `<ha-selector data-field="${name}"></ha-selector>`,
+  };
+  const timed = renderRuleConditionSection(context);
+  const maintained = renderRuleConditionSection({ ...context, rule: { ...context.rule, resolve_mode: "state" } });
+  assert.match(timed, /data-field="auto_resolve"/);
+  assert.doesNotMatch(maintained, /data-field="auto_resolve"/);
+  assert.match(maintained, /id="rule-resolve-mode"/);
+  assert.match(maintained, /name="to_value"/);
 });

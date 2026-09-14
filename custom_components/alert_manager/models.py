@@ -711,6 +711,7 @@ class Rule:
     from_value: str | int | float | bool | None = None
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
+    resolve_mode: str = "duration"
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -863,6 +864,8 @@ class Rule:
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
         if self.source in TRANSITION_SOURCES:
+            if self.resolve_mode not in ("duration", "state"):
+                raise ValueError("Unsupported transition resolution mode")
             for value in (self.from_value, self.to_value):
                 if not isinstance(
                     value, str | int | float | bool
@@ -936,7 +939,7 @@ class Rule:
         extra = result.pop("extra", {})
         result.update(extra)
         if self.source not in TRANSITION_SOURCES:
-            for key in ("from_value", "to_value", "auto_resolve"):
+            for key in ("from_value", "to_value", "auto_resolve", "resolve_mode"):
                 result.pop(key, None)
         if self.source in ("jinja", "unchanged", *TRANSITION_SOURCES):
             result.pop("operator", None)

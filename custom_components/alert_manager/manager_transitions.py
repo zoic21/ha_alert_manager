@@ -129,6 +129,14 @@ class _TransitionsMixin:
         if not self._is_base_eligible(record.details.entity_id):
             return False
         rule = self._transition_rules_by_id.get(record.details.rule_id)
+        if rule is not None and rule.resolve_mode == "state":
+            value = transition_value(
+                rule, self.hass.states.get(record.details.entity_id)
+            )
+            if value is not None and normalize_scalar(value) != normalize_scalar(
+                rule.to_value
+            ):
+                return False
         return (
             rule is not None
             and rule.enabled
@@ -158,6 +166,16 @@ class _TransitionsMixin:
                 self._transition_observations.pop(alert_id, None)
                 continue
             record = self.records.get(alert_id)
+            if record is not None and record.status is AlertStatus.ACTIVE:
+                # Apply mode edits to the existing episode and cancel stale deadlines.
+                if rule.resolve_mode == "state" and record.expires_at is not None:
+                    record.expires_at = None
+                    self._schedule_timer(record)
+                    changed = True
+                elif rule.resolve_mode == "duration" and record.expires_at is None:
+                    record.expires_at = now + timedelta(seconds=rule.auto_resolve)
+                    self._schedule_timer(record)
+                    changed = True
             if (
                 record is not None
                 and record.status is AlertStatus.ACTIVE
@@ -244,7 +262,11 @@ class _TransitionsMixin:
                 changed = True
             if now.astimezone(UTC) >= observation.due_at.astimezone(UTC):
                 became_active = advance_record(record, now)
-                record.expires_at = now + timedelta(seconds=rule.auto_resolve)
+                record.expires_at = (
+                    now + timedelta(seconds=rule.auto_resolve)
+                    if rule.resolve_mode == "duration"
+                    else None
+                )
                 record.details.condition_params = {
                     "from_value": observation.departed,
                     "to_value": observation.arrived,

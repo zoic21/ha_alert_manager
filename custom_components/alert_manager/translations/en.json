@@ -282,7 +282,8 @@
       "transition_finite": "Transition numbers must be finite.",
       "transition_unavailable": "Unknown and unavailable cannot be transition values.",
       "transition_distinct": "Departure and arrival must differ.",
-      "transition_expiration": "Automatic resolution must be between 1 second and 365 days."
+      "transition_expiration": "Automatic resolution must be between 1 second and 365 days.",
+      "transition_resolution_mode": "Choose a supported transition resolution mode."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -647,13 +648,16 @@
       "from_value": "Departure value",
       "to_value": "Arrival value",
       "auto_resolve": "Automatic resolution",
-      "transition_help": "Requires an observed departure → arrival transition. The trigger delay holds the arrival value; automatic resolution starts at activation. Confirmed repeats extend it without clearing acknowledgment. No recovery notification is sent.",
+      "transition_help": "Requires an observed departure → arrival change. The trigger delay confirms the arrival value. Then resolve after a duration or when a known value leaves the arrival value.",
       "last_occurrence": "Last transition",
       "resolution_reason": "Resolution reason",
       "automatic_resolution": "Automatic expiration",
       "source_value": "Value",
       "source_value_variation": "Variation",
-      "source_value_transition": "Transition"
+      "source_value_transition": "Transition",
+      "resolve_mode": "Resolution mode",
+      "resolve_mode_duration": "After a duration",
+      "resolve_mode_state": "While the arrival value is maintained"
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",
