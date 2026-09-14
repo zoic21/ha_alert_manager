@@ -12,23 +12,39 @@
 
 Alert Manager brings Home Assistant problems into one place: unavailable devices, low batteries, failed automations, unexpected values or broken configuration references. It follows each alert from detection to resolution, instead of leaving you with a notification that is easy to miss.
 
-[Installation](#installation) · [User guide](docs/user-guide.md) · [Report an issue](https://github.com/zoic21/ha_alert_manager/issues)
+Use automatic monitoring for common failures and custom rules for your own equipment. A problem stays visible while it needs attention; acknowledging it records that you know about it without pretending it is fixed. Resolved occurrences can be kept in history to make recurring problems easier to spot.
+
+[Installation](#installation) · [Documentation](docs/user-guide.md) · [Report an issue](https://github.com/zoic21/ha_alert_manager/issues)
 
 <p align="center">
   <img src="docs/assets/screenshots/dashboard.png" alt="Alert Manager overview with current alerts">
 </p>
 
-## Features
+## What you can do
 
-| Area | What you can do |
-| --- | --- |
-| Automatic monitoring | Detect unavailable entities, connectivity failures, low batteries, UniFi devices away from home, automation/script errors and repeated instability. Configure defaults and device/entity exceptions per pack, with label-based global exclusions. |
-| Custom rules | Monitor states, attributes, thresholds, ranges, inactivity, variations, transitions and Jinja conditions. Generate rules from blueprints, edit visually or in YAML, duplicate and test against current values, including matching notification profiles. |
-| Alert management | Search, filter and group alerts; acknowledge them indefinitely or temporarily; inspect their details, notification deliveries and previous occurrences. Explore history and recurrence statistics. |
-| Dashboard card | Display a compact, responsive view grouped by device, with label filtering, a tile limit, alignment and icon color. The card hides when there are no matching alerts and opens the relevant details on click. |
-| Notifications | Configure optional profiles with several recipients, new alerts, recoveries, reminders, batching and ordered label exceptions. Edit profiles in YAML, duplicate them or send a test. |
-| Configuration coherence | Find missing static entity references and invalid ZHA device references, scan on demand or on a schedule, and optionally raise an alert for unresolved findings. |
-| Configuration and automation | Use Home Assistant labels, YAML import/export, automatic configuration backups, monitoring entities and lifecycle events for your own automations. |
+### Monitor everyday problems automatically
+
+Enable packs for unavailable entities, connectivity failures, low batteries, UniFi devices away from home, automation/script execution errors and repeated instability. Adjust delays, thresholds and exclusions so an expected situation or a brief glitch does not turn into unnecessary noise.
+
+Everything is configured from the panel. Labels help organize alerts and route notifications, while monitoring entities and lifecycle events remain available for your own automations.
+
+### Define rules for your installation
+
+Monitor a fridge consuming more than 200 W for two hours, a temperature outside an expected range, heating without a sufficient temperature rise, a sensor that stops changing or a completed appliance cycle.
+
+Rules support states, nested attributes, numeric and text comparisons, inactivity, variations, transitions and Jinja conditions. One rule can monitor several entities independently. Edit visually or in YAML, duplicate a rule and test an unsaved draft against current values, including the notification profiles that would match. Custom Jinja messages can explain the problem and optionally stay updated while it is active.
+
+### Follow alerts from the dashboard to history
+
+Overview separates active, upcoming and acknowledged alerts, with search, filters, sorting, device grouping, customizable columns and multiple selection. Open an alert to inspect its triggering/current values, notification deliveries and previous occurrences. Acknowledgement can be indefinite or temporary.
+
+The included dashboard card presents a compact view grouped by device. Choose a tile limit, label filter, alignment and icon color; it hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
+
+### Choose when to notify and check configuration health
+
+Optional notification profiles support several recipients, new alerts, recoveries, reminders, batching and ordered label exceptions. Profiles can be tested, duplicated and edited in YAML. Keep your own event-based notification automations instead when they suit your setup better.
+
+Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
 
 The interface is available in **English and French**, on desktop and mobile. All authenticated users can read the card, Overview and History; configuration and all actions, including acknowledgement, require an administrator.
 
@@ -90,13 +106,20 @@ max_tiles: 5
 alignment: left
 ```
 
-## Using Alert Manager
+## Documentation
 
-Start in **Configuration → Automatic monitoring**, adjust the enabled packs and their delays, then add custom rules for situations specific to your installation. Notification profiles are optional; your own event-based automations can be used instead.
+Start in **Configuration → Automatic monitoring**, review the enabled packs and their delays, then add custom rules for situations specific to your installation. Notification profiles are optional.
 
-The **[user guide](docs/user-guide.md)** covers rule examples, transitions, card options and startup behavior, notification routing, temporary acknowledgement, history statistics, coherence scans, YAML and recovery. A **[French guide](docs/user-guide.fr.md)** is also available.
+The detailed documentation is maintained **in English**:
 
-For generated rules, see the **[blueprint documentation](docs/blueprints/README.md)** and **[blueprint contributor guide](docs/rule-blueprints.md)**.
+| Guide | What it covers |
+| --- | --- |
+| [Custom rules](docs/custom-rules.md) | Operations, attributes, Jinja, variations, transitions, rule testing and practical YAML examples. |
+| [Configuration](docs/configuration.md) | Monitoring packs, delays, exclusions, notification profiles, YAML, backups and diagnostics. |
+| [Configuration coherence](docs/coherence.md) | Reference scans, ZHA checks, exclusions, schedules and coherence alerts. |
+| [Dashboard and history](docs/dashboard-and-history.md) | Overview, card options, acknowledgement, startup, history and recurrence statistics. |
+
+The [documentation index](docs/user-guide.md) provides an entry point to all four guides. Documentation follows the branch being read; use the matching release branch or tag for an installed version.
 
 Questions, bugs and monitoring ideas are welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
 
