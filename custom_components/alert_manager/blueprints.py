@@ -11,8 +11,8 @@ from typing import Any
 
 import yaml
 
-from .const import MAX_RULE_ENTITY_IDS
-from .models import Rule, normalize_scalar, safe_float
+from .const import BLUEPRINT_OVERRIDE_FIELDS, MAX_RULE_ENTITY_IDS
+from .models import Rule, normalize_scalar, safe_float, validate_label_list
 from .validation import validate_rule_payload
 
 BLUEPRINT_DIRECTORY = Path(__file__).parent / "blueprint"
@@ -382,6 +382,31 @@ def blueprint_payload(
     return payload
 
 
+def blueprint_default_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Snapshot overridable defaults without entity membership or enabled state."""
+    data = validate_rule_payload(payload).as_dict()
+    return {
+        key: deepcopy(data[key])
+        for key in sorted(BLUEPRINT_OVERRIDE_FIELDS)
+        if key in data
+    }
+
+
+def initialize_blueprint_defaults(
+    rule: dict[str, Any], defaults: dict[str, Any]
+) -> dict[str, Any]:
+    """Preserve legacy customizations when adding blueprint defaults."""
+    rule = deepcopy(rule)
+    metadata = rule["blueprint"]
+    if "defaults" not in metadata:
+        metadata["defaults"] = deepcopy(defaults)
+        overrides = metadata.setdefault("overrides", {})
+        for key in ("name", "level", "label_ids"):
+            if rule.get(key) != defaults.get(key):
+                overrides[key] = deepcopy(rule.get(key))
+    return rule
+
+
 def reconcile_blueprints(
     catalog: list[dict[str, Any]],
     installation: dict[str, Any],
@@ -411,12 +436,17 @@ def reconcile_blueprints(
         desired = sorted(set(discovered) - excluded)
         current = set(rule["entity_ids"])
         candidate = blueprint_payload(recipe, desired, translations)
-        for key in ("id", "name", "enabled", "label_ids"):
+        # Resolve defaults using the existing scope if discovery is empty.
+        defaults = blueprint_default_settings(
+            {**candidate, "entity_ids": rule["entity_ids"]}
+        )
+        metadata = initialize_blueprint_defaults(rule, defaults)["blueprint"]
+        for key in ("id", "enabled"):
             candidate[key] = deepcopy(rule[key])
-        candidate["level"] = rule.get("level", "alert")
         candidate.update(deepcopy(metadata.get("overrides", {})))
         candidate["blueprint"].update(
             managed=True,
+            defaults=defaults,
             overrides=deepcopy(metadata.get("overrides", {})),
             excluded_entities=sorted(excluded),
         )
@@ -467,12 +497,17 @@ def managed_rule_edit(existing: dict[str, Any], data: dict[str, Any]) -> dict[st
     ):
         raise ValueError("Detach the rule before editing blueprint-owned fields")
     updated = deepcopy(data)
+    if "label_ids" in updated:
+        updated["label_ids"] = validate_label_list(
+            updated["label_ids"], path="label_ids"
+        )
     metadata = deepcopy(metadata)
     overrides = metadata.setdefault("overrides", {})
-    for key in ("value", "duration"):
+    for key in sorted(BLUEPRINT_OVERRIDE_FIELDS):
         if key not in data:
             continue
-        old, new = existing.get(key), data[key]
+        old = metadata.get("defaults", {}).get(key, existing.get(key))
+        new = updated[key]
         if key == "value":
             normalize = (
                 safe_float
@@ -485,7 +520,9 @@ def managed_rule_edit(existing: dict[str, Any], data: dict[str, Any]) -> dict[st
             new = [
                 normalize(item) for item in (new if isinstance(new, list) else [new])
             ]
-        if old != new or key in overrides:
-            overrides[key] = data[key]
+        if old != new or (key in overrides and key not in metadata.get("defaults", {})):
+            overrides[key] = updated[key]
+        else:
+            overrides.pop(key, None)
     updated["blueprint"] = metadata
     return updated

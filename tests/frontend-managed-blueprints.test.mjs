@@ -224,8 +224,7 @@ test("real rule edits still block blueprint actions and empty membership has an 
 test("managed YAML contains only editable settings and switching back preserves provenance", async () => {
   const panel = { _editingRule: managedDraft, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {}, _call: async () => managedDraft };
   await editor.switchRuleEditor.call(panel);
-  assert.match(panel._ruleYaml, /^name:/);
-  assert.match(panel._ruleYaml, /duration: 0/);
+  assert.equal(panel._ruleYaml, "enabled: true\n");
   assert.doesNotMatch(panel._ruleYaml, /blueprint|entity_ids|source|operator|value:|message|condition_template/);
   await editor.switchRuleEditor.call(panel);
   assert.equal(panel._ruleEditorMode, "visual");
@@ -286,12 +285,15 @@ test("applying a reviewed selection sends it without another confirmation", asyn
   } finally { globalThis.window = previous; }
 });
 
-test("managed YAML separates blueprint overrides from rule settings", async () => {
-  const panel = { _editingRule: { ...managedDraft, source: "value", operator: "above", value: 90, duration: 300 }, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {} };
+test("managed YAML separates enabled state from explicit overrides", async () => {
+  const validated = { ...managedDraft, enabled: false, blueprint: { ...managedDraft.blueprint, overrides: { name: "My CPU", duration: 600, value: 95 } } };
+  const panel = { _editingRule: managedDraft, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {}, _call: async () => validated };
   await editor.switchRuleEditor.call(panel);
-  assert.match(panel._ruleYaml, /^name: /m);
-  assert.match(panel._ruleYaml, /^override:\n  duration: 300\n  value: "90"\n$/m);
-  assert.doesNotMatch(panel._ruleYaml, /^(duration|value):/m);
+  assert.match(panel._ruleYaml, /^enabled: false\noverride:/);
+  assert.match(panel._ruleYaml, /^  name: "My CPU"$/m);
+  assert.match(panel._ruleYaml, /^  duration: 600$/m);
+  assert.match(panel._ruleYaml, /^  value: 95$/m);
+  assert.doesNotMatch(panel._ruleYaml, /^(name|duration|value):/m);
 });
 
 test("applying blueprint changes displays a success message inside the drawer", async () => {
@@ -316,4 +318,25 @@ test("failed blueprint application never reports success", async () => {
   assert.equal(panel._notice, null);
   assert.equal(panel._ruleEditorError, "errors.unknown");
   assert.notEqual(panel._blueprintReview, null);
+});
+
+test("failed managed YAML preparation preserves the visual draft and reports the error", async () => {
+  const panel = { _editingRule: managedDraft, _ruleEditorMode: "visual", _ruleDirty: true, _notice: { text: "Validation failed" }, _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() {}, _refreshUiState() {}, _t: t, _call: async () => null };
+  await editor.switchRuleEditor.call(panel);
+  assert.equal(panel._editingRule, managedDraft);
+  assert.equal(panel._ruleEditorMode, "visual");
+  assert.equal(panel._ruleDirty, true);
+  assert.equal(panel._ruleEditorError, "Validation failed");
+});
+
+test("late managed YAML preparation cannot replace another editor", async () => {
+  let finish;
+  const panel = { _editingRule: managedDraft, _ruleEditorMode: "visual", _clearRuleEditorError() {}, _clearRuleTestResult() {}, _captureRuleDraft() {}, _refreshRuleEditor() { assert.fail("stale editor refreshed"); }, _call: () => new Promise(resolve => { finish = resolve; }) };
+  const pending = editor.switchRuleEditor.call(panel);
+  const other = { id: "other" };
+  panel._editingRule = other;
+  finish(managedDraft);
+  await pending;
+  assert.equal(panel._editingRule, other);
+  assert.equal(panel._ruleEditorMode, "visual");
 });

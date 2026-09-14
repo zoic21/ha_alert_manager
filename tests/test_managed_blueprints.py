@@ -72,7 +72,11 @@ def test_new_version_preserves_only_explicit_overrides(
     assert updated["message"] == "Updated message"
     assert updated["name"] == "My CPU"
     assert updated["label_ids"] == ["mine"]
-    assert updated["blueprint"]["overrides"] == {"value": 85}
+    assert updated["blueprint"]["overrides"] == {
+        "value": 85,
+        "name": "My CPU",
+        "label_ids": ["mine"],
+    }
     assert Rule.from_dict(updated).as_dict() == updated
 
 
@@ -352,7 +356,11 @@ def test_managed_yaml_partial_edits_preserve_structure(hass, entry, registry_ent
     assert updated["duration"] == 60
     for key in ("id", "entity_ids", "source", "operator", "condition_template"):
         assert updated.get(key) == rule.get(key)
-    assert updated["blueprint"]["overrides"] == {"value": 82, "duration": 60}
+    assert updated["blueprint"]["overrides"] == {
+        "value": 82,
+        "duration": 60,
+        "name": "My CPU",
+    }
     renamed = run(manager.async_update_rule_yaml(rule["id"], 'name: "Renamed"'))
     assert renamed["value"] == 82
     assert renamed["duration"] == 60
@@ -436,11 +444,18 @@ def test_managed_yaml_nested_overrides_round_trip(hass, entry, registry_entry):
     assert validated["value"] == 82
     updated = run(manager.async_update_rule_yaml(rule["id"], raw))
     assert updated["blueprint"]["managed"] is True
-    assert updated["blueprint"]["overrides"] == {"duration": 60, "value": 82}
+    assert updated["blueprint"]["overrides"] == {
+        "duration": 60,
+        "value": 82,
+        "name": "My CPU",
+    }
     assert updated["entity_ids"] == rule["entity_ids"]
     assert "override" not in updated
     renamed = run(manager.async_update_rule_yaml(rule["id"], 'name: "Renamed"'))
-    assert renamed["blueprint"]["overrides"] == updated["blueprint"]["overrides"]
+    assert renamed["blueprint"]["overrides"] == {
+        **updated["blueprint"]["overrides"],
+        "name": "Renamed",
+    }
 
 
 @pytest.mark.parametrize(
@@ -475,3 +490,195 @@ def test_override_yaml_is_reserved_for_managed_rules(hass, entry, registry_entry
         run(manager.async_validate_rule_yaml(raw, rule_id=rule["id"]))
     with pytest.raises(ValueError, match="Unknown rule field: override"):
         run(manager.async_update_rule_yaml(rule["id"], raw))
+
+
+def test_only_changed_fields_are_overrides_and_enabled_is_independent(
+    hass, entry, registry_entry
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    assert original["blueprint"]["overrides"] == {}
+    assert original["blueprint"]["defaults"]["duration"] == original["duration"]
+    unchanged = run(
+        manager.async_update_rule(
+            original["id"],
+            {
+                "enabled": False,
+                "value": "90",
+                "name": original["name"],
+                "level": original["level"],
+                "label_ids": [],
+            },
+        )
+    )
+    assert unchanged["blueprint"]["overrides"] == {}
+    updated = run(
+        manager.async_update_rule(
+            original["id"],
+            {
+                "name": "My CPU",
+                "level": "info",
+                "label_ids": ["custom"],
+                "duration": 600,
+            },
+        )
+    )
+    assert updated["blueprint"]["overrides"] == {
+        "name": "My CPU",
+        "level": "info",
+        "label_ids": ["custom"],
+        "duration": 600,
+    }
+    assert updated["enabled"] is False
+    reset = run(
+        manager.async_update_rule_yaml(
+            original["id"], "enabled: false\noverride:\n  name: My CPU"
+        )
+    )
+    assert reset["blueprint"]["overrides"] == {"name": "My CPU"}
+    assert reset["duration"] == original["duration"]
+    assert reset["level"] == original["level"]
+    assert reset["label_ids"] == []
+    reset_all = run(manager.async_update_rule_yaml(original["id"], "enabled: false"))
+    assert reset_all["name"] == original["name"]
+    assert reset_all["blueprint"]["overrides"] == {}
+    assert reset_all["enabled"] is False
+
+
+def test_visual_return_to_default_removes_override(hass, entry, registry_entry):
+    manager, original = create_managed(hass, entry, registry_entry)
+    run(manager.async_update_rule(original["id"], {"name": "Changed", "value": 95}))
+    reset = run(
+        manager.async_update_rule(
+            original["id"], {"name": original["name"], "value": "90"}
+        )
+    )
+    assert reset["blueprint"]["overrides"] == {}
+
+
+def test_legacy_customizations_are_preserved_during_lazy_upgrade(
+    hass, entry, registry_entry
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    legacy = deepcopy(original)
+    legacy["name"] = "Legacy name"
+    legacy["level"] = "info"
+    legacy["label_ids"] = ["legacy"]
+    legacy["blueprint"].pop("defaults")
+    manager.config["rules"][0] = legacy
+    before = deepcopy(manager.config)
+    validated = run(
+        manager.async_validate_rule_yaml('name: "Legacy name"', rule_id=original["id"])
+    )
+    assert manager.config == before
+    assert validated["blueprint"]["overrides"] == {
+        "name": "Legacy name",
+        "level": "info",
+        "label_ids": ["legacy"],
+    }
+    updated = run(manager.async_update_rule(original["id"], {"enabled": False}))
+    assert updated["blueprint"]["overrides"] == validated["blueprint"]["overrides"]
+    assert "defaults" in updated["blueprint"]
+    assert Rule.from_dict(updated).as_dict() == updated
+
+
+def test_inherited_presentation_follows_accepted_blueprint_version(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    catalog = manager_api.load_blueprints()
+    recipe = next(
+        item for item in catalog if item["blueprint_id"] == "system_cpu_usage"
+    )
+    recipe["blueprint_version"] += 1
+    recipe["rule"].update(name="New default", level="info")
+    monkeypatch.setattr(manager_api, "load_blueprints", lambda: catalog)
+    row = run(manager.async_reconcile_blueprints())[0]
+    updated = run(apply(manager, row))
+    assert updated["level"] == "info"
+    assert updated["blueprint"]["overrides"] == {}
+    assert updated["blueprint"]["defaults"]["level"] == "info"
+    assert updated["id"] == original["id"]
+
+
+def test_yaml_reset_rejects_concurrent_rule_changes(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    executor = hass.async_add_executor_job
+
+    async def scenario():
+        parsing = asyncio.Event()
+        release = asyncio.Event()
+
+        async def paused(target, *args):
+            if getattr(target, "func", None) is manager_api.parse_rule_yaml_data:
+                parsing.set()
+                await release.wait()
+            return await executor(target, *args)
+
+        monkeypatch.setattr(hass, "async_add_executor_job", paused)
+        task = asyncio.create_task(
+            manager.async_update_rule_yaml(original["id"], "enabled: true")
+        )
+        await parsing.wait()
+        updated = await manager.async_update_rule(
+            original["id"], {"name": "Concurrent"}
+        )
+        release.set()
+        with pytest.raises(ValueError, match="Rules changed"):
+            await task
+        assert manager.config["rules"][0] == updated
+
+    run(scenario())
+
+
+def test_label_overrides_remain_canonical_after_reload(hass, entry, registry_entry):
+    manager, original = create_managed(hass, entry, registry_entry)
+    updated = run(
+        manager.async_update_rule_yaml(
+            original["id"], 'enabled: true\noverride:\n  label_ids: [" label ", label]'
+        )
+    )
+    assert updated["label_ids"] == ["label"]
+    assert updated["blueprint"]["overrides"]["label_ids"] == ["label"]
+    assert Rule.from_dict(updated).as_dict() == updated
+
+
+def test_missing_legacy_recipe_still_allows_disabling(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    legacy = deepcopy(original)
+    legacy["blueprint"].pop("defaults")
+    legacy["blueprint"]["overrides"] = {"value": 95}
+    legacy["value"] = 95
+    manager.config["rules"][0] = legacy
+    monkeypatch.setattr(manager_api, "load_blueprints", lambda: [])
+    updated = run(
+        manager.async_update_rule(original["id"], {"enabled": False, "value": "95"})
+    )
+    assert updated["enabled"] is False
+    assert updated["blueprint"]["overrides"] == {"value": "95"}
+
+
+def test_managed_level_override_does_not_rebuild_or_evaluate(
+    hass, entry, registry_entry, monkeypatch
+):
+    manager, original = create_managed(hass, entry, registry_entry)
+    before_timers = dict(manager._timers)
+
+    def rebuild():
+        raise AssertionError("Presentation change rebuilt rule index")
+
+    async def evaluate(*args, **kwargs):
+        raise AssertionError("Presentation change evaluated entities")
+
+    monkeypatch.setattr(manager, "_rebuild_rule_index", rebuild)
+    monkeypatch.setattr(manager, "async_evaluate_entity", evaluate)
+    changed = run(manager.async_update_rule(original["id"], {"level": "info"}))
+    assert changed["blueprint"]["overrides"] == {"level": "info"}
+    assert manager._timers == before_timers
+    reset = run(manager.async_update_rule_yaml(original["id"], "enabled: true"))
+    assert reset["level"] == "alert"
+    assert reset["blueprint"]["overrides"] == {}
+    assert manager._timers == before_timers

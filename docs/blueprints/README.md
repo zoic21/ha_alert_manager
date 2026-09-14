@@ -47,7 +47,9 @@ blueprint changes. New rules remain managed by their blueprint. Use **Review /
 Update** to choose which proposed entities to monitor (checked) or exclude
 (unchecked), then apply the selection. Keep at least one entity selected; disable
 the rule to stop monitoring. The editor and its YAML mode expose only customizable
-settings. **Test** evaluates the effective blueprint rule. **Take control** detaches
+settings. YAML keeps `enabled` separate and shows only explicit customizations under
+`override:`. Removing a field from that block restores the inherited blueprint value.
+**Test** evaluates the effective blueprint rule. **Take control** detaches
 it for full manual editing. You can also select the blueprint again to regenerate it. After confirmation, regeneration **overwrites the existing rule's
 customizations** with the current blueprint defaults and discovered entities,
 while preserving the rule identifier.

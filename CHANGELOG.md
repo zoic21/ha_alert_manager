@@ -7,9 +7,11 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.20**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.21**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
+- Store only explicit blueprint overrides (including name, level and labels), keep
+  enabled independent, and restore inherited values when YAML overrides are removed.
 - Confirm applied blueprint changes inside the editor and group editable blueprint
   settings under `override` in the managed rule YAML editor.
 - Avoid recurring blueprint threshold changes caused only by number/string formatting,

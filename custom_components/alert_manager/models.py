@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .const import (
     ATTRIBUTE_SOURCES,
+    BLUEPRINT_OVERRIDE_FIELDS,
     LEGACY_ATTRIBUTE_SOURCES,
     LEGACY_RULE_SOURCES,
     MAX_DELAY,
@@ -706,7 +707,8 @@ class Rule:
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
     version: int = 2
-    blueprint: dict[str, Any] | None = None
+    # Blueprint metadata does not change the effective detection definition.
+    blueprint: dict[str, Any] | None = field(default=None, compare=False)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -775,7 +777,14 @@ class Rule:
             if (
                 not isinstance(provenance, dict)
                 or set(provenance)
-                - {"id", "version", "managed", "overrides", "excluded_entities"}
+                - {
+                    "id",
+                    "version",
+                    "managed",
+                    "overrides",
+                    "excluded_entities",
+                    "defaults",
+                }
                 or not isinstance(provenance.get("id"), str)
                 or not 1 <= len(provenance["id"].strip()) <= 128
                 or type(provenance.get("version")) is not int
@@ -787,7 +796,9 @@ class Rule:
             exclusions = provenance.get("excluded_entities", [])
             if (
                 not isinstance(overrides, dict)
-                or set(overrides) - {"value", "duration"}
+                or set(overrides) - BLUEPRINT_OVERRIDE_FIELDS
+                or not isinstance(provenance.get("defaults", {}), dict)
+                or set(provenance.get("defaults", {})) - BLUEPRINT_OVERRIDE_FIELDS
                 or not isinstance(exclusions, list)
                 or len(exclusions) > MAX_RULE_ENTITY_IDS
                 or any(

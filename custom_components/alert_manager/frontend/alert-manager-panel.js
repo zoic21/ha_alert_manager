@@ -4898,14 +4898,23 @@ async function switchRuleEditor() {
     if (this._ruleEditorMode === "visual") {
       this._captureRuleDraft();
       if (this._editingRule?.blueprint?.managed) {
-        const { value, duration, ...settings } = ruleDraftUpdate(this._editingRule);
-        const overrides = { duration };
-        if (!["jinja", "unchanged"].includes(this._editingRule.source)
-          && this._editingRule.operator !== "unchanged") overrides.value = value;
+        const draft = this._editingRule;
+        const payload = ruleDraftUpdate(draft);
+        const validated = await this._call({
+          type: "alert_manager/rules/yaml/validate", rule_id: draft.id,
+          yaml: Object.entries(payload).map(([key, item]) => `${key}: ${JSON.stringify(item)}`).join("\n"),
+        }, "");
+        if (this._editingRule !== draft || this.isConnected === false) return;
+        if (!validated) {
+          this._ruleEditorError = consumeRuleEditorNotice(this, this._t("rules.yaml_invalid"));
+          this._refreshRuleEditor();
+          return;
+        }
+        this._editingRule = { ...validated, id: draft.id };
+        const overrides = Object.entries(validated.blueprint?.overrides ?? {});
         this._ruleYaml = [
-          ...Object.entries(settings).map(([key, item]) => `${key}: ${JSON.stringify(item)}`),
-          "override:",
-          ...Object.entries(overrides).map(([key, item]) => `  ${key}: ${JSON.stringify(item)}`),
+          `enabled: ${JSON.stringify(validated.enabled ?? true)}`,
+          ...(overrides.length ? ["override:", ...overrides.map(([key, item]) => `  ${key}: ${JSON.stringify(item)}`)] : []),
         ].join("\n") + "\n";
       } else {
         this._ruleYaml = ruleToYaml(this._editingRule ?? newRuleDefaults());

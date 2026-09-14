@@ -286,7 +286,7 @@
       "managed_settings": "Surcharges ou exclusions invalides (50 exclusions maximum).",
       "managed_selection": "Sélectionnez uniquement des entités actuelles ou découvertes ; une entité ne peut pas être également exclue.",
       "rule_level_invalid": "Le niveau doit être Alerte ou Information.",
-      "managed_yaml_overrides": "override doit contenir uniquement duration et/ou value, sans répéter ces champs à la racine."
+      "managed_yaml_overrides": "override accepte uniquement name, level, label_ids, duration et value, sans les répéter à la racine. enabled reste à la racine."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -982,7 +982,7 @@
       "invalid": "Le nouveau blueprint est incompatible avec les surcharges enregistrées. Ajustez-les ou prenez le contrôle avant d’appliquer.",
       "monitored": "À surveiller",
       "excluded": "À exclure",
-      "yaml_help": "Les champs sous override remplacent les réglages du blueprint (durée et seuil si applicable). La règle reste gérée par son blueprint ; les champs omis conservent leur valeur actuelle.",
+      "yaml_help": "enabled reste indépendant. override contient uniquement vos personnalisations (name, level, label_ids, duration, value). Retirez un champ de ce bloc pour rétablir sa valeur héritée du blueprint.",
       "applied": "Les changements du blueprint ont bien été appliqués."
     }
   },
