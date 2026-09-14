@@ -10,9 +10,6 @@ before a stable release are intentionally omitted.
 Current development build: **2.4.0-dev.24**, published on **2026-09-14**.
 This is a prerelease for testing, not a stable release.
 
-- Removed the experimental custom-rule blueprint feature entirely, including generation,
-  update checks, managed overrides, interface and documentation. Use the visual or
-  YAML editor to create and edit ordinary custom rules; no migration is introduced.
 - Keep custom-rule information icons after the title with 10 px spacing,
   vertical centering and consistent sizing.
 - Keep grouped dashboard icons beside the text and open the matching device alerts
@@ -58,11 +55,6 @@ This is a prerelease for testing, not a stable release.
 - Preserve compatible alert identities, acknowledgements, history and occurrence evidence
   during edits/imports. Disabled monitoring cancels affected notifications and timers
   without announcing recovery. Configuration exports now use version 2 and retain rule IDs.
-- Added a YAML blueprint generator for editable custom rules, with on-demand entity
-  discovery and built-in CPU, memory, disk and temperature recipes, including
-  compatible device CPU/memory sensors alongside System Monitor.
-  Its action is grouped beside manual rule creation with a dedicated icon.
-  Existing generated rules can be regenerated after an explicit overwrite warning.
 - Added native Companion notification icons for new alerts, reminders and recoveries,
   including batches and profile tests. Supported mobile targets use text-only titles;
   other targets and notification groups retain the existing title emojis.
