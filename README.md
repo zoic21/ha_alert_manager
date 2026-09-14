@@ -8,380 +8,94 @@
 
 # Alert Manager for Home Assistant
 
-**Know when something is wrong in Home Assistant — and keep it visible until it is fixed.**
+**Know when something is wrong — and keep it visible until it is fixed.**
 
-Alert Manager turns abnormal situations in Home Assistant into issues you can actually follow. Instead of spreading the logic across templates, automations, notifications and dashboard cards, you define what “not normal” means and Alert Manager keeps track of it from detection to resolution.
+Alert Manager brings Home Assistant problems into one place: unavailable devices, low batteries, failed automations, unexpected values or broken configuration references. It follows each alert from detection to resolution, instead of leaving you with a notification that is easy to miss.
 
-It can also look for **broken entity references in your Home Assistant configuration**, helping you find leftovers after an entity is renamed or removed.
-
-Typical examples:
-
-- an entity has been `unavailable` for more than 15 minutes;
-- a battery drops below 15%;
-- a connectivity sensor stays `off`;
-- a UniFi device stays `not_home`;
-- an automation or script finishes with an error;
-- a fridge consumes more than 200 W for 2 hours;
-- a temperature remains outside an expected range;
-- a value or attribute stops changing for too long;
-- an automation or dashboard still references an entity that no longer exists;
-- any custom state, attribute or Jinja-based condition you want to monitor.
-
-The important difference from a simple notification is that a problem **remains visible until it is resolved**.
-
-## What Alert Manager gives you
-
-- **A central alert dashboard** for active, upcoming and acknowledged problems.
-- **Automatic monitoring** for common Home Assistant failures such as unavailable entities, connectivity, low batteries, UniFi devices, and failed automations or scripts.
-- **Powerful custom rules** for states, attributes, ranges, inactivity and Jinja conditions.
-- **Configuration coherence checks** to find references to missing entities and jump back to the affected configuration when possible.
-- **Alert acknowledgement and history** so temporary handling does not hide the real state of your installation.
-- **Optional notification profiles** for new alerts, reminders and recoveries, with batching and label-based exceptions.
-- **Search, filters, sorting, grouping and customizable columns**, with a responsive mobile view.
-- **Exclusions and delays** to keep expected situations and short glitches from becoming noise.
-- **YAML export and automatic configuration backups** with guided recovery if the saved configuration becomes invalid.
-- **Home Assistant entities and events** so Alert Manager can feed your own dashboards and notification automations.
-- **French and English UI**.
-
-Use the built-in profiles to send notifications through Home Assistant’s native `notify` entities without writing an automation, or keep your own event-based notification automations. You decide who gets notified, how and when.
-
-## Screenshots
-
-### Overview
+[Installation](#installation) · [User guide](docs/user-guide.md) · [Report an issue](https://github.com/zoic21/ha_alert_manager/issues)
 
 <p align="center">
-  <img src="docs/assets/screenshots/overview.webp" alt="Alert Manager overview">
+  <img src="docs/assets/screenshots/dashboard.png" alt="Alert Manager overview with current alerts">
 </p>
+
+## Features
+
+| Area | What you can do |
+| --- | --- |
+| Automatic monitoring | Detect unavailable entities, connectivity failures, low batteries, UniFi devices away from home, automation/script errors and repeated instability. Adjust delays and exclusions to avoid noise. |
+| Custom rules | Monitor states, attributes, thresholds, ranges, inactivity, variations, transitions and Jinja conditions. Edit visually or in YAML, duplicate rules and test them against current values, including matching notification profiles. |
+| Alert management | Search, filter and group alerts; acknowledge them indefinitely or temporarily; inspect their details, notification deliveries and previous occurrences. Explore history and recurrence statistics. |
+| Dashboard card | Display a compact, responsive view grouped by device, with label filtering, a tile limit, alignment and icon color. The card hides when there are no matching alerts and opens the relevant details on click. |
+| Notifications | Configure optional profiles with several recipients, new alerts, recoveries, reminders, batching and ordered label exceptions. Edit profiles in YAML, duplicate them or send a test. |
+| Configuration coherence | Find missing static entity references and invalid ZHA device references, scan on demand or on a schedule, and optionally raise an alert for unresolved findings. |
+| Configuration and automation | Use Home Assistant labels, YAML import/export, automatic configuration backups, monitoring entities and lifecycle events for your own automations. |
+
+The interface is available in **English and French**, on desktop and mobile. All authenticated users can read the card, Overview and History; configuration and all actions, including acknowledgement, require an administrator.
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
+### Dashboard card
+
+<img src="docs/assets/screenshots/card.png" alt="Compact Alert Manager dashboard card">
+
+### Upcoming alerts
+
+<img src="docs/assets/screenshots/incomming.png" alt="Alerts waiting for their trigger delay">
+
 ### History
 
-<p align="center">
-  <img src="docs/assets/screenshots/history.webp" alt="Alert Manager history">
-</p>
-
-### Automatic monitoring
-
-<p align="center">
-  <img src="docs/assets/screenshots/automatic-monitoring.webp" alt="Alert Manager automatic monitoring">
-</p>
+<img src="docs/assets/screenshots/history.png" alt="Alert history and filtering">
 
 ### Custom rules
 
-<p align="center">
-  <img src="docs/assets/screenshots/custom-rules.webp" alt="Alert Manager custom rules">
-</p>
+<img src="docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules in Alert Manager">
 
 ### Configuration coherence
 
-<p align="center">
-  <img src="docs/assets/screenshots/coherence.png" alt="Alert Manager configuration coherence">
-</p>
-
-### Rule editor
-
-<p align="center">
-  <img src="docs/assets/screenshots/rule-editor.webp" width="520" alt="Alert Manager rule editor">
-</p>
+<img src="docs/assets/screenshots/coherence.png" alt="Configuration coherence results">
 
 ### Configuration
 
-<p align="center">
-  <img src="docs/assets/screenshots/configuration.webp" alt="Alert Manager configuration">
-</p>
+<img src="docs/assets/screenshots/configuration.png" alt="Alert Manager configuration">
 
 </details>
 
-The **Value** (`source: value`), **Variation** (`source: value_variation`) and **Transition** (`source: value_transition`) operations share an optional `attribute`: empty or omitted targets the state; filled targets that attribute. A missing entity attribute never falls back to state. Nested paths are supported; wildcard paths are limited to regular comparisons. Jinja and No change keep their existing behavior.
-
-Storage and YAML imports automatically migrate legacy sources: `state`/`attribute` → `value`, `variation`/`state_variation`/`attribute_variation` → `value_variation`, `transition`/`attribute_transition` → `value_transition`. Stale attributes on legacy state sources are cleared; legacy attribute sources without a valid attribute are rejected. Rule identities, alerts and history are preserved. Active alert sources and their display parameters are migrated during storage loading, before startup reconciliation. The runtime uses only canonical sources; historical snapshots remain unchanged.
-
-**Transition** (`source: value_transition`, with optional `attribute`) observes a specific `from_value` → `to_value` edge. The trigger delay (`duration`, default 0 seconds) requires continuous arrival-value maintenance before activation; leaving that value cancels the hold and requires a new matching edge. Unrelated attribute updates do not restart the hold.
-
-`auto_resolve` (default 600 seconds, minimum 1) starts at activation. Leaving the arrival value afterward does not resolve the alert. Another confirmed transition extends the deadline on the same alert and preserves its acknowledgment. Details/history retain the observed values and last transition; expiration is marked as automatic and sends no recovery notification. Existing start/reminder routing still applies.
-
-Initial discovery, reloads and startup grace never infer a transition. Unknown/unavailable states and missing attributes cannot arm a hold. Pending holds are not restored and a monitoring pause requires a fresh edge; active/acknowledged deadlines survive a restart. The tester reports that a current value cannot prove an edge and has no runtime side effects.
-
-
 ## Installation
+
+Requires **Home Assistant 2026.8 or newer**. One Alert Manager instance is supported per Home Assistant installation.
 
 ### HACS
 
-Until Alert Manager is available in the default HACS catalog:
+1. In **HACS → Custom repositories**, add `https://github.com/zoic21/ha_alert_manager` with category **Integration**.
+2. Install **Alert Manager** and restart Home Assistant.
+3. Open **Settings → Devices & services → Add integration** and search for **Alert Manager**.
 
-1. Open **HACS → Custom repositories**.
-2. Add `https://github.com/zoic21/ha_alert_manager` as an **Integration**.
-3. Install **Alert Manager**.
-4. Restart Home Assistant.
-5. Go to **Settings → Devices & services → Add integration** and search for **Alert Manager**.
+The panel appears in the Home Assistant sidebar. No YAML configuration is required.
 
-The **Alert Manager** panel then appears in the Home Assistant sidebar.
+<details>
+<summary>Manual installation</summary>
 
-### Manual installation
+Copy `custom_components/alert_manager` to `/config/custom_components/alert_manager`, restart Home Assistant, then add **Alert Manager** from **Settings → Devices & services**.
 
-1. Copy `custom_components/alert_manager` to `/config/custom_components/alert_manager`.
-2. Restart Home Assistant.
-3. Add **Alert Manager** from **Settings → Devices & services**.
+</details>
 
-No Lovelace resource and no YAML configuration are required to get started.
+### Add the dashboard card
 
-## Dashboard card
-
-The integration includes **Alert Manager** in the dashboard card picker. No separate
-HACS frontend installation or manual Lovelace resource is needed. Refresh your browser
-after installing or updating the integration. All authenticated users can view the card, Overview and History, including alert
-details and history statistics. Other tabs and all actions, including acknowledgement,
-require an administrator. Non-administrators do not load integration configuration.
-
-The visual editor offers a maximum tile count (5 by default, 1–100) and an optional
-label filter. Labels match the alert's pack/rule labels or its entity labels, using
-the same semantics as the panel. Matching active, unacknowledged alerts are grouped
-by device before applying the limit. A single alert opens its details; a grouped
-tile opens the device-filtered list. The compact +N tile opens the matching alerts; N counts the remaining alerts.
-
-Tiles are capped at 300 px and wrap on narrow screens. The visual editor also offers
-left/center/right alignment (left by default) and an optional icon color from Home Assistant’s native palette. Without
-a custom color, icons follow the Home Assistant theme.
+Choose **Alert Manager** in the dashboard card picker. No separate frontend installation or manual Lovelace resource is needed; refresh your browser after installing or updating the integration.
 
 ```yaml
 type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
-# icon_color: red
-# Optional Home Assistant label ID:
-# label: maintenance
 ```
 
-With no matching alerts the card hides using Home Assistant's native card visibility
-mechanism, including its wrapper in standard Sections and Masonry views. Custom layout
-cards may handle visibility differently. During startup, known active alerts remain visible
-with a compact hourglass indicating that reevaluation is in progress. The hourglass shares
-the overflow bubble when more alerts are hidden; clicking it opens the filtered Overview.
-On mobile, the bubble stays beside the last visible alert, which narrows to make room.
-Startup with no matching alerts displays nothing. Loading, disabled monitoring and
-unavailability remain visible. An empty-data example is displayed only in the editor
-outside startup.
+## Using Alert Manager
 
+Start in **Configuration → Automatic monitoring**, adjust the enabled packs and their delays, then add custom rules for situations specific to your installation. Notification profiles are optional; your own event-based automations can be used instead.
 
-## Automatic monitoring
+The **[user guide](docs/user-guide.md)** covers rule examples, transitions, card options and startup behavior, notification routing, temporary acknowledgement, history statistics, coherence scans, YAML and recovery. A **[French guide](docs/user-guide.fr.md)** is also available.
 
-Open **Configuration → Automatic monitoring** to enable and configure the packs that watch common Home Assistant problems:
+Questions, bugs and monitoring ideas are welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
 
-| Monitor | Alert condition |
-| --- | --- |
-| Unavailable entities | entity stays `unavailable` |
-| Connectivity | `binary_sensor` with `device_class: connectivity` stays `off` |
-| Low battery | battery sensor reaches the configured threshold |
-| UniFi | UniFi network `device_tracker` stays away from `home` |
-| Automation and script errors | an `automation` or `script` execution finishes with an error |
-| Flapping / instability | the same anomaly occurs repeatedly within a detection window |
-
-Each monitor can be enabled independently. Delays and exclusions can be adjusted from the UI, and battery thresholds can be adapted when some devices need different limits.
-
-Each pack can carry Home Assistant labels (`automatic.<pack>.label_ids` in YAML), so its alerts can be selected by notification profiles and label exceptions. Changing a pack’s labels updates its current alerts; history retains the labels recorded when the alert was resolved.
-
-Automation and script errors have no delay by default. A successful completed execution resolves the alert. For selected automations or scripts, you can require several consecutive failed execution cycles before raising it.
-
-The Flapping pack detects repeated short anomalies per source and entity, even if they clear before the normal trigger delay. It is disabled by default: 5 occurrences within 1 hour trigger a separate alert, which resolves after 30 minutes without another occurrence. These settings can be adjusted globally, per source pack, per entity or per custom rule. Unavailable entities and connectivity are the preselected sources; source packs must be enabled, and custom rules can participate through their flapping option.
-
-Flapping alert details keep the count / threshold visible. A collapsed section reveals the retained occurrence times, grouped by local date in a compact grid. This evidence follows the detector’s bounded rolling window, survives restarts and is saved in resolved history; older alerts without this metadata explicitly indicate that timestamps are unavailable.
-
-## Custom rules
-
-For everything else, create your own rules directly from the Alert Manager panel.
-
-A rule can monitor one or several entities independently and use:
-
-- the entity state or a nested attribute, including array paths such as `data.*.key`;
-- equality, text, numeric threshold, **between** and **outside** comparisons;
-- the variation of the state or a numeric attribute from the moment a Jinja condition becomes true;
-- the absence of any change, or only a specific state or attribute that stops changing;
-- a Jinja condition in addition to a comparison, or Jinja as the complete rule logic.
-
-Delays let you require the situation to persist before it becomes an alert, which prevents short glitches from filling the dashboard. Custom Jinja messages are frozen when the alert activates by default, or can be kept up to date while it remains active.
-
-A Jinja rendering error is indeterminate: it creates no new occurrence and preserves existing alerts, their pending deadlines and the last valid message. Dependencies remain tracked so a relevant change retries the rule. For variation rules, an error neither creates nor resets the baseline; only an explicitly false Jinja condition ends the current window. Errors remain visible in logs and the rule tester.
-
-Example use cases include abnormal temperatures, unexpected power consumption, backup age, error codes, stale sensors, equipment that stopped updating or almost any state Home Assistant exposes.
-
-Rules can be edited visually or in YAML and duplicated from the panel. One rule can monitor up to 50 entities, and one configuration can contain up to 500 rules. Jinja-only YAML rules use `source: jinja`; existing `source: none` rules are migrated automatically.
-
-The **Test** button in the visual editor evaluates the draft against current values and shows, for each entity, the value read, comparison and Jinja condition results, rendered message and any errors. It also lists every profile that would notify a new alert for each entity, using draft, entity and device labels, enabled profiles and their ordered exceptions. This preview remains conditional on an actual trigger and respects the configured delay. It does not save anything, change alerts or their timers, or send notifications. For a variation rule without a compatible baseline, the result remains indeterminate.
-
-Rules can carry Home Assistant labels (`label_ids` in YAML), displayed in the table. For notifications, these complement entity and device labels and apply to both profile filters and label exceptions.
-
-Duration fields throughout the panel use Home Assistant’s native duration selector (hours, minutes and seconds), including optional overrides and notification reminders. Configuration and YAML continue to store seconds; clearing an optional duration retains its inherited/disabled behavior.
-
-On desktop, the rule editor and configuration drawers can be resized in width. They adapt to mobile screens, and closing a modified editor asks for confirmation before discarding changes.
-
-### Examples
-
-#### A thermostat that heats without warming the room
-
-When the thermostat starts heating, the Jinja condition becomes true and Alert Manager stores the initial current_temperature. After two hours, this rule raises an alert if the room has gained less than 0.2 °C. In the message, value is the measured temperature variation.
-
-```yaml
-name: "Thermostat : surveillance"
-enabled: true
-entity_ids:
-  - "climate.tado_smart_thermostat_su0582429440"
-source: "attribute_variation"
-attribute: "current_temperature"
-operator: "below"
-value: "0.2"
-duration: 7200
-message: "Le chauffage {{ state_attr(entity_id, 'friendly_name') }} est en marche depuis 2 h, mais la température n'a augmenté que de {{ value | float(0) | round(1) }} °C."
-update_message_when_active: false
-condition_template: "{{ state.state == 'heating' }}"
-```
-
-#### Bayrol messages, with expected states filtered out
-
-This rule evaluates every message key in the Bayrol data array. It can activate only when none of the expected flow, start-delay and enjoyment states is present; its Jinja condition also requires flow to be present.
-
-```yaml
-name: "Alerte Bayrol"
-enabled: true
-entity_ids:
-  - "sensor.bayrol_messages"
-source: "attribute"
-attribute: "data.*.key"
-operator: "not_contains"
-value:
-  - "al_no_flow_bnc"
-  - "al_start_delay"
-  - "enjoy"
-duration: 5400
-message: "{% if state_attr('sensor.bayrol_messages','data') %}\n{% for item in state_attr('sensor.bayrol_messages','data') %}     \n    {% if item.key not in ['al_no_flow_bnc','enjoy','al_start_delay'] %}       \n      {{ item.message | replace(\"\\n\",\" \") }}  \n    {% endif %}      \n{% endfor %}     \n{% endif %}"
-update_message_when_active: false
-condition_template: "{% set flow = states('binary_sensor.bayrol_flow_contact') %}\n{{ (flow == 'on') }}"
-
-```
-
-## Configuration coherence
-
-The **Coherence** page checks static entity references found in your Home Assistant configuration against the entities that currently exist.
-
-Custom rules (including disabled rules) are checked from an in-memory snapshot: selected entities and static references in Jinja conditions/messages. Dynamic references and plain message text are skipped. Results identify the rule field and the Open button opens its editor; these inputs do not increase the scanned-file count.
-
-When ZHA is fully loaded, the same scan also checks static `device_ieee` addresses in `zha_event` automation triggers and script/automation `wait_for_trigger` steps (modern and legacy syntax). It checks membership in the Home Assistant device registry for ZHA, not availability or current radio-network membership: disabled devices, remotes without entities and stale registered devices still count as present. Other Zigbee integrations do not satisfy these references. Templates, blueprint inputs and malformed IEEE values are skipped; blueprints are not expanded. If ZHA is absent the check is not applicable; incomplete setup or unavailable metadata is reported as a skipped check without missing-device findings. Ignore an exact IEEE address through the existing reference exclusions in Configuration.
-
-When an issue is found, Alert Manager shows where it comes from and, when possible, lets you open the affected automation, script, dashboard, template or other Home Assistant object directly. Results are stored between restarts and can also be exposed through `sensor.alert_manager_coherence_issue` so a failed coherence check can itself become something you monitor.
-
-Scans can run on demand or automatically on a daily, weekly or monthly schedule. ESPHome scanning can be disabled, and known references can be ignored from the configuration page.
-
-The same page also provides the 50 latest deleted entities still retained by Home Assistant, with their deletion date and integration. This is read directly from Home Assistant's entity registry and does not require Alert Manager to maintain its own deletion history.
-
-Enable **Create an alert for coherence issues** under **Configuration → Coherence analysis** to maintain one immediate alert while findings remain. It uses the usual acknowledgment, history and notification profiles. Continuing findings update the same alert; only a complete check confirming recovery resolves it. Failed or incomplete checks cannot clear it. Enabling uses the latest report without starting a scan; disabling removes the alert and reminders without reporting a recovery. The option is off by default and is also available as `coherence_alert_enabled` in configuration YAML.
-
-## Configuration export and recovery
-
-Every configuration side panel also offers **YAML mode** in its three-dot menu: pack overrides (battery thresholds, execution errors and flapping), entity/device exclusions and per-entity delays. The YAML contains only the field edited in that panel, using the same keys as configuration exports and durations in seconds. Switching editors preserves unsaved values and list order. Invalid YAML, unknown fields and invalid settings block saving and returning to the visual editor; closing a changed panel asks for confirmation. Use **Save** to apply changes. Read-only detail and diagnostic panels are not editable.
-
-The complete configuration can be exported and imported as YAML. Alert Manager also keeps the three latest valid daily configuration exports. They can be downloaded or restored from the settings page.
-
-If the stored configuration cannot be loaded at startup, Alert Manager starts safely with defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently. Restoring a complete backup replaces the current configuration, runtime alerts and history.
-
-## Alert lifecycle
-
-An alert can be:
-
-- **Upcoming** while its delay is still running;
-- **Active** once the condition has lasted long enough;
-- **Acknowledged** when you know about the issue but it is not resolved yet;
-- **Resolved** when the abnormal condition disappears.
-
-Resolved alerts can be kept in history, making it easier to spot recurring problems instead of only seeing what is wrong right now.
-
-Use **Statistics** in History to rank alerts, entities, devices, integrations or rules over the last **7 or 30 days**, with occurrence counts and total/average active time. Calculations run on demand from retained resolved history only, independently of the history table filters; durations are clipped to the period and include acknowledged time. Concurrent alerts contribute separately, so the totals do not measure device downtime. Deleted/expired history and ongoing alerts are excluded. Summary counts show occurrences, affected entities and devices, and cumulative duration. The most frequent entity, device and integration are highlighted, with ties indicated. Click a ranking row or a highlighted item to open matching history; use the table’s standard category and active-period filters to adjust or clear the selection.
-
-When retained occurrences exist, alert details show a clickable history count. Clicking it opens History filtered by the stable alert ID; the filter can be changed or cleared.
-
-Select entries in the History table, or use **Delete** in a history entry’s details menu, to delete individual occurrences after confirmation without affecting current alerts.
-
-Selecting an alert opens its details, including the value that triggered it and the current value, with contextual access to the related Home Assistant entity when available. Numeric values use Home Assistant’s display precision for the entity and the user’s number format, without changing the stored values.
-
-Use **Reevaluate** in the details menu of an ongoing alert to check its entity’s current state again. This also reevaluates other alerts for that entity, preserves normal delays and protections, and resolves alerts through the usual history and notification flow. It requires monitoring to be enabled and startup to be complete.
-
-## Notifications without getting spammed
-
-### Built-in notification profiles
-
-In **Configuration → Notifications**, create a named profile, select one or more **`notify` entities**, and choose whether to send new-alert and recovery notifications. Reminders can be disabled or repeated at a configurable interval of at least one minute. Each profile can be enabled independently.
-
-The profile’s three-dot menu switches between the visual editor and **YAML mode**, including ordered exceptions. The unlabeled switch in the header enables or disables the profile. Invalid YAML blocks saving and returning to the visual editor; closing either editor with changes asks for confirmation.
-
-The same menu offers **Duplicate** to prepare an independent copy with a suggested name, preserving recipients, settings and exception order. The copy is created only when saved; usage counters and notification runtime state are not copied.
-
-Save the profile, then use **Test** in its three-dot menu to send a real test notification to its targets without creating an alert. Profiles accept notification entities, not arbitrary actions or scripts; channels exposed only as actions can still be used through your own automations.
-
-### Labels and exceptions
-
-A profile can cover all alerts or only alerts matching at least one selected label. Matching combines the labels of the entity, its device, and the custom rule or automatic pack that produced the alert.
-
-Exceptions require **all selected labels to match (AND)** and override new-alert, recovery or reminder settings. The **first matching exception in list order** takes precedence; settings left inherited keep the profile defaults. In YAML, exceptions use `selector_ids`; existing single-label exceptions using `selector_id` remain accepted.
-
-### Batching, reminders and mobile navigation
-
-New-alert and recovery notifications are grouped separately per profile. The global batching delay is **30 seconds by default**, adjustable from **10 to 300 seconds**. New batches use the configured delay; batches already waiting keep their deadline. If an alert resolves before its queued start notification is sent, that unsent start/recovery pair is discarded.
-
-Due reminders are grouped per profile and stop when an alert is acknowledged or resolved. After a restart, reminders wait until alert reconciliation completes. Only confirmed alerts resume reminders; an overdue deadline restarts from the profile interval, without replaying missed reminders.
-
-Titles distinguish **🚨 new alerts**, **🔔 reminders** and **✅ recoveries**. With a supported Home Assistant Companion target, tapping a notification opens the alert details for a single ongoing alert, the overview for several ongoing alerts, or **History** for recoveries. Generic notification delivery sends the title and message without appending a raw navigation URL.
-
-### Per-alert notification details
-
-Each profile shows its successful sends for the current hour and previous 23 hours (an approximate 24-hour window), since integration startup. These counters are kept only in memory and reset on restart/reload. A grouped send counts once even with several targets; tests and complete failures are excluded.
-
-Alert details track activation and reminder notifications separately, each with its delivery count, matching profiles and last delivery time. Reminder-only profiles appear under reminders. A zero count means no successful delivery of that type. A batch counts once per profile and alert when at least one target succeeds; tests and complete failures are excluded. History also keeps recovery deliveries, their profiles and last delivery time separately. Older combined activation/reminder totals are retained under Activation. These details survive restarts, stay hidden for pending alerts, and do not reconstruct past deliveries. Notifications sent by external automations are not counted.
-
-### Using your own notification automations
-
-Built-in profiles are optional. Per-alert Home Assistant events remain available for your own notification logic.
-
-## Home Assistant entities and events
-
-Alert Manager exposes dedicated entities so its state can also be used outside the built-in panel:
-
-- `switch.alert_manager_main_monitoring`
-- `sensor.alert_manager_main_active`
-- `sensor.alert_manager_main_pending`
-- `sensor.alert_manager_main_acknowledge`
-- `sensor.alert_manager_coherence_issue`
-
-Useful events include:
-
-- `alert_manager_alert_started`
-- `alert_manager_alert_resolved`
-- `alert_manager_alert_acknowledged`
-- `alert_manager_alert_unacknowledged`
-
-Alert acknowledgement is also available through `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
-
-The active alert details ⋮ menu also offers **Acknowledge temporarily…**: 15 min, 30 min, 1 h, 24 h or a custom duration in minutes, hours or days (up to one year). The details stay open and show the remaining time; click it for the exact deadline. Regular acknowledgement remains unlimited.
-
-At expiry, an ongoing alert becomes active again without changing its identity or start time. Profiles allowing new-alert notifications are notified again, even without reminders configured. Resolution or manual unacknowledgement cancels the deadline. It survives restarts and is processed after startup reconciliation; while monitoring is disabled, expiry waits for monitoring to resume without shifting the deadline.
-
-### Runtime diagnostics
-
-Configuration includes a compact diagnostic block for custom-rule evaluation count, average/maximum/total processing time, alert transitions and successful profile sends. One measured evaluation is one rule/entity pair, including its condition, with no asynchronous waiting. Tests, automatic packs and coherence scans are excluded from timing; this does not measure Home Assistant event-loop load. Activity counts actual transitions (including repeated occurrences), not current alert totals; immediate activations are not counted as pending and restored alerts are not counted again. Exactly 24 hourly aggregate buckets are held in memory, with no samples, persistence or rotation timer. The displayed observation period starts at integration startup or the oldest retained hour, whichever is later.
-
-## Requirements
-
-- Home Assistant **2026.8 or newer**.
-- One Alert Manager instance per Home Assistant installation.
-- Administrator access is required for configuration and all actions; other users have read-only access to Overview and History.
-
-Alert Manager is an unofficial community integration and is not affiliated with the Home Assistant project.
-
-## Note
-
-This code was written partly with the help of AI.
-
-## Feedback
-
-Alert Manager is actively evolving and real-world installations are the best way to find edge cases.
-
-Bug reports, ideas and unusual monitoring use cases are very welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
+Alert Manager is an unofficial community integration, not affiliated with Home Assistant. This code was written partly with the help of AI.
