@@ -5,9 +5,9 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.4 — Development prerelease
+## 2.4 — Beta prerelease
 
-Current development build: **2.4.0-dev.38**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.1**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
@@ -18,6 +18,9 @@ This is a prerelease for testing, not a stable release.
   duration in the timeline heading; hide redundant transition markers and order
   simultaneous events. Keep recorded units beside timeline values and use only
   the dialog scroll, with a neutral timeline header when expanded or clicked.
+  Place pending countdowns in the heading and future expiration/acknowledgement
+  deadlines beneath their lifecycle events, without a separate footer or redundant
+  sequence detection/progress entries.
 
 - Show sequence evidence immediately when opening active or historical alerts,
   and prevent delayed history responses from restoring stale pending details.

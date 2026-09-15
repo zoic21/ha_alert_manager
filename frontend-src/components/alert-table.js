@@ -903,7 +903,7 @@ export function alertDetailsItems(kind, row) {
       ...(row.source?.condition_params?.resolution_reason === "monitoring_disabled" ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("automatic.administrative_resolution") }] : []),
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
-      ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
+      ...(kind !== "history" && row.status !== "pending" && row.expiresAt ? [{ key: "expires", label: this._t("alert_details.resolution_scheduled", { date: this._date(row.expiresAt) }), value: row.expiresAt }] : []),
       ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
       this._readOnly ? { key: "entity-id", label: this._t("table.columns.entity_id"), value: row.entityId } : linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
@@ -985,13 +985,13 @@ export function alertDetailsItems(kind, row) {
         },
       );
     } else if (row.status === "pending") {
-      items.push({
+      if (!row.sequenceProgress) items.push({
         key: "remaining",
-        label: this._t(row.sequenceProgress ? "alert_details.sequence_progress_label" : "overview.remaining"),
+        label: this._t("overview.remaining"),
         value: this._monitoringEnabled
-          ? (row.sequenceProgress || this._remaining(row.due))
+          ? this._remaining(row.due)
           : this._t("table.monitoring_suspended"),
-        due: this._monitoringEnabled && !row.sequenceProgress ? row.due : null,
+        due: this._monitoringEnabled ? row.due : null,
       });
     } else {
       items.push({
@@ -1015,11 +1015,11 @@ export function alertDetailsItems(kind, row) {
           : "",
       });
     }
-    if (kind === "overview" && row.acknowledged) {
+    if (kind === "overview" && row.acknowledged && row.acknowledgedUntil) {
       items.push({
         key: "acknowledged-until",
-        label: this._t("timed_acknowledgement.until"),
-        value: row.acknowledgedUntil || this._t("timed_acknowledgement.unlimited"),
+        label: this._t("alert_details.acknowledged_until", { date: this._date(row.acknowledgedUntil) }),
+        value: row.acknowledgedUntil,
         datetime: row.acknowledgedUntil,
         relative: true,
       });
@@ -1121,9 +1121,14 @@ export function renderAlertDetails(context) {
     const valueCaption = (value) => value === undefined || value === null || value === "" ? "" : `${summary.valueLabel} ${value}`;
     const resolutionReason = timeline.find((item) => item.key === "resolution_reason");
     const duration = timeline.find((item) => item.key === "duration");
+    const remaining = timeline.find((item) => item.key === "remaining");
     const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged"]);
-    const events = timeline.filter((item) => eventKeys.has(item.key))
+    const events = timeline.filter((item) => eventKeys.has(item.key) && !(sequence && item.key === "detected"))
       .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.key === "resolved" ? resolutionReason?.value || "" : item.suffix || "", type: item.key }));
+    for (const event of events) {
+      const deadlineKey = event.key === "activated" ? "expires" : event.key === "acknowledged" ? "acknowledged-until" : null;
+      event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
+    }
     for (const step of sequence?.steps ?? []) events.push({
       ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
       label: valueCaption(step.value), condition: "",
@@ -1174,17 +1179,17 @@ export function renderAlertDetails(context) {
     ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
     <ha-card outlined class="alert-details-card">
       <ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-alert-timeline ${summary.timelineExpanded ? "expanded" : ""}>
-        <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : ""}</span>
+        <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : remaining ? ` · <span${remaining.due ? ` data-due="${esc(remaining.due)}"` : ""}>${esc(remaining.value)}</span>` : ""}</span>
         <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
           <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
             ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
           </div>
           ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+          ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
         </li>`).join("")}</ol>
         ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
         ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
       </ha-expansion-panel>
-      <dl class="alert-details-list">${renderItems(timeline.filter((item) => !eventKeys.has(item.key) && !["duration", "resolution_reason", "last_occurrence"].includes(item.key)))}</dl>
     </ha-card>
     ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }

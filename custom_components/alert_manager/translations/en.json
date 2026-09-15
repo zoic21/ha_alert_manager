@@ -33,6 +33,8 @@
       "detection": "Detection",
       "resolution": "Resolution",
       "activation": "Activation",
+      "resolution_scheduled": "Automatic resolution scheduled for {date}",
+      "acknowledged_until": "Until {date}",
       "value_prefix": "Value:",
       "activated_at": "Activated at",
       "timeline_notification_alert": "Start notification",

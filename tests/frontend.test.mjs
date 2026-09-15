@@ -190,14 +190,14 @@ test("timed acknowledgement dialog stays above details without replacing them", 
   }
 });
 
-test("timed acknowledgement details default to a live relative deadline", () => {
+test("timed acknowledgement deadline is a caption and unlimited acknowledgement has none", () => {
   const panel = tablePanel();
   const alert = panel._alerts.acknowledge[0];
   alert.acknowledged_until = "2026-09-05T18:00:00+00:00";
   const row = panel._tableRows("overview").find((item) => item.status === "acknowledged");
-  assert.match(panel._renderAlertDetails("overview", row), /data-detail-key="acknowledged-until"[\s\S]*data-timestamp-mode="relative"/);
+  assert.ok(panel._renderAlertDetails("overview", row).includes(`Jusqu’à ${panel._date(row.acknowledgedUntil)}`));
   row.acknowledgedUntil = "";
-  assert.match(panel._renderAlertDetails("overview", row), /Sans limite de durée/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /Sans limite de durée|Jusqu’à/);
   assert.doesNotMatch(panel._renderAlertDetails("history", row), /data-detail-key="acknowledged-until"/);
 });
 
@@ -1603,7 +1603,12 @@ test("pending alert details keep their remaining time live", () => {
   const row = panel._tableRows("overview").find((item) => item.status === "pending");
   const html = panel._renderAlertDetails("overview", row);
 
-  assert.match(html, /data-detail-key="remaining"[\s\S]*data-due="2099-08-26T12:15:00Z"/);
+  assert.match(html, /slot="header">Chronologie · <span data-due="2099-08-26T12:15:00Z"/);
+  assert.doesNotMatch(html, /data-detail-key="remaining"/);
+  panel._monitoringEnabled = false;
+  const paused = panel._renderAlertDetails("overview", row);
+  assert.doesNotMatch(paused, /data-due=/);
+  assert.ok(paused.includes(panel._t("table.monitoring_suspended")));
 });
 
 test("alert detail timestamps reuse Home Assistant absolute and relative time", async () => {
@@ -5780,7 +5785,7 @@ test("pending sequences show progress and evidence without an activation countdo
   assert.equal(row.sequenceProgress, "1/2 étapes validées");
   assert.match(row.condition, /en attente de l’étape 2/);
   const markup = panel._renderAlertDetails("overview", row);
-  assert.match(markup, /Progression de la séquence/);
+  assert.doesNotMatch(markup, /Progression de la séquence|data-detail-key="remaining"|data-event-type="detected"/);
   assert.match(markup, /data-alert-timeline/);
   assert.doesNotMatch(markup, /data-due=/);
   const timeline = panel._nativeTimelineCell(row);
@@ -5814,7 +5819,7 @@ test("unified timeline orders lifecycle and profile sends and summarizes reminde
   assert.match(panel._renderAlertDetails("overview", { ...row, activated: row.detected }), /data-event-type="detected"/);
 });
 
-test("sequence timeline titles describe steps and simultaneous completion precedes detection", () => {
+test("sequence timeline shows steps before activation without redundant detection", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   const at = "2026-09-15T12:31:15Z";
@@ -5834,11 +5839,9 @@ test("sequence timeline titles describe steps and simultaneous completion preced
     assert.match(events[0], /data-event-type="step"/);
     assert.match(events[0], /alert-details-sequence-value">Étape 1 terminée · égal à 3 · 0 s/);
     assert.match(events[0], /alert-details-sequence-caption"><span>Valeur : 0<\/span>/);
-    assert.match(events[1], /data-event-type="detected"/);
-    assert.match(events[1], /alert-details-sequence-value">Détection</);
-    assert.match(events[1], /alert-details-sequence-caption"><span>Valeur : 3<\/span>/);
-    assert.match(events[2], /data-event-type="activated"/);
-    assert.match(events[2], /alert-details-sequence-value">Activation</);
+    assert.doesNotMatch(html, /data-event-type="detected"/);
+    assert.match(events[1], /data-event-type="activated"/);
+    assert.match(events[1], /alert-details-sequence-value">Activation</);
   }
   const transition = panel._renderAlertDetails("overview", { ...row, source: { source: "value_transition" } });
   assert.doesNotMatch(transition, /last_occurrence|Dernière transition/);
@@ -5889,4 +5892,22 @@ test("timeline values retain recorded units for transitions and sequence steps",
   assert.match(styles, /\.alert-details-occurrence-panel::part\(summary\)\{background:var\(--card-background-color\)/);
   const timelineStyle = styles.match(/\.alert-details-sequence-timeline\{([^}]+)\}/)[1];
   assert.doesNotMatch(timelineStyle, /max-height|overflow-y:auto|overflow:auto/);
+});
+
+
+test("timeline deadlines belong to lifecycle captions and unlimited acknowledgement stays silent", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const row = { ...base, status: "acknowledged", acknowledged: true,
+    acknowledgedAt: "2026-09-15T12:30:00Z", acknowledgedBy: "Loïc",
+    acknowledgedUntil: "2026-09-15T13:30:00Z", expiresAt: "2026-09-15T14:30:00Z" };
+  const markup = panel._renderAlertDetails("overview", row);
+  const entries = [...markup.matchAll(/<li class="alert-details-sequence-step"[\s\S]*?<\/li>/g)].map(match => match[0]);
+  assert.match(entries.find(entry => entry.includes('data-event-type="activated"')), /Résolution automatique prévue à/);
+  const acknowledged = entries.find(entry => entry.includes('data-event-type="acknowledged"'));
+  assert.match(acknowledged, /Jusqu’à/);
+  assert.match(acknowledged, /Loïc/);
+  assert.doesNotMatch(markup, /alert-details-list|data-detail-key="expires"|data-detail-key="acknowledged-until"/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, acknowledgedUntil: null }), /Jusqu’à|illimitée/);
+  assert.doesNotMatch(panel._renderAlertDetails("history", row), /Résolution automatique prévue à|Jusqu’à/);
 });
