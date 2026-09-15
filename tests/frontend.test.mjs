@@ -5624,7 +5624,7 @@ test("flapping evidence shares the collapsed timeline and is retained on refresh
     assert.match(markup, /Occurrence d’instabilité/);
     assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
     assert.equal((markup.match(/data-event-type="flapping"/g) || []).length, 3);
-    assert.ok(markup.indexOf("data-alert-timeline") < markup.indexOf(">Chronologie<"));
+    assert.ok(markup.indexOf("data-alert-timeline") < markup.indexOf('slot="header">Chronologie'));
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
   assert.match(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
@@ -5841,5 +5841,26 @@ test("sequence timeline titles describe steps and simultaneous completion preced
     assert.match(events[2], /alert-details-sequence-value">Activation</);
   }
   const transition = panel._renderAlertDetails("overview", { ...row, source: { source: "value_transition" } });
-  assert.match(transition, /data-event-type="last_occurrence"/);
+  assert.doesNotMatch(transition, /last_occurrence|Dernière transition/);
+});
+
+
+test("timeline places resolution reason and duration inline and shows recorded transition values", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const source of ["value_transition", "attribute_transition", "transition"]) {
+    const row = { ...base, value: "2", duration: 60, automaticResolution: true,
+      resolved: "2026-09-15T12:32:15Z", lastOccurrence: "2026-09-15T12:31:15Z",
+      source: { source, condition_params: { from_value: 0, to_value: 2 } } };
+    const html = panel._renderAlertDetails("history", row);
+    assert.match(html, /slot="header">Chronologie · 1 min<\/span>/);
+    assert.match(html, /Valeur : 0 → 2/);
+    assert.match(html, /data-event-type="resolved"[\s\S]*?sequence-value">Résolution<\/span>[\s\S]*?sequence-caption"><span>Expiration automatique<\/span>/);
+    assert.doesNotMatch(html, /data-detail-key="(?:duration|resolution_reason|last_occurrence)"|Dernière transition/);
+    const active = panel._renderAlertDetails("overview", row);
+    assert.match(active, /slot="header">Chronologie<\/span>/);
+    const legacy = panel._renderAlertDetails("history", { ...row, source: { source } });
+    assert.match(legacy, /Valeur : 2<\/span>/);
+    assert.doesNotMatch(legacy, /undefined|null/);
+  }
 });

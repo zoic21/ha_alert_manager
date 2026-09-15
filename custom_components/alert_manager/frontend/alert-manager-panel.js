@@ -2085,6 +2085,11 @@ function alertDetailsItems(kind, row) {
       action,
       data,
     });
+    const transition = TRANSITION_RULE_SOURCES.has(row.source?.source)
+      || row.source?.condition_key === "rule.transition";
+    const transitionParams = row.source?.condition_params ?? {};
+    const transitionValue = transition && transitionParams.from_value != null && transitionParams.to_value != null
+      ? `${transitionParams.from_value} → ${transitionParams.to_value}` : row.value;
     const flapping = row.source?.type === "flapping";
     const params = flapping ? row.source.condition_params ?? {} : {};
     const occurrenceDates = (Array.isArray(params.occurrences) ? params.occurrences : [])
@@ -2107,7 +2112,6 @@ function alertDetailsItems(kind, row) {
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
-      ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence), datetime: row.lastOccurrence }] : []),
       ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
       this._readOnly ? { key: "entity-id", label: this._t("table.columns.entity_id"), value: row.entityId } : linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
@@ -2141,7 +2145,7 @@ function alertDetailsItems(kind, row) {
         label: this._t(flapping ? "alert_details.flapping_occurrences" : "alert_details.trigger_value"),
         value: flapping && Number.isInteger(params.threshold) && params.threshold >= 2
           ? `${params.count ?? row.value} / ${params.threshold}`
-          : row.value,
+          : transitionValue,
       },
       {
         key: "detected",
@@ -2178,7 +2182,7 @@ function alertDetailsItems(kind, row) {
         },
         {
           key: "resolved",
-          label: this._t("table.columns.resolved"),
+          label: this._t("alert_details.resolution"),
           value: this._date(row.resolved),
           datetime: row.resolved,
         },
@@ -2321,10 +2325,11 @@ function renderAlertDetails(context) {
     const sequence = items.find((item) => item.key === "sequence-steps");
     const triggerValue = items.find((item) => item.key === "trigger-value");
     const valueCaption = (value) => value === undefined || value === null || value === "" ? "" : `${summary.valueLabel} ${value}`;
-    const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged", "last_occurrence"]);
+    const resolutionReason = timeline.find((item) => item.key === "resolution_reason");
+    const duration = timeline.find((item) => item.key === "duration");
+    const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged"]);
     const events = timeline.filter((item) => eventKeys.has(item.key))
-      .filter((item) => item.key !== "last_occurrence" || !sequence)
-      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.suffix || "", type: item.key }));
+      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.key === "resolved" ? resolutionReason?.value || "" : item.suffix || "", type: item.key }));
     for (const step of sequence?.steps ?? []) events.push({
       ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
       label: valueCaption(step.value), condition: "",
@@ -2352,7 +2357,7 @@ function renderAlertDetails(context) {
           value: stats.timelineLabel, label: `${stats.value} · ${profiles}` });
       }
     }
-    const eventOrder = { step: 0, flapping: 0, last_occurrence: 1, detected: 2, activated: 3, acknowledged: 4, resolved: 5 };
+    const eventOrder = { step: 0, flapping: 0, detected: 2, activated: 3, acknowledged: 4, resolved: 5 };
     events.sort((left, right) => (Date.parse(left.datetime) || 0) - (Date.parse(right.datetime) || 0)
       || (eventOrder[left.type] ?? 6) - (eventOrder[right.type] ?? 6));
     events.push(...reminders);
@@ -2375,7 +2380,7 @@ function renderAlertDetails(context) {
     ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
     <ha-card outlined class="alert-details-card">
       <ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-alert-timeline ${summary.timelineExpanded ? "expanded" : ""}>
-        <span slot="header">${esc(summary.timelineLabel)}</span>
+        <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : ""}</span>
         <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
           <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
             ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
@@ -2385,7 +2390,7 @@ function renderAlertDetails(context) {
         ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
         ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
       </ha-expansion-panel>
-      <dl class="alert-details-list">${renderItems(timeline.filter((item) => !eventKeys.has(item.key)))}</dl>
+      <dl class="alert-details-list">${renderItems(timeline.filter((item) => !eventKeys.has(item.key) && !["duration", "resolution_reason", "last_occurrence"].includes(item.key)))}</dl>
     </ha-card>
     ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }

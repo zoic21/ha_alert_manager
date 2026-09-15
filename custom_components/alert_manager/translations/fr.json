@@ -31,6 +31,7 @@
       "notification_profiles": "Profils",
       "notification_last": "Dernier envoi",
       "detection": "Détection",
+      "resolution": "Résolution",
       "activation": "Activation",
       "value_prefix": "Valeur :",
       "activated_at": "Activée le",

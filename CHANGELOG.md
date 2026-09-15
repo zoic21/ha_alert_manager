@@ -7,14 +7,16 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.36**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.37**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
 
 - Clarify alert details: move the history link into the entity information card,
   show trigger values below detection and sequence values below step headings,
-  remove redundant sequence transition markers and order simultaneous events.
+  show transition departure/arrival values, resolution reasons and the total
+  duration in the timeline heading; hide redundant transition markers and order
+  simultaneous events.
 
 - Show sequence evidence immediately when opening active or historical alerts,
   and prevent delayed history responses from restoring stale pending details.
