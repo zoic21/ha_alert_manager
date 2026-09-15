@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.37**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.38**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
@@ -16,7 +16,8 @@ This is a prerelease for testing, not a stable release.
   show trigger values below detection and sequence values below step headings,
   show transition departure/arrival values, resolution reasons and the total
   duration in the timeline heading; hide redundant transition markers and order
-  simultaneous events.
+  simultaneous events. Keep recorded units beside timeline values and use only
+  the dialog scroll, with a neutral timeline header when expanded or clicked.
 
 - Show sequence evidence immediately when opening active or historical alerts,
   and prevent delayed history responses from restoring stale pending details.

@@ -5864,3 +5864,29 @@ test("timeline places resolution reason and duration inline and shows recorded t
     assert.doesNotMatch(legacy, /undefined|null/);
   }
 });
+
+
+test("timeline values retain recorded units for transitions and sequence steps", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const kind of ["overview", "history"]) {
+    for (const unit of ["°C", undefined]) {
+      const suffix = unit ? ` ${unit}` : "";
+      const row = { ...base, source: { source: "value_transition", unit,
+        condition_params: { from_value: 0, to_value: 2 } } };
+      const transition = panel._renderAlertDetails(kind, row);
+      assert.ok(transition.includes(`Valeur : 0${suffix} → 2${suffix}`));
+      const sequence = panel._renderAlertDetails(kind, { ...row, source: {
+        source: "value_sequence", unit, condition_params: {
+          evidence: [{ step: 1, started_value: 0 }, { step: 2, started_value: null }],
+        },
+      } });
+      assert.ok(sequence.includes(`Valeur : 0${suffix}</span>`));
+      assert.doesNotMatch(sequence, /undefined|null/);
+    }
+  }
+  const styles = panel._styles().replace(/\s+/g, "");
+  assert.match(styles, /\.alert-details-occurrence-panel::part\(summary\)\{background:var\(--card-background-color\)/);
+  const timelineStyle = styles.match(/\.alert-details-sequence-timeline\{([^}]+)\}/)[1];
+  assert.doesNotMatch(timelineStyle, /max-height|overflow-y:auto|overflow:auto/);
+});

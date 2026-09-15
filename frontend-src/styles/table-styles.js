@@ -213,6 +213,7 @@ export const tableStyles = `
     border-top: 1px solid var(--divider-color);
     --expansion-panel-content-padding: 0;
   }
+  .alert-details-occurrence-panel::part(summary) { background: var(--card-background-color); }
   .alert-details-occurrence-groups {
     max-height: 240px;
     overflow-y: auto;
@@ -222,8 +223,6 @@ export const tableStyles = `
     list-style: none;
     margin: 0;
     padding: 0 16px 16px;
-    max-height: 300px;
-    overflow-y: auto;
   }
   .alert-details-sequence-step {
     position: relative;
