@@ -37,7 +37,9 @@
       "copied": "Copied",
       "copy_failed": "Unable to copy. Select the ID to copy it.",
       "expand_id": "Expand or collapse the full identifier",
-      "notifications_reminder": "Reminders"
+      "notifications_reminder": "Reminders",
+      "sequence_progress": "{count}/{total} steps completed",
+      "sequence_progress_label": "Sequence progress"
     },
     "automatic": {
       "aria_enable": "Enable {name}",
@@ -173,7 +175,8 @@
         "selected_unchanged": "{source} unchanged{duration}",
         "unchanged": "State and attributes unchanged{duration}",
         "transition": "{from_value} → {to_value}",
-        "sequence": "Sequence of {count} steps completed"
+        "sequence": "Sequence of {count} steps completed",
+        "sequence_pending": "{count}/{total} steps completed — waiting for step {next}"
       },
       "sources": {
         "attribute": "Attribute {attribute}",

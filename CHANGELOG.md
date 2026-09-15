@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.32**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.33**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
@@ -27,7 +27,10 @@ This is a prerelease for testing, not a stable release.
   compact step editor with collapsible summaries, per-step activation, drag-and-drop
   ordering, YAML and rule-tester support. Disabled steps are skipped, including for
   final-step resolution. Alert details retain step timestamps and observed values
-  in an expandable section, including resolved history.
+  in an expandable section, including resolved history. Sequences appear in pending
+  alerts after the first completed step, with progress instead of an activation
+  countdown; abandoned or expired progress disappears without history or resolution
+  notifications.
 - Transitions and sequences can resolve after a duration, when the arrival value or
   final step no longer matches, or using a separate numeric/text comparison on the
   same entity and attribute. Unknown/unavailable values preserve active alerts.

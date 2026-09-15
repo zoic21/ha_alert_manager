@@ -711,7 +711,8 @@ class _ApiMixin:
     async def async_reevaluate_alert(self, alert_id: str) -> bool:
         """Reevaluate an alert's entity using the normal lifecycle."""
         record = self.records.get(alert_id)
-        if record is None:
+        progress = self._sequence_progress.get(alert_id)
+        if record is None and (progress is None or not progress.completed):
             raise ValueError(f"Unknown or resolved alert id: {alert_id}")
         if (
             not self.monitoring_enabled
@@ -719,8 +720,11 @@ class _ApiMixin:
             or self.hass.state is not CoreState.running
         ):
             raise ValueError("Alert reevaluation requires running monitoring")
-        await self.async_evaluate_entity(record.details.entity_id)
-        return alert_id in self.records
+        entity_id = record.details.entity_id if record else alert_id.rsplit(":", 1)[1]
+        await self.async_evaluate_entity(entity_id)
+        return alert_id in self.records or bool(
+            (progress := self._sequence_progress.get(alert_id)) and progress.completed
+        )
 
     async def async_acknowledge(self, alert_id: str, actor: str | None) -> bool:
         """Acknowledge one active alert and persist before publishing it."""

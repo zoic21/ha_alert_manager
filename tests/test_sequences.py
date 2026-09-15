@@ -213,10 +213,13 @@ def setup_sequence(hass, entry, **changes):
         source="value_sequence",
         from_value=None,
         to_value=None,
-        steps=[
-            {"operator": "above", "value": 100, "duration": 30},
-            {"operator": "below", "value": 10, "duration": 20},
-        ],
+        steps=changes.pop(
+            "steps",
+            [
+                {"operator": "above", "value": 100, "duration": 30},
+                {"operator": "below", "value": 10, "duration": 20},
+            ],
+        ),
         **changes,
     )
 
@@ -783,3 +786,117 @@ def test_disabling_a_step_discards_pending_progress_and_stale_timer(
     assert sequence_timer(manager, hass, key)["point"] == dt_util.now() + timedelta(
         seconds=30
     )
+
+
+def test_pending_sequence_progress_publishes_then_hands_off_once(hass, entry, set_now):
+    manager, key, _ = setup_sequence(hass, entry)
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    assert manager.public_snapshot()["pending_count"] == 0
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    snapshot = manager.public_snapshot()
+    assert snapshot["pending_count"] == 1
+    pending = snapshot["pending"][0]
+    assert pending["id"] == key
+    assert pending["due_at"] is None
+    assert pending["condition_key"] == "rule.sequence_pending"
+    assert pending["condition_params"]["count"] == 1
+    assert pending["condition_params"]["total"] == 2
+    assert pending["condition_params"]["next"] == 2
+    assert pending["condition_params"]["evidence"][0]["completed_value"] == "120"
+    assert manager._last_public_snapshot == snapshot
+    assert key not in manager.records
+    assert not manager.history
+    assert not [e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]
+    assert run(manager.async_reevaluate_alert(key))
+    # Reads do not mutate proof, restart timers or expose mutable steps.
+    pending["condition_params"]["steps"][0]["value"] = -1
+    assert manager._sequence_progress[key].rule.steps[0]["value"] == 100
+    edge(manager, hass, "5")
+    set_now(now + timedelta(seconds=50))
+    fire_sequence_timer(manager, hass, key)
+    snapshot = manager.public_snapshot()
+    assert snapshot["pending_count"] == 0
+    assert snapshot["active_count"] == 1
+    assert snapshot["alerts"][0]["id"] == key
+    assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == 1
+    # A second progression must not duplicate the existing active episode.
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=80))
+    fire_sequence_timer(manager, hass, key)
+    assert manager.public_snapshot()["pending_count"] == 0
+    assert manager.public_snapshot()["active_count"] == 1
+
+
+def test_pending_sequence_expiration_is_silent_and_not_persisted(hass, entry, set_now):
+    from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
+
+    manager, key, _ = setup_sequence(hass, entry, sequence_timeout=60)
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    assert manager.public_snapshot()["pending_count"] == 1
+    run(manager._async_save_state())
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    run(restored._async_finish_startup_reconciliation())
+    assert restored.public_snapshot()["pending_count"] == 0
+    set_now(now + timedelta(seconds=60))
+    fire_sequence_timer(manager, hass, key)
+    assert manager.public_snapshot()["pending_count"] == 0
+    assert manager._last_public_snapshot["pending_count"] == 0
+    assert not manager.history and not manager._pending_history
+    assert not [e for e in hass.bus.fired if e[0] == EVENT_ALERT_RESOLVED]
+
+
+@pytest.mark.parametrize(
+    "operation", ["monitor", "disable", "edit", "delete", "unload"]
+)
+def test_visible_sequence_cleanup(hass, entry, set_now, operation):
+    manager, key, rule = setup_sequence(hass, entry, sequence_timeout=120)
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    assert manager.public_snapshot()["pending_count"] == 1
+    stale = sequence_timer(manager, hass, key)
+    if operation == "monitor":
+        run(manager.async_set_monitoring(False))
+        run(manager.async_set_monitoring(True))
+    elif operation == "disable":
+        run(manager.async_update_rule(rule["id"], {"enabled": False}))
+    elif operation == "edit":
+        run(manager.async_update_rule(rule["id"], {"sequence_timeout": 200}))
+    elif operation == "delete":
+        run(manager.async_delete_rule(rule["id"]))
+    else:
+        run(manager.async_unload())
+    stale["action"](stale["point"])
+    assert manager.public_snapshot()["pending_count"] == 0
+    assert not manager.history
+
+
+def test_pending_sequence_counts_only_enabled_steps_and_keeps_evidence(
+    hass, entry, set_now
+):
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        steps=[
+            {"operator": "above", "value": 100, "enabled": False},
+            {"operator": "above", "value": 100, "duration": 30},
+            {"operator": "below", "value": 10, "duration": 20},
+        ],
+    )
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    params = manager.public_snapshot()["pending"][0]["condition_params"]
+    assert (params["count"], params["total"], params["next"]) == (1, 2, 3)
+    assert params["evidence"][0]["step"] == 2
+    edge(manager, hass, "unknown")
+    assert manager.public_snapshot()["pending_count"] == 1
+    assert manager.public_snapshot()["pending"][0]["condition_params"] == params

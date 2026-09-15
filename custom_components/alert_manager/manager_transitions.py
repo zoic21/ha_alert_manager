@@ -127,12 +127,56 @@ class _TransitionsMixin:
             progress = SequenceProgress(rule)
             self._sequence_progress[alert_id] = progress
         progress.observed_state = state
+        was_pending = bool(progress.completed)
         evidence = progress.observe(state, now, previous=previous)
+        if was_pending or progress.completed:
+            self._queued_public_refresh = True
         if evidence is not None and state is not None:
             self._transition_confirmed[alert_id] = TransitionObservation(
                 rule, state, None, transition_value(rule, state), now, now, evidence
             )
         self._schedule_sequence(alert_id, entity_id, progress)
+
+    def _pending_sequence_alerts(self) -> list[dict[str, Any]]:
+        """Project proven progress into pending, without persisting an episode."""
+        if (
+            not self.monitoring_enabled
+            or self._runtime_phase is not RuntimePhase.RUNNING
+        ):
+            return []
+        pending = []
+        for alert_id, progress in self._sequence_progress.items():
+            if not progress.completed or alert_id in self.records:
+                continue
+            entity_id = alert_id.rsplit(":", 1)[1]
+            state = self.hass.states.get(entity_id)
+            if state is None or not self._is_base_eligible(entity_id):
+                continue
+            rule = progress.rule
+            params = {
+                "count": len(progress.completed),
+                "total": sum(step.get("enabled", True) for step in rule.steps),
+                "next": progress.index + 1,
+                "steps": rule.steps,
+                "evidence": [dict(item) for item in progress.completed],
+            }
+            details = self._details(
+                state,
+                alert_id,
+                "rule",
+                self._localized_pack_condition("rule.sequence_pending", params),
+                value=transition_value(rule, state),
+                condition_key="rule.sequence_pending",
+                condition_params=params,
+                rule_id=rule.id,
+                rule_name=rule.name,
+                labels=rule.label_ids,
+                source=rule.source,
+                attribute=rule.attribute,
+            )
+            record = AlertRecord.pending(details, 0, progress.started_at)
+            pending.append({**self._public_alert_record(record), "due_at": None})
+        return pending
 
     def _schedule_sequence(
         self, alert_id: str, entity_id: str, progress: SequenceProgress

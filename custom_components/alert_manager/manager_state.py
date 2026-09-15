@@ -211,6 +211,7 @@ class _StateMixin:
             target = acknowledged if record.acknowledged else unacknowledged
             target.append(self._public_alert_record(record))
         pending = [self._public_alert_record(record) for record in pending_records]
+        pending.extend(self._pending_sequence_alerts())
         return {
             "active_count": len(unacknowledged),
             "acknowledge_count": len(acknowledged),

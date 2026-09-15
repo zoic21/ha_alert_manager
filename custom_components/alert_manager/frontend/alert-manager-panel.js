@@ -1598,6 +1598,8 @@ function tableRows(kind, historyEvents = []) {
         value: this._displayValue(value, source.unit, source.entity_id),
         rawValue: value,
         condition,
+        sequenceProgress: !history && source.condition_key === "rule.sequence_pending"
+          ? this._t("alert_details.sequence_progress", source.condition_params ?? {}) : "",
         detected: source.detected_at || "",
         activated: history ? source.active_at : source.active_since,
         expiresAt: source.expires_at,
@@ -2037,8 +2039,8 @@ function nativeEntityCell(row, narrow = false, kind = this._activeTab) {
           let item;
           if (column === "timeline" && row.status === "pending" && this._monitoringEnabled) {
             item = document.createElement("span");
-            item.dataset.due = row.due;
-            item.textContent = this._remaining(row.due);
+            if (!row.sequenceProgress) item.dataset.due = row.due;
+            item.textContent = row.sequenceProgress || this._remaining(row.due);
           } else if (column === "timeline") {
             item = document.createElement("span");
             item.textContent = row.status === "pending"
@@ -2186,11 +2188,11 @@ function alertDetailsItems(kind, row) {
     } else if (row.status === "pending") {
       items.push({
         key: "remaining",
-        label: this._t("overview.remaining"),
+        label: this._t(row.sequenceProgress ? "alert_details.sequence_progress_label" : "overview.remaining"),
         value: this._monitoringEnabled
-          ? this._remaining(row.due)
+          ? (row.sequenceProgress || this._remaining(row.due))
           : this._t("table.monitoring_suspended"),
-        due: this._monitoringEnabled ? row.due : null,
+        due: this._monitoringEnabled && !row.sequenceProgress ? row.due : null,
       });
     } else {
       items.push({
@@ -2663,7 +2665,7 @@ function closeAlertDetailsDialog(afterClosed) {
 function nativeTimelineCell(row) {
     if (!globalThis.document?.createElement) {
       if (row.status === "pending") {
-        return this._monitoringEnabled ? this._remaining(row.due) : this._t("table.monitoring_suspended");
+        return this._monitoringEnabled ? (row.sequenceProgress || this._remaining(row.due)) : this._t("table.monitoring_suspended");
       }
       return this._date(row.activated);
     }
@@ -2672,15 +2674,15 @@ function nativeTimelineCell(row) {
     const label = document.createElement("small");
     label.style.cssText = "display:block;margin:0;color:var(--secondary-text-color,#727272)";
     if (row.status === "pending") {
-      label.textContent = this._t("overview.remaining");
+      label.textContent = this._t(row.sequenceProgress ? "alert_details.sequence_progress_label" : "overview.remaining");
       timeline.append(label);
       const value = document.createElement("span");
       if (!this._monitoringEnabled) {
         timeline.style.color = "var(--warning-color,#9a6b00)";
         value.textContent = this._t("table.monitoring_suspended");
       } else {
-        value.dataset.due = row.due;
-        value.textContent = this._remaining(row.due);
+        if (!row.sequenceProgress) value.dataset.due = row.due;
+        value.textContent = row.sequenceProgress || this._remaining(row.due);
       }
       timeline.append(value);
       return timeline;

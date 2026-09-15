@@ -37,7 +37,9 @@
       "copied": "Copié",
       "copy_failed": "Copie impossible. Sélectionnez l’ID pour le copier.",
       "expand_id": "Afficher ou réduire l’identifiant complet",
-      "notifications_reminder": "Rappels"
+      "notifications_reminder": "Rappels",
+      "sequence_progress": "{count}/{total} étapes validées",
+      "sequence_progress_label": "Progression de la séquence"
     },
     "automatic": {
       "aria_enable": "Activer {name}",
@@ -173,7 +175,8 @@
         "selected_unchanged": "{source} inchangé{duration}",
         "unchanged": "État et attributs inchangés{duration}",
         "transition": "{from_value} → {to_value}",
-        "sequence": "Séquence de {count} étapes terminée"
+        "sequence": "Séquence de {count} étapes terminée",
+        "sequence_pending": "{count}/{total} étapes validées — en attente de l’étape {next}"
       },
       "sources": {
         "attribute": "Attribut {attribute}",

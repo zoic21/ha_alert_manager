@@ -5682,3 +5682,25 @@ test("sequence details show recorded values and timestamps in a persistent colla
   row.source.condition_params.evidence = [];
   assert.doesNotMatch(panel._renderAlertDetails("history", row), /data-sequence-details/);
 });
+
+test("pending sequences show progress and evidence without an activation countdown", () => {
+  const panel = tablePanel();
+  const source = { ...panel._tableRows("overview")[0].source,
+    source: "value_sequence", due_at: null, condition_key: "rule.sequence_pending",
+    condition_params: { count: 1, total: 2, next: 2,
+      steps: [{ operator: "above", value: 100 }, { operator: "below", value: 10 }],
+      evidence: [{ step: 1, started_at: "2026-09-15T10:00:00+00:00", completed_at: "2026-09-15T10:00:30+00:00", seconds: 30, started_value: 120, completed_value: 150 }],
+    },
+  };
+  panel._alerts = { alerts: [], acknowledge: [], pending: [source] };
+  const row = panel._tableRows("overview")[0];
+  assert.equal(row.sequenceProgress, "1/2 étapes validées");
+  assert.match(row.condition, /en attente de l’étape 2/);
+  const markup = panel._renderAlertDetails("overview", row);
+  assert.match(markup, /Progression de la séquence/);
+  assert.match(markup, /data-sequence-details/);
+  assert.doesNotMatch(markup, /data-due=/);
+  const timeline = panel._nativeTimelineCell(row);
+  assert.equal(timeline.children[1].textContent, "1/2 étapes validées");
+  assert.equal(timeline.children[1].dataset.due, undefined);
+});
