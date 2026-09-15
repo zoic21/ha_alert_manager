@@ -53,6 +53,8 @@ _AUTOMATIC_KEYS = {
     for pack in PACKS
 }
 _RULE_CLIENT_KEYS = {
+    "steps",
+    "sequence_timeout",
     "from_value",
     "to_value",
     "auto_resolve",
@@ -455,6 +457,21 @@ def _validate_pack_number(
             raise ValueError(f"{path} must be an integer")
         return int(number)
     return number
+
+
+def merge_rule_update(
+    existing: dict[str, Any], changes: dict[str, Any]
+) -> dict[str, Any]:
+    """Retain partial updates, dropping sequence-only fields on a source change."""
+    merged = {**existing, **changes}
+    if (
+        existing.get("source") == "value_sequence"
+        and changes.get("source", "value_sequence") != "value_sequence"
+    ):
+        for key in ("steps", "sequence_timeout"):
+            if key not in changes:
+                merged.pop(key, None)
+    return merged
 
 
 def validate_rule_payload(data: Any, *, rule_id: str | None = None) -> Rule:

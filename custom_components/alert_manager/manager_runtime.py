@@ -594,6 +594,7 @@ class _RuntimeMixin:
         if self._coherence_schedule_unsubscribe is not None:
             self._coherence_schedule_unsubscribe()
             self._coherence_schedule_unsubscribe = None
+        self._clear_sequences()
         self._clear_queued_evaluations()
         self._registry_evaluation_dirty = False
         self._pending_entity_renames.clear()

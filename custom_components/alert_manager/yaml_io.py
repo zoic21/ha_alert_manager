@@ -29,6 +29,8 @@ MAX_YAML_SIZE = 1_000_000
 
 
 _RULE_YAML_KEYS = {
+    "steps",
+    "sequence_timeout",
     "from_value",
     "to_value",
     "auto_resolve",
@@ -179,7 +181,14 @@ def rule_to_yaml_data(
         result["operator"] = data.get("operator")
         if result["operator"] != "unchanged":
             result["value"] = data.get("value")
-    if source in TRANSITION_SOURCES:
+    if source == "value_sequence":
+        result.update(
+            {
+                key: data.get(key)
+                for key in ("steps", "sequence_timeout", "auto_resolve", "resolve_mode")
+            }
+        )
+    elif source in TRANSITION_SOURCES:
         result.update(
             {
                 key: data.get(key)

@@ -316,7 +316,7 @@ function alertCurrentValue(row) {
     let value = state.state;
     const source = row.source?.source;
     if (["attribute", "attribute_variation", "attribute_transition"].includes(source)
-      || (["value", "value_variation", "value_transition"].includes(source) && row.source?.attribute)) {
+      || (["value", "value_variation", "value_transition", "value_sequence"].includes(source) && row.source?.attribute)) {
       const [found, attribute] = attributeValue(
         state.attributes,
         row.source?.attribute,
@@ -1032,6 +1032,18 @@ export function alertDetailsItems(kind, row) {
           label: this._t("alert_details.notification_last"),
           value: stats.last_sent ? this._date(stats.last_sent) : "—",
           datetime: stats.last_sent,
+        });
+      }
+    }
+    if (row.source?.source === "value_sequence") {
+      const sequence = row.source.condition_params ?? {};
+      for (const evidence of (sequence.evidence ?? []).slice(0, 20)) {
+        const step = sequence.steps?.[evidence.step - 1];
+        if (!step) continue;
+        items.push({
+          key: `sequence-step-${evidence.step}`,
+          label: this._t("rules.sequence_completed", { step: evidence.step }),
+          value: `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}`,
         });
       }
     }

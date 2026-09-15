@@ -6,10 +6,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 
 from .const import TRANSITION_SOURCES, VARIATION_SOURCES
-from .models import Rule, extract_attribute_value, safe_float
+from .models import Rule, extract_attribute_value, normalize_scalar, safe_float
 
 type ConditionEvaluator = Callable[[Any], tuple[bool | None, str | None]]
 
@@ -112,3 +113,18 @@ def evaluate_rule(
     jinja_matches = evaluation.jinja_result is not False
     evaluation.result = comparison_matches and jinja_matches
     return evaluation
+
+
+def transition_value(rule: Rule, state: State | None) -> Any:
+    """Missing and unavailable observations are never arbitrary edge values."""
+    if not isinstance(state, State) or state.state in (
+        STATE_UNKNOWN,
+        STATE_UNAVAILABLE,
+    ):
+        return None
+    found, value = rule_current_value(rule, state)
+    if not found or not isinstance(value, str | int | float | bool):
+        return None
+    if normalize_scalar(value) in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        return None
+    return value

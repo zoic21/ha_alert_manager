@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -21,6 +21,7 @@ from .const import (
     MAX_RULE_ENTITY_IDS,
     MAX_RULE_MESSAGE_LENGTH,
     MAX_RULE_NAME_LENGTH,
+    MAX_SEQUENCE_STEPS,
     MIN_DELAY,
     OPERATORS,
     TRANSITION_SOURCES,
@@ -712,6 +713,8 @@ class Rule:
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
     resolve_mode: str = "duration"
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    sequence_timeout: int = 0
     version: int = 2
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -806,7 +809,7 @@ class Rule:
                     "Attribute wildcard paths must use complete .* segments"
                 )
         if (
-            self.source in ("value_variation", "value_transition")
+            self.source in ("value_variation", "value_transition", "value_sequence")
             and self.attribute
             and "*" in self.attribute
         ):
@@ -863,6 +866,11 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
+        if self.source == "value_sequence":
+            self._validate_sequence()
+            return
+        if self.steps or self.sequence_timeout:
+            raise ValueError("Sequence fields require a sequence source")
         if self.source in TRANSITION_SOURCES:
             if self.resolve_mode not in ("duration", "state"):
                 raise ValueError("Unsupported transition resolution mode")
@@ -933,11 +941,84 @@ class Rule:
         if len(set(normalized)) != len(normalized):
             raise ValueError("Text operator values must be unique")
 
+    def _validate_sequence(self) -> None:
+        """Bound the linear schema; reuse ordinary comparison validation."""
+        if (
+            not isinstance(self.steps, list)
+            or not 2 <= len(self.steps) <= MAX_SEQUENCE_STEPS
+        ):
+            raise ValueError("Sequence requires between 2 and 20 steps")
+        if (
+            self.duration != 0
+            or self.resolve_mode != "duration"
+            or self.condition_template
+        ):
+            raise ValueError(
+                "Sequence requires zero delay, duration resolution and no template"
+            )
+        for value, minimum in ((self.sequence_timeout, 0), (self.auto_resolve, 1)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not minimum <= value <= 31_536_000
+            ):
+                raise ValueError("Invalid sequence duration")
+        for step in self.steps:
+            if not isinstance(step, dict) or set(step) - {
+                "operator",
+                "value",
+                "duration_mode",
+                "duration",
+                "duration_max",
+            }:
+                raise ValueError("Invalid sequence step")
+            if (
+                step.get("operator") not in OPERATORS
+                or step.get("operator") == "unchanged"
+                or "value" not in step
+            ):
+                raise ValueError("Invalid sequence step")
+            mode = step.get("duration_mode", "at_least")
+            duration = step.get("duration", 0)
+            maximum = step.get("duration_max", 0)
+            if mode not in ("at_least", "less_than", "between"):
+                raise ValueError("Invalid sequence duration mode")
+            for value in (duration, maximum):
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or not 0 <= value <= 31_536_000
+                ):
+                    raise ValueError("Invalid sequence duration")
+            if (
+                (mode == "less_than" and duration == 0)
+                or (mode == "between" and maximum <= duration)
+                or (mode != "between" and maximum)
+            ):
+                raise ValueError("Invalid sequence duration bounds")
+            replace(
+                self,
+                source="value",
+                steps=[],
+                sequence_timeout=0,
+                operator=step["operator"],
+                value=step["value"],
+            ).validate()
+        self.steps = [
+            {"duration_mode": "at_least", "duration": 0, **step} for step in self.steps
+        ]
+
     def as_dict(self) -> dict[str, Any]:
         """Serialize a rule including forward-compatible fields."""
         result = asdict(self)
         extra = result.pop("extra", {})
         result.update(extra)
+        if self.source != "value_sequence":
+            result.pop("steps", None)
+            result.pop("sequence_timeout", None)
+        else:
+            result.pop("from_value", None)
+            result.pop("to_value", None)
         if self.source not in TRANSITION_SOURCES:
             for key in ("from_value", "to_value", "auto_resolve", "resolve_mode"):
                 result.pop(key, None)

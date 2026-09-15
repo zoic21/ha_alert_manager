@@ -20,13 +20,14 @@ Home Assistant labels can be attached to a rule. They help organize rules and pa
 | --- | --- | --- |
 | Value | `value` | Compare the state or an attribute with an expected value, threshold or range, or check that this specific value has stopped changing. |
 | Variation | `value_variation` | Measure a numeric change from a baseline recorded when a Jinja condition becomes true. |
+| Sequence | `value_sequence` | Recognize 2–20 ordered conditions on the same state or attribute before creating an alert. |
 | Transition | `value_transition` | Observe a specific `from_value` → `to_value` change and resolve the resulting alert after a duration or when the arrival value is left. |
 | No change | `unchanged` | Detect an entity with no state or attribute change for the configured duration. |
 | Jinja | `jinja` | Use a template as the complete rule condition. |
 
 Value comparisons include equality, inequality, contains/not contains, above/below and between/outside a range. Text comparisons can use several values. Inactivity can concern the whole entity or only the selected state/attribute: choose the operation that matches the behavior you need to observe.
 
-For Value, Variation and Transition, an omitted or empty `attribute` targets the state; a populated `attribute` targets that attribute. Missing attributes never fall back to the state. Nested paths are supported; wildcard paths such as `data.*.key` are limited to regular comparisons.
+For Value, Variation, Transition and Sequence, an omitted or empty `attribute` targets the state; a populated `attribute` targets that attribute. Missing attributes never fall back to the state. Nested paths are supported; wildcard paths such as `data.*.key` are limited to regular comparisons.
 
 ### Delays, conditions and messages
 
@@ -54,6 +55,50 @@ Choose a resolution mode after activation:
 Existing rules keep the duration mode. Active alerts retain their acknowledgement across restarts; the state mode rechecks the current value on restart or monitoring resume. Changing the resolution mode keeps the current episode and removes its deadline or starts the configured expiration duration from the change.
 
 Automatic expiration is recorded in history but sends **no recovery notification**. New-alert notifications and reminders still apply. Unconfirmed holds do not survive a restart or monitoring pause; active/acknowledged expiration deadlines survive restarts. After a pause, a new activation requires a fresh edge.
+
+### Ordered sequences
+
+Choose **Sequence** to detect an ordered scenario, such as the end of an appliance cycle. Add, remove and move steps with the buttons in each step header. The editor uses native HA selectors and stacks fields when the drawer is narrow.
+
+Each of the **2–20 steps** compares the same selected scalar state or nested attribute, using the ordinary numeric/text operators. Wildcards and per-step entities or attributes are not supported. Each entity has independent progress; only one sequence per rule/entity can be in progress.
+
+| Duration mode | When the step completes |
+| --- | --- |
+| `at_least` (default) | When the condition has remained continuously true for `duration` seconds. `0` completes immediately. Matching value changes do not restart the hold. |
+| `less_than` | Only when a known value stops matching, and the completed hold is strictly shorter than `duration`. |
+| `between` | Only when a known value stops matching, and the completed hold is between `duration` and `duration_max`, including both bounds. |
+
+Completed steps remain completed while the engine waits for the next condition. Interrupting a minimum hold resets only that hold. Time before an earlier step completed is never reused. Unknown/unavailable states, missing attributes and invalid numeric values cancel the current hold without validating an exit.
+
+`sequence_timeout` is optional (`0` = no limit). It starts when the first step begins progressing, even if that first hold is interrupted. Reaching this total deadline discards the progression; a later event can start a new sequence. The sequence must finish **before** the deadline. Only a current minimum hold or total deadline schedules a timer; there is no polling.
+
+A complete sequence creates a normal alert immediately (`duration: 0`) with normal labels, notifications, acknowledgement and history. `auto_resolve` controls its lifetime using the existing transition expiration behavior, including no recovery notification for automatic expiration. Remaining in the final condition cannot generate repeated occurrences: it must be left before a new complete sequence can rearm. A second completion during the same active episode refreshes its expiration and preserves acknowledgement.
+
+Progress is transient: restart, reload, monitoring pause, rule disable/removal or incompatible edits discard unfinished steps. Current-state snapshots do not reconstruct a sequence. Active and acknowledged alerts continue to use normal persistence.
+
+The **Test** result distinguishes the current comparison from observed progression. It shows the current step, completed holds, interrupted/invalid holds and the next deadline. It is a read-only snapshot; click **Test** again to refresh. Alert details and history retain a bounded summary of the steps and observed durations of the completed occurrence. Message templates are supported; sequence condition templates, branches, loops, exact-duration timing and actions between steps are deliberately excluded.
+
+```yaml
+name: Washing machine finished
+entity_ids:
+  - sensor.washing_machine_power
+source: value_sequence
+steps:
+  - operator: above
+    value: 100
+    duration_mode: at_least
+    duration: 300
+  - operator: below
+    value: 10
+    duration_mode: at_least
+    duration: 120
+sequence_timeout: 21600
+duration: 0
+auto_resolve: 600
+resolve_mode: duration
+```
+
+Simple `value_transition` rules retain their existing semantics and require no migration.
 
 ## YAML editing and compatibility
 

@@ -432,3 +432,125 @@ test("state resolution hides only the expiration duration", () => {
   assert.match(maintained, /id="rule-resolve-mode"/);
   assert.match(maintained, /name="to_value"/);
 });
+
+test("sequence drafts preserve typed values and YAML structure without mutating their source", () => {
+  const original = rule({ source: "value_sequence", attribute: "metrics.power", steps: [
+    { operator: "above", value: 100, duration_mode: "at_least", duration: 300 },
+    { operator: "between", value: [0, 10], duration_mode: "between", duration: 120, duration_max: 300 },
+  ], sequence_timeout: 21600, auto_resolve: 600 });
+  const before = structuredClone(original);
+  const draft = normalizeRuleDraft(original);
+  const serialized = serializeRuleDraft(draft);
+  assert.deepEqual(serialized.steps, original.steps);
+  assert.equal(serialized.duration, 0);
+  assert.equal(serialized.attribute, "metrics.power");
+  assert.equal(serialized.condition_template, null);
+  const yaml = ruleToYaml(serialized);
+  assert.match(yaml, /steps:\n  - operator: "above"\n    value: 100/);
+  assert.match(yaml, /value: \[0,10\]/);
+  assert.match(yaml, /duration_max: 300/);
+  assert.match(yaml, /sequence_timeout: 21600/);
+  assert.doesNotMatch(yaml, /from_value:|to_value:/);
+  draft.steps[1].value[0] = 5;
+  assert.deepEqual(original, before);
+  assert.equal("steps" in serializeRuleDraft({ ...draft, source: "value" }), false);
+});
+
+test("sequence modes rebuild only the condition section and retain neighboring step values", () => {
+  const changes = new Map();
+  let refreshes = 0;
+  const panel = {
+    _editingRule: normalizeRuleDraft(rule({ source: "value_sequence", steps: [
+      { operator: "above", value: 100, duration: 300 },
+      { operator: "below", value: 10, duration: 120 },
+    ] })),
+    _ruleEditorMode: "visual", _t: t, _ruleAttributeOptions: () => [],
+    _configureSelect(id, options, value, callback) { changes.set(id, callback); },
+    _configureSelector() {}, _handleSelected() {}, _clearRuleTestResult() {},
+    _captureRuleDraft() {}, _refreshRuleConditionSection() { refreshes++; },
+    shadowRoot: { querySelector() { return null; } },
+  };
+  hydrateRuleEditorControls.call(panel);
+  changes.get("sequence-1-mode")("between");
+  assert.equal(panel._editingRule.steps[1].duration_mode, "between");
+  assert.equal(panel._editingRule.steps[1].duration, 120);
+  assert.equal(panel._editingRule.steps[0].value, 100);
+  const context = {
+    rule: panel._editingRule, t, renderTextField: () => "",
+    renderNumberField: (name) => `<ha-selector data-field="${name}"></ha-selector>`,
+  };
+  assert.match(renderRuleConditionSection(context), /sequence-1-duration_max/);
+  changes.get("sequence-1-mode")("at_least");
+  const html = renderRuleConditionSection(context);
+  assert.doesNotMatch(html, /sequence-1-duration_max/);
+  assert.match(html, /sequence-1-duration/);
+  assert.doesNotMatch(html, /id="rule-condition-template"|name="from_value"/);
+  assert.equal(refreshes, 2);
+});
+
+test("sequence form capture scopes comparison and duration inputs to their own step", () => {
+  const original = normalizeRuleDraft(rule({ source: "value_sequence", steps: [
+    { operator: "above", value: 100, duration: 300, duration_mode: "at_least" },
+    { operator: "between", value: [0, 10], duration_mode: "between", duration: 120, duration_max: 300 },
+  ] }));
+  function row(index, fields) {
+    return {
+      dataset: { sequenceStep: String(index) },
+      querySelector(selector) {
+        const key = /data-field="([^"]+)"/.exec(selector)?.[1];
+        return fields[key] ?? null;
+      },
+      querySelectorAll: () => [],
+    };
+  }
+  const duration = (minutes) => ({ dataset: { durationValue: "0" }, value: { hours: 0, minutes, seconds: 0 } });
+  const rows = [
+    row(0, { operator: { value: "above" }, value: { value: "100" }, "sequence-0-duration": duration(5) }),
+    row(1, { operator: { value: "between" }, "lower-bound": { value: "0" }, "upper-bound": { value: "10" }, "sequence-1-duration": duration(2), "sequence-1-duration_max": duration(6) }),
+  ];
+  const form = { querySelector: () => null, querySelectorAll: (selector) => selector === "[data-sequence-step]" ? rows : [] };
+  const captured = captureRuleDraftFromForm(form, original);
+  assert.equal(captured.steps[0].value, 100);
+  assert.equal(captured.steps[0].duration, 300);
+  assert.deepEqual(captured.steps[1].value, [0, 10]);
+  assert.equal(captured.steps[1].duration_max, 360);
+  assert.equal(original.steps[1].duration_max, 300);
+});
+
+test("sequence reordering and removal retain the entire step including durations", async () => {
+  const { handleRulesAction } = await import("../frontend-src/views/rules.js");
+  const steps = [
+    { operator: "above", value: 100, duration: 300 },
+    { operator: "below", value: 10, duration_mode: "between", duration: 120, duration_max: 300 },
+    { operator: "equals", value: ["idle", "off"], duration: 0 },
+  ];
+  const panel = {
+    _editingRule: { steps: structuredClone(steps) },
+    _captureRuleDraft() {}, _clearRuleTestResult() {}, _refreshRuleConditionSection() {},
+    shadowRoot: { querySelector: () => null },
+  };
+  await handleRulesAction.call(panel, "move-sequence-step", { dataset: { index: "1", direction: "-1" } });
+  assert.deepEqual(panel._editingRule.steps, [steps[1], steps[0], steps[2]]);
+  await handleRulesAction.call(panel, "remove-sequence-step", { dataset: { index: "1" } });
+  assert.deepEqual(panel._editingRule.steps, [steps[1], steps[2]]);
+  await handleRulesAction.call(panel, "remove-sequence-step", { dataset: { index: "0" } });
+  assert.equal(panel._editingRule.steps.length, 2);
+  await handleRulesAction.call(panel, "add-sequence-step", { dataset: {} });
+  assert.equal(panel._editingRule.steps.length, 3);
+  assert.equal(panel._ruleDirty, true);
+});
+
+test("choosing Sequence in a new ordinary rule immediately creates two editable steps", () => {
+  let chooseSource;
+  const panel = {
+    _editingRule: rule(), _ruleEditorMode: "visual", _t: t,
+    _ruleAttributeOptions: () => [], _configureSelector() {},
+    _configureSelect(id, options, value, callback) { if (id === "rule-source") chooseSource = callback; },
+    _captureRuleDraft() { this._editingRule = captureRuleDraftFromForm({ querySelector: () => null, querySelectorAll: () => [] }, this._editingRule); },
+    _refreshRuleEditor() {}, shadowRoot: { querySelector: () => null },
+  };
+  hydrateRuleEditorControls.call(panel);
+  chooseSource("value_sequence");
+  assert.equal(panel._editingRule.steps.length, 2);
+  assert.notEqual(panel._editingRule.steps[0], panel._editingRule.steps[1]);
+});

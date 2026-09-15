@@ -11,6 +11,10 @@ function consumeRuleEditorNotice(panel, fallback) {
     return message;
 }
 
+export function newSequenceStep() {
+    return { operator: "above", value: "", duration_mode: "at_least", duration: 0 };
+}
+
 export function normalizeRuleDraft(rule = {}) {
     const defaults = newRuleDefaults();
     const normalized = {
@@ -18,6 +22,7 @@ export function normalizeRuleDraft(rule = {}) {
       ...normalizeRuleTarget(rule),
       entity_ids: [...(rule.entity_ids ?? defaults.entity_ids)],
       label_ids: [...(rule.label_ids ?? defaults.label_ids)],
+      steps: (rule.steps ?? [newSequenceStep(), newSequenceStep()]).map((step) => ({ ...step, value: Array.isArray(step.value) ? [...step.value] : step.value })),
     };
     if (VARIATION_RULE_SOURCES.has(normalized.source)
       && !VARIATION_RULE_OPERATORS.has(normalized.operator)) {
@@ -87,6 +92,8 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
       attribute: String(value("attribute") ?? currentRule.attribute ?? ""),
       operator,
       value: ruleValue,
+      steps: captureSequenceSteps(form, currentRule.steps),
+      sequence_timeout: Number(value("sequence_timeout") ?? currentRule.sequence_timeout ?? 0),
       from_value: String(value("from_value") ?? currentRule.from_value ?? ""),
       to_value: String(value("to_value") ?? currentRule.to_value ?? ""),
       auto_resolve: Number(value("auto_resolve") ?? currentRule.auto_resolve ?? 600),
@@ -113,6 +120,32 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
     };
 }
 
+export function captureSequenceSteps(form, steps = []) {
+    const rows = Array.from(form.querySelectorAll?.("[data-sequence-step]") ?? []);
+    if (!rows.length) return steps.map((step) => ({ ...step, value: Array.isArray(step.value) ? [...step.value] : step.value }));
+    return rows.map((row, index) => {
+      const step = steps[index] ?? newSequenceStep();
+      const captured = captureRuleDraftFromForm(row, { ...step, steps: [] });
+      const read = (key) => durationFieldValue(formField(row, `sequence-${index}-${key}`));
+      const mode = read("mode") ?? step.duration_mode ?? "at_least";
+      return {
+        operator: captured.operator,
+        value: preserveSequenceValue(step.value, captured.value),
+        duration_mode: mode,
+        duration: Number(read("duration") ?? step.duration ?? 0),
+        ...(mode === "between" ? { duration_max: Number(read("duration_max") ?? step.duration_max ?? 0) } : {}),
+      };
+    });
+}
+
+function preserveSequenceValue(previous, captured) {
+    if (Array.isArray(previous) && Array.isArray(captured)) {
+      return captured.map((value, index) => String(previous[index]) === String(value) ? previous[index] : value);
+    }
+    if (!Array.isArray(previous) && Array.isArray(captured) && captured.length === 1 && String(previous) === String(captured[0])) return previous;
+    return String(previous) === String(captured) ? previous : captured;
+}
+
 export function serializeRuleDraft(draft) {
     const source = draft.source;
     const comparisonFree = ["jinja", "unchanged"].includes(source);
@@ -136,10 +169,16 @@ export function serializeRuleDraft(draft) {
       operator,
       value: comparisonValue,
       ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 600), resolve_mode: draft.resolve_mode ?? "duration" } : {}),
-      duration: Number(draft.duration),
+      ...(source === "value_sequence" ? {
+        steps: (draft.steps ?? []).map((step) => ({ ...step, value: Array.isArray(step.value) ? [...step.value] : step.value })),
+        sequence_timeout: Number(draft.sequence_timeout ?? 0),
+        auto_resolve: Number(draft.auto_resolve ?? 600),
+        resolve_mode: "duration",
+      } : {}),
+      duration: source === "value_sequence" ? 0 : Number(draft.duration),
       message: String(draft.message ?? "").trim() || null,
       update_message_when_active: Boolean(draft.update_message_when_active),
-      condition_template: String(draft.condition_template ?? "").trim() || null,
+      condition_template: source === "value_sequence" ? null : String(draft.condition_template ?? "").trim() || null,
       flapping_enabled: Boolean(draft.flapping_enabled),
       flapping_occurrences: draft.flapping_occurrences ?? null,
       flapping_window: draft.flapping_window ?? null,
@@ -297,6 +336,7 @@ export function renderRuleTestResult(result, context) {
           ${ruleTestDetail(t("rules.test.final_result"), ruleTestBoolean(item.final_result, t))}
           ${ruleTestDetail(t("rules.test.delay"), formatDuration(item.duration))}
           ${ruleTestDetail(t("rules.test.reason"), reason)}
+          ${item.sequence ? renderSequenceDiagnostics(item.sequence, t, formatDuration) : ""}
           ${["notification_profiles", "notification_reminder_profiles", "notification_resolved_profiles"].map((key) => ruleTestDetail(
             t(`rules.test.${key}`),
             item[key]?.length ? item[key].map((profile) => profile.name).join(", ") : "-",
@@ -446,7 +486,7 @@ export function renderRuleVisualEditor(context) {
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
-            ${renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
+            ${rule.source === "value_sequence" ? renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" }) : renderNumberField("duration", t("rules.duration"), rule.duration, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name" })}
             <div class="field full rule-message-field"><span class="field-label">${esc(t("rules.message_optional"))}</span><ha-selector id="rule-message-template"></ha-selector><small>${esc(t("rules.message_help"))}</small></div>
             <div class="field full"><div class="switch-field-row"><span class="field-label">${esc(t("rules.update_message_when_active"))}</span><ha-switch id="rule-update-message-when-active" name="update_message_when_active" aria-label="${esc(t("rules.update_message_when_active"))}" ${rule.update_message_when_active ? "checked" : ""}></ha-switch></div><small>${esc(t("rules.update_message_when_active_help"))}</small></div>
           </div>
@@ -465,15 +505,17 @@ export function renderRuleConditionSection({ rule, t, renderTextField, renderNum
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
     const transition = TRANSITION_RULE_SOURCES.has(rule.source);
-    const comparisonFree = jinjaOnly || unchanged || transition;
+    const sequence = rule.source === "value_sequence";
+    const comparisonFree = jinjaOnly || unchanged || transition || sequence;
     return `<div data-rule-condition-section><section class="rule-editor-section">
         <div class="rule-section-heading"><div><h3>${esc(t("rules.condition"))}</h3><small>${esc(t("rules.editor_condition_help"))}</small></div></div>
         <div class="fields">
           <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
-          <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(["value_variation", "value_transition"].includes(rule.source) ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
+          <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(["value_variation", "value_transition", "value_sequence"].includes(rule.source) ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
           ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}<div class="field full"><span class="field-label">${esc(t("rules.resolve_mode"))}</span><ha-select id="rule-resolve-mode" data-field="resolve_mode"></ha-select></div>${rule.resolve_mode === "state" ? "" : renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
+          ${sequence ? renderSequenceEditor({ rule, t, renderNumberField }) : ""}
           ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
-          <div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>
+          ${sequence ? "" : `<div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>`}
         </div>
       </section></div>`;
 }
@@ -509,6 +551,7 @@ export function ruleValueList(value) {
 }
 
 export function ruleSummary(rule) {
+    if (rule.source === "value_sequence") return this._t("rules.sequence_summary", { count: rule.steps?.length ?? 0 });
     if (TRANSITION_RULE_SOURCES.has(rule.source)) return this._t("conditions.rule.transition", { from_value: rule.from_value, to_value: rule.to_value });
     if (rule.source === "jinja") return this._t("conditions.rule.jinja", { duration: "" });
     if (rule.source === "unchanged") {
@@ -841,6 +884,7 @@ export function hydrateRuleEditorMenu(root, onSelected) {
 }
 
 export function hydrateRuleEditorControls() {
+  hydrateSequenceEditor.call(this);
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
     mode: this._ruleEditorMode,
@@ -849,6 +893,7 @@ export function hydrateRuleEditorControls() {
     sourceOptions: [
       { value: "value", label: this._t("rules.source_value") },
       { value: "value_transition", label: this._t("rules.source_value_transition") },
+      { value: "value_sequence", label: this._t("rules.source_value_sequence") },
       { value: "value_variation", label: this._t("rules.source_value_variation") },
       { value: "unchanged", label: this._t("rules.source_unchanged") },
       { value: "jinja", label: this._t("rules.source_jinja") },
@@ -887,6 +932,9 @@ export function hydrateRuleEditorControls() {
       const previousSource = this._editingRule.source ?? "value";
       this._captureRuleDraft();
       this._editingRule.source = value;
+      if (value === "value_sequence" && (this._editingRule.steps?.length ?? 0) < 2) {
+        this._editingRule.steps = [newSequenceStep(), newSequenceStep()];
+      }
       if (TRANSITION_RULE_SOURCES.has(value) && !TRANSITION_RULE_SOURCES.has(previousSource)) {
         this._editingRule.duration = 0;
         this._editingRule.operator = "equals";
@@ -896,7 +944,7 @@ export function hydrateRuleEditorControls() {
         this._editingRule.operator = "above";
         this._editingRule.value = this._ruleValueList(this._editingRule.value)[0] ?? "";
       }
-      if (TRANSITION_RULE_SOURCES.has(value) || TRANSITION_RULE_SOURCES.has(previousSource)) {
+      if (value === "value_sequence" || previousSource === "value_sequence" || TRANSITION_RULE_SOURCES.has(value) || TRANSITION_RULE_SOURCES.has(previousSource)) {
         this._ruleDirty = true;
         this._refreshRuleEditor();
         return;
@@ -959,4 +1007,58 @@ export function hydrateRuleEditorControls() {
       if (settings) settings.hidden = !this._editingRule.flapping_enabled;
     },
   });
+}
+
+export function renderSequenceEditor({ rule, t, renderNumberField }) {
+  const steps = rule.steps ?? [newSequenceStep(), newSequenceStep()];
+  const duration = (index, key, label, value, minimum = 0) => renderNumberField(
+    `sequence-${index}-${key}`, label, value, t("units.seconds"), minimum, MAX_DURATION_SECONDS, { nameMode: "name" },
+  );
+  return `<div class="sequence-editor full"><p class="sequence-help">${esc(t("rules.sequence_help"))}</p>
+    ${steps.map((step, index) => {
+      const mode = step.duration_mode ?? "at_least";
+      const move = (direction, disabled) => `<ha-icon-button data-action="move-sequence-step" data-index="${index}" data-direction="${direction}" aria-label="${esc(t(direction < 0 ? "rules.sequence_up" : "rules.sequence_down"))}" title="${esc(t(direction < 0 ? "rules.sequence_up" : "rules.sequence_down"))}" ${disabled ? "disabled" : ""}><ha-icon icon="mdi:chevron-${direction < 0 ? "up" : "down"}"></ha-icon></ha-icon-button>`;
+      return `<section class="sequence-step" data-sequence-step="${index}">
+        <div class="sequence-step-heading"><h4>${esc(t(index === 0 ? "rules.sequence_first" : "rules.sequence_then", { index: index + 1 }))}</h4><div class="sequence-step-actions">${move(-1, index === 0)}${move(1, index === steps.length - 1)}${steps.length > 2 ? renderConfigurationRemove(t("rules.sequence_remove", { index: index + 1 }), "remove-sequence-step", { "data-index": index }) : ""}</div></div>
+        <div class="sequence-comparison"><div class="field"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="sequence-${index}-operator" data-field="operator"></ha-select></div><div class="fields sequence-values">${renderRuleValues({ rule: step, t })}</div></div>
+        <div class="sequence-timing"><div class="field"><span class="field-label">${esc(t("rules.sequence_timing"))}</span><ha-select id="sequence-${index}-mode" data-field="sequence-${index}-mode"></ha-select></div>${mode === "between" ? "" : duration(index, "duration", t("rules.sequence_duration"), step.duration ?? 0, mode === "less_than" ? 1 : 0)}</div>
+        ${mode === "between" ? `<div class="sequence-duration-bounds">${duration(index, "duration", t("rules.sequence_minimum"), step.duration ?? 0)}${duration(index, "duration_max", t("rules.sequence_maximum"), step.duration_max ?? 0, 1)}</div>` : ""}
+        <small class="sequence-timing-help">${esc(t(mode === "at_least" ? "rules.sequence_hold_help" : "rules.sequence_exit_help"))}</small>
+      </section>`;
+    }).join("")}
+    <ha-button appearance="plain" data-action="add-sequence-step" ${steps.length >= 20 ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.sequence_add"))}</ha-button>
+    ${renderNumberField("sequence_timeout", t("rules.sequence_timeout"), rule.sequence_timeout ?? 0, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name", help: t("rules.sequence_timeout_help") })}
+  </div>`;
+}
+
+function hydrateSequenceEditor() {
+  if (this._ruleEditorMode !== "visual" || this._editingRule?.source !== "value_sequence") return;
+  const steps = this._editingRule.steps ?? [newSequenceStep(), newSequenceStep()];
+  steps.forEach((step, index) => {
+    const change = (key, value) => {
+      this._captureRuleDraft();
+      const target = this._editingRule.steps[index];
+      target[key] = value;
+      if (key === "operator") {
+        const values = ruleValueList(target.value);
+        target.value = RANGE_RULE_OPERATORS.has(value) ? [values[0] ?? "", values[1] ?? ""]
+          : TEXT_RULE_OPERATORS.has(value) ? values : values[0] ?? "";
+      }
+      if (key === "duration_mode" && value !== "between") delete target.duration_max;
+      this._clearRuleTestResult();
+      this._ruleDirty = true;
+      this._refreshRuleConditionSection();
+    };
+    this._configureSelect(`sequence-${index}-operator`, ["above", "below", "equals", "not_equals", "contains", "not_contains", "between", "outside"].map((value) => ({ value, label: this._t(`operators.${value}`) })), step.operator, (value) => change("operator", value));
+    this._configureSelect(`sequence-${index}-mode`, ["at_least", "less_than", "between"].map((value) => ({ value, label: this._t(`rules.sequence_${value}`) })), step.duration_mode ?? "at_least", (value) => change("duration_mode", value));
+  });
+}
+
+function renderSequenceDiagnostics(progress, t, formatDuration) {
+  return ruleTestDetail(t("rules.sequence_progress"), t("rules.sequence_position", { step: progress.step, total: progress.total }))
+    + ruleTestDetail(t("rules.sequence_status"), t(`rules.sequence_status_${progress.reason}`))
+    + ruleTestDetail(t("rules.test.comparison_result"), ruleTestBoolean(progress.matching, t))
+    + ruleTestDetail(t("rules.sequence_elapsed"), formatDuration(progress.elapsed))
+    + ruleTestDetail(t("rules.sequence_remaining"), progress.remaining === null ? null : formatDuration(progress.remaining))
+    + (progress.completed ?? []).map((step) => ruleTestDetail(t("rules.sequence_completed", { step: step.step }), formatDuration(step.seconds))).join("");
 }

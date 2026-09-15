@@ -31,6 +31,7 @@ from .notification_runtime import NotificationRuntime
 from .notifications import NotificationManager
 from .packs import OCCURRENCE_PACKS, reset_pack_runtimes
 from .runtime_phase import RuntimePhase
+from .sequences import SequenceProgress
 from .statistics import RuntimeStatistics
 from .storage import (
     AlertManagerConfigBackupStorage,
@@ -107,6 +108,10 @@ class AlertManager(
         self._administratively_removed: set[str] = set()
         self._rules: list[Rule] = []
         self._rules_by_entity: dict[str, list[Rule]] = {}
+        self._sequence_progress: dict[str, SequenceProgress] = {}
+        self._sequence_timers: dict[
+            str, tuple[object, Callable[[], None], datetime]
+        ] = {}
         self._transition_observations: dict[str, TransitionObservation] = {}
         self._transition_confirmed: dict[str, TransitionObservation] = {}
         self._variation_baselines: dict[str, float] = {}
@@ -401,6 +406,7 @@ class AlertManager(
                 for cancel in self._timers.values():
                     cancel()
                 self._timers.clear()
+                self._clear_sequences()
                 self._transition_observations.clear()
                 self._transition_confirmed.clear()
                 reset_pack_runtimes(self.hass)

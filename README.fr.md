@@ -32,7 +32,7 @@ Tout se configure depuis le panneau. Les étiquettes servent à organiser les al
 
 Surveillez un réfrigérateur consommant plus de 200 W pendant deux heures, une température hors plage, un chauffage sans hausse de température suffisante, un capteur qui ne change plus ou la fin d’un cycle d’appareil.
 
-Les règles prennent en charge états, attributs imbriqués, comparaisons numériques et textuelles, absence de changement, variations, transitions et conditions Jinja. Une règle peut surveiller plusieurs entités indépendamment. Éditez visuellement ou en YAML, dupliquez une règle et testez un brouillon sur les valeurs réelles, avec les profils de notification correspondants. Les messages Jinja expliquent le problème et peuvent rester actualisés tant que l’alerte est active.
+Les règles prennent en charge états, attributs imbriqués, comparaisons numériques et textuelles, absence de changement, variations, transitions, séquences ordonnées et conditions Jinja. Une règle peut surveiller plusieurs entités indépendamment. Le mode Séquence propose de 2 à 20 étapes réordonnables sur la même valeur : maintien continu « Au moins », validation à la sortie « Moins de » ou « Entre deux durées », et délai total facultatif. Les étapes terminées restent acquises ; une interruption de surveillance remet la progression à zéro. Le testeur affiche le suivi observé sans le modifier. Éditez visuellement ou en YAML, dupliquez une règle et testez un brouillon sur les valeurs réelles, avec les profils de notification correspondants. Les messages Jinja expliquent le problème et peuvent rester actualisés tant que l’alerte est active.
 
 ### Suivre les alertes du dashboard à l’historique
 

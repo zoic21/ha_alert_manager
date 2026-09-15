@@ -62,7 +62,7 @@ const ruleToYaml = (rule) => {
   if (ATTRIBUTE_RULE_SOURCES.has(source)) {
     lines.push(`attribute: ${yamlValue(rule.attribute)}`);
   }
-  if (!["jinja", "unchanged"].includes(source) && !TRANSITION_RULE_SOURCES.has(source)) {
+  if (!["jinja", "unchanged"].includes(source) && !TRANSITION_RULE_SOURCES.has(source) && source !== "value_sequence") {
     lines.push(`operator: ${yamlValue(rule.operator)}`);
     if (rule.operator !== "unchanged") {
       lines.push(Array.isArray(rule.value)
@@ -70,15 +70,28 @@ const ruleToYaml = (rule) => {
         : `value: ${yamlValue(rule.value)}`);
     }
   }
+  if (source === "value_sequence") {
+    lines.push("steps:");
+    for (const step of rule.steps ?? []) {
+      lines.push(`  - operator: ${yamlValue(step.operator)}`);
+      lines.push(`    value: ${JSON.stringify(step.value)}`);
+      lines.push(`    duration_mode: ${yamlValue(step.duration_mode ?? "at_least")}`);
+      lines.push(`    duration: ${yamlValue(step.duration ?? 0)}`);
+      if (step.duration_mode === "between") lines.push(`    duration_max: ${yamlValue(step.duration_max)}`);
+    }
+    lines.push(`sequence_timeout: ${yamlValue(rule.sequence_timeout ?? 0)}`);
+    lines.push(`auto_resolve: ${yamlValue(rule.auto_resolve ?? 600)}`);
+    lines.push('resolve_mode: "duration"');
+  }
   if (TRANSITION_RULE_SOURCES.has(source)) {
     for (const key of ["from_value", "to_value", "auto_resolve"]) lines.push(`${key}: ${yamlValue(rule[key] ?? (key === "auto_resolve" ? 600 : ""))}`);
     lines.push(`resolve_mode: ${yamlValue(rule.resolve_mode ?? "duration")}`);
   }
   lines.push(
-    `duration: ${yamlValue(rule.duration)}`,
+    `duration: ${yamlValue(source === "value_sequence" ? 0 : rule.duration)}`,
     `message: ${yamlValue(rule.message)}`,
     `update_message_when_active: ${yamlValue(rule.update_message_when_active ?? false)}`,
-    `condition_template: ${yamlValue(rule.condition_template)}`,
+    `condition_template: ${yamlValue(source === "value_sequence" ? null : rule.condition_template)}`,
     `flapping_enabled: ${yamlValue(rule.flapping_enabled ?? false)}`,
     `flapping_occurrences: ${yamlValue(rule.flapping_occurrences)}`,
     `flapping_window: ${yamlValue(rule.flapping_window)}`,

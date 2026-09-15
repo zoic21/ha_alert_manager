@@ -42,10 +42,13 @@ from .const import (
 from .history_statistics import aggregate_history
 from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
+from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
+from .sequences import SequenceProgress
 from .storage import StorageDurabilitySnapshot, sort_history
 from .transactions import async_finish_non_interruptible
 from .validation import (
+    merge_rule_update,
     validate_config,
     validate_config_update,
     validate_rule_count,
@@ -77,6 +80,7 @@ class _ConfigurationSnapshot:
     records: dict[str, AlertRecord]
     pending_history: list[AlertHistoryEntry]
     administratively_removed: set[str]
+    sequence_progress: dict[str, SequenceProgress]
     transition_confirmed: dict[str, Any]
     transition_observations: dict[str, Any]
     variation_baselines: dict[str, float]
@@ -230,7 +234,9 @@ class _ApiMixin:
             validate_rule_update_fields(data)
             existing = self.config["rules"][self._rule_index(rule_id)]
             existing_rule = Rule.from_dict(existing)
-            rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
+            rule = validate_rule_payload(
+                merge_rule_update(existing, data), rule_id=rule_id
+            )
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
 
@@ -304,6 +310,25 @@ class _ApiMixin:
                 else None
             ),
         }
+        if rule.source == "value_sequence":
+            if state is None:
+                return {**base, "status": "error", "reason": "entity_not_found"}
+            if not self._is_base_eligible(entity_id):
+                return {**base, "status": "error", "reason": "entity_disabled"}
+            progress = self._sequence_progress.get(f"rule:{rule.id}:{entity_id}")
+            if progress is None or progress.rule != rule:
+                progress = SequenceProgress(rule)
+            snapshot = progress.snapshot(state, dt_util.now())
+            step = rule.steps[progress.index]
+            return {
+                **base,
+                "status": "indeterminate",
+                "reason": "sequence_required",
+                "operator": step["operator"],
+                "comparison_value": step["value"],
+                "raw_value": transition_value(rule, state),
+                "sequence": snapshot,
+            }
         if rule.source in TRANSITION_SOURCES:
             return {
                 **base,
@@ -524,6 +549,7 @@ class _ApiMixin:
                     )
                 else:
                     self._freeze_pending_alerts(dt_util.now())
+                    self._clear_sequences()
                     self._transition_observations.clear()
                     self._transition_confirmed.clear()
                     self._clear_variation_baselines()
@@ -1137,7 +1163,7 @@ class _ApiMixin:
         index = self._rule_index(rule_id)
         existing = self.config["rules"][index]
         old_rule = Rule.from_dict(existing)
-        rule = validate_rule_payload({**existing, **data}, rule_id=rule_id)
+        rule = validate_rule_payload(merge_rule_update(existing, data), rule_id=rule_id)
         self._validate_rule_sources(rule)
         self._validate_rule_template(rule)
         previous = self._configuration_snapshot()
@@ -1268,6 +1294,10 @@ class _ApiMixin:
             records=deepcopy(self.records),
             pending_history=list(self._pending_history),
             administratively_removed=set(self._administratively_removed),
+            sequence_progress={
+                key: progress.copy()
+                for key, progress in self._sequence_progress.items()
+            },
             transition_confirmed=dict(self._transition_confirmed),
             transition_observations=dict(self._transition_observations),
             variation_baselines=dict(self._variation_baselines),
@@ -1293,6 +1323,8 @@ class _ApiMixin:
         self.config = snapshot.config
         self._pending_history = snapshot.pending_history
         self._administratively_removed = snapshot.administratively_removed
+        self._clear_sequences()
+        self._sequence_progress = snapshot.sequence_progress
         self._transition_confirmed = snapshot.transition_confirmed
         self._transition_observations = snapshot.transition_observations
         self._variation_baselines = snapshot.variation_baselines
@@ -1313,6 +1345,8 @@ class _ApiMixin:
         self._rebuild_rule_index()
         self._refresh_tracking()
         self._reschedule_record_timers()
+        for alert_id, progress in self._sequence_progress.items():
+            self._schedule_sequence(alert_id, alert_id.rsplit(":", 1)[1], progress)
 
     def _remove_rule_instances(self, rule_id: str, entity_ids: set[str]) -> None:
         """Remove configuration-owned instances without user resolution events."""
