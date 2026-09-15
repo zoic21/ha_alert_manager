@@ -23,7 +23,7 @@ SERVICE_SCHEMA = vol.Schema(
 
 
 async def _actor_name(hass: HomeAssistant, call: ServiceCall) -> str | None:
-    """Resolve an administrator display name without exposing its internal id."""
+    """Resolve an administrator display name after checking action permissions."""
     user = await async_require_admin(hass, call.context)
     return (user.name or None) if user is not None else None
 
@@ -49,6 +49,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 call.data[ATTR_ALERT_ID],
                 await _actor_name(hass, call),
                 actor_type=_actor_type(call),
+                actor_user_id=getattr(call.context, "user_id", None),
             )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
@@ -62,6 +63,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 call.data[ATTR_ALERT_ID],
                 await _actor_name(hass, call),
                 actor_type=_actor_type(call),
+                actor_user_id=getattr(call.context, "user_id", None),
             )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err

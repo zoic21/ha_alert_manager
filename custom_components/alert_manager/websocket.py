@@ -96,6 +96,7 @@ async def websocket_alert_acknowledgements_update(
             msg["acknowledged"],
             getattr(connection.user, "name", None) or None,
             duration=msg.get("duration"),
+            actor_user_id=getattr(connection.user, "id", None),
         )
     except ValueError as err:
         connection.send_error(msg["id"], ERR_VALIDATION, str(err))

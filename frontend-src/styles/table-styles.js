@@ -265,6 +265,12 @@ export const tableStyles = `
     color: var(--secondary-text-color);
   }
   .alert-details-actor { --mdc-icon-size: 16px; }
+  ha-user-badge.alert-details-user {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    font-size: var(--ha-font-size-s, 12px);
+  }
   .alert-details-sequence-value { overflow-wrap: anywhere; min-width: 0; }
   .alert-details-sequence-entry .alert-details-timestamp {
     color: var(--secondary-text-color);

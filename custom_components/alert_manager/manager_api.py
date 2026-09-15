@@ -727,22 +727,40 @@ class _ApiMixin:
         )
 
     async def async_acknowledge(
-        self, alert_id: str, actor: str | None, *, actor_type: str | None = None
+        self,
+        alert_id: str,
+        actor: str | None,
+        *,
+        actor_type: str | None = None,
+        actor_user_id: str | None = None,
     ) -> bool:
         """Acknowledge one active alert and persist before publishing it."""
         return bool(
             await self.async_set_acknowledgements(
-                [alert_id], True, actor, actor_type=actor_type
+                [alert_id],
+                True,
+                actor,
+                actor_type=actor_type,
+                actor_user_id=actor_user_id,
             )
         )
 
     async def async_unacknowledge(
-        self, alert_id: str, actor: str | None, *, actor_type: str | None = None
+        self,
+        alert_id: str,
+        actor: str | None,
+        *,
+        actor_type: str | None = None,
+        actor_user_id: str | None = None,
     ) -> bool:
         """Remove acknowledgement from one active alert idempotently."""
         return bool(
             await self.async_set_acknowledgements(
-                [alert_id], False, actor, actor_type=actor_type
+                [alert_id],
+                False,
+                actor,
+                actor_type=actor_type,
+                actor_user_id=actor_user_id,
             )
         )
 
@@ -754,6 +772,7 @@ class _ApiMixin:
         actor: str | None,
         duration: int | None = None,
         actor_type: str | None = None,
+        actor_user_id: str | None = None,
     ) -> list[str]:
         """Apply one durable acknowledgement transaction to several alerts."""
         if duration is not None and (
@@ -767,7 +786,12 @@ class _ApiMixin:
             for alert_id in dict.fromkeys(alert_ids)
         ]
         return await self._async_apply_acknowledgements(
-            records, acknowledged, actor, duration=duration, actor_type=actor_type
+            records,
+            acknowledged,
+            actor,
+            duration=duration,
+            actor_type=actor_type,
+            actor_user_id=actor_user_id,
         )
 
     async def _async_apply_acknowledgements(
@@ -778,6 +802,7 @@ class _ApiMixin:
         *,
         duration: int | None = None,
         actor_type: str | None = None,
+        actor_user_id: str | None = None,
         expired: bool = False,
     ) -> list[str]:
         """Persist acknowledgement changes while the runtime mutation lock is held."""
@@ -806,7 +831,12 @@ class _ApiMixin:
         ]
         for record in changes:
             record.record_acknowledgement(
-                acknowledged, now, actor, expired=expired, actor_type=actor_type
+                acknowledged,
+                now,
+                actor,
+                expired=expired,
+                actor_type=actor_type,
+                actor_user_id=actor_user_id,
             )
             if acknowledged:
                 record.acknowledged = True

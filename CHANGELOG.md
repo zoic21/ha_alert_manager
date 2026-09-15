@@ -7,10 +7,14 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.4**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.5**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Use Home Assistant’s native user badge beside timeline timestamps: person photo
+  when linked, initials otherwise, with the name accessible as a tooltip. Retain
+  authenticated user ids for future events; never guess identities in older history.
 
 - Replace timeline actor names with accessible icons beside timestamps; identify
   automation/script service origins when Home Assistant provides them and retain

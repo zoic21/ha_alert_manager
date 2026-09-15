@@ -5980,7 +5980,7 @@ test("acknowledgement history shows retained actions in live and resolved timeli
   assert.equal((active.match(/Jusqu’à/g) || []).length, 1);
 });
 
-test("acknowledgement author is an icon beside the timestamp with only the deadline below", () => {
+test("acknowledgement author is a native badge beside the timestamp with only the deadline below", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   for (const recorded of [false, true]) {
@@ -5998,7 +5998,7 @@ test("acknowledgement author is an icon beside the timestamp with only the deadl
     assert.equal((timed.match(/class="alert-details-sequence-caption"/g) || []).length, 1);
     assert.match(timed, /<div class="alert-details-sequence-caption">Jusqu’à [^<]+<\/div>/);
     assert.match(timed, /data-timestamp="2026-09-15T12:30:00Z"/);
-    assert.match(timed, /class="alert-details-event-meta"><ha-icon class="alert-details-actor" icon="mdi:account" title="Loïc &lt;admin&gt;" aria-label="Loïc &lt;admin&gt;" role="img"><\/ha-icon><span class="alert-details-timestamp"/);
+    assert.match(timed, /class="alert-details-event-meta"><ha-user-badge[^>]+data-actor-name="Loïc &lt;admin&gt;"[^>]*>[\s\S]*?<\/ha-user-badge><span class="alert-details-timestamp"/);
     assert.doesNotMatch(timed, /\(Loïc/);
     for (const markup of [entry("overview", { ...row, acknowledgedUntil: null }), entry("history", row)]) {
       assert.match(markup, /Acquitté/);
@@ -6059,4 +6059,48 @@ test("shared dates show time alone today and full dates on other local days", as
     assert.equal(date.call(context, null), "—");
     assert.equal(date.call(context, "invalid"), "invalid");
   }
+});
+
+
+test("timeline user badges retain authenticated ids without guessing legacy identities", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const kind of ["overview", "history"]) {
+    const markup = panel._renderAlertDetails(kind, { ...base, acknowledgementHistory: [
+      { action: "acknowledged", at: "2026-09-15T12:00:00Z", by: "Loïc <admin>", actor_user_id: "user-1" },
+      { action: "unacknowledged", at: "2026-09-15T12:01:00Z", by: "Loïc <admin>" },
+    ] });
+    assert.equal((markup.match(/<ha-user-badge /g) || []).length, 2);
+    assert.match(markup, /data-actor-user-id="user-1"/);
+    assert.match(markup, /data-actor-user-id=""/);
+    assert.match(markup, /title="Loïc &lt;admin&gt;" aria-label="Loïc &lt;admin&gt;"/);
+    assert.doesNotMatch(markup, /<admin>|\(Loïc/);
+  }
+});
+
+test("native badge hydration sets user identity and preserves timestamp mode toggles", () => {
+  const panel = tablePanel();
+  const badge = { dataset: { actorUserId: "user-1", actorName: "Loïc" } };
+  const timestamp = {
+    dataset: { timestamp: "2026-09-15T12:00:00Z", timestampMode: "absolute" },
+    replaceChildren(node) { this.child = node; },
+  };
+  const root = { querySelector() { return null; }, querySelectorAll(selector) {
+    if (selector === "ha-user-badge[data-timeline-user]") return [badge];
+    if (selector === "[data-timestamp]") return [timestamp];
+    return [];
+  } };
+  panel._hydrateAlertDetailTimestamps(root);
+  assert.equal(badge.hass, panel._hass);
+  assert.equal(badge.user.id, "user-1");
+  assert.equal(badge.user.name, "Loïc");
+  assert.equal(timestamp.child.tagName, "HA-ABSOLUTE-TIME");
+  timestamp.dataset.timestampMode = "relative";
+  panel._hydrateAlertDetailTimestamps(root);
+  assert.equal(timestamp.child.tagName, "HA-RELATIVE-TIME");
+  assert.equal(badge.user.id, "user-1");
+  badge.dataset.actorUserId = "";
+  panel._hydrateAlertDetailTimestamps(root);
+  assert.equal(badge.user.id, "");
+  assert.equal(badge.user.name, "Loïc");
 });

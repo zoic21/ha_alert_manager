@@ -44,6 +44,7 @@
       "activated_at": "Activée le",
       "acknowledged": "Acquitté",
       "unacknowledged": "Désacquitté",
+      "actor_user": "Utilisateur",
       "actor_automation": "Automatisation",
       "actor_script": "Script",
       "acknowledgement_expired": "Désacquitté automatiquement",

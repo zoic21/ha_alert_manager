@@ -686,3 +686,68 @@ def test_service_origin_is_preserved_only_when_identified(
         AlertHistoryEntry.from_dict(archived.as_dict()).acknowledgement_history
         == record.acknowledgement_history
     )
+
+
+def test_timeline_user_identity_survives_storage_restart_and_resolution(
+    hass, entry, set_now
+):
+    """A native badge uses a trusted user id, not a guess from a display name."""
+    from custom_components.alert_manager.models import AlertHistoryEntry, AlertRecord
+
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_acknowledge(alert_id, "Loïc", actor_user_id="user-1"))
+    record = manager.records[alert_id]
+    assert record.acknowledgement_history[-1]["actor_user_id"] == "user-1"
+    restored = AlertRecord.from_dict(record.as_storage_dict())
+    assert restored.acknowledgement_history == record.acknowledgement_history
+    archive = AlertHistoryEntry.resolved(
+        record, record.active_since + timedelta(hours=1)
+    )
+    assert archive.acknowledgement_history[-1]["actor_user_id"] == "user-1"
+    run(manager.async_unload())
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    assert (
+        manager.records[alert_id].acknowledgement_history[-1]["actor_user_id"]
+        == "user-1"
+    )
+    run(manager.async_unacknowledge(alert_id, "Other user", actor_user_id="user-2"))
+    assert (
+        manager.records[alert_id].acknowledgement_history[-1]["actor_user_id"]
+        == "user-2"
+    )
+
+
+@pytest.mark.parametrize("user_id", [None, "", [], {}, 12, "x" * 256])
+def test_invalid_optional_timeline_user_identity_does_not_drop_an_event(
+    hass, entry, set_now, user_id
+):
+    """Malformed optional badge metadata cannot corrupt the retained history."""
+    from custom_components.alert_manager.models import AlertRecord
+
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(manager.async_acknowledge(alert_id, "Loïc"))
+    stored = manager.records[alert_id].as_storage_dict()
+    stored["acknowledgement_history"][-1]["actor_user_id"] = user_id
+    restored = AlertRecord.from_dict(stored)
+    assert len(restored.acknowledgement_history) == 1
+    assert restored.acknowledgement_history[-1]["by"] == "Loïc"
+    assert "actor_user_id" not in restored.acknowledgement_history[-1]
+
+
+def test_automatic_expiry_does_not_reuse_the_acknowledging_users_badge(
+    hass, entry, set_now
+):
+    """The expiry event is not attributed to the user who set the deadline."""
+    manager, alert_id = active_manager(hass, entry, set_now)
+    run(
+        manager.async_set_acknowledgements(
+            [alert_id], True, "Loïc", duration=60, actor_user_id="user-1"
+        )
+    )
+    record = manager.records[alert_id]
+    deadline = record.acknowledged_until
+    set_now(deadline + timedelta(seconds=1))
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert record.acknowledgement_history[-1]["expired"] is True
+    assert "actor_user_id" not in record.acknowledgement_history[-1]

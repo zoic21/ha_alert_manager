@@ -44,6 +44,7 @@
       "activated_at": "Activated at",
       "acknowledged": "Acknowledged",
       "unacknowledged": "Unacknowledged",
+      "actor_user": "User",
       "actor_automation": "Automation",
       "actor_script": "Script",
       "acknowledgement_expired": "Automatically unacknowledged",

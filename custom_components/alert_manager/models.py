@@ -403,6 +403,13 @@ def _acknowledgement_history(value: Any) -> list[dict[str, Any]]:
             event["by"] = item["by"]
         if item.get("actor_type") in ("automation", "script"):
             event["actor_type"] = item["actor_type"]
+        user_id = item.get("actor_user_id")
+        if (
+            isinstance(user_id, str)
+            and 0 < len(user_id) <= 255
+            and not item.get("expired")
+        ):
+            event["actor_user_id"] = user_id
         if item.get("expired") is True and item["action"] == "unacknowledged":
             event["expired"] = True
         result.append(event)
@@ -737,6 +744,7 @@ class AlertRecord:
         *,
         expired: bool = False,
         actor_type: str | None = None,
+        actor_user_id: str | None = None,
     ) -> None:
         """Append an action, preserving a known legacy acknowledgement first."""
         events = list(self.acknowledgement_history)
@@ -755,6 +763,7 @@ class AlertRecord:
                 "by": actor,
                 "expired": expired,
                 "actor_type": actor_type,
+                "actor_user_id": actor_user_id,
             }
         )
         self.acknowledgement_history = _acknowledgement_history(events)

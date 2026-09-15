@@ -1006,13 +1006,15 @@ export function alertDetailsItems(kind, row) {
     const acknowledgementHistory = Array.isArray(row.acknowledgementHistory) ? row.acknowledgementHistory.slice(-10) : [];
     for (const [index, event] of acknowledgementHistory.entries()) {
       if (!["acknowledged", "unacknowledged"].includes(event.action) || !Number.isFinite(Date.parse(event.at))) continue;
-      const author = typeof event.by === "string" ? event.by.trim() : "";
+      const author = (typeof event.by === "string" ? event.by.trim() : "")
+        || (event.actor_user_id ? this._t("alert_details.actor_user") : "");
       items.push({
         key: event.action,
         label: this._t(event.action === "acknowledged" ? "alert_details.acknowledged" : event.expired ? "alert_details.acknowledgement_expired" : "alert_details.unacknowledged"),
         value: this._date(event.at), datetime: event.at,
         actorIcon: event.actor_type === "automation" ? "mdi:robot" : event.actor_type === "script" ? "mdi:script-text-outline" : author ? "mdi:account" : "",
         actorLabel: ["automation", "script"].includes(event.actor_type) ? this._t(`alert_details.actor_${event.actor_type}`) : author,
+        actorUserId: typeof event.actor_user_id === "string" ? event.actor_user_id : "",
         pastAcknowledgement: index !== acknowledgementHistory.length - 1 || !row.acknowledged,
       });
     }
@@ -1126,6 +1128,15 @@ function renderAlertDetailsNotice(notice) {
     return `<div data-active-notice><ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert></div>`;
 }
 
+function renderTimelineActor(event) {
+    if (!event.actorIcon) return "";
+    const label = esc(event.actorLabel);
+    if (event.actorIcon === "mdi:account") {
+      return `<ha-user-badge class="alert-details-actor alert-details-user" data-timeline-user data-actor-user-id="${esc(event.actorUserId || "")}" data-actor-name="${label}" title="${label}" aria-label="${label}" role="img"><ha-icon icon="mdi:account" aria-hidden="true"></ha-icon></ha-user-badge>`;
+    }
+    return `<ha-icon class="alert-details-actor" icon="${esc(event.actorIcon)}" title="${label}" aria-label="${label}" role="img"></ha-icon>`;
+}
+
 export function renderAlertDetails(context) {
     const { items, summary, notice } = context;
     const attributes = (data) => Object.entries(data).map(([key, value]) => (
@@ -1213,7 +1224,7 @@ export function renderAlertDetails(context) {
         <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : remaining ? ` · <span${remaining.due ? ` data-due="${esc(remaining.due)}"` : ""}>${esc(remaining.value)}</span>` : ""}</span>
         <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
           <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
-            ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${event.actorIcon ? `<ha-icon class="alert-details-actor" icon="${esc(event.actorIcon)}" title="${esc(event.actorLabel)}" aria-label="${esc(event.actorLabel)}" role="img"></ha-icon>` : ""}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
+            ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${renderTimelineActor(event)}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
           </div>
           ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
           ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
@@ -1228,6 +1239,12 @@ export function renderAlertDetails(context) {
 
 export function hydrateAlertDetailTimestamps(root = this._alertDetailsDialog) {
     if (!globalThis.document?.createElement || !root) return;
+    for (const badge of root.querySelectorAll?.("ha-user-badge[data-timeline-user]") ?? []) {
+      // The native badge resolves the user's person photo, falling back to initials.
+      // Legacy events deliberately have no guessed user id when only a name was saved.
+      badge.hass = this._hass;
+      badge.user = { id: badge.dataset.actorUserId || "", name: badge.dataset.actorName };
+    }
     if (root.querySelector?.(".alert-details-labels")) void loadNativeLabels(this._hass);
     const targets = [
       ...(root.matches?.("[data-timestamp]") ? [root] : []),
