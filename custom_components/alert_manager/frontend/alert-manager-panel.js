@@ -4282,6 +4282,7 @@ function refreshRuleConditionSection() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+    hydrateDurationFields(this.shadowRoot.querySelector("[data-rule-condition-section]"), this);
     this._hydrateRuleEditorControls();
 }
 

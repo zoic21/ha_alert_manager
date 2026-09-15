@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   durationFieldValue, durationSelectorValue, hydrateDurationFields,
-  renderDurationControl, validateDurationFields, reportFormValidity,
+  renderDurationControl, renderDurationField, validateDurationFields, reportFormValidity,
 } from "../frontend-src/components/duration-field.js";
 import { captureNotificationProfileDraft } from "../frontend-src/components/notification-profiles.js";
-import { captureRuleDraftFromForm } from "../frontend-src/components/rule-editor.js";
+import { captureRuleDraftFromForm, refreshRuleConditionSection } from "../frontend-src/components/rule-editor.js";
 import { captureAutomaticConfigurationValues, captureAutomaticMapValues } from "../frontend-src/views/automatic.js";
 
 function durationField(seconds, required = true, min = 0, max = 31536000) {
@@ -157,4 +157,51 @@ test("page validation skips the open drawer while drawer Save still validates it
   assert.equal(validations, 0);
   assert.equal(reportFormValidity.call(panel, form), false);
   assert.equal(validations, 1);
+});
+
+
+test("transition duration is hydrated after each partial resolution-mode refresh", () => {
+  for (const attribute of [null, "mode"]) {
+    let fields = [];
+    let inputEvents = 0;
+    const section = {
+      set outerHTML(markup) {
+        fields = [...markup.matchAll(/<ha-selector[^>]*data-duration-value="([^"]*)"[^>]*>/g)]
+          .map((match) => durationField(match[1]));
+      },
+      querySelectorAll() { return fields; },
+    };
+    const panel = {
+      _editingRule: { source: "value_transition", attribute, resolve_mode: "state", auto_resolve: 125 },
+      _configuredControls: new WeakSet(), _hass: {}, _t: (key) => key,
+      _textField: () => "",
+      _numberField: (name, label, value, _unit, min, max, options) =>
+        renderDurationField(name, label, value, min, max, options),
+      _hydrateRuleEditorControls() {},
+      _refreshRuleEditor() { assert.fail("mode changes must retain the editor and its scroll position"); },
+      _handleInput({ target }) {
+        inputEvents += 1;
+        this._editingRule.auto_resolve = durationFieldValue(target);
+      },
+      shadowRoot: { querySelector() { return section; } },
+    };
+    for (const mode of ["state", "duration", "state", "duration"]) {
+      panel._editingRule.resolve_mode = mode;
+      refreshRuleConditionSection.call(panel);
+      if (mode === "state") {
+        assert.equal(fields.length, 0);
+        continue;
+      }
+      assert.equal(fields.length, 1);
+      const field = fields[0];
+      assert.deepEqual(field.selector, { duration: { enable_day: false, enable_millisecond: false, enable_second: true } });
+      assert.equal(field.hass, panel._hass);
+      assert.equal(durationFieldValue(field), panel._editingRule.auto_resolve);
+      // Rehydration must not attach a second input callback.
+      hydrateDurationFields(section, panel);
+      change(field, { minutes: 3, seconds: 7 });
+      assert.equal(panel._editingRule.auto_resolve, 187);
+    }
+    assert.equal(inputEvents, 2);
+  }
 });

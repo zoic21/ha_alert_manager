@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.28**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.29**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Restore the editable expiration duration when switching transition resolution
+  modes, retaining its value across repeated changes.
 
 - Remove unknown stored configuration fields during startup while preserving valid
   notification profiles, rules and pack settings; pack saves remain available.

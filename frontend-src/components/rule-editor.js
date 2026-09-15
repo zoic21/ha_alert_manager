@@ -1,4 +1,4 @@
-import { durationFieldValue } from "./duration-field.js";
+import { durationFieldValue, hydrateDurationFields } from "./duration-field.js";
 import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { newRuleDefaults, normalizeRuleTarget, ruleToYaml } from "../utils/formatting.js";
@@ -190,6 +190,7 @@ export function refreshRuleConditionSection() {
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
     });
+    hydrateDurationFields(this.shadowRoot.querySelector("[data-rule-condition-section]"), this);
     this._hydrateRuleEditorControls();
 }
 
