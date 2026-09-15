@@ -262,7 +262,7 @@ function remaining(value) {
 }
 
 function durationText(seconds, maxParts = Infinity) {
-    const value = Math.max(0, Number(seconds) || 0);
+    const value = Math.max(0, Math.round(Number(seconds) || 0));
     const parts = [
       [86400, "days"],
       [3600, "hours"],

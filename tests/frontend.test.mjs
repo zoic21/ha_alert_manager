@@ -208,6 +208,8 @@ test("human duration formatter", () => {
   assert.equal(panel._durationText(900), "15 min");
   assert.equal(panel._durationText(7200), "2 h");
   for (const [seconds, expected] of [
+    [120.000719, "2 min"], [0.49, "0 s"], [0.5, "1 s"],
+    [59.6, "1 min"], [3599.6, "1 h"], [86399.6, "1 j"],
     [0, "0 s"], [59, "59 s"], [60, "1 min"], [3599, "59 min 59 s"],
     [3600, "1 h"], [3661, "1 h 1 min 1 s"], [86399, "23 h 59 min 59 s"],
     [86400, "1 j"], [90061, "1 j 1 h 1 min 1 s"],

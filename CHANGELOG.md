@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.1**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.2**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Round displayed durations to whole seconds, including sequence evidence,
+  avoiding fractional-second artifacts and handling minute/hour boundaries.
 
 - Clarify alert details: move the history link into the entity information card,
   show trigger values below detection and sequence values below step headings,
