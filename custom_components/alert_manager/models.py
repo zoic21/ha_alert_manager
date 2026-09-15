@@ -160,6 +160,7 @@ class AlertHistoryEntry:
     acknowledged: bool
     acknowledged_at: datetime | None
     acknowledged_by: str | None
+    acknowledgement_history: list[dict[str, Any]] = field(default_factory=list)
     notifications: dict[str, Any] | None = None
     labels: list[str] = field(default_factory=list)
     label_metadata: list[dict[str, str]] | None = None
@@ -225,6 +226,9 @@ class AlertHistoryEntry:
             acknowledged=record.acknowledged,
             acknowledged_at=record.acknowledged_at,
             acknowledged_by=record.acknowledged_by,
+            acknowledgement_history=_acknowledgement_history(
+                record.acknowledgement_history
+            ),
             notifications=_json_safe(record.notifications),
             labels=list(record.details.labels),
         )
@@ -361,6 +365,9 @@ class AlertHistoryEntry:
             if isinstance(metadata, list)
             else None
         )
+        values["acknowledgement_history"] = _acknowledgement_history(
+            data.get("acknowledgement_history")
+        )
         values["notifications"] = _notification_summary(data.get("notifications"))
         return cls(**values)
 
@@ -371,6 +378,33 @@ class AlertHistoryEntry:
             if result[key] is not None:
                 result[key] = result[key].isoformat()
         return result
+
+
+MAX_ACKNOWLEDGEMENT_HISTORY = 10
+
+
+def _acknowledgement_history(value: Any) -> list[dict[str, Any]]:
+    """Keep bounded valid optional events without rejecting an existing alert."""
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value[-MAX_ACKNOWLEDGEMENT_HISTORY:]:
+        if not isinstance(item, dict) or item.get("action") not in (
+            "acknowledged",
+            "unacknowledged",
+        ):
+            continue
+        try:
+            at = _parse_aware_datetime(item.get("at"), "acknowledgement_history.at")
+        except TypeError, ValueError:
+            continue
+        event = {"action": item["action"], "at": at.isoformat()}
+        if isinstance(item.get("by"), str):
+            event["by"] = item["by"]
+        if item.get("expired") is True and item["action"] == "unacknowledged":
+            event["expired"] = True
+        result.append(event)
+    return result
 
 
 def _notification_summary(value: Any) -> dict[str, Any] | None:
@@ -465,6 +499,7 @@ class AlertRecord:
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
     acknowledged_until: datetime | None = None
+    acknowledgement_history: list[dict[str, Any]] = field(default_factory=list)
     notifications: dict[str, Any] | None = None
 
     @classmethod
@@ -620,6 +655,9 @@ class AlertRecord:
             acknowledged_at=parsed_acknowledged_at,
             acknowledged_by=acknowledged_by,
             acknowledged_until=parsed_acknowledged_until,
+            acknowledgement_history=_acknowledgement_history(
+                data.get("acknowledgement_history")
+            ),
             notifications=_notification_summary(data.get("notifications")),
         )
 
@@ -636,6 +674,10 @@ class AlertRecord:
             ),
             "acknowledged": self.acknowledged,
         }
+        if self.acknowledgement_history:
+            result["acknowledgement_history"] = _acknowledgement_history(
+                self.acknowledgement_history
+            )
         if self.notifications is not None:
             result["notifications"] = _json_safe(self.notifications)
         if self.visible_at is not None:
@@ -664,6 +706,10 @@ class AlertRecord:
                 "delay": self.delay,
             }
         )
+        if self.acknowledgement_history:
+            result["acknowledgement_history"] = _acknowledgement_history(
+                self.acknowledgement_history
+            )
         if self.notifications is not None:
             result["notifications"] = _json_safe(self.notifications)
         if self.visible_at is not None:
@@ -680,6 +726,34 @@ class AlertRecord:
                 if self.acknowledged_by is not None:
                     result["acknowledged_by"] = self.acknowledged_by
         return result
+
+    def record_acknowledgement(
+        self,
+        acknowledged: bool,
+        now: datetime,
+        actor: str | None,
+        *,
+        expired: bool = False,
+    ) -> None:
+        """Append an action, preserving a known legacy acknowledgement first."""
+        events = list(self.acknowledgement_history)
+        if not events and self.acknowledged and self.acknowledged_at is not None:
+            events.append(
+                {
+                    "action": "acknowledged",
+                    "at": self.acknowledged_at.isoformat(),
+                    "by": self.acknowledged_by,
+                }
+            )
+        events.append(
+            {
+                "action": "acknowledged" if acknowledged else "unacknowledged",
+                "at": now.isoformat(),
+                "by": actor,
+                "expired": expired,
+            }
+        )
+        self.acknowledgement_history = _acknowledgement_history(events)
 
     def clear_acknowledgement(self) -> None:
         """Reset acknowledgement metadata without changing the alert lifecycle."""

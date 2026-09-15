@@ -411,6 +411,9 @@ def test_timed_acknowledgement_persists_and_expires_once(hass, entry, set_now):
     events = event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
     assert len(events) == 1
     assert events[0]["acknowledgement_expired"] is True
+    assert record.acknowledgement_history[-1]["action"] == "unacknowledged"
+    assert record.acknowledgement_history[-1]["expired"] is True
+    assert len(record.acknowledgement_history) == 2
     assert "acknowledged_until" not in record.as_storage_dict()
     run(manager._async_expire_acknowledgement(record, deadline))
     assert len(event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)) == 1
@@ -567,3 +570,76 @@ def test_expiry_waiting_on_lock_cannot_override_new_deadline(hass, entry, set_no
     run(scenario())
     assert record.acknowledged
     assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
+
+
+def test_acknowledgement_history_is_bounded_persistent_and_archived(
+    hass, entry, set_now
+):
+    """Keep the ten latest actions across reload and immutable history snapshots."""
+    from custom_components.alert_manager.models import AlertHistoryEntry, AlertRecord
+
+    manager, alert_id = active_manager(hass, entry, set_now)
+    record = manager.records[alert_id]
+    start = record.active_since
+    expected = []
+    for index in range(12):
+        now = start + timedelta(seconds=index + 1)
+        set_now(now)
+        acknowledged = index % 2 == 0
+        assert run(manager.async_set_acknowledgements([alert_id], acknowledged, "Loïc"))
+        expected.append(
+            {
+                "action": "acknowledged" if acknowledged else "unacknowledged",
+                "at": now.isoformat(),
+                "by": "Loïc",
+            }
+        )
+        assert not run(
+            manager.async_set_acknowledgements([alert_id], acknowledged, "Loïc")
+        )
+        assert record.acknowledgement_history == expected[-10:]
+    assert record.as_public_dict()["acknowledgement_history"] == expected[-10:]
+    assert (
+        AlertRecord.from_dict(record.as_storage_dict()).acknowledgement_history
+        == expected[-10:]
+    )
+    run(manager.async_unload())
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    record = restored.records[alert_id]
+    assert record.acknowledgement_history == expected[-10:]
+    archived = AlertHistoryEntry.resolved(record, start + timedelta(minutes=1))
+    record.acknowledgement_history[0]["by"] = "Changed"
+    assert (
+        AlertHistoryEntry.from_dict(archived.as_dict()).acknowledgement_history
+        == expected[-10:]
+    )
+    legacy = record.as_storage_dict()
+    legacy.pop("acknowledgement_history")
+    assert AlertRecord.from_dict(legacy).acknowledgement_history == []
+    legacy["acknowledgement_history"] = [
+        {"action": "acknowledged", "at": "invalid"},
+        None,
+        expected[-1],
+    ]
+    assert AlertRecord.from_dict(legacy).acknowledgement_history == [expected[-1]]
+
+
+@pytest.mark.parametrize("acknowledged", [True, False])
+def test_acknowledgement_history_rolls_back_with_failed_save(
+    hass, entry, set_now, acknowledged
+):
+    """Failed mutations never leave ghost timeline events, even when already full."""
+    manager, alert_id = active_manager(hass, entry, set_now)
+    record = manager.records[alert_id]
+    for index in range(10 if acknowledged else 11):
+        run(manager.async_set_acknowledgements([alert_id], index % 2 == 0, "Loïc"))
+    before = record.as_storage_dict()
+
+    async def fail():
+        raise OSError("disk full")
+
+    manager._async_save_state = fail
+    with pytest.raises(OSError, match="disk full"):
+        run(manager.async_set_acknowledgements([alert_id], acknowledged, "Loïc"))
+    assert record.as_storage_dict() == before

@@ -405,6 +405,7 @@ export function tableRows(kind, historyEvents = []) {
         duration: history ? Number(source.total_duration_seconds ?? 0) : 0,
         acknowledged: history ? source.acknowledged === true : status === "acknowledged",
         notifications: source.notifications,
+        acknowledgementHistory: source.acknowledgement_history,
         acknowledgedAt: source.acknowledged_at || "",
         acknowledgedBy: source.acknowledged_by || "",
         acknowledgedUntil: source.acknowledged_until || "",
@@ -1002,7 +1003,19 @@ export function alertDetailsItems(kind, row) {
         datetime: row.activated,
       });
     }
-    if (row.acknowledged) {
+    const acknowledgementHistory = Array.isArray(row.acknowledgementHistory) ? row.acknowledgementHistory.slice(-10) : [];
+    for (const [index, event] of acknowledgementHistory.entries()) {
+      if (!["acknowledged", "unacknowledged"].includes(event.action) || !Number.isFinite(Date.parse(event.at))) continue;
+      const author = event.by || this._t("overview.acknowledged_system");
+      items.push({
+        key: event.action,
+        label: this._t(event.action === "acknowledged" ? "overview.acknowledged" : event.expired ? "alert_details.acknowledgement_expired" : "alert_details.unacknowledged"),
+        value: this._date(event.at), datetime: event.at,
+        suffix: this._t("overview.acknowledged_details", { date: "", author }).trim(),
+        pastAcknowledgement: index !== acknowledgementHistory.length - 1 || !row.acknowledged,
+      });
+    }
+    if (row.acknowledged && !acknowledgementHistory.length) {
       const author = row.acknowledgedBy || this._t("overview.acknowledged_system");
       items.push({
         key: "acknowledged",
@@ -1128,7 +1141,7 @@ export function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "unacknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));
@@ -1140,11 +1153,11 @@ export function renderAlertDetails(context) {
     const resolutionReason = timeline.find((item) => item.key === "resolution_reason");
     const duration = timeline.find((item) => item.key === "duration");
     const remaining = timeline.find((item) => item.key === "remaining");
-    const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged"]);
+    const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged", "unacknowledged"]);
     const events = timeline.filter((item) => eventKeys.has(item.key) && !(sequence && item.key === "detected"))
       .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.key === "resolved" ? resolutionReason?.value || "" : item.suffix || "", type: item.key }));
     for (const event of events) {
-      const deadlineKey = event.key === "activated" ? "expires" : event.key === "acknowledged" ? "acknowledged-until" : null;
+      const deadlineKey = event.key === "activated" ? "expires" : event.key === "acknowledged" && !event.pastAcknowledgement ? "acknowledged-until" : null;
       event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
     }
     for (const step of sequence?.steps ?? []) events.push({
@@ -1174,7 +1187,7 @@ export function renderAlertDetails(context) {
           value: stats.timelineLabel, label: `${stats.value} · ${profiles}` });
       }
     }
-    const eventOrder = { step: 0, flapping: 0, detected: 2, activated: 3, acknowledged: 4, resolved: 5 };
+    const eventOrder = { step: 0, flapping: 0, detected: 2, activated: 3, acknowledged: 4, unacknowledged: 4, resolved: 5 };
     events.sort((left, right) => (Date.parse(left.datetime) || 0) - (Date.parse(right.datetime) || 0)
       || (eventOrder[left.type] ?? 6) - (eventOrder[right.type] ?? 6));
     events.push(...reminders);

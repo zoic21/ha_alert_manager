@@ -5954,3 +5954,28 @@ test("pending step countdown distinguishes holds, exit limits and between window
     assert.doesNotMatch(panel._renderAlertDetails("history", row), /step-pending|data-sequence-countdown/);
   } finally { Date.now = originalNow; }
 });
+
+test("acknowledgement history shows retained actions in live and resolved timelines", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const row = { ...base, acknowledged: false, acknowledgementHistory: [
+    { action: "acknowledged", at: "2026-09-15T12:01:00Z", by: "Loïc <admin>" },
+    { action: "unacknowledged", at: "2026-09-15T12:02:00Z", by: "Loïc" },
+    { action: "acknowledged", at: "2026-09-15T12:03:00Z", by: "Loïc" },
+    { action: "unacknowledged", at: "2026-09-15T12:04:00Z", expired: true },
+  ] };
+  for (const kind of ["overview", "history"]) {
+    const markup = panel._renderAlertDetails(kind, row);
+    assert.equal((markup.match(/data-event-type="acknowledged"/g) || []).length, 2);
+    assert.equal((markup.match(/data-event-type="unacknowledged"/g) || []).length, 2);
+    assert.match(markup, /Acquittement retiré/);
+    assert.match(markup, /Acquittement expiré/);
+    assert.match(markup, /Loïc &lt;admin&gt;/);
+    assert.doesNotMatch(markup, /data-detail-key="unacknowledged"/);
+  }
+  const active = panel._renderAlertDetails("overview", { ...row, acknowledged: true,
+    acknowledgementHistory: row.acknowledgementHistory.slice(0, 3),
+    acknowledgedAt: "2026-09-15T12:03:00Z", acknowledgedUntil: "2026-09-15T13:03:00Z" });
+  assert.equal((active.match(/data-event-type="acknowledged"/g) || []).length, 2);
+  assert.equal((active.match(/Jusqu’à/g) || []).length, 1);
+});

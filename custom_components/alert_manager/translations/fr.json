@@ -42,6 +42,8 @@
       "sequence_limit_exceeded": "Limite dépassée",
       "value_prefix": "Valeur :",
       "activated_at": "Activée le",
+      "unacknowledged": "Acquittement retiré",
+      "acknowledgement_expired": "Acquittement expiré",
       "timeline_notification_alert": "Notification de début",
       "timeline_notification_resolved": "Notification de résolution",
       "timeline_notification_reminder": "Rappels",

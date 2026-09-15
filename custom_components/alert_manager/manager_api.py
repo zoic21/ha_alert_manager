@@ -786,10 +786,12 @@ class _ApiMixin:
                 record.acknowledged_at,
                 record.acknowledged_by,
                 record.acknowledged_until,
+                record.acknowledgement_history,
             )
             for record in changes
         ]
         for record in changes:
+            record.record_acknowledgement(acknowledged, now, actor, expired=expired)
             if acknowledged:
                 record.acknowledged = True
                 record.acknowledged_at = now
@@ -808,11 +810,13 @@ class _ApiMixin:
                 previous_at,
                 previous_by,
                 previous_until,
+                previous_history,
             ) in previous:
                 record.acknowledged = was_acknowledged
                 record.acknowledged_at = previous_at
                 record.acknowledged_by = previous_by
                 record.acknowledged_until = previous_until
+                record.acknowledgement_history = previous_history
             raise
         self._publish_if_changed()
         for (
@@ -821,6 +825,7 @@ class _ApiMixin:
             previous_at,
             previous_by,
             _previous_until,
+            _previous_history,
         ) in previous:
             self._schedule_timer(record)
             if acknowledged:

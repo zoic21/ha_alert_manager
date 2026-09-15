@@ -42,6 +42,8 @@
       "sequence_limit_exceeded": "Limit exceeded",
       "value_prefix": "Value:",
       "activated_at": "Activated at",
+      "unacknowledged": "Acknowledgement removed",
+      "acknowledgement_expired": "Acknowledgement expired",
       "timeline_notification_alert": "Start notification",
       "timeline_notification_resolved": "Resolution notification",
       "timeline_notification_reminder": "Reminders",

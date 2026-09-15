@@ -1423,6 +1423,8 @@ class _RuntimeMixin:
                         record.status = AlertStatus.PENDING
                         record.active_since = None
                         record.visible_at = record.detected_at
+                        if record.acknowledged:
+                            record.record_acknowledgement(False, now, None)
                         record.clear_acknowledgement()
                     elif not pending_was_visible:
                         self._recalculate_hidden_pending_visibility(record, now)
