@@ -1494,6 +1494,83 @@ test("clicking an alert row opens its detail dialog instead of entity more info"
   assert.deepEqual(opened, [["overview", "rule:temperature:sensor.rack"]]);
 });
 
+for (const kind of ["overview", "history"]) {
+  test(`${kind} row clicks retain full sequence evidence on initial load and refresh`, () => {
+    const panel = tablePanel();
+    const listeners = {};
+    const table = {
+      addEventListener(name, listener) { listeners[name] = listener; },
+      querySelectorAll() { return []; },
+      querySelector() { return null; },
+    };
+    panel.shadowRoot.querySelector = (selector) => (
+      selector === `[data-alert-table-page="${kind}"]` ? table : null
+    );
+    const sequence = {
+      source: "value_sequence", condition_key: "rule.sequence",
+      condition_params: {
+        steps: [{ operator: "equals", value: "1" }, { operator: "equals", value: "2" }],
+        evidence: [{ step: 1, started_at: "2026-09-15T10:00:00Z", started_value: "1", seconds: 0 }],
+      },
+    };
+    const source = kind === "history" ? historyEvent(sequence) : currentAlert(sequence);
+    if (kind === "history") panel._history = { events: [source] };
+    else panel._alerts = { ...panel._alerts, alerts: [source], pending: [], acknowledge: [] };
+    let opened;
+    panel._openAlertDetails = (openedKind, row) => {
+      assert.equal(openedKind, kind);
+      opened = row;
+    };
+    panel._hydrateDataTables();
+    const id = kind === "history" ? source.event_id : source.id;
+    const click = () => {
+      listeners["row-click"]({ detail: { id } });
+      assert.equal(table.data[0].source, undefined, "keep nested payloads out of native table search");
+      assert.equal(opened.source, source);
+      const html = panel._renderAlertDetails(kind, opened);
+      assert.match(html, /data-sequence-details/);
+      assert.match(html, /data-timestamp="2026-09-15T10:00:00Z"/);
+      return html;
+    };
+    click();
+    source.condition_params = { ...source.condition_params, evidence: [
+      ...source.condition_params.evidence,
+      { step: 2, started_at: "2026-09-15T10:01:00Z", started_value: "2", seconds: 0 },
+    ] };
+    panel._refreshAlertTableData(kind, table);
+    assert.match(click(), /data-timestamp="2026-09-15T10:01:00Z"/);
+  });
+}
+
+test("late history response cannot restore pending sequence details after activation", async () => {
+  const { refreshHistoryOccurrenceDetails } = await import("../frontend-src/components/alert-table.js");
+  const panel = tablePanel();
+  const first = { step: 1, started_at: "2026-09-15T10:00:00Z", started_value: "1", seconds: 0 };
+  const second = { step: 2, started_at: "2026-09-15T10:01:00Z", started_value: "2", seconds: 0 };
+  const source = currentAlert({ source: "value_sequence", condition_key: "rule.sequence_pending",
+    condition_params: { count: 1, total: 2, next: 2,
+      steps: [{ operator: "equals", value: "1" }, { operator: "equals", value: "2" }], evidence: [first] } });
+  panel._alerts = { ...panel._alerts, alerts: [], pending: [source], acknowledge: [] };
+  const pending = panel._tableRows("overview")[0];
+  const dialog = { alertKind: "overview", alertId: pending.id, alertRow: pending,
+    querySelector: (selector) => selector === "[data-sequence-details]" ? { expanded: true } : null };
+  panel._alertDetailsDialog = dialog;
+  panel._hydrateAlertDetailTimestamps = panel._updateCountdowns = () => {};
+  const table = { querySelector: () => null };
+  panel.shadowRoot.querySelector = selector => selector === '[data-alert-table-page="overview"]' ? table : null;
+  panel._alerts.pending = [];
+  panel._alerts.alerts = [{ ...source, condition_key: "rule.sequence",
+    condition_params: { ...source.condition_params, count: 2, evidence: [first, second] } }];
+  panel._refreshOverviewData();
+  assert.match(dialog.innerHTML, /data-timestamp="2026-09-15T10:01:00Z"/);
+  panel._history = { events: [historyEvent({ id: source.id })] };
+  refreshHistoryOccurrenceDetails.call(panel);
+  assert.equal(dialog.alertRow.status, "active");
+  assert.match(dialog.innerHTML, /alert-details-status-active/);
+  assert.match(dialog.innerHTML, /data-timestamp="2026-09-15T10:01:00Z"/);
+  assert.match(dialog.innerHTML, /data-sequence-details expanded/);
+});
+
 test("alert details expose translated fields and contextual links", () => {
   const panel = tablePanel();
   panel._config.rules = [{ id: "temperature", name: "Température baie" }];

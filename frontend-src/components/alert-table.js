@@ -15,7 +15,7 @@ export function refreshAlertTableData(kind, tablePage) {
     const visibleRows = this._filteredTableRows(kind, sourceRows, false);
     tablePage.hass = this._hass;
     tablePage.data = this._nativeTableData(kind, visibleRows);
-    tablePage._alertManagerRows = tablePage.data;
+    tablePage._alertManagerRows = visibleRows;
     const selectedIds = kind === "overview" ? this._selectedAlertIds : this._selectedHistoryIds;
     const availableIds = new Set(sourceRows.map((row) => row.id));
     for (const id of selectedIds) {
@@ -95,7 +95,9 @@ export function hydrateDataTables() {
       tablePage.columnOrder = orderedColumns;
       tablePage.hiddenColumns = hiddenColumns;
       tablePage.data = data;
-      tablePage._alertManagerRows = data;
+      // Native table rows omit nested source data to keep search lightweight.
+      // Detail dialogs need the complete row, including recorded evidence.
+      tablePage._alertManagerRows = visibleRows;
       tablePage.filter = this._tableState[kind].search;
       tablePage.searchLabel = this._t("table.search");
       tablePage.filters = this._filterCount(kind);
@@ -1245,7 +1247,7 @@ export function openAlertDetails(kind, row) {
 
 export function refreshHistoryOccurrenceDetails() {
     const dialog = this._alertDetailsDialog;
-    if (!dialog?.alertRow) return;
+    if (!dialog?.alertRow || dialog.reevaluating || dialog.alertKind === "result") return;
     const id = dialog.alertRow.alertId;
     const count = id
       ? (this._history?.events ?? []).reduce((total, entry) => total + Number(entry.id === id), 0) : 0;
@@ -1317,6 +1319,7 @@ export async function handleAlertDetailsSelection(event) {
         };
         if (dialog && this._alertDetailsDialog === dialog) {
           dialog.notice = notice;
+          dialog.alertRow = row ?? null;
           if (!row) dialog.alertKind = "result";
           dialog.innerHTML = row
             ? this._renderAlertDetails("overview", row)
@@ -1327,6 +1330,7 @@ export async function handleAlertDetailsSelection(event) {
         const notice = { kind: "error", text: this._errorText(error) };
         if (dialog && this._alertDetailsDialog === dialog) {
           dialog.notice = notice;
+          dialog.alertRow = previousRow ?? null;
           dialog.innerHTML = previousRow
             ? this._renderAlertDetails("overview", previousRow)
             : renderAlertDetailsNotice(dialog.notice);

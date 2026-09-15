@@ -47,6 +47,7 @@ export function refreshOverviewData() {
       if (!updatedRow) {
         this._closeAlertDetailsDialog();
       } else {
+        detailsDialog.alertRow = updatedRow;
         detailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         detailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         detailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
@@ -190,6 +191,7 @@ export async function updateAlertAcknowledgement(service, alertId, duration = nu
       }
       const updatedRow = this._tableRows("overview").find((item) => item.id === alertId);
       if (this._alertDetailsDialog && updatedRow) {
+        this._alertDetailsDialog.alertRow = updatedRow;
         this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);

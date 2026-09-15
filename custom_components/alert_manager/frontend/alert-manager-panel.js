@@ -1223,7 +1223,7 @@ function refreshAlertTableData(kind, tablePage) {
     const visibleRows = this._filteredTableRows(kind, sourceRows, false);
     tablePage.hass = this._hass;
     tablePage.data = this._nativeTableData(kind, visibleRows);
-    tablePage._alertManagerRows = tablePage.data;
+    tablePage._alertManagerRows = visibleRows;
     const selectedIds = kind === "overview" ? this._selectedAlertIds : this._selectedHistoryIds;
     const availableIds = new Set(sourceRows.map((row) => row.id));
     for (const id of selectedIds) {
@@ -1303,7 +1303,9 @@ function hydrateDataTables() {
       tablePage.columnOrder = orderedColumns;
       tablePage.hiddenColumns = hiddenColumns;
       tablePage.data = data;
-      tablePage._alertManagerRows = data;
+      // Native table rows omit nested source data to keep search lightweight.
+      // Detail dialogs need the complete row, including recorded evidence.
+      tablePage._alertManagerRows = visibleRows;
       tablePage.filter = this._tableState[kind].search;
       tablePage.searchLabel = this._t("table.search");
       tablePage.filters = this._filterCount(kind);
@@ -2453,7 +2455,7 @@ function openAlertDetails(kind, row) {
 
 function refreshHistoryOccurrenceDetails() {
     const dialog = this._alertDetailsDialog;
-    if (!dialog?.alertRow) return;
+    if (!dialog?.alertRow || dialog.reevaluating || dialog.alertKind === "result") return;
     const id = dialog.alertRow.alertId;
     const count = id
       ? (this._history?.events ?? []).reduce((total, entry) => total + Number(entry.id === id), 0) : 0;
@@ -2525,6 +2527,7 @@ async function handleAlertDetailsSelection(event) {
         };
         if (dialog && this._alertDetailsDialog === dialog) {
           dialog.notice = notice;
+          dialog.alertRow = row ?? null;
           if (!row) dialog.alertKind = "result";
           dialog.innerHTML = row
             ? this._renderAlertDetails("overview", row)
@@ -2535,6 +2538,7 @@ async function handleAlertDetailsSelection(event) {
         const notice = { kind: "error", text: this._errorText(error) };
         if (dialog && this._alertDetailsDialog === dialog) {
           dialog.notice = notice;
+          dialog.alertRow = previousRow ?? null;
           dialog.innerHTML = previousRow
             ? this._renderAlertDetails("overview", previousRow)
             : renderAlertDetailsNotice(dialog.notice);
@@ -5381,6 +5385,7 @@ function refreshOverviewData() {
       if (!updatedRow) {
         this._closeAlertDetailsDialog();
       } else {
+        detailsDialog.alertRow = updatedRow;
         detailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         detailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         detailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
@@ -5524,6 +5529,7 @@ async function updateAlertAcknowledgement(service, alertId, duration = null) {
       }
       const updatedRow = this._tableRows("overview").find((item) => item.id === alertId);
       if (this._alertDetailsDialog && updatedRow) {
+        this._alertDetailsDialog.alertRow = updatedRow;
         this._alertDetailsDialog.headerTitle = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.heading = updatedRow.entityName || updatedRow.entityId;
         this._alertDetailsDialog.innerHTML = this._renderAlertDetails("overview", updatedRow);
