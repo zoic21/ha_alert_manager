@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.34**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.35**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Show sequence evidence immediately when opening active or historical alerts,
+  and prevent delayed history responses from restoring stale pending details.
 
 - Keep sequence details visible for active and historical alerts, with an explicit
   message when an older alert has no recorded steps. Present recorded starting
@@ -26,6 +29,11 @@ This is a prerelease for testing, not a stable release.
   refreshing other configuration surfaces.
 
 ### Major changes
+
+- All alert details share one expandable chronological timeline with colored event
+  markers, lifecycle dates, sequence steps and instability occurrences. Start and
+  resolution notifications retain send times and profile names; reminders display
+  a total and profiles without timestamps. The expanded state survives refreshes.
 
 - Custom transition rules support ordered multi-step sequences with continuous hold
   durations, independent progress per entity, an optional overall timeout, and a
