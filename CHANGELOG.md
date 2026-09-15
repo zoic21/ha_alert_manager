@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.2**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.3**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Show in-progress sequence holds from the first step, with mode-aware countdowns
+  for minimum, maximum and bounded durations and an indication when a limit is exceeded.
 
 - Round displayed durations to whole seconds, including sequence evidence,
   avoiding fractional-second artifacts and handling minute/hour boundaries.
@@ -42,6 +45,11 @@ This is a prerelease for testing, not a stable release.
   refreshing other configuration surfaces.
 
 ### Major changes
+
+- Retain the ten latest acknowledgement and unacknowledgement actions in each
+  alert timeline, including automatic expiry. Preserve timestamps and actors across
+  restarts and resolution, discard the oldest event at the limit, and roll back
+  the timeline when persistence fails.
 
 - All alert details share one expandable chronological timeline with colored event
   markers, lifecycle dates, sequence steps and instability occurrences. Start and
