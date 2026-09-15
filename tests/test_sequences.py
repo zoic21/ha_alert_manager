@@ -186,7 +186,7 @@ def test_yaml_and_readonly_diagnostics():
         {"sequence_timeout": True},
         {"duration": 5},
         {"condition_template": "{{ true }}"},
-        {"resolve_mode": "state"},
+        {"resolve_mode": "invalid"},
         {"steps": [{"operator": "above", "value": 2, "duration_mode": "exactly"}] * 2},
         {"steps": [{"operator": "above", "value": "nan"}] * 2},
         {
@@ -503,3 +503,169 @@ def test_repeated_full_sequence_keeps_ack_and_emits_an_occurrence(hass, entry, s
     assert (
         record.details.condition_params["last_occurrence"] == dt_util.now().isoformat()
     )
+
+
+@pytest.mark.parametrize("mode", ["duration", "state", "condition"])
+@pytest.mark.parametrize("attribute", [None, "power"])
+def test_sequence_resolution_modes_and_restart(hass, entry, set_now, mode, attribute):
+    manager, key, rule = setup_sequence(
+        hass,
+        entry,
+        resolve_mode=mode,
+        attribute=attribute,
+        resolve_condition={"operator": "above", "value": 20}
+        if mode == "condition"
+        else None,
+    )
+
+    def update(value):
+        edge(
+            manager,
+            hass,
+            "ok" if attribute else str(value),
+            {"power": value} if attribute else None,
+        )
+
+    now = dt_util.now()
+    update(120)
+    set_now(now + timedelta(seconds=30))
+    update(5)
+    set_now(now + timedelta(seconds=50))
+    fire_sequence_timer(manager, hass, key)
+    record = manager.records[key]
+    assert record.status is AlertStatus.ACTIVE
+    assert (record.expires_at is not None) == (mode == "duration")
+    run(manager.async_acknowledge(key, "admin"))
+    run(manager.async_unload())
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(manager._async_finish_startup_reconciliation())
+    assert manager.records[key].acknowledged
+    for invalid in ("unknown", "unavailable", "nan", "invalid"):
+        update(invalid)
+        assert key in manager.records
+    update(15)
+    if mode == "state":
+        assert key not in manager.records
+        assert len(manager.history) == 1
+        return
+    assert key in manager.records
+    update(25)
+    if mode == "condition":
+        assert key not in manager.records
+        assert len(manager.history) == 1
+    else:
+        assert key in manager.records
+        set_now(manager.records[key].expires_at)
+        manager._evaluation_flush_scheduled = True
+        manager._timer_due(key)
+        run(manager._async_flush_queued_evaluations())
+        assert key not in manager.records
+    restored = parse_rule_yaml(dump_rule_yaml(Rule.from_dict(rule)))
+    assert restored.resolve_mode == mode
+    assert restored.resolve_condition == rule.get("resolve_condition")
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        None,
+        {},
+        {"operator": "unchanged", "value": 1},
+        {"operator": "above", "value": "nan"},
+        {"operator": "between", "value": [10, 1]},
+        {"operator": "equals", "value": "ok", "entity_id": "sensor.other"},
+    ],
+)
+def test_invalid_resolution_comparisons_rejected(condition):
+    with pytest.raises(ValueError):
+        sequence(resolve_mode="condition", resolve_condition=condition)
+
+
+def test_last_step_exit_resolves_immediately(hass, entry, set_now):
+    manager, key, _ = setup_sequence(hass, entry, resolve_mode="state")
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    edge(manager, hass, "5")
+    set_now(now + timedelta(seconds=50))
+    edge(manager, hass, "15")
+    assert key not in manager.records
+    assert len(manager.history) == 1
+    assert len(manager.history[0].condition_params["evidence"]) == 2
+
+
+def test_resolution_edits_cancel_stale_expiration(hass, entry, set_now):
+    manager, key, rule = setup_sequence(hass, entry)
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    edge(manager, hass, "5")
+    set_now(now + timedelta(seconds=50))
+    fire_sequence_timer(manager, hass, key)
+    record = manager.records[key]
+    old_expiry = record.expires_at
+    run(
+        manager.async_update_rule(
+            rule["id"],
+            {
+                "resolve_mode": "condition",
+                "resolve_condition": {"operator": "above", "value": 20},
+            },
+        )
+    )
+    assert record.expires_at is None
+    set_now(old_expiry)
+    manager._evaluation_flush_scheduled = True
+    manager._timer_due(key)
+    run(manager._async_flush_queued_evaluations())
+    assert manager.records[key] is record
+    run(manager.async_update_rule(rule["id"], {"resolve_mode": "duration"}))
+    assert record.expires_at == dt_util.now() + timedelta(seconds=60)
+    assert manager._transition_rules_by_id[rule["id"]].resolve_condition is None
+
+
+@pytest.mark.parametrize("source", ["value_sequence", "value_transition"])
+@pytest.mark.parametrize("mode", ["duration", "state", "condition"])
+def test_resolution_notification_preview_follows_mode(
+    hass, entry, monkeypatch, source, mode
+):
+    setup_rule = setup_sequence if source == "value_sequence" else setup
+    manager, _, rule = setup_rule(
+        hass,
+        entry,
+        resolve_mode=mode,
+        resolve_condition={"operator": "below", "value": 10}
+        if mode == "condition"
+        else None,
+    )
+    monkeypatch.setattr(
+        manager.notification_runtime,
+        "preview_profiles",
+        lambda *_: {
+            "started": [],
+            "reminder": [],
+            "resolved": [{"id": "recovery", "name": "Recovery"}],
+        },
+    )
+    result = run(manager.async_test_rule({}, rule_id=rule["id"]))["results"][0]
+    assert result["notification_resolved_profiles"] == (
+        [] if mode == "duration" else [{"id": "recovery", "name": "Recovery"}]
+    )
+
+
+def test_condition_resolution_waits_while_monitoring_paused(hass, entry):
+    manager, key, _ = setup(
+        hass,
+        entry,
+        resolve_mode="condition",
+        resolve_condition={"operator": "equals", "value": "C"},
+    )
+    edge(manager, hass, "B")
+    record = manager.records[key]
+    run(manager.async_set_monitoring(False))
+    edge(manager, hass, "C")
+    assert manager.records[key] is record
+    run(manager.async_set_monitoring(True))
+    assert key not in manager.records
+    assert len(manager.history) == 1

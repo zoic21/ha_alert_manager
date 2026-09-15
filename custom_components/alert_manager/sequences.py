@@ -19,7 +19,11 @@ def sequence_comparison(
     if transition_value(rule, state) is None:
         return None
     comparison = replace(
-        rule, source="value", operator=step["operator"], value=step["value"]
+        rule,
+        source="value",
+        operator=step["operator"],
+        value=step["value"],
+        condition_template=None,
     )
     return evaluate_rule(
         comparison, state, evaluate_condition=lambda _: (None, None)

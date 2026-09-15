@@ -507,6 +507,19 @@ export async function handleRulesAction(action, button) {
     this.shadowRoot.querySelector(`#sequence-${focusIndex}-operator`)?.focus?.();
     return true;
   }
+  if (["add-rule-value", "remove-rule-value"].includes(action) && button.closest?.("[data-resolution-condition]")) {
+    this._captureRuleDraft();
+    const condition = this._editingRule.resolve_condition;
+    const values = this._ruleValueList(condition.value);
+    if (action === "add-rule-value") values.push("");
+    else values.splice(Number(button.dataset.index), 1);
+    condition.value = values.length ? values : [""];
+    this._clearRuleTestResult();
+    this._ruleDirty = true;
+    this._refreshRuleConditionSection();
+    if (action === "add-rule-value") revealAddedRow(this.shadowRoot, "[data-resolution-condition] .rule-value-row:last-child");
+    return true;
+  }
   if (["add-rule-value", "remove-rule-value"].includes(action) && button.closest?.("[data-sequence-step]")) {
     this._captureRuleDraft();
     const index = Number(button.closest("[data-sequence-step]").dataset.sequenceStep);

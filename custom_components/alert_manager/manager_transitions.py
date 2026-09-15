@@ -15,7 +15,7 @@ from .models import AlertRecord, AlertStatus, Rule, advance_record, normalize_sc
 from .packs.base import PackOccurrence
 from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
-from .sequences import SequenceProgress
+from .sequences import SequenceProgress, sequence_comparison
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,14 +220,21 @@ class _TransitionsMixin:
         if not self._is_base_eligible(record.details.entity_id):
             return False
         rule = self._transition_rules_by_id.get(record.details.rule_id)
-        if rule is not None and rule.resolve_mode == "state":
-            value = transition_value(
-                rule, self.hass.states.get(record.details.entity_id)
-            )
-            if value is not None and normalize_scalar(value) != normalize_scalar(
-                rule.to_value
-            ):
-                return False
+        if rule is not None and record.status is AlertStatus.ACTIVE:
+            state = self.hass.states.get(record.details.entity_id)
+            if rule.resolve_mode == "condition":
+                if sequence_comparison(rule, rule.resolve_condition, state) is True:
+                    return False
+            elif rule.resolve_mode == "state":
+                if rule.source == "value_sequence":
+                    if sequence_comparison(rule, rule.steps[-1], state) is False:
+                        return False
+                else:
+                    value = transition_value(rule, state)
+                    if value is not None and normalize_scalar(
+                        value
+                    ) != normalize_scalar(rule.to_value):
+                        return False
         return (
             rule is not None
             and rule.enabled
@@ -260,7 +267,7 @@ class _TransitionsMixin:
             record = self.records.get(alert_id)
             if record is not None and record.status is AlertStatus.ACTIVE:
                 # Apply mode edits to the existing episode and cancel stale deadlines.
-                if rule.resolve_mode == "state" and record.expires_at is not None:
+                if rule.resolve_mode != "duration" and record.expires_at is not None:
                     record.expires_at = None
                     self._schedule_timer(record)
                     changed = True

@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.30**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.31**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
@@ -24,7 +24,10 @@ This is a prerelease for testing, not a stable release.
 
 - Custom transition rules support ordered multi-step sequences with continuous hold
   durations, independent progress per entity, an optional overall timeout, and a
-  compact step editor with YAML and rule-tester support.
+  compact step editor with collapsible summaries, YAML and rule-tester support.
+- Transitions and sequences can resolve after a duration, when the arrival value or
+  final step no longer matches, or using a separate numeric/text comparison on the
+  same entity and attribute. Unknown/unavailable values preserve active alerts.
 
 - Custom transition rules can resolve after a duration or remain active until a known
   value leaves the arrival state, for both state and attribute transitions.

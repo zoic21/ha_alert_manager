@@ -286,12 +286,13 @@
       "transition_expiration": "La résolution automatique doit être comprise entre 1 seconde et 365 jours.",
       "transition_resolution_mode": "Choisissez un mode de résolution de transition valide.",
       "sequence_steps": "Une séquence doit contenir entre 2 et 20 étapes.",
-      "sequence_options": "Une séquence utilise duration: 0, une résolution après une durée et aucune condition Jinja.",
+      "sequence_options": "Une séquence utilise duration: 0 et aucune condition Jinja.",
       "sequence_duration": "Les durées doivent être des secondes entières entre 0 et 31536000 ; la résolution doit durer au moins 1 seconde.",
       "sequence_step": "Choisissez un opérateur de comparaison et une valeur valides pour chaque étape.",
       "sequence_mode": "Choisissez « Au moins », « Moins de » ou « Entre deux durées ».",
       "sequence_bounds": "La durée maximale doit dépasser la minimale ; « Moins de » exige une durée supérieure à 0.",
-      "sequence_source": "Les champs de séquence exigent source: value_sequence."
+      "sequence_source": "Les champs de séquence exigent source: value_sequence.",
+      "resolution_condition": "Choisissez une comparaison et une valeur de résolution valides."
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {
@@ -647,7 +648,7 @@
       "upper_bound": "Borne supérieure",
       "value": "Valeur de comparaison",
       "values": "Valeurs de comparaison",
-      "yaml_help": "Utilisez source: value, value_variation ou value_transition. Un attribut vide ou absent cible l’état ; un attribut renseigné cible cet attribut. Les variations exigent condition_template et comparent valeur_actuelle - valeur_initiale. Variations et transitions n’acceptent pas les attributs avec joker. between/outside utilisent value: [borne_inférieure, borne_supérieure]. source: unchanged surveille l’état et les attributs ensemble ; source: jinja évalue uniquement condition_template. Les anciennes sources sont migrées automatiquement. Les séquences utilisent source: value_sequence, steps (operator, value, duration_mode, duration, duration_max) et sequence_timeout.",
+      "yaml_help": "Utilisez source: value, value_variation ou value_transition. Un attribut vide ou absent cible l’état ; un attribut renseigné cible cet attribut. Les variations exigent condition_template et comparent valeur_actuelle - valeur_initiale. Variations et transitions n’acceptent pas les attributs avec joker. between/outside utilisent value: [borne_inférieure, borne_supérieure]. source: unchanged surveille l’état et les attributs ensemble ; source: jinja évalue uniquement condition_template. Les anciennes sources sont migrées automatiquement. Les séquences utilisent source: value_sequence, steps (operator, value, duration_mode, duration, duration_max) et sequence_timeout. Résolution : resolve_mode: duration, state ou condition ; condition utilise resolve_condition: {operator: below, value: 10}.",
       "yaml_invalid": "La règle YAML est invalide.",
       "yaml_title": "Règle YAML",
       "labels": "Étiquettes",
@@ -657,7 +658,7 @@
       "from_value": "Valeur de départ",
       "to_value": "Valeur d’arrivée",
       "auto_resolve": "Résolution automatique",
-      "transition_help": "Nécessite un changement observé départ → arrivée. Le délai de déclenchement confirme le maintien à l’arrivée. Ensuite, résolution après une durée ou dès qu’une valeur connue quitte l’état d’arrivée.",
+      "transition_help": "Nécessite un changement observé départ → arrivée. Le délai de déclenchement confirme le maintien à l’arrivée. Résolution après une durée, à la sortie de l’état d’arrivée ou selon un test de valeur.",
       "last_occurrence": "Dernière transition",
       "resolution_reason": "Motif de résolution",
       "automatic_resolution": "Expiration automatique",
@@ -699,7 +700,11 @@
       "sequence_status_completed": "Séquence terminée ; attente du réarmement",
       "sequence_elapsed": "Maintien observé",
       "sequence_remaining": "Prochaine échéance dans",
-      "sequence_completed": "Étape {step} terminée"
+      "sequence_completed": "Étape {step} terminée",
+      "resolve_mode_condition": "Quand une condition de valeur est vraie",
+      "resolve_mode_last_step": "Quand la dernière étape n’est plus vraie",
+      "resolve_condition_help": "Résout dès que ce test est vrai sur la même entité et le même attribut. Les valeurs inconnues ou indisponibles sont ignorées.",
+      "resolve_last_step_help": "Résout dès que la comparaison de la dernière étape devient fausse, sans reprendre sa durée de maintien. Si l’étape se termine en quittant sa condition, la résolution est immédiate."
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",

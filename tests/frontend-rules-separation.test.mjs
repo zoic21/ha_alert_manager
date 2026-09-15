@@ -401,7 +401,7 @@ test("transition resolution selector refreshes its duration control and keeps th
     _ruleEditorMode: "visual", _t: t, _ruleAttributeOptions: () => [],
     _configureSelect(id, options, value, callback) {
       if (id === "rule-resolve-mode") {
-        assert.deepEqual(options.map((option) => option.value), ["duration", "state"]);
+        assert.deepEqual(options.map((option) => option.value), ["duration", "state", "condition"]);
         assert.equal(value, "duration");
         changeMode = callback;
       }
@@ -553,4 +553,78 @@ test("choosing Sequence in a new ordinary rule immediately creates two editable 
   chooseSource("value_sequence");
   assert.equal(panel._editingRule.steps.length, 2);
   assert.notEqual(panel._editingRule.steps[0], panel._editingRule.steps[1]);
+});
+
+test("sequence and transition resolution fields survive mode changes and YAML", () => {
+  for (const source of ["value_sequence", "value_transition"]) {
+    const current = normalizeRuleDraft(rule({ source, resolve_mode: "condition", auto_resolve: 240, resolve_condition: { operator: "between", value: [10, 20] } }));
+    const row = { querySelector: (selector) => ({ '[data-field="operator"]': { value: "between" }, '[data-field="lower-bound"]': { value: "12" }, '[data-field="upper-bound"]': { value: "30" } })[selector] ?? null, querySelectorAll: () => [] };
+    const form = { querySelector: (selector) => selector === "[data-resolution-condition]" ? row : null, querySelectorAll: () => [] };
+    let captured = captureRuleDraftFromForm(form, current);
+    assert.deepEqual(captured.resolve_condition, { operator: "between", value: ["12", "30"] });
+    const context = { t, renderTextField: () => "", renderNumberField: (name) => `<ha-selector data-field="${name}"></ha-selector>` };
+    for (const mode of ["state", "duration", "condition"]) {
+      captured = captureRuleDraftFromForm({ querySelector: () => null, querySelectorAll: () => [] }, { ...captured, resolve_mode: mode });
+      const html = renderRuleConditionSection({ ...context, rule: captured });
+      assert.equal(html.includes('data-field="auto_resolve"'), mode === "duration");
+      assert.equal(html.includes("data-resolution-condition"), mode === "condition");
+      assert.equal((html.match(/id="rule-resolve-mode"/g) ?? []).length, 1);
+      assert.equal(captured.auto_resolve, 240);
+      const payload = serializeRuleDraft(captured);
+      assert.equal(payload.resolve_mode, mode);
+      assert.equal("resolve_condition" in payload, mode === "condition");
+      if (mode === "condition") {
+        assert.deepEqual(payload.resolve_condition, { operator: "between", value: ["12", "30"] });
+        assert.match(ruleToYaml(payload), /resolve_condition: \{"operator":"between","value":\["12","30"\]\}/);
+      }
+    }
+    assert.equal("resolve_condition" in serializeRuleDraft({ ...captured, source: "value" }), false);
+  }
+});
+
+test("sequence expansion captures edits, keeps its state and never serializes it", () => {
+  const listeners = new Map();
+  const summary = { textContent: "" };
+  const expansion = {
+    querySelectorAll: () => [], querySelector: () => summary,
+    addEventListener: (name, handler) => listeners.set(name, handler),
+    removeEventListener: (name) => listeners.delete(name),
+  };
+  const panel = {
+    _editingRule: normalizeRuleDraft(rule({ source: "value_sequence", steps: [{ operator: "above", value: 100, duration: 300 }, { operator: "below", value: 10, duration: 120 }] })),
+    _ruleEditorMode: "visual", _t: t, _ruleAttributeOptions: () => [],
+    _configureSelect() {}, _configureSelector() {}, _handleSelected() {},
+    _captureRuleDraft() { this._editingRule.steps[0].value = 200; },
+    shadowRoot: { querySelector: (selector) => selector === '[data-sequence-step="0"]' ? expansion : null },
+  };
+  hydrateRuleEditorControls.call(panel);
+  hydrateRuleEditorControls.call(panel);
+  assert.equal(listeners.size, 1);
+  listeners.get("expanded-changed")({ target: expansion, detail: { expanded: true } });
+  assert.equal(panel._editingRule.steps[0]._expanded, true);
+  listeners.get("expanded-changed")({ target: expansion, detail: { expanded: false } });
+  assert.equal(panel._editingRule.steps[0]._expanded, false);
+  assert.match(summary.textContent, /200/);
+  assert.match(summary.textContent, /duration.minutes/);
+  const html = renderRuleConditionSection({ rule: panel._editingRule, t, renderTextField: () => "", renderNumberField: () => "" });
+  assert.match(html, /<ha-expansion-panel[^>]*data-sequence-step="0"/);
+  assert.doesNotMatch(html, /data-sequence-step="0"[^>]* expanded/);
+  assert.match(html, /slot="icons" class="sequence-step-actions"/);
+  assert.equal("_expanded" in serializeRuleDraft(panel._editingRule).steps[0], false);
+  assert.doesNotMatch(ruleToYaml(panel._editingRule), /_expanded/);
+});
+
+test("resolution comparison value actions do not change sequence steps", async () => {
+  const { handleRulesAction } = await import("../frontend-src/views/rules.js");
+  const panel = {
+    _editingRule: { resolve_condition: { operator: "equals", value: ["done"] }, steps: [{ value: 100 }] },
+    _captureRuleDraft() {}, _clearRuleTestResult() {}, _refreshRuleConditionSection() {},
+    _ruleValueList: (value) => [...value], shadowRoot: { querySelector: () => null },
+  };
+  const button = { closest: (selector) => selector === "[data-resolution-condition]" ? {} : null, dataset: { index: "0" } };
+  await handleRulesAction.call(panel, "add-rule-value", button);
+  assert.deepEqual(panel._editingRule.resolve_condition.value, ["done", ""]);
+  await handleRulesAction.call(panel, "remove-rule-value", button);
+  assert.deepEqual(panel._editingRule.resolve_condition.value, [""]);
+  assert.deepEqual(panel._editingRule.steps, [{ value: 100 }]);
 });

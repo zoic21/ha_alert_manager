@@ -713,6 +713,7 @@ class Rule:
     to_value: str | int | float | bool | None = None
     auto_resolve: int = 600
     resolve_mode: str = "duration"
+    resolve_condition: dict[str, Any] | None = None
     steps: list[dict[str, Any]] = field(default_factory=list)
     sequence_timeout: int = 0
     version: int = 2
@@ -866,14 +867,37 @@ class Rule:
             raise ValueError("Duration must be an integer")
         if self.duration < 0 or self.duration > 31_536_000:
             raise ValueError("Duration must be between 0 and 31536000 seconds")
+        if self.source in TRANSITION_SOURCES:
+            if self.resolve_mode not in ("duration", "state", "condition"):
+                raise ValueError("Unsupported transition resolution mode")
+            if self.resolve_mode == "condition":
+                condition = self.resolve_condition
+                if (
+                    not isinstance(condition, dict)
+                    or set(condition) != {"operator", "value"}
+                    or not isinstance(condition["operator"], str)
+                    or condition["operator"] not in OPERATORS
+                    or condition["operator"] == "unchanged"
+                ):
+                    raise ValueError("Invalid resolution condition")
+                replace(
+                    self,
+                    source="value",
+                    steps=[],
+                    sequence_timeout=0,
+                    resolve_condition=None,
+                    operator=condition["operator"],
+                    value=condition["value"],
+                    condition_template=None,
+                ).validate()
+            else:
+                self.resolve_condition = None
         if self.source == "value_sequence":
             self._validate_sequence()
             return
         if self.steps or self.sequence_timeout:
             raise ValueError("Sequence fields require a sequence source")
         if self.source in TRANSITION_SOURCES:
-            if self.resolve_mode not in ("duration", "state"):
-                raise ValueError("Unsupported transition resolution mode")
             for value in (self.from_value, self.to_value):
                 if not isinstance(
                     value, str | int | float | bool
@@ -948,14 +972,8 @@ class Rule:
             or not 2 <= len(self.steps) <= MAX_SEQUENCE_STEPS
         ):
             raise ValueError("Sequence requires between 2 and 20 steps")
-        if (
-            self.duration != 0
-            or self.resolve_mode != "duration"
-            or self.condition_template
-        ):
-            raise ValueError(
-                "Sequence requires zero delay, duration resolution and no template"
-            )
+        if self.duration != 0 or self.condition_template:
+            raise ValueError("Sequence requires zero delay and no template")
         for value, minimum in ((self.sequence_timeout, 0), (self.auto_resolve, 1)):
             if (
                 isinstance(value, bool)
@@ -1020,7 +1038,13 @@ class Rule:
             result.pop("from_value", None)
             result.pop("to_value", None)
         if self.source not in TRANSITION_SOURCES:
-            for key in ("from_value", "to_value", "auto_resolve", "resolve_mode"):
+            for key in (
+                "from_value",
+                "to_value",
+                "auto_resolve",
+                "resolve_mode",
+                "resolve_condition",
+            ):
                 result.pop(key, None)
         if self.source in ("jinja", "unchanged", *TRANSITION_SOURCES):
             result.pop("operator", None)

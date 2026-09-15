@@ -286,12 +286,13 @@
       "transition_expiration": "Automatic resolution must be between 1 second and 365 days.",
       "transition_resolution_mode": "Choose a supported transition resolution mode.",
       "sequence_steps": "A sequence must contain between 2 and 20 steps.",
-      "sequence_options": "A sequence requires duration: 0, duration-based resolution and no Jinja condition.",
+      "sequence_options": "A sequence requires duration: 0 and no Jinja condition.",
       "sequence_duration": "Durations must be whole seconds between 0 and 31536000; resolution requires at least 1 second.",
       "sequence_step": "Choose a supported comparison operator and value for each step.",
       "sequence_mode": "Choose At least, Less than or Between two durations.",
       "sequence_bounds": "The maximum duration must exceed the minimum; Less than requires a duration greater than 0.",
-      "sequence_source": "Sequence fields require source: value_sequence."
+      "sequence_source": "Sequence fields require source: value_sequence.",
+      "resolution_condition": "Choose a valid resolution comparison and value."
     },
     "loading": "Loading Alert Manager…",
     "history": {
@@ -647,7 +648,7 @@
       "upper_bound": "Upper bound",
       "value": "Comparison value",
       "values": "Comparison values",
-      "yaml_help": "Use source: value, value_variation or value_transition. An empty or omitted attribute targets the entity state; a filled attribute targets that attribute. Variations require condition_template and compare current_value - starting_value. Variations and transitions do not support wildcard attributes. between/outside use value: [lower, upper]. source: unchanged monitors state and attributes together; source: jinja only evaluates condition_template. Legacy sources are migrated automatically. Sequences use source: value_sequence, steps (operator, value, duration_mode, duration, duration_max) and sequence_timeout.",
+      "yaml_help": "Use source: value, value_variation or value_transition. An empty or omitted attribute targets the entity state; a filled attribute targets that attribute. Variations require condition_template and compare current_value - starting_value. Variations and transitions do not support wildcard attributes. between/outside use value: [lower, upper]. source: unchanged monitors state and attributes together; source: jinja only evaluates condition_template. Legacy sources are migrated automatically. Sequences use source: value_sequence, steps (operator, value, duration_mode, duration, duration_max) and sequence_timeout. Resolution: resolve_mode: duration, state or condition; condition uses resolve_condition: {operator: below, value: 10}.",
       "yaml_invalid": "The YAML rule is invalid.",
       "yaml_title": "YAML rule",
       "labels": "Labels",
@@ -657,7 +658,7 @@
       "from_value": "Departure value",
       "to_value": "Arrival value",
       "auto_resolve": "Automatic resolution",
-      "transition_help": "Requires an observed departure → arrival change. The trigger delay confirms the arrival value. Then resolve after a duration or when a known value leaves the arrival value.",
+      "transition_help": "Requires an observed departure → arrival change. The trigger delay confirms the arrival hold. Resolves after a duration, on leaving the arrival state, or using a value condition.",
       "last_occurrence": "Last transition",
       "resolution_reason": "Resolution reason",
       "automatic_resolution": "Automatic expiration",
@@ -699,7 +700,11 @@
       "sequence_status_completed": "Sequence completed; waiting to rearm",
       "sequence_elapsed": "Observed hold",
       "sequence_remaining": "Next deadline in",
-      "sequence_completed": "Step {step} completed"
+      "sequence_completed": "Step {step} completed",
+      "resolve_mode_condition": "When a value condition is true",
+      "resolve_mode_last_step": "When the last step is no longer true",
+      "resolve_condition_help": "Resolves when this test is true on the same entity and attribute. Unknown or unavailable values are ignored.",
+      "resolve_last_step_help": "Resolves when the final step comparison becomes false, without its hold duration. If the step completes on leaving its condition, resolution is immediate."
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",

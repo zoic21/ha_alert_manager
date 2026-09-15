@@ -1,5 +1,6 @@
 export const ruleEditorStyles = `
 
+  [data-rule-condition-section] { container-type: inline-size; }
   .sequence-editor {
     display: grid;
     gap: 12px;
@@ -9,10 +10,13 @@ export const ruleEditorStyles = `
   .sequence-help { margin: 0; color: var(--secondary-text-color); }
   .sequence-step {
     min-width: 0;
-    padding: 12px;
+    --expansion-panel-content-padding: 0;
     border: 1px solid var(--divider-color);
     border-radius: var(--ha-border-radius-m, 8px);
   }
+  .sequence-step-content { padding: 12px; }
+  .sequence-step-header { min-width: 0; padding-block: 8px; }
+  .sequence-step-summary { display: block; color: var(--secondary-text-color); overflow-wrap: anywhere; }
   .sequence-step-heading, .sequence-step-actions {
     display: flex;
     align-items: center;

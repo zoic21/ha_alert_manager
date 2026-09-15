@@ -81,11 +81,14 @@ const ruleToYaml = (rule) => {
     }
     lines.push(`sequence_timeout: ${yamlValue(rule.sequence_timeout ?? 0)}`);
     lines.push(`auto_resolve: ${yamlValue(rule.auto_resolve ?? 600)}`);
-    lines.push('resolve_mode: "duration"');
+    lines.push(`resolve_mode: ${yamlValue(rule.resolve_mode ?? "duration")}`);
   }
   if (TRANSITION_RULE_SOURCES.has(source)) {
     for (const key of ["from_value", "to_value", "auto_resolve"]) lines.push(`${key}: ${yamlValue(rule[key] ?? (key === "auto_resolve" ? 600 : ""))}`);
     lines.push(`resolve_mode: ${yamlValue(rule.resolve_mode ?? "duration")}`);
+  }
+  if ((TRANSITION_RULE_SOURCES.has(source) || source === "value_sequence") && rule.resolve_mode === "condition") {
+    lines.push(`resolve_condition: ${JSON.stringify(rule.resolve_condition)}`);
   }
   lines.push(
     `duration: ${yamlValue(source === "value_sequence" ? 0 : rule.duration)}`,

@@ -1,5 +1,6 @@
 const VALIDATION_ERROR_KEYS = new Map([
-  ["Sequence requires zero delay, duration resolution and no template", "sequence_options"],
+  ["Invalid resolution condition", "resolution_condition"],
+  ["Sequence requires zero delay and no template", "sequence_options"],
   ["Sequence fields require a sequence source", "sequence_source"],
   ["Sequence requires between 2 and 20 steps", "sequence_steps"],
   ["Invalid sequence duration bounds", "sequence_bounds"],

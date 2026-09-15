@@ -286,7 +286,11 @@ class _ApiMixin:
             "entity_id": entity_id,
             "notification_profiles": profiles["started"],
             "notification_reminder_profiles": profiles["reminder"],
-            "notification_resolved_profiles": profiles["resolved"],
+            "notification_resolved_profiles": (
+                []
+                if rule.source in TRANSITION_SOURCES and rule.resolve_mode == "duration"
+                else profiles["resolved"]
+            ),
             "name": (
                 state.attributes.get(ATTR_FRIENDLY_NAME, entity_id)
                 if state is not None
@@ -334,7 +338,6 @@ class _ApiMixin:
                 **base,
                 "status": "indeterminate",
                 "reason": "transition_required",
-                "notification_resolved_profiles": [],
             }
         if state is None:
             return {**base, "status": "error", "reason": "entity_not_found"}

@@ -59,6 +59,7 @@ _RULE_CLIENT_KEYS = {
     "to_value",
     "auto_resolve",
     "resolve_mode",
+    "resolve_condition",
     "name",
     "entity_ids",
     "label_ids",

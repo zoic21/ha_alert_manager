@@ -21,7 +21,7 @@ Home Assistant labels can be attached to a rule. They help organize rules and pa
 | Value | `value` | Compare the state or an attribute with an expected value, threshold or range, or check that this specific value has stopped changing. |
 | Variation | `value_variation` | Measure a numeric change from a baseline recorded when a Jinja condition becomes true. |
 | Sequence | `value_sequence` | Recognize 2–20 ordered conditions on the same state or attribute before creating an alert. |
-| Transition | `value_transition` | Observe a specific `from_value` → `to_value` change and resolve the resulting alert after a duration or when the arrival value is left. |
+| Transition | `value_transition` | Observe a specific `from_value` → `to_value` change and resolve the resulting alert after a duration, when the arrival value is left, or when a value condition matches. |
 | No change | `unchanged` | Detect an entity with no state or attribute change for the configured duration. |
 | Jinja | `jinja` | Use a template as the complete rule condition. |
 
@@ -51,6 +51,8 @@ Choose a resolution mode after activation:
 
 - **After a duration** (`resolve_mode: duration`, the default): the alert expires after `auto_resolve` seconds (**600 by default**, minimum 1). Leaving the arrival value does not resolve it. Another confirmed transition extends the same alert's deadline and preserves its acknowledgement.
 - **While the arrival value is maintained** (`resolve_mode: state`): the alert has no expiration deadline. A known value different from `to_value` resolves it through the normal lifecycle, including recovery notifications when enabled. Unknown/unavailable states and missing attributes preserve the active alert until a known value is observed. Unrelated attribute updates do not resolve it. This applies to both entity states and selected attributes.
+- **When a value condition is true** (`resolve_mode: condition`): `resolve_condition` uses the same comparison operators as sequence steps (`above`, `below`, `between`, `outside`, `equals`, `not_equals`, `contains`, `not_contains`) on the same entity and attribute. For example, `resolve_condition: {operator: below, value: 10}` resolves below 10. There is no hold delay or expiration timer. Unknown/unavailable or invalid numeric values cannot resolve the alert. This test is independent of the trigger's Jinja condition.
+
 
 Existing rules keep the duration mode. Active alerts retain their acknowledgement across restarts; the state mode rechecks the current value on restart or monitoring resume. Changing the resolution mode keeps the current episode and removes its deadline or starts the configured expiration duration from the change.
 
@@ -72,7 +74,7 @@ Completed steps remain completed while the engine waits for the next condition. 
 
 `sequence_timeout` is optional (`0` = no limit). It starts when the first step begins progressing, even if that first hold is interrupted. Reaching this total deadline discards the progression; a later event can start a new sequence. The sequence must finish **before** the deadline. Only a current minimum hold or total deadline schedules a timer; there is no polling.
 
-A complete sequence creates a normal alert immediately (`duration: 0`) with normal labels, notifications, acknowledgement and history. `auto_resolve` controls its lifetime using the existing transition expiration behavior, including no recovery notification for automatic expiration. Remaining in the final condition cannot generate repeated occurrences: it must be left before a new complete sequence can rearm. A second completion during the same active episode refreshes its expiration and preserves acknowledgement.
+A complete sequence creates a normal alert immediately (`duration: 0`) with normal labels, notifications, acknowledgement and history. Resolution has three modes: `duration` uses `auto_resolve` and the existing transition expiration behavior (no recovery notification for automatic expiration); `state` resolves when the last step comparison is false; `condition` uses the independent `resolve_condition` comparison described above. State/condition resolution uses the normal recovery lifecycle. A last-step exit resolves immediately if that exit also completed the sequence; the hold duration is not applied again. Unknown/unavailable or invalid numeric values preserve the alert. Remaining in the final condition cannot generate repeated occurrences: it must be left before a new complete sequence can rearm. A second completion during the same active episode refreshes its expiration and preserves acknowledgement.
 
 Progress is transient: restart, reload, monitoring pause, rule disable/removal or incompatible edits discard unfinished steps. Current-state snapshots do not reconstruct a sequence. Active and acknowledged alerts continue to use normal persistence.
 
@@ -98,7 +100,9 @@ auto_resolve: 600
 resolve_mode: duration
 ```
 
-Simple `value_transition` rules retain their existing semantics and require no migration.
+Steps use native collapsible panels: a collapsed step shows its comparison and hold duration. Expanding, reordering or collapsing a step preserves its fields; newly added steps open for editing.
+
+Existing rules keep their resolution mode and require no migration.
 
 ## YAML editing and compatibility
 

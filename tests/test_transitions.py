@@ -453,3 +453,52 @@ def test_state_resolution_pause_rechecks_without_new_edge(hass, entry):
     assert key not in manager.records
     edge(manager, hass, "B")
     assert key not in manager.records
+
+
+@pytest.mark.parametrize("attribute", [None, "mode"])
+@pytest.mark.parametrize(
+    "operator,value,stay,resolve",
+    [
+        ("above", 10, "5", "15"),
+        ("below", 10, "15", "5"),
+        ("between", [10, 20], "5", "15"),
+        ("outside", [10, 20], "15", "5"),
+        ("equals", ["done", "off"], "running", "done"),
+        ("not_equals", ["B", "running"], "running", "done"),
+        ("contains", ["done"], "running", "all done"),
+        ("not_contains", ["B", "running"], "running", "done"),
+    ],
+)
+def test_transition_resolution_comparison(
+    hass, entry, attribute, operator, value, stay, resolve
+):
+    manager, key, rule = setup(
+        hass,
+        entry,
+        source="value_transition",
+        attribute=attribute,
+        resolve_mode="condition",
+        resolve_condition={"operator": operator, "value": value},
+    )
+
+    def update(value):
+        edge(
+            manager,
+            hass,
+            "ok" if attribute else value,
+            {"mode": value} if attribute else None,
+        )
+
+    update("B")
+    assert key in manager.records
+    assert manager.records[key].expires_at is None
+    for invalid in ("unknown", "unavailable"):
+        update(invalid)
+        assert key in manager.records
+    update(stay)
+    assert key in manager.records
+    update(resolve)
+    assert key not in manager.records
+    assert len(manager.history) == 1
+    restored = parse_rule_yaml(dump_rule_yaml(Rule.from_dict(rule)))
+    assert restored.resolve_condition == {"operator": operator, "value": value}
