@@ -7,13 +7,13 @@ from homeassistant.core import State
 
 # Integration-level event/timer/lifecycle tests use the same harness as simple edges.
 from homeassistant.util import dt as dt_util
+from test_transitions import edge, run, setup
 
 from custom_components.alert_manager.const import EVENT_ALERT_STARTED
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus, Rule
 from custom_components.alert_manager.sequences import SequenceProgress
 from custom_components.alert_manager.yaml_io import dump_rule_yaml, parse_rule_yaml
-from tests.test_transitions import edge, run, setup
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 
