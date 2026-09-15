@@ -8,6 +8,13 @@ from homeassistant.core import HomeAssistant, State
 
 from .base import AutomaticPack, PackConfigField, PackMatch, PackNeutral
 
+# Exclusion-only override: keep the shared "enabled" key for stored/YAML config
+# and generic pack resolution. Remove the entity override to monitor it again;
+# enabling an individual entity is deliberately not supported by this pack.
+ENTITY_EXCLUSION_FIELD = PackConfigField(
+    "enabled", "boolean", "monitoring", False, options=(False,)
+)
+
 
 def _applies(_hass: HomeAssistant, state: State) -> bool:
     """Monitor update entities without maintaining a separate subscription."""
@@ -54,11 +61,7 @@ PACK = AutomaticPack(
             "excluded_update_entities",
             {},
             entity_domains=("update",),
-            fields=(
-                PackConfigField(
-                    "enabled", "boolean", "monitoring", False, options=(False,)
-                ),
-            ),
+            fields=(ENTITY_EXCLUSION_FIELD,),
         ),
     ),
 )

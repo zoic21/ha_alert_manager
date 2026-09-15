@@ -124,16 +124,20 @@ def remove_unknown_stored_config_fields(config: dict[str, Any]) -> list[str]:
             prune(rule, _RULE_CLIENT_KEYS | {"id", "version"}, f"rules[{index}]")
     profiles = config.get("notification_profiles")
     if isinstance(profiles, list):
-        for index, profile in enumerate(profiles):
-            path = f"notification_profiles[{index}]"
+        for profile_index, profile in enumerate(profiles):
+            path = f"notification_profiles[{profile_index}]"
             prune(profile, _PROFILE_KEYS, path)
             if not isinstance(profile, dict):
                 continue
             prune(profile.get("default_policy"), _POLICY_KEYS, f"{path}.default_policy")
             exceptions = profile.get("exceptions")
             if isinstance(exceptions, list):
-                for index, exception in enumerate(exceptions):
-                    prune(exception, _EXCEPTION_KEYS, f"{path}.exceptions[{index}]")
+                for exception_index, exception in enumerate(exceptions):
+                    prune(
+                        exception,
+                        _EXCEPTION_KEYS,
+                        f"{path}.exceptions[{exception_index}]",
+                    )
     return sorted(removed)
 
 
