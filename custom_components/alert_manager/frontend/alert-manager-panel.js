@@ -619,6 +619,25 @@ function conditionText(alert) {
     return this._t(`conditions.${alert.condition_key}`, params);
 }
 
+function sequenceCountdown(startedAt, mode, minimum, maximum) {
+    const elapsed = (Date.now() - Date.parse(startedAt)) / 1000;
+    if (!Number.isFinite(elapsed)) return "";
+    const limit = mode === "less_than" ? minimum : maximum;
+    let key = "sequence_hold_remaining";
+    let remaining = minimum - elapsed;
+    if (mode !== "at_least") {
+      if (elapsed > limit || (mode === "less_than" && elapsed >= limit)) {
+        return this._t("alert_details.sequence_limit_exceeded");
+      }
+      if (mode === "between" && elapsed < minimum) key = "sequence_minimum_remaining";
+      else {
+        key = "sequence_limit_remaining";
+        remaining = limit - elapsed;
+      }
+    }
+    return this._t(`alert_details.${key}`, { duration: this._durationText(Math.max(0, Math.ceil(remaining))) });
+}
+
 function updateCountdowns() {
     this._refreshStartupBanner();
     if (!this._monitoringEnabled) return;
@@ -631,6 +650,10 @@ function updateCountdowns() {
       if (table?.shadowRoot) roots.push(table.shadowRoot);
     });
     for (const root of roots) {
+      root?.querySelectorAll("[data-sequence-countdown]").forEach((node) => {
+        node.textContent = sequenceCountdown.call(this, node.dataset.startedAt, node.dataset.mode,
+          Number(node.dataset.minimum), Number(node.dataset.maximum));
+      });
       root?.querySelectorAll("[data-due]").forEach((node) => {
         node.textContent = this._remaining(node.dataset.due);
       });
@@ -2271,6 +2294,23 @@ function alertDetailsItems(kind, row) {
               : this._displayValue(evidence.started_value, row.source?.unit, row.entityId),
           };
         });
+      const current = kind !== "history" && row.status === "pending" ? sequence.current_step : null;
+      const currentStep = current && sequence.steps?.[current.step - 1];
+      if (currentStep && current.started_at) {
+        const mode = currentStep.duration_mode ?? "at_least";
+        const minimum = Number(currentStep.duration ?? 0);
+        const maximum = Number(currentStep.duration_max ?? 0);
+        const timing = `${this._t(`rules.sequence_${mode}`)} ${this._durationText(minimum)}${mode === "between" ? ` – ${this._durationText(maximum)}` : ""}`;
+        steps.push({
+          label: this._t("alert_details.sequence_in_progress", { step: current.step }),
+          condition: `${this._t(`operators.${currentStep.operator}`)} ${Array.isArray(currentStep.value) ? currentStep.value.join(" / ") : currentStep.value} · ${timing}`,
+          datetime: current.started_at, date: this._date(current.started_at),
+          value: this._displayValue(current.started_value, row.source?.unit, row.entityId),
+          inProgress: true,
+          countdown: { startedAt: current.started_at, mode, minimum, maximum,
+            text: sequenceCountdown.call(this, current.started_at, mode, minimum, maximum) },
+        });
+      }
       items.push({
         key: "sequence-steps",
         label: steps.length ? this._t("alert_details.sequence_steps", { count: steps.length }) : this._t("alert_details.sequence_timeline"),
@@ -2338,7 +2378,7 @@ function renderAlertDetails(context) {
       event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
     }
     for (const step of sequence?.steps ?? []) events.push({
-      ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
+      ...step, type: step.inProgress ? "step-pending" : "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
       label: valueCaption(step.value), condition: "",
     });
     for (const group of occurrences?.groups ?? []) {
@@ -2393,6 +2433,7 @@ function renderAlertDetails(context) {
             ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
           </div>
           ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+          ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
           ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
         </li>`).join("")}</ol>
         ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
@@ -8255,7 +8296,7 @@ const tableStyles = `
     background: var(--timeline-event-color, var(--primary-color));
     box-shadow: 0 0 0 4px var(--card-background-color);
   }
-  [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
+  [data-event-type="step-pending"], [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
   [data-event-type="activated"] { --timeline-event-color: var(--error-color); }
   [data-event-type="resolved"] { --timeline-event-color: var(--success-color); }
   [data-event-type="acknowledged"] { --timeline-event-color: var(--info-color); }

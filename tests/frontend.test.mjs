@@ -5913,3 +5913,44 @@ test("timeline deadlines belong to lifecycle captions and unlimited acknowledgem
   assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, acknowledgedUntil: null }), /Jusqu’à|illimitée/);
   assert.doesNotMatch(panel._renderAlertDetails("history", row), /Résolution automatique prévue à|Jusqu’à/);
 });
+
+
+test("pending step countdown distinguishes holds, exit limits and between windows", async () => {
+  const { sequenceCountdown, updateCountdowns } = await import("../frontend-src/utils/formatting.js");
+  const panel = tablePanel();
+  const originalNow = Date.now;
+  const start = "2026-09-15T10:00:00Z";
+  try {
+    Date.now = () => Date.parse(start) + 36000;
+    assert.equal(sequenceCountdown.call(panel, start, "at_least", 120, 0), "Maintien restant : 1 min 24 s");
+    assert.equal(sequenceCountdown.call(panel, start, "less_than", 120, 0), "Limite dans : 1 min 24 s");
+    assert.equal(sequenceCountdown.call(panel, start, "between", 60, 120), "Durée minimale dans : 24 s");
+    Date.now = () => Date.parse(start) + 72000;
+    assert.equal(sequenceCountdown.call(panel, start, "between", 60, 120), "Limite dans : 48 s");
+    Date.now = () => Date.parse(start) + 120000;
+    assert.equal(sequenceCountdown.call(panel, start, "less_than", 120, 0), "Limite dépassée");
+    assert.equal(sequenceCountdown.call(panel, start, "between", 60, 120), "Limite dans : 0 s");
+    const node = { dataset: { startedAt: start, mode: "between", minimum: "60", maximum: "120" }, textContent: "" };
+    const context = { _monitoringEnabled: true, _refreshStartupBanner() {},
+      _t: panel._t.bind(panel), _durationText: panel._durationText.bind(panel),
+      shadowRoot: { querySelectorAll: selector => selector === "[data-sequence-countdown]" ? [node] : [] } };
+    Date.now = () => Date.parse(start) + 121000;
+    updateCountdowns.call(context);
+    assert.equal(node.textContent, "Limite dépassée");
+    context._monitoringEnabled = false;
+    node.textContent = "paused";
+    updateCountdowns.call(context);
+    assert.equal(node.textContent, "paused");
+    const row = { ...panel._tableRows("overview")[0], status: "pending", sequenceProgress: "0/2", source: {
+      source: "value_sequence", unit: "W", condition_params: { steps: [{ operator: "equals", value: 0, duration: 120, duration_mode: "less_than" }], evidence: [],
+        current_step: { step: 1, started_at: start, started_value: 0 } },
+    } };
+    const html = panel._renderAlertDetails("overview", row);
+    assert.match(html, /data-event-type="step-pending"/);
+    assert.match(html, /Étape 1 en cours/);
+    assert.match(html, /Valeur : 0 W/);
+    assert.match(html, /data-sequence-countdown/);
+    assert.doesNotMatch(html, /data-due=|data-event-type="detected"/);
+    assert.doesNotMatch(panel._renderAlertDetails("history", row), /step-pending|data-sequence-countdown/);
+  } finally { Date.now = originalNow; }
+});

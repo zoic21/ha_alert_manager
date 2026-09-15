@@ -241,7 +241,7 @@ export const tableStyles = `
     background: var(--timeline-event-color, var(--primary-color));
     box-shadow: 0 0 0 4px var(--card-background-color);
   }
-  [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
+  [data-event-type="step-pending"], [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
   [data-event-type="activated"] { --timeline-event-color: var(--error-color); }
   [data-event-type="resolved"] { --timeline-event-color: var(--success-color); }
   [data-event-type="acknowledged"] { --timeline-event-color: var(--info-color); }

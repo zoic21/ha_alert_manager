@@ -330,6 +330,25 @@ function conditionText(alert) {
     return this._t(`conditions.${alert.condition_key}`, params);
 }
 
+function sequenceCountdown(startedAt, mode, minimum, maximum) {
+    const elapsed = (Date.now() - Date.parse(startedAt)) / 1000;
+    if (!Number.isFinite(elapsed)) return "";
+    const limit = mode === "less_than" ? minimum : maximum;
+    let key = "sequence_hold_remaining";
+    let remaining = minimum - elapsed;
+    if (mode !== "at_least") {
+      if (elapsed > limit || (mode === "less_than" && elapsed >= limit)) {
+        return this._t("alert_details.sequence_limit_exceeded");
+      }
+      if (mode === "between" && elapsed < minimum) key = "sequence_minimum_remaining";
+      else {
+        key = "sequence_limit_remaining";
+        remaining = limit - elapsed;
+      }
+    }
+    return this._t(`alert_details.${key}`, { duration: this._durationText(Math.max(0, Math.ceil(remaining))) });
+}
+
 function updateCountdowns() {
     this._refreshStartupBanner();
     if (!this._monitoringEnabled) return;
@@ -342,6 +361,10 @@ function updateCountdowns() {
       if (table?.shadowRoot) roots.push(table.shadowRoot);
     });
     for (const root of roots) {
+      root?.querySelectorAll("[data-sequence-countdown]").forEach((node) => {
+        node.textContent = sequenceCountdown.call(this, node.dataset.startedAt, node.dataset.mode,
+          Number(node.dataset.minimum), Number(node.dataset.maximum));
+      });
       root?.querySelectorAll("[data-due]").forEach((node) => {
         node.textContent = this._remaining(node.dataset.due);
       });

@@ -812,7 +812,13 @@ def test_pending_sequence_progress_publishes_then_hands_off_once(hass, entry, se
     manager, key, _ = setup_sequence(hass, entry)
     now = dt_util.now()
     edge(manager, hass, "120")
-    assert manager.public_snapshot()["pending_count"] == 0
+    assert manager.public_snapshot()["pending_count"] == 1
+    assert (
+        manager.public_snapshot()["pending"][0]["condition_params"]["current_step"][
+            "step"
+        ]
+        == 1
+    )
     set_now(now + timedelta(seconds=30))
     fire_sequence_timer(manager, hass, key)
     snapshot = manager.public_snapshot()
@@ -920,3 +926,45 @@ def test_pending_sequence_counts_only_enabled_steps_and_keeps_evidence(
     edge(manager, hass, "unknown")
     assert manager.public_snapshot()["pending_count"] == 1
     assert manager.public_snapshot()["pending"][0]["condition_params"] == params
+
+
+@pytest.mark.parametrize("mode", ["at_least", "less_than", "between"])
+def test_pending_hold_payload_tracks_interruption_and_restart(
+    hass, entry, set_now, mode
+):
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        steps=[
+            {
+                "operator": "above",
+                "value": 100,
+                "duration": 30,
+                "duration_mode": mode,
+                **({"duration_max": 60} if mode == "between" else {}),
+            },
+            {"operator": "below", "value": 10, "duration": 20},
+        ],
+    )
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    params = manager.public_snapshot()["pending"][0]["condition_params"]
+    assert params["current_step"] == {
+        "step": 1,
+        "started_at": now.isoformat(),
+        "started_value": "120",
+    }
+    assert params["evidence"] == []
+    # Invalid input interrupts all modes without proving an exit.
+    edge(manager, hass, "unavailable")
+    assert manager.public_snapshot()["pending_count"] == 0
+    set_now(now + timedelta(seconds=10))
+    edge(manager, hass, "130")
+    params = manager.public_snapshot()["pending"][0]["condition_params"]
+    assert (
+        params["current_step"]["started_at"]
+        == (now + timedelta(seconds=10)).isoformat()
+    )
+    assert params["current_step"]["started_value"] == "130"
+    assert not manager.history
+    assert key not in manager.records

@@ -127,9 +127,9 @@ class _TransitionsMixin:
             progress = SequenceProgress(rule)
             self._sequence_progress[alert_id] = progress
         progress.observed_state = state
-        was_pending = bool(progress.completed)
+        was_pending = bool(progress.completed or progress.hold_since)
         evidence = progress.observe(state, now, previous=previous)
-        if was_pending or progress.completed:
+        if was_pending or progress.completed or progress.hold_since:
             self._queued_public_refresh = True
         if evidence is not None and state is not None:
             self._transition_confirmed[alert_id] = TransitionObservation(
@@ -146,7 +146,10 @@ class _TransitionsMixin:
             return []
         pending = []
         for alert_id, progress in self._sequence_progress.items():
-            if not progress.completed or alert_id in self.records:
+            if (
+                not (progress.completed or progress.hold_since)
+                or alert_id in self.records
+            ):
                 continue
             entity_id = alert_id.rsplit(":", 1)[1]
             state = self.hass.states.get(entity_id)
@@ -160,6 +163,12 @@ class _TransitionsMixin:
                 "steps": rule.steps,
                 "evidence": [dict(item) for item in progress.completed],
             }
+            if progress.hold_since is not None:
+                params["current_step"] = {
+                    "step": progress.index + 1,
+                    "started_at": progress.hold_since.isoformat(),
+                    "started_value": progress.started_value,
+                }
             details = self._details(
                 state,
                 alert_id,

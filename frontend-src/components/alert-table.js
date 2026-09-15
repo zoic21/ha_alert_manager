@@ -1,3 +1,4 @@
+import { sequenceCountdown } from "../utils/formatting.js";
 import { navigate } from "../utils/navigation.js";
 export { navigate };
 import { alertLabelIds } from "../utils/alert-labels.js";
@@ -1063,6 +1064,23 @@ export function alertDetailsItems(kind, row) {
               : this._displayValue(evidence.started_value, row.source?.unit, row.entityId),
           };
         });
+      const current = kind !== "history" && row.status === "pending" ? sequence.current_step : null;
+      const currentStep = current && sequence.steps?.[current.step - 1];
+      if (currentStep && current.started_at) {
+        const mode = currentStep.duration_mode ?? "at_least";
+        const minimum = Number(currentStep.duration ?? 0);
+        const maximum = Number(currentStep.duration_max ?? 0);
+        const timing = `${this._t(`rules.sequence_${mode}`)} ${this._durationText(minimum)}${mode === "between" ? ` – ${this._durationText(maximum)}` : ""}`;
+        steps.push({
+          label: this._t("alert_details.sequence_in_progress", { step: current.step }),
+          condition: `${this._t(`operators.${currentStep.operator}`)} ${Array.isArray(currentStep.value) ? currentStep.value.join(" / ") : currentStep.value} · ${timing}`,
+          datetime: current.started_at, date: this._date(current.started_at),
+          value: this._displayValue(current.started_value, row.source?.unit, row.entityId),
+          inProgress: true,
+          countdown: { startedAt: current.started_at, mode, minimum, maximum,
+            text: sequenceCountdown.call(this, current.started_at, mode, minimum, maximum) },
+        });
+      }
       items.push({
         key: "sequence-steps",
         label: steps.length ? this._t("alert_details.sequence_steps", { count: steps.length }) : this._t("alert_details.sequence_timeline"),
@@ -1130,7 +1148,7 @@ export function renderAlertDetails(context) {
       event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
     }
     for (const step of sequence?.steps ?? []) events.push({
-      ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
+      ...step, type: step.inProgress ? "step-pending" : "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
       label: valueCaption(step.value), condition: "",
     });
     for (const group of occurrences?.groups ?? []) {
@@ -1185,6 +1203,7 @@ export function renderAlertDetails(context) {
             ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
           </div>
           ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+          ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
           ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
         </li>`).join("")}</ol>
         ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
