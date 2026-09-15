@@ -1570,7 +1570,7 @@ test("late history response cannot restore pending sequence details after activa
   assert.equal(dialog.alertRow.status, "active");
   assert.match(dialog.innerHTML, /alert-details-status-active/);
   assert.match(dialog.innerHTML, /data-timestamp="2026-09-15T10:01:00Z"/);
-  assert.match(dialog.innerHTML, /data-alert-timeline expanded/);
+  assert.match(dialog.innerHTML, /<ha-card[^>]*data-alert-timeline>/);
 });
 
 test("alert details expose translated fields and contextual links", () => {
@@ -1605,7 +1605,7 @@ test("pending alert details keep their remaining time live", () => {
   const row = panel._tableRows("overview").find((item) => item.status === "pending");
   const html = panel._renderAlertDetails("overview", row);
 
-  assert.match(html, /slot="header">Chronologie · <span data-due="2099-08-26T12:15:00Z"/);
+  assert.match(html, /class="alert-details-timeline-heading">Chronologie · <span data-due="2099-08-26T12:15:00Z"/);
   assert.doesNotMatch(html, /data-detail-key="remaining"/);
   panel._monitoringEnabled = false;
   const paused = panel._renderAlertDetails("overview", row);
@@ -5506,7 +5506,7 @@ test("alert details group timeline and delivery facts without hiding data in any
     const kind = status === "resolved" ? "history" : "overview";
     const row = { ...base, status, notifications: { alert: { count: 0, profiles: {} }, resolved: { count: 1, profiles: { a: "Loïc" } } } };
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /slot="header">Chronologie/);
+    assert.match(markup, /class="alert-details-timeline-heading">Chronologie/);
     assert.match(markup, /alert-details-identifier" data-detail-key="alert-id"/);
     assert.match(markup, /data-action="copy-alert-id"/);
     const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
@@ -5616,27 +5616,28 @@ test("flapping details expose bounded evidence in live and historical alerts", (
   }
 });
 
-test("flapping evidence shares the collapsed timeline and is retained on refresh", () => {
+test("flapping evidence shares the always-visible timeline and is retained on refresh", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
-  const dates = [new Date(2026, 8, 10, 23, 58, 32), new Date(2026, 8, 10, 23, 59, 35), new Date(2026, 8, 11, 0, 1, 36)];
+  const dates = [new Date(2026, 8, 10, 23, 58, 32), new Date(2026, 8, 10, 23, 59, 35),
+    ...Array.from({ length: 10 }, (_, index) => new Date(2026, 8, 11, 0, index + 1, 36))];
   const row = { ...base, source: { type: "flapping", condition_params: {
     count: 3, threshold: 3, occurrences: dates.map(date => date.getTime() / 1000),
   } } };
   for (const kind of ["overview", "history"]) {
     const item = panel._alertDetailsItems(kind, row).find(item => item.key === "flapping-occurrences");
-    assert.deepEqual(item.groups.map(group => group.timestamps.length), [2, 1]);
+    assert.deepEqual(item.groups.map(group => group.timestamps.length), [2, 10]);
     assert.equal(item.groups[0].timestamps[0].value, "23:58:32");
     const markup = panel._renderAlertDetails(kind, row);
     assert.match(markup, /Occurrence d’instabilité/);
-    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
-    assert.equal((markup.match(/data-event-type="flapping"/g) || []).length, 3);
-    assert.ok(markup.indexOf("data-alert-timeline") < markup.indexOf('slot="header">Chronologie'));
+    assert.doesNotMatch(markup, /ha-expansion-panel/);
+    assert.equal((markup.match(/data-event-type="flapping"/g) || []).length, dates.length);
+    assert.ok(markup.indexOf("data-alert-timeline") < markup.indexOf('class="alert-details-timeline-heading">Chronologie'));
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
-  assert.match(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /<ha-card[^>]*data-alert-timeline>/);
   panel._alertDetailsDialog.alertId = "another-alert";
-  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /<ha-card[^>]*data-alert-timeline>/);
 });
 
 
@@ -5739,7 +5740,7 @@ test("sequence headers keep their card background and expanded summaries stay hi
   assert.match(styles, /\.sequence-step-summary\[hidden\]\{display:none/);
 });
 
-test("sequence details show recorded values and timestamps in a persistent collapsed panel", () => {
+test("sequence details show recorded values and timestamps in an always-visible timeline", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   const row = { ...base, source: { source: "value_sequence", condition_params: {
@@ -5751,8 +5752,8 @@ test("sequence details show recorded values and timestamps in a persistent colla
   } } };
   for (const kind of ["overview", "history"]) {
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /slot="header">Chronologie/);
-    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
+    assert.match(markup, /class="alert-details-timeline-heading">Chronologie/);
+    assert.doesNotMatch(markup, /ha-expansion-panel/);
     for (const evidence of row.source.condition_params.evidence) {
       assert.ok(markup.includes(`data-timestamp="${evidence.started_at}"`));
       assert.ok(markup.includes(`class="alert-details-sequence-caption"><span>Valeur : ${evidence.started_value}</span>`));
@@ -5760,9 +5761,9 @@ test("sequence details show recorded values and timestamps in a persistent colla
     }
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
-  assert.match(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /<ha-card[^>]*data-alert-timeline>/);
   panel._alertDetailsDialog.alertId = "another";
-  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /<ha-card[^>]*data-alert-timeline>/);
   delete row.source.condition_params.evidence[0].started_value;
   row.source.condition_params.evidence[1].started_value = '<script>bad</script>';
   assert.match(panel._renderAlertDetails("history", row), /Valeur non disponible/);
@@ -5858,12 +5859,12 @@ test("timeline places resolution reason and duration inline and shows recorded t
       resolved: "2026-09-15T12:32:15Z", lastOccurrence: "2026-09-15T12:31:15Z",
       source: { source, condition_params: { from_value: 0, to_value: 2 } } };
     const html = panel._renderAlertDetails("history", row);
-    assert.match(html, /slot="header">Chronologie · 1 min<\/span>/);
+    assert.match(html, /class="alert-details-timeline-heading">Chronologie · 1 min<\/h3>/);
     assert.match(html, /Valeur : 0 → 2/);
     assert.match(html, /data-event-type="resolved"[\s\S]*?sequence-value">Résolution<\/span>[\s\S]*?sequence-caption"><span>Expiration automatique<\/span>/);
     assert.doesNotMatch(html, /data-detail-key="(?:duration|resolution_reason|last_occurrence)"|Dernière transition/);
     const active = panel._renderAlertDetails("overview", row);
-    assert.match(active, /slot="header">Chronologie<\/span>/);
+    assert.match(active, /class="alert-details-timeline-heading">Chronologie<\/h3>/);
     const legacy = panel._renderAlertDetails("history", { ...row, source: { source } });
     assert.match(legacy, /Valeur : 2<\/span>/);
     assert.doesNotMatch(legacy, /undefined|null/);
@@ -5891,7 +5892,7 @@ test("timeline values retain recorded units for transitions and sequence steps",
     }
   }
   const styles = panel._styles().replace(/\s+/g, "");
-  assert.match(styles, /\.alert-details-occurrence-panel::part\(summary\)\{background:var\(--card-background-color\)/);
+  assert.match(styles, /\.alert-details-timeline-heading\{margin:0;padding:16px16px0/);
   const timelineStyle = styles.match(/\.alert-details-sequence-timeline\{([^}]+)\}/)[1];
   assert.doesNotMatch(timelineStyle, /max-height|overflow-y:auto|overflow:auto/);
 });

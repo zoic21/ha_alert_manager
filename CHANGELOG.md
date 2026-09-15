@@ -7,10 +7,13 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.5**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.6**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Always show the complete timeline in pending, active and historical alert details,
+  without expanding a panel or limiting the displayed events; use the dialog scroll.
 
 - Use Home Assistant’s native user badge beside timeline timestamps: person photo
   when linked, initials otherwise, with the name accessible as a tooltip. Retain
@@ -33,7 +36,7 @@ This is a prerelease for testing, not a stable release.
   show transition departure/arrival values, resolution reasons and the total
   duration in the timeline heading; hide redundant transition markers and order
   simultaneous events. Keep recorded units beside timeline values and use only
-  the dialog scroll, with a neutral timeline header when expanded or clicked.
+  the dialog scroll, with a neutral timeline heading.
   Place pending countdowns in the heading and future expiration/acknowledgement
   deadlines beneath their lifecycle events, without a separate footer or redundant
   sequence detection/progress entries.
@@ -61,10 +64,10 @@ This is a prerelease for testing, not a stable release.
   restarts and resolution, discard the oldest event at the limit, and roll back
   the timeline when persistence fails.
 
-- All alert details share one expandable chronological timeline with colored event
+- All alert details share one always-visible chronological timeline with colored event
   markers, lifecycle dates, sequence steps and instability occurrences. Start and
   resolution notifications retain send times and profile names; reminders display
-  a total and profiles without timestamps. The expanded state survives refreshes.
+  a total and profiles without timestamps. The timeline remains visible during refreshes.
 
 - Custom transition rules support ordered multi-step sequences with continuous hold
   durations, independent progress per entity, an optional overall timeout, and a

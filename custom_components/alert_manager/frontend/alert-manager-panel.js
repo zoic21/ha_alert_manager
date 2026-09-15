@@ -2449,20 +2449,18 @@ function renderAlertDetails(context) {
     ${summary.labels?.length ? `<div class="alert-details-labels">${summary.labels.map((label) => `<ha-label dense${label.color ? ` color="${esc(label.color)}"` : ""} title="${esc(label.description || label.name)}">${esc(label.name)}${label.icon ? `<ha-icon slot="icon" icon="${esc(label.icon)}"></ha-icon>` : ""}</ha-label>`).join("")}</div>` : ""}
     ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
     ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
-    <ha-card outlined class="alert-details-card">
-      <ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-alert-timeline ${summary.timelineExpanded ? "expanded" : ""}>
-        <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : remaining ? ` · <span${remaining.due ? ` data-due="${esc(remaining.due)}"` : ""}>${esc(remaining.value)}</span>` : ""}</span>
-        <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
-          <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
-            ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${renderTimelineActor(event)}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
-          </div>
-          ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
-          ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
-          ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
-        </li>`).join("")}</ol>
-        ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
-        ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
-      </ha-expansion-panel>
+    <ha-card outlined class="alert-details-card" data-alert-timeline>
+      <h3 class="alert-details-timeline-heading">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : remaining ? ` · <span${remaining.due ? ` data-due="${esc(remaining.due)}"` : ""}>${esc(remaining.value)}</span>` : ""}</h3>
+      <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
+        <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
+          ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${renderTimelineActor(event)}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
+        </div>
+        ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+        ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
+        ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
+      </li>`).join("")}</ol>
+      ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
+      ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
     </ha-card>
     ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }
@@ -2512,8 +2510,6 @@ function renderAlertDetailsPanel(kind, row) {
         ? this._alertDetailsDialog.notice : null,
       items: this._alertDetailsItems(kind, row),
       summary: {
-        timelineExpanded: this._alertDetailsDialog?.alertId === row.id
-          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-alert-timeline]")?.expanded),
         alertId: row.id,
         timelineLabel: this._t("alert_details.timeline"),
         valueLabel: this._t("alert_details.value_prefix"),
@@ -8294,11 +8290,12 @@ const tableStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
-  .alert-details-occurrence-panel {
-    border-top: 1px solid var(--divider-color);
-    --expansion-panel-content-padding: 0;
+  .alert-details-timeline-heading {
+    margin: 0;
+    padding: 16px 16px 0;
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-medium, 500);
   }
-  .alert-details-occurrence-panel::part(summary) { background: var(--card-background-color); }
   .alert-details-occurrence-groups {
     max-height: 240px;
     overflow-y: auto;

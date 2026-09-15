@@ -209,11 +209,12 @@ export const tableStyles = `
     font-size: var(--ha-font-size-m, 14px);
     font-weight: var(--ha-font-weight-normal, 400);
   }
-  .alert-details-occurrence-panel {
-    border-top: 1px solid var(--divider-color);
-    --expansion-panel-content-padding: 0;
+  .alert-details-timeline-heading {
+    margin: 0;
+    padding: 16px 16px 0;
+    font-size: var(--ha-font-size-m, 14px);
+    font-weight: var(--ha-font-weight-medium, 500);
   }
-  .alert-details-occurrence-panel::part(summary) { background: var(--card-background-color); }
   .alert-details-occurrence-groups {
     max-height: 240px;
     overflow-y: auto;
