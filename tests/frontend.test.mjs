@@ -5514,7 +5514,7 @@ test("alert details group timeline and delivery facts without hiding data in any
     assert.equal((markup.match(/data-alert-timeline/g) || []).length, 1);
     assert.doesNotMatch(markup, /alert-details-notification/);
     if (kind === "history") {
-      assert.match(cards[1], /Activée le/);
+      assert.match(cards[1], /Activation/);
       assert.match(cards[1], /Notification de résolution/);
       assert.match(cards[1], /Loïc/);
     }
@@ -5748,7 +5748,7 @@ test("sequence details show recorded values and timestamps in a persistent colla
     assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
     for (const evidence of row.source.condition_params.evidence) {
       assert.ok(markup.includes(`data-timestamp="${evidence.started_at}"`));
-      assert.ok(markup.includes(`class="alert-details-sequence-caption"><span>${evidence.started_value}</span>`));
+      assert.ok(markup.includes(`class="alert-details-sequence-caption"><span>Valeur : ${evidence.started_value}</span>`));
       assert.ok(!markup.includes(`data-timestamp="${evidence.completed_at}"`));
     }
   }
@@ -5833,10 +5833,12 @@ test("sequence timeline titles describe steps and simultaneous completion preced
     const events = [...cards[1].matchAll(/<li class="alert-details-sequence-step"[\s\S]*?<\/li>/g)].map(match => match[0]);
     assert.match(events[0], /data-event-type="step"/);
     assert.match(events[0], /alert-details-sequence-value">Étape 1 terminée · égal à 3 · 0 s/);
-    assert.match(events[0], /alert-details-sequence-caption"><span>0<\/span>/);
+    assert.match(events[0], /alert-details-sequence-caption"><span>Valeur : 0<\/span>/);
     assert.match(events[1], /data-event-type="detected"/);
-    assert.match(events[1], /alert-details-sequence-caption"><span>3<\/span>/);
+    assert.match(events[1], /alert-details-sequence-value">Détection</);
+    assert.match(events[1], /alert-details-sequence-caption"><span>Valeur : 3<\/span>/);
     assert.match(events[2], /data-event-type="activated"/);
+    assert.match(events[2], /alert-details-sequence-value">Activation</);
   }
   const transition = panel._renderAlertDetails("overview", { ...row, source: { source: "value_transition" } });
   assert.match(transition, /data-event-type="last_occurrence"/);

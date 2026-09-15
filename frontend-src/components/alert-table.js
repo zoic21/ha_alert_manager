@@ -937,7 +937,7 @@ export function alertDetailsItems(kind, row) {
       },
       {
         key: "detected",
-        label: this._t("table.columns.detected"),
+        label: this._t("alert_details.detection"),
         value: this._date(row.detected),
         datetime: row.detected,
       },
@@ -964,7 +964,7 @@ export function alertDetailsItems(kind, row) {
       items.push(
         {
           key: "activated",
-          label: this._t("alert_details.activated_at"),
+          label: this._t("alert_details.activation"),
           value: this._date(row.activated),
           datetime: row.activated,
         },
@@ -992,7 +992,7 @@ export function alertDetailsItems(kind, row) {
     } else {
       items.push({
         key: "activated",
-        label: this._t("overview.active_since"),
+        label: this._t("alert_details.activation"),
         value: this._date(row.activated),
         datetime: row.activated,
       });
@@ -1112,13 +1112,14 @@ export function renderAlertDetails(context) {
     const occurrences = items.find((item) => item.key === "flapping-occurrences");
     const sequence = items.find((item) => item.key === "sequence-steps");
     const triggerValue = items.find((item) => item.key === "trigger-value");
+    const valueCaption = (value) => value === undefined || value === null || value === "" ? "" : `${summary.valueLabel} ${value}`;
     const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged", "last_occurrence"]);
     const events = timeline.filter((item) => eventKeys.has(item.key))
       .filter((item) => item.key !== "last_occurrence" || !sequence)
-      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? (triggerValue?.value ?? "") : item.suffix || "", type: item.key }));
+      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.suffix || "", type: item.key }));
     for (const step of sequence?.steps ?? []) events.push({
       ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
-      label: step.value, condition: "",
+      label: valueCaption(step.value), condition: "",
     });
     for (const group of occurrences?.groups ?? []) {
       for (const timestamp of group.timestamps) events.push({
@@ -1224,6 +1225,7 @@ export function renderAlertDetailsPanel(kind, row) {
           && Boolean(this._alertDetailsDialog?.querySelector?.("[data-alert-timeline]")?.expanded),
         alertId: row.id,
         timelineLabel: this._t("alert_details.timeline"),
+        valueLabel: this._t("alert_details.value_prefix"),
         notificationsLabel: this._t("alert_details.notifications_title"),
         copyLabel: this._t("alert_details.copy_id"),
         expandIdLabel: this._t("alert_details.expand_id"),
