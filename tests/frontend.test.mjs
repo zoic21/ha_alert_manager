@@ -8,6 +8,8 @@ import { handleNotificationProfileMenuSelection } from "../frontend-src/componen
 import { handleAlertTableAction } from "../frontend-src/components/alert-table.js";
 import { canUsePanelAction } from "../frontend-src/utils/permissions.js";
 
+import { ACTION_ICONS } from "../frontend-src/utils/constants.js";
+
 import { compactCss } from "./frontend-test-helpers.mjs";
 
 const flattenTranslations = (value, prefix = "") => Object.entries(value).reduce(
@@ -5621,4 +5623,28 @@ test("historical label IDs never include present-day entity labels", async () =>
   const panel = tablePanel();
   const row = panel._tableRows("overview")[0];
   assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, labels: [] }), /alert-details-labels/);
+});
+
+test("action decoration preserves authored icons and stays idempotent across refreshes", () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const buttons = Object.keys(ACTION_ICONS).flatMap((action) =>
+    [null, "ha-icon", "ha-svg-icon"].map((tag) => {
+      const button = fakeDomElement("ha-button");
+      button.dataset.action = action;
+      button.prepend = (icon) => button.children.unshift(icon);
+      button.querySelector = (selector) => button.children.find((child) =>
+        (selector.includes('[slot="start"]') && child.attributes.slot === "start") ||
+        (selector.includes("[data-alert-manager-action-icon]") && "data-alert-manager-action-icon" in child.attributes));
+      if (tag) {
+        const icon = fakeDomElement(tag);
+        icon.setAttribute("slot", "start");
+        button.children.push(icon);
+      }
+      return button;
+    }));
+  panel.shadowRoot.querySelectorAll = (selector) => buttons.filter((button) =>
+    selector === `[data-action="${button.dataset.action}"]`);
+  for (let refresh = 0; refresh < 3; refresh++) panel._decorateActionIcons();
+  for (const button of buttons) assert.equal(button.children.length, 1, button.dataset.action);
 });

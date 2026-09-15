@@ -89,7 +89,11 @@ Switching preserves unsaved values and list order; closing a modified editor ask
 
 The full configuration can be exported/imported as YAML. Alert Manager retains the **three latest valid daily configuration backups**, downloadable and restorable from Configuration.
 
-If the saved configuration is invalid at startup, the integration uses safe defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently.
+At startup, unknown stored configuration fields are removed after supported migrations.
+Valid notification profiles, rules and pack settings are preserved, and the cleaned
+configuration is saved automatically. New API/YAML input still rejects unknown fields.
+
+If a known field in the saved configuration has an invalid value at startup, the integration uses safe defaults, displays a persistent warning and lets an administrator choose a backup. It never restores one silently.
 
 **Restoring a complete backup replaces the configuration and reevaluates current states while retaining compatible alert/rule IDs, acknowledgements, occurrence evidence and history.** Version-2 exports retain rule IDs. Review the replacement configuration before confirming. Configuration exports should not be confused with a full Home Assistant backup.
 

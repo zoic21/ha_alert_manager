@@ -10041,7 +10041,7 @@ class AlertManagerPanel extends HTMLElement {
     if (!globalThis.document?.createElement) return;
     for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
       for (const button of this.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? []) {
-        if (button.querySelector?.("[data-alert-manager-action-icon]")) continue;
+        if (button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
         const icon = document.createElement("ha-icon");
         icon.setAttribute("slot", "start");
         icon.setAttribute("icon", iconName);

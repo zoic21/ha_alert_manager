@@ -86,10 +86,10 @@ def test_22_storage_yaml_and_backup_keep_the_same_configuration(hass):
         {"automatic": {"unavailable": {"domains": ["sensor"]}}},
     ],
 )
-def test_pre_22_configuration_is_rejected_without_overwriting_storage(
+def test_obsolete_fields_are_rejected_in_updates_but_cleaned_from_storage(
     hass, entry, changes
 ):
-    """Both obsolete UI updates and unsupported stored data remain non-destructive."""
+    """Reject obsolete new input while preserving known persisted settings."""
 
     async def scenario():
         manager = AlertManager(hass, entry)
@@ -99,12 +99,14 @@ def test_pre_22_configuration_is_rejected_without_overwriting_storage(
             await manager.async_update_config(changes)
         assert hass.stores["alert_manager"] == before
         await manager.async_unload()
-        unsupported = {"config": changes, "alerts": {}}
+        unsupported = {"config": {**changes, "excluded_labels": ["keep"]}, "alerts": {}}
         hass.stores["alert_manager"] = deepcopy(unsupported)
         restarted = AlertManager(hass, entry)
         await restarted.async_setup()
-        assert restarted.recovery_active
-        assert hass.stores["alert_manager"] == unsupported
+        assert not restarted.recovery_active
+        expected = validate_config({"excluded_labels": ["keep"]})
+        assert restarted.get_config() == expected
+        assert hass.stores["alert_manager"]["config"] == expected
         await restarted.async_unload()
 
     asyncio.run(scenario())

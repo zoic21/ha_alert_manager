@@ -367,3 +367,92 @@ def test_restart_catches_up_when_latest_valid_backup_is_older_than_one_day(hass,
     assert datetime.fromisoformat(backups[0]["created_at"]) - datetime.fromisoformat(
         old["created_at"]
     ) >= timedelta(days=1)
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_obsolete_fields_are_removed_without_losing_config(hass, entry, legacy):
+    """Old fields cannot disable notification profiles or future pack saves."""
+    from custom_components.alert_manager.packs import PACKS
+
+    profile = {
+        "id": "phone",
+        "name": "Phone",
+        "targets": ["notify.mobile_app_phone"],
+        "default_policy": {
+            "notify_on_start": True,
+            "notify_on_resolved": True,
+            "reminder_interval": None,
+        },
+        "exceptions": [
+            {
+                "selector_type": "label",
+                "selector_id": "important",
+                "notify_on_start": False,
+            }
+        ],
+    }
+    expected = validate_config(
+        {
+            "notification_profiles": [profile],
+            "rules": [{"id": "target", **rule_payload()}],
+        }
+    )
+    stored = deepcopy(expected)
+    stored["information_labels"] = ["information"]
+    stored["obsolete_option"] = {"anything": True}
+    stored["rules"][0]["level"] = "information"
+    for pack in PACKS:
+        stored["automatic"][pack.id]["level"] = "information"
+    stored["notification_profiles"][0]["obsolete"] = True
+    stored["notification_profiles"][0]["default_policy"]["obsolete"] = True
+    stored["notification_profiles"][0]["exceptions"][0]["obsolete"] = True
+    stored["automatic"]["unavailable"]["entity_overrides"] = {
+        "sensor.other": {"enabled": False, "obsolete": True}
+    }
+    expected["automatic"]["unavailable"]["entity_overrides"] = {
+        "sensor.other": {"enabled": False}
+    }
+    if legacy:
+        stored.pop("pack_config_version")
+        stored["global_delay"] = 300
+    hass.stores["alert_manager"] = {"config": stored, "alerts": {}}
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    assert not manager.recovery_active
+    assert manager.get_config() == expected
+    assert hass.stores["alert_manager"]["config"] == expected
+    for pack in PACKS:
+        run(
+            manager.async_update_config(
+                {"automatic": {pack.id: {"label_ids": ["information"]}}}
+            )
+        )
+    assert (
+        manager.get_config()["notification_profiles"]
+        == expected["notification_profiles"]
+    )
+    assert manager.storage._migrate_config(manager.get_config())[1] is False
+
+
+def test_obsolete_fields_do_not_hide_invalid_values(hass, entry):
+    """Cleanup must never overwrite a store whose known fields are invalid."""
+    original = {
+        "config": {"information_labels": [], "pending_display_delay": "broken"},
+        "alerts": {},
+    }
+    hass.stores["alert_manager"] = deepcopy(original)
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    assert manager.recovery_active
+    assert hass.stores["alert_manager"] == original
+
+
+def test_new_input_still_rejects_unknown_fields():
+    """Tolerant storage loading does not weaken API or YAML validation."""
+    from custom_components.alert_manager.validation import validate_config_update
+
+    for validate in (validate_config, validate_config_update):
+        with pytest.raises(ValueError, match="Unknown configuration field"):
+            validate({"information_labels": []})
+    with pytest.raises(ValueError, match="Unknown"):
+        parse_config_yaml("version: 1\nconfig:\n  information_labels: []\n")

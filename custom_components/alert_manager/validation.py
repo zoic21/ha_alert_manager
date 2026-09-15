@@ -22,7 +22,12 @@ from .const import (
     TRANSITION_SOURCES,
 )
 from .models import Rule, normalize_rule_source, safe_float, validate_label_list
-from .notifications import validate_notification_profiles
+from .notifications import (
+    _EXCEPTION_KEYS,
+    _POLICY_KEYS,
+    _PROFILE_KEYS,
+    validate_notification_profiles,
+)
 from .packs import PACKS, PACKS_BY_ID, PackConfigField
 
 _DEVICE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -70,6 +75,66 @@ _RULE_CLIENT_KEYS = {
     "flapping_recovery",
 }
 _REQUIRED_RULE_KEYS = {"name", "entity_ids", "duration"}
+
+
+def remove_unknown_stored_config_fields(config: dict[str, Any]) -> list[str]:
+    """Prune obsolete stored fields after migrations, leaving values for validation.
+
+    Only storage calls this: new API/YAML input must still reject unknown fields.
+    Dynamic identifiers and opaque values are never interpreted as schema fields.
+    """
+    removed: list[str] = []
+
+    def prune(value: Any, allowed: set[str], path: str) -> None:
+        if not isinstance(value, dict):
+            return
+        for key in _unknown_keys(value, allowed):
+            removed.append(f"{path}.{key}")
+            del value[key]
+
+    def pack_fields(value: Any, fields: tuple[PackConfigField, ...], path: str) -> None:
+        if not isinstance(value, dict):
+            return
+        for field in fields:
+            settings = value.get(field.id)
+            if not field.fields or not isinstance(settings, dict):
+                continue
+            for target_id, target in settings.items():
+                target_path = f"{path}.{field.id}.{target_id}"
+                prune(target, {item.id for item in field.fields}, target_path)
+                pack_fields(target, field.fields, target_path)
+
+    # Exclusions still need their dedicated migration, including type validation.
+    prune(
+        config,
+        set(DEFAULT_CONFIG) | {"excluded_entities", "excluded_devices"},
+        "config",
+    )
+    automatic = config.get("automatic")
+    prune(automatic, set(_AUTOMATIC_KEYS), "automatic")
+    if isinstance(automatic, dict):
+        for pack_id, settings in automatic.items():
+            prune(settings, _AUTOMATIC_KEYS[pack_id], f"automatic.{pack_id}")
+            pack_fields(
+                settings, PACKS_BY_ID[pack_id].config_fields, f"automatic.{pack_id}"
+            )
+    rules = config.get("rules")
+    if isinstance(rules, list):
+        for index, rule in enumerate(rules):
+            prune(rule, _RULE_CLIENT_KEYS | {"id", "version"}, f"rules[{index}]")
+    profiles = config.get("notification_profiles")
+    if isinstance(profiles, list):
+        for index, profile in enumerate(profiles):
+            path = f"notification_profiles[{index}]"
+            prune(profile, _PROFILE_KEYS, path)
+            if not isinstance(profile, dict):
+                continue
+            prune(profile.get("default_policy"), _POLICY_KEYS, f"{path}.default_policy")
+            exceptions = profile.get("exceptions")
+            if isinstance(exceptions, list):
+                for index, exception in enumerate(exceptions):
+                    prune(exception, _EXCEPTION_KEYS, f"{path}.exceptions[{index}]")
+    return sorted(removed)
 
 
 def validate_config_update(changes: Any) -> None:

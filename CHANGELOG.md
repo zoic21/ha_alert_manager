@@ -7,8 +7,15 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.27**, published on **2026-09-14**.
+Current development build: **2.4.0-dev.28**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
+
+### Reliability fixes
+
+- Remove unknown stored configuration fields during startup while preserving valid
+  notification profiles, rules and pack settings; pack saves remain available.
+- Prevent duplicate action icons when opening rule editors from alert details or
+  refreshing other configuration surfaces.
 
 ### Major changes
 

@@ -34,6 +34,7 @@ from .pack_migration import (
     migrate_flapping_precedence,
     migrate_pack_config,
 )
+from .validation import remove_unknown_stored_config_fields
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -599,6 +600,11 @@ def _migrate_config_shape(stored: Any) -> tuple[dict[str, Any], bool]:
     if version < 2:
         config = migrate_flapping_precedence(migrate_pack_config(config))
         config["pack_config_version"] = 2
+        changed = True
+    if removed := remove_unknown_stored_config_fields(config):
+        _LOGGER.warning(
+            "Removed unknown stored configuration fields: %s", ", ".join(removed)
+        )
         changed = True
     return config, changed
 
