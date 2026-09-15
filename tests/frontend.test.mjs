@@ -5650,6 +5650,12 @@ test("action decoration preserves authored icons and stays idempotent across ref
   for (const button of buttons) assert.equal(button.children.length, 1, button.dataset.action);
 });
 
+test("sequence headers keep their card background and expanded summaries stay hidden", () => {
+  const styles = compactCss(readFileSync(new URL("../frontend-src/styles/rule-editor-styles.js", import.meta.url), "utf8"));
+  assert.match(styles, /\.sequence-step::part\(summary\)\{background:var\(--card-background-color\)/);
+  assert.match(styles, /\.sequence-step-summary\[hidden\]\{display:none/);
+});
+
 test("sequence details show recorded values and timestamps in a persistent collapsed panel", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
@@ -5665,10 +5671,9 @@ test("sequence details show recorded values and timestamps in a persistent colla
     assert.match(markup, /Voir les 2 étapes/);
     assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-sequence-details[^>]*>/)[0], /\bexpanded\b/);
     for (const evidence of row.source.condition_params.evidence) {
-      for (const phase of ["started", "completed"]) {
-        assert.ok(markup.includes(`data-timestamp="${evidence[`${phase}_at`]}"`));
-        assert.ok(markup.includes(` · ${evidence[`${phase}_value`]}`));
-      }
+      assert.ok(markup.includes(`data-timestamp="${evidence.started_at}"`));
+      assert.ok(markup.includes(`class="alert-details-sequence-value">${evidence.started_value}</span>`));
+      assert.ok(!markup.includes(`data-timestamp="${evidence.completed_at}"`));
     }
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
@@ -5676,11 +5681,13 @@ test("sequence details show recorded values and timestamps in a persistent colla
   panel._alertDetailsDialog.alertId = "another";
   assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-sequence-details expanded/);
   delete row.source.condition_params.evidence[0].started_value;
-  row.source.condition_params.evidence[0].completed_value = '<script>bad</script>';
+  row.source.condition_params.evidence[1].started_value = '<script>bad</script>';
   assert.match(panel._renderAlertDetails("history", row), /Valeur non disponible/);
   assert.doesNotMatch(panel._renderAlertDetails("history", row), /<script>/);
   row.source.condition_params.evidence = [];
-  assert.doesNotMatch(panel._renderAlertDetails("history", row), /data-sequence-details/);
+  const legacy = panel._renderAlertDetails("history", row);
+  assert.match(legacy, /data-sequence-details/);
+  assert.match(legacy, /Les étapes n’ont pas été enregistrées/);
 });
 
 test("pending sequences show progress and evidence without an activation countdown", () => {

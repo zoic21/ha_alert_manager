@@ -2245,28 +2245,25 @@ function alertDetailsItems(kind, row) {
         });
       }
     }
-    if (row.source?.source === "value_sequence") {
+    if (row.source?.source === "value_sequence" || row.source?.condition_key === "rule.sequence") {
       const sequence = row.source.condition_params ?? {};
       const steps = (Array.isArray(sequence.evidence) ? sequence.evidence : []).slice(0, 20)
-        .filter((evidence) => evidence && Number.isInteger(evidence.step) && sequence.steps?.[evidence.step - 1])
+        .filter((evidence) => evidence && Number.isInteger(evidence.step) && evidence.step > 0)
         .map((evidence) => {
-          const step = sequence.steps[evidence.step - 1];
+          const step = sequence.steps?.[evidence.step - 1];
           return {
             label: this._t("rules.sequence_completed", { step: evidence.step }),
-            condition: `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}`,
-            items: ["started", "completed"].map((phase) => ({
-              key: `sequence-${evidence.step}-${phase}`,
-              label: this._t(`alert_details.sequence_${phase}`),
-              datetime: evidence[`${phase}_at`],
-              value: this._date(evidence[`${phase}_at`]),
-              suffix: ` · ${evidence[`${phase}_value`] ?? this._t("alert_details.sequence_value_unavailable")}`,
-            })),
+            condition: step ? `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}` : "",
+            datetime: evidence.started_at,
+            date: evidence.started_at ? this._date(evidence.started_at) : "—",
+            value: evidence.started_value ?? this._t("alert_details.sequence_value_unavailable"),
           };
         });
-      if (steps.length) items.push({
+      items.push({
         key: "sequence-steps",
-        label: this._t("alert_details.sequence_steps", { count: steps.length }),
+        label: steps.length ? this._t("alert_details.sequence_steps", { count: steps.length }) : this._t("alert_details.sequence_timeline"),
         value: String(steps.length),
+        unavailable: this._t("alert_details.sequence_unavailable"),
         steps,
       });
     }
@@ -2343,11 +2340,12 @@ function renderAlertDetails(context) {
       </ha-expansion-panel>` : `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
       ${sequence ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-sequence-details ${summary.sequenceExpanded ? "expanded" : ""}>
         <span slot="header">${esc(sequence.label)}</span>
-        <div class="alert-details-occurrence-groups">${sequence.steps.map((step) => `<section class="alert-details-sequence-step">
-          <h4 class="alert-details-occurrence-date">${esc(step.label)}</h4>
-          <p class="alert-details-sequence-condition">${esc(step.condition)}</p>
-          <dl class="alert-details-list">${renderItems(step.items)}</dl>
-        </section>`).join("")}</div>
+        ${sequence.steps.length ? `<ol class="alert-details-sequence-timeline">${sequence.steps.map((step) => `<li class="alert-details-sequence-step">
+          <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(step.value)}</span>
+            ${step.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(step.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(step.date)}</span>` : `<span>—</span>`}
+          </div>
+          <div class="alert-details-sequence-caption"><span>${esc(step.label)}</span>${step.condition ? `<span> · ${esc(step.condition)}</span>` : ""}</div>
+        </li>`).join("")}</ol>` : `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>`}
       </ha-expansion-panel>` : ""}
     </ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
@@ -5200,8 +5198,8 @@ function renderSequenceEditor({ rule, t, renderNumberField }) {
 
       const title = t(index === 0 ? "rules.sequence_first" : "rules.sequence_then", { index: index + 1 });
       const summary = sequenceStepSummary(step, t);
-      return `<ha-expansion-panel left-chevron class="sequence-step${step.enabled === false ? " sequence-step-disabled" : ""}" data-sequence-step="${index}" header="${esc(title)}" secondary="${esc(summary)}" ${step._expanded ? "expanded" : ""}>
-        <div slot="header" class="sequence-step-header"><ha-icon-button class="sequence-step-reorder" data-index="${index}" aria-label="${esc(t("rules.sequence_reorder", { index: index + 1 }))}" title="${esc(t("rules.sequence_reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><div class="sequence-step-heading-text"><div>${esc(title)}</div><small class="sequence-step-summary">${esc(summary)}</small></div></div>
+      return `<ha-expansion-panel left-chevron class="sequence-step${step.enabled === false ? " sequence-step-disabled" : ""}" data-sequence-step="${index}" header="${esc(title)}" secondary="${step._expanded ? "" : esc(summary)}" ${step._expanded ? "expanded" : ""}>
+        <div slot="header" class="sequence-step-header"><ha-icon-button class="sequence-step-reorder" data-index="${index}" aria-label="${esc(t("rules.sequence_reorder", { index: index + 1 }))}" title="${esc(t("rules.sequence_reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><div class="sequence-step-heading-text"><div>${esc(title)}</div><small class="sequence-step-summary" ${step._expanded ? "hidden" : ""}>${esc(summary)}</small></div></div>
         <div slot="icons" class="sequence-step-actions"><ha-switch data-sequence-enabled aria-label="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" title="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" ${step.enabled !== false ? "checked" : ""}></ha-switch>${steps.length > 2 ? renderConfigurationRemove(t("rules.sequence_remove", { index: index + 1 }), "remove-sequence-step", { "data-index": index }) : ""}</div><div class="sequence-step-content">
         <div class="sequence-comparison"><div class="field"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="sequence-${index}-operator" data-field="operator"></ha-select></div><div class="fields sequence-values">${renderRuleValues({ rule: step, t })}</div></div>
         <div class="sequence-timing"><div class="field"><span class="field-label">${esc(t("rules.sequence_timing"))}</span><ha-select id="sequence-${index}-mode" data-field="sequence-${index}-mode"></ha-select></div>${mode === "between" ? "" : duration(index, "duration", t("rules.sequence_duration"), step.duration ?? 0, mode === "less_than" ? 1 : 0)}</div>
@@ -5250,9 +5248,13 @@ function hydrateSequenceEditor() {
         this._captureRuleDraft();
         const current = this._editingRule.steps[index];
         current._expanded = event.detail.expanded;
-        expansion.secondary = sequenceStepSummary(current, (key, values) => this._t(key, values));
+        const text = sequenceStepSummary(current, (key, values) => this._t(key, values));
+        expansion.secondary = current._expanded ? "" : text;
         const summary = expansion.querySelector(".sequence-step-summary");
-        if (summary) summary.textContent = expansion.secondary;
+        if (summary) {
+          summary.textContent = text;
+          summary.hidden = current._expanded;
+        }
       };
       expansion.addEventListener("expanded-changed", expansion._sequenceExpansionHandler);
     }
@@ -8183,15 +8185,48 @@ const tableStyles = `
     overflow-y: auto;
     padding: 0 var(--ha-space-4, 16px) var(--ha-space-4, 16px);
   }
-  .alert-details-sequence-step + .alert-details-sequence-step {
-    border-top: 1px solid var(--divider-color);
-    margin-top: 12px;
-    padding-top: 4px;
+  .alert-details-sequence-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0 16px 16px;
+    max-height: 300px;
+    overflow-y: auto;
   }
-  .alert-details-sequence-condition {
-    margin: 0 0 8px;
+  .alert-details-sequence-step {
+    position: relative;
+    margin-inline-start: 6px;
+    padding: 12px 0 12px 22px;
+    border-inline-start: 2px solid var(--divider-color);
+  }
+  .alert-details-sequence-step::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: -6px;
+    top: 18px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    box-shadow: 0 0 0 4px var(--card-background-color);
+  }
+  .alert-details-sequence-entry {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .alert-details-sequence-value { overflow-wrap: anywhere; min-width: 0; }
+  .alert-details-sequence-entry .alert-details-timestamp {
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .alert-details-sequence-caption {
+    margin-top: 4px;
     overflow-wrap: anywhere;
     color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
   }
   .alert-details-occurrence-date {
     margin: 8px 0;
@@ -9284,6 +9319,8 @@ const ruleEditorStyles = `
     border: 1px solid var(--divider-color);
     border-radius: var(--ha-border-radius-m, 8px);
   }
+  .sequence-step::part(summary) { background: var(--card-background-color); }
+  .sequence-step-summary[hidden] { display: none; }
   .sequence-step-content { padding: 12px; }
   .sequence-step-list { display: grid; gap: 12px; min-width: 0; }
   .sequence-step-header { display: flex; align-items: center; min-width: 0; padding-block: 8px; }

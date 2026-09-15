@@ -1037,28 +1037,25 @@ export function alertDetailsItems(kind, row) {
         });
       }
     }
-    if (row.source?.source === "value_sequence") {
+    if (row.source?.source === "value_sequence" || row.source?.condition_key === "rule.sequence") {
       const sequence = row.source.condition_params ?? {};
       const steps = (Array.isArray(sequence.evidence) ? sequence.evidence : []).slice(0, 20)
-        .filter((evidence) => evidence && Number.isInteger(evidence.step) && sequence.steps?.[evidence.step - 1])
+        .filter((evidence) => evidence && Number.isInteger(evidence.step) && evidence.step > 0)
         .map((evidence) => {
-          const step = sequence.steps[evidence.step - 1];
+          const step = sequence.steps?.[evidence.step - 1];
           return {
             label: this._t("rules.sequence_completed", { step: evidence.step }),
-            condition: `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}`,
-            items: ["started", "completed"].map((phase) => ({
-              key: `sequence-${evidence.step}-${phase}`,
-              label: this._t(`alert_details.sequence_${phase}`),
-              datetime: evidence[`${phase}_at`],
-              value: this._date(evidence[`${phase}_at`]),
-              suffix: ` · ${evidence[`${phase}_value`] ?? this._t("alert_details.sequence_value_unavailable")}`,
-            })),
+            condition: step ? `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}` : "",
+            datetime: evidence.started_at,
+            date: evidence.started_at ? this._date(evidence.started_at) : "—",
+            value: evidence.started_value ?? this._t("alert_details.sequence_value_unavailable"),
           };
         });
-      if (steps.length) items.push({
+      items.push({
         key: "sequence-steps",
-        label: this._t("alert_details.sequence_steps", { count: steps.length }),
+        label: steps.length ? this._t("alert_details.sequence_steps", { count: steps.length }) : this._t("alert_details.sequence_timeline"),
         value: String(steps.length),
+        unavailable: this._t("alert_details.sequence_unavailable"),
         steps,
       });
     }
@@ -1135,11 +1132,12 @@ export function renderAlertDetails(context) {
       </ha-expansion-panel>` : `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
       ${sequence ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-sequence-details ${summary.sequenceExpanded ? "expanded" : ""}>
         <span slot="header">${esc(sequence.label)}</span>
-        <div class="alert-details-occurrence-groups">${sequence.steps.map((step) => `<section class="alert-details-sequence-step">
-          <h4 class="alert-details-occurrence-date">${esc(step.label)}</h4>
-          <p class="alert-details-sequence-condition">${esc(step.condition)}</p>
-          <dl class="alert-details-list">${renderItems(step.items)}</dl>
-        </section>`).join("")}</div>
+        ${sequence.steps.length ? `<ol class="alert-details-sequence-timeline">${sequence.steps.map((step) => `<li class="alert-details-sequence-step">
+          <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(step.value)}</span>
+            ${step.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(step.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(step.date)}</span>` : `<span>—</span>`}
+          </div>
+          <div class="alert-details-sequence-caption"><span>${esc(step.label)}</span>${step.condition ? `<span> · ${esc(step.condition)}</span>` : ""}</div>
+        </li>`).join("")}</ol>` : `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>`}
       </ha-expansion-panel>` : ""}
     </ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}

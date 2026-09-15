@@ -240,24 +240,44 @@ def fire_sequence_timer(manager, hass, key):
     run(manager._async_flush_queued_evaluations())
 
 
-def test_sequence_handoff_resolution_history_and_restart(hass, entry, set_now):
-    manager, key, _rule = setup_sequence(hass, entry)
+@pytest.mark.parametrize("instant", [False, True])
+def test_sequence_handoff_resolution_history_and_restart(hass, entry, set_now, instant):
+    changes = (
+        {
+            "steps": [
+                {"operator": "above", "value": 100, "duration": 0},
+                {"operator": "below", "value": 10, "duration": 0},
+            ]
+        }
+        if instant
+        else {}
+    )
+    manager, key, _rule = setup_sequence(hass, entry, **changes)
     now = dt_util.now()
     assert not manager._sequence_progress  # no snapshot reconstruction
     edge(manager, hass, "120")
     assert key not in manager.records  # no pending alert for incomplete scenarios
     set_now(now + timedelta(seconds=30))
-    fire_sequence_timer(manager, hass, key)
+    if not instant:
+        fire_sequence_timer(manager, hass, key)
     assert manager._sequence_progress[key].index == 1
     edge(manager, hass, "5")
     set_now(now + timedelta(seconds=50))
-    fire_sequence_timer(manager, hass, key)
+    if not instant:
+        fire_sequence_timer(manager, hass, key)
     record = manager.records[key]
     assert record.status is AlertStatus.ACTIVE
     assert len(record.details.condition_params["evidence"]) == 2
     assert record.details.condition_params["evidence"][0]["started_value"] == "120"
     assert record.details.condition_params["evidence"][1]["completed_value"] == "5"
     assert record.details.condition_key == "rule.sequence"
+    public = manager._public_alert_record(record)
+    assert public["source"] == "value_sequence"
+    assert public["condition_params"]["steps"] == manager._rules[0].steps
+    assert (
+        public["condition_params"]["evidence"]
+        == record.details.condition_params["evidence"]
+    )
     assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == 1
     run(manager.async_unload())
     restored = AlertManager(hass, entry)

@@ -218,15 +218,48 @@ export const tableStyles = `
     overflow-y: auto;
     padding: 0 var(--ha-space-4, 16px) var(--ha-space-4, 16px);
   }
-  .alert-details-sequence-step + .alert-details-sequence-step {
-    border-top: 1px solid var(--divider-color);
-    margin-top: 12px;
-    padding-top: 4px;
+  .alert-details-sequence-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0 16px 16px;
+    max-height: 300px;
+    overflow-y: auto;
   }
-  .alert-details-sequence-condition {
-    margin: 0 0 8px;
+  .alert-details-sequence-step {
+    position: relative;
+    margin-inline-start: 6px;
+    padding: 12px 0 12px 22px;
+    border-inline-start: 2px solid var(--divider-color);
+  }
+  .alert-details-sequence-step::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: -6px;
+    top: 18px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    box-shadow: 0 0 0 4px var(--card-background-color);
+  }
+  .alert-details-sequence-entry {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .alert-details-sequence-value { overflow-wrap: anywhere; min-width: 0; }
+  .alert-details-sequence-entry .alert-details-timestamp {
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+  }
+  .alert-details-sequence-caption {
+    margin-top: 4px;
     overflow-wrap: anywhere;
     color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
   }
   .alert-details-occurrence-date {
     margin: 8px 0;

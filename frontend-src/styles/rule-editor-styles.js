@@ -14,6 +14,8 @@ export const ruleEditorStyles = `
     border: 1px solid var(--divider-color);
     border-radius: var(--ha-border-radius-m, 8px);
   }
+  .sequence-step::part(summary) { background: var(--card-background-color); }
+  .sequence-step-summary[hidden] { display: none; }
   .sequence-step-content { padding: 12px; }
   .sequence-step-list { display: grid; gap: 12px; min-width: 0; }
   .sequence-step-header { display: flex; align-items: center; min-width: 0; padding-block: 8px; }

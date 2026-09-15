@@ -603,8 +603,13 @@ test("sequence expansion captures edits, keeps its state and never serializes it
   assert.equal(listeners.size, 1);
   listeners.get("expanded-changed")({ target: expansion, detail: { expanded: true } });
   assert.equal(panel._editingRule.steps[0]._expanded, true);
+  assert.equal(summary.hidden, true);
+  assert.equal(expansion.secondary, "");
+  const expandedHtml = renderRuleConditionSection({ rule: panel._editingRule, t, renderTextField: () => "", renderNumberField: () => "" });
+  assert.match(expandedHtml, /class="sequence-step-summary" hidden/);
   listeners.get("expanded-changed")({ target: expansion, detail: { expanded: false } });
   assert.equal(panel._editingRule.steps[0]._expanded, false);
+  assert.equal(summary.hidden, false);
   assert.match(summary.textContent, /200/);
   assert.match(summary.textContent, /duration.minutes/);
   const html = renderRuleConditionSection({ rule: panel._editingRule, t, renderTextField: () => "", renderNumberField: () => "" });

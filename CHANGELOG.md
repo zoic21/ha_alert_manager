@@ -7,10 +7,15 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Development prerelease
 
-Current development build: **2.4.0-dev.33**, published on **2026-09-15**.
+Current development build: **2.4.0-dev.34**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Keep sequence details visible for active and historical alerts, with an explicit
+  message when an older alert has no recorded steps. Present recorded starting
+  values and timestamps as a compact timeline; hide expanded editor summaries
+  and keep step headers on the normal card background.
 
 - Restore the editable expiration duration when switching transition resolution
   modes, retaining its value across repeated changes.
