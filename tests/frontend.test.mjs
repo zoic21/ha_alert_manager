@@ -1528,7 +1528,7 @@ for (const kind of ["overview", "history"]) {
       assert.equal(table.data[0].source, undefined, "keep nested payloads out of native table search");
       assert.equal(opened.source, source);
       const html = panel._renderAlertDetails(kind, opened);
-      assert.match(html, /data-sequence-details/);
+      assert.match(html, /data-alert-timeline/);
       assert.match(html, /data-timestamp="2026-09-15T10:00:00Z"/);
       return html;
     };
@@ -1553,7 +1553,7 @@ test("late history response cannot restore pending sequence details after activa
   panel._alerts = { ...panel._alerts, alerts: [], pending: [source], acknowledge: [] };
   const pending = panel._tableRows("overview")[0];
   const dialog = { alertKind: "overview", alertId: pending.id, alertRow: pending,
-    querySelector: (selector) => selector === "[data-sequence-details]" ? { expanded: true } : null };
+    querySelector: (selector) => selector === "[data-alert-timeline]" ? { expanded: true } : null };
   panel._alertDetailsDialog = dialog;
   panel._hydrateAlertDetailTimestamps = panel._updateCountdowns = () => {};
   const table = { querySelector: () => null };
@@ -1568,7 +1568,7 @@ test("late history response cannot restore pending sequence details after activa
   assert.equal(dialog.alertRow.status, "active");
   assert.match(dialog.innerHTML, /alert-details-status-active/);
   assert.match(dialog.innerHTML, /data-timestamp="2026-09-15T10:01:00Z"/);
-  assert.match(dialog.innerHTML, /data-sequence-details expanded/);
+  assert.match(dialog.innerHTML, /data-alert-timeline expanded/);
 });
 
 test("alert details expose translated fields and contextual links", () => {
@@ -1588,8 +1588,8 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /data-detail-key="current-value"[\s\S]*Valeur actuelle[\s\S]*35 °C/);
   assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
-  assert.match(html, /data-detail-key="detected"[\s\S]*data-action="toggle-alert-timestamp"/);
-  assert.match(html, /data-detail-key="activated"[\s\S]*data-timestamp-mode="absolute"/);
+  assert.match(html, /data-event-type="detected"[\s\S]*data-action="toggle-alert-timestamp"/);
+  assert.match(html, /data-event-type="activated"[\s\S]*data-timestamp-mode="absolute"/);
   assert.match(html, /ID de l’alerte/);
   assert.match(html, /<ha-card outlined class="alert-details-card">/);
   assert.match(html, /slot="headerActionItems"[\s\S]*data-alert-id="rule:temperature:sensor\.rack"/);
@@ -4707,13 +4707,13 @@ test("notification details stay compact, escape profiles and exclude pending", (
   const live = panel._renderAlertDetails("overview", row);
   assert.match(live, /3 envoyée\(s\)/);
   assert.match(live, /Sans rappel, &lt;script&gt;/);
-  assert.match(live, /data-detail-key="notification-last-alert"[\s\S]*data-action="toggle-alert-timestamp"/);
-  assert.doesNotMatch(live, /notifications-resolved/);
+  assert.match(live, /data-event-type="notification-alert"[\s\S]*data-action="toggle-alert-timestamp"/);
+  assert.doesNotMatch(live, /data-event-type="notification-resolved"/);
   const history = panel._renderAlertDetails("history", row);
-  assert.match(history, /notifications-resolved/);
+  assert.match(history, /data-event-type="notification-resolved"/);
   assert.match(history, /2 envoyée\(s\)/);
-  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, status: "pending" }), /notification-profiles/);
-  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, notifications: null }), /notification-profiles/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, status: "pending" }), /data-event-type="notification-/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, notifications: null }), /data-event-type="notification-/);
 });
 
 
@@ -5499,7 +5499,7 @@ test("alert details group timeline and delivery facts without hiding data in any
     const kind = status === "resolved" ? "history" : "overview";
     const row = { ...base, status, notifications: { alert: { count: 0, profiles: {} }, resolved: { count: 1, profiles: { a: "Loïc" } } } };
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /alert-details-section-title">Chronologie/);
+    assert.match(markup, /slot="header">Chronologie/);
     assert.match(markup, /alert-details-identifier" data-detail-key="alert-id"/);
     assert.match(markup, /data-action="copy-alert-id"/);
     const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
@@ -5507,20 +5507,18 @@ test("alert details group timeline and delivery facts without hiding data in any
     assert.ok(!cards[0].includes('data-detail-key="condition"'));
     assert.ok(cards[0].includes('class="alert-details-grid"'));
     assert.ok(cards[0].includes('data-detail-key="entity-id"'));
-    assert.ok(!cards[0].includes('data-detail-key="detected"'));
-    assert.ok(cards[1].includes('data-detail-key="detected"'));
+    assert.ok(!cards[0].includes('data-event-type="detected"'));
+    assert.ok(cards[1].includes('data-event-type="detected"'));
     assert.ok(cards.every((card) => !card.includes('data-detail-key="alert-id"')));
-    if (status === "pending") assert.equal(cards.length, 2);
-    else {
-      assert.match(cards[2], /alert-details-notification/);
-      assert.match(cards[2], /Activation/);
-      assert.match(cards[2], /Rappels/);
-      assert.match(cards[2], /0 envoyée/);
-    }
+    assert.equal(cards.length, 2);
+    assert.equal((markup.match(/data-alert-timeline/g) || []).length, 1);
+    assert.doesNotMatch(markup, /alert-details-notification/);
     if (kind === "history") {
       assert.match(cards[1], /Activée le/);
-      assert.match(cards[2], /Résolution/);
+      assert.match(cards[1], /Notification de résolution/);
+      assert.match(cards[1], /Loïc/);
     }
+
   }
 });
 
@@ -5578,7 +5576,8 @@ test("notification details separate reminders and retain legacy activation total
   assert.equal(items.find((item) => item.key === "notification-profiles-reminder").value, "Reminder only");
   assert.equal(items.find((item) => item.key === "notifications-reminder").value, "2 envoyée(s)");
   const markup = panel._renderAlertDetails("history", row);
-  assert.equal((markup.match(/<dl class="alert-details-notification">/g) || []).length, 3);
+  assert.equal((markup.match(/data-alert-timeline/g) || []).length, 1);
+  assert.match(markup, /data-event-type="reminder"[\s\S]*2 envoyée\(s\) · Reminder only/);
   assert.doesNotMatch(markup, /Activation et rappels/);
 });
 
@@ -5595,9 +5594,9 @@ test("flapping details expose bounded evidence in live and historical alerts", (
     assert.equal(items.find((item) => item.key === "trigger-value").label, "Occurrences");
     assert.equal(items.find((item) => item.key === "trigger-value").value, "3 / 5");
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /alert-details-occurrences/);
+    assert.match(markup, /data-event-type="flapping"/);
     for (const timestamp of timestamps) {
-      assert.ok(markup.includes(`<time datetime="${new Date(timestamp * 1000).toISOString()}">`));
+      assert.ok(markup.includes(`data-timestamp="${new Date(timestamp * 1000).toISOString()}"`));
     }
     row.source.condition_params = {};
     const legacy = panel._renderAlertDetails(kind, row);
@@ -5610,7 +5609,7 @@ test("flapping details expose bounded evidence in live and historical alerts", (
   }
 });
 
-test("flapping evidence is collapsed, grouped by local day and retained on refresh", () => {
+test("flapping evidence shares the collapsed timeline and is retained on refresh", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   const dates = [new Date(2026, 8, 10, 23, 58, 32), new Date(2026, 8, 10, 23, 59, 35), new Date(2026, 8, 11, 0, 1, 36)];
@@ -5622,15 +5621,15 @@ test("flapping evidence is collapsed, grouped by local day and retained on refre
     assert.deepEqual(item.groups.map(group => group.timestamps.length), [2, 1]);
     assert.equal(item.groups[0].timestamps[0].value, "23:58:32");
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /Voir les 3 horaires/);
-    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-flapping-occurrences[^>]*>/)[0], /\bexpanded\b/);
-    assert.equal((markup.match(/class="alert-details-occurrence-date"/g) || []).length, 2);
-    assert.ok(markup.indexOf("data-flapping-occurrences") < markup.indexOf(">Chronologie<"));
+    assert.match(markup, /Occurrence d’instabilité/);
+    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
+    assert.equal((markup.match(/data-event-type="flapping"/g) || []).length, 3);
+    assert.ok(markup.indexOf("data-alert-timeline") < markup.indexOf(">Chronologie<"));
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
-  assert.match(panel._renderAlertDetails("overview", row), /data-flapping-occurrences expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
   panel._alertDetailsDialog.alertId = "another-alert";
-  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-flapping-occurrences expanded/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
 });
 
 
@@ -5745,8 +5744,8 @@ test("sequence details show recorded values and timestamps in a persistent colla
   } } };
   for (const kind of ["overview", "history"]) {
     const markup = panel._renderAlertDetails(kind, row);
-    assert.match(markup, /Voir les 2 étapes/);
-    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-sequence-details[^>]*>/)[0], /\bexpanded\b/);
+    assert.match(markup, /slot="header">Chronologie/);
+    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
     for (const evidence of row.source.condition_params.evidence) {
       assert.ok(markup.includes(`data-timestamp="${evidence.started_at}"`));
       assert.ok(markup.includes(`class="alert-details-sequence-value">${evidence.started_value}</span>`));
@@ -5754,16 +5753,16 @@ test("sequence details show recorded values and timestamps in a persistent colla
     }
   }
   panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
-  assert.match(panel._renderAlertDetails("overview", row), /data-sequence-details expanded/);
+  assert.match(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
   panel._alertDetailsDialog.alertId = "another";
-  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-sequence-details expanded/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-alert-timeline expanded/);
   delete row.source.condition_params.evidence[0].started_value;
   row.source.condition_params.evidence[1].started_value = '<script>bad</script>';
   assert.match(panel._renderAlertDetails("history", row), /Valeur non disponible/);
   assert.doesNotMatch(panel._renderAlertDetails("history", row), /<script>/);
   row.source.condition_params.evidence = [];
   const legacy = panel._renderAlertDetails("history", row);
-  assert.match(legacy, /data-sequence-details/);
+  assert.match(legacy, /data-alert-timeline/);
   assert.match(legacy, /Les étapes n’ont pas été enregistrées/);
 });
 
@@ -5782,9 +5781,35 @@ test("pending sequences show progress and evidence without an activation countdo
   assert.match(row.condition, /en attente de l’étape 2/);
   const markup = panel._renderAlertDetails("overview", row);
   assert.match(markup, /Progression de la séquence/);
-  assert.match(markup, /data-sequence-details/);
+  assert.match(markup, /data-alert-timeline/);
   assert.doesNotMatch(markup, /data-due=/);
   const timeline = panel._nativeTimelineCell(row);
   assert.equal(timeline.children[1].textContent, "1/2 étapes validées");
   assert.equal(timeline.children[1].dataset.due, undefined);
+});
+
+test("unified timeline orders lifecycle and profile sends and summarizes reminders without times", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const row = { ...base, detected: "2026-09-15T10:00:00Z", activated: "2026-09-15T10:01:00Z",
+    resolved: "2026-09-15T10:10:00Z", notifications: {
+      alert: { count: 2, profiles: { a: "Renamed", b: "Mobile" }, last_sent: "2026-09-15T10:03:00Z", events: [
+        { sent_at: "2026-09-15T10:03:00Z", profile_name: "Mobile" },
+        { sent_at: "2026-09-15T10:02:00Z", profile_name: "Original <name>" },
+      ] },
+      reminder: { count: 12, profiles: { a: "Maison", b: "Mobile" }, last_sent: "2026-09-15T10:09:00Z" },
+      resolved: { count: 1, profiles: { a: "Maison" }, last_sent: "2026-09-15T10:11:00Z", events: [
+        { sent_at: "2026-09-15T10:11:00Z", profile_name: "Maison" },
+      ] },
+    } };
+  const markup = panel._renderAlertDetails("history", row);
+  assert.equal((markup.match(/data-alert-timeline/g) || []).length, 1);
+  const entries = [...markup.matchAll(/<li class="alert-details-sequence-step"[\s\S]*?<\/li>/g)].map(match => match[0]);
+  assert.deepEqual(entries.map(entry => entry.match(/data-event-type="([^"]+)"/)[1]),
+    ["detected", "activated", "notification-alert", "notification-alert", "resolved", "notification-resolved", "reminder"]);
+  assert.match(entries[2], /Original &lt;name&gt;/);
+  assert.doesNotMatch(markup, /Renamed/);
+  assert.match(entries.at(-1), /12 envoyée\(s\) · Maison, Mobile/);
+  assert.doesNotMatch(entries.at(-1), /data-timestamp|10:09/);
+  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, activated: row.detected }), /data-event-type="detected"/);
 });

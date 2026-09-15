@@ -2107,7 +2107,7 @@ function alertDetailsItems(kind, row) {
       ...(!this._readOnly && row.source?.type === "coherence" ? [linked("coherence", this._t("coherence.title"), this._t("coherence.open"), "open-alert-coherence")] : []),
       { key: "message", label: this._t("table.columns.message"), value: row.message },
       ...(row.expiresAt ? [{ key: "expires", label: this._t("rules.auto_resolve"), value: this._date(row.expiresAt) }] : []),
-      ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence) }] : []),
+      ...(row.lastOccurrence ? [{ key: "last_occurrence", label: this._t("rules.last_occurrence"), value: this._date(row.lastOccurrence), datetime: row.lastOccurrence }] : []),
       ...(row.automaticResolution ? [{ key: "resolution_reason", label: this._t("rules.resolution_reason"), value: this._t("rules.automatic_resolution") }] : []),
       { key: "condition", label: this._t("table.columns.condition"), value: row.condition },
       this._readOnly ? { key: "entity-id", label: this._t("table.columns.entity_id"), value: row.entityId } : linked("entity-id", this._t("table.columns.entity_id"), row.entityId, "more-info", {
@@ -2162,6 +2162,7 @@ function alertDetailsItems(kind, row) {
       }
       items.push({
         key: "flapping-occurrences",
+        entryLabel: this._t("alert_details.timeline_flapping"),
         label: this._t("alert_details.flapping_show_times", { count: occurrenceDates.length }),
         value: this._t("alert_details.flapping_occurrences_unavailable"),
         groups: [...groups].map(([date, timestamps]) => ({ date, timestamps })),
@@ -2233,7 +2234,10 @@ function alertDetailsItems(kind, row) {
         items.push({
           key: `notifications-${notificationKind}`,
           label: this._t(`alert_details.notifications_${notificationKind}`),
+          timelineLabel: this._t(`alert_details.timeline_notification_${notificationKind}`),
           value: this._t("alert_details.notifications_count", { count: stats.count }),
+          count: stats.count,
+          events: (stats.events ?? []).map((event) => ({ datetime: event.sent_at, date: this._date(event.sent_at), value: event.profile_name })),
         }, {
           key: `notification-profiles-${notificationKind}`,
           label: this._t("alert_details.notification_profiles"),
@@ -2315,10 +2319,39 @@ function renderAlertDetails(context) {
     const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
     const occurrences = items.find((item) => item.key === "flapping-occurrences");
     const sequence = items.find((item) => item.key === "sequence-steps");
+    const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged", "last_occurrence"]);
+    const events = timeline.filter((item) => eventKeys.has(item.key))
+      .filter((item) => item.key !== "detected" || !timeline.some((other) => other.key === "activated" && Date.parse(other.datetime) === Date.parse(item.datetime)))
+      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.suffix || "", type: item.key }));
+    for (const step of sequence?.steps ?? []) events.push({ ...step, type: "step" });
+    for (const group of occurrences?.groups ?? []) {
+      for (const timestamp of group.timestamps) events.push({
+        type: "flapping", datetime: timestamp.datetime, date: `${group.date} · ${timestamp.value}`,
+        value: occurrences.entryLabel, label: "",
+      });
+    }
+    const reminders = [];
+    for (const kind of ["alert", "reminder", "resolved"]) {
+      const stats = notifications.find((item) => item.key === `notifications-${kind}`);
+      if (!stats?.count) continue;
+      const profiles = notifications.find((item) => item.key === `notification-profiles-${kind}`)?.value ?? "";
+      if (kind === "reminder") {
+        reminders.push({ type: "reminder", value: stats.timelineLabel, label: `${stats.value} · ${profiles}` });
+        continue;
+      }
+      if (stats.events?.length) {
+        for (const event of stats.events) events.push({ ...event, type: `notification-${kind}`, label: stats.timelineLabel });
+      } else {
+        const last = notifications.find((item) => item.key === `notification-last-${kind}`);
+        events.push({ type: `notification-${kind}`, datetime: last?.datetime, date: last?.value,
+          value: stats.timelineLabel, label: `${stats.value} · ${profiles}` });
+      }
+    }
+    events.sort((left, right) => (Date.parse(left.datetime) || 0) - (Date.parse(right.datetime) || 0));
+    events.push(...reminders);
     const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
     const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences && item !== sequence)
       .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
-    const section = (entries, title = "") => entries.length ? `<ha-card outlined class="alert-details-card">${title ? `<h3 class="alert-details-section-title">${esc(title)}</h3>` : ""}<dl class="alert-details-list">${renderItems(entries)}</dl></ha-card>` : "";
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
       ${summary.menuAction ? `<ha-dropdown-item value="${esc(summary.menuAction)}"${summary.menuAction === "delete-history-detail" ? ' variant="danger"' : ""}><ha-icon slot="icon" icon="${esc(summary.menuIcon)}"></ha-icon>${esc(summary.menuLabel)}</ha-dropdown-item>` : ""}
@@ -2332,31 +2365,21 @@ function renderAlertDetails(context) {
     </section>
     ${summary.labels?.length ? `<div class="alert-details-labels">${summary.labels.map((label) => `<ha-label dense${label.color ? ` color="${esc(label.color)}"` : ""} title="${esc(label.description || label.name)}">${esc(label.name)}${label.icon ? `<ha-icon slot="icon" icon="${esc(label.icon)}"></ha-icon>` : ""}</ha-label>`).join("")}</div>` : ""}
     ${introduction.length ? `<dl class="alert-details-introduction">${renderItems(introduction)}</dl>` : ""}
-    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl>
-      ${occurrences ? occurrences.groups.length ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-flapping-occurrences ${summary.occurrencesExpanded ? "expanded" : ""}>
-        <span slot="header">${esc(occurrences.label)}</span>
-        <div class="alert-details-occurrence-groups">${occurrences.groups.map((group) => `<section>
-          <h4 class="alert-details-occurrence-date">${esc(group.date)}</h4>
-          <ol class="alert-details-occurrences">${group.timestamps.map((timestamp) => `<li><time datetime="${esc(timestamp.datetime)}">${esc(timestamp.value)}</time></li>`).join("")}</ol>
-        </section>`).join("")}</div>
-      </ha-expansion-panel>` : `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
-      ${sequence ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-sequence-details ${summary.sequenceExpanded ? "expanded" : ""}>
-        <span slot="header">${esc(sequence.label)}</span>
-        ${sequence.steps.length ? `<ol class="alert-details-sequence-timeline">${sequence.steps.map((step) => `<li class="alert-details-sequence-step">
-          <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(step.value)}</span>
-            ${step.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(step.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(step.date)}</span>` : `<span>—</span>`}
+    ${details.length ? `<ha-card outlined class="alert-details-card"><dl class="alert-details-grid">${renderItems(details)}</dl></ha-card>` : ""}
+    <ha-card outlined class="alert-details-card">
+      <ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-alert-timeline ${summary.timelineExpanded ? "expanded" : ""}>
+        <span slot="header">${esc(summary.timelineLabel)}</span>
+        <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
+          <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
+            ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
           </div>
-          <div class="alert-details-sequence-caption"><span>${esc(step.label)}</span>${step.condition ? `<span> · ${esc(step.condition)}</span>` : ""}</div>
-        </li>`).join("")}</ol>` : `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>`}
-      </ha-expansion-panel>` : ""}
-    </ha-card>` : ""}
-    ${section(timeline, summary.timelineLabel)}
-    ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
-      ${["alert", "reminder", "resolved"].map((kind) => {
-        const entries = notifications.filter((item) => item.key.endsWith(`-${kind}`));
-        return entries.length ? `<dl class="alert-details-notification">${renderItems(entries)}</dl>` : "";
-      }).join("")}
-    </ha-card>` : ""}
+          ${event.label || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+        </li>`).join("")}</ol>
+        ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
+        ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
+      </ha-expansion-panel>
+      <dl class="alert-details-list">${renderItems(timeline.filter((item) => !eventKeys.has(item.key)))}</dl>
+    </ha-card>
     ${identifier ? `<div class="alert-details-identifier" data-detail-key="alert-id"><span>${esc(identifier.label)}</span><span class="alert-details-identifier-value" data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(summary.expandIdLabel)}" title="${esc(identifier.value)}">${esc(identifier.value)}</span><ha-icon-button data-action="copy-alert-id" data-alert-id="${esc(identifier.value)}" aria-label="${esc(summary.copyLabel)}" title="${esc(summary.copyLabel)}"><ha-icon icon="mdi:content-copy"></ha-icon></ha-icon-button><span class="alert-details-copy-status" role="status"></span></div>` : ""}`;
 }
 
@@ -2399,10 +2422,8 @@ function renderAlertDetailsPanel(kind, row) {
         ? this._alertDetailsDialog.notice : null,
       items: this._alertDetailsItems(kind, row),
       summary: {
-        sequenceExpanded: this._alertDetailsDialog?.alertId === row.id
-          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-sequence-details]")?.expanded),
-        occurrencesExpanded: this._alertDetailsDialog?.alertId === row.id
-          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-flapping-occurrences]")?.expanded),
+        timelineExpanded: this._alertDetailsDialog?.alertId === row.id
+          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-alert-timeline]")?.expanded),
         alertId: row.id,
         timelineLabel: this._t("alert_details.timeline"),
         notificationsLabel: this._t("alert_details.notifications_title"),
@@ -8212,9 +8233,17 @@ const tableStyles = `
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: var(--primary-color);
+    background: var(--timeline-event-color, var(--primary-color));
     box-shadow: 0 0 0 4px var(--card-background-color);
   }
+  [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
+  [data-event-type="activated"] { --timeline-event-color: var(--error-color); }
+  [data-event-type="resolved"] { --timeline-event-color: var(--success-color); }
+  [data-event-type="acknowledged"] { --timeline-event-color: var(--info-color); }
+  [data-event-type="flapping"], [data-event-type="last_occurrence"] { --timeline-event-color: var(--orange-color); }
+  [data-event-type="notification-alert"] { --timeline-event-color: var(--purple-color); }
+  [data-event-type="notification-resolved"] { --timeline-event-color: var(--teal-color); }
+  [data-event-type="reminder"] { --timeline-event-color: var(--secondary-text-color); }
   .alert-details-sequence-entry {
     display: flex;
     align-items: baseline;

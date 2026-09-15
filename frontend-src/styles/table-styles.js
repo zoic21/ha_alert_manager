@@ -239,9 +239,17 @@ export const tableStyles = `
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: var(--primary-color);
+    background: var(--timeline-event-color, var(--primary-color));
     box-shadow: 0 0 0 4px var(--card-background-color);
   }
+  [data-event-type="detected"] { --timeline-event-color: var(--warning-color); }
+  [data-event-type="activated"] { --timeline-event-color: var(--error-color); }
+  [data-event-type="resolved"] { --timeline-event-color: var(--success-color); }
+  [data-event-type="acknowledged"] { --timeline-event-color: var(--info-color); }
+  [data-event-type="flapping"], [data-event-type="last_occurrence"] { --timeline-event-color: var(--orange-color); }
+  [data-event-type="notification-alert"] { --timeline-event-color: var(--purple-color); }
+  [data-event-type="notification-resolved"] { --timeline-event-color: var(--teal-color); }
+  [data-event-type="reminder"] { --timeline-event-color: var(--secondary-text-color); }
   .alert-details-sequence-entry {
     display: flex;
     align-items: baseline;

@@ -63,6 +63,15 @@ class _StateMixin:
                 profile["id"]: profile["name"],
             }
             if kind not in ("matched", "matched_reminder"):
+                if key != "reminder":
+                    stats["events"] = [
+                        *stats.get("events", []),
+                        {
+                            "sent_at": sent_at.isoformat(),
+                            "profile_id": profile["id"],
+                            "profile_name": profile["name"],
+                        },
+                    ][-100:]
                 stats["count"] += 1
                 previous = stats["last_sent"]
                 stats["last_sent"] = (

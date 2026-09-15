@@ -406,6 +406,26 @@ def _notification_summary(value: Any) -> dict[str, Any] | None:
             "profiles": dict(profiles),
             "last_sent": last_sent,
         }
+        if kind != "reminder" and isinstance(data.get("events"), list):
+            events = []
+            for event in data["events"][-100:]:
+                if not isinstance(event, dict) or not all(
+                    isinstance(event.get(key), str)
+                    for key in ("sent_at", "profile_id", "profile_name")
+                ):
+                    continue
+                try:
+                    if datetime.fromisoformat(event["sent_at"]).tzinfo is None:
+                        continue
+                except ValueError:
+                    continue
+                events.append(
+                    {
+                        key: event[key]
+                        for key in ("sent_at", "profile_id", "profile_name")
+                    }
+                )
+            result[kind]["events"] = events
     return result or None
 
 

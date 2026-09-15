@@ -1251,6 +1251,18 @@ def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
             "count": 2,
             "profiles": {"profile": "Profile", "second": "Second"},
             "last_sent": (now + timedelta(minutes=8)).isoformat(),
+            "events": [
+                {
+                    "sent_at": (now + timedelta(minutes=7)).isoformat(),
+                    "profile_id": "profile",
+                    "profile_name": "Profile",
+                },
+                {
+                    "sent_at": (now + timedelta(minutes=8)).isoformat(),
+                    "profile_id": "second",
+                    "profile_name": "Second",
+                },
+            ],
         }
         restored, _ = await manager.history_storage.async_load()
         assert restored[0].notifications == stats
@@ -1748,3 +1760,32 @@ def test_legacy_notification_totals_remain_activation_on_restore():
     restored = AlertRecord.from_dict(data)
     assert restored.notifications == legacy
     assert "reminder" not in restored.notifications
+
+
+def test_notification_timeline_bounds_and_snapshots(hass, entry) -> None:
+    """Bound timestamps, retain profile names, and never expand reminder events."""
+    from custom_components.alert_manager.notification_runtime import _NotificationItem
+
+    async def scenario() -> None:
+        manager = AlertManager(hass, entry)
+        now = datetime(2026, 9, 15, 10, tzinfo=UTC)
+        record = _active_record(now)
+        manager.records = {record.details.id: record}
+        item = _NotificationItem.from_event(record.as_public_dict())
+        profile = _profile()
+        await manager._async_record_notification([item], profile, "matched", now)
+        assert "events" not in record.notifications["alert"]
+        for index in range(105):
+            await manager._async_record_notification(
+                [item], profile, "started", now + timedelta(seconds=index)
+            )
+        assert len(record.notifications["alert"]["events"]) == 100
+        assert record.notifications["alert"]["count"] == 105
+        profile["name"] = "Renamed"
+        await manager._async_record_notification([item], profile, "reminder", now)
+        assert "events" not in record.notifications["reminder"]
+        assert record.notifications["alert"]["events"][-1]["profile_name"] == "Profile"
+        restored = AlertRecord.from_dict(record.as_storage_dict())
+        assert restored.notifications == record.notifications
+
+    asyncio.run(scenario())
