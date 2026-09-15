@@ -44,6 +44,8 @@
       "activated_at": "Activée le",
       "acknowledged": "Acquitté",
       "unacknowledged": "Désacquitté",
+      "actor_automation": "Automatisation",
+      "actor_script": "Script",
       "acknowledgement_expired": "Désacquitté automatiquement",
       "timeline_notification_alert": "Notification de début",
       "timeline_notification_resolved": "Notification de résolution",

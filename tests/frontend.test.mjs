@@ -5968,7 +5968,7 @@ test("acknowledgement history shows retained actions in live and resolved timeli
     const markup = panel._renderAlertDetails(kind, row);
     assert.equal((markup.match(/data-event-type="acknowledged"/g) || []).length, 2);
     assert.equal((markup.match(/data-event-type="unacknowledged"/g) || []).length, 2);
-    assert.match(markup, /<span class="alert-details-sequence-value">Désacquitté \(Loïc\)<\/span>/);
+    assert.match(markup, /<span class="alert-details-sequence-value">Désacquitté<\/span>/);
     assert.match(markup, /Désacquitté automatiquement/);
     assert.match(markup, /Loïc &lt;admin&gt;/);
     assert.doesNotMatch(markup, /data-detail-key="unacknowledged"/);
@@ -5980,7 +5980,7 @@ test("acknowledgement history shows retained actions in live and resolved timeli
   assert.equal((active.match(/Jusqu’à/g) || []).length, 1);
 });
 
-test("acknowledgement author stays in the heading with only the deadline below", () => {
+test("acknowledgement author is an icon beside the timestamp with only the deadline below", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   for (const recorded of [false, true]) {
@@ -5994,18 +5994,20 @@ test("acknowledgement author stays in the heading with only the deadline below",
     const entry = (kind, data) => panel._renderAlertDetails(kind, data)
       .match(/<li class="alert-details-sequence-step" data-event-type="acknowledged">[\s\S]*?<\/li>/)[0];
     const timed = entry("overview", row);
-    assert.match(timed, /<span class="alert-details-sequence-value">Acquitté \(Loïc &lt;admin&gt;\)<\/span>/);
+    assert.match(timed, /<span class="alert-details-sequence-value">Acquitté<\/span>/);
     assert.equal((timed.match(/class="alert-details-sequence-caption"/g) || []).length, 1);
     assert.match(timed, /<div class="alert-details-sequence-caption">Jusqu’à [^<]+<\/div>/);
     assert.match(timed, /data-timestamp="2026-09-15T12:30:00Z"/);
+    assert.match(timed, /class="alert-details-event-meta"><ha-icon class="alert-details-actor" icon="mdi:account" title="Loïc &lt;admin&gt;" aria-label="Loïc &lt;admin&gt;" role="img"><\/ha-icon><span class="alert-details-timestamp"/);
+    assert.doesNotMatch(timed, /\(Loïc/);
     for (const markup of [entry("overview", { ...row, acknowledgedUntil: null }), entry("history", row)]) {
-      assert.match(markup, /Acquitté \(Loïc &lt;admin&gt;\)/);
+      assert.match(markup, /Acquitté/);
       assert.doesNotMatch(markup, /alert-details-sequence-caption|Jusqu’à/);
     }
   }
 });
 
-test("automated acknowledgement actions omit the actor and empty parentheses", () => {
+test("unknown acknowledgement sources omit the actor and empty parentheses", () => {
   const panel = tablePanel();
   const base = panel._tableRows("overview")[0];
   for (const author of [undefined, null, "", "   "]) {
@@ -6023,5 +6025,38 @@ test("automated acknowledgement actions omit the actor and empty parentheses", (
         assert.doesNotMatch(entry, /\(\)|Automatisation ou système|alert-details-sequence-caption/);
       }
     }
+  }
+});
+
+
+test("identified automations and scripts use their own timestamp icon", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const [actor_type, icon, label] of [["automation", "mdi:robot", "Automatisation"], ["script", "mdi:script-text-outline", "Script"]]) {
+    for (const kind of ["overview", "history"]) {
+      const markup = panel._renderAlertDetails(kind, { ...base, acknowledgementHistory: [
+        { action: "acknowledged", at: "2026-09-15T12:00:00Z", actor_type },
+        { action: "unacknowledged", at: "2026-09-15T12:01:00Z", actor_type },
+      ] });
+      assert.equal(markup.split(`icon="${icon}" title="${label}"`).length - 1, 2);
+      assert.doesNotMatch(markup, /icon="mdi:account"/);
+    }
+  }
+});
+
+test("shared dates show time alone today and full dates on other local days", async () => {
+  const { date } = await import("../frontend-src/utils/formatting.js");
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 34, 56);
+  for (const language of ["fr", "en"]) {
+    const context = { _language: language };
+    assert.equal(date.call(context, today.toISOString()), new Intl.DateTimeFormat(language, { timeStyle: "medium" }).format(today));
+    for (const offset of [-1, 1, -365]) {
+      const other = new Date(today);
+      other.setDate(other.getDate() + offset);
+      assert.equal(date.call(context, other.toISOString()), new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "medium" }).format(other));
+    }
+    assert.equal(date.call(context, null), "—");
+    assert.equal(date.call(context, "invalid"), "invalid");
   }
 });

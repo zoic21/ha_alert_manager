@@ -538,7 +538,7 @@ function date(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return new Intl.DateTimeFormat(this._language, {
-      dateStyle: "short",
+      ...(date.toDateString() === new Date().toDateString() ? {} : { dateStyle: "short" }),
       timeStyle: "medium",
     }).format(date);
 }
@@ -2186,7 +2186,7 @@ function alertDetailsItems(kind, row) {
         const date = new Date(datetime);
         const day = dateFormat.format(date);
         if (!groups.has(day)) groups.set(day, []);
-        groups.get(day).push({ datetime, value: timeFormat.format(date) });
+        groups.get(day).push({ datetime, value: timeFormat.format(date), date: this._date(datetime) });
       }
       items.push({
         key: "flapping-occurrences",
@@ -2241,7 +2241,8 @@ function alertDetailsItems(kind, row) {
         key: event.action,
         label: this._t(event.action === "acknowledged" ? "alert_details.acknowledged" : event.expired ? "alert_details.acknowledgement_expired" : "alert_details.unacknowledged"),
         value: this._date(event.at), datetime: event.at,
-        suffix: author ? `(${author})` : "",
+        actorIcon: event.actor_type === "automation" ? "mdi:robot" : event.actor_type === "script" ? "mdi:script-text-outline" : author ? "mdi:account" : "",
+        actorLabel: ["automation", "script"].includes(event.actor_type) ? this._t(`alert_details.actor_${event.actor_type}`) : author,
         pastAcknowledgement: index !== acknowledgementHistory.length - 1 || !row.acknowledged,
       });
     }
@@ -2254,7 +2255,8 @@ function alertDetailsItems(kind, row) {
           ? this._date(row.acknowledgedAt)
           : this._t("overview.acknowledged"),
         datetime: row.acknowledgedAt,
-        suffix: author ? `(${author})` : "",
+        actorIcon: author ? "mdi:account" : "",
+        actorLabel: author,
       });
     }
     if (kind === "overview" && row.acknowledged && row.acknowledgedUntil) {
@@ -2385,10 +2387,6 @@ function renderAlertDetails(context) {
     const events = timeline.filter((item) => eventKeys.has(item.key) && !(sequence && item.key === "detected"))
       .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.key === "resolved" ? resolutionReason?.value || "" : item.suffix || "", type: item.key }));
     for (const event of events) {
-      if (event.key === "acknowledged" || event.key === "unacknowledged") {
-        event.value = [event.value, event.label].filter(Boolean).join(" ");
-        event.label = "";
-      }
       const deadlineKey = event.key === "activated" ? "expires" : event.key === "acknowledged" && !event.pastAcknowledgement ? "acknowledged-until" : null;
       event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
     }
@@ -2398,7 +2396,7 @@ function renderAlertDetails(context) {
     });
     for (const group of occurrences?.groups ?? []) {
       for (const timestamp of group.timestamps) events.push({
-        type: "flapping", datetime: timestamp.datetime, date: `${group.date} · ${timestamp.value}`,
+        type: "flapping", datetime: timestamp.datetime, date: timestamp.date ?? `${group.date} · ${timestamp.value}`,
         value: occurrences.entryLabel, label: "",
       });
     }
@@ -2445,7 +2443,7 @@ function renderAlertDetails(context) {
         <span slot="header">${esc(summary.timelineLabel)}${duration ? ` · ${esc(duration.value)}` : remaining ? ` · <span${remaining.due ? ` data-due="${esc(remaining.due)}"` : ""}>${esc(remaining.value)}</span>` : ""}</span>
         <ol class="alert-details-sequence-timeline">${events.map((event) => `<li class="alert-details-sequence-step" data-event-type="${esc(event.type)}">
           <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
-            ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
+            ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${event.actorIcon ? `<ha-icon class="alert-details-actor" icon="${esc(event.actorIcon)}" title="${esc(event.actorLabel)}" aria-label="${esc(event.actorLabel)}" role="img"></ha-icon>` : ""}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
           </div>
           ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
           ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
@@ -8327,6 +8325,14 @@ const tableStyles = `
     gap: 4px 16px;
     font-variant-numeric: tabular-nums;
   }
+  .alert-details-event-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    color: var(--secondary-text-color);
+  }
+  .alert-details-actor { --mdc-icon-size: 16px; }
   .alert-details-sequence-value { overflow-wrap: anywhere; min-width: 0; }
   .alert-details-sequence-entry .alert-details-timestamp {
     color: var(--secondary-text-color);

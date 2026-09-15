@@ -643,3 +643,46 @@ def test_acknowledgement_history_rolls_back_with_failed_save(
     with pytest.raises(OSError, match="disk full"):
         run(manager.async_set_acknowledgements([alert_id], acknowledged, "Loïc"))
     assert record.as_storage_dict() == before
+
+
+@pytest.mark.parametrize(
+    ("event_type", "actor_type"),
+    [
+        ("automation_triggered", "automation"),
+        ("script_started", "script"),
+        ("state_changed", None),
+        (None, None),
+    ],
+)
+def test_service_origin_is_preserved_only_when_identified(
+    hass, entry, set_now, event_type, actor_type
+):
+    """Preserve explicit origins through persistence and history."""
+    from custom_components.alert_manager.models import AlertHistoryEntry, AlertRecord
+
+    manager, alert_id = active_manager(hass, entry, set_now)
+    hass.data[DATA_MANAGER] = manager
+    run(async_setup_services(hass))
+    context = Context()
+    context.origin_event = SimpleNamespace(event_type=event_type)
+    for action in ("acknowledge", "unacknowledge"):
+        run(
+            hass.services.async_call(
+                "alert_manager", action, {"alert_id": alert_id}, context=context
+            )
+        )
+    record = manager.records[alert_id]
+    assert len(record.acknowledgement_history) == 2
+    for event in record.acknowledgement_history:
+        assert event.get("actor_type") == actor_type
+        if actor_type is None:
+            assert "actor_type" not in event
+    restored = AlertRecord.from_dict(record.as_storage_dict())
+    assert restored.acknowledgement_history == record.acknowledgement_history
+    archived = AlertHistoryEntry.resolved(
+        record, record.active_since + timedelta(minutes=1)
+    )
+    assert (
+        AlertHistoryEntry.from_dict(archived.as_dict()).acknowledgement_history
+        == record.acknowledgement_history
+    )

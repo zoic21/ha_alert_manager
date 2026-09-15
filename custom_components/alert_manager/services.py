@@ -28,6 +28,15 @@ async def _actor_name(hass: HomeAssistant, call: ServiceCall) -> str | None:
     return (user.name or None) if user is not None else None
 
 
+def _actor_type(call: ServiceCall) -> str | None:
+    """Identify an automation or script only from its explicit origin event."""
+    origin = getattr(call.context, "origin_event", None)
+    return {
+        "automation_triggered": "automation",
+        "script_started": "script",
+    }.get(getattr(origin, "event_type", None))
+
+
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register actions backed by the single loaded manager."""
 
@@ -37,7 +46,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError("Alert Manager is not loaded")
         try:
             await manager.async_acknowledge(
-                call.data[ATTR_ALERT_ID], await _actor_name(hass, call)
+                call.data[ATTR_ALERT_ID],
+                await _actor_name(hass, call),
+                actor_type=_actor_type(call),
             )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err
@@ -48,7 +59,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError("Alert Manager is not loaded")
         try:
             await manager.async_unacknowledge(
-                call.data[ATTR_ALERT_ID], await _actor_name(hass, call)
+                call.data[ATTR_ALERT_ID],
+                await _actor_name(hass, call),
+                actor_type=_actor_type(call),
             )
         except ValueError as err:
             raise ServiceValidationError(str(err)) from err

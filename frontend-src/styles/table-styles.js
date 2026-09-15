@@ -257,6 +257,14 @@ export const tableStyles = `
     gap: 4px 16px;
     font-variant-numeric: tabular-nums;
   }
+  .alert-details-event-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    color: var(--secondary-text-color);
+  }
+  .alert-details-actor { --mdc-icon-size: 16px; }
   .alert-details-sequence-value { overflow-wrap: anywhere; min-width: 0; }
   .alert-details-sequence-entry .alert-details-timestamp {
     color: var(--secondary-text-color);

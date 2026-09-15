@@ -249,7 +249,7 @@ function date(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return new Intl.DateTimeFormat(this._language, {
-      dateStyle: "short",
+      ...(date.toDateString() === new Date().toDateString() ? {} : { dateStyle: "short" }),
       timeStyle: "medium",
     }).format(date);
 }

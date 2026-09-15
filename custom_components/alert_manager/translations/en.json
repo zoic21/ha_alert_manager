@@ -44,6 +44,8 @@
       "activated_at": "Activated at",
       "acknowledged": "Acknowledged",
       "unacknowledged": "Unacknowledged",
+      "actor_automation": "Automation",
+      "actor_script": "Script",
       "acknowledgement_expired": "Automatically unacknowledged",
       "timeline_notification_alert": "Start notification",
       "timeline_notification_resolved": "Resolution notification",

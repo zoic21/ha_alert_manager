@@ -7,10 +7,16 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.3**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.4**, published on **2026-09-15**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Replace timeline actor names with accessible icons beside timestamps; identify
+  automation/script service origins when Home Assistant provides them and retain
+  them through restarts and resolution. Unknown origins remain unlabelled.
+- Show only the time for today throughout the interface, including timeline
+  occurrences, tables, backups and coherence; retain full dates on other days.
 
 - Show in-progress sequence holds from the first step, with mode-aware countdowns
   for minimum, maximum and bounded durations and an indication when a limit is exceeded.
