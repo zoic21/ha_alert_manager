@@ -1006,27 +1006,25 @@ export function alertDetailsItems(kind, row) {
     const acknowledgementHistory = Array.isArray(row.acknowledgementHistory) ? row.acknowledgementHistory.slice(-10) : [];
     for (const [index, event] of acknowledgementHistory.entries()) {
       if (!["acknowledged", "unacknowledged"].includes(event.action) || !Number.isFinite(Date.parse(event.at))) continue;
-      const author = event.by || this._t("overview.acknowledged_system");
+      const author = typeof event.by === "string" ? event.by.trim() : "";
       items.push({
         key: event.action,
-        label: this._t(event.action === "acknowledged" ? "overview.acknowledged" : event.expired ? "alert_details.acknowledgement_expired" : "alert_details.unacknowledged"),
+        label: this._t(event.action === "acknowledged" ? "alert_details.acknowledged" : event.expired ? "alert_details.acknowledgement_expired" : "alert_details.unacknowledged"),
         value: this._date(event.at), datetime: event.at,
-        suffix: this._t("overview.acknowledged_details", { date: "", author }).trim(),
+        suffix: author ? `(${author})` : "",
         pastAcknowledgement: index !== acknowledgementHistory.length - 1 || !row.acknowledged,
       });
     }
     if (row.acknowledged && !acknowledgementHistory.length) {
-      const author = row.acknowledgedBy || this._t("overview.acknowledged_system");
+      const author = typeof row.acknowledgedBy === "string" ? row.acknowledgedBy.trim() : "";
       items.push({
         key: "acknowledged",
-        label: this._t("overview.acknowledged"),
+        label: this._t("alert_details.acknowledged"),
         value: row.acknowledgedAt
           ? this._date(row.acknowledgedAt)
           : this._t("overview.acknowledged"),
         datetime: row.acknowledgedAt,
-        suffix: row.acknowledgedAt
-          ? this._t("overview.acknowledged_details", { date: "", author }).trim()
-          : "",
+        suffix: author ? `(${author})` : "",
       });
     }
     if (kind === "overview" && row.acknowledged && row.acknowledgedUntil) {
@@ -1157,6 +1155,10 @@ export function renderAlertDetails(context) {
     const events = timeline.filter((item) => eventKeys.has(item.key) && !(sequence && item.key === "detected"))
       .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? valueCaption(triggerValue?.value) : item.key === "resolved" ? resolutionReason?.value || "" : item.suffix || "", type: item.key }));
     for (const event of events) {
+      if (event.key === "acknowledged" || event.key === "unacknowledged") {
+        event.value = [event.value, event.label].filter(Boolean).join(" ");
+        event.label = "";
+      }
       const deadlineKey = event.key === "activated" ? "expires" : event.key === "acknowledged" && !event.pastAcknowledgement ? "acknowledged-until" : null;
       event.deadline = deadlineKey ? timeline.find((item) => item.key === deadlineKey)?.label : null;
     }

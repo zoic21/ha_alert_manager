@@ -1709,7 +1709,7 @@ test("alert details header uses the entity name and reverses its acknowledgement
     .find((row) => row.status === "acknowledged");
   const acknowledgedHtml = panel._renderAlertDetails("overview", acknowledgedRow);
   assert.match(acknowledgedHtml, /ha-dropdown-item value="unacknowledge"/);
-  assert.match(acknowledgedHtml, /Retirer l’acquittement/);
+  assert.match(acknowledgedHtml, /Désacquitter/);
 });
 
 test("alert details acknowledgement menu reuses the alert service and refreshes the dialog", async () => {
@@ -5968,8 +5968,8 @@ test("acknowledgement history shows retained actions in live and resolved timeli
     const markup = panel._renderAlertDetails(kind, row);
     assert.equal((markup.match(/data-event-type="acknowledged"/g) || []).length, 2);
     assert.equal((markup.match(/data-event-type="unacknowledged"/g) || []).length, 2);
-    assert.match(markup, /Acquittement retiré/);
-    assert.match(markup, /Acquittement expiré/);
+    assert.match(markup, /<span class="alert-details-sequence-value">Désacquitté \(Loïc\)<\/span>/);
+    assert.match(markup, /Désacquitté automatiquement/);
     assert.match(markup, /Loïc &lt;admin&gt;/);
     assert.doesNotMatch(markup, /data-detail-key="unacknowledged"/);
   }
@@ -5978,4 +5978,50 @@ test("acknowledgement history shows retained actions in live and resolved timeli
     acknowledgedAt: "2026-09-15T12:03:00Z", acknowledgedUntil: "2026-09-15T13:03:00Z" });
   assert.equal((active.match(/data-event-type="acknowledged"/g) || []).length, 2);
   assert.equal((active.match(/Jusqu’à/g) || []).length, 1);
+});
+
+test("acknowledgement author stays in the heading with only the deadline below", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const recorded of [false, true]) {
+    const row = { ...base, status: "acknowledged", acknowledged: true,
+      acknowledgedAt: "2026-09-15T12:30:00Z", acknowledgedBy: "Loïc <admin>",
+      acknowledgedUntil: "2026-09-15T13:30:00Z",
+      acknowledgementHistory: recorded ? [
+        { action: "acknowledged", at: "2026-09-15T12:30:00Z", by: "Loïc <admin>" },
+      ] : undefined,
+    };
+    const entry = (kind, data) => panel._renderAlertDetails(kind, data)
+      .match(/<li class="alert-details-sequence-step" data-event-type="acknowledged">[\s\S]*?<\/li>/)[0];
+    const timed = entry("overview", row);
+    assert.match(timed, /<span class="alert-details-sequence-value">Acquitté \(Loïc &lt;admin&gt;\)<\/span>/);
+    assert.equal((timed.match(/class="alert-details-sequence-caption"/g) || []).length, 1);
+    assert.match(timed, /<div class="alert-details-sequence-caption">Jusqu’à [^<]+<\/div>/);
+    assert.match(timed, /data-timestamp="2026-09-15T12:30:00Z"/);
+    for (const markup of [entry("overview", { ...row, acknowledgedUntil: null }), entry("history", row)]) {
+      assert.match(markup, /Acquitté \(Loïc &lt;admin&gt;\)/);
+      assert.doesNotMatch(markup, /alert-details-sequence-caption|Jusqu’à/);
+    }
+  }
+});
+
+test("automated acknowledgement actions omit the actor and empty parentheses", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  for (const author of [undefined, null, "", "   "]) {
+    for (const recorded of [false, true]) {
+      const row = { ...base, acknowledged: true, acknowledgedAt: "2026-09-15T12:30:00Z", acknowledgedBy: author,
+        acknowledgementHistory: recorded ? [
+          { action: "acknowledged", at: "2026-09-15T12:30:00Z", by: author },
+          { action: "unacknowledged", at: "2026-09-15T12:31:00Z", by: author },
+        ] : undefined };
+      const markup = panel._renderAlertDetails("overview", row);
+      const entries = [...markup.matchAll(/<li class="alert-details-sequence-step" data-event-type="(?:acknowledged|unacknowledged)">[\s\S]*?<\/li>/g)].map(match => match[0]);
+      assert.equal(entries.length, recorded ? 2 : 1);
+      for (const entry of entries) {
+        assert.match(entry, /<span class="alert-details-sequence-value">(?:Acquitté|Désacquitté)<\/span>/);
+        assert.doesNotMatch(entry, /\(\)|Automatisation ou système|alert-details-sequence-caption/);
+      }
+    }
+  }
 });

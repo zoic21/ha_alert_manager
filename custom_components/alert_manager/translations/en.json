@@ -42,8 +42,9 @@
       "sequence_limit_exceeded": "Limit exceeded",
       "value_prefix": "Value:",
       "activated_at": "Activated at",
-      "unacknowledged": "Acknowledgement removed",
-      "acknowledgement_expired": "Acknowledgement expired",
+      "acknowledged": "Acknowledged",
+      "unacknowledged": "Unacknowledged",
+      "acknowledgement_expired": "Automatically unacknowledged",
       "timeline_notification_alert": "Start notification",
       "timeline_notification_resolved": "Resolution notification",
       "timeline_notification_reminder": "Reminders",
@@ -485,7 +486,7 @@
       "active_since": "Active since",
       "area": "Area",
       "aria_acknowledge": "Acknowledge alert {id}",
-      "aria_unacknowledge": "Remove acknowledgement from alert {id}",
+      "aria_unacknowledge": "Unacknowledge alert {id}",
       "condition": "Condition",
       "detected": "Detected",
       "device": "Device",
@@ -512,7 +513,7 @@
       "summary_pending": "Upcoming alerts",
       "summary_tracked": "Total monitored",
       "summary_tracked_calculating": "Calculating…",
-      "unacknowledge": "Remove acknowledgement",
+      "unacknowledge": "Unacknowledge",
       "reevaluate": "Reevaluate"
     },
     "packs": {
@@ -792,7 +793,7 @@
     },
     "success": {
       "alert_acknowledged": "Alert acknowledged",
-      "alert_unacknowledged": "Acknowledgement removed",
+      "alert_unacknowledged": "Unacknowledged",
       "automatic_saved": "Automatic monitoring saved",
       "backup_downloaded": "Backup downloaded",
       "backup_restored": "Configuration backup restored",
@@ -870,7 +871,7 @@
         "select": "Select",
         "toolbar": "Selected alert actions",
         "unacknowledge": "Unacknowledge ({count})",
-        "unacknowledged_result": "Removed acknowledgement from {count} alert(s)"
+        "unacknowledged_result": "Unacknowledged {count} alert(s)"
       },
       "sort": {
         "activated": "Activation date",
@@ -989,12 +990,12 @@
       }
     },
     "unacknowledge": {
-      "name": "Remove alert acknowledgement",
-      "description": "Remove the acknowledgement from one active Alert Manager alert.",
+      "name": "Unacknowledge alert",
+      "description": "Unacknowledge one active Alert Manager alert.",
       "fields": {
         "alert_id": {
           "name": "Alert ID",
-          "description": "Exact stable ID of the active alert whose acknowledgement is removed."
+          "description": "Exact stable ID of the active alert to unacknowledge."
         }
       }
     }

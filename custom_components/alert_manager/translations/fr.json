@@ -42,8 +42,9 @@
       "sequence_limit_exceeded": "Limite dépassée",
       "value_prefix": "Valeur :",
       "activated_at": "Activée le",
-      "unacknowledged": "Acquittement retiré",
-      "acknowledgement_expired": "Acquittement expiré",
+      "acknowledged": "Acquitté",
+      "unacknowledged": "Désacquitté",
+      "acknowledgement_expired": "Désacquitté automatiquement",
       "timeline_notification_alert": "Notification de début",
       "timeline_notification_resolved": "Notification de résolution",
       "timeline_notification_reminder": "Rappels",
@@ -485,7 +486,7 @@
       "active_since": "Active depuis",
       "area": "Pièce",
       "aria_acknowledge": "Acquitter l’alerte {id}",
-      "aria_unacknowledge": "Retirer l’acquittement de l’alerte {id}",
+      "aria_unacknowledge": "Désacquitter l’alerte {id}",
       "condition": "Condition",
       "detected": "Détectée",
       "device": "Équipement",
@@ -512,7 +513,7 @@
       "summary_pending": "Alertes à venir",
       "summary_tracked": "Total suivi",
       "summary_tracked_calculating": "Calcul en cours…",
-      "unacknowledge": "Retirer l’acquittement",
+      "unacknowledge": "Désacquitter",
       "reevaluate": "Réévaluer"
     },
     "packs": {
@@ -792,7 +793,7 @@
     },
     "success": {
       "alert_acknowledged": "Alerte acquittée",
-      "alert_unacknowledged": "Acquittement retiré",
+      "alert_unacknowledged": "Désacquitté",
       "automatic_saved": "Surveillance automatique enregistrée",
       "backup_downloaded": "Sauvegarde téléchargée",
       "backup_restored": "Sauvegarde de configuration restaurée",
@@ -870,7 +871,7 @@
         "select": "Sélectionner",
         "toolbar": "Actions sur les alertes sélectionnées",
         "unacknowledge": "Désacquitter ({count})",
-        "unacknowledged_result": "Acquittement retiré pour {count} alerte(s)"
+        "unacknowledged_result": "{count} alerte(s) désacquittée(s)"
       },
       "sort": {
         "activated": "Date d’activation",
@@ -989,12 +990,12 @@
       }
     },
     "unacknowledge": {
-      "name": "Retirer l’acquittement d’une alerte",
-      "description": "Retire l’acquittement d’une alerte active d’Alert Manager.",
+      "name": "Désacquitter une alerte",
+      "description": "Désacquitte une alerte active d’Alert Manager.",
       "fields": {
         "alert_id": {
           "name": "Identifiant de l’alerte",
-          "description": "Identifiant stable exact de l’alerte active dont l’acquittement est retiré."
+          "description": "Identifiant stable exact de l’alerte active à désacquitter."
         }
       }
     }
