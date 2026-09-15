@@ -1,3 +1,4 @@
+import { newSequenceStep } from "../components/rule-editor.js";
 import { revealAddedRow } from "../components/configuration-drawer.js";
 import { labelMetadata, nativeLabelBadges } from "../components/alert-table.js";
 import { MDI_PLUS } from "../utils/constants.js";
@@ -479,6 +480,45 @@ export async function handleRulesAction(action, button) {
   }
   if (action === "switch-rule-editor") {
     await this._switchRuleEditor();
+    return true;
+  }
+  if (["add-sequence-step", "remove-sequence-step", "move-sequence-step"].includes(action)) {
+    this._captureRuleDraft();
+    const steps = this._editingRule.steps;
+    const index = Number(button.dataset.index);
+    let focusIndex = index;
+    if (action === "add-sequence-step" && steps.length < 20) {
+      steps.push(newSequenceStep());
+      focusIndex = steps.length - 1;
+    } else if (action === "remove-sequence-step" && steps.length > 2) {
+      steps.splice(index, 1);
+      focusIndex = Math.min(index, steps.length - 1);
+    } else if (action === "move-sequence-step") {
+      const destination = index + Number(button.dataset.direction);
+      if (destination >= 0 && destination < steps.length) {
+        [steps[index], steps[destination]] = [steps[destination], steps[index]];
+        focusIndex = destination;
+      }
+    }
+    this._clearRuleTestResult();
+    this._ruleDirty = true;
+    this._refreshRuleConditionSection();
+    revealAddedRow(this.shadowRoot, `[data-sequence-step="${focusIndex}"]`);
+    this.shadowRoot.querySelector(`#sequence-${focusIndex}-operator`)?.focus?.();
+    return true;
+  }
+  if (["add-rule-value", "remove-rule-value"].includes(action) && button.closest?.("[data-sequence-step]")) {
+    this._captureRuleDraft();
+    const index = Number(button.closest("[data-sequence-step]").dataset.sequenceStep);
+    const step = this._editingRule.steps[index];
+    const values = this._ruleValueList(step.value);
+    if (action === "add-rule-value") values.push("");
+    else values.splice(Number(button.dataset.index), 1);
+    step.value = values.length ? values : [""];
+    this._clearRuleTestResult();
+    this._ruleDirty = true;
+    this._refreshRuleConditionSection();
+    if (action === "add-rule-value") revealAddedRow(this.shadowRoot, `[data-sequence-step="${index}"] .rule-value-row:last-child`);
     return true;
   }
   if (action === "add-rule-value") {

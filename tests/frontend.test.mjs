@@ -3619,6 +3619,7 @@ test("custom rule choices use native Home Assistant selects", () => {
   assert.deepEqual(source.options, [
     { value: "value", label: "Valeur" },
     { value: "value_transition", label: "Transition" },
+    { value: "value_sequence", label: "Séquence" },
     { value: "value_variation", label: "Variation" },
     { value: "unchanged", label: "Aucun changement" },
     { value: "jinja", label: "Jinja" },

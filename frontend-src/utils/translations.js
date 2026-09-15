@@ -1,4 +1,12 @@
 const VALIDATION_ERROR_KEYS = new Map([
+  ["Sequence requires zero delay, duration resolution and no template", "sequence_options"],
+  ["Sequence fields require a sequence source", "sequence_source"],
+  ["Sequence requires between 2 and 20 steps", "sequence_steps"],
+  ["Invalid sequence duration bounds", "sequence_bounds"],
+  ["Invalid sequence duration mode", "sequence_mode"],
+  ["Invalid sequence duration", "sequence_duration"],
+  ["Invalid sequence step", "sequence_step"],
+
   ["Unsupported transition resolution mode", "transition_resolution_mode"],
   ["Automatic resolution must be between 1 and 31536000 seconds", "transition_expiration"],
   ["Transition departure and arrival must differ", "transition_distinct"],

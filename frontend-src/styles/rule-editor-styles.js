@@ -1,5 +1,40 @@
 export const ruleEditorStyles = `
 
+  .sequence-editor {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    container-type: inline-size;
+  }
+  .sequence-help { margin: 0; color: var(--secondary-text-color); }
+  .sequence-step {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--divider-color);
+    border-radius: var(--ha-border-radius-m, 8px);
+  }
+  .sequence-step-heading, .sequence-step-actions {
+    display: flex;
+    align-items: center;
+  }
+  .sequence-step-heading { justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .sequence-step-heading h4 { margin: 0; font-size: 14px; font-weight: 500; }
+  .sequence-step-actions { flex-shrink: 0; }
+  .sequence-step-actions ha-icon-button { --mdc-icon-button-size: 36px; }
+  .sequence-comparison, .sequence-timing, .sequence-duration-bounds {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .sequence-values { margin: 0; min-width: 0; }
+  .sequence-values .field { min-width: 0; }
+  .sequence-timing, .sequence-duration-bounds { margin-top: 12px; }
+  .sequence-timing-help { display: block; margin-top: 8px; color: var(--secondary-text-color); }
+  .sequence-step .field-label { min-height: 20px; }
+  .sequence-step .rule-value-footer { flex-wrap: wrap; gap: 4px; }
+  .sequence-step .rule-value-footer small { flex: 1 1 120px; }
+
   /* Rule editor */
   .actions {
     display: flex;

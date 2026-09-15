@@ -6,15 +6,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import State
+from homeassistant.core import State, callback
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
 from .const import TRANSITION_SOURCES
 from .models import AlertRecord, AlertStatus, Rule, advance_record, normalize_scalar
 from .packs.base import PackOccurrence
-from .rule_evaluation import rule_current_value
+from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
+from .sequences import SequenceProgress
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,21 +28,7 @@ class TransitionObservation:
     arrived: Any
     observed_at: datetime
     due_at: datetime
-
-
-def transition_value(rule: Rule, state: State | None) -> Any:
-    """Missing and unavailable observations are never arbitrary edge values."""
-    if not isinstance(state, State) or state.state in (
-        STATE_UNKNOWN,
-        STATE_UNAVAILABLE,
-    ):
-        return None
-    found, value = rule_current_value(rule, state)
-    if not found or not isinstance(value, str | int | float | bool):
-        return None
-    if normalize_scalar(value) in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-        return None
-    return value
+    evidence: list[dict[str, Any]] | None = None
 
 
 class _TransitionsMixin:
@@ -62,6 +49,11 @@ class _TransitionsMixin:
             if not rule.enabled or rule.source not in TRANSITION_SOURCES:
                 continue
             alert_id = f"rule:{rule.id}:{entity_id}"
+            if rule.source == "value_sequence":
+                if old is None:
+                    continue
+                self._observe_sequence(rule, entity_id, new, now, previous=old)
+                continue
             departed, arrived = transition_value(rule, old), transition_value(rule, new)
             observation = self._transition_observations.get(alert_id)
             if (
@@ -108,12 +100,111 @@ class _TransitionsMixin:
                 now + timedelta(seconds=rule.duration),
             )
 
+    def _clear_sequences(self) -> None:
+        for _token, cancel, _due in self._sequence_timers.values():
+            cancel()
+        self._sequence_timers.clear()
+        self._sequence_progress.clear()
+
+    def _drop_sequence(self, alert_id: str) -> None:
+        timer = self._sequence_timers.pop(alert_id, None)
+        if timer is not None:
+            timer[1]()
+        self._sequence_progress.pop(alert_id, None)
+
+    def _observe_sequence(
+        self,
+        rule: Rule,
+        entity_id: str,
+        state: State | None,
+        now: datetime,
+        *,
+        previous: State | None = None,
+    ) -> None:
+        alert_id = f"rule:{rule.id}:{entity_id}"
+        progress = self._sequence_progress.get(alert_id)
+        if progress is None or progress.rule != rule:
+            progress = SequenceProgress(rule)
+            self._sequence_progress[alert_id] = progress
+        progress.observed_state = state
+        evidence = progress.observe(state, now, previous=previous)
+        if evidence is not None and state is not None:
+            self._transition_confirmed[alert_id] = TransitionObservation(
+                rule, state, None, transition_value(rule, state), now, now, evidence
+            )
+        self._schedule_sequence(alert_id, entity_id, progress)
+
+    def _schedule_sequence(
+        self, alert_id: str, entity_id: str, progress: SequenceProgress
+    ) -> None:
+        due = progress.deadline()
+        timer = self._sequence_timers.get(alert_id)
+        if timer is not None and timer[2] == due:
+            return
+        if timer is not None:
+            self._sequence_timers.pop(alert_id)
+            timer[1]()
+        if due is None:
+            return
+        token = object()
+
+        @callback
+        def reached(_now: datetime) -> None:
+            current = self._sequence_timers.get(alert_id)
+            if current is None or current[0] is not token:
+                return
+            self._sequence_timers.pop(alert_id, None)
+            if (
+                not self.monitoring_enabled
+                or self._runtime_phase is not RuntimePhase.RUNNING
+                or not self._is_base_eligible(entity_id)
+                or self._transition_rules_by_id.get(progress.rule.id) != progress.rule
+            ):
+                self._drop_sequence(alert_id)
+                return
+            state = self.hass.states.get(entity_id)
+            observed = progress.observed_state
+            now = dt_util.now()
+            expired = (
+                progress.started_at is not None
+                and progress.rule.sequence_timeout
+                and now
+                >= progress.started_at
+                + timedelta(seconds=progress.rule.sequence_timeout)
+            )
+            if (
+                not expired
+                and state is not observed
+                and (
+                    state is None
+                    or observed is None
+                    or state.last_updated != observed.last_updated
+                    or state.state != observed.state
+                    or state.attributes != observed.attributes
+                )
+            ):
+                # StateMachine already changed, but its event callback is queued.
+                # Let that edge prove/interrupt the hold before touching progress.
+                return
+            self._observe_sequence(progress.rule, entity_id, state, now)
+            self._queue_entity_evaluations((entity_id,), collect_occurrences=True)
+
+        cancel = async_track_point_in_utc_time(self.hass, reached, due.astimezone(UTC))
+        self._sequence_timers[alert_id] = (token, cancel, due)
+
     def _prune_transition_observations(self) -> None:
         self._transition_rules_by_id = {
             rule.id: rule
             for rule in self._rules
             if rule.enabled and rule.source in TRANSITION_SOURCES
         }
+        for alert_id, progress in tuple(self._sequence_progress.items()):
+            entity_id = alert_id.rsplit(":", 1)[1]
+            if (
+                self._transition_rules_by_id.get(progress.rule.id) != progress.rule
+                or entity_id not in progress.rule.entity_ids
+            ):
+                self._drop_sequence(alert_id)
         for observations in (self._transition_observations, self._transition_confirmed):
             for alert_id, observation in tuple(observations.items()):
                 if (
@@ -162,6 +253,7 @@ class _TransitionsMixin:
                 continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             if not self._is_base_eligible(entity_id):
+                self._drop_sequence(alert_id)
                 self._transition_confirmed.pop(alert_id, None)
                 self._transition_observations.pop(alert_id, None)
                 continue
@@ -223,14 +315,21 @@ class _TransitionsMixin:
                 self._pop_record(alert_id)
                 self._cancel_timer(alert_id)
                 record = None
+            repeated_sequence = observation.evidence is not None and record is not None
             if record is None:
                 details = self._details(
                     observation.state,
                     alert_id,
                     "rule",
-                    f"{observation.departed} → {observation.arrived}",
+                    self._localized_pack_condition(
+                        "rule.sequence", {"count": len(observation.evidence)}
+                    )
+                    if observation.evidence is not None
+                    else f"{observation.departed} → {observation.arrived}",
                     value=observation.arrived,
-                    condition_key="rule.transition",
+                    condition_key="rule.sequence"
+                    if observation.evidence
+                    else "rule.transition",
                     condition_params={
                         "from_value": observation.departed,
                         "to_value": observation.arrived,
@@ -272,6 +371,21 @@ class _TransitionsMixin:
                     "to_value": observation.arrived,
                     "last_occurrence": observation.observed_at.isoformat(),
                 }
+                if observation.evidence is not None:
+                    record.details.condition_params = {
+                        "count": len(observation.evidence),
+                        "steps": rule.steps,
+                        "evidence": observation.evidence,
+                        "last_occurrence": observation.observed_at.isoformat(),
+                    }
+                if (
+                    repeated_sequence
+                    and new_occurrences is not None
+                    and self._is_automatic_eligible(entity_id)
+                ):
+                    new_occurrences.append(
+                        PackOccurrence(source=record.details, occurred_at=now)
+                    )
                 if self._transition_observations.get(alert_id) is observation:
                     self._transition_observations.pop(alert_id, None)
                 if became_active and emit_events:

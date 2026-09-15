@@ -143,7 +143,13 @@ LEGACY_ATTRIBUTE_SOURCES: Final = (
     "attribute_variation",
     "attribute_transition",
 )
-ATTRIBUTE_SOURCES: Final = ("value", "value_variation", "value_transition")
+ATTRIBUTE_SOURCES: Final = (
+    "value",
+    "value_variation",
+    "value_transition",
+    "value_sequence",
+)
 VALUE_SOURCES: Final = (*ATTRIBUTE_SOURCES, "unchanged", "jinja")
-TRANSITION_SOURCES: Final = ("value_transition",)
+TRANSITION_SOURCES: Final = ("value_transition", "value_sequence")
+MAX_SEQUENCE_STEPS: Final = 20
 VARIATION_SOURCES: Final = ("value_variation",)

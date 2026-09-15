@@ -1,4 +1,10 @@
 export const responsiveStyles = `
+  @container (max-width: 440px) {
+    .sequence-comparison, .sequence-timing, .sequence-duration-bounds {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   :host([narrow]) .history-panel .history-header {
     flex-direction: column;
     align-items: stretch;
