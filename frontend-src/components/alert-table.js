@@ -1104,18 +1104,22 @@ export function renderAlertDetails(context) {
             ? `<a class="alert-details-action table-cell-link" href="#" data-action="${esc(item.action)}"${attributes(item.data)}${item.ariaLabel ? ` aria-label="${esc(item.ariaLabel)}"` : ""}>${esc(item.value)}</a>`
             : esc(item.value)}</dd>
         </div>`).join("")}`;
-    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason", "history-occurrences"]);
+    const timelineKeys = new Set(["detected", "activated", "resolved", "duration", "remaining", "acknowledged", "acknowledged-until", "expires", "last_occurrence", "resolution_reason"]);
     const notifications = items.filter((item) => /^(notifications-|notification-)/.test(item.key));
     const identifier = items.find((item) => item.key === "alert-id");
     const timeline = items.filter((item) => timelineKeys.has(item.key));
     const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
     const occurrences = items.find((item) => item.key === "flapping-occurrences");
     const sequence = items.find((item) => item.key === "sequence-steps");
+    const triggerValue = items.find((item) => item.key === "trigger-value");
     const eventKeys = new Set(["detected", "activated", "resolved", "acknowledged", "last_occurrence"]);
     const events = timeline.filter((item) => eventKeys.has(item.key))
-      .filter((item) => item.key !== "detected" || !timeline.some((other) => other.key === "activated" && Date.parse(other.datetime) === Date.parse(item.datetime)))
-      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.suffix || "", type: item.key }));
-    for (const step of sequence?.steps ?? []) events.push({ ...step, type: "step" });
+      .filter((item) => item.key !== "last_occurrence" || !sequence)
+      .map((item) => ({ ...item, date: item.value, value: item.label, label: item.key === "detected" ? (triggerValue?.value ?? "") : item.suffix || "", type: item.key }));
+    for (const step of sequence?.steps ?? []) events.push({
+      ...step, type: "step", value: [step.label, step.condition].filter(Boolean).join(" · "),
+      label: step.value, condition: "",
+    });
     for (const group of occurrences?.groups ?? []) {
       for (const timestamp of group.timestamps) events.push({
         type: "flapping", datetime: timestamp.datetime, date: `${group.date} · ${timestamp.value}`,
@@ -1139,10 +1143,12 @@ export function renderAlertDetails(context) {
           value: stats.timelineLabel, label: `${stats.value} · ${profiles}` });
       }
     }
-    events.sort((left, right) => (Date.parse(left.datetime) || 0) - (Date.parse(right.datetime) || 0));
+    const eventOrder = { step: 0, flapping: 0, last_occurrence: 1, detected: 2, activated: 3, acknowledged: 4, resolved: 5 };
+    events.sort((left, right) => (Date.parse(left.datetime) || 0) - (Date.parse(right.datetime) || 0)
+      || (eventOrder[left.type] ?? 6) - (eventOrder[right.type] ?? 6));
     events.push(...reminders);
-    const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
-    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences && item !== sequence)
+    const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "history-occurrences"];
+    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences && item !== sequence && item !== triggerValue)
       .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
       <ha-icon-button slot="trigger" aria-label="${esc(summary.menuAriaLabel)}" title="${esc(summary.menuAriaLabel)}"><ha-svg-icon path="${MDI_DOTS_VERTICAL}"></ha-svg-icon></ha-icon-button>
@@ -1165,7 +1171,7 @@ export function renderAlertDetails(context) {
           <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
             ${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}
           </div>
-          ${event.label || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
+          ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
         </li>`).join("")}</ol>
         ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}
         ${occurrences && !occurrences.groups.length ? `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}

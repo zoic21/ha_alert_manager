@@ -1587,7 +1587,7 @@ test("alert details expose translated fields and contextual links", () => {
   assert.match(html, /data-action="open-alert-device" data-device-id="device-rack"/);
   assert.match(html, /data-action="open-alert-rule" data-rule-id="temperature"/);
   assert.match(html, /data-detail-key="current-value"[\s\S]*Valeur actuelle[\s\S]*35 °C/);
-  assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
+  assert.match(html, /data-event-type="detected"[\s\S]*alert-details-sequence-caption[\s\S]*34\.5 °C/);
   assert.match(html, /data-event-type="detected"[\s\S]*data-action="toggle-alert-timestamp"/);
   assert.match(html, /data-event-type="activated"[\s\S]*data-timestamp-mode="absolute"/);
   assert.match(html, /ID de l’alerte/);
@@ -1652,10 +1652,10 @@ test("alert details read the current value from a configured attribute path", ()
   const html = panel._renderAlertDetails("overview", row);
 
   assert.match(html, /data-detail-key="current-value"[\s\S]*9\.2 °C/);
-  assert.match(html, /data-detail-key="trigger-value"[\s\S]*11 °C/);
+  assert.match(html, /data-event-type="detected"[\s\S]*alert-details-sequence-caption[\s\S]*11 °C/);
 });
 
-test("history details label the stored value as the trigger value only", () => {
+test("history details show the stored trigger value under detection", () => {
   const panel = tablePanel();
   const event = {
     ...currentAlert(),
@@ -1669,7 +1669,7 @@ test("history details label the stored value as the trigger value only", () => {
   const html = panel._renderAlertDetails("history", row);
 
   assert.doesNotMatch(html, /data-detail-key="current-value"/);
-  assert.match(html, /data-detail-key="trigger-value"[\s\S]*Valeur de déclenchement[\s\S]*34\.5 °C/);
+  assert.match(html, /data-event-type="detected"[\s\S]*alert-details-sequence-caption[\s\S]*34\.5 °C/);
 });
 
 test("an alert message identical to its condition is not displayed twice", () => {
@@ -5542,15 +5542,15 @@ test("copying an alert ID is read-only and reports clipboard success or failure"
 });
 
 
-test("alert identifier toggles in place and history belongs to the timeline", async () => {
+test("alert identifier toggles in place and history belongs to entity details", async () => {
   const panel = tablePanel();
   const row = panel._tableRows("overview")[0];
   panel._alertDetailsDialog = { alertId: row.id, historyOccurrenceCount: 4 };
   const markup = panel._renderAlertDetails("overview", row);
   assert.match(markup, /data-action="toggle-alert-id" role="button" tabindex="0" aria-expanded="false"/);
   const cards = [...markup.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map((match) => match[1]);
-  assert.ok(!cards[0].includes('data-detail-key="history-occurrences"'));
-  assert.match(cards[1], /data-detail-key="history-occurrences"[\s\S]*data-action="open-alert-history"/);
+  assert.ok(!cards[1].includes('data-detail-key="history-occurrences"'));
+  assert.match(cards[0], /data-detail-key="history-occurrences"[\s\S]*data-action="open-alert-history"/);
   assert.equal(canUsePanelAction(true, "toggle-alert-id", "overview"), true);
   let expanded = "false";
   const control = { getAttribute: () => expanded, setAttribute: (name, value) => { assert.equal(name, "aria-expanded"); expanded = value; } };
@@ -5748,7 +5748,7 @@ test("sequence details show recorded values and timestamps in a persistent colla
     assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-alert-timeline[^>]*>/)[0], /\bexpanded\b/);
     for (const evidence of row.source.condition_params.evidence) {
       assert.ok(markup.includes(`data-timestamp="${evidence.started_at}"`));
-      assert.ok(markup.includes(`class="alert-details-sequence-value">${evidence.started_value}</span>`));
+      assert.ok(markup.includes(`class="alert-details-sequence-caption"><span>${evidence.started_value}</span>`));
       assert.ok(!markup.includes(`data-timestamp="${evidence.completed_at}"`));
     }
   }
@@ -5811,5 +5811,33 @@ test("unified timeline orders lifecycle and profile sends and summarizes reminde
   assert.doesNotMatch(markup, /Renamed/);
   assert.match(entries.at(-1), /12 envoyée\(s\) · Maison, Mobile/);
   assert.doesNotMatch(entries.at(-1), /data-timestamp|10:09/);
-  assert.doesNotMatch(panel._renderAlertDetails("overview", { ...row, activated: row.detected }), /data-event-type="detected"/);
+  assert.match(panel._renderAlertDetails("overview", { ...row, activated: row.detected }), /data-event-type="detected"/);
+});
+
+test("sequence timeline titles describe steps and simultaneous completion precedes detection", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const at = "2026-09-15T12:31:15Z";
+  const row = { ...base, value: "3", detected: at, activated: at, lastOccurrence: at, resolved: "2026-09-15T12:32:15Z",
+    source: { source: "value_sequence", condition_params: {
+      steps: [{ operator: "equals", value: 3 }],
+      evidence: [{ step: 1, started_at: at, started_value: 0, seconds: 0 }],
+    } } };
+  panel._alertDetailsDialog = { alertId: row.id, historyOccurrenceCount: 2 };
+  for (const kind of ["overview", "history"]) {
+    const html = panel._renderAlertDetails(kind, row);
+    const cards = [...html.matchAll(/<ha-card[^>]*>([\s\S]*?)<\/ha-card>/g)].map(match => match[1]);
+    assert.match(cards[0], /data-detail-key="history-occurrences"[\s\S]*data-action="open-alert-history"/);
+    assert.doesNotMatch(cards[0], /trigger-value|Valeur de déclenchement/);
+    assert.doesNotMatch(cards[1], /Dernière transition|history-occurrences/);
+    const events = [...cards[1].matchAll(/<li class="alert-details-sequence-step"[\s\S]*?<\/li>/g)].map(match => match[0]);
+    assert.match(events[0], /data-event-type="step"/);
+    assert.match(events[0], /alert-details-sequence-value">Étape 1 terminée · égal à 3 · 0 s/);
+    assert.match(events[0], /alert-details-sequence-caption"><span>0<\/span>/);
+    assert.match(events[1], /data-event-type="detected"/);
+    assert.match(events[1], /alert-details-sequence-caption"><span>3<\/span>/);
+    assert.match(events[2], /data-event-type="activated"/);
+  }
+  const transition = panel._renderAlertDetails("overview", { ...row, source: { source: "value_transition" } });
+  assert.match(transition, /data-event-type="last_occurrence"/);
 });
