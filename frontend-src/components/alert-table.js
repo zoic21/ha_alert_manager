@@ -1037,15 +1037,28 @@ export function alertDetailsItems(kind, row) {
     }
     if (row.source?.source === "value_sequence") {
       const sequence = row.source.condition_params ?? {};
-      for (const evidence of (sequence.evidence ?? []).slice(0, 20)) {
-        const step = sequence.steps?.[evidence.step - 1];
-        if (!step) continue;
-        items.push({
-          key: `sequence-step-${evidence.step}`,
-          label: this._t("rules.sequence_completed", { step: evidence.step }),
-          value: `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}`,
+      const steps = (Array.isArray(sequence.evidence) ? sequence.evidence : []).slice(0, 20)
+        .filter((evidence) => evidence && Number.isInteger(evidence.step) && sequence.steps?.[evidence.step - 1])
+        .map((evidence) => {
+          const step = sequence.steps[evidence.step - 1];
+          return {
+            label: this._t("rules.sequence_completed", { step: evidence.step }),
+            condition: `${this._t(`operators.${step.operator}`)} ${Array.isArray(step.value) ? step.value.join(" / ") : step.value} · ${this._durationText(evidence.seconds)}`,
+            items: ["started", "completed"].map((phase) => ({
+              key: `sequence-${evidence.step}-${phase}`,
+              label: this._t(`alert_details.sequence_${phase}`),
+              datetime: evidence[`${phase}_at`],
+              value: this._date(evidence[`${phase}_at`]),
+              suffix: ` · ${evidence[`${phase}_value`] ?? this._t("alert_details.sequence_value_unavailable")}`,
+            })),
+          };
         });
-      }
+      if (steps.length) items.push({
+        key: "sequence-steps",
+        label: this._t("alert_details.sequence_steps", { count: steps.length }),
+        value: String(steps.length),
+        steps,
+      });
     }
     const dialog = this._alertDetailsDialog;
     if (dialog?.alertId === row.id && dialog.historyOccurrenceCount > 0) {
@@ -1092,8 +1105,9 @@ export function renderAlertDetails(context) {
     const timeline = items.filter((item) => timelineKeys.has(item.key));
     const introduction = items.filter((item) => ["message", "condition"].includes(item.key));
     const occurrences = items.find((item) => item.key === "flapping-occurrences");
+    const sequence = items.find((item) => item.key === "sequence-steps");
     const detailOrder = ["entity-id", "device", "rule", "integration", "area", "current-value", "trigger-value"];
-    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences)
+    const details = items.filter((item) => !timelineKeys.has(item.key) && !notifications.includes(item) && !introduction.includes(item) && item !== identifier && item !== occurrences && item !== sequence)
       .sort((left, right) => detailOrder.indexOf(left.key) - detailOrder.indexOf(right.key));
     const section = (entries, title = "") => entries.length ? `<ha-card outlined class="alert-details-card">${title ? `<h3 class="alert-details-section-title">${esc(title)}</h3>` : ""}<dl class="alert-details-list">${renderItems(entries)}</dl></ha-card>` : "";
     return `${summary.menuAction || summary.reevaluateLabel ? `<ha-dropdown slot="headerActionItems" data-alert-details-menu data-alert-id="${esc(summary.alertId)}" size="m" placement="bottom-end">
@@ -1117,6 +1131,14 @@ export function renderAlertDetails(context) {
           <ol class="alert-details-occurrences">${group.timestamps.map((timestamp) => `<li><time datetime="${esc(timestamp.datetime)}">${esc(timestamp.value)}</time></li>`).join("")}</ol>
         </section>`).join("")}</div>
       </ha-expansion-panel>` : `<p class="alert-details-occurrence-unavailable">${esc(occurrences.value)}</p>` : ""}
+      ${sequence ? `<ha-expansion-panel left-chevron class="alert-details-occurrence-panel" data-sequence-details ${summary.sequenceExpanded ? "expanded" : ""}>
+        <span slot="header">${esc(sequence.label)}</span>
+        <div class="alert-details-occurrence-groups">${sequence.steps.map((step) => `<section class="alert-details-sequence-step">
+          <h4 class="alert-details-occurrence-date">${esc(step.label)}</h4>
+          <p class="alert-details-sequence-condition">${esc(step.condition)}</p>
+          <dl class="alert-details-list">${renderItems(step.items)}</dl>
+        </section>`).join("")}</div>
+      </ha-expansion-panel>` : ""}
     </ha-card>` : ""}
     ${section(timeline, summary.timelineLabel)}
     ${notifications.length ? `<ha-card outlined class="alert-details-card"><h3 class="alert-details-section-title">${esc(summary.notificationsLabel)}</h3>
@@ -1167,6 +1189,8 @@ export function renderAlertDetailsPanel(kind, row) {
         ? this._alertDetailsDialog.notice : null,
       items: this._alertDetailsItems(kind, row),
       summary: {
+        sequenceExpanded: this._alertDetailsDialog?.alertId === row.id
+          && Boolean(this._alertDetailsDialog?.querySelector?.("[data-sequence-details]")?.expanded),
         occurrencesExpanded: this._alertDetailsDialog?.alertId === row.id
           && Boolean(this._alertDetailsDialog?.querySelector?.("[data-flapping-occurrences]")?.expanded),
         alertId: row.id,

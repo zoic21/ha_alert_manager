@@ -58,6 +58,10 @@ def test_order_continuity_and_next_step_no_backdating():
     evidence = observe(p, 6, 720)
     assert len(evidence) == 2
     assert evidence[1]["seconds"] == 120
+    assert evidence[0]["started_value"] == "120"
+    assert evidence[0]["completed_value"] == "110"
+    assert evidence[1]["started_value"] == "5"
+    assert evidence[1]["completed_value"] == "6"
     assert observe(p, 6, 900) is None
     observe(p, 120, 1000)
     observe(p, 120, 1300)
@@ -109,6 +113,8 @@ def test_exit_modes(mode, duration, maximum, exit_at, valid):
     observe(p, 5, exit_at)
     assert p.index == int(valid)
     if valid:
+        assert p.completed[0]["started_value"] == "120"
+        assert p.completed[0]["completed_value"] == "5"
         assert p.hold_since == START + timedelta(seconds=exit_at)
         assert observe(p, 5, exit_at + 10)
 
@@ -246,6 +252,8 @@ def test_sequence_handoff_resolution_history_and_restart(hass, entry, set_now):
     record = manager.records[key]
     assert record.status is AlertStatus.ACTIVE
     assert len(record.details.condition_params["evidence"]) == 2
+    assert record.details.condition_params["evidence"][0]["started_value"] == "120"
+    assert record.details.condition_params["evidence"][1]["completed_value"] == "5"
     assert record.details.condition_key == "rule.sequence"
     assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == 1
     run(manager.async_unload())
@@ -669,3 +677,24 @@ def test_condition_resolution_waits_while_monitoring_paused(hass, entry):
     run(manager.async_set_monitoring(True))
     assert key not in manager.records
     assert len(manager.history) == 1
+
+
+def test_sequence_evidence_uses_attribute_and_restarted_hold_values():
+    p = SequenceProgress(sequence(attribute="power"))
+
+    def sample(value, seconds):
+        return p.observe(
+            State("sensor.power", "ok", {"power": value}),
+            START + timedelta(seconds=seconds),
+        )
+
+    sample(150, 0)
+    sample("unknown", 100)
+    sample(200, 200)
+    sample(250, 500)
+    sample(5, 600)
+    evidence = sample(0, 720)
+    assert evidence[0]["started_value"] == 200
+    assert evidence[0]["completed_value"] == 250
+    assert evidence[0]["started_at"] == (START + timedelta(seconds=200)).isoformat()
+    assert evidence[1]["completed_value"] == 0

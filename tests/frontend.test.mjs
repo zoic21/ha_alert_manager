@@ -5649,3 +5649,36 @@ test("action decoration preserves authored icons and stays idempotent across ref
   for (let refresh = 0; refresh < 3; refresh++) panel._decorateActionIcons();
   for (const button of buttons) assert.equal(button.children.length, 1, button.dataset.action);
 });
+
+test("sequence details show recorded values and timestamps in a persistent collapsed panel", () => {
+  const panel = tablePanel();
+  const base = panel._tableRows("overview")[0];
+  const row = { ...base, source: { source: "value_sequence", condition_params: {
+    steps: [{ operator: "above", value: 100 }, { operator: "below", value: 10 }],
+    evidence: [
+      { step: 1, started_at: "2026-09-15T10:00:00+00:00", completed_at: "2026-09-15T10:00:30+00:00", seconds: 30, started_value: 120, completed_value: 150 },
+      { step: 2, started_at: "2026-09-15T10:00:40+00:00", completed_at: "2026-09-15T10:01:00+00:00", seconds: 20, started_value: 0, completed_value: false },
+    ],
+  } } };
+  for (const kind of ["overview", "history"]) {
+    const markup = panel._renderAlertDetails(kind, row);
+    assert.match(markup, /Voir les 2 étapes/);
+    assert.doesNotMatch(markup.match(/<ha-expansion-panel[^>]*data-sequence-details[^>]*>/)[0], /\bexpanded\b/);
+    for (const evidence of row.source.condition_params.evidence) {
+      for (const phase of ["started", "completed"]) {
+        assert.ok(markup.includes(`data-timestamp="${evidence[`${phase}_at`]}"`));
+        assert.ok(markup.includes(` · ${evidence[`${phase}_value`]}`));
+      }
+    }
+  }
+  panel._alertDetailsDialog = { alertId: row.id, querySelector: () => ({ expanded: true }) };
+  assert.match(panel._renderAlertDetails("overview", row), /data-sequence-details expanded/);
+  panel._alertDetailsDialog.alertId = "another";
+  assert.doesNotMatch(panel._renderAlertDetails("overview", row), /data-sequence-details expanded/);
+  delete row.source.condition_params.evidence[0].started_value;
+  row.source.condition_params.evidence[0].completed_value = '<script>bad</script>';
+  assert.match(panel._renderAlertDetails("history", row), /Valeur non disponible/);
+  assert.doesNotMatch(panel._renderAlertDetails("history", row), /<script>/);
+  row.source.condition_params.evidence = [];
+  assert.doesNotMatch(panel._renderAlertDetails("history", row), /data-sequence-details/);
+});

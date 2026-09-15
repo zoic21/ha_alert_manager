@@ -218,6 +218,16 @@ export const tableStyles = `
     overflow-y: auto;
     padding: 0 var(--ha-space-4, 16px) var(--ha-space-4, 16px);
   }
+  .alert-details-sequence-step + .alert-details-sequence-step {
+    border-top: 1px solid var(--divider-color);
+    margin-top: 12px;
+    padding-top: 4px;
+  }
+  .alert-details-sequence-condition {
+    margin: 0 0 8px;
+    overflow-wrap: anywhere;
+    color: var(--secondary-text-color);
+  }
   .alert-details-occurrence-date {
     margin: 8px 0;
     color: var(--secondary-text-color);

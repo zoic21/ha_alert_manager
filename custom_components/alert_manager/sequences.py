@@ -39,6 +39,7 @@ class SequenceProgress:
     index: int = 0
     started_at: datetime | None = None
     hold_since: datetime | None = None
+    started_value: Any = None
     completed: list[dict[str, Any]] = field(default_factory=list)
     waiting_for_exit: bool = False
     reason: str = "waiting"
@@ -51,6 +52,7 @@ class SequenceProgress:
         self.index = 0
         self.started_at = None
         self.hold_since = None
+        self.started_value = None
         self.completed = []
         self.reason = reason
 
@@ -101,7 +103,7 @@ class SequenceProgress:
             and previous is not None
             and sequence_comparison(self.rule, step, previous) is True
         ):
-            evidence = self._complete(now)
+            evidence = self._complete(now, state)
             if evidence is not None:
                 return evidence
             step = self.rule.steps[self.index]
@@ -114,13 +116,14 @@ class SequenceProgress:
         if matches:
             if self.hold_since is None:
                 self.hold_since = now
+                self.started_value = transition_value(self.rule, state)
                 if self.started_at is None:
                     self.started_at = now
             self.reason = "holding" if mode == "at_least" else "awaiting_exit"
             if mode == "at_least" and now >= self.hold_since + timedelta(
                 seconds=step.get("duration", 0)
             ):
-                evidence = self._complete(now)
+                evidence = self._complete(now, state)
                 if evidence is not None:
                     return evidence
                 return self.observe(state, now)
@@ -131,7 +134,7 @@ class SequenceProgress:
                 mode == "between"
                 and step.get("duration", 0) <= elapsed <= step["duration_max"]
             ):
-                evidence = self._complete(now)
+                evidence = self._complete(now, state)
                 if evidence is not None:
                     return evidence
                 # The exit observation may start the next step, from now only.
@@ -140,13 +143,15 @@ class SequenceProgress:
             self.reason = "interrupted"
         return None
 
-    def _complete(self, now: datetime) -> list[dict[str, Any]] | None:
+    def _complete(self, now: datetime, state: State) -> list[dict[str, Any]] | None:
         self.completed.append(
             {
                 "step": self.index + 1,
                 "started_at": self.hold_since.isoformat(),
                 "completed_at": now.isoformat(),
                 "seconds": (now - self.hold_since).total_seconds(),
+                "started_value": self.started_value,
+                "completed_value": transition_value(self.rule, state),
             }
         )
         self.hold_since = None
