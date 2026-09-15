@@ -504,6 +504,7 @@ const ruleToYaml = (rule) => {
     for (const step of rule.steps ?? []) {
       lines.push(`  - operator: ${yamlValue(step.operator)}`);
       lines.push(`    value: ${JSON.stringify(step.value)}`);
+      if (step.enabled === false) lines.push("    enabled: false");
       lines.push(`    duration_mode: ${yamlValue(step.duration_mode ?? "at_least")}`);
       lines.push(`    duration: ${yamlValue(step.duration ?? 0)}`);
       if (step.duration_mode === "between") lines.push(`    duration_max: ${yamlValue(step.duration_max)}`);
@@ -3323,6 +3324,38 @@ function refreshActiveNotice() {
   }
 }
 
+// The automation editor registers HA's sortable and bottom-sheet components.
+function hydrateConfigurationSorting(panel, { selector, handleSelector, count, move }) {
+  const sortable = panel.shadowRoot?.querySelector(selector);
+  if (!sortable) return;
+  if (!customElements.get("ha-sortable")) void loadNativeBottomSheet.call(panel, true);
+  sortable.disabled = Boolean(panel._busy);
+  sortable.onkeydown = (event) => {
+    const handle = event.target.closest?.(handleSelector);
+    if (!handle || !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const oldIndex = Number(handle.dataset.index);
+    const newIndex = event.key === "Home" ? 0
+      : event.key === "End" ? count - 1
+      : oldIndex + (event.key === "ArrowUp" ? -1 : 1);
+    move(oldIndex, newIndex);
+  };
+  // Property callbacks keep repeated hydration idempotent.
+  sortable._configurationItemMoved = (event) => {
+    event.stopPropagation();
+    const { oldIndex, newIndex } = event.detail;
+    // Let HA finish its drag-end rollback before replacing the drawer content.
+    queueMicrotask(() => {
+      if (sortable.isConnected) move(oldIndex, newIndex);
+    });
+  };
+  if (!sortable._configurationSortingBound) {
+    sortable.addEventListener("item-moved", (event) => sortable._configurationItemMoved(event));
+    sortable._configurationSortingBound = true;
+  }
+}
+
 // Source: frontend-src/components/configuration-yaml.js
 function configurationDrawerForTab(panel, activeTab) {
   const drawer = panel._configurationDrawer;
@@ -3788,36 +3821,13 @@ function hydrateNotificationProfileControls(panel) {
   });
 }
 
-// The automation editor registers HA's sortable and bottom-sheet components.
 function hydrateNotificationExceptionSorting(panel) {
-  const sortable = panel.shadowRoot?.querySelector("#notification-exception-sortable");
-  if (!sortable) return;
-  if (!customElements.get("ha-sortable")) void loadNativeBottomSheet.call(panel, true);
-  sortable.disabled = Boolean(panel._busy);
-  sortable.onkeydown = (event) => {
-    const handle = event.target.closest?.(".notification-exception-reorder");
-    if (!handle || !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const oldIndex = Number(handle.dataset.index);
-    const newIndex = event.key === "Home" ? 0
-      : event.key === "End" ? panel._notificationProfileDraft.exceptions.length - 1
-      : oldIndex + (event.key === "ArrowUp" ? -1 : 1);
-    moveNotificationException(panel, oldIndex, newIndex);
-  };
-  // Property callbacks keep repeated hydration idempotent.
-  sortable._notificationItemMoved = (event) => {
-    event.stopPropagation();
-    const { oldIndex, newIndex } = event.detail;
-    // Let HA finish its drag-end rollback before replacing the drawer content.
-    queueMicrotask(() => {
-      if (sortable.isConnected) moveNotificationException(panel, oldIndex, newIndex);
-    });
-  };
-  if (!sortable._notificationSortingBound) {
-    sortable.addEventListener("item-moved", (event) => sortable._notificationItemMoved(event));
-    sortable._notificationSortingBound = true;
-  }
+  hydrateConfigurationSorting(panel, {
+    selector: "#notification-exception-sortable",
+    handleSelector: ".notification-exception-reorder",
+    count: panel._notificationProfileDraft?.exceptions?.length ?? 0,
+    move: (oldIndex, newIndex) => moveNotificationException(panel, oldIndex, newIndex),
+  });
 }
 
 function moveNotificationException(panel, oldIndex, newIndex) {
@@ -4165,7 +4175,7 @@ function consumeRuleEditorNotice(panel, fallback) {
 }
 
 function newSequenceStep() {
-    return { operator: "above", value: "", duration_mode: "at_least", duration: 0, _expanded: true };
+    return { enabled: true, operator: "above", value: "", duration_mode: "at_least", duration: 0, _expanded: true };
 }
 
 function normalizeRuleDraft(rule = {}) {
@@ -4292,6 +4302,7 @@ function captureSequenceSteps(form, steps = []) {
       const mode = read("mode") ?? step.duration_mode ?? "at_least";
       return {
         _expanded: step._expanded ?? false,
+        enabled: row.querySelector?.("[data-sequence-enabled]")?.checked ?? step.enabled ?? true,
         operator: captured.operator,
         value: preserveSequenceValue(step.value, captured.value),
         duration_mode: mode,
@@ -5182,28 +5193,48 @@ function renderSequenceEditor({ rule, t, renderNumberField }) {
     `sequence-${index}-${key}`, label, value, t("units.seconds"), minimum, MAX_DURATION_SECONDS, { nameMode: "name" },
   );
   return `<div class="sequence-editor full"><p class="sequence-help">${esc(t("rules.sequence_help"))}</p>
-    ${steps.map((step, index) => {
+    <ha-sortable id="sequence-step-sortable" handle-selector=".sequence-step-reorder" draggable-selector=".sequence-step"><div class="sequence-step-list">${steps.map((step, index) => {
       const mode = step.duration_mode ?? "at_least";
-      const move = (direction, disabled) => `<ha-icon-button data-action="move-sequence-step" data-index="${index}" data-direction="${direction}" aria-label="${esc(t(direction < 0 ? "rules.sequence_up" : "rules.sequence_down"))}" title="${esc(t(direction < 0 ? "rules.sequence_up" : "rules.sequence_down"))}" ${disabled ? "disabled" : ""}><ha-icon icon="mdi:chevron-${direction < 0 ? "up" : "down"}"></ha-icon></ha-icon-button>`;
+
       const title = t(index === 0 ? "rules.sequence_first" : "rules.sequence_then", { index: index + 1 });
       const summary = sequenceStepSummary(step, t);
-      return `<ha-expansion-panel left-chevron class="sequence-step" data-sequence-step="${index}" header="${esc(title)}" secondary="${esc(summary)}" ${step._expanded ? "expanded" : ""}>
-        <div slot="header" class="sequence-step-header"><div>${esc(title)}</div><small class="sequence-step-summary">${esc(summary)}</small></div>
-        <div slot="icons" class="sequence-step-actions">${move(-1, index === 0)}${move(1, index === steps.length - 1)}${steps.length > 2 ? renderConfigurationRemove(t("rules.sequence_remove", { index: index + 1 }), "remove-sequence-step", { "data-index": index }) : ""}</div><div class="sequence-step-content">
+      return `<ha-expansion-panel left-chevron class="sequence-step${step.enabled === false ? " sequence-step-disabled" : ""}" data-sequence-step="${index}" header="${esc(title)}" secondary="${esc(summary)}" ${step._expanded ? "expanded" : ""}>
+        <div slot="header" class="sequence-step-header"><ha-icon-button class="sequence-step-reorder" data-index="${index}" aria-label="${esc(t("rules.sequence_reorder", { index: index + 1 }))}" title="${esc(t("rules.sequence_reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><div class="sequence-step-heading-text"><div>${esc(title)}</div><small class="sequence-step-summary">${esc(summary)}</small></div></div>
+        <div slot="icons" class="sequence-step-actions"><ha-switch data-sequence-enabled aria-label="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" title="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" ${step.enabled !== false ? "checked" : ""}></ha-switch>${steps.length > 2 ? renderConfigurationRemove(t("rules.sequence_remove", { index: index + 1 }), "remove-sequence-step", { "data-index": index }) : ""}</div><div class="sequence-step-content">
         <div class="sequence-comparison"><div class="field"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="sequence-${index}-operator" data-field="operator"></ha-select></div><div class="fields sequence-values">${renderRuleValues({ rule: step, t })}</div></div>
         <div class="sequence-timing"><div class="field"><span class="field-label">${esc(t("rules.sequence_timing"))}</span><ha-select id="sequence-${index}-mode" data-field="sequence-${index}-mode"></ha-select></div>${mode === "between" ? "" : duration(index, "duration", t("rules.sequence_duration"), step.duration ?? 0, mode === "less_than" ? 1 : 0)}</div>
         ${mode === "between" ? `<div class="sequence-duration-bounds">${duration(index, "duration", t("rules.sequence_minimum"), step.duration ?? 0)}${duration(index, "duration_max", t("rules.sequence_maximum"), step.duration_max ?? 0, 1)}</div>` : ""}
         <small class="sequence-timing-help">${esc(t(mode === "at_least" ? "rules.sequence_hold_help" : "rules.sequence_exit_help"))}</small>
       </div></ha-expansion-panel>`;
-    }).join("")}
+    }).join("")}</div></ha-sortable>
     <ha-button appearance="plain" data-action="add-sequence-step" ${steps.length >= 20 ? "disabled" : ""}><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("rules.sequence_add"))}</ha-button>
     ${renderNumberField("sequence_timeout", t("rules.sequence_timeout"), rule.sequence_timeout ?? 0, t("units.seconds"), 0, MAX_DURATION_SECONDS, { nameMode: "name", help: t("rules.sequence_timeout_help") })}
   </div>`;
 }
 
+function moveSequenceStep(panel, oldIndex, newIndex) {
+  const steps = panel._editingRule?.steps;
+  if (panel._busy || !steps || !Number.isInteger(oldIndex) || !Number.isInteger(newIndex)
+    || oldIndex < 0 || newIndex < 0 || oldIndex >= steps.length || newIndex >= steps.length
+    || oldIndex === newIndex) return;
+  panel._captureRuleDraft();
+  const captured = panel._editingRule.steps;
+  captured.splice(newIndex, 0, captured.splice(oldIndex, 1)[0]);
+  panel._clearRuleTestResult();
+  panel._ruleDirty = true;
+  panel._refreshRuleConditionSection();
+  panel.shadowRoot.querySelector(`.sequence-step-reorder[data-index="${newIndex}"]`)?.focus?.();
+}
+
 function hydrateSequenceEditor() {
   if (this._ruleEditorMode !== "visual" || this._editingRule?.source !== "value_sequence") return;
   const steps = this._editingRule.steps ?? [newSequenceStep(), newSequenceStep()];
+  hydrateConfigurationSorting(this, {
+    selector: "#sequence-step-sortable",
+    handleSelector: ".sequence-step-reorder",
+    count: steps.length,
+    move: (oldIndex, newIndex) => moveSequenceStep(this, oldIndex, newIndex),
+  });
   steps.forEach((step, index) => {
     const expansion = this.shadowRoot.querySelector(`[data-sequence-step="${index}"]`);
     if (expansion?.addEventListener) {
@@ -5237,6 +5268,18 @@ function hydrateSequenceEditor() {
       this._ruleDirty = true;
       this._refreshRuleConditionSection();
     };
+    const toggle = expansion?.querySelector?.("[data-sequence-enabled]");
+    if (toggle) {
+      toggle.checked = step.enabled !== false;
+      toggle.onclick = (event) => event.stopPropagation();
+      toggle.onkeydown = (event) => event.stopPropagation();
+      toggle.onchange = (event) => {
+        event.stopPropagation();
+        change("enabled", toggle.checked);
+      };
+    }
+    const handle = expansion?.querySelector?.(".sequence-step-reorder");
+    if (handle) handle.onclick = (event) => event.stopPropagation();
     this._configureSelect(`sequence-${index}-operator`, ruleComparisonOptions((key) => this._t(key)), step.operator, (value) => change("operator", value));
     this._configureSelect(`sequence-${index}-mode`, ["at_least", "less_than", "between"].map((value) => ({ value, label: this._t(`rules.sequence_${value}`) })), step.duration_mode ?? "at_least", (value) => change("duration_mode", value));
   });
@@ -5259,7 +5302,7 @@ function sequenceStepSummary(step, t) {
   const comparison = `${t(`operators.${step.operator}`)} ${ruleValueList(step.value).join(" / ")}`;
   const duration = (seconds) => durationText.call({ _t: t }, seconds ?? 0);
   const timing = `${t(`rules.sequence_${step.duration_mode ?? "at_least"}`)} ${duration(step.duration)}${step.duration_mode === "between" ? ` – ${duration(step.duration_max)}` : ""}`;
-  return `${comparison} · ${timing}`;
+  return `${step.enabled === false ? `${t("rules.sequence_disabled")} · ` : ""}${comparison} · ${timing}`;
 }
 
 function renderResolutionEditor({ rule, t, renderNumberField }) {
@@ -6641,7 +6684,7 @@ async function handleRulesAction(action, button) {
     await this._switchRuleEditor();
     return true;
   }
-  if (["add-sequence-step", "remove-sequence-step", "move-sequence-step"].includes(action)) {
+  if (["add-sequence-step", "remove-sequence-step"].includes(action)) {
     this._captureRuleDraft();
     const steps = this._editingRule.steps;
     const index = Number(button.dataset.index);
@@ -6652,12 +6695,6 @@ async function handleRulesAction(action, button) {
     } else if (action === "remove-sequence-step" && steps.length > 2) {
       steps.splice(index, 1);
       focusIndex = Math.min(index, steps.length - 1);
-    } else if (action === "move-sequence-step") {
-      const destination = index + Number(button.dataset.direction);
-      if (destination >= 0 && destination < steps.length) {
-        [steps[index], steps[destination]] = [steps[destination], steps[index]];
-        focusIndex = destination;
-      }
     }
     this._clearRuleTestResult();
     this._ruleDirty = true;
@@ -9246,7 +9283,12 @@ const ruleEditorStyles = `
     border-radius: var(--ha-border-radius-m, 8px);
   }
   .sequence-step-content { padding: 12px; }
-  .sequence-step-header { min-width: 0; padding-block: 8px; }
+  .sequence-step-list { display: grid; gap: 12px; min-width: 0; }
+  .sequence-step-header { display: flex; align-items: center; min-width: 0; padding-block: 8px; }
+  .sequence-step-heading-text { min-width: 0; }
+  .sequence-step-disabled .sequence-step-heading-text { color: var(--secondary-text-color); }
+  .sequence-step-reorder { flex: none; cursor: grab; touch-action: none; --mdc-icon-button-size: 32px; }
+  .sequence-step-reorder:active { cursor: grabbing; }
   .sequence-step-summary { display: block; color: var(--secondary-text-color); overflow-wrap: anywhere; }
   .sequence-step-heading, .sequence-step-actions {
     display: flex;
@@ -9254,7 +9296,7 @@ const ruleEditorStyles = `
   }
   .sequence-step-heading { justify-content: space-between; gap: 8px; margin-bottom: 12px; }
   .sequence-step-heading h4 { margin: 0; font-size: 14px; font-weight: 500; }
-  .sequence-step-actions { flex-shrink: 0; }
+  .sequence-step-actions { flex-shrink: 0; gap: 8px; }
   .sequence-step-actions ha-icon-button { --mdc-icon-button-size: 36px; }
   .sequence-comparison, .sequence-timing, .sequence-duration-bounds {
     display: grid;

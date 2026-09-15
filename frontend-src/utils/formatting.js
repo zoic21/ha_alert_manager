@@ -75,6 +75,7 @@ const ruleToYaml = (rule) => {
     for (const step of rule.steps ?? []) {
       lines.push(`  - operator: ${yamlValue(step.operator)}`);
       lines.push(`    value: ${JSON.stringify(step.value)}`);
+      if (step.enabled === false) lines.push("    enabled: false");
       lines.push(`    duration_mode: ${yamlValue(step.duration_mode ?? "at_least")}`);
       lines.push(`    duration: ${yamlValue(step.duration ?? 0)}`);
       if (step.duration_mode === "between") lines.push(`    duration_max: ${yamlValue(step.duration_max)}`);

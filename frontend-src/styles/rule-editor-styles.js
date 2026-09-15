@@ -15,7 +15,12 @@ export const ruleEditorStyles = `
     border-radius: var(--ha-border-radius-m, 8px);
   }
   .sequence-step-content { padding: 12px; }
-  .sequence-step-header { min-width: 0; padding-block: 8px; }
+  .sequence-step-list { display: grid; gap: 12px; min-width: 0; }
+  .sequence-step-header { display: flex; align-items: center; min-width: 0; padding-block: 8px; }
+  .sequence-step-heading-text { min-width: 0; }
+  .sequence-step-disabled .sequence-step-heading-text { color: var(--secondary-text-color); }
+  .sequence-step-reorder { flex: none; cursor: grab; touch-action: none; --mdc-icon-button-size: 32px; }
+  .sequence-step-reorder:active { cursor: grabbing; }
   .sequence-step-summary { display: block; color: var(--secondary-text-color); overflow-wrap: anywhere; }
   .sequence-step-heading, .sequence-step-actions {
     display: flex;
@@ -23,7 +28,7 @@ export const ruleEditorStyles = `
   }
   .sequence-step-heading { justify-content: space-between; gap: 8px; margin-bottom: 12px; }
   .sequence-step-heading h4 { margin: 0; font-size: 14px; font-weight: 500; }
-  .sequence-step-actions { flex-shrink: 0; }
+  .sequence-step-actions { flex-shrink: 0; gap: 8px; }
   .sequence-step-actions ha-icon-button { --mdc-icon-button-size: 36px; }
   .sequence-comparison, .sequence-timing, .sequence-duration-bounds {
     display: grid;

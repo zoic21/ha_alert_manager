@@ -236,3 +236,35 @@ export function refreshActiveNotice() {
       ? `<ha-alert class="alert-details-notice" data-alert-details-notice alert-type="${esc(notice.kind)}" role="${notice.kind === "error" ? "alert" : "status"}">${esc(notice.text)}</ha-alert>` : "";
   }
 }
+
+// The automation editor registers HA's sortable and bottom-sheet components.
+export function hydrateConfigurationSorting(panel, { selector, handleSelector, count, move }) {
+  const sortable = panel.shadowRoot?.querySelector(selector);
+  if (!sortable) return;
+  if (!customElements.get("ha-sortable")) void loadNativeBottomSheet.call(panel, true);
+  sortable.disabled = Boolean(panel._busy);
+  sortable.onkeydown = (event) => {
+    const handle = event.target.closest?.(handleSelector);
+    if (!handle || !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const oldIndex = Number(handle.dataset.index);
+    const newIndex = event.key === "Home" ? 0
+      : event.key === "End" ? count - 1
+      : oldIndex + (event.key === "ArrowUp" ? -1 : 1);
+    move(oldIndex, newIndex);
+  };
+  // Property callbacks keep repeated hydration idempotent.
+  sortable._configurationItemMoved = (event) => {
+    event.stopPropagation();
+    const { oldIndex, newIndex } = event.detail;
+    // Let HA finish its drag-end rollback before replacing the drawer content.
+    queueMicrotask(() => {
+      if (sortable.isConnected) move(oldIndex, newIndex);
+    });
+  };
+  if (!sortable._configurationSortingBound) {
+    sortable.addEventListener("item-moved", (event) => sortable._configurationItemMoved(event));
+    sortable._configurationSortingBound = true;
+  }
+}

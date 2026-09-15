@@ -15,7 +15,7 @@ from .models import AlertRecord, AlertStatus, Rule, advance_record, normalize_sc
 from .packs.base import PackOccurrence
 from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
-from .sequences import SequenceProgress, sequence_comparison
+from .sequences import SequenceProgress, sequence_comparison, sequence_final_step
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,7 +227,11 @@ class _TransitionsMixin:
                     return False
             elif rule.resolve_mode == "state":
                 if rule.source == "value_sequence":
-                    if sequence_comparison(rule, rule.steps[-1], state) is False:
+                    final_step = sequence_final_step(rule)
+                    if (
+                        final_step is None
+                        or sequence_comparison(rule, final_step, state) is False
+                    ):
                         return False
                 else:
                     value = transition_value(rule, state)

@@ -30,6 +30,13 @@ def sequence_comparison(
     ).result
 
 
+def sequence_final_step(rule: Rule) -> dict[str, Any] | None:
+    """Return the final enabled comparison, preserving stored step positions."""
+    return next(
+        (step for step in reversed(rule.steps) if step.get("enabled", True)), None
+    )
+
+
 @dataclass(slots=True)
 class SequenceProgress:
     """One progression per rule/entity, bounded by the configured step count."""
@@ -44,12 +51,22 @@ class SequenceProgress:
     waiting_for_exit: bool = False
     reason: str = "waiting"
 
+    def __post_init__(self) -> None:
+        self._skip_disabled()
+
+    def _skip_disabled(self) -> None:
+        while self.index < len(self.rule.steps) and not self.rule.steps[self.index].get(
+            "enabled", True
+        ):
+            self.index += 1
+
     def copy(self) -> SequenceProgress:
         """Copy mutable timing evidence without copying immutable HA State objects."""
         return replace(self, completed=[dict(item) for item in self.completed])
 
     def reset(self, reason: str = "waiting") -> None:
         self.index = 0
+        self._skip_disabled()
         self.started_at = None
         self.hold_since = None
         self.started_value = None
@@ -58,6 +75,8 @@ class SequenceProgress:
 
     def deadline(self) -> datetime | None:
         """Only a live minimum hold or the whole-sequence limit needs a timer."""
+        if self.index >= len(self.rule.steps):
+            return None
         deadlines = []
         if self.started_at is not None and self.rule.sequence_timeout:
             deadlines.append(
@@ -77,6 +96,9 @@ class SequenceProgress:
         self, state: State | None, now: datetime, *, previous: State | None = None
     ) -> list[dict[str, Any]] | None:
         """Consume one observation; never backdate the next step's hold."""
+        if self.index >= len(self.rule.steps):
+            self.reason = "disabled"
+            return None
         if (
             self.started_at is not None
             and self.rule.sequence_timeout
@@ -86,7 +108,10 @@ class SequenceProgress:
             # The deadline discards progress; a later real observation may rearm.
             return None
         if self.waiting_for_exit:
-            if sequence_comparison(self.rule, self.rule.steps[-1], state) is not False:
+            if (
+                sequence_comparison(self.rule, sequence_final_step(self.rule), state)
+                is not False
+            ):
                 return None
             self.waiting_for_exit = False
         step = self.rule.steps[self.index]
@@ -156,6 +181,7 @@ class SequenceProgress:
         )
         self.hold_since = None
         self.index += 1
+        self._skip_disabled()
         self.reason = "waiting"
         if self.index < len(self.rule.steps):
             return None
@@ -168,15 +194,17 @@ class SequenceProgress:
         """Read-only diagnostics, including comparison versus proven progress."""
         due = self.deadline()
         return {
-            "step": self.index + 1,
+            "step": min(self.index + 1, len(self.rule.steps)),
             "total": len(self.rule.steps),
             "matching": sequence_comparison(
                 self.rule, self.rule.steps[self.index], state
-            ),
+            )
+            if self.index < len(self.rule.steps)
+            else None,
             "elapsed": max(0, (now - self.hold_since).total_seconds())
             if self.hold_since
             else 0,
             "remaining": max(0, (due - now).total_seconds()) if due else None,
-            "reason": self.reason,
+            "reason": self.reason if self.index < len(self.rule.steps) else "disabled",
             "completed": [dict(item) for item in self.completed],
         }

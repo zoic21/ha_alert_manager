@@ -7,6 +7,7 @@ import {
   hydrateRuleEditor,
   hydrateRuleEditorControls,
   normalizeRuleDraft,
+  moveSequenceStep,
   refreshRuleConditionSection,
   renderRuleEditor,
   renderRuleConditionSection,
@@ -529,7 +530,7 @@ test("sequence reordering and removal retain the entire step including durations
     _captureRuleDraft() {}, _clearRuleTestResult() {}, _refreshRuleConditionSection() {},
     shadowRoot: { querySelector: () => null },
   };
-  await handleRulesAction.call(panel, "move-sequence-step", { dataset: { index: "1", direction: "-1" } });
+  moveSequenceStep(panel, 1, 0);
   assert.deepEqual(panel._editingRule.steps, [steps[1], steps[0], steps[2]]);
   await handleRulesAction.call(panel, "remove-sequence-step", { dataset: { index: "1" } });
   assert.deepEqual(panel._editingRule.steps, [steps[1], steps[2]]);
@@ -627,4 +628,75 @@ test("resolution comparison value actions do not change sequence steps", async (
   await handleRulesAction.call(panel, "remove-rule-value", button);
   assert.deepEqual(panel._editingRule.resolve_condition.value, [""]);
   assert.deepEqual(panel._editingRule.steps, [{ value: 100 }]);
+});
+
+
+test("sequence step toggle is saved in visual and YAML drafts without losing its fields", () => {
+  const draft = normalizeRuleDraft(rule({ source: "value_sequence", steps: [
+    { operator: "above", value: 100, duration: 30, enabled: false },
+    { operator: "below", value: 10, duration: 20 },
+  ] }));
+  const captured = captureRuleDraftFromForm({ querySelector: () => null, querySelectorAll: () => [] }, draft);
+  assert.equal(serializeRuleDraft(captured).steps[0].enabled, false);
+  assert.match(ruleToYaml(captured), /enabled: false/);
+  const html = renderRuleConditionSection({ rule: captured, t, renderTextField: () => "", renderNumberField: () => "" });
+  assert.match(html, /<ha-sortable[^>]*handle-selector=".sequence-step-reorder"/);
+  assert.match(html, /class="sequence-step sequence-step-disabled"/);
+  assert.match(html, /sequence_disabled/);
+  assert.match(html, /data-sequence-enabled/);
+  assert.doesNotMatch(html, /move-sequence-step|mdi:chevron-up|mdi:chevron-down/);
+});
+
+test("native sequence sorting captures edits, supports nonadjacent moves and binds once", async () => {
+  const { hydrateConfigurationSorting } = await import("../frontend-src/components/configuration-drawer.js");
+  const previous = globalThis.customElements;
+  globalThis.customElements = { get: () => true };
+  try {
+    const listeners = [];
+    const sortable = { isConnected: true, addEventListener: (name, cb) => listeners.push(cb) };
+    const panel = {
+      _editingRule: { steps: [{ value: 1 }, { value: 2, enabled: false }, { value: 3, duration: 30 }] },
+      _captureRuleDraft() { this._editingRule.steps = this._editingRule.steps.map(step => ({ ...step })); },
+      _clearRuleTestResult() {}, _refreshRuleConditionSection() {},
+      shadowRoot: { querySelector: selector => selector === "#sort" ? sortable : null },
+    };
+    const hydrate = () => hydrateConfigurationSorting(panel, { selector: "#sort", handleSelector: ".handle", count: 3, move: (a, b) => moveSequenceStep(panel, a, b) });
+    hydrate(); hydrate();
+    assert.equal(listeners.length, 1);
+    listeners[0]({ stopPropagation() {}, detail: { oldIndex: 2, newIndex: 0 } });
+    await new Promise(resolve => queueMicrotask(resolve));
+    assert.deepEqual(panel._editingRule.steps.map(s => s.value), [3, 1, 2]);
+    assert.equal(panel._editingRule.steps[0].duration, 30);
+    sortable.onkeydown({ key: "Home", target: { closest: () => ({ dataset: { index: "2" } }) }, preventDefault() {}, stopPropagation() {} });
+    assert.equal(panel._editingRule.steps[0].enabled, false);
+    panel._busy = true;
+    moveSequenceStep(panel, 0, 2);
+    assert.equal(panel._editingRule.steps[0].enabled, false);
+  } finally { globalThis.customElements = previous; }
+});
+
+test("sequence switches update only their step and preserve collapsed state", () => {
+  const toggle = { checked: true };
+  const expansion = { querySelector: selector => selector === "[data-sequence-enabled]" ? toggle : null };
+  const panel = {
+    _editingRule: normalizeRuleDraft(rule({ source: "value_sequence", steps: [
+      { operator: "above", value: 100, duration: 30, _expanded: false },
+      { operator: "below", value: 10, duration: 20 },
+    ] })),
+    _ruleEditorMode: "visual", _t: t, _ruleAttributeOptions: () => [],
+    _configureSelect() {}, _configureSelector() {}, _handleSelected() {},
+    _captureRuleDraft() {}, _clearRuleTestResult() {}, _refreshRuleConditionSection() {},
+    shadowRoot: { querySelector: selector => selector === '[data-sequence-step="0"]' ? expansion : null },
+  };
+  hydrateRuleEditorControls.call(panel);
+  toggle.checked = false;
+  toggle.onchange({ stopPropagation() {} });
+  assert.equal(panel._editingRule.steps[0].enabled, false);
+  assert.equal(panel._editingRule.steps[0]._expanded, false);
+  assert.equal(panel._editingRule.steps[0].duration, 30);
+  assert.notEqual(panel._editingRule.steps[1].enabled, false);
+  assert.equal(panel._ruleDirty, true);
+  toggle.checked = true;
+  toggle.onchange({ stopPropagation() {} });
+  assert.equal(panel._editingRule.steps[0].enabled, true);
 });

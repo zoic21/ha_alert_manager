@@ -674,11 +674,14 @@
       "resolve_mode_state": "While the arrival value is maintained",
       "source_value_sequence": "Sequence",
       "sequence_summary": "Sequence of {count} steps",
-      "sequence_help": "Steps follow the same value, in this order. Completed steps stay completed.",
+      "sequence_reorder": "Move step {index}",
+      "sequence_reorder_help": "Drag to reorder. Keyboard: Up/Down arrows, Home/End.",
+      "sequence_enabled": "Enable step {index}",
+      "sequence_disabled": "Disabled",
+      "sequence_status_disabled": "All steps are disabled",
+      "sequence_help": "Steps follow the same value, in this order. Completed steps stay completed. Disabled steps are skipped; if all steps are disabled, the sequence never triggers.",
       "sequence_first": "Step {index}",
       "sequence_then": "Then · Step {index}",
-      "sequence_up": "Move step up",
-      "sequence_down": "Move step down",
       "sequence_remove": "Remove step {index}",
       "sequence_add": "Add step",
       "sequence_timing": "Condition duration",
@@ -708,7 +711,7 @@
       "resolve_mode_condition": "When a value condition is true",
       "resolve_mode_last_step": "When the last step is no longer true",
       "resolve_condition_help": "Resolves when this test is true on the same entity and attribute. Unknown or unavailable values are ignored.",
-      "resolve_last_step_help": "Resolves when the final step comparison becomes false, without its hold duration. If the step completes on leaving its condition, resolution is immediate."
+      "resolve_last_step_help": "Resolves when the final enabled step comparison becomes false, without its hold duration. If the step completes on leaving its condition, resolution is immediate."
     },
     "settings": {
       "discard_confirm": "Discard unsaved changes in this drawer?",

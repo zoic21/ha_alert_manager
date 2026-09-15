@@ -1,5 +1,5 @@
 import { durationFieldValue, renderDurationControl } from "./duration-field.js";
-import { loadNativeBottomSheet, renderConfigurationDrawer, renderConfigurationRemove } from "./configuration-drawer.js";
+import { hydrateConfigurationSorting, renderConfigurationDrawer, renderConfigurationRemove } from "./configuration-drawer.js";
 import {
   MAX_DURATION_SECONDS,
   MDI_PLUS,
@@ -276,36 +276,13 @@ export function hydrateNotificationProfileControls(panel) {
   });
 }
 
-// The automation editor registers HA's sortable and bottom-sheet components.
 function hydrateNotificationExceptionSorting(panel) {
-  const sortable = panel.shadowRoot?.querySelector("#notification-exception-sortable");
-  if (!sortable) return;
-  if (!customElements.get("ha-sortable")) void loadNativeBottomSheet.call(panel, true);
-  sortable.disabled = Boolean(panel._busy);
-  sortable.onkeydown = (event) => {
-    const handle = event.target.closest?.(".notification-exception-reorder");
-    if (!handle || !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const oldIndex = Number(handle.dataset.index);
-    const newIndex = event.key === "Home" ? 0
-      : event.key === "End" ? panel._notificationProfileDraft.exceptions.length - 1
-      : oldIndex + (event.key === "ArrowUp" ? -1 : 1);
-    moveNotificationException(panel, oldIndex, newIndex);
-  };
-  // Property callbacks keep repeated hydration idempotent.
-  sortable._notificationItemMoved = (event) => {
-    event.stopPropagation();
-    const { oldIndex, newIndex } = event.detail;
-    // Let HA finish its drag-end rollback before replacing the drawer content.
-    queueMicrotask(() => {
-      if (sortable.isConnected) moveNotificationException(panel, oldIndex, newIndex);
-    });
-  };
-  if (!sortable._notificationSortingBound) {
-    sortable.addEventListener("item-moved", (event) => sortable._notificationItemMoved(event));
-    sortable._notificationSortingBound = true;
-  }
+  hydrateConfigurationSorting(panel, {
+    selector: "#notification-exception-sortable",
+    handleSelector: ".notification-exception-reorder",
+    count: panel._notificationProfileDraft?.exceptions?.length ?? 0,
+    move: (oldIndex, newIndex) => moveNotificationException(panel, oldIndex, newIndex),
+  });
 }
 
 export function moveNotificationException(panel, oldIndex, newIndex) {

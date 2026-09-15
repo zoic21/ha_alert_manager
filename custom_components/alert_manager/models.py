@@ -986,6 +986,7 @@ class Rule:
                 "operator",
                 "value",
                 "duration_mode",
+                "enabled",
                 "duration",
                 "duration_max",
             }:
@@ -995,6 +996,8 @@ class Rule:
                 or step.get("operator") == "unchanged"
                 or "value" not in step
             ):
+                raise ValueError("Invalid sequence step")
+            if not isinstance(step.get("enabled", True), bool):
                 raise ValueError("Invalid sequence step")
             mode = step.get("duration_mode", "at_least")
             duration = step.get("duration", 0)

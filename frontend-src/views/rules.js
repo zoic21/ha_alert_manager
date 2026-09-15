@@ -482,7 +482,7 @@ export async function handleRulesAction(action, button) {
     await this._switchRuleEditor();
     return true;
   }
-  if (["add-sequence-step", "remove-sequence-step", "move-sequence-step"].includes(action)) {
+  if (["add-sequence-step", "remove-sequence-step"].includes(action)) {
     this._captureRuleDraft();
     const steps = this._editingRule.steps;
     const index = Number(button.dataset.index);
@@ -493,12 +493,6 @@ export async function handleRulesAction(action, button) {
     } else if (action === "remove-sequence-step" && steps.length > 2) {
       steps.splice(index, 1);
       focusIndex = Math.min(index, steps.length - 1);
-    } else if (action === "move-sequence-step") {
-      const destination = index + Number(button.dataset.direction);
-      if (destination >= 0 && destination < steps.length) {
-        [steps[index], steps[destination]] = [steps[destination], steps[index]];
-        focusIndex = destination;
-      }
     }
     this._clearRuleTestResult();
     this._ruleDirty = true;

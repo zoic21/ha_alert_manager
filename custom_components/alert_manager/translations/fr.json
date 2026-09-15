@@ -674,11 +674,14 @@
       "resolve_mode_state": "Tant que l’état d’arrivée est maintenu",
       "source_value_sequence": "Séquence",
       "sequence_summary": "Séquence de {count} étapes",
-      "sequence_help": "Les étapes suivent la même valeur, dans cet ordre. Chaque étape terminée reste acquise.",
+      "sequence_reorder": "Déplacer l’étape {index}",
+      "sequence_reorder_help": "Glisser pour réordonner. Au clavier : flèches haut/bas, Début/Fin.",
+      "sequence_enabled": "Activer l’étape {index}",
+      "sequence_disabled": "Désactivée",
+      "sequence_status_disabled": "Toutes les étapes sont désactivées",
+      "sequence_help": "Les étapes suivent la même valeur, dans cet ordre. Chaque étape terminée reste acquise. Les étapes désactivées sont ignorées ; si toutes sont désactivées, la séquence ne déclenche rien.",
       "sequence_first": "Étape {index}",
       "sequence_then": "Puis · Étape {index}",
-      "sequence_up": "Monter cette étape",
-      "sequence_down": "Descendre cette étape",
       "sequence_remove": "Supprimer l’étape {index}",
       "sequence_add": "Ajouter une étape",
       "sequence_timing": "Maintien de la condition",
@@ -708,7 +711,7 @@
       "resolve_mode_condition": "Quand une condition de valeur est vraie",
       "resolve_mode_last_step": "Quand la dernière étape n’est plus vraie",
       "resolve_condition_help": "Résout dès que ce test est vrai sur la même entité et le même attribut. Les valeurs inconnues ou indisponibles sont ignorées.",
-      "resolve_last_step_help": "Résout dès que la comparaison de la dernière étape devient fausse, sans reprendre sa durée de maintien. Si l’étape se termine en quittant sa condition, la résolution est immédiate."
+      "resolve_last_step_help": "Résout dès que la comparaison de la dernière étape activée devient fausse, sans reprendre sa durée de maintien. Si l’étape se termine en quittant sa condition, la résolution est immédiate."
     },
     "settings": {
       "discard_confirm": "Abandonner les modifications non enregistrées de ce volet ?",

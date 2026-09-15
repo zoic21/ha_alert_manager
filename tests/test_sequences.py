@@ -698,3 +698,88 @@ def test_sequence_evidence_uses_attribute_and_restarted_hold_values():
     assert evidence[0]["completed_value"] == 250
     assert evidence[0]["started_at"] == (START + timedelta(seconds=200)).isoformat()
     assert evidence[1]["completed_value"] == 0
+
+
+@pytest.mark.parametrize("disabled", [0, 1, 2])
+def test_disabled_steps_are_skipped_but_evidence_keeps_original_positions(disabled):
+    steps = [
+        {"operator": "above", "value": 100},
+        {"operator": "below", "value": 10},
+        {"operator": "equals", "value": "done"},
+    ]
+    steps[disabled]["enabled"] = False
+    p = SequenceProgress(sequence(steps=steps))
+    enabled = [i for i in range(3) if i != disabled]
+    values = [120, 5, "done"]
+    for i in enabled:
+        evidence = observe(p, values[i], i * 10)
+    assert [item["step"] for item in evidence] == [i + 1 for i in enabled]
+    assert p.waiting_for_exit
+    assert observe(p, values[enabled[-1]], 40) is None
+    assert p.waiting_for_exit
+    observe(p, 50, 50)
+    assert not p.waiting_for_exit
+
+
+def test_all_disabled_steps_have_no_deadline_or_alert_and_roundtrip_yaml():
+    rule = sequence(
+        steps=[
+            {"operator": "above", "value": 100, "enabled": False},
+            {"operator": "below", "value": 10, "enabled": False},
+        ]
+    )
+    p = SequenceProgress(rule)
+    assert observe(p, 120, 0) is None
+    assert p.deadline() is None
+    assert p.snapshot(State("sensor.power", "120"), START)["reason"] == "disabled"
+    assert parse_rule_yaml(dump_rule_yaml(rule), rule_id=rule.id).steps == rule.steps
+
+
+@pytest.mark.parametrize("enabled", [None, "false", 0, 1])
+def test_step_enabled_is_strict_boolean(enabled):
+    with pytest.raises(ValueError, match="Invalid sequence step"):
+        sequence(
+            steps=[
+                {"operator": "above", "value": 100, "enabled": enabled},
+                {"operator": "below", "value": 10},
+            ]
+        )
+
+
+def test_disabled_final_step_resolution_uses_last_enabled_step(hass, entry, set_now):
+    manager, key, rule = setup_sequence(hass, entry, resolve_mode="state")
+    steps = [dict(step) for step in rule["steps"]]
+    steps[-1]["enabled"] = False
+    run(manager.async_update_rule(rule["id"], {"steps": steps}))
+    now = dt_util.now()
+    edge(manager, hass, "120")
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    assert key in manager.records
+    evidence = manager.records[key].details.condition_params["evidence"]
+    assert [item["step"] for item in evidence] == [1]
+    edge(manager, hass, "5")
+    assert key not in manager.records
+    assert manager.history[-1].condition_params["evidence"] == evidence
+
+
+def test_disabling_a_step_discards_pending_progress_and_stale_timer(
+    hass, entry, set_now
+):
+    manager, key, rule = setup_sequence(hass, entry)
+    edge(manager, hass, "120")
+    stale = sequence_timer(manager, hass, key)
+    steps = [dict(step, enabled=False) for step in rule["steps"]]
+    run(manager.async_update_rule(rule["id"], {"steps": steps}))
+    set_now(stale["point"])
+    stale["action"](None)
+    run(manager._async_flush_queued_evaluations())
+    assert key not in manager.records
+    assert not manager._sequence_timers
+    steps[0]["enabled"] = True
+    run(manager.async_update_rule(rule["id"], {"steps": steps}))
+    edge(manager, hass, "5")
+    edge(manager, hass, "120")
+    assert sequence_timer(manager, hass, key)["point"] == dt_util.now() + timedelta(
+        seconds=30
+    )
