@@ -73,8 +73,23 @@ class SequenceProgress:
         self.completed = []
         self.reason = reason
 
+    def _hold_expiration(self) -> datetime | None:
+        """Return the first instant at which a bounded hold can no longer pass."""
+        if self.hold_since is None or self.index >= len(self.rule.steps):
+            return None
+        step = self.rule.steps[self.index]
+        mode = step.get("duration_mode", "at_least")
+        if mode == "less_than":
+            return self.hold_since + timedelta(seconds=step["duration"])
+        if mode == "between":
+            # The upper bound is inclusive: an exit exactly there is valid.
+            return self.hold_since + timedelta(
+                seconds=step["duration_max"], microseconds=1
+            )
+        return None
+
     def deadline(self) -> datetime | None:
-        """Only a live minimum hold or the whole-sequence limit needs a timer."""
+        """Schedule minimum holds, bounded-hold expiry and the sequence limit."""
         if self.index >= len(self.rule.steps):
             return None
         deadlines = []
@@ -83,6 +98,9 @@ class SequenceProgress:
                 self.started_at + timedelta(seconds=self.rule.sequence_timeout)
             )
         step = self.rule.steps[self.index]
+        expiration = self._hold_expiration()
+        if expiration is not None:
+            deadlines.append(expiration)
         if (
             self.hold_since is not None
             and step.get("duration_mode", "at_least") == "at_least"
@@ -98,6 +116,10 @@ class SequenceProgress:
         """Consume one observation; never backdate the next step's hold."""
         if self.index >= len(self.rule.steps):
             self.reason = "disabled"
+            return None
+        expiration = self._hold_expiration()
+        if expiration is not None and now >= expiration:
+            self.reset("expired")
             return None
         if (
             self.started_at is not None

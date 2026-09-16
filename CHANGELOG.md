@@ -7,10 +7,14 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.7**, published on **2026-09-16**.
+Current beta build: **2.4.0-beta.8**, published on **2026-09-16**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Discard a pending sequence as soon as a bounded step exceeds its allowed hold,
+  using a deadline timer even when its value never changes. Clear all completed
+  steps silently and preserve the inclusive upper bound for between durations.
 
 - Initialize sequence observations from the current value after startup reconciliation,
   including entities first discovered later, without counting downtime or replaying

@@ -1045,3 +1045,97 @@ def test_startup_sequence_hold_starts_now_and_keeps_its_timer(hass, entry, set_n
     set_now(now + timedelta(seconds=50))
     fire_sequence_timer(restored, hass, key)
     assert restored.records[key].status is AlertStatus.ACTIVE
+
+
+@pytest.mark.parametrize("mode", ["less_than", "between"])
+@pytest.mark.parametrize("expiry_source", ["timer", "event"])
+def test_bounded_step_expiration_discards_pending_sequence(
+    hass, entry, set_now, mode, expiry_source
+):
+    """A failed last step removes pending immediately and cannot reuse steps 1/2."""
+    from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
+
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        steps=[
+            {"operator": "equals", "value": "1", "duration": 0},
+            {"operator": "equals", "value": "2", "duration": 0},
+            {
+                "operator": "equals",
+                "value": "3",
+                "duration_mode": mode,
+                "duration": 120 if mode == "less_than" else 10,
+                **({"duration_max": 120} if mode == "between" else {}),
+            },
+        ],
+    )
+    now = dt_util.now()
+    for value in ("1", "2", "3"):
+        edge(manager, hass, value)
+    progress = manager._sequence_progress[key]
+    assert progress.index == 2
+    assert manager.public_snapshot()["pending_count"] == 1
+    expiry = now + timedelta(seconds=120, microseconds=mode == "between")
+    assert progress.deadline() == expiry
+    timer = sequence_timer(manager, hass, key)
+    set_now(expiry)
+    if expiry_source == "timer":
+        fire_sequence_timer(manager, hass, key)
+    else:
+        edge(manager, hass, "4")
+        assert timer["cancelled"]
+    assert manager.public_snapshot()["pending_count"] == 0
+    assert manager._last_public_snapshot["pending_count"] == 0
+    assert progress.index == 0 and not progress.completed
+    assert progress.hold_since is None and progress.started_at is None
+    assert key not in manager._sequence_timers
+    assert not manager.records and not manager.history and not manager._pending_history
+    assert not [
+        e for e in hass.bus.fired if e[0] in (EVENT_ALERT_STARTED, EVENT_ALERT_RESOLVED)
+    ]
+    edge(manager, hass, "3")
+    edge(manager, hass, "4")
+    assert manager.public_snapshot()["pending_count"] == 0
+    assert key not in manager.records
+    # A full fresh cycle is still allowed; the old timer cannot erase it.
+    for value in ("1", "2", "3"):
+        edge(manager, hass, value)
+    timer["action"](dt_util.now())
+    assert manager._sequence_progress[key].index == 2
+    set_now(expiry + timedelta(seconds=20))
+    edge(manager, hass, "4")
+    assert manager.records[key].status is AlertStatus.ACTIVE
+
+
+@pytest.mark.parametrize(
+    "mode,offset,valid",
+    [
+        ("less_than", -1, True),
+        ("less_than", 0, False),
+        ("between", 0, True),
+        ("between", 1, False),
+    ],
+)
+def test_bounded_hold_exit_at_upper_boundary(mode, offset, valid):
+    p = SequenceProgress(
+        sequence(
+            steps=[
+                {"operator": "equals", "value": "1", "duration": 0},
+                {
+                    "operator": "equals",
+                    "value": "3",
+                    "duration_mode": mode,
+                    "duration": 120 if mode == "less_than" else 10,
+                    **({"duration_max": 120} if mode == "between" else {}),
+                },
+            ]
+        )
+    )
+    observe(p, 1, 0)
+    observe(p, 3, 0)
+    evidence = p.observe(
+        State("sensor.power", "4"), START + timedelta(seconds=120, microseconds=offset)
+    )
+    assert bool(evidence) is valid
+    assert not p.completed and p.hold_since is None
