@@ -1139,3 +1139,86 @@ def test_bounded_hold_exit_at_upper_boundary(mode, offset, valid):
     )
     assert bool(evidence) is valid
     assert not p.completed and p.hold_since is None
+
+
+@pytest.mark.parametrize("attribute", [None, "mode"])
+@pytest.mark.parametrize("mode", ["less_than", "between", "at_least"])
+def test_completing_exit_starts_next_pending_cycle(
+    hass, entry, set_now, attribute, mode
+):
+    from custom_components.alert_manager.const import EVENT_ALERT_RESOLVED
+
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        attribute=attribute,
+        resolve_mode="state",
+        steps=[
+            {"operator": "equals", "value": "1", "duration": 0},
+            {"operator": "equals", "value": "2", "duration": 0},
+            {
+                "operator": "equals",
+                "value": "3",
+                "duration_mode": mode,
+                "duration": 120 if mode == "less_than" else 10,
+                **({"duration_max": 120} if mode == "between" else {}),
+            },
+        ],
+    )
+    now = dt_util.now()
+    for value in ("1", "2", "3"):
+        edge(manager, hass, value, {"mode": value})
+    stale = sequence_timer(manager, hass, key)
+    for cycle in (1, 2):
+        set_now(now + timedelta(seconds=20 * cycle))
+        edge(manager, hass, "1", {"mode": "1"})
+        assert key not in manager.records
+        snapshot = manager.public_snapshot()
+        assert snapshot["pending_count"] == 1 and snapshot["active_count"] == 0
+        progress = manager._sequence_progress[key]
+        assert progress.index == 1 and not progress.waiting_for_exit
+        assert len(progress.completed) == 1
+        assert progress.completed[0]["started_value"] == "1"
+        assert progress.completed[0]["started_at"] == dt_util.now().isoformat()
+        evidence = manager.history[-1].condition_params["evidence"]
+        assert len(evidence) == 3
+        assert evidence[-1]["completed_value"] == "1"
+        assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == cycle
+        assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_RESOLVED]) == cycle
+        stale["action"](dt_util.now())
+        assert progress.index == 1
+        if cycle == 1:
+            for value in ("2", "3"):
+                edge(manager, hass, value, {"mode": value})
+
+
+def test_completing_exit_starts_new_hold_without_backdating(hass, entry, set_now):
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        resolve_mode="state",
+        steps=[
+            {"operator": "equals", "value": "1", "duration": 10},
+            {
+                "operator": "equals",
+                "value": "3",
+                "duration_mode": "less_than",
+                "duration": 120,
+            },
+        ],
+    )
+    now = dt_util.now()
+    edge(manager, hass, "1")
+    set_now(now + timedelta(seconds=10))
+    fire_sequence_timer(manager, hass, key)
+    edge(manager, hass, "3")
+    set_now(now + timedelta(seconds=20))
+    edge(manager, hass, "1")
+    progress = manager._sequence_progress[key]
+    assert progress.index == 0 and progress.hold_since == dt_util.now()
+    assert progress.deadline() == now + timedelta(seconds=30)
+    assert manager.public_snapshot()["pending_count"] == 1
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(manager, hass, key)
+    assert progress.index == 1
+    assert len(manager.history) == 1

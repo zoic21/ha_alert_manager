@@ -210,6 +210,13 @@ class SequenceProgress:
         evidence = self.completed
         self.reset("completed")
         self.waiting_for_exit = True
+        if (
+            sequence_comparison(self.rule, sequence_final_step(self.rule), state)
+            is False
+        ):
+            # The completing exit can also start the next cycle, from now only.
+            # It cannot complete that cycle: its final condition is already false.
+            self.observe(state, now)
         return evidence
 
     def snapshot(self, state: State | None, now: datetime) -> dict[str, Any]:
