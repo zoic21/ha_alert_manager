@@ -2455,8 +2455,7 @@ function renderAlertDetails(context) {
         <div class="alert-details-sequence-entry"><span class="alert-details-sequence-value">${esc(event.value)}</span>
           ${event.datetime || event.actorIcon ? `<span class="alert-details-event-meta">${renderTimelineActor(event)}${event.datetime ? `<span class="alert-details-timestamp" data-action="toggle-alert-timestamp" data-timestamp="${esc(event.datetime)}" data-timestamp-mode="absolute" role="button" tabindex="0">${esc(event.date)}</span>` : ""}</span>` : ""}
         </div>
-        ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}</div>` : ""}
-        ${event.countdown ? `<div class="alert-details-sequence-caption" data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</div>` : ""}
+        ${(event.label !== "" && event.label !== undefined && event.label !== null) || event.condition ? `<div class="alert-details-sequence-caption"><span>${esc(event.label)}</span>${event.condition ? `<span> · ${esc(event.condition)}</span>` : ""}${event.countdown ? ` · <span data-sequence-countdown data-started-at="${esc(event.countdown.startedAt)}" data-mode="${esc(event.countdown.mode)}" data-minimum="${esc(event.countdown.minimum)}" data-maximum="${esc(event.countdown.maximum)}">${esc(event.countdown.text)}</span>` : ""}</div>` : ""}
         ${event.deadline ? `<div class="alert-details-sequence-caption">${esc(event.deadline)}</div>` : ""}
       </li>`).join("")}</ol>
       ${sequence && !sequence.steps.length ? `<p class="alert-details-occurrence-unavailable">${esc(sequence.unavailable)}</p>` : ""}

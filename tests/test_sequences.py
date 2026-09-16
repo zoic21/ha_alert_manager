@@ -868,7 +868,12 @@ def test_pending_sequence_expiration_is_silent_and_not_persisted(hass, entry, se
     restored = AlertManager(hass, entry)
     run(restored.async_setup())
     run(restored._async_finish_startup_reconciliation())
-    assert restored.public_snapshot()["pending_count"] == 0
+    assert restored.public_snapshot()["pending_count"] == 1
+    # The persisted progression was discarded; the current value starts step 1.
+    assert restored._sequence_progress[key].index == 0
+    assert restored._sequence_progress[key].hold_since == dt_util.now()
+    assert not restored._sequence_progress[key].completed
+    run(restored.async_unload())
     set_now(now + timedelta(seconds=60))
     fire_sequence_timer(manager, hass, key)
     assert manager.public_snapshot()["pending_count"] == 0
@@ -968,3 +973,75 @@ def test_pending_hold_payload_tracks_interruption_and_restart(
     assert params["current_step"]["started_value"] == "130"
     assert not manager.history
     assert key not in manager.records
+
+
+@pytest.mark.parametrize("attribute", [None, "mode"])
+@pytest.mark.parametrize("initial", ["1", "unknown", None])
+def test_startup_observes_first_step_without_a_new_edge(
+    hass, entry, set_now, attribute, initial
+):
+    """The value held across reboot can start 1 -> 2 -> 3 after reconciliation."""
+    manager, key, _ = setup_sequence(
+        hass,
+        entry,
+        attribute=attribute,
+        steps=[
+            {"operator": "equals", "value": "1", "duration": 0},
+            {"operator": "equals", "value": "2", "duration": 0},
+            {
+                "operator": "equals",
+                "value": "3",
+                "duration": 120,
+                "duration_mode": "less_than",
+            },
+        ],
+    )
+    edge(manager, hass, "1", {"mode": "1"})
+    run(manager.async_unload())
+    if initial is None:
+        hass.states.data.pop("sensor.edge", None)
+    else:
+        hass.states.set("sensor.edge", initial, {"mode": initial})
+    now = dt_util.now() + timedelta(hours=1)
+    set_now(now)
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    assert not restored._sequence_progress
+    run(restored._async_finish_startup_reconciliation())
+    if initial != "1":
+        assert not restored._sequence_progress[key].completed
+        edge(restored, hass, "1", {"mode": "1"})
+    progress = restored._sequence_progress[key]
+    assert progress.index == 1
+    assert progress.completed[0]["started_at"] == now.isoformat()
+    assert restored.public_snapshot()["pending_count"] == 1
+    edge(restored, hass, "2", {"mode": "2"})
+    set_now(now + timedelta(seconds=19))
+    edge(restored, hass, "3", {"mode": "3"})
+    assert key not in restored.records  # Less-than requires a proven exit.
+    set_now(now + timedelta(seconds=40))
+    edge(restored, hass, "4", {"mode": "4"})
+    assert restored.records[key].status is AlertStatus.ACTIVE
+    assert len(restored.records[key].details.condition_params["evidence"]) == 3
+
+
+def test_startup_sequence_hold_starts_now_and_keeps_its_timer(hass, entry, set_now):
+    manager, key, _ = setup_sequence(hass, entry)
+    edge(manager, hass, "120")
+    run(manager.async_unload())
+    now = dt_util.now() + timedelta(hours=1)
+    set_now(now)
+    restored = AlertManager(hass, entry)
+    run(restored.async_setup())
+    run(restored._async_finish_startup_reconciliation())
+    progress = restored._sequence_progress[key]
+    assert progress.index == 0
+    assert progress.hold_since == now
+    assert progress.deadline() == now + timedelta(seconds=30)
+    set_now(now + timedelta(seconds=30))
+    fire_sequence_timer(restored, hass, key)
+    assert progress.index == 1
+    edge(restored, hass, "5")
+    set_now(now + timedelta(seconds=50))
+    fire_sequence_timer(restored, hass, key)
+    assert restored.records[key].status is AlertStatus.ACTIVE

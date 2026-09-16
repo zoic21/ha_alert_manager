@@ -7,10 +7,14 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Beta prerelease
 
-Current beta build: **2.4.0-beta.6**, published on **2026-09-15**.
+Current beta build: **2.4.0-beta.7**, published on **2026-09-16**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Initialize sequence observations from the current value after startup reconciliation,
+  including entities first discovered later, without counting downtime or replaying
+  restored active alerts. Show step countdowns inline after the observed value.
 
 - Always show the complete timeline in pending, active and historical alert details,
   without expanding a panel or limiting the displayed events; use the dialog scroll.

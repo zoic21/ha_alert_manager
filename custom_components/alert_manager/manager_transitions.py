@@ -37,7 +37,7 @@ class _TransitionsMixin:
     def _observe_transitions(
         self, entity_id: str, old: State | None, new: State | None
     ) -> None:
-        # Startup reconciliation and initial discovery must not arm an edge.
+        # Startup reconciliation must not arm an edge.
         if (
             self._runtime_phase is not RuntimePhase.RUNNING
             or entity_id not in self._rules_by_entity
@@ -50,8 +50,6 @@ class _TransitionsMixin:
                 continue
             alert_id = f"rule:{rule.id}:{entity_id}"
             if rule.source == "value_sequence":
-                if old is None:
-                    continue
                 self._observe_sequence(rule, entity_id, new, now, previous=old)
                 continue
             departed, arrived = transition_value(rule, old), transition_value(rule, new)
@@ -99,6 +97,29 @@ class _TransitionsMixin:
                 now,
                 now + timedelta(seconds=rule.duration),
             )
+
+    def _initialize_startup_sequences(self) -> None:
+        """Start fresh observations from current values after startup commits."""
+        if not self.monitoring_enabled:
+            return
+        now = dt_util.now()
+        affected = set()
+        for rule in self._transition_rules_by_id.values():
+            if rule.source != "value_sequence":
+                continue
+            for entity_id in rule.entity_ids:
+                alert_id = f"rule:{rule.id}:{entity_id}"
+                if (
+                    alert_id in self.records
+                    or alert_id in self._sequence_progress
+                    or not self._is_base_eligible(entity_id)
+                ):
+                    continue
+                self._observe_sequence(
+                    rule, entity_id, self.hass.states.get(entity_id), now
+                )
+                affected.add(entity_id)
+        self._queue_entity_evaluations(affected, collect_occurrences=True)
 
     def _clear_sequences(self) -> None:
         for _token, cancel, _due in self._sequence_timers.values():

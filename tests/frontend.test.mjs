@@ -5950,7 +5950,7 @@ test("pending step countdown distinguishes holds, exit limits and between window
     assert.match(html, /data-event-type="step-pending"/);
     assert.match(html, /Étape 1 en cours/);
     assert.match(html, /Valeur : 0 W/);
-    assert.match(html, /data-sequence-countdown/);
+    assert.match(html, /Valeur : 0 W<\/span> · <span data-sequence-countdown[^>]*>Limite dépassée<\/span><\/div>/);
     assert.doesNotMatch(html, /data-due=|data-event-type="detected"/);
     assert.doesNotMatch(panel._renderAlertDetails("history", row), /step-pending|data-sequence-countdown/);
   } finally { Date.now = originalNow; }

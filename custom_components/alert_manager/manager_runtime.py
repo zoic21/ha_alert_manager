@@ -348,6 +348,7 @@ class _RuntimeMixin:
         previous_records: dict[str, AlertRecord],
     ) -> None:
         """Publish lifecycle and refresh external consumers after commit."""
+        self._initialize_startup_sequences()
         self._commit_reconciliation_lifecycle(previous_records)
         self._publish_if_changed(force=True)
         self._schedule_deferred_runtime_work()
