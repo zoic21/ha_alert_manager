@@ -7,10 +7,15 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.5**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.6**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Preserve notifications for alerts that resolve before batch delivery. Activation-only
+  profiles retain the original message; profiles requesting activation and recovery
+  receive one combined message at the original deadline, recorded once in the timeline
+  and persisted history. Automatic transition/sequence expiry remains activation-only.
 
 - Avoid rebuilding unchanged public alert snapshots while preserving pending
   visibility deadlines and explicit invalidation on alert changes.
