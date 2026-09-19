@@ -1514,43 +1514,11 @@ class _RuntimeMixin:
                         )
                     )
             else:
-                if alert_id != COHERENCE_ALERT_ID:
-                    details.value = record.details.value
-                if record.details != details:
-                    live_message_only = self._is_live_message_only_change(
-                        record, details
-                    )
-                    record.details = details
-                    self._public_snapshot_dirty = True
-                    persisted_changed = True
-                    if live_message_only:
-                        self._schedule_live_message_flush()
-                    else:
-                        immediate_changed = True
-                if record.delay != delay and (
-                    record.status is AlertStatus.PENDING
-                    or record.details.type not in PACKS_BY_ID
-                ):
-                    pending_was_visible = self._pending_is_visible(record, now)
-                    record.delay = delay
-                    self._public_snapshot_dirty = True
-                    record.due_at = calculate_due_at(
-                        record.detected_at, delay + record.paused_seconds
-                    )
-                    self._cancel_timer(alert_id)
-                    if record.status is AlertStatus.ACTIVE and now.astimezone(
-                        UTC
-                    ) < record.due_at.astimezone(UTC):
-                        record.status = AlertStatus.PENDING
-                        record.active_since = None
-                        record.visible_at = record.detected_at
-                        if record.acknowledged:
-                            record.record_acknowledgement(False, now, None)
-                        record.clear_acknowledgement()
-                    elif not pending_was_visible:
-                        self._recalculate_hidden_pending_visibility(record, now)
-                    persisted_changed = True
-                    immediate_changed = True
+                record_changed, record_immediate_changed = self._update_existing_record(
+                    record, details, delay, now
+                )
+                persisted_changed |= record_changed
+                immediate_changed |= record_immediate_changed
 
             became_active = self._advance_record(record, now)
             if emit_events:
@@ -1583,7 +1551,88 @@ class _RuntimeMixin:
             ):
                 self._schedule_timer(record)
 
-        missing_candidate_ids = existing_ids - candidates.keys() - preserved_ids
+        removed = self._remove_missing_candidates(
+            existing_ids - candidates.keys() - preserved_ids,
+            now,
+            emit_events=emit_events,
+            archive_resolutions=archive_resolutions,
+        )
+        persisted_changed |= removed
+        immediate_changed |= removed
+        if immediate_changed:
+            self._immediate_state_save_required = True
+        state_save_required = self._immediate_state_save_required
+        if save and state_save_required:
+            await self._async_save_state()
+        if publish and (
+            not persisted_changed or immediate_changed or state_save_required
+        ):
+            self._publish_if_changed()
+        return persisted_changed
+
+    def _update_existing_record(
+        self, record: AlertRecord, details: AlertDetails, delay: int, now: datetime
+    ) -> tuple[bool, bool]:
+        """Update details/delay; return (persisted_changed, immediate_changed).
+
+        Live-message-only edits keep their deferred flush. Delay edits can move
+        an active occurrence back to pending before the caller advances it.
+        """
+        alert_id = record.details.id
+        persisted_changed = False
+        immediate_changed = False
+        if alert_id != COHERENCE_ALERT_ID:
+            details.value = record.details.value
+        if record.details != details:
+            live_message_only = self._is_live_message_only_change(record, details)
+            record.details = details
+            self._public_snapshot_dirty = True
+            persisted_changed = True
+            if live_message_only:
+                self._schedule_live_message_flush()
+            else:
+                immediate_changed = True
+        if record.delay != delay and (
+            record.status is AlertStatus.PENDING
+            or record.details.type not in PACKS_BY_ID
+        ):
+            pending_was_visible = self._pending_is_visible(record, now)
+            record.delay = delay
+            self._public_snapshot_dirty = True
+            record.due_at = calculate_due_at(
+                record.detected_at, delay + record.paused_seconds
+            )
+            self._cancel_timer(alert_id)
+            if record.status is AlertStatus.ACTIVE and now.astimezone(
+                UTC
+            ) < record.due_at.astimezone(UTC):
+                record.status = AlertStatus.PENDING
+                record.active_since = None
+                record.visible_at = record.detected_at
+                if record.acknowledged:
+                    record.record_acknowledgement(False, now, None)
+                record.clear_acknowledgement()
+            elif not pending_was_visible:
+                self._recalculate_hidden_pending_visibility(record, now)
+            persisted_changed = True
+            immediate_changed = True
+
+        return persisted_changed, immediate_changed
+
+    def _remove_missing_candidates(
+        self,
+        missing_candidate_ids: set[str],
+        now: datetime,
+        *,
+        emit_events: bool,
+        archive_resolutions: bool,
+    ) -> bool:
+        """Remove unmatched occurrences, preserving transitions and deadlines.
+
+        Pending removals stay out of history; administrative removals suppress
+        resolution events. Any removal requires an immediate durable write.
+        """
+        changed = False
         for alert_id in missing_candidate_ids:
             if self._preserve_transition_record(alert_id):
                 continue
@@ -1598,8 +1647,7 @@ class _RuntimeMixin:
             if record is None:
                 continue
             self._cancel_timer(alert_id)
-            persisted_changed = True
-            immediate_changed = True
+            changed = True
             if alert_id == COHERENCE_ALERT_ID and not self.config.get(
                 "coherence_alert_enabled"
             ):
@@ -1618,16 +1666,7 @@ class _RuntimeMixin:
                     )
                 if emit_events and not administrative:
                     self._fire_resolved(record, now)
-        if immediate_changed:
-            self._immediate_state_save_required = True
-        state_save_required = self._immediate_state_save_required
-        if save and state_save_required:
-            await self._async_save_state()
-        if publish and (
-            not persisted_changed or immediate_changed or state_save_required
-        ):
-            self._publish_if_changed()
-        return persisted_changed
+        return changed
 
     def _add_coherence_candidate(
         self, entity_id: str, candidates: dict[str, tuple[AlertDetails, int]]
