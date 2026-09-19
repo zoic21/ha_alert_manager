@@ -865,8 +865,16 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     ).async_save(result)
     hass.data[DATA_COHERENCE_RESULT] = result
     async_dispatcher_send(hass, SIGNAL_COHERENCE_UPDATED, result)
-    if manager is not None:
-        await manager.async_reconcile_coherence_alert()
+    # A scan outlives callers and can finish after the integration was reloaded.
+    while (manager := hass.data.get(DATA_MANAGER)) is not None:
+        try:
+            await manager.async_reconcile_coherence_alert()
+        except RuntimeError:
+            # The old manager may also stop while reconciliation waits for its lock.
+            if hass.data.get(DATA_MANAGER) is manager:
+                raise
+        else:
+            break
     return result
 
 

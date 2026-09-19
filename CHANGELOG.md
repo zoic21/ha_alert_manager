@@ -7,11 +7,23 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.3**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.4**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
 
+- Finish shared coherence scans against the current integration instance after
+  a reload, including shutdown while reconciliation waits for its mutation lock.
+- Publish Home Assistant lifecycle events only after configuration commits;
+  failed transactions no longer trigger automations for rolled-back alerts.
+- Track the allowed coherence sensor as a Jinja dependency so conditions and
+  live messages react without waiting for their own source entity to change.
+- Compare elapsed instants across daylight-saving changes for Jinja throttling,
+  notification accounting, acknowledgement expiry and rename collision selection.
+- Serialize history clearing and retention changes with late notification writes
+  so removed occurrences cannot reappear after reload.
+- Apply explicit message edits consistently through individual rule updates and
+  full YAML imports, including messages normally frozen at activation.
 - Persist long-lived pending alerts after five elapsed minutes across daylight-saving
   changes, avoiding premature writes in spring and repeated overdue callbacks in autumn.
 - Recognize the coherence sensor by its immutable registry identity so custom rules

@@ -223,6 +223,83 @@ def test_scan_overlap_and_failure_use_one_reconciliation(hass, entry, monkeypatc
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("reload", [False, True])
+@pytest.mark.parametrize("phase", ["scanning", "reconciling"])
+def test_scan_finishing_after_unload_uses_current_manager(
+    hass, entry, monkeypatch, reload, phase
+):
+    """A shared scan must not reconcile the manager it captured before reload."""
+
+    async def scenario():
+        previous = await setup(hass, entry)
+        await previous.async_update_config({"coherence_alert_enabled": True})
+        entered, release = asyncio.Event(), asyncio.Event()
+        reconciling = asyncio.Event()
+        original_reconcile = previous.async_reconcile_coherence_alert
+
+        async def reconcile():
+            reconciling.set()
+            await original_reconcile()
+
+        previous.async_reconcile_coherence_alert = reconcile
+
+        async def scan(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return report()
+
+        monkeypatch.setattr(coherence, "async_scan_configuration", scan)
+        if phase == "reconciling":
+            await previous._config_mutation_lock.acquire()
+            release.set()
+        task = asyncio.create_task(coherence.async_run_coherence_scan(hass))
+        await entered.wait()
+        if phase == "reconciling":
+            await reconciling.wait()
+        hass.data.pop(DATA_MANAGER)
+        unloading = asyncio.create_task(previous.async_unload())
+        await asyncio.sleep(0)
+        if phase == "reconciling":
+            previous._config_mutation_lock.release()
+        await unloading
+        if reload:
+            current = await setup(hass, entry)
+            await current._async_finish_startup_reconciliation()
+        release.set()
+        result = await task
+        assert hass.data[DATA_COHERENCE_RESULT] is result
+        assert ALERT_ID not in previous.records
+        if reload:
+            assert current.records[ALERT_ID].status is AlertStatus.ACTIVE
+            assert len(events(hass, EVENT_ALERT_STARTED)) == 1
+            await current.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_scan_propagates_reconciliation_failure_on_current_manager(
+    hass, entry, monkeypatch
+):
+    """A reload guard must not hide a real reconciliation or persistence failure."""
+
+    async def scenario():
+        manager = await setup(hass, entry)
+
+        async def scan(*args, **kwargs):
+            return report()
+
+        async def reconcile():
+            raise RuntimeError("reconciliation failed")
+
+        monkeypatch.setattr(coherence, "async_scan_configuration", scan)
+        manager.async_reconcile_coherence_alert = reconcile
+        with pytest.raises(RuntimeError, match="reconciliation failed"):
+            await coherence.async_run_coherence_scan(hass)
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
 def test_report_coverage_survives_successive_skipped_categories():
     previous = report(2)
     previous["results"][0]["reference_type"] = "zha_device_ieee"
