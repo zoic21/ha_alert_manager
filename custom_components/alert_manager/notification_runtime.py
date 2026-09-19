@@ -60,6 +60,7 @@ class _NotificationItem:
     condition: str | None
     detected_at: str | None = None
     labels: tuple[str, ...] = ()
+    resolved_before_send: bool = False
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
@@ -226,8 +227,9 @@ class NotificationRuntime:
                     if profile_runtime.pop(alert_id, None) is not None:
                         runtime_changed = True
             for key, batch in tuple(self._batches.items()):
-                for alert_id in alert_ids:
-                    batch.items.pop(alert_id, None)
+                for item_key, item in tuple(batch.items.items()):
+                    if item.alert_id in alert_ids:
+                        batch.items.pop(item_key, None)
                 if batch.items:
                     continue
                 if batch.cancel is not None:
@@ -493,15 +495,16 @@ class NotificationRuntime:
                     self._queue_batch(profile_id, "started", item)
                 changed = True
             elif event_type == EVENT_ALERT_RESOLVED:
-                if self._cancel_transient_start(profile_id, item.alert_id):
-                    self._runtime.get(profile_id, {}).pop(item.alert_id, None)
-                    changed = True
-                    continue
-                if policy.notify_on_resolved and not (
+                notify_resolved = policy.notify_on_resolved and not (
                     data.get("source") in TRANSITION_SOURCES
                     and (data.get("condition_params") or {}).get("resolution_reason")
                     == "automatic"
-                ):
+                )
+                batch = self._batches.get((profile_id, "started"))
+                pending = batch.items.get(item.alert_id) if batch else None
+                if pending is not None and pending.detected_at == item.detected_at:
+                    pending.resolved_before_send = notify_resolved
+                elif notify_resolved:
                     self._queue_batch(profile_id, "resolved", item)
                 self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                 changed = True
@@ -532,6 +535,10 @@ class NotificationRuntime:
         """Add an occurrence to a fixed collection window."""
         key = (profile_id, kind)
         batch = self._batches.setdefault(key, _PendingBatch())
+        previous = batch.items.get(item.alert_id)
+        if previous is not None and previous.detected_at != item.detected_at:
+            # Keep the earlier occurrence until the original collection deadline.
+            batch.items[f"{previous.alert_id}:{previous.detected_at}"] = previous
         batch.items[item.alert_id] = item
         if batch.cancel is not None:
             return
@@ -559,18 +566,6 @@ class NotificationRuntime:
             ),
         )
 
-    def _cancel_transient_start(self, profile_id: str, alert_id: str) -> bool:
-        """Drop a start/resolution pair that never left its collection window."""
-        key = (profile_id, "started")
-        batch = self._batches.get(key)
-        if batch is None or batch.items.pop(alert_id, None) is None:
-            return False
-        if not batch.items:
-            if batch.cancel is not None:
-                batch.cancel()
-            self._batches.pop(key, None)
-        return True
-
     def _batch_contains(self, profile_id: str, kind: str, alert_id: str) -> bool:
         """Return whether an alert is retained in one unsent batch."""
         batch = self._batches.get((profile_id, kind))
@@ -588,6 +583,20 @@ class NotificationRuntime:
         except ValueError:
             return
         items = list(batch.items.values())
+        if kind == "started":
+            active = [item for item in items if not item.resolved_before_send]
+            recovered = [item for item in items if item.resolved_before_send]
+            if active:
+                await self._async_deliver_batch(profile, "started", active)
+            if recovered:
+                await self._async_deliver_batch(profile, "started_resolved", recovered)
+        else:
+            await self._async_deliver_batch(profile, kind, items)
+
+    async def _async_deliver_batch(
+        self, profile: dict[str, Any], kind: str, items: list[_NotificationItem]
+    ) -> None:
+        """Deliver and account for one homogeneous part of a collected batch."""
         title, message = self._render_batch(kind, items)
         url = self._batch_url(kind, items)
         if self._unloading:
@@ -826,6 +835,11 @@ class NotificationRuntime:
         title_key = f"{kind}_title" if count == 1 else f"{kind}_title_plural"
         fallback = {
             "started": "New alert" if count == 1 else "{count} new alerts",
+            "started_resolved": (
+                "Alert occurred and resolved"
+                if count == 1
+                else "{count} alerts occurred and resolved"
+            ),
             "resolved": "Back to normal" if count == 1 else "{count} alerts resolved",
             "reminder": "Alert reminder" if count == 1 else "Reminder: {count} alerts",
         }[kind]
@@ -842,7 +856,15 @@ class NotificationRuntime:
         for grouped_items in grouped.values():
             first = grouped_items[0]
             name = first.device_name or first.name
-            if len(grouped_items) > 1:
+            if kind == "started_resolved":
+                details = "; ".join(
+                    item.message or item.condition or item.alert_type
+                    for item in grouped_items
+                )
+                summary = self._delivery.text(
+                    "started_resolved_message", "{details} — back to normal"
+                ).replace("{details}", details)
+            elif len(grouped_items) > 1:
                 summary = self._delivery.text(
                     "grouped_resolved" if kind == "resolved" else "grouped_alerts",
                     "{count} alerts" + (" resolved" if kind == "resolved" else ""),
@@ -860,7 +882,7 @@ class NotificationRuntime:
     @staticmethod
     def _batch_url(kind: str, items: list[_NotificationItem]) -> str:
         """Return a stable panel URL, specializing only unambiguous live alerts."""
-        if kind == "resolved":
+        if kind in ("resolved", "started_resolved"):
             return "/alert-manager/history"
         if len(items) == 1:
             return f"/alert-manager?alert={quote(items[0].alert_id, safe='')}"

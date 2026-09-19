@@ -64,7 +64,7 @@ For example, a profile may notify every new alert, while its first exception dis
 
 ### Batching and reminders
 
-New alerts and recoveries are grouped separately per profile. The batching delay is **30 seconds by default**, adjustable from **10 to 300 seconds**. Changing it affects new batches, not batches already waiting. When an alert clears before its queued activation is sent, the unsent activation/recovery pair is discarded.
+New alerts and recoveries are grouped separately per profile. The batching delay is **30 seconds by default**, adjustable from **10 to 300 seconds**. Changing it affects new batches, not batches already waiting. When an alert clears before its queued activation is sent, activation-only profiles still receive the activation. Profiles requesting both activation and recovery receive one combined message with the original alert details at the original batch deadline. Automatic transition/sequence expiry retains activation-only delivery because it does not establish recovery. The combined delivery is recorded once in the timeline, including in persisted history.
 
 Reminders are grouped per profile and stop on acknowledgement or resolution. After restart they wait for alert reconciliation. Only confirmed alerts resume reminders; overdue deadlines restart from the configured interval without replaying missed reminders.
 

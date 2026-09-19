@@ -77,6 +77,7 @@ class _StateMixin:
                             "sent_at": sent_at.isoformat(),
                             "profile_id": profile["id"],
                             "profile_name": profile["name"],
+                            **({"kind": kind} if kind == "started_resolved" else {}),
                         },
                     ][-100:]
                 stats["count"] += 1

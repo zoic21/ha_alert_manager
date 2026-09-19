@@ -52,6 +52,8 @@ The included dashboard card presents a compact view grouped by device. Choose de
 
 Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The first exception whose labels all match applies. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
 
+If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
+
 Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
 
 ### Inspect runtime diagnostics

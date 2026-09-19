@@ -49,6 +49,7 @@ _NOTIFICATION_ICONS = {
     "started": ("mdi:alert-circle", "🚨"),
     "reminder": ("mdi:bell-ring", "🔔"),
     "resolved": ("mdi:check-circle", "✅"),
+    "started_resolved": ("mdi:check-circle", "✅"),
     "test": ("mdi:bell-check", ""),
 }
 

@@ -1049,7 +1049,11 @@ export function alertDetailsItems(kind, row) {
           timelineLabel: this._t(`alert_details.timeline_notification_${notificationKind}`),
           value: this._t("alert_details.notifications_count", { count: stats.count }),
           count: stats.count,
-          events: (stats.events ?? []).map((event) => ({ datetime: event.sent_at, date: this._date(event.sent_at), value: event.profile_name })),
+          events: (stats.events ?? []).map((event) => ({
+            datetime: event.sent_at, date: this._date(event.sent_at), value: event.profile_name,
+            combined: event.kind === "started_resolved",
+            combinedLabel: event.kind === "started_resolved" ? this._t("alert_details.timeline_notification_started_resolved") : "",
+          })),
         }, {
           key: `notification-profiles-${notificationKind}`,
           label: this._t("alert_details.notification_profiles"),
@@ -1191,7 +1195,9 @@ export function renderAlertDetails(context) {
         continue;
       }
       if (stats.events?.length) {
-        for (const event of stats.events) events.push({ ...event, type: `notification-${kind}`, label: stats.timelineLabel });
+        for (const event of stats.events) events.push({ ...event,
+          type: event.combined ? "notification-resolved" : `notification-${kind}`,
+          label: event.combined ? event.combinedLabel : stats.timelineLabel });
       } else {
         const last = notifications.find((item) => item.key === `notification-last-${kind}`);
         events.push({ type: `notification-${kind}`, datetime: last?.datetime, date: last?.value,

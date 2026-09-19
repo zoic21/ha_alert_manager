@@ -52,6 +52,8 @@ La carte de dashboard intégrée propose une vue compacte regroupée par équipe
 
 Les profils de notification intégrés et facultatifs gèrent plusieurs destinataires `notify`, les nouvelles alertes, les retours à la normale, les rappels et le regroupement des envois. Sélectionnez les alertes par étiquette et définissez des exceptions ordonnées ; les étiquettes de l’entité, de l’appareil et de la règle ou du pack participent à la sélection. La première exception dont toutes les étiquettes correspondent s’applique. Les profils peuvent être testés, dupliqués et édités en YAML. Les notifications Companion prises en charge ouvrent l’alerte ou la vue concernée au toucher. Vos automatisations basées sur les événements restent utilisables.
 
+Si une alerte se résout avant l’envoi du lot, les profils notifiant seulement l’activation la reçoivent quand même ; ceux notifiant aussi la résolution reçoivent un message combiné, identifié comme tel dans la chronologie. L’expiration automatique d’une transition ou séquence ne constitue pas un retour à la normale.
+
 L’analyse de cohérence retrouve les références statiques vers des entités et appareils ZHA absents dans les sources de configuration prises en charge. Lancez-la à la demande ou selon un planning, ouvrez la configuration concernée lorsque c’est possible et conservez éventuellement une alerte tant que des problèmes subsistent. L’import/export YAML et les sauvegardes automatiques permettent aussi de récupérer la configuration.
 
 ### Consulter les diagnostics de fonctionnement

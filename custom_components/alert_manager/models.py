@@ -468,6 +468,8 @@ def _notification_summary(value: Any) -> dict[str, Any] | None:
                         for key in ("sent_at", "profile_id", "profile_name")
                     }
                 )
+                if event.get("kind") == "started_resolved":
+                    events[-1]["kind"] = "started_resolved"
             result[kind]["events"] = events
     return result or None
 

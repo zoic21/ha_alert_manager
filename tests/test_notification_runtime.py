@@ -234,27 +234,71 @@ def test_notification_batch_url(kind, count, expected_url) -> None:
     assert NotificationRuntime._batch_url(kind, items) == expected_url
 
 
-def test_start_resolved_inside_batch_window_is_cancelled(hass, entry) -> None:
-    """A transient condition creates neither a start nor a resolved delivery."""
+@pytest.mark.parametrize(
+    "start,resolved", [(True, False), (True, True), (False, True), (False, False)]
+)
+@pytest.mark.parametrize(
+    "source,automatic",
+    [
+        ("value", False),
+        ("value_transition", False),
+        ("value_transition", True),
+        ("value_sequence", False),
+        ("value_sequence", True),
+    ],
+)
+def test_short_alert_delivery_policy(hass, entry, start, resolved, source, automatic):
+    """Short alerts survive batching and only real recoveries are combined."""
 
-    async def scenario() -> None:
+    async def scenario():
+        profile = _profile()
+        profile["default_policy"].update(
+            notify_on_start=start, notify_on_resolved=resolved
+        )
         config = validate_config(
-            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )
         delivery = _DeliverySpy()
         runtime = NotificationRuntime(hass, entry, lambda: config, lambda: {}, delivery)
         await runtime.async_setup()
         event = _event_data(
-            "unavailable:sensor.test",
-            entity_id="sensor.test",
-            device_id=None,
+            "unavailable:sensor.test", entity_id="sensor.test", device_id=None
         )
-
+        event.update(
+            source=source,
+            message="Original alert details",
+            detected_at="2026-09-19T10:00:00+00:00",
+        )
         await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
-        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
-
-        assert runtime._batches == {}
+        batch = runtime._batches.get(("profile", "started"))
+        timer = batch.cancel if batch else None
+        await runtime._async_handle_event(
+            EVENT_ALERT_RESOLVED,
+            {
+                **event,
+                "message": "Changed",
+                "condition_params": {
+                    "resolution_reason": "automatic" if automatic else "condition"
+                },
+            },
+        )
         assert delivery.calls == []
+        if start:
+            assert runtime._batches[("profile", "started")].cancel is timer
+        await runtime._async_flush_batch("profile", "started")
+        await runtime._async_flush_batch("profile", "resolved")
+        recovery = resolved and not automatic
+        expected = (
+            ["started_resolved" if recovery else "started"]
+            if start
+            else (["resolved"] if recovery else [])
+        )
+        assert [call["kind"] for call in delivery.calls] == expected
+        if start:
+            assert "Original alert details" in delivery.calls[0]["message"]
+        if expected == ["started_resolved"]:
+            assert delivery.calls[0]["click_url"] == "/alert-manager/history"
+            assert "back to normal" in delivery.calls[0]["message"]
         await runtime.async_unload()
 
     asyncio.run(scenario())
@@ -1948,5 +1992,80 @@ def test_value_resolution_notifies_after_delivered_activation(
         assert [call["kind"] for call in spy.calls] == ["started", "resolved"]
         assert manager.history[0].notifications["resolved"]["count"] == 1
         await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("discard", [False, True])
+def test_combined_batch_keeps_reactivated_occurrences(hass, entry, discard):
+    """A new occurrence cannot overwrite a recovered one in the same window."""
+
+    async def scenario():
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [_profile()]}
+        )
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(hass, entry, lambda: config, lambda: {}, delivery)
+        await runtime.async_setup()
+        event = _event_data(
+            "unavailable:sensor.test", entity_id="sensor.test", device_id=None
+        )
+        event["detected_at"] = "2026-09-19T10:00:00+00:00"
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+        await runtime._async_handle_event(
+            EVENT_ALERT_STARTED, {**event, "detected_at": "2026-09-19T10:00:05+00:00"}
+        )
+        assert len(runtime._batches[("profile", "started")].items) == 2
+        if discard:
+            await runtime.async_discard_alerts({event["id"]})
+        await runtime._async_flush_batch("profile", "started")
+        assert [call["kind"] for call in delivery.calls] == (
+            [] if discard else ["started", "started_resolved"]
+        )
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_combined_delivery_history_roundtrip(hass, entry, success):
+    """One successful combined delivery creates one durable timeline event."""
+    from custom_components.alert_manager.models import AlertHistoryEntry
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        now = datetime(2026, 9, 19, 10, tzinfo=UTC)
+        record = _active_record(now)
+        manager.history = [
+            AlertHistoryEntry.resolved(record, now + timedelta(seconds=1))
+        ]
+        manager.config["notification_profiles"] = [_profile()]
+        runtime = NotificationRuntime(
+            hass,
+            entry,
+            lambda: manager.config,
+            lambda: {},
+            _DeliverySpy(success=success),
+            manager._async_record_notification,
+        )
+        await runtime.async_setup()
+        event = record.as_public_dict()
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_handle_event(EVENT_ALERT_RESOLVED, event)
+        await runtime._async_flush_batch("profile", "started")
+        stats = manager.history[0].notifications
+        assert stats["alert"]["count"] == int(success)
+        assert "resolved" not in stats
+        if success:
+            assert len(stats["alert"]["events"]) == 1
+            assert stats["alert"]["events"][0]["kind"] == "started_resolved"
+        assert (
+            AlertHistoryEntry.from_dict(manager.history[0].as_dict()).notifications
+            == stats
+        )
+        restored, _ = await manager.history_storage.async_load()
+        assert restored[0].notifications == stats
+        await runtime.async_unload()
 
     asyncio.run(scenario())

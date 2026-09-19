@@ -60,7 +60,8 @@
       "expand_id": "Afficher ou réduire l’identifiant complet",
       "notifications_reminder": "Rappels",
       "sequence_progress": "{count}/{total} étapes validées",
-      "sequence_progress_label": "Progression de la séquence"
+      "sequence_progress_label": "Progression de la séquence",
+      "timeline_notification_started_resolved": "Notification d’activation et de résolution envoyée"
     },
     "automatic": {
       "aria_enable": "Activer {name}",
@@ -456,7 +457,10 @@
       "yaml_title": "YAML du profil de notification",
       "duplicate": "Dupliquer",
       "copy": "copie",
-      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test."
+      "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test.",
+      "started_resolved_title": "Alerte survenue puis résolue",
+      "started_resolved_title_plural": "{count} alertes survenues puis résolues",
+      "started_resolved_message": "{details} — retour à la normale"
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

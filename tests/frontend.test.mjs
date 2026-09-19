@@ -6132,3 +6132,16 @@ test("native badge hydration sets user identity and preserves timestamp mode tog
   assert.equal(badge.user.id, "");
   assert.equal(badge.user.name, "Loïc");
 });
+
+
+test("combined delivery renders one explicit activation and recovery timeline entry", () => {
+  const panel = tablePanel();
+  const row = panel._tableRows("overview")[0];
+  row.notifications = { alert: { count: 1, profiles: { a: "Mobile" }, last_sent: "2026-09-19T10:00:30+00:00",
+    events: [{ sent_at: "2026-09-19T10:00:30+00:00", profile_name: "Mobile", profile_id: "a", kind: "started_resolved" }] } };
+  const markup = panel._renderAlertDetails("history", row);
+  assert.equal((markup.match(/Notification d’activation et de résolution envoyée/g) || []).length, 1);
+  assert.equal((markup.match(/data-event-type="notification-resolved"/g) || []).length, 1);
+  assert.doesNotMatch(markup, /data-event-type="notification-alert"/);
+  assert.match(markup, /Mobile/);
+});
