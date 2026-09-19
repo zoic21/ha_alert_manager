@@ -1222,3 +1222,39 @@ def test_completing_exit_starts_new_hold_without_backdating(hass, entry, set_now
     fire_sequence_timer(manager, hass, key)
     assert progress.index == 1
     assert len(manager.history) == 1
+
+
+@pytest.mark.parametrize("via_import", [False, True])
+def test_pending_sequence_label_edit_preserves_progress(hass, entry, via_import):
+    """Labels refresh immediately without losing completed steps or a hold."""
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    manager, key, rule = setup(
+        hass,
+        entry,
+        source="value_sequence",
+        label_ids=["old"],
+        steps=[
+            {"operator": "equals", "value": "B"},
+            {"operator": "equals", "value": "C", "duration": 60},
+        ],
+    )
+    edge(manager, hass, "B")
+    edge(manager, hass, "C")
+    progress = manager._sequence_progress[key]
+    before = progress.copy()
+    timer = manager._sequence_timers[key]
+    if via_import:
+        config = manager.get_config()
+        config["rules"][0]["label_ids"] = ["new"]
+        run(manager.async_import_config(dump_config_yaml(config)))
+    else:
+        run(manager.async_update_rule(rule["id"], {"label_ids": ["new"]}))
+    assert manager.public_snapshot()["pending"][0]["labels"] == ["new"]
+    assert manager._sequence_progress[key] is progress
+    assert progress.completed == before.completed
+    assert progress.hold_since == before.hold_since
+    assert manager._sequence_timers[key] is timer
+    # A configuration rebuild must also preserve the new presentation.
+    run(manager.async_update_config({"excluded_labels": ["unrelated"]}))
+    assert manager.public_snapshot()["pending"][0]["labels"] == ["new"]

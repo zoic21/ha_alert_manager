@@ -1694,6 +1694,7 @@ def test_transition_expiration_cleans_reminders_without_recovery(
                 "rule:edge:sensor.test", entity_id="sensor.test", device_id=None
             ),
             "source": "value_transition",
+            "condition_params": {"resolution_reason": "automatic"},
             "attribute": attribute,
         }
         await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
@@ -1787,5 +1788,68 @@ def test_notification_timeline_bounds_and_snapshots(hass, entry) -> None:
         assert record.notifications["alert"]["events"][-1]["profile_name"] == "Profile"
         restored = AlertRecord.from_dict(record.as_storage_dict())
         assert restored.notifications == record.notifications
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("source", ["value_transition", "value_sequence"])
+@pytest.mark.parametrize("resolve_mode", ["state", "condition"])
+def test_value_resolution_notifies_after_delivered_activation(
+    hass, entry, source, resolve_mode
+):
+    """Only automatic expiration suppresses recovery; state/condition notify."""
+
+    async def scenario():
+        hass.states.set("sensor.edge", "A")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"notification_profiles": [_profile()]})
+        spy = _DeliverySpy()
+        manager.notification_runtime._delivery = spy
+        rule = await manager.async_create_rule(
+            {
+                "name": "Edge",
+                "entity_ids": ["sensor.edge"],
+                "source": source,
+                "resolve_mode": resolve_mode,
+                **(
+                    {"resolve_condition": {"operator": "equals", "value": "D"}}
+                    if resolve_mode == "condition"
+                    else {}
+                ),
+                **(
+                    {"from_value": "A", "to_value": "B"}
+                    if source == "value_transition"
+                    else {
+                        "steps": [
+                            {"operator": "equals", "value": "B"},
+                            {"operator": "equals", "value": "C"},
+                        ]
+                    }
+                ),
+            }
+        )
+
+        async def observe(value):
+            old = hass.states.get("sensor.edge")
+            hass.states.set("sensor.edge", value)
+            manager._observe_transitions(
+                "sensor.edge", old, hass.states.get("sensor.edge")
+            )
+            await manager.async_evaluate_entity("sensor.edge")
+            for _ in range(10):
+                await asyncio.sleep(0)
+
+        await observe("B")
+        if source == "value_sequence":
+            await observe("C")
+        await manager.notification_runtime._async_flush_batch("profile", "started")
+        assert [call["kind"] for call in spy.calls] == ["started"]
+        await observe("D")
+        assert f"rule:{rule['id']}:sensor.edge" not in manager.records
+        await manager.notification_runtime._async_flush_batch("profile", "resolved")
+        assert [call["kind"] for call in spy.calls] == ["started", "resolved"]
+        assert manager.history[0].notifications["resolved"]["count"] == 1
+        await manager.async_unload()
 
     asyncio.run(scenario())

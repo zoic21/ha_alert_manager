@@ -5,12 +5,24 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.4 — Beta prerelease
+## 2.4 — Release candidate
 
-Current beta build: **2.4.0-beta.9**, published on **2026-09-16**.
+Current release candidate: **2.4.0-rc.1**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Deliver recovery notifications for transitions and sequences resolved by state
+  or condition; automatic expiration remains silent.
+- Preserve pending countdowns when YAML imports pause or resume monitoring,
+  using the same runtime cleanup and rollback behavior as the monitoring switch.
+- Measure transition and sequence durations in elapsed time across daylight-saving
+  changes, including an outgoing state event arriving before a hold timer.
+- Preserve variation baselines and alert continuity when an entity is renamed.
+- Index restored alerts by entity during startup reconciliation to avoid repeated
+  full scans that block the Home Assistant event loop on large installations.
+- Apply label edits immediately to in-progress sequences without resetting their
+  completed steps or hold timers.
 
 - Reuse the observation completing a sequence to start the next cycle when it
   also matches the first step, keeping the previous occurrence evidence separate

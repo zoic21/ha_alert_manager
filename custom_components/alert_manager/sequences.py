@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.core import State
@@ -114,6 +114,7 @@ class SequenceProgress:
         self, state: State | None, now: datetime, *, previous: State | None = None
     ) -> list[dict[str, Any]] | None:
         """Consume one observation; never backdate the next step's hold."""
+        now = now.astimezone(UTC)
         if self.index >= len(self.rule.steps):
             self.reason = "disabled"
             return None
@@ -221,6 +222,7 @@ class SequenceProgress:
 
     def snapshot(self, state: State | None, now: datetime) -> dict[str, Any]:
         """Read-only diagnostics, including comparison versus proven progress."""
+        now = now.astimezone(UTC)
         due = self.deadline()
         return {
             "step": min(self.index + 1, len(self.rule.steps)),

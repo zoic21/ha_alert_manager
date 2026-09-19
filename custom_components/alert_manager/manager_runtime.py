@@ -982,6 +982,7 @@ class _RuntimeMixin:
                         overrides[new_entity_id] = overrides.pop(old_entity_id)
                         changed = True
 
+            retained_renamed_rules: set[str] = set()
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
                 if alert_id == COHERENCE_ALERT_ID:
                     continue
@@ -1053,6 +1054,8 @@ class _RuntimeMixin:
                     if retained_was_durable:
                         durable_alert_ids.add(new_alert_id)
                     durable_identity_changed = True
+                if record is original_record and record.details.rule_id is not None:
+                    retained_renamed_rules.add(record.details.rule_id)
                 record.details.entity_id = new_entity_id
                 record.details.id = new_alert_id
                 self._set_record(record)
@@ -1068,6 +1071,22 @@ class _RuntimeMixin:
                 )
                 if retained_was_unverified:
                     self._unverified_restored_alert_ids.add(new_alert_id)
+                changed = True
+
+            for rule in self._rules_by_entity.get(old_entity_id, ()):
+                old_key = self._variation_key(rule, old_entity_id)
+                baseline = self._variation_baselines.pop(old_key, None)
+                if baseline is None:
+                    continue
+                new_key = self._variation_key(rule, new_entity_id)
+                # Keep the baseline belonging to the retained occurrence. With
+                # no live collision winner, preserve an existing target window.
+                if (
+                    new_key not in self._variation_baselines
+                    or rule.id in retained_renamed_rules
+                ):
+                    self._variation_baselines[new_key] = baseline
+                self._variation_baselines_dirty = True
                 changed = True
 
             if old_entity_id in self._queued_evaluation_entities:

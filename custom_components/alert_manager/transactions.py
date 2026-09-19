@@ -81,6 +81,20 @@ class StartupReconciliationTransaction:
     _entity_renames: dict[str, str] = field(default_factory=dict)
     _unverified_original_ids: set[str] = field(default_factory=set)
     _live_original_ids: dict[str, str] = field(default_factory=dict)
+    _original_ids_by_entity: dict[str, set[str]] = field(
+        init=False, default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        self._rebuild_entity_index()
+
+    def _rebuild_entity_index(self) -> None:
+        """Index immutable originals once, rebuilding only after identity changes."""
+        self._original_ids_by_entity = {}
+        for original_id, record in self._restored_records.items():
+            self._original_ids_by_entity.setdefault(
+                self._record_entity_id(record), set()
+            ).add(original_id)
 
     @classmethod
     def capture(
@@ -103,9 +117,7 @@ class StartupReconciliationTransaction:
     @property
     def entity_ids(self) -> set[str]:
         """Return every current entity owning a restored occurrence."""
-        return {
-            self._record_entity_id(record) for record in self._restored_records.values()
-        }
+        return set(self._original_ids_by_entity)
 
     def records_for_entity(self, entity_id: str) -> dict[str, tuple[str, AlertRecord]]:
         """Return retained originals and fresh records for one current entity."""
@@ -115,10 +127,11 @@ class StartupReconciliationTransaction:
         """Return current records that still originate from restored state."""
         return {
             alert_id
-            for alert_id, original_id in self._live_original_ids.items()
-            if original_id in self._restored_records
-            and self._record_entity_id(self._restored_records[original_id]) == entity_id
-            and self._current_alert_id(self._restored_records[original_id]) == alert_id
+            for original_id in self._original_ids_by_entity.get(entity_id, ())
+            if self._live_original_ids.get(
+                alert_id := self._current_alert_id(self._restored_records[original_id])
+            )
+            == original_id
         }
 
     def live_origin(self, alert_id: str) -> str | None:
@@ -146,11 +159,7 @@ class StartupReconciliationTransaction:
 
     def stage_unverified(self, entity_id: str, alert_ids: set[str]) -> None:
         """Replace one entity's provisional provenance with its latest result."""
-        original_ids = {
-            original_id
-            for original_id, record in self._restored_records.items()
-            if self._record_entity_id(record) == entity_id
-        }
+        original_ids = self._original_ids_by_entity.get(entity_id, set())
         self._unverified_original_ids.difference_update(original_ids)
         for alert_id in alert_ids:
             original_id = self._live_original_ids.get(alert_id)
@@ -160,6 +169,7 @@ class StartupReconciliationTransaction:
     def record_entity_renames(self, renames: dict[str, str]) -> None:
         """Record identity mapping and discard provenance lost in collisions."""
         self._entity_renames.update(renames)
+        self._rebuild_entity_index()
         retained_original_ids = {
             original_id
             for entity_id in self.entity_ids
@@ -221,13 +231,11 @@ class StartupReconciliationTransaction:
     def _retained_records(self, entity_id: str) -> dict[str, tuple[str, AlertRecord]]:
         """Resolve rename collisions deterministically to the oldest occurrence."""
         retained: dict[str, tuple[str, AlertRecord]] = {}
-        for original_id, original in self._restored_records.items():
-            target_entity_id = self._record_entity_id(original)
-            if target_entity_id != entity_id:
-                continue
+        for original_id in self._original_ids_by_entity.get(entity_id, ()):
+            original = self._restored_records[original_id]
             candidate = deepcopy(original)
-            candidate.details.id = self._alert_id(original, target_entity_id)
-            candidate.details.entity_id = target_entity_id
+            candidate.details.id = self._alert_id(original, entity_id)
+            candidate.details.entity_id = entity_id
             existing = retained.get(candidate.details.id)
             if existing is None:
                 retained[candidate.details.id] = (original_id, candidate)

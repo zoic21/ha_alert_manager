@@ -11,7 +11,14 @@ from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
 from .const import TRANSITION_SOURCES
-from .models import AlertRecord, AlertStatus, Rule, advance_record, normalize_scalar
+from .models import (
+    AlertRecord,
+    AlertStatus,
+    Rule,
+    advance_record,
+    calculate_due_at,
+    normalize_scalar,
+)
 from .packs.base import PackOccurrence
 from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
@@ -44,7 +51,7 @@ class _TransitionsMixin:
             or not self._is_base_eligible(entity_id)
         ):
             return
-        now = dt_util.now()
+        now = dt_util.now().astimezone(UTC)
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled or rule.source not in TRANSITION_SOURCES:
                 continue
@@ -95,14 +102,14 @@ class _TransitionsMixin:
                 departed,
                 arrived,
                 now,
-                now + timedelta(seconds=rule.duration),
+                calculate_due_at(now, rule.duration),
             )
 
     def _initialize_startup_sequences(self) -> None:
         """Start fresh observations from current values after startup commits."""
         if not self.monitoring_enabled:
             return
-        now = dt_util.now()
+        now = dt_util.now().astimezone(UTC)
         affected = set()
         for rule in self._transition_rules_by_id.values():
             if rule.source != "value_sequence":
@@ -238,7 +245,7 @@ class _TransitionsMixin:
                 return
             state = self.hass.states.get(entity_id)
             observed = progress.observed_state
-            now = dt_util.now()
+            now = dt_util.now().astimezone(UTC)
             expired = (
                 progress.started_at is not None
                 and progress.rule.sequence_timeout
@@ -309,6 +316,8 @@ class _TransitionsMixin:
                 or entity_id not in progress.rule.entity_ids
             ):
                 self._drop_sequence(alert_id)
+            else:
+                progress.rule = self._transition_rules_by_id[progress.rule.id]
         for observations in (self._transition_observations, self._transition_confirmed):
             for alert_id, observation in tuple(observations.items()):
                 if (
@@ -362,6 +371,7 @@ class _TransitionsMixin:
         emit_events: bool,
         new_occurrences: list[PackOccurrence] | None = None,
     ) -> bool:
+        now = now.astimezone(UTC)
         changed = False
         for rule in self._rules_by_entity.get(entity_id, ()):
             if not rule.enabled or rule.source not in TRANSITION_SOURCES:
@@ -380,7 +390,7 @@ class _TransitionsMixin:
                     self._schedule_timer(record)
                     changed = True
                 elif rule.resolve_mode == "duration" and record.expires_at is None:
-                    record.expires_at = now + timedelta(seconds=rule.auto_resolve)
+                    record.expires_at = calculate_due_at(now, rule.auto_resolve)
                     self._schedule_timer(record)
                     changed = True
             if (
@@ -461,8 +471,9 @@ class _TransitionsMixin:
                 record = AlertRecord.pending(
                     details, rule.duration, observation.observed_at
                 )
-                record.visible_at = observation.observed_at + timedelta(
-                    seconds=min(self.config["pending_display_delay"], rule.duration)
+                record.visible_at = calculate_due_at(
+                    observation.observed_at,
+                    min(self.config["pending_display_delay"], rule.duration),
                 )
                 self._set_record(record)
                 if new_occurrences is not None and self._is_automatic_eligible(
@@ -477,7 +488,7 @@ class _TransitionsMixin:
             if now.astimezone(UTC) >= observation.due_at.astimezone(UTC):
                 became_active = advance_record(record, now)
                 record.expires_at = (
-                    now + timedelta(seconds=rule.auto_resolve)
+                    calculate_due_at(now, rule.auto_resolve)
                     if rule.resolve_mode == "duration"
                     else None
                 )

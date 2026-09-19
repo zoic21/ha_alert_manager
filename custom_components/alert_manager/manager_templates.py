@@ -122,8 +122,11 @@ class _TemplatesMixin:
                 rule if cached.id == rule.id else cached
                 for cached in self._rules_by_entity[entity_id]
             ]
-            if record := self.records.get(f"rule:{rule.id}:{entity_id}"):
+            alert_id = f"rule:{rule.id}:{entity_id}"
+            if record := self.records.get(alert_id):
                 record.details.labels = list(rule.label_ids)
+            if progress := self._sequence_progress.get(alert_id):
+                progress.rule = rule
 
     def _rebuild_rule_index(self) -> None:
         """Cache enabled rules and rebuild template dependency indexes."""

@@ -497,9 +497,10 @@ class NotificationRuntime:
                     self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                     changed = True
                     continue
-                if (
-                    policy.notify_on_resolved
-                    and data.get("source") not in TRANSITION_SOURCES
+                if policy.notify_on_resolved and not (
+                    data.get("source") in TRANSITION_SOURCES
+                    and (data.get("condition_params") or {}).get("resolution_reason")
+                    == "automatic"
                 ):
                     self._queue_batch(profile_id, "resolved", item)
                 self._runtime.get(profile_id, {}).pop(item.alert_id, None)

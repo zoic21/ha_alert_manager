@@ -543,20 +543,13 @@ class _ApiMixin:
             previous = self._configuration_snapshot()
             self.config["monitoring_enabled"] = enabled
             try:
+                self._apply_monitoring_change(enabled)
                 if enabled:
-                    self._resume_pending_alerts(dt_util.now())
                     await self.async_evaluate_all(
                         save=False,
                         publish=False,
                         emit_events=False,
                     )
-                else:
-                    self._freeze_pending_alerts(dt_util.now())
-                    self._clear_sequences()
-                    self._transition_observations.clear()
-                    self._transition_confirmed.clear()
-                    self._clear_variation_baselines()
-                    self._pack_runtime.clear()
                 await self._async_save_state()
             except BaseException:
                 self._restore_configuration_snapshot(previous)
@@ -577,6 +570,18 @@ class _ApiMixin:
         self._publish_if_changed(force=True)
         async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
         return True
+
+    def _apply_monitoring_change(self, enabled: bool) -> None:
+        """Share pause/resume bookkeeping between the switch and full imports."""
+        if enabled:
+            self._resume_pending_alerts(dt_util.now())
+        else:
+            self._freeze_pending_alerts(dt_util.now())
+            self._clear_sequences()
+            self._transition_observations.clear()
+            self._transition_confirmed.clear()
+            self._clear_variation_baselines()
+            self._pack_runtime.clear()
 
     async def _async_sync_monitoring_notification(self) -> None:
         """Keep one localized persistent startup warning in sync."""
@@ -1105,6 +1110,8 @@ class _ApiMixin:
             try:
                 self._recovery_active = False
                 self.config = candidate
+                if previous_monitoring_enabled != self.monitoring_enabled:
+                    self._apply_monitoring_change(self.monitoring_enabled)
                 self._refresh_config_caches()
                 self.storage.pack_runtime = self._pack_runtime
                 self._rebuild_rule_index()
@@ -1139,6 +1146,8 @@ class _ApiMixin:
                     )
                     self._emit_resume_events(previous.records, emit_events=False)
                 else:
+                    reset_pack_runtimes(self.hass)
+                    self._cancel_all_pack_rechecks()
                     self._cancel_all_timers()
                 async_dispatcher_send(self.hass, SIGNAL_MONITORING_UPDATED)
             if self.monitoring_enabled and not monitoring_changed:

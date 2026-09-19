@@ -388,3 +388,87 @@ def test_restored_alerts_are_partitioned_after_restart(hass, entry, set_now):
         }
 
     run(scenario())
+
+
+@pytest.mark.parametrize("pause_with_import", [False, True])
+@pytest.mark.parametrize("resume_with_import", [False, True])
+def test_import_and_switch_share_pending_pause_clock(
+    hass, entry, set_now, pause_with_import, resume_with_import
+):
+    """Every switch/import combination counts only monitored time."""
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    async def scenario():
+        start = datetime(2026, 9, 19, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.test", "20")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "High",
+                "entity_ids": ["sensor.test"],
+                "source": "value",
+                "operator": "above",
+                "value": 10,
+                "duration": 60,
+            }
+        )
+        key = f"rule:{rule['id']}:sensor.test"
+
+        async def monitoring(enabled, use_import):
+            if use_import:
+                config = manager.get_config()
+                config["monitoring_enabled"] = enabled
+                await manager.async_import_config(dump_config_yaml(config))
+            else:
+                await manager.async_set_monitoring(enabled)
+
+        set_now(start + timedelta(seconds=10))
+        await monitoring(False, pause_with_import)
+        assert manager.records[key].paused_at == start + timedelta(seconds=10)
+        assert not manager._timers
+        set_now(start + timedelta(seconds=100))
+        await monitoring(True, resume_with_import)
+        assert manager.records[key].status is AlertStatus.PENDING
+        assert manager.records[key].due_at == start + timedelta(seconds=150)
+        assert manager.records[key].paused_at is None
+        set_now(start + timedelta(seconds=150))
+        await manager.async_evaluate_entity("sensor.test")
+        assert manager.records[key].status is AlertStatus.ACTIVE
+        assert manager.records[key].active_since == start + timedelta(seconds=150)
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("initially_enabled", [False, True])
+def test_failed_monitoring_import_restores_pending_clock(
+    hass, entry, set_now, initially_enabled
+):
+    """A rejected import restores the previous pause state and pending timers."""
+    from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+    async def scenario():
+        start = datetime(2026, 9, 19, 12, tzinfo=UTC)
+        set_now(start)
+        hass.states.set("sensor.test", "unavailable")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        if not initially_enabled:
+            await manager.async_set_monitoring(False)
+        before = manager.records["unavailable:sensor.test"].as_storage_dict()
+        set_now(start + timedelta(seconds=100))
+        candidate = manager.get_config()
+        candidate["monitoring_enabled"] = not initially_enabled
+
+        async def fail_save(*args, **kwargs):
+            raise OSError("disk failure")
+
+        manager.storage.async_save = fail_save
+        with pytest.raises(OSError, match="disk failure"):
+            await manager.async_import_config(dump_config_yaml(candidate))
+        assert manager.monitoring_enabled is initially_enabled
+        assert manager.records["unavailable:sensor.test"].as_storage_dict() == before
+        assert bool(manager._timers) is initially_enabled
+
+    run(scenario())
