@@ -22,6 +22,7 @@ class _Bucket:
     evaluation_max_ns: int = 0
     activity: dict[str, int] = field(default_factory=dict)
     notifications: int = 0
+    periodic_recoveries: int = 0
     profiles: dict[str, int] = field(default_factory=dict)
 
 
@@ -43,8 +44,13 @@ class RuntimeStatistics:
             bucket.evaluation_max_ns = 0
             bucket.activity.clear()
             bucket.notifications = 0
+            bucket.periodic_recoveries = 0
             bucket.profiles.clear()
         return bucket
+
+    def record_recovery(self) -> None:
+        """Count one source corrected by a periodic check."""
+        self._current_bucket().periodic_recoveries += 1
 
     def record_evaluation(self, duration_ns: int) -> None:
         """Record one synchronous custom-rule/entity evaluation (no awaits)."""
@@ -95,7 +101,7 @@ class RuntimeStatistics:
         """Ignore expired/future buckets even after an arbitrarily long idle."""
         now = dt_util.now().astimezone(UTC)
         hour = int(now.timestamp() // 3600)
-        count = total = maximum = notifications = 0
+        count = total = maximum = notifications = recoveries = 0
         activity = dict.fromkeys(_ACTIVITY_KEYS, 0)
         profiles: dict[str, int] = {}
         for bucket in self._buckets:
@@ -105,6 +111,7 @@ class RuntimeStatistics:
             total += bucket.evaluation_total_ns
             maximum = max(maximum, bucket.evaluation_max_ns)
             notifications += bucket.notifications
+            recoveries += bucket.periodic_recoveries
             for kind, value in bucket.activity.items():
                 activity[kind] += value
             for profile_id, value in bucket.profiles.items():
@@ -120,5 +127,6 @@ class RuntimeStatistics:
             "evaluation_max_ms": maximum / 1_000_000,
             **activity,
             "notifications": notifications,
+            "periodic_recoveries": recoveries,
             "notification_profiles": profiles,
         }

@@ -927,6 +927,7 @@
     "statistics": {
       "title": "Runtime diagnostics",
       "scope": "Custom rules: one evaluation per rule/entity pair, including its condition. Synchronous processing only; excludes tests, automatic packs, coherence scans and asynchronous waits. This is not Home Assistant event-loop load.",
+      "periodic_recoveries": "Periodic check recoveries",
       "evaluation_count": "Rule evaluations",
       "evaluation_average_ms": "Average per evaluation",
       "evaluation_max_ms": "Maximum per evaluation",

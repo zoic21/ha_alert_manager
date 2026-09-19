@@ -55,6 +55,7 @@ from .packs import (
     PackOccurrence,
     PackRecheck,
 )
+from .packs.execution_errors import PACK_ID as EXECUTION_ERRORS_PACK_ID
 from .packs.flapping import _settings as flapping_settings
 from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 from .runtime_phase import RuntimePhase
@@ -585,6 +586,9 @@ class _RuntimeMixin:
             return
         self._runtime_phase = RuntimePhase.STOPPING
         self.notification_runtime.begin_shutdown()
+        if self._periodic_check_unsubscribe is not None:
+            self._periodic_check_unsubscribe()
+            self._periodic_check_unsubscribe = None
         self._cancel_startup_reconciliation()
         self._cancel_all_timers()
         self._cancel_all_pack_rechecks()
@@ -1246,6 +1250,93 @@ class _RuntimeMixin:
         """Read the cached availability used by the state-change hot path."""
         return self._pack_availability.get(pack_id, False)
 
+    def _periodic_check_ready(self) -> bool:
+        return (
+            not self._unloading
+            and not self.recovery_active
+            and self.monitoring_enabled
+            and self._runtime_phase is RuntimePhase.RUNNING
+            and self.hass.state is CoreState.running
+        )
+
+    def _entity_lifecycle_snapshot(self, entity_id: str) -> dict[str, tuple]:
+        """Compare episodes without counting message/metadata refreshes as repairs."""
+        return {
+            alert_id: (record.status, record.detected_at, record.active_since)
+            for alert_id in self._record_ids_by_entity.get(entity_id, ())
+            if (record := self.records.get(alert_id)) is not None
+        }
+
+    async def _async_periodic_check(self, _now: datetime) -> None:
+        """Reconcile indexed sources, never reconstructing unobserved edges."""
+        if self._periodic_check_running or not self._periodic_check_ready():
+            return
+        self._periodic_check_running = True
+        try:
+            async with self._config_mutation_lock:
+                if not self._periodic_check_ready():
+                    return
+                # Real events retain their occurrence semantics and take precedence.
+                await self._async_process_queued_evaluations()
+                entity_ids = (
+                    self._automatic_tracked_entities
+                    | self._rules_by_entity.keys()
+                    | self._record_ids_by_entity.keys()
+                )
+                recovered = 0
+                for index, entity_id in enumerate(entity_ids, 1):
+                    if not self._periodic_check_ready():
+                        break
+                    # A state event received during a batch yield belongs to the
+                    # normal worker, including its flapping/execution evidence.
+                    if entity_id not in self._queued_evaluation_entities:
+                        before = self._entity_lifecycle_snapshot(entity_id)
+                        changed = self._reconcile_sequence_timers(entity_id)
+                        await self.async_evaluate_entity(
+                            entity_id,
+                            save=False,
+                            publish=False,
+                            reconciliation=True,
+                        )
+                        records = tuple(
+                            self.records[alert_id]
+                            for alert_id in self._record_ids_by_entity.get(
+                                entity_id, ()
+                            )
+                        )
+                        now = dt_util.now()
+                        self._resolve_expired_alerts(
+                            now,
+                            alert_ids=(
+                                record.details.id
+                                for record in records
+                                if record.expires_at is not None
+                                and record.expires_at <= now
+                            ),
+                        )
+                        for record in records:
+                            if (
+                                record.details.id in self.records
+                                and record.details.id not in self._timers
+                            ):
+                                self._schedule_timer(record)
+                        if changed or before != self._entity_lifecycle_snapshot(
+                            entity_id
+                        ):
+                            recovered += 1
+                            self.statistics.record_recovery()
+                    if index % _EVALUATION_BATCH_SIZE == 0:
+                        await asyncio.sleep(0)
+                save_required = self._immediate_state_save_required
+                if save_required:
+                    await self._async_save_state()
+                if recovered or save_required:
+                    self._publish_if_changed()
+                if recovered:
+                    _LOGGER.debug("Periodic check reconciled %s entities", recovered)
+        finally:
+            self._periodic_check_running = False
+
     async def async_evaluate_all(
         self,
         *,
@@ -1316,6 +1407,7 @@ class _RuntimeMixin:
         emit_events: bool = True,
         archive_resolutions: bool = True,
         _new_occurrences: list[PackOccurrence] | None = None,
+        reconciliation: bool = False,
     ) -> bool:
         """Evaluate every automatic category and rule for one entity."""
         if (
@@ -1350,7 +1442,9 @@ class _RuntimeMixin:
         immediate_changed |= transition_changed
         existing_ids = set(self._record_ids_by_entity.get(entity_id, ()))
         candidates, indeterminate_candidate_ids = (
-            self._build_candidates(state) if state is not None else ({}, set())
+            self._build_candidates(state, reconciliation=reconciliation)
+            if state is not None
+            else ({}, set())
         )
         coherence_preserved = self._add_coherence_candidate(entity_id, candidates)
         preserved_ids = self._preserved_record_ids_for_observation(
@@ -1377,7 +1471,10 @@ class _RuntimeMixin:
             if record is None:
                 detected_at = (
                     self._inactivity_detected_at(details.rule_id, state, now)
-                    if details.source == "unchanged" or details.operator == "unchanged"
+                    if not reconciliation
+                    and (
+                        details.source == "unchanged" or details.operator == "unchanged"
+                    )
                     else now
                 )
                 record = AlertRecord.pending(details, delay, detected_at)
@@ -1776,7 +1873,7 @@ class _RuntimeMixin:
         return evaluation
 
     def _build_candidates(
-        self, state: State
+        self, state: State, *, reconciliation: bool = False
     ) -> tuple[dict[str, tuple[AlertDetails, int]], set[str]]:
         """Build current candidates and identify indeterminate observations."""
         if not self._is_base_eligible(state.entity_id):
@@ -1793,6 +1890,12 @@ class _RuntimeMixin:
 
         if automatic_eligible:
             for pack in PACKS:
+                if reconciliation and pack.id == EXECUTION_ERRORS_PACK_ID:
+                    # Execution evidence belongs exclusively to the event/recheck path.
+                    alert_id = f"{pack.id}:{entity_id}"
+                    if (record := self.records.get(alert_id)) is not None:
+                        result[alert_id] = (record.details, record.delay)
+                    continue
                 if self._add_pack_candidate(result, state, pack.id):
                     indeterminate_ids.add(f"{pack.id}:{entity_id}")
 
