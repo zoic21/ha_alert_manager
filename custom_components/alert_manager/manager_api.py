@@ -58,7 +58,6 @@ from .validation import (
 )
 from .yaml_io import (
     dump_config_yaml,
-    dump_rule_yaml,
     import_summary,
     parse_config_yaml,
     parse_configuration_field_yaml,
@@ -671,10 +670,6 @@ class _ApiMixin:
     def get_packs(self) -> list[dict[str, Any]]:
         """Return backend-owned pack metadata with current availability."""
         return [pack.as_public_dict(self.hass) for pack in PACKS]
-
-    def get_rule_yaml(self, rule_id: str) -> str:
-        """Return the editable YAML form of one existing rule."""
-        return dump_rule_yaml(self.config["rules"][self._rule_index(rule_id)])
 
     async def async_validate_rule_yaml(
         self, raw_yaml: str, *, rule_id: str | None = None
