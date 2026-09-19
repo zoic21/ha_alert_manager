@@ -4471,7 +4471,12 @@ def test_unavailable_monitors_every_domain_but_not_alert_manager(
 
 def test_custom_rules_reject_alert_manager_entities(hass, entry, registry_entry):
     """Visual and YAML-backed rule APIs cannot monitor the integration itself."""
-    registry_entry(hass, "sensor.renamed_alerts", platform="alert_manager")
+    registry_entry(
+        hass,
+        "sensor.renamed_alerts",
+        platform="alert_manager",
+        unique_id="alert_manager_main_active",
+    )
     manager = make_manager(hass, entry)
     payload = {
         "name": "Self monitoring",
@@ -4491,9 +4496,20 @@ def test_custom_rules_reject_alert_manager_entities(hass, entry, registry_entry)
         run(manager.async_create_rule(payload))
 
 
-def test_coherence_issue_sensor_is_a_loop_safe_custom_rule_source(hass, entry):
+@pytest.mark.parametrize(
+    "entity_id",
+    ["sensor.alert_manager_coherence_issue", "sensor.renamed_coherence"],
+)
+def test_coherence_issue_sensor_is_a_loop_safe_custom_rule_source(
+    hass, entry, registry_entry, entity_id
+):
     """Only the coherence result sensor can feed a custom Alert Manager rule."""
-    entity_id = "sensor.alert_manager_coherence_issue"
+    registry_entry(
+        hass,
+        entity_id,
+        platform="alert_manager",
+        unique_id="alert_manager_coherence_issue",
+    )
     hass.states.set(
         entity_id,
         "2",
@@ -4510,7 +4526,7 @@ def test_coherence_issue_sensor_is_a_loop_safe_custom_rule_source(hass, entry):
                 "duration": 0,
                 "enabled": True,
                 "source": "state",
-                "message": "{{ states('sensor.alert_manager_coherence_issue') }}",
+                "message": "{{ states('" + entity_id + "') }}",
             }
         )
     )
@@ -4520,6 +4536,87 @@ def test_coherence_issue_sensor_is_a_loop_safe_custom_rule_source(hass, entry):
     assert manager.records[alert_id].status is AlertStatus.ACTIVE
     assert manager.records[alert_id].details.message == "2"
     assert f"unavailable:{entity_id}" not in manager.records
+
+
+def test_coherence_rule_survives_registry_rename_and_reload(
+    hass, entry, registry_entry
+):
+    """Renaming the loop-safe sensor preserves its rule and event-driven lifecycle."""
+
+    async def scenario():
+        old_entity_id = "sensor.alert_manager_coherence_issue"
+        new_entity_id = "sensor.renamed_coherence"
+        registry_entry(
+            hass,
+            old_entity_id,
+            platform="alert_manager",
+            unique_id="alert_manager_coherence_issue",
+        )
+        hass.states.set(old_entity_id, "2")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Coherence issues",
+                "entity_ids": [old_entity_id],
+                "operator": "above",
+                "value": 0,
+                "duration": 0,
+            }
+        )
+        old_alert_id = f"rule:{rule['id']}:{old_entity_id}"
+        new_alert_id = f"rule:{rule['id']}:{new_entity_id}"
+        detected_at = manager.records[old_alert_id].detected_at
+        await manager.async_acknowledge(old_alert_id, "Admin")
+
+        registry_item = hass.entity_registry.entries.pop(old_entity_id)
+        registry_item.entity_id = new_entity_id
+        hass.entity_registry.entries[new_entity_id] = registry_item
+        hass.states.data.pop(old_entity_id)
+        hass.states.set(new_entity_id, "2")
+        manager._registry_changed(
+            Event(
+                {
+                    "action": "update",
+                    "old_entity_id": old_entity_id,
+                    "entity_id": new_entity_id,
+                    "changes": {"entity_id": new_entity_id},
+                }
+            )
+        )
+        await manager._async_flush_registry_evaluation()
+        assert old_alert_id not in manager.records
+        assert manager.records[new_alert_id].detected_at == detected_at
+        assert manager.records[new_alert_id].acknowledged_by == "Admin"
+        assert not manager.history
+        await manager.async_unload()
+
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        assert restarted.config["rules"][0]["entity_ids"] == [new_entity_id]
+        fire_startup_reconciliation(hass)
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert restarted.records[new_alert_id].detected_at == detected_at
+        assert restarted.records[new_alert_id].acknowledged_by == "Admin"
+
+        old_state = hass.states.get(new_entity_id)
+        new_state = hass.states.set(new_entity_id, "0")
+        restarted._state_changed(
+            Event(
+                {
+                    "entity_id": new_entity_id,
+                    "old_state": old_state,
+                    "new_state": new_state,
+                }
+            )
+        )
+        await restarted._async_flush_queued_evaluations()
+        assert new_alert_id not in restarted.records
+        assert len(restarted.history) == 1
+        await restarted.async_unload()
+
+    run(scenario())
 
 
 def test_coherence_schedule_is_replaced_and_cancelled_with_configuration(hass, entry):

@@ -310,7 +310,7 @@ class _StateMixin:
         await self.storage.async_save(
             self.config,
             self.records,
-            pending_before=dt_util.now()
+            pending_before=dt_util.now().astimezone(UTC)
             - timedelta(seconds=PENDING_PERSISTENCE_DELAY_SECONDS),
             include_all_pending=not self.monitoring_enabled,
         )

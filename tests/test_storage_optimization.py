@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import CoreState, Event
@@ -72,11 +73,22 @@ def test_config_write_does_not_capture_a_fresh_pending(hass, entry):
     assert hass.stores[STORAGE_KEY]["config"]["pending_display_delay"] == 5
 
 
-def test_long_pending_is_persisted_once_and_resumes_after_reload(hass, entry, set_now):
+@pytest.mark.parametrize(
+    "start",
+    [
+        datetime(2026, 8, 24, 12, tzinfo=UTC),
+        datetime(2026, 3, 29, 1, 59, 30, tzinfo=ZoneInfo("Europe/Paris")),
+        datetime(2026, 10, 25, 2, 59, 30, tzinfo=ZoneInfo("Europe/Paris")),
+        datetime(2026, 10, 25, 2, 5, tzinfo=ZoneInfo("Europe/Paris"), fold=1),
+    ],
+    ids=["utc", "spring-forward", "fall-back", "repeated-hour"],
+)
+def test_long_pending_is_persisted_once_and_resumes_after_reload(
+    hass, entry, set_now, start
+):
     """The shared deadline makes a long pending durable without polling."""
 
     async def scenario():
-        start = datetime(2026, 8, 24, 12, tzinfo=UTC)
         set_now(start)
         hass.states.set("sensor.test", "unavailable")
         first = AlertManager(hass, entry)
@@ -91,22 +103,30 @@ def test_long_pending_is_persisted_once_and_resumes_after_reload(hass, entry, se
             if not item["cancelled"]
             and "pending_persistence" in item["action"].__qualname__
         )
-        expected = start + timedelta(seconds=PENDING_PERSISTENCE_DELAY_SECONDS)
+        expected = start.astimezone(UTC) + timedelta(
+            seconds=PENDING_PERSISTENCE_DELAY_SECONDS
+        )
         assert timer["point"] == expected
         before = hass.store_save_count
-        set_now(expected)
+        set_now((expected - timedelta(seconds=1)).astimezone(start.tzinfo))
+        await first._async_save_state()
+        assert alert_id not in hass.stores[STORAGE_KEY]["alerts"]
+        assert hass.store_save_count == before
+
+        set_now(expected.astimezone(start.tzinfo))
         timer["action"](expected)
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
         assert hass.store_save_count == before + 1
         assert alert_id in hass.stores[STORAGE_KEY]["alerts"]
+        assert first._pending_persistence_timer is None
         await first.async_unload()
 
-        set_now(expected + timedelta(seconds=30))
+        set_now((expected + timedelta(seconds=30)).astimezone(start.tzinfo))
         second = AlertManager(hass, entry)
         await second.async_setup()
-        assert second.records[alert_id].due_at == due_at
+        assert second.records[alert_id].due_at.astimezone(UTC) == due_at.astimezone(UTC)
 
     run(scenario())
 

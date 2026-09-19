@@ -7,11 +7,15 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.2**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.3**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
 
+- Persist long-lived pending alerts after five elapsed minutes across daylight-saving
+  changes, avoiding premature writes in spring and repeated overdue callbacks in autumn.
+- Recognize the coherence sensor by its immutable registry identity so custom rules
+  and Jinja references remain valid after a rename and survive integration reloads.
 - Reconcile incompatible rule runtime state consistently after edits and full YAML
   imports: discard obsolete transition deadlines, removed or disabled instances,
   and variation references whose attribute or template changed.

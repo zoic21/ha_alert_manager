@@ -623,8 +623,17 @@ class _TemplatesMixin:
 
     def _is_allowed_rule_source(self, entity_id: str) -> bool:
         """Allow normal entities and the loop-safe coherence issue sensor."""
-        return entity_id in CUSTOM_RULE_ALLOWED_ENTITY_IDS or not self._is_own_entity(
+        if entity_id in CUSTOM_RULE_ALLOWED_ENTITY_IDS or not self._is_own_entity(
             entity_id
+        ):
+            return True
+        entity_entry = self._entity_registry.async_get(entity_id)
+        # Built-in object IDs are also their immutable registry unique IDs.
+        return (
+            entity_entry is not None
+            and entity_entry.platform == DOMAIN
+            and f"{entity_id.partition('.')[0]}.{entity_entry.unique_id}"
+            in CUSTOM_RULE_ALLOWED_ENTITY_IDS
         )
 
     def _validate_rule_sources(self, rule: Rule) -> None:
