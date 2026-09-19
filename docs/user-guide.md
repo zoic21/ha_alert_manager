@@ -6,7 +6,7 @@ The detailed documentation is maintained in English. Start with the page that ma
 
 | Guide | Contents |
 | --- | --- |
-| [Custom rules](custom-rules.md) | States and attributes, comparisons, Jinja, inactivity, variations, transitions, rule testing and YAML examples. |
+| [Custom rules](custom-rules.md) | States and attributes, comparisons, Jinja, inactivity, variations, transitions, sequences, rule testing and YAML examples. |
 | [Configuration](configuration.md) | Automatic monitoring packs, delays and exclusions, notification profiles, labels, YAML, configuration backups and diagnostics. |
 | [Configuration coherence](coherence.md) | Reference scans, missing entities and ZHA devices, exclusions, scheduling and the optional coherence alert. |
 | [Dashboard and history](dashboard-and-history.md) | Overview, dashboard card, filters, acknowledgement, startup behavior, history and recurrence statistics. |

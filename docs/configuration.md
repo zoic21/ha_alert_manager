@@ -14,6 +14,7 @@ Open **Configuration → Automatic monitoring** to enable and configure the pack
 | Connectivity | A `binary_sensor` with `device_class: connectivity` remains `off`. |
 | Low battery | A battery sensor reaches the configured threshold; default 15%. |
 | UniFi | A UniFi network `device_tracker` remains away from `home`. |
+| Available updates | A Home Assistant `update` entity is `on`. |
 | Automation and script errors | An execution finishes with an error; a successfully completed execution resolves the alert. |
 | Flapping / instability | The same anomaly recurs within a detection window. |
 
@@ -26,6 +27,8 @@ A disabled pack or device blocks its entity exceptions. No exception bypasses th
 In **Configuration → General**, global exclusions use Home Assistant labels on entities or devices and affect automatic monitoring only. Custom rules remain independent. Device exceptions also cover newly added eligible entities.
 
 Trigger delays belong to individual packs. The pending-alert display delay controls only when a pending alert is shown, not when it becomes active. Pack labels update current alerts when changed; history keeps the labels recorded at resolution.
+
+The available-updates pack supports entity exclusions only. Remove an exclusion to monitor that entity again; it does not offer device exceptions or per-entity delays.
 
 ### Configure a pack or target
 

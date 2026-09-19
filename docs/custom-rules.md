@@ -60,7 +60,7 @@ Automatic expiration is recorded in history but sends **no recovery notification
 
 ### Ordered sequences
 
-Choose **Sequence** to detect an ordered scenario, such as the end of an appliance cycle. Add, remove and move steps with the buttons in each step header. The editor uses native HA selectors and stacks fields when the drawer is narrow.
+Choose **Sequence** to detect an ordered scenario, such as the end of an appliance cycle. Add or remove steps, enable or disable them individually, and reorder them by dragging their handle or using the keyboard (arrow keys, Home and End). Disabled steps are skipped; if every step is disabled, the sequence cannot trigger. Final-step resolution follows the last enabled step. The editor uses native HA selectors and stacks fields when the drawer is narrow.
 
 Each of the **2–20 steps** compares the same selected scalar state or nested attribute, using the ordinary numeric/text operators. Wildcards and per-step entities or attributes are not supported. Each entity has independent progress; only one sequence per rule/entity can be in progress.
 
@@ -69,6 +69,8 @@ Each of the **2–20 steps** compares the same selected scalar state or nested a
 | `at_least` (default) | When the condition has remained continuously true for `duration` seconds. `0` completes immediately. Matching value changes do not restart the hold. |
 | `less_than` | Only when a known value stops matching, and the completed hold is strictly shorter than `duration`. |
 | `between` | Only when a known value stops matching, and the completed hold is between `duration` and `duration_max`, including both bounds. |
+
+From the first step’s hold, the sequence appears in pending alerts with its progress and a countdown for the current hold or exit limit.
 
 Completed steps remain completed while the engine waits for the next condition. Interrupting a minimum hold resets only that hold. Time before an earlier step completed is never reused. Unknown/unavailable states, missing attributes and invalid numeric values cancel the current hold without validating an exit.
 
