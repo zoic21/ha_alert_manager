@@ -7,10 +7,17 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.4**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.5**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Avoid rebuilding unchanged public alert snapshots while preserving pending
+  visibility deadlines and explicit invalidation on alert changes.
+- Clean template dependencies when alert and rule lifecycles end, avoiding
+  unnecessary reevaluations.
+- Simplify entity evaluation by extracting record updates and removals while
+  preserving persistence, notification and history behavior.
 
 - Finish shared coherence scans against the current integration instance after
   a reload, including shutdown while reconciliation waits for its mutation lock.
