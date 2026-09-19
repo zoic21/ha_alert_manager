@@ -7390,6 +7390,7 @@ function renderRuntimeStatistics({ statistics, date, t }) {
   const metrics = [
     "evaluation_count", "evaluation_average_ms", "evaluation_max_ms", "evaluation_total_ms",
     "pending", "activations", "acknowledgments", "resolutions", "notifications",
+    "periodic_recoveries",
   ];
   return `${title}<small>${esc(t("statistics.scope"))}</small>
     <dl class="statistics-grid">${metrics.map((key) => {

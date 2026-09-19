@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntry
@@ -16,6 +16,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
@@ -136,6 +137,8 @@ class AlertManager(
         self._automatic_tracked_entities: set[str] = set()
         self._custom_tracked_count = 0
         self._unloading = False
+        self._periodic_check_running = False
+        self._periodic_check_unsubscribe: Callable[[], None] | None = None
         self._last_public_snapshot: dict[str, Any] | None = None
         self._pack_availability: dict[str, bool] = {}
         self._excluded_labels: frozenset[str] = frozenset()
@@ -354,6 +357,10 @@ class AlertManager(
         if self._runtime_phase is RuntimePhase.STOPPING:
             return False
         await self.notification_runtime.async_setup()
+        if self._runtime_phase is not RuntimePhase.STOPPING:
+            self._periodic_check_unsubscribe = async_track_time_interval(
+                self.hass, self._async_periodic_check, timedelta(minutes=10)
+            )
         return self._runtime_phase is not RuntimePhase.STOPPING
 
     def _refresh_coherence_schedule(self) -> None:

@@ -618,12 +618,13 @@ test("runtime diagnostics render scope, period and aggregates with escaped value
       evaluation_count: 4, evaluation_average_ms: 0.5,
       evaluation_max_ms: 2, evaluation_total_ms: 2000,
       pending: 1, activations: 2, acknowledgments: 3, resolutions: 4,
-      notifications: 5, observed_from: "<start>", observed_until: "<end>",
+      notifications: 5, periodic_recoveries: 7, observed_from: "<start>", observed_until: "<end>",
     },
     date: (value) => value,
     t: (key, values) => values ? `${key}: ${values.start} / ${values.end}` : key,
   });
-  assert.equal(markup.match(/<dt>/g).length, 9);
+  assert.equal(markup.match(/<dt>/g).length, 10);
+  assert.match(markup, /statistics.periodic_recoveries<\/dt><dd>7<\/dd>/);
   assert.match(markup, /statistics.scope/);
   assert.match(markup, /statistics.window/);
   assert.match(markup, /&lt;start&gt; \/ &lt;end&gt;/);

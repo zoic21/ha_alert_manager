@@ -122,3 +122,21 @@ An evaluation is one rule/entity pair, including its condition and excluding asy
 Lifecycle events are `alert_manager_alert_started`, `alert_manager_alert_resolved`, `alert_manager_alert_acknowledged` and `alert_manager_alert_unacknowledged`. Acknowledgement actions are `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
 
 These entities, events and actions remain available for your own dashboards and automations, whether or not you use built-in notification profiles.
+
+### Periodic safety check
+
+Every 10 minutes, while monitoring is running, Alert Manager checks the current
+Home Assistant states of already tracked entities using its normal evaluator.
+It never requests entity updates or reconstructs missed transitions or sequence
+steps. Newly discovered conditions start at the check time, including inactivity
+windows; existing pending deadlines remain unchanged. Known lifecycle and sequence
+timers can be restored. Sequence progress is discarded if its last observed state
+no longer matches, because a missed exit cannot prove a completed hold.
+
+**Periodic check recoveries** in Configuration → Runtime diagnostics counts
+entities whose alert lifecycle or sequence progress was corrected (once per entity
+per pass). Message/metadata refreshes and timer restoration alone do not increment
+it. Like the other diagnostics, it uses the current UTC hour and previous 23 hourly
+buckets, lives only in memory and resets on reload/restart. An unchanged pass does
+not save or publish alert state. Repeated recoveries indicate an event/timer bug to
+investigate, not normal polling behavior.

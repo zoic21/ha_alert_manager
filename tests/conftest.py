@@ -368,6 +368,18 @@ def async_track_time_change(hass, action, *, hour, minute, second):
     return cancel
 
 
+def async_track_time_interval(hass, action, interval):
+    item = {"action": action, "interval": interval, "cancelled": False}
+    hass.intervals = getattr(hass, "intervals", [])
+    hass.intervals.append(item)
+
+    def cancel():
+        item["cancelled"] = True
+
+    return cancel
+
+
+event_helper.async_track_time_interval = async_track_time_interval
 event_helper.async_track_point_in_utc_time = async_track_point_in_utc_time
 event_helper.async_track_time_change = async_track_time_change
 

@@ -927,6 +927,7 @@
     "statistics": {
       "title": "Diagnostic de fonctionnement",
       "scope": "Règles personnalisées : une évaluation par couple règle/entité, condition comprise. Traitement synchrone uniquement ; hors tests, packs automatiques, cohérence et attentes asynchrones. Ce n’est pas la charge de la boucle événementielle de Home Assistant.",
+      "periodic_recoveries": "Rattrapages du contrôle périodique",
       "evaluation_count": "Évaluations de règles",
       "evaluation_average_ms": "Moyenne par évaluation",
       "evaluation_max_ms": "Maximum par évaluation",

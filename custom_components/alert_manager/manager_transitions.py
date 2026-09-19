@@ -266,6 +266,36 @@ class _TransitionsMixin:
         cancel = async_track_point_in_utc_time(self.hass, reached, due.astimezone(UTC))
         self._sequence_timers[alert_id] = (token, cancel, due)
 
+    def _reconcile_sequence_timers(self, entity_id: str) -> bool:
+        """Restore proven deadlines; discard progress after an unobserved change."""
+        changed = False
+        state = self.hass.states.get(entity_id)
+        for rule in self._rules_by_entity.get(entity_id, ()):
+            if rule.source != "value_sequence":
+                continue
+            alert_id = f"rule:{rule.id}:{entity_id}"
+            progress = self._sequence_progress.get(alert_id)
+            if progress is None:
+                continue
+            observed = progress.observed_state
+            if state is not observed and (
+                state is None
+                or observed is None
+                or state.last_updated != observed.last_updated
+                or state.state != observed.state
+                or state.attributes != observed.attributes
+            ):
+                # In particular, a missed exit cannot complete a bounded hold.
+                changed |= bool(progress.completed or progress.hold_since)
+                self._drop_sequence(alert_id)
+                continue
+            timer = self._sequence_timers.get(alert_id)
+            if timer is not None and timer[2] <= dt_util.now():
+                self._sequence_timers.pop(alert_id)
+                timer[1]()
+            self._schedule_sequence(alert_id, entity_id, progress)
+        return changed
+
     def _prune_transition_observations(self) -> None:
         self._transition_rules_by_id = {
             rule.id: rule
