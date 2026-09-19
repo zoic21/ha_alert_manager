@@ -7,10 +7,24 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.1**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.2**, dated **2026-09-19**.
 This is a prerelease for testing, not a stable release.
 
 ### Reliability fixes
+
+- Reconcile incompatible rule runtime state consistently after edits and full YAML
+  imports: discard obsolete transition deadlines, removed or disabled instances,
+  and variation references whose attribute or template changed.
+- Measure temporary acknowledgements and resumed pending deadlines in elapsed time
+  across daylight-saving changes, including subsequent delay edits.
+- Resolve Alert Manager's entity IDs through the Home Assistant registry so renamed
+  sensors and switches keep the dashboard, panel and monitoring action working.
+- Count execution errors confirmed by delayed trace rechecks toward flapping.
+- Allow testing sequences with every step disabled and reevaluating a pending
+  sequence during its first hold.
+- Enrich restored rule metadata with one indexed lookup per record.
+- Gate release publication on CI for the exact tagged commit and require committed
+  frontend bundles to be reproducible; CI no longer pushes a separate build commit.
 
 - Deliver recovery notifications for transitions and sequences resolved by state
   or condition; automatic expiration remains silent.

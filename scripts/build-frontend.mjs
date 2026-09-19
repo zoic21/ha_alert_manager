@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 
 const sourceNames = [
   "utils/constants.js",
+  "utils/integration-entities.js",
   "utils/permissions.js",
   "utils/alert-labels.js",
   "utils/navigation.js",
@@ -45,7 +46,7 @@ const stripModuleSyntax = (source) => source
 
 const dashboardNames = [
   "dashboard/frontend-ready.js",
-  "utils/constants.js", "utils/escaping.js", "utils/alert-labels.js",
+  "utils/constants.js", "utils/integration-entities.js", "utils/escaping.js", "utils/alert-labels.js",
   "utils/navigation.js", "utils/formatting.js", "api/transport.js", "api/dashboard.js",
   "dashboard/translations.js", "dashboard/groups.js", "dashboard/editor.js",
   "styles/dashboard-styles.js", "dashboard/card.js",

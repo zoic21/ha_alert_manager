@@ -10,15 +10,21 @@ on:
       - custom_components/alert_manager/manifest.json
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   release:
     name: Create tag and GitHub release
+    needs: validate
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository

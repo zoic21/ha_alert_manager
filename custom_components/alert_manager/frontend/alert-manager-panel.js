@@ -92,6 +92,18 @@ const ACTION_ICONS = Object.freeze({
   "open-deleted-entities": "mdi:delete-clock-outline",
 });
 
+// Source: frontend-src/utils/integration-entities.js
+function integrationEntityId(snapshot, defaultId) {
+  return snapshot?.entity_ids?.[defaultId] || defaultId;
+}
+
+// Keep stable role keys for consumers while resolving renamed HA entities.
+function integrationStates(hass, snapshot) {
+  return Object.fromEntries(ALERT_MANAGER_ENTITY_IDS.map((defaultId) => [
+    defaultId, hass?.states?.[integrationEntityId(snapshot, defaultId)],
+  ]));
+}
+
 // Source: frontend-src/utils/permissions.js
 const readOnlyTabs = new Set(["overview", "history"]);
 const readOnlyActions = new Set([
@@ -836,7 +848,10 @@ function restorePanelState() {
 function setHass(value) {
     const language = value?.locale?.language || "en";
     const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
+    const states = integrationStates(value, this._alerts);
+    const identitiesChanged = Object.keys(this._entityStates ?? {}).some((defaultId) =>
+      this._entityStates[defaultId] && !states[defaultId]);
+    const scannedAt = states["sensor.alert_manager_coherence_issue"]
       ?.attributes?.scanned_at ?? null;
     const coherenceChanged = Boolean(
       scannedAt && scannedAt !== this._coherenceScannedAt,
@@ -859,7 +874,7 @@ function setHass(value) {
     this._language = language;
     if (!this._config) this._restorePanelState();
     const alertsChanged = this._syncSensor();
-    const historyRevision = value?.states?.["sensor.alert_manager_main_active"]
+    const historyRevision = states["sensor.alert_manager_main_active"]
       ?.attributes?.history_revision;
     const historyChanged = historyRevision !== this._historyRevision;
     this._historyRevision = historyRevision;
@@ -878,8 +893,8 @@ function setHass(value) {
       this._load();
     } else if (this.isConnected && languageChanged && !this._translationPromise) {
       this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
+    } else if (this.isConnected && (identitiesChanged || (this._activeTab === "overview" && alertsChanged))) {
+      if (this._activeTab === "overview") this._refreshOverviewData();
       void this._refreshAlerts();
     }
 }
@@ -939,7 +954,7 @@ async function load() {
       }
       this._notificationStats ??= { last_24h: {} };
       this._monitoringEnabled = readOnly
-        ? this._hass.states?.["switch.alert_manager_main_monitoring"]?.state !== "off"
+        ? this._hass.states?.[integrationEntityId(this._alerts, "switch.alert_manager_main_monitoring")]?.state !== "off"
         : this._config.monitoring_enabled !== false;
       if (!readOnly) {
         this._resetSettingsDraft();
@@ -1001,6 +1016,7 @@ async function refreshPanelData(panel, kind) {
             };
             if (panel.isConnected && panel._activeTab === "history") panel._refreshHistoryData();
           } else {
+            panel._syncSensor?.();
             panel._rememberPanelState();
             panel._openAlertDeepLink();
             if (panel.isConnected && panel._activeTab === "overview") panel._refreshOverviewData();
@@ -1093,12 +1109,13 @@ async function call(message, successText) {
 }
 
 function syncSensor() {
-    const states = this._hass?.states ?? {};
+    const states = integrationStates(this._hass, this._alerts);
     const entityIds = [
       "sensor.alert_manager_main_active",
       "sensor.alert_manager_main_pending",
       "sensor.alert_manager_main_acknowledge",
       "switch.alert_manager_main_monitoring",
+      "sensor.alert_manager_coherence_issue",
     ];
     if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
       return false;
@@ -5126,7 +5143,7 @@ function hydrateRuleEditor(root, context) {
   );
   context.configureSelector(
     "rule-entity-ids",
-    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
+    { entity: { multiple: true, exclude_entities: context.excludedEntityIds ?? CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
     context.draft.entity_ids ?? [],
     context.onEntitiesChanged,
   );
@@ -5175,6 +5192,7 @@ function hydrateRuleEditorControls() {
   hydrateResolutionEditor.call(this);
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
+    excludedEntityIds: CUSTOM_RULE_EXCLUDED_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)),
     mode: this._ruleEditorMode,
     draft: this._editingRule,
     closeLabel: this._t("rules.aria_close"),
@@ -5681,7 +5699,7 @@ async function handleOverviewAction(action, button) {
     this._refreshUiState();
     try {
       await this._hass.callService("switch", "turn_on", {
-        entity_id: "switch.alert_manager_main_monitoring",
+        entity_id: integrationEntityId(this._alerts, "switch.alert_manager_main_monitoring"),
       });
       this._monitoringEnabled = true;
       if (this._config) this._config.monitoring_enabled = true;
@@ -7835,7 +7853,7 @@ function hydrateSettingsControls() {
   );
   this._configureSelector(
     "excluded-entities",
-    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)) } },
     this._settingsDraft.excluded_entities,
     (value) => {
       this._settingsDraft.excluded_entities = this._multipleSelectorValue(
@@ -7860,7 +7878,7 @@ function hydrateSettingsControls() {
   this._entityDelayDraft.forEach((row, index) => {
     this._configureSelector(
       `delay-entity-${index}`,
-      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)) } },
       row.entity_id || "",
       (value) => this._setEntityDelayEntity(index, value),
     );

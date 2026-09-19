@@ -1269,7 +1269,7 @@ def normalize_scalar(value: Any) -> str:
     return str(value).strip()
 
 
-def calculate_due_at(detected_at: datetime, delay: int) -> datetime:
+def calculate_due_at(detected_at: datetime, delay: int | float) -> datetime:
     """Add an elapsed duration without daylight-saving wall-clock errors."""
     if detected_at.tzinfo is None or detected_at.utcoffset() is None:
         raise ValueError("Alert timestamps must include a timezone")

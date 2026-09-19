@@ -155,9 +155,9 @@ class _TransitionsMixin:
             progress = SequenceProgress(rule)
             self._sequence_progress[alert_id] = progress
         progress.observed_state = state
-        was_pending = bool(progress.completed or progress.hold_since)
+        was_pending = progress.is_pending
         evidence = progress.observe(state, now, previous=previous)
-        if was_pending or progress.completed or progress.hold_since:
+        if was_pending or progress.is_pending:
             self._queued_public_refresh = True
         if evidence is not None and state is not None:
             self._transition_confirmed[alert_id] = TransitionObservation(
@@ -174,10 +174,7 @@ class _TransitionsMixin:
             return []
         pending = []
         for alert_id, progress in self._sequence_progress.items():
-            if (
-                not (progress.completed or progress.hold_since)
-                or alert_id in self.records
-            ):
+            if not progress.is_pending or alert_id in self.records:
                 continue
             entity_id = alert_id.rsplit(":", 1)[1]
             state = self.hass.states.get(entity_id)
@@ -293,7 +290,7 @@ class _TransitionsMixin:
                 or state.attributes != observed.attributes
             ):
                 # In particular, a missed exit cannot complete a bounded hold.
-                changed |= bool(progress.completed or progress.hold_since)
+                changed |= progress.is_pending
                 self._drop_sequence(alert_id)
                 continue
             timer = self._sequence_timers.get(alert_id)

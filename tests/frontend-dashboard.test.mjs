@@ -128,6 +128,41 @@ test("non-admin cards fetch alerts and closed subscriptions never receive stale 
   assert.equal(values.length, length);
 });
 
+test("renamed integration entities are discovered and continue driving card refreshes", async () => {
+  const { hass, requests } = fixture();
+  const values = [];
+  const active = "sensor.alert_manager_main_active", monitoring = "switch.alert_manager_main_monitoring";
+  hass.states["sensor.renamed_count"] = hass.states[active];
+  hass.states["switch.renamed_monitoring"] = hass.states[monitoring];
+  delete hass.states[active]; delete hass.states[monitoring];
+  const mapping = { [active]: "sensor.renamed_count", [monitoring]: "switch.renamed_monitoring" };
+  const subscription = connectDashboard(hass, (value) => values.push(value));
+  assert.equal(requests.length, 1);
+  requests[0].resolve({ alerts: [alert("one")], entity_ids: mapping });
+  await tick();
+  assert.equal(values.at(-1).status, "ready");
+  subscription.update(hass);
+  assert.equal(requests.length, 1);
+  hass.states["sensor.renamed_count"] = { state: "2", attributes: { alerts_revision: 2 } };
+  subscription.update(hass);
+  assert.equal(requests.length, 2);
+  requests[1].resolve({ alerts: [alert("two")], entity_ids: mapping });
+  await tick();
+  assert.equal(values.at(-1).snapshot.alerts[0].id, "two");
+  hass.states["sensor.renamed_again"] = hass.states["sensor.renamed_count"];
+  delete hass.states["sensor.renamed_count"];
+  subscription.update(hass);
+  assert.equal(requests.length, 3);
+  requests[2].resolve({ alerts: [], entity_ids: { ...mapping, [active]: "sensor.renamed_again" } });
+  await tick();
+  assert.equal(values.at(-1).status, "ready");
+  hass.states["switch.renamed_monitoring"] = { state: "off", attributes: {} };
+  subscription.update(hass);
+  assert.equal(values.at(-1).status, "paused");
+  assert.equal(requests.length, 3);
+  subscription.disconnect();
+});
+
 // A minimal DOM double tests the card contract; actual HA components are not
 // replaced in production. The browser fixture covers layout independently.
 class TestElement extends EventTarget {

@@ -1,4 +1,5 @@
 import { AlertManagerApi } from "./transport.js";
+import { integrationStates } from "../utils/integration-entities.js";
 
 const dashboardConnections = new WeakMap();
 
@@ -8,7 +9,20 @@ export function connectDashboard(hass, listener) {
   let state = dashboardConnections.get(connection);
   if (!state) {
     state = { listeners: new Set(), hass, value: { status: "loading" }, revision: null,
-      generation: 0, fetching: false, requested: false, closed: false };
+      generation: 0, fetching: false, requested: false, closed: false, identities: null };
+    state.observe = () => {
+      const states = integrationStates(state.hass, state.identities);
+      const sensor = states["sensor.alert_manager_main_active"];
+      const monitoring = states["switch.alert_manager_main_monitoring"];
+      const missing = !sensor || !monitoring;
+      const status = missing
+          || ["unavailable", "unknown"].includes(sensor.state)
+          || ["unavailable", "unknown"].includes(monitoring.state) ? "unavailable"
+          : monitoring.state === "off" ? "paused" : null;
+      const revision = JSON.stringify([status, sensor?.state,
+        sensor?.attributes?.alerts_revision, sensor?.attributes?.runtime?.startup]);
+      return { status, revision, missing };
+    };
     state.publish = (value) => {
       if (state.closed) return;
       state.value = value;
@@ -27,7 +41,12 @@ export function connectDashboard(hass, listener) {
               type: "alert_manager/alerts/list",
             });
             if (!Array.isArray(snapshot?.alerts)) throw new Error("Invalid alert snapshot");
-            if (generation === state.generation) state.publish({ status: "ready", snapshot });
+            if (generation === state.generation) {
+              state.identities = snapshot;
+              const observed = state.observe();
+              state.revision = observed.revision;
+              state.publish(observed.status ? { status: observed.status } : { status: "ready", snapshot });
+            }
           } catch (error) {
             if (generation === state.generation) state.publish({
               status: error?.code === "unauthorized" ? "admin" : "unavailable",
@@ -44,20 +63,15 @@ export function connectDashboard(hass, listener) {
         state.disconnected();
         return;
       }
-      const sensor = next.states?.["sensor.alert_manager_main_active"];
-      const monitoring = next.states?.["switch.alert_manager_main_monitoring"];
-      const status = !sensor || !monitoring
-          || ["unavailable", "unknown"].includes(sensor.state)
-          || ["unavailable", "unknown"].includes(monitoring.state) ? "unavailable"
-          : monitoring.state === "off" ? "paused" : null;
-      const revision = JSON.stringify([status, sensor?.state,
-        sensor?.attributes?.alerts_revision, sensor?.attributes?.runtime?.startup]);
+      const { status, revision, missing } = state.observe();
       if (!force && revision === state.revision) return;
       state.revision = revision;
       state.generation += 1;
       if (status) {
         state.requested = false;
         state.publish({ status });
+        // Discover registry identities once when defaults or previous names vanish.
+        if (missing) void state.refresh();
       } else {
         if (state.value.status !== "ready") state.publish({ status: "loading" });
         void state.refresh();

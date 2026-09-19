@@ -150,8 +150,8 @@ class _RuntimeMixin:
             if self._last_public_snapshot is not None:
                 self._publish_if_changed()
 
-        self._startup_reconciliation_deadline = dt_util.now() + timedelta(
-            seconds=STARTUP_RECONCILIATION_DELAY_SECONDS
+        self._startup_reconciliation_deadline = calculate_due_at(
+            dt_util.now(), STARTUP_RECONCILIATION_DELAY_SECONDS
         )
         self._startup_reconciliation_timer = async_track_point_in_utc_time(
             self.hass,
@@ -511,7 +511,7 @@ class _RuntimeMixin:
                 if (
                     previous.details.source in TRANSITION_SOURCES
                     and previous.expires_at is not None
-                    and now >= previous.expires_at
+                    and now.astimezone(UTC) >= previous.expires_at.astimezone(UTC)
                 ):
                     previous.details.condition_params = {
                         **(previous.details.condition_params or {}),
@@ -1330,7 +1330,8 @@ class _RuntimeMixin:
                                 record.details.id
                                 for record in records
                                 if record.expires_at is not None
-                                and record.expires_at <= now
+                                and record.expires_at.astimezone(UTC)
+                                <= now.astimezone(UTC)
                             ),
                         )
                         for record in records:
@@ -1531,8 +1532,8 @@ class _RuntimeMixin:
                     pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
                     record.due_at = calculate_due_at(
-                        record.detected_at, delay
-                    ) + timedelta(seconds=record.paused_seconds)
+                        record.detected_at, delay + record.paused_seconds
+                    )
                     self._cancel_timer(alert_id)
                     if record.status is AlertStatus.ACTIVE and now.astimezone(
                         UTC
@@ -2039,12 +2040,12 @@ class _RuntimeMixin:
         @callback
         def timer_due(_now: datetime) -> None:
             self._pack_recheck_timers.pop(key, None)
-            self._queue_entity_evaluations((entity_id,))
+            self._queue_entity_evaluations((entity_id,), collect_occurrences=True)
 
         self._pack_recheck_timers[key] = async_track_point_in_utc_time(
             self.hass,
             timer_due,
-            dt_util.now() + timedelta(seconds=delay),
+            calculate_due_at(dt_util.now(), delay),
         )
 
     def _cancel_pack_recheck(self, pack_id: str, entity_id: str) -> None:

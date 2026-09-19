@@ -1,5 +1,6 @@
 import { refreshHistoryOccurrenceDetails } from "../components/alert-table.js";
 import { syncRuntimeMetadata } from "../utils/formatting.js";
+import { integrationEntityId, integrationStates } from "../utils/integration-entities.js";
 
 import { AlertManagerApi } from "./transport.js";
 export { AlertManagerApi };
@@ -52,7 +53,10 @@ export function restorePanelState() {
 export function setHass(value) {
     const language = value?.locale?.language || "en";
     const languageChanged = language !== this._language;
-    const scannedAt = value?.states?.["sensor.alert_manager_coherence_issue"]
+    const states = integrationStates(value, this._alerts);
+    const identitiesChanged = Object.keys(this._entityStates ?? {}).some((defaultId) =>
+      this._entityStates[defaultId] && !states[defaultId]);
+    const scannedAt = states["sensor.alert_manager_coherence_issue"]
       ?.attributes?.scanned_at ?? null;
     const coherenceChanged = Boolean(
       scannedAt && scannedAt !== this._coherenceScannedAt,
@@ -75,7 +79,7 @@ export function setHass(value) {
     this._language = language;
     if (!this._config) this._restorePanelState();
     const alertsChanged = this._syncSensor();
-    const historyRevision = value?.states?.["sensor.alert_manager_main_active"]
+    const historyRevision = states["sensor.alert_manager_main_active"]
       ?.attributes?.history_revision;
     const historyChanged = historyRevision !== this._historyRevision;
     this._historyRevision = historyRevision;
@@ -94,8 +98,8 @@ export function setHass(value) {
       this._load();
     } else if (this.isConnected && languageChanged && !this._translationPromise) {
       this._reloadTranslations();
-    } else if (this.isConnected && this._activeTab === "overview" && alertsChanged) {
-      this._refreshOverviewData();
+    } else if (this.isConnected && (identitiesChanged || (this._activeTab === "overview" && alertsChanged))) {
+      if (this._activeTab === "overview") this._refreshOverviewData();
       void this._refreshAlerts();
     }
 }
@@ -155,7 +159,7 @@ export async function load() {
       }
       this._notificationStats ??= { last_24h: {} };
       this._monitoringEnabled = readOnly
-        ? this._hass.states?.["switch.alert_manager_main_monitoring"]?.state !== "off"
+        ? this._hass.states?.[integrationEntityId(this._alerts, "switch.alert_manager_main_monitoring")]?.state !== "off"
         : this._config.monitoring_enabled !== false;
       if (!readOnly) {
         this._resetSettingsDraft();
@@ -217,6 +221,7 @@ async function refreshPanelData(panel, kind) {
             };
             if (panel.isConnected && panel._activeTab === "history") panel._refreshHistoryData();
           } else {
+            panel._syncSensor?.();
             panel._rememberPanelState();
             panel._openAlertDeepLink();
             if (panel.isConnected && panel._activeTab === "overview") panel._refreshOverviewData();
@@ -309,12 +314,13 @@ export async function call(message, successText) {
 }
 
 export function syncSensor() {
-    const states = this._hass?.states ?? {};
+    const states = integrationStates(this._hass, this._alerts);
     const entityIds = [
       "sensor.alert_manager_main_active",
       "sensor.alert_manager_main_pending",
       "sensor.alert_manager_main_acknowledge",
       "switch.alert_manager_main_monitoring",
+      "sensor.alert_manager_coherence_issue",
     ];
     if (entityIds.every((entityId) => states[entityId] === this._entityStates[entityId])) {
       return false;

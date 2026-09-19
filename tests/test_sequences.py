@@ -744,7 +744,7 @@ def test_disabled_steps_are_skipped_but_evidence_keeps_original_positions(disabl
     assert not p.waiting_for_exit
 
 
-def test_all_disabled_steps_have_no_deadline_or_alert_and_roundtrip_yaml():
+def test_all_disabled_steps_have_no_deadline_or_alert_and_roundtrip_yaml(hass, entry):
     rule = sequence(
         steps=[
             {"operator": "above", "value": 100, "enabled": False},
@@ -756,6 +756,22 @@ def test_all_disabled_steps_have_no_deadline_or_alert_and_roundtrip_yaml():
     assert p.deadline() is None
     assert p.snapshot(State("sensor.power", "120"), START)["reason"] == "disabled"
     assert parse_rule_yaml(dump_rule_yaml(rule), rule_id=rule.id).steps == rule.steps
+    hass.states.set("sensor.power", "120")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    result = run(
+        manager.async_test_rule(
+            {
+                key: value
+                for key, value in rule.as_dict().items()
+                if key not in ("id", "version")
+            }
+        )
+    )["results"][0]
+    assert result["status"] == "indeterminate"
+    assert result["sequence"]["reason"] == "disabled"
+    assert result["operator"] is None
+    assert result["comparison_value"] is None
 
 
 @pytest.mark.parametrize("enabled", [None, "false", 0, 1])
@@ -812,6 +828,8 @@ def test_pending_sequence_progress_publishes_then_hands_off_once(hass, entry, se
     manager, key, _ = setup_sequence(hass, entry)
     now = dt_util.now()
     edge(manager, hass, "120")
+    assert not manager._sequence_progress[key].completed
+    assert run(manager.async_reevaluate_alert(key))
     assert manager.public_snapshot()["pending_count"] == 1
     assert (
         manager.public_snapshot()["pending"][0]["condition_params"]["current_step"][

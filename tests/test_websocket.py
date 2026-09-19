@@ -736,11 +736,19 @@ def test_configuration_field_yaml_websocket_validates_without_saving(hass, entry
     assert unauthorized.errors[0][1] == "unauthorized"
 
 
-def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
+def test_authenticated_users_can_read_alerts_and_history_only(
+    hass, entry, registry_entry
+):
     """Reading the dashboard/history never grants configuration or mutation access."""
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
+    registry_entry(
+        hass,
+        "sensor.renamed_alert_count",
+        platform="alert_manager",
+        unique_id="alert_manager_main_active",
+    )
     connection = Connection(admin=False)
     asyncio.run(websocket_alerts_list(hass, connection, {"id": 1}))
     asyncio.run(websocket_history_list(hass, connection, {"id": 2}))
@@ -748,7 +756,12 @@ def test_authenticated_users_can_read_alerts_and_history_only(hass, entry):
         websocket_history_list(hass, connection, {"id": 3, "statistics_days": 7})
     )
     assert connection.errors == []
-    assert connection.results[0][1] == manager.public_snapshot()
+    assert connection.results[0][1] == manager.frontend_snapshot()
+    assert (
+        connection.results[0][1]["entity_ids"]["sensor.alert_manager_main_active"]
+        == "sensor.renamed_alert_count"
+    )
+    assert "entity_ids" not in manager.public_snapshot()
     assert connection.results[1][1] == manager.history_snapshot()
     assert "statistics" in connection.results[2][1]
     assert all("rules" not in payload for _, payload in connection.results)

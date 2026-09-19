@@ -1,5 +1,6 @@
 import { durationFieldValue, hydrateDurationFields } from "./duration-field.js";
 import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_ENTITY_IDS, MAX_DURATION_SECONDS, MDI_CLOSE, MDI_DOTS_VERTICAL, MDI_PLUS, RANGE_RULE_OPERATORS, TEXT_RULE_OPERATORS, VARIATION_RULE_OPERATORS, VARIATION_RULE_SOURCES } from "../utils/constants.js";
+import { integrationEntityId } from "../utils/integration-entities.js";
 import { esc } from "../utils/escaping.js";
 import { durationText, newRuleDefaults, normalizeRuleTarget, ruleToYaml } from "../utils/formatting.js";
 import { hydrateConfigurationSorting, renderSideDrawer, renderConfigurationRemove, renderDrawerResizeHandle } from "./configuration-drawer.js";
@@ -852,7 +853,7 @@ export function hydrateRuleEditor(root, context) {
   );
   context.configureSelector(
     "rule-entity-ids",
-    { entity: { multiple: true, exclude_entities: CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
+    { entity: { multiple: true, exclude_entities: context.excludedEntityIds ?? CUSTOM_RULE_EXCLUDED_ENTITY_IDS } },
     context.draft.entity_ids ?? [],
     context.onEntitiesChanged,
   );
@@ -901,6 +902,7 @@ export function hydrateRuleEditorControls() {
   hydrateResolutionEditor.call(this);
   const variation = VARIATION_RULE_SOURCES.has(this._editingRule.source);
   hydrateRuleEditor(this.shadowRoot, {
+    excludedEntityIds: CUSTOM_RULE_EXCLUDED_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)),
     mode: this._ruleEditorMode,
     draft: this._editingRule,
     closeLabel: this._t("rules.aria_close"),

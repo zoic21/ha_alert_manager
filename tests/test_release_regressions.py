@@ -1,10 +1,12 @@
 """Clock, identity and reconciliation regressions found in the stable review."""
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import State
+from homeassistant.util import dt as dt_util
 from test_transitions import edge, expire, run, setup
 
 from custom_components.alert_manager.manager import AlertManager
@@ -13,6 +15,189 @@ from custom_components.alert_manager.sequences import SequenceProgress
 from custom_components.alert_manager.transactions import (
     StartupReconciliationTransaction,
 )
+from custom_components.alert_manager.yaml_io import dump_config_yaml
+
+
+@pytest.mark.parametrize("via_import", [False, True])
+def test_source_edit_discards_previous_transition_deadline(
+    hass, entry, set_now, via_import
+):
+    manager, key, rule = setup(hass, entry)
+    edge(manager, hass, "B")
+    old_deadline = manager.records[key].expires_at
+    stale_timer = next(
+        timer for timer in reversed(hass.timers) if not timer["cancelled"]
+    )
+    changes = {"source": "value", "operator": "equals", "value": ["B"], "duration": 0}
+    if via_import:
+        config = manager.get_config()
+        config["rules"][0].update(changes)
+        run(manager.async_import_config(dump_config_yaml(config)))
+    else:
+        run(manager.async_update_rule(rule["id"], changes))
+    assert manager.records[key].expires_at is None
+    set_now(old_deadline)
+    stale_timer["action"](old_deadline)
+    run(manager._async_flush_queued_evaluations())
+    assert key in manager.records
+    assert not manager.history
+
+
+@pytest.mark.parametrize("change", ["remove", "disable", "entity"])
+@pytest.mark.parametrize("paused", [False, True])
+def test_import_removes_invalid_transition_instances(hass, entry, change, paused):
+    manager, key, _ = setup(hass, entry)
+    edge(manager, hass, "B")
+    if paused:
+        run(manager.async_set_monitoring(False))
+    config = manager.get_config()
+    if change == "remove":
+        config["rules"] = []
+    elif change == "disable":
+        config["rules"][0]["enabled"] = False
+    else:
+        hass.states.set("sensor.replacement", "B")
+        config["rules"][0]["entity_ids"] = ["sensor.replacement"]
+    run(manager.async_import_config(dump_config_yaml(config)))
+    assert key not in manager.records
+    assert key not in manager._timers
+    assert not manager.history
+
+
+@pytest.mark.parametrize("change", ["attribute", "condition_template"])
+def test_import_resets_only_incompatible_variation_baselines(hass, entry, change):
+    async def scenario():
+        hass.states.set("sensor.value", "10", {"a": 10, "b": 100})
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        rule = await manager.async_create_rule(
+            {
+                "name": "Variation",
+                "entity_ids": ["sensor.value"],
+                "source": "value_variation",
+                "attribute": "a",
+                "condition_template": "{{ true }}",
+                "operator": "above",
+                "value": 5,
+                "duration": 0,
+            }
+        )
+        baseline_key = f"{rule['id']}:sensor.value"
+        original = deepcopy(manager._variation_baselines[baseline_key])
+        config = manager.get_config()
+        # An unrelated import must preserve the observation window.
+        config["rules"][0]["name"] = "Renamed"
+        await manager.async_import_config(dump_config_yaml(config))
+        assert manager._variation_baselines[baseline_key] == original
+        config["rules"][0][change] = "b" if change == "attribute" else "true"
+        hass.states.set("sensor.value", "20", {"a": 20, "b": 100})
+        await manager.async_import_config(dump_config_yaml(config))
+        assert f"rule:{rule['id']}:sensor.value" not in manager.records
+        assert manager._variation_baselines[baseline_key] != original
+        assert not manager.history
+
+    run(scenario())
+
+
+def test_temporary_acknowledgement_uses_elapsed_time(hass, entry, set_now, dst_start):
+    set_now(dst_start)
+    manager, key, _ = setup(hass, entry, auto_resolve=7200)
+    edge(manager, hass, "B")
+    run(manager.async_set_acknowledgements([key], True, None, duration=60))
+    record = manager.records[key]
+    expected = dst_start.astimezone(UTC) + timedelta(seconds=60)
+    assert record.acknowledged_until.astimezone(UTC) == expected
+    deadline = record.acknowledged_until
+    set_now((expected - timedelta(seconds=1)).astimezone(dst_start.tzinfo))
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert record.acknowledged
+    set_now(expected.astimezone(dst_start.tzinfo))
+    run(manager._async_expire_acknowledgement(record, deadline))
+    assert not record.acknowledged
+
+
+def test_pending_pause_and_delay_edits_use_elapsed_time(
+    hass, entry, set_now, dst_start
+):
+    set_now(dst_start)
+    hass.states.set("sensor.pending", "unavailable")
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    run(manager.async_update_config({"pending_display_delay": 120}))
+    key = "unavailable:sensor.pending"
+    record = manager.records[key]
+    initial_due = record.due_at.astimezone(UTC)
+    initial_visible = record.visible_at.astimezone(UTC)
+    run(manager.async_set_monitoring(False))
+    resumed = dst_start.astimezone(UTC) + timedelta(seconds=60)
+    set_now(resumed.astimezone(dst_start.tzinfo))
+    run(manager.async_set_monitoring(True))
+    record = manager.records[key]
+    assert record.due_at.astimezone(UTC) == initial_due + timedelta(seconds=60)
+    assert record.visible_at.astimezone(UTC) == initial_visible + timedelta(seconds=60)
+    run(
+        manager.async_update_config(
+            {
+                "pending_display_delay": 180,
+                "automatic": {"unavailable": {"delay": 1200}},
+            }
+        )
+    )
+    record = manager.records[key]
+    assert record.due_at.astimezone(UTC) == dst_start.astimezone(UTC) + timedelta(
+        seconds=1260
+    )
+    assert record.visible_at.astimezone(UTC) == dst_start.astimezone(UTC) + timedelta(
+        seconds=240
+    )
+
+
+def test_rule_metadata_enrichment_scans_rule_definitions_once(hass, entry):
+    manager = AlertManager(hass, entry)
+    run(manager.async_setup())
+    manager._rules = [
+        Rule.from_dict(
+            {
+                "id": str(i),
+                "name": str(i),
+                "entity_ids": [f"sensor.x{i}"],
+                "source": "value",
+                "operator": "equals",
+                "value": ["on"],
+                "duration": 0,
+            }
+        )
+        for i in range(300)
+    ]
+    for rule in manager._rules:
+        key = f"rule:{rule.id}:{rule.entity_ids[0]}"
+        manager.records[key] = AlertRecord.pending(
+            AlertDetails(
+                id=key,
+                type="rule",
+                entity_id=rule.entity_ids[0],
+                name="x",
+                value="on",
+                condition="x",
+            ),
+            60,
+            dt_util.now(),
+        )
+
+    class CountedRules(list):
+        visits = 0
+
+        def __iter__(self):
+            for rule in super().__iter__():
+                self.visits += 1
+                yield rule
+
+    manager._rules = CountedRules(manager._rules)
+    manager._enrich_rule_metadata()
+    assert manager._rules.visits == len(manager._rules)
+    assert all(
+        record.details.rule_id is not None for record in manager.records.values()
+    )
 
 
 @pytest.fixture(params=[(3, 29, 1), (10, 25, 2)])

@@ -1,4 +1,5 @@
 import { esc } from "../utils/escaping.js";
+import { integrationEntityId } from "../utils/integration-entities.js";
 
 export function startupStatusText(startup, t, durationText, now = Date.now()) {
     if (!startup?.in_progress) return null;
@@ -236,7 +237,7 @@ export async function handleOverviewAction(action, button) {
     this._refreshUiState();
     try {
       await this._hass.callService("switch", "turn_on", {
-        entity_id: "switch.alert_manager_main_monitoring",
+        entity_id: integrationEntityId(this._alerts, "switch.alert_manager_main_monitoring"),
       });
       this._monitoringEnabled = true;
       if (this._config) this._config.monitoring_enabled = true;

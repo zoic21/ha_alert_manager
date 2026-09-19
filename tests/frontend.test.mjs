@@ -979,6 +979,33 @@ test("disabled monitoring warning can turn the switch back on", async () => {
   assert.doesNotMatch(panel._pageMessagesContent(), /alert-type="warning"/);
 });
 
+test("panel counts, runtime and monitoring action use registry identities", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._config = { ...completeConfig(), monitoring_enabled: false };
+  panel._alerts = { ...panel._alerts, entity_ids: {
+    "sensor.alert_manager_main_active": "sensor.renamed_count",
+    "switch.alert_manager_main_monitoring": "switch.renamed_monitoring",
+  } };
+  const calls = [];
+  panel._hass = {
+    states: {
+      "sensor.renamed_count": { state: "4", attributes: { alerts_revision: 2, runtime: { tracked_count: 42 } } },
+      "switch.renamed_monitoring": { state: "on", attributes: {} },
+    },
+    callService: async (...args) => { calls.push(args); },
+  };
+  assert.equal(panel._syncSensor(), true);
+  assert.equal(panel._alerts.active_count, 4);
+  assert.equal(panel._alerts.tracked_count, 42);
+  assert.equal(panel._syncSensor(), false);
+  panel._hass.states["switch.renamed_monitoring"] = { state: "off", attributes: {} };
+  panel._syncSensor();
+  assert.equal(panel._monitoringEnabled, false);
+  await panel._handleClick(actionEvent("enable-monitoring"));
+  assert.deepEqual(calls, [["switch", "turn_on", { entity_id: "switch.renamed_monitoring" }]]);
+});
+
 const completePacks = () => automaticPacks().filter((pack) => pack.id !== "flapping");
 
 const form = (values) => ({

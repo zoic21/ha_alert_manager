@@ -162,8 +162,8 @@ changes to `main` or synchronizing it also requires an explicit request.
 1. Fetch the target branch and tags, inspect the working tree and branch history,
    and check the latest GitHub releases. Preserve unrelated local changes. Choose
    an unused version and confirm that its `v<version>` tag does not already exist.
-   Use `2.2.0-rc.N` for a release candidate, `2.2.0-beta.N` for a beta, and `2.2.0`
-   for the stable release. Never remove the prerelease suffix unless stable
+   Continue the target branch's version series with an unused `-rc.N` for a release
+   candidate or `-beta.N` for a beta. Never remove the prerelease suffix unless stable
    publication was requested.
 2. Update all four required files together:
 
@@ -201,12 +201,14 @@ git diff --check
 
 Review the complete diff and commit the release contents together. A fresh frontend
 build must reproduce the committed bundle without a diff. Do not push a release
-with failing checks: publication is independent of CI and does not wait for it.
+with failing checks: publication also runs the reusable CI workflow on the exact
+pushed commit and requires it to pass, including bundle reproducibility.
 
 ### Publish and verify
 
 - Inspect `.github/workflows/release.yml` before pushing. Currently a push that
-  changes the manifest on `main` or `release/2.2` automatically creates the tag
+  changes the manifest on `main`, `release/2.2` or `release/2.3` validates the commit
+  with the reusable CI workflow, then automatically creates the tag
   `v<version>` at the pushed commit and a GitHub release with generated notes.
   Versions containing a hyphen are published with `prerelease: true`.
 - Push the validated commit to the requested branch. Let the workflow create the

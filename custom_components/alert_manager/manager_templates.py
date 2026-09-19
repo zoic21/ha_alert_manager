@@ -571,6 +571,7 @@ class _TemplatesMixin:
     def _enrich_rule_metadata(self) -> bool:
         """Add V1.5.5 rule identity fields to persisted runtime records."""
         changed = False
+        rules_by_id = {rule.id: rule for rule in self._rules}
         for record in self.records.values():
             if record.details.type != "rule":
                 continue
@@ -581,10 +582,7 @@ class _TemplatesMixin:
             ) or not record.details.id.endswith(suffix):
                 continue
             rule_id = record.details.id[len(prefix) : -len(suffix)]
-            rule = next(
-                (candidate for candidate in self._rules if candidate.id == rule_id),
-                None,
-            )
+            rule = rules_by_id.get(rule_id)
             if rule is None:
                 continue
             if record.details.rule_id != rule.id:

@@ -293,6 +293,57 @@ def test_late_trace_rechecks_are_deduplicated(hass, entry, scenario_cls):
     asyncio.run(scenario())
 
 
+def test_late_error_trace_counts_toward_flapping(hass, entry, scenario_cls):
+    """A real execution outcome counts even when the bounded recheck confirms it."""
+
+    async def scenario():
+        runtime = await scenario_cls.create(hass, entry)
+        await runtime.manager.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "enabled": True,
+                        "source_packs": {
+                            "execution_errors": {
+                                "enabled": True,
+                                "occurrences": 2,
+                                "window": 3600,
+                                "recovery": 1800,
+                            }
+                        },
+                    }
+                }
+            }
+        )
+        for index in range(2):
+            trace = runtime.start(f"late-error-{index}")
+            await runtime.flush()
+            runtime._state_change(0)
+            await runtime.flush()
+            assert (
+                "execution_errors",
+                runtime.entity_id,
+            ) in runtime.manager._pack_recheck_timers
+            timer = hass.timers[-1]
+            trace.finish("Delayed error")
+            timer["action"](timer["point"])
+            await runtime.flush()
+            assert f"execution_errors:{runtime.entity_id}" in runtime.manager.records
+            if index == 0:
+                success = runtime.start("success")
+                runtime.finish(success)
+                await runtime.flush()
+                assert (
+                    f"execution_errors:{runtime.entity_id}"
+                    not in runtime.manager.records
+                )
+        assert (
+            f"flapping:execution_errors:{runtime.entity_id}" in runtime.manager.records
+        )
+
+    asyncio.run(scenario())
+
+
 def test_error_then_error_keeps_and_updates_alert(hass, entry, scenario_cls):
     """A later failed cycle retains the stable occurrence with its new message."""
 

@@ -54,6 +54,11 @@ class SequenceProgress:
     def __post_init__(self) -> None:
         self._skip_disabled()
 
+    @property
+    def is_pending(self) -> bool:
+        """Include the first in-progress hold before any step is completed."""
+        return bool(self.completed or self.hold_since is not None)
+
     def _skip_disabled(self) -> None:
         while self.index < len(self.rule.steps) and not self.rule.steps[self.index].get(
             "enabled", True

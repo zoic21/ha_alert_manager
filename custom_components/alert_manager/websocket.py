@@ -71,7 +71,7 @@ async def websocket_alerts_list(
 ) -> None:
     """Return active and pending alerts to an authenticated user."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
-        connection.send_result(msg["id"], manager.public_snapshot())
+        connection.send_result(msg["id"], manager.frontend_snapshot())
 
 
 @websocket_api.require_admin

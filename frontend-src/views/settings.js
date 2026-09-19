@@ -8,6 +8,7 @@ import {
   MDI_UPLOAD,
 } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { integrationEntityId } from "../utils/integration-entities.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import {
   confirmConfigurationDiscard,
@@ -557,7 +558,7 @@ export function hydrateSettingsControls() {
   );
   this._configureSelector(
     "excluded-entities",
-    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+    { entity: { multiple: true, exclude_entities: ALERT_MANAGER_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)) } },
     this._settingsDraft.excluded_entities,
     (value) => {
       this._settingsDraft.excluded_entities = this._multipleSelectorValue(
@@ -582,7 +583,7 @@ export function hydrateSettingsControls() {
   this._entityDelayDraft.forEach((row, index) => {
     this._configureSelector(
       `delay-entity-${index}`,
-      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS } },
+      { entity: { exclude_entities: ALERT_MANAGER_ENTITY_IDS.map((id) => integrationEntityId(this._alerts, id)) } },
       row.entity_id || "",
       (value) => this._setEntityDelayEntity(index, value),
     );

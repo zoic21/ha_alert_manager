@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from functools import partial, wraps
 from typing import Any
 
@@ -30,6 +30,7 @@ from homeassistant.util import dt as dt_util
 
 from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
+    ALERT_MANAGER_ENTITY_IDS,
     DOMAIN,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
@@ -40,7 +41,7 @@ from .const import (
     VARIATION_SOURCES,
 )
 from .history_statistics import aggregate_history
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule
+from .models import AlertHistoryEntry, AlertRecord, AlertStatus, Rule, calculate_due_at
 from .packs import PACKS, PACKS_BY_ID, reset_pack_runtimes
 from .rule_evaluation import transition_value
 from .runtime_phase import RuntimePhase
@@ -179,6 +180,17 @@ class _ApiMixin:
         ):
             return deepcopy(self._last_public_snapshot)
         return self._build_public_snapshot()
+
+    def frontend_snapshot(self) -> dict[str, Any]:
+        """Include current registry identities without enlarging recorder attributes."""
+        entity_ids = {}
+        for default_id in sorted(ALERT_MANAGER_ENTITY_IDS):
+            domain, _, unique_id = default_id.partition(".")
+            entity_ids[default_id] = (
+                self._entity_registry.async_get_entity_id(domain, DOMAIN, unique_id)
+                or default_id
+            )
+        return {**self.public_snapshot(), "entity_ids": entity_ids}
 
     async def async_history_statistics_snapshot(self, days: int) -> dict[str, Any]:
         """Aggregate an immutable history snapshot outside the event loop."""
@@ -323,13 +335,15 @@ class _ApiMixin:
             if progress is None or progress.rule != rule:
                 progress = SequenceProgress(rule)
             snapshot = progress.snapshot(state, dt_util.now())
-            step = rule.steps[progress.index]
+            step = (
+                rule.steps[progress.index] if progress.index < len(rule.steps) else None
+            )
             return {
                 **base,
                 "status": "indeterminate",
                 "reason": "sequence_required",
-                "operator": step["operator"],
-                "comparison_value": step["value"],
+                "operator": step["operator"] if step else None,
+                "comparison_value": step["value"] if step else None,
                 "raw_value": transition_value(rule, state),
                 "sequence": snapshot,
             }
@@ -717,7 +731,7 @@ class _ApiMixin:
         """Reevaluate an alert's entity using the normal lifecycle."""
         record = self.records.get(alert_id)
         progress = self._sequence_progress.get(alert_id)
-        if record is None and (progress is None or not progress.completed):
+        if record is None and (progress is None or not progress.is_pending):
             raise ValueError(f"Unknown or resolved alert id: {alert_id}")
         if (
             not self.monitoring_enabled
@@ -728,7 +742,7 @@ class _ApiMixin:
         entity_id = record.details.entity_id if record else alert_id.rsplit(":", 1)[1]
         await self.async_evaluate_entity(entity_id)
         return alert_id in self.records or bool(
-            (progress := self._sequence_progress.get(alert_id)) and progress.completed
+            (progress := self._sequence_progress.get(alert_id)) and progress.is_pending
         )
 
     async def async_acknowledge(
@@ -848,7 +862,7 @@ class _ApiMixin:
                 record.acknowledged_at = now
                 record.acknowledged_by = actor
                 record.acknowledged_until = (
-                    now + timedelta(seconds=duration) if duration is not None else None
+                    calculate_due_at(now, duration) if duration is not None else None
                 )
             else:
                 record.clear_acknowledgement()
@@ -904,10 +918,12 @@ class _ApiMixin:
         ):
             return
         now = dt_util.now()
-        if record.expires_at is not None and record.expires_at <= now:
+        if record.expires_at is not None and record.expires_at.astimezone(
+            UTC
+        ) <= now.astimezone(UTC):
             self._schedule_timer(record, acknowledgement_retry_at=record.expires_at)
             return
-        if now < deadline:
+        if now.astimezone(UTC) < deadline.astimezone(UTC):
             self._schedule_timer(record)
             return
         try:
@@ -919,7 +935,7 @@ class _ApiMixin:
                 "Unable to expire acknowledgement for %s", record.details.id
             )
             self._schedule_timer(
-                record, acknowledgement_retry_at=dt_util.now() + timedelta(seconds=60)
+                record, acknowledgement_retry_at=calculate_due_at(dt_util.now(), 60)
             )
 
     def _active_record_for_service(self, alert_id: str) -> AlertRecord:
@@ -1115,6 +1131,10 @@ class _ApiMixin:
                 self._refresh_config_caches()
                 self.storage.pack_runtime = self._pack_runtime
                 self._rebuild_rule_index()
+                imported_by_id = {rule.id: rule for rule in self._rules}
+                for previous_rule in previous.config["rules"]:
+                    old_rule = Rule.from_dict(previous_rule)
+                    self._prepare_rule_update(old_rule, imported_by_id.get(old_rule.id))
                 self._reconcile_flapping_settings()
                 self._refresh_pack_entry_listeners()
                 self._pack_availability = self._current_pack_availability()
@@ -1249,13 +1269,13 @@ class _ApiMixin:
         self._publish_if_changed()
         return rule.as_dict()
 
-    async def _async_apply_rule_update(self, old_rule: Rule, rule: Rule) -> set[str]:
-        """Apply one validated replacement inside the caller's transaction."""
-        rule_id = rule.id
-        if old_rule.label_ids != rule.label_ids and old_rule == rule:
-            # Rule equality excludes labels; the cached metadata is already refreshed.
-            # Presentation edits must not evaluate conditions or advance timers.
-            return set()
+    def _prepare_rule_update(self, old_rule: Rule, rule: Rule | None) -> set[str]:
+        """Discard incompatible runtime state for both edits and full imports."""
+        rule_id = old_rule.id
+        if rule is None:
+            removed_entities = set(old_rule.entity_ids)
+            self._remove_rule_instances(rule_id, removed_entities)
+            return removed_entities
         variation_definition_changed = (
             old_rule.source in VARIATION_SOURCES or rule.source in VARIATION_SOURCES
         ) and (
@@ -1281,8 +1301,23 @@ class _ApiMixin:
         )
         if inactivity_changed:
             removed_entities.update(set(old_rule.entity_ids) & set(rule.entity_ids))
-        if self.monitoring_enabled:
-            self._remove_rule_instances(rule_id, removed_entities)
+        transition_source_changed = old_rule.source != rule.source and (
+            old_rule.source in TRANSITION_SOURCES or rule.source in TRANSITION_SOURCES
+        )
+        if transition_source_changed:
+            # A new detector cannot inherit an edge or deadline from the old one.
+            removed_entities.update(old_rule.entity_ids)
+        self._remove_rule_instances(rule_id, removed_entities)
+        return removed_entities
+
+    async def _async_apply_rule_update(self, old_rule: Rule, rule: Rule) -> set[str]:
+        """Apply one validated replacement inside the caller's transaction."""
+        rule_id = rule.id
+        if old_rule.label_ids != rule.label_ids and old_rule == rule:
+            # Rule equality excludes labels; the cached metadata is already refreshed.
+            # Presentation edits must not evaluate conditions or advance timers.
+            return set()
+        removed_entities = self._prepare_rule_update(old_rule, rule)
 
         affected_entities = set(old_rule.entity_ids) | set(rule.entity_ids)
         for entity_id in affected_entities:

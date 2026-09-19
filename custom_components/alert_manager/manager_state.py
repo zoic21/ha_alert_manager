@@ -260,8 +260,9 @@ class _StateMixin:
             return
         record.visible_at = calculate_due_at(
             record.detected_at,
-            min(self.config["pending_display_delay"], record.delay),
-        ) + timedelta(seconds=record.paused_seconds)
+            min(self.config["pending_display_delay"], record.delay)
+            + record.paused_seconds,
+        )
 
     def _cancel_all_timers(self) -> None:
         """Cancel each scheduled due transition before a full rebuild."""
@@ -454,7 +455,7 @@ class _StateMixin:
             self.hass,
             timer_due,
             (
-                dt_util.now() + timedelta(seconds=LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS)
+                calculate_due_at(dt_util.now(), LIVE_MESSAGE_FLUSH_INTERVAL_SECONDS)
             ).astimezone(UTC),
         )
 
@@ -537,9 +538,13 @@ class _StateMixin:
                 continue
             paused_for = now_utc - record.paused_at.astimezone(UTC)
             if paused_for.total_seconds() > 0:
-                record.due_at += paused_for
+                record.due_at = calculate_due_at(
+                    record.due_at, paused_for.total_seconds()
+                )
                 if record.visible_at is not None:
-                    record.visible_at += paused_for
+                    record.visible_at = calculate_due_at(
+                        record.visible_at, paused_for.total_seconds()
+                    )
                 record.paused_seconds += paused_for.total_seconds()
             record.paused_at = None
             changed = True
@@ -670,7 +675,8 @@ class _StateMixin:
             )
             if acknowledgement_check_at is not None and (
                 record.expires_at is None
-                or acknowledgement_check_at < record.expires_at
+                or acknowledgement_check_at.astimezone(UTC)
+                < record.expires_at.astimezone(UTC)
             ):
                 when = acknowledgement_check_at.astimezone(UTC)
                 acknowledgement_due = True
