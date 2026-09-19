@@ -114,6 +114,7 @@ class _TemplatesMixin:
 
     def _replace_rule_presentation(self, index: int, rule: Rule) -> None:
         """Replace a visually edited rule without invalidating template timers."""
+        self._public_snapshot_dirty = True
         self._rules[index] = rule
         if rule.id in self._transition_rules_by_id:
             self._transition_rules_by_id[rule.id] = rule
@@ -130,8 +131,16 @@ class _TemplatesMixin:
 
     def _rebuild_rule_index(self) -> None:
         """Cache enabled rules and rebuild template dependency indexes."""
+        self._public_snapshot_dirty = True
         self._refresh_config_caches()
         self._rules = [Rule.from_dict(rule) for rule in self.config.get("rules", [])]
+        self._live_message_rule_ids = {
+            rule.id
+            for rule in self._rules
+            if rule.enabled
+            and rule.message is not None
+            and rule.update_message_when_active
+        }
         self._prune_transition_observations()
         valid_variation_keys = {
             f"{rule.id}:{entity_id}"
@@ -173,6 +182,9 @@ class _TemplatesMixin:
             for rule in self._rules
             if rule.enabled and rule.message is not None
             for entity_id in rule.entity_ids
+            if rule.update_message_when_active
+            or (record := self.records.get(f"rule:{rule.id}:{entity_id}")) is None
+            or record.status is not AlertStatus.ACTIVE
         }
         self._rule_message_render_info = {
             key: info
@@ -460,6 +472,11 @@ class _TemplatesMixin:
             return None, ", ".join(sorted(own_entities))
         return rendered or None, None
 
+    def _clear_rule_message_dependencies(self, rule_id: str, entity_id: str) -> None:
+        """Drop one resolved, frozen or invalid message's tracked dependencies."""
+        self._rule_message_render_info.pop((rule_id, entity_id), None)
+        self._remove_dependency_key(("message", rule_id, entity_id))
+
     def _render_rule_message(
         self,
         rule: Rule,
@@ -472,7 +489,6 @@ class _TemplatesMixin:
         if rule.message is None:
             return None
         pair = (rule.id, state.entity_id)
-        dependency_key = ("message", rule.id, state.entity_id)
         alert_id = f"rule:{rule.id}:{state.entity_id}"
         record = self.records.get(alert_id)
         frozen = (
@@ -481,8 +497,7 @@ class _TemplatesMixin:
             and not rule.update_message_when_active
         )
         if frozen:
-            self._rule_message_render_info.pop(pair, None)
-            self._remove_dependency_key(dependency_key)
+            self._clear_rule_message_dependencies(*pair)
             if not force:
                 return record.details.message
 
@@ -492,8 +507,7 @@ class _TemplatesMixin:
             )
             own_entities = self._render_info_has_own_dependency(render_info)
             if own_entities:
-                self._rule_message_render_info.pop(pair, None)
-                self._remove_dependency_key(dependency_key)
+                self._clear_rule_message_dependencies(*pair)
                 _LOGGER.error(
                     "Ignored unsafe Jinja message for rule %s because it depends on "
                     "Alert Manager entities: %s",
@@ -540,6 +554,7 @@ class _TemplatesMixin:
         if rule.source in TRANSITION_SOURCES:
             changed = record.details.message != rendered_message
             record.details.message = rendered_message
+            self._public_snapshot_dirty |= changed
             return changed
         condition = self._rule_condition(rule, state)
         condition_key = (
@@ -562,6 +577,7 @@ class _TemplatesMixin:
         record.details.condition = condition
         record.details.condition_key = condition_key
         record.details.condition_params = condition_params
+        self._public_snapshot_dirty |= changed
         return changed
 
     def _refresh_config_caches(self) -> None:

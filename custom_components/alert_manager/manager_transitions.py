@@ -15,7 +15,6 @@ from .models import (
     AlertRecord,
     AlertStatus,
     Rule,
-    advance_record,
     calculate_due_at,
     normalize_scalar,
 )
@@ -129,6 +128,7 @@ class _TransitionsMixin:
         self._queue_entity_evaluations(affected, collect_occurrences=True)
 
     def _clear_sequences(self) -> None:
+        self._public_snapshot_dirty |= bool(self._sequence_progress)
         for _token, cancel, _due in self._sequence_timers.values():
             cancel()
         self._sequence_timers.clear()
@@ -138,7 +138,8 @@ class _TransitionsMixin:
         timer = self._sequence_timers.pop(alert_id, None)
         if timer is not None:
             timer[1]()
-        self._sequence_progress.pop(alert_id, None)
+        if self._sequence_progress.pop(alert_id, None) is not None:
+            self._public_snapshot_dirty = True
 
     def _observe_sequence(
         self,
@@ -159,6 +160,7 @@ class _TransitionsMixin:
         evidence = progress.observe(state, now, previous=previous)
         if was_pending or progress.is_pending:
             self._queued_public_refresh = True
+            self._public_snapshot_dirty = True
         if evidence is not None and state is not None:
             self._transition_confirmed[alert_id] = TransitionObservation(
                 rule, state, None, transition_value(rule, state), now, now, evidence
@@ -483,7 +485,7 @@ class _TransitionsMixin:
                     self._count_pending_transition(record, None)
                 changed = True
             if now.astimezone(UTC) >= observation.due_at.astimezone(UTC):
-                became_active = advance_record(record, now)
+                became_active = self._advance_record(record, now)
                 record.expires_at = (
                     calculate_due_at(now, rule.auto_resolve)
                     if rule.resolve_mode == "duration"
@@ -515,4 +517,5 @@ class _TransitionsMixin:
                     self._fire_started(record)
                 changed = True
             self._schedule_timer(record)
+        self._public_snapshot_dirty |= changed
         return changed

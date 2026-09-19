@@ -141,12 +141,15 @@ class AlertManager(
         self._periodic_check_running = False
         self._periodic_check_unsubscribe: Callable[[], None] | None = None
         self._last_public_snapshot: dict[str, Any] | None = None
+        self._public_snapshot_dirty = True
+        self._public_snapshot_valid_until: datetime | None = None
         self._pack_availability: dict[str, bool] = {}
         self._excluded_labels: frozenset[str] = frozenset()
         self._rule_templates: dict[str, Template] = {}
         self._rule_template_render_info: dict[tuple[str, str], Any] = {}
         self._rule_message_templates: dict[str, Template] = {}
         self._rule_message_render_info: dict[tuple[str, str], Any] = {}
+        self._live_message_rule_ids: set[str] = set()
         self._condition_translations: dict[str, str] = {}
         self._template_dependents: dict[str, set[DependencyKey]] = {}
         self._template_dynamic_infos: dict[DependencyKey, Any] = {}

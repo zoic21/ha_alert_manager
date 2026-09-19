@@ -29,7 +29,13 @@ from .const import (
     SIGNAL_NOTIFICATION_LIFECYCLE,
     TRANSITION_SOURCES,
 )
-from .models import AlertHistoryEntry, AlertRecord, AlertStatus, calculate_due_at
+from .models import (
+    AlertHistoryEntry,
+    AlertRecord,
+    AlertStatus,
+    advance_record,
+    calculate_due_at,
+)
 from .packs.base import PackGeneratedAlert
 from .runtime_phase import RuntimePhase
 from .storage import sort_history
@@ -93,6 +99,7 @@ class _StateMixin:
                     and record.detected_at.astimezone(UTC) == detected_at
                 ):
                     record.notifications = updated(record.notifications)
+                    self._public_snapshot_dirty = True
                     live_changed = True
                     occurrences.remove((alert_id, detected_at))
             if occurrences:
@@ -129,6 +136,7 @@ class _StateMixin:
         ):
             self._remove_record_from_index(alert_id, previous.details.entity_id)
         self.records[alert_id] = record
+        self._public_snapshot_dirty = True
         self._record_ids_by_entity.setdefault(record.details.entity_id, set()).add(
             alert_id
         )
@@ -137,6 +145,11 @@ class _StateMixin:
         """Remove one authoritative record and its entity lookup entry."""
         record = self.records.pop(alert_id, None)
         if record is not None:
+            self._public_snapshot_dirty = True
+            if record.details.rule_id:
+                self._clear_rule_message_dependencies(
+                    record.details.rule_id, record.details.entity_id
+                )
             if self._startup_reconciliation_transaction is not None:
                 self._startup_reconciliation_transaction.record_removed(alert_id)
             self._unverified_restored_alert_ids.discard(alert_id)
@@ -146,6 +159,7 @@ class _StateMixin:
     def _replace_records(self, records: dict[str, AlertRecord]) -> None:
         """Replace authoritative records and rebuild the derived lookup cache."""
         self.records = records
+        self._public_snapshot_dirty = True
         self._unverified_restored_alert_ids.intersection_update(records)
         self._rebuild_record_index()
 
@@ -194,6 +208,27 @@ class _StateMixin:
         """Expose current labels without changing persisted detection details."""
         return {**record.as_public_dict(), "labels": self._current_alert_labels(record)}
 
+    def _advance_record(self, record: AlertRecord, now: datetime) -> bool:
+        """Activate one occurrence and stop tracking its frozen message."""
+        if not advance_record(record, now):
+            return False
+        self._public_snapshot_dirty = True
+        rule_id = record.details.rule_id
+        if rule_id and rule_id not in self._live_message_rule_ids:
+            self._clear_rule_message_dependencies(rule_id, record.details.entity_id)
+        return True
+
+    def _public_startup_status(self) -> dict[str, Any]:
+        """Share the constant-size startup projection with publication checks."""
+        return {
+            "in_progress": self._runtime_phase.is_startup,
+            "stabilization_until": (
+                self._startup_reconciliation_deadline.isoformat()
+                if self._startup_reconciliation_deadline is not None
+                else None
+            ),
+        }
+
     def _build_public_snapshot(self) -> dict[str, Any]:
         """Build the public alert partitions and runtime status."""
         now = dt_util.now()
@@ -233,14 +268,7 @@ class _StateMixin:
             "alerts": unacknowledged,
             "acknowledge": acknowledged,
             "pending": pending,
-            "startup": {
-                "in_progress": self._runtime_phase.is_startup,
-                "stabilization_until": (
-                    self._startup_reconciliation_deadline.isoformat()
-                    if self._startup_reconciliation_deadline is not None
-                    else None
-                ),
-            },
+            "startup": self._public_startup_status(),
         }
 
     def _pending_is_visible(
@@ -267,6 +295,7 @@ class _StateMixin:
             min(self.config["pending_display_delay"], record.delay)
             + record.paused_seconds,
         )
+        self._public_snapshot_dirty = True
 
     def _cancel_all_timers(self) -> None:
         """Cancel each scheduled due transition before a full rebuild."""
@@ -531,6 +560,7 @@ class _StateMixin:
             if record.status is AlertStatus.PENDING and record.paused_at is None:
                 record.paused_at = now
                 changed = True
+        self._public_snapshot_dirty |= changed
         return changed
 
     def _resume_pending_alerts(self, now: datetime) -> bool:
@@ -552,6 +582,7 @@ class _StateMixin:
                 record.paused_seconds += paused_for.total_seconds()
             record.paused_at = None
             changed = True
+        self._public_snapshot_dirty |= changed
         return changed
 
     def _apply_generated_alert(
@@ -590,6 +621,7 @@ class _StateMixin:
         else:
             record.details = details
             record.expires_at = generated.resolve_at
+            self._public_snapshot_dirty = True
         reconciliation_transaction = self._startup_reconciliation_transaction
         if reconciliation_transaction is not None:
             # A real occurrence-pack signal is authoritative over the restored
@@ -751,6 +783,7 @@ class _StateMixin:
             )
             return
         self._queued_public_refresh = True
+        self._public_snapshot_dirty = True
         self._queue_entity_evaluations((record.details.entity_id,))
 
     def _cancel_timer(self, alert_id: str) -> None:
@@ -837,27 +870,40 @@ class _StateMixin:
         self._emit_lifecycle_event(EVENT_ALERT_UNACKNOWLEDGED, data)
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
-        """Avoid redundant sensor writes and Recorder churn."""
+        """Rebuild only after invalidation; suppress unchanged public payloads."""
         if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
             return
-        live_message_pairs = {
-            (rule.id, entity_id)
-            for rule in self._rules
-            if rule.enabled
-            and rule.message is not None
-            and rule.update_message_when_active
-            for entity_id in rule.entity_ids
-        }
-        for record in self.records.values():
-            if record.status is not AlertStatus.ACTIVE or not record.details.rule_id:
-                continue
-            pair = (record.details.rule_id, record.details.entity_id)
-            if pair in live_message_pairs:
-                continue
-            self._rule_message_render_info.pop(pair, None)
-            self._remove_dependency_key(("message", pair[0], pair[1]))
+        previous = self._last_public_snapshot
+        now = dt_util.now().astimezone(UTC)
+        # Counts and startup deadlines are cheap to compare and can change without
+        # mutating a record. Alert mutations invalidate before any awaited work.
+        if (
+            not force
+            and not self._public_snapshot_dirty
+            and previous is not None
+            and (
+                self._public_snapshot_valid_until is None
+                or now < self._public_snapshot_valid_until
+            )
+            and previous["tracked_count"] == self._tracked_count()
+            and previous["startup"] == self._public_startup_status()
+        ):
+            return
         snapshot = self._build_public_snapshot()
-        if not force and snapshot == self._last_public_snapshot:
+        # Time alone can reveal a pending row, even before its queued timer runs.
+        # Cache the next boundary only on rebuild; unchanged checks remain O(1).
+        self._public_snapshot_valid_until = min(
+            (
+                record.visible_at.astimezone(UTC)
+                for record in self.records.values()
+                if record.status is AlertStatus.PENDING
+                and record.visible_at is not None
+                and record.visible_at.astimezone(UTC) > now
+            ),
+            default=None,
+        )
+        self._public_snapshot_dirty = False
+        if not force and snapshot == previous:
             return
         self._last_public_snapshot = snapshot
         async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)

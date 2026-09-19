@@ -841,6 +841,7 @@ class _ApiMixin:
             for record in changes
         ]
         for record in changes:
+            self._public_snapshot_dirty = True
             record.record_acknowledgement(
                 acknowledged,
                 now,
@@ -1033,6 +1034,7 @@ class _ApiMixin:
                             COHERENCE_ENTITY_ID, save=False, publish=False
                         )
                 if labels_changed:
+                    self._public_snapshot_dirty = True
                     for record in self.records.values():
                         if record.details.type in labels_changed:
                             record.details.labels = list(

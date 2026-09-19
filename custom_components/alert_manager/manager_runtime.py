@@ -42,7 +42,6 @@ from .models import (
     AlertRecord,
     AlertStatus,
     Rule,
-    advance_record,
     calculate_due_at,
     safe_float,
 )
@@ -869,6 +868,8 @@ class _RuntimeMixin:
         """Coalesce registry changes and preserve references across entity renames."""
         if self._unloading or self._runtime_phase is RuntimePhase.STOPPING:
             return
+        # Effective labels also come from registries, outside stored details.
+        self._public_snapshot_dirty = True
         self.notification_runtime.registry_changed()
         old_entity_id = event.data.get("old_entity_id")
         new_entity_id = event.data.get("entity_id")
@@ -1520,6 +1521,7 @@ class _RuntimeMixin:
                         record, details
                     )
                     record.details = details
+                    self._public_snapshot_dirty = True
                     persisted_changed = True
                     if live_message_only:
                         self._schedule_live_message_flush()
@@ -1531,6 +1533,7 @@ class _RuntimeMixin:
                 ):
                     pending_was_visible = self._pending_is_visible(record, now)
                     record.delay = delay
+                    self._public_snapshot_dirty = True
                     record.due_at = calculate_due_at(
                         record.detected_at, delay + record.paused_seconds
                     )
@@ -1549,7 +1552,7 @@ class _RuntimeMixin:
                     persisted_changed = True
                     immediate_changed = True
 
-            became_active = advance_record(record, now)
+            became_active = self._advance_record(record, now)
             if emit_events:
                 self._count_pending_transition(record, previous_status)
             if became_active:
@@ -1568,7 +1571,7 @@ class _RuntimeMixin:
             record = self.records.get(alert_id)
             if record is None:
                 continue
-            if advance_record(record, now):
+            if self._advance_record(record, now):
                 persisted_changed = True
                 immediate_changed = True
                 self._cancel_timer(alert_id)
@@ -2241,6 +2244,7 @@ class _RuntimeMixin:
             deadline = occurred + timedelta(seconds=settings[2])
             if record.expires_at != deadline:
                 record.expires_at = deadline
+                self._public_snapshot_dirty = True
                 self._cancel_timer(record.details.id)
                 self._schedule_timer(record)
 
