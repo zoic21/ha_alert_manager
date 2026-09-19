@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Awaitable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import UTC
 from typing import Any
 
 from homeassistant.util.async_ import create_eager_task
@@ -59,7 +60,7 @@ def select_alert_collision(
         lifecycle = restored_records[origin_id] if restored else record
         return (
             restored,
-            record.detected_at,
+            record.detected_at.astimezone(UTC),
             lifecycle.status is not AlertStatus.ACTIVE,
             origin_id or record.details.id,
         )

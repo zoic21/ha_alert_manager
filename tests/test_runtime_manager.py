@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.const import ATTR_DEVICE_CLASS
@@ -20,6 +21,7 @@ from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import AlertStatus
 from custom_components.alert_manager.packs import PACKS
 from custom_components.alert_manager.sensor import AlertManagerSensor
+from custom_components.alert_manager.yaml_io import dump_config_yaml
 
 
 def run(coroutine):
@@ -104,7 +106,8 @@ def test_plain_message_can_name_alert_manager_entity(hass, entry):
     assert created["message"] == "See sensor.alert_manager_main_active for details"
 
 
-def test_explicit_message_edit_refreshes_active_alert_once(hass, entry):
+@pytest.mark.parametrize("mutation", ["rule", "import"])
+def test_explicit_message_edit_refreshes_active_alert_once(hass, entry, mutation):
     """Editing a rule refreshes its active message without tracking it afterward."""
 
     async def scenario():
@@ -116,10 +119,15 @@ def test_explicit_message_edit_refreshes_active_alert_once(hass, entry):
         alert_id = f"rule:{created['id']}:sensor.source"
         assert manager.records[alert_id].details.message is None
 
-        await manager.async_update_rule(
-            created["id"],
-            {"message": ("Status {{ states('binary_sensor.cloudflared_running') }}")},
-        )
+        changes = {
+            "message": "Status {{ states('binary_sensor.cloudflared_running') }}"
+        }
+        if mutation == "rule":
+            await manager.async_update_rule(created["id"], changes)
+        else:
+            config = manager.get_config()
+            config["rules"][0].update(changes)
+            await manager.async_import_config(dump_config_yaml(config))
 
         record = manager.records[alert_id]
         assert record.status is AlertStatus.ACTIVE
@@ -817,9 +825,19 @@ def test_jinja_lifecycle_uses_the_lifecycle_filter_only(hass, entry):
     assert "sensor.other" not in queued
 
 
-def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_now):
+@pytest.mark.parametrize(
+    "start",
+    [
+        datetime(2026, 8, 27, 12, tzinfo=UTC),
+        datetime(2026, 3, 29, 1, 59, 30, tzinfo=ZoneInfo("Europe/Paris")),
+        datetime(2026, 10, 25, 2, 59, 30, tzinfo=ZoneInfo("Europe/Paris")),
+        datetime(2026, 10, 25, 2, 10, tzinfo=ZoneInfo("Europe/Paris"), fold=1),
+    ],
+)
+def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(
+    hass, entry, set_now, start
+):
     """Broad templates coalesce state churn until RenderInfo's limit expires."""
-    start = datetime(2026, 8, 27, 12, tzinfo=UTC)
     set_now(start)
     manager = make_manager(hass, entry)
     info = _render_info(
@@ -842,7 +860,8 @@ def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_n
     )
     assert dependency_key in manager._template_rate_limit_timers
     first_timer = hass.timers[-1]
-    assert first_timer["point"] == start + timedelta(seconds=60)
+    until = start.astimezone(UTC) + timedelta(seconds=60)
+    assert first_timer["point"].astimezone(UTC) == until
 
     manager._dynamic_dependency_matches(
         dependency_key,
@@ -851,8 +870,74 @@ def test_dynamic_jinja_rate_limit_queues_one_trailing_refresh(hass, entry, set_n
         lifecycle=False,
     )
     assert len(manager._template_rate_limit_timers) == 1
+    set_now(until.astimezone(start.tzinfo))
     first_timer["action"](first_timer["point"])
     assert queued == ["sensor.source"]
+    assert manager._dynamic_dependency_matches(
+        dependency_key, info, "binary_sensor.changed", lifecycle=False
+    )
+    assert manager._template_rate_limit_until[dependency_key].astimezone(UTC) == (
+        until + timedelta(seconds=60)
+    )
+
+
+@pytest.mark.parametrize(
+    "entity_id", ["sensor.alert_manager_coherence_issue", "sensor.renamed_coherence"]
+)
+@pytest.mark.parametrize("kind", ["condition", "message"])
+def test_coherence_dependency_reacts_without_source_change(
+    hass, entry, registry_entry, entity_id, kind
+):
+    """Allowed own dependencies update other entities' rules and live messages."""
+
+    async def scenario():
+        registry_entry(
+            hass,
+            entity_id,
+            platform="alert_manager",
+            unique_id="alert_manager_coherence_issue",
+        )
+        hass.states.set("sensor.source", "on")
+        hass.states.set(entity_id, "0")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        options = (
+            {"condition_template": "{{ is_state('" + entity_id + "', '1') }}"}
+            if kind == "condition"
+            else {
+                "message": "{{ states('" + entity_id + "') }}",
+                "update_message_when_active": True,
+            }
+        )
+        created = await manager.async_create_rule(_rule(duration=0, **options))
+        alert_id = f"rule:{created['id']}:sensor.source"
+        assert (kind, created["id"], "sensor.source") in manager._template_dependents[
+            entity_id
+        ]
+        if kind == "condition":
+            assert alert_id not in manager.records
+        else:
+            assert manager.records[alert_id].details.message == "0"
+        old_state = hass.states.get(entity_id)
+        hass.states.set(entity_id, "1")
+        manager._state_changed(
+            _state_event(entity_id, old_state, hass.states.get(entity_id))
+        )
+        await manager._async_flush_queued_evaluations()
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+        if kind == "message":
+            assert manager.records[alert_id].details.message == "1"
+        else:
+            old_state = hass.states.get(entity_id)
+            hass.states.set(entity_id, "0")
+            manager._state_changed(
+                _state_event(entity_id, old_state, hass.states.get(entity_id))
+            )
+            await manager._async_flush_queued_evaluations()
+            assert alert_id not in manager.records
+        await manager.async_unload()
+
+    asyncio.run(scenario())
 
 
 def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_now):
@@ -915,11 +1000,16 @@ def test_entity_rename_migrates_config_and_active_occurrence(hass, entry, set_no
     asyncio.run(scenario())
 
 
-def test_entity_rename_collision_keeps_retained_record_provenance(hass, entry, set_now):
+@pytest.mark.parametrize("repeated_hour", [False, True])
+def test_entity_rename_collision_keeps_retained_record_provenance(
+    hass, entry, set_now, repeated_hour
+):
     """A rename collision cannot strip startup protection from the kept record."""
 
     async def scenario():
         start = datetime(2026, 8, 27, 12, tzinfo=UTC)
+        if repeated_hour:
+            start = datetime(2026, 10, 25, 2, 55, tzinfo=ZoneInfo("Europe/Paris"))
         set_now(start)
         hass.states.set("sensor.old", "on")
         hass.states.set("sensor.new", "on")
@@ -930,7 +1020,9 @@ def test_entity_rename_collision_keeps_retained_record_provenance(hass, entry, s
         )
         old_alert_id = f"rule:{created['id']}:sensor.old"
         new_alert_id = f"rule:{created['id']}:sensor.new"
-        manager.records[old_alert_id].detected_at = start + timedelta(seconds=1)
+        manager.records[old_alert_id].detected_at = (
+            start.astimezone(UTC) + timedelta(minutes=10)
+        ).astimezone(start.tzinfo)
         manager._unverified_restored_alert_ids = {new_alert_id}
         manager._pending_entity_renames = {"sensor.old": "sensor.new"}
 

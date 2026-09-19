@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -44,7 +45,7 @@ class _StateMixin:
     ) -> None:
         """Attach delivery facts to the occurrence, including already archived ones."""
         occurrences = {
-            (item.alert_id, datetime.fromisoformat(item.detected_at))
+            (item.alert_id, datetime.fromisoformat(item.detected_at).astimezone(UTC))
             for item in items
             if item.detected_at is not None
         }
@@ -87,14 +88,17 @@ class _StateMixin:
         async with self._history_archive_lock:
             for alert_id, detected_at in tuple(occurrences):
                 record = self.records.get(alert_id)
-                if record is not None and record.detected_at == detected_at:
+                if (
+                    record is not None
+                    and record.detected_at.astimezone(UTC) == detected_at
+                ):
                     record.notifications = updated(record.notifications)
                     live_changed = True
                     occurrences.remove((alert_id, detected_at))
             if occurrences:
                 for entries in (self.history, self._pending_history):
                     for index, entry in enumerate(entries):
-                        if (entry.id, entry.detected_at) in occurrences:
+                        if (entry.id, entry.detected_at.astimezone(UTC)) in occurrences:
                             entries[index] = replace(
                                 entry, notifications=updated(entry.notifications)
                             )
@@ -764,32 +768,50 @@ class _StateMixin:
         ):
             self.statistics.record_activity("pending")
 
+    @contextmanager
+    def _bus_events_transaction(self) -> Iterator[None]:
+        """Expose configuration-generated HA events only after a successful commit."""
+        previous = self._deferred_bus_events
+        events: list[tuple[str, dict[str, Any]]] = []
+        self._deferred_bus_events = events
+        try:
+            yield
+        finally:
+            self._deferred_bus_events = previous
+        # An exception skips publication, including events from nested transactions.
+        if previous is not None:
+            previous.extend(events)
+        else:
+            for event_type, data in events:
+                self.hass.bus.async_fire(event_type, data)
+
+    def _emit_lifecycle_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Share event payloads while respecting both notification and bus deferral."""
+        async_dispatcher_send(
+            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, event_type, data
+        )
+        if self._deferred_bus_events is not None:
+            self._deferred_bus_events.append((event_type, data))
+        else:
+            self.hass.bus.async_fire(event_type, data)
+
     def _fire_started(self, record: AlertRecord) -> None:
         """Emit the documented start event exactly on activation."""
         self.statistics.record_activity("activations")
         data = record.as_public_dict()
-        async_dispatcher_send(
-            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_STARTED, data
-        )
-        self.hass.bus.async_fire(EVENT_ALERT_STARTED, data)
+        self._emit_lifecycle_event(EVENT_ALERT_STARTED, data)
 
     def _fire_resolved(self, record: AlertRecord, now: datetime) -> None:
         """Emit resolution information without retaining history."""
         self.statistics.record_activity("resolutions")
         data = record.as_public_dict()
         data["resolved_at"] = now.isoformat()
-        async_dispatcher_send(
-            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_RESOLVED, data
-        )
-        self.hass.bus.async_fire(EVENT_ALERT_RESOLVED, data)
+        self._emit_lifecycle_event(EVENT_ALERT_RESOLVED, data)
 
     def _fire_acknowledged(self, record: AlertRecord) -> None:
         """Emit an acknowledgement event only after durable state changed."""
         data = record.as_public_dict()
-        async_dispatcher_send(
-            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_ACKNOWLEDGED, data
-        )
-        self.hass.bus.async_fire(EVENT_ALERT_ACKNOWLEDGED, data)
+        self._emit_lifecycle_event(EVENT_ALERT_ACKNOWLEDGED, data)
 
     def _fire_unacknowledged(
         self,
@@ -812,10 +834,7 @@ class _StateMixin:
             data["previous_acknowledged_at"] = previous_at.isoformat()
         if previous_by is not None:
             data["previous_acknowledged_by"] = previous_by
-        async_dispatcher_send(
-            self.hass, SIGNAL_NOTIFICATION_LIFECYCLE, EVENT_ALERT_UNACKNOWLEDGED, data
-        )
-        self.hass.bus.async_fire(EVENT_ALERT_UNACKNOWLEDGED, data)
+        self._emit_lifecycle_event(EVENT_ALERT_UNACKNOWLEDGED, data)
 
     def _publish_if_changed(self, *, force: bool = False) -> None:
         """Avoid redundant sensor writes and Recorder churn."""

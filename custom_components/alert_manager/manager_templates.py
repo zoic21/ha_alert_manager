@@ -213,7 +213,7 @@ class _TemplatesMixin:
         entities = frozenset(getattr(render_info, "entities", ()) or ())
         self._template_entities_by_key[dependency_key] = entities
         for entity_id in entities:
-            if self._is_own_entity(entity_id):
+            if not self._is_allowed_rule_source(entity_id):
                 continue
             self._template_dependents.setdefault(entity_id, set()).add(dependency_key)
         if self._render_info_is_dynamic(render_info):
@@ -221,7 +221,7 @@ class _TemplatesMixin:
             rate_limit = getattr(render_info, "rate_limit", None)
             if isinstance(rate_limit, int | float) and rate_limit > 0:
                 self._template_rate_limit_until[dependency_key] = (
-                    dt_util.now() + timedelta(seconds=float(rate_limit))
+                    dt_util.now().astimezone(UTC) + timedelta(seconds=float(rate_limit))
                 )
         if getattr(render_info, "has_time", False):
             self._template_time_dependencies.add(dependency_key)
@@ -364,9 +364,9 @@ class _TemplatesMixin:
         rate_limit = getattr(render_info, "rate_limit", None)
         if not isinstance(rate_limit, int | float) or rate_limit <= 0:
             return True
-        now = dt_util.now()
+        now = dt_util.now().astimezone(UTC)
         until = self._template_rate_limit_until.get(dependency_key)
-        if until is None or now.astimezone(UTC) >= until.astimezone(UTC):
+        if until is None or now >= until.astimezone(UTC):
             self._template_rate_limit_until[dependency_key] = now + timedelta(
                 seconds=float(rate_limit)
             )

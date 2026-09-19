@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import CoreState, Event
@@ -1176,7 +1177,8 @@ def test_usage_is_not_restored_or_persisted(hass, entry, set_now) -> None:
     asyncio.run(scenario())
 
 
-def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
+@pytest.mark.parametrize("fold", [None, 0, 1])
+def test_occurrence_delivery_statistics_and_history(hass, entry, fold) -> None:
     """Count profiles, not targets; keep late deliveries on the old occurrence."""
     from custom_components.alert_manager.models import AlertHistoryEntry
     from custom_components.alert_manager.notification_runtime import _NotificationItem
@@ -1184,6 +1186,10 @@ def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
     async def scenario() -> None:
         manager = AlertManager(hass, entry)
         now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        if fold is not None:
+            now = datetime(
+                2026, 10, 25, 2, 10, tzinfo=ZoneInfo("Europe/Paris"), fold=fold
+            )
         record = _active_record(now)
         manager.records = {record.details.id: record}
         item = _NotificationItem.from_event(record.as_public_dict())
@@ -1232,9 +1238,12 @@ def test_occurrence_delivery_statistics_and_history(hass, entry) -> None:
             AlertRecord.from_dict(record.as_storage_dict()).notifications
             == record.notifications
         )
+        now = now.astimezone(UTC)
         archived = AlertHistoryEntry.resolved(record, now + timedelta(minutes=5))
         manager.history = [archived]
-        replacement = _active_record(now + timedelta(minutes=6))
+        replacement = _active_record(
+            (now + timedelta(hours=1)).astimezone(ZoneInfo("Europe/Paris"))
+        )
         manager.records = {replacement.details.id: replacement}
         await manager._async_record_notification(
             [item], profile, "resolved", now + timedelta(minutes=7)
@@ -1346,6 +1355,72 @@ def test_delivery_waiting_for_archive_is_counted_once(hass, entry) -> None:
         await manager._async_flush_history()
         restored, _ = await manager.history_storage.async_load()
         assert restored[0].notifications["alert"]["count"] == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mutation", ["clear", "trim", "disable"])
+@pytest.mark.parametrize("fail_mutation", [False, True])
+def test_history_edits_wait_for_inflight_delivery_accounting(
+    hass, entry, mutation, fail_mutation
+):
+    """Late delivery writes cannot resurrect deleted history or bypass retention."""
+    from custom_components.alert_manager.models import AlertHistoryEntry
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        manager.config = deepcopy(DEFAULT_CONFIG)
+        now = datetime(2026, 9, 5, 10, tzinfo=UTC)
+        old = _active_record(now)
+        recent = _active_record(now + timedelta(hours=1))
+        manager.history = [
+            AlertHistoryEntry.resolved(recent, now + timedelta(hours=2)),
+            AlertHistoryEntry.resolved(old, now + timedelta(minutes=1)),
+        ]
+        item = _NotificationItem.from_event(old.as_public_dict())
+        original_save = manager.history_storage.async_save
+        write_started = asyncio.Event()
+        release_write = asyncio.Event()
+        calls = 0
+
+        async def controlled_save(entries):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                write_started.set()
+                await release_write.wait()
+            elif fail_mutation and calls == 2:
+                raise OSError("disk full")
+            await original_save(entries)
+
+        manager.history_storage.async_save = controlled_save
+        delivery = asyncio.create_task(
+            manager._async_record_notification([item], _profile(), "started", now)
+        )
+        await write_started.wait()
+        edit = asyncio.create_task(
+            manager.async_clear_history()
+            if mutation == "clear"
+            else manager.async_set_history_limit(1 if mutation == "trim" else 0)
+        )
+        try:
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            assert not edit.done()
+        finally:
+            release_write.set()
+            await delivery
+            if fail_mutation:
+                with pytest.raises(OSError, match="disk full"):
+                    await edit
+            else:
+                await edit
+        expected = 2 if fail_mutation else (1 if mutation == "trim" else 0)
+        restored, _ = await manager.history_storage.async_load()
+        assert len(manager.history) == len(restored) == expected
+        assert restored == manager.history
+        if fail_mutation:
+            assert manager.history[-1].notifications["alert"]["count"] == 1
 
     asyncio.run(scenario())
 
@@ -1585,7 +1660,7 @@ def test_rule_label_edit_discards_only_its_pending_notifications(hass, entry):
 
 @pytest.mark.parametrize("fail_save", [False, True])
 @pytest.mark.parametrize("cancel_caller", [False, True])
-@pytest.mark.parametrize("mutation", ["create", "update"])
+@pytest.mark.parametrize("mutation", ["create", "update", "resolve"])
 def test_rule_notifications_wait_for_transaction_commit(
     hass, entry, fail_save, cancel_caller, mutation
 ):
@@ -1602,9 +1677,12 @@ def test_rule_notifications_wait_for_transaction_commit(
             "value": 8,
             "duration": 0,
         }
-        if mutation == "update":
-            existing = await manager.async_create_rule({**rule_data, "value": 20})
+        if mutation != "create":
+            existing = await manager.async_create_rule(
+                {**rule_data, "value": 8 if mutation == "resolve" else 20}
+            )
         await manager.async_update_config({"notification_profiles": [_profile()]})
+        hass.bus.fired.clear()
         initial_rules = deepcopy(manager.config["rules"])
         delivery = _DeliverySpy()
         runtime = manager.notification_runtime
@@ -1624,12 +1702,15 @@ def test_rule_notifications_wait_for_transaction_commit(
         task = asyncio.create_task(
             manager.async_create_rule(rule_data)
             if mutation == "create"
-            else manager.async_update_rule(existing["id"], {"value": 8})
+            else manager.async_update_rule(
+                existing["id"], {"value": 20 if mutation == "resolve" else 8}
+            )
         )
         await save_started.wait()
         await asyncio.sleep(0)
         assert not runtime._batches
         assert not delivery.calls
+        assert not hass.bus.fired
         if cancel_caller:
             task.cancel()
             await asyncio.sleep(0)
@@ -1643,14 +1724,30 @@ def test_rule_notifications_wait_for_transaction_commit(
         manager.storage.async_save = original_save
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        await runtime._async_flush_batch("profile", "started")
+        kind = "resolved" if mutation == "resolve" else "started"
+        await runtime._async_flush_batch("profile", kind)
         assert len(delivery.calls) == (0 if fail_save else 1)
-        assert bool(manager.records) is not fail_save
+        assert bool(manager.records) == (
+            fail_save if mutation == "resolve" else not fail_save
+        )
+        expected_event = (
+            EVENT_ALERT_RESOLVED if mutation == "resolve" else EVENT_ALERT_STARTED
+        )
+        assert [event for event, _data in hass.bus.fired] == (
+            [] if fail_save else [expected_event]
+        )
+        if not fail_save:
+            assert hass.bus.fired[0][1]["id"] == (
+                f"rule:{manager.config['rules'][0]['id']}:sensor.test"
+            )
         if fail_save:
             assert manager.config["rules"] == initial_rules
         else:
-            assert manager.config["rules"][0]["value"] == 8
+            assert manager.config["rules"][0]["value"] == (
+                20 if mutation == "resolve" else 8
+            )
         assert runtime._deferred_events is None
+        assert manager._deferred_bus_events is None
         await manager.async_unload()
 
     asyncio.run(scenario())

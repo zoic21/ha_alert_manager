@@ -111,6 +111,7 @@ def _serialize_config_mutation(
             async def mutate() -> Any:
                 with (
                     self.notification_runtime.events_deferred(),
+                    self._bus_events_transaction(),
                     self.statistics.activity_transaction(),
                 ):
                     return await method(self, *args, **kwargs)
@@ -484,47 +485,43 @@ class _ApiMixin:
         if limit == self.config["history_limit"]:
             return self.get_history_config()
 
-        previous_config = deepcopy(self.config)
-        previous_history = list(self.history)
-        previous_pending = list(self._pending_history)
-        self.config["history_limit"] = limit
-        if limit == 0:
-            self._pending_history = []
-        history_changed = self._trim_history()
-        history_saved = False
-        try:
-            if history_changed:
-                await self.history_storage.async_save(self.history)
-                history_saved = True
-            await self._async_save_main_store()
-        except BaseException:
-            self.config = previous_config
-            self.history = previous_history
-            self._pending_history = previous_pending
-            if history_saved:
-                try:
-                    await self.history_storage.async_save(previous_history)
-                except Exception:
-                    _LOGGER.exception(
-                        "Unable to restore alert history after retention update failure"
-                    )
-            raise
+        async with self._history_archive_lock:
+            previous_config = deepcopy(self.config)
+            previous_history = list(self.history)
+            previous_pending = list(self._pending_history)
+            self.config["history_limit"] = limit
+            if limit == 0:
+                self._pending_history = []
+            history_changed = self._trim_history()
+            history_saved = False
+            try:
+                if history_changed:
+                    await self.history_storage.async_save(self.history)
+                    history_saved = True
+                await self._async_save_main_store()
+            except BaseException:
+                self.config = previous_config
+                self.history = previous_history
+                self._pending_history = previous_pending
+                if history_saved:
+                    try:
+                        await self.history_storage.async_save(previous_history)
+                    except Exception:
+                        _LOGGER.exception(
+                            "Unable to restore alert history "
+                            "after retention update failure"
+                        )
+                raise
         async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.get_history_config()
 
     @_serialize_runtime_mutation
     async def async_clear_history(self) -> dict[str, Any]:
         """Delete history only, preserving every current runtime record."""
-        previous_history = list(self.history)
-        previous_pending = list(self._pending_history)
-        self.history = []
-        self._pending_history = []
-        try:
+        async with self._history_archive_lock:
             await self.history_storage.async_save([])
-        except BaseException:
-            self.history = previous_history
-            self._pending_history = previous_pending
-            raise
+            self.history = []
+            self._pending_history = []
         async_dispatcher_send(self.hass, SIGNAL_HISTORY_UPDATED)
         return self.history_snapshot()
 
@@ -911,7 +908,8 @@ class _ApiMixin:
         if (
             self.records.get(record.details.id) is not record
             or not record.acknowledged
-            or record.acknowledged_until != deadline
+            or record.acknowledged_until is None
+            or record.acknowledged_until.astimezone(UTC) != deadline.astimezone(UTC)
             or not self.monitoring_enabled
             or self._runtime_phase is not RuntimePhase.RUNNING
             or self.hass.state is not CoreState.running
@@ -1132,9 +1130,13 @@ class _ApiMixin:
                 self.storage.pack_runtime = self._pack_runtime
                 self._rebuild_rule_index()
                 imported_by_id = {rule.id: rule for rule in self._rules}
+                edited_messages: list[Rule] = []
                 for previous_rule in previous.config["rules"]:
                     old_rule = Rule.from_dict(previous_rule)
-                    self._prepare_rule_update(old_rule, imported_by_id.get(old_rule.id))
+                    rule = imported_by_id.get(old_rule.id)
+                    self._prepare_rule_update(old_rule, rule)
+                    if rule is not None and old_rule.message != rule.message:
+                        edited_messages.append(rule)
                 self._reconcile_flapping_settings()
                 self._refresh_pack_entry_listeners()
                 self._pack_availability = self._current_pack_availability()
@@ -1143,6 +1145,8 @@ class _ApiMixin:
                     publish=False,
                     emit_events=False,
                 )
+                for rule in edited_messages:
+                    self._refresh_edited_rule_messages(rule)
                 self._reschedule_hidden_pending_visibility(dt_util.now())
                 await self._async_save_state()
                 self._immediate_state_save_required = False
@@ -1327,9 +1331,13 @@ class _ApiMixin:
                 if record := self.records.get(f"rule:{rule_id}:{entity_id}"):
                     record.details.labels = list(rule.label_ids)
         if old_rule.message != rule.message:
-            for entity_id in rule.entity_ids:
-                self._refresh_active_rule_message(rule, entity_id)
+            self._refresh_edited_rule_messages(rule)
         return removed_entities
+
+    def _refresh_edited_rule_messages(self, rule: Rule) -> None:
+        """Apply an explicit message edit once, including otherwise frozen alerts."""
+        for entity_id in rule.entity_ids:
+            self._refresh_active_rule_message(rule, entity_id)
 
     async def _async_finalize_rule_update(
         self, old_rule: Rule, rule: Rule, removed_entities: set[str]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import Context
@@ -550,8 +551,13 @@ def test_resolution_deadline_wins_when_both_deadlines_passed(hass, entry, set_no
     assert not event_data(hass, EVENT_ALERT_UNACKNOWLEDGED)
 
 
-def test_expiry_waiting_on_lock_cannot_override_new_deadline(hass, entry, set_now):
+@pytest.mark.parametrize("repeated_hour", [False, True])
+def test_expiry_waiting_on_lock_cannot_override_new_deadline(
+    hass, entry, set_now, repeated_hour
+):
     manager, alert_id = active_manager(hass, entry, set_now)
+    if repeated_hour:
+        set_now(datetime(2026, 10, 25, 2, tzinfo=ZoneInfo("Europe/Paris")))
     run(manager.async_set_acknowledgements([alert_id], True, None, 900))
     record = manager.records[alert_id]
     deadline = record.acknowledged_until
@@ -563,7 +569,9 @@ def test_expiry_waiting_on_lock_cannot_override_new_deadline(hass, entry, set_no
             manager._async_expire_acknowledgement(record, deadline)
         )
         await asyncio.sleep(0)
-        record.acknowledged_until = deadline + timedelta(hours=1)
+        record.acknowledged_until = (
+            deadline.astimezone(UTC) + timedelta(hours=1)
+        ).astimezone(deadline.tzinfo)
         manager._config_mutation_lock.release()
         await task
 

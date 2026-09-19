@@ -100,6 +100,7 @@ class AlertManager(
         self._device_registry = dr.async_get(hass)
         self._area_registry = ar.async_get(hass)
         self._config_mutation_lock = asyncio.Lock()
+        self._deferred_bus_events: list[tuple[str, dict[str, Any]]] | None = None
         self._history_archive_lock = asyncio.Lock()
         self.config: dict[str, Any] = {}
         self.records: dict[str, AlertRecord] = {}
