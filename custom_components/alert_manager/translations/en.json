@@ -316,12 +316,14 @@
       "transition_resolution_mode": "Choose a supported transition resolution mode.",
       "sequence_steps": "A sequence must contain between 2 and 20 steps.",
       "sequence_options": "A sequence requires duration: 0 and no Jinja condition.",
-      "sequence_duration": "Durations must be whole seconds between 0 and 31536000; resolution requires at least 1 second.",
+      "sequence_duration": "Duration must be a whole number of seconds between 0 and 31,536,000 (at least 1 for resolution).",
       "sequence_step": "Choose a supported comparison operator and value for each step.",
       "sequence_mode": "Choose At least, Less than or Between two durations.",
       "sequence_bounds": "The maximum duration must exceed the minimum; Less than requires a duration greater than 0.",
       "sequence_source": "Sequence fields require source: value_sequence.",
-      "resolution_condition": "Choose a valid resolution comparison and value."
+      "resolution_condition": "Choose a valid resolution comparison and value.",
+      "field_context": "{field}: {detail}",
+      "sequence_field_context": "Step {step} — {field}: {detail}"
     },
     "loading": "Loading Alert Manager…",
     "history": {

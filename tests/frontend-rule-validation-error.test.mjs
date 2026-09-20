@@ -189,3 +189,46 @@ test("editing the visual rule clears a stale inline validation error", () => {
   assert.equal(removed, 1);
   assert.equal(panel._ruleDirty, true);
 });
+
+test("sequence validation names the field and step in both languages", async () => {
+  const { readFile } = await import("node:fs/promises");
+  for (const language of ["fr", "en"]) {
+    const catalog = JSON.parse(await readFile(new URL(`../custom_components/alert_manager/translations/${language}.json`, import.meta.url)));
+    const panel = new AlertManagerPanel();
+    for (const [key, value] of Object.entries(catalog.config_panel.errors)) {
+      panel._translations[`component.alert_manager.config_panel.errors.${key}`] = value;
+    }
+    for (const [key, value] of Object.entries(catalog.config_panel.rules)) {
+      panel._translations[`component.alert_manager.config_panel.rules.${key}`] = value;
+    }
+    for (const [message, label] of [
+      ["auto_resolve: Invalid sequence duration", "auto_resolve"],
+      ["sequence_timeout: Invalid sequence duration", "sequence_timeout"],
+      ["steps[1].duration: Invalid sequence duration", "sequence_duration"],
+      ["steps[1].duration_max: Invalid sequence duration bounds", "sequence_maximum"],
+      ["steps[1].value: Range lower bound must not exceed upper bound", "values"],
+    ]) {
+      const text = panel._errorText({ code: "invalid_format", message });
+      assert.ok(text.includes(catalog.config_panel.rules[label]), text);
+      assert.doesNotMatch(text, /component\.alert_manager|\{detail\}/);
+      if (message.startsWith("steps")) assert.match(text, language === "fr" ? /Étape 2/ : /Step 2/);
+    }
+  }
+});
+
+test("sequence summaries display common entity units through the full editor", async () => {
+  const { sequenceRuleUnit, sequenceStepSummary, normalizeRuleDraft } = await import("../frontend-src/components/rule-editor.js");
+  const panel = new AlertManagerPanel();
+  panel._editingRule = normalizeRuleDraft({ source: "value_sequence", entity_ids: ["sensor.power"], steps: [
+    { operator: "above", value: 100, duration: 60 },
+    { operator: "between", value: [1, 5], duration: 120 },
+  ] });
+  panel._hass = { states: { "sensor.power": { attributes: { unit_of_measurement: "W" } } } };
+  assert.match(panel._renderRuleEditor(), /100 W/);
+  assert.match(panel._renderRuleEditor(), /1 W \/ 5 W/);
+  assert.equal(sequenceRuleUnit({ ...panel._editingRule, attribute: "other" }, panel._hass.states), "");
+  assert.equal(sequenceRuleUnit({ entity_ids: ["sensor.power", "sensor.missing"] }, panel._hass.states), "");
+  assert.doesNotMatch(sequenceStepSummary({ operator: "above", value: 100 }, (key) => key), /100 W/);
+  assert.equal(panel._editingRule.auto_resolve, 1);
+  assert.equal(normalizeRuleDraft({ auto_resolve: 600 }).auto_resolve, 600);
+});

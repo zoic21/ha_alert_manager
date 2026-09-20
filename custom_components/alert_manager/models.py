@@ -1083,57 +1083,71 @@ class Rule:
             raise ValueError("Sequence requires between 2 and 20 steps")
         if self.duration != 0 or self.condition_template:
             raise ValueError("Sequence requires zero delay and no template")
-        for value, minimum in ((self.sequence_timeout, 0), (self.auto_resolve, 1)):
+        for error_field, value, minimum in (
+            ("sequence_timeout", self.sequence_timeout, 0),
+            ("auto_resolve", self.auto_resolve, 1),
+        ):
             if (
                 isinstance(value, bool)
                 or not isinstance(value, int)
                 or not minimum <= value <= 31_536_000
             ):
-                raise ValueError("Invalid sequence duration")
-        for step in self.steps:
-            if not isinstance(step, dict) or set(step) - {
-                "operator",
-                "value",
-                "duration_mode",
-                "enabled",
-                "duration",
-                "duration_max",
-            }:
-                raise ValueError("Invalid sequence step")
-            if (
-                step.get("operator") not in OPERATORS
-                or step.get("operator") == "unchanged"
-                or "value" not in step
-            ):
-                raise ValueError("Invalid sequence step")
-            if not isinstance(step.get("enabled", True), bool):
-                raise ValueError("Invalid sequence step")
-            mode = step.get("duration_mode", "at_least")
-            duration = step.get("duration", 0)
-            maximum = step.get("duration_max", 0)
-            if mode not in ("at_least", "less_than", "between"):
-                raise ValueError("Invalid sequence duration mode")
-            for value in (duration, maximum):
+                raise ValueError(f"{error_field}: Invalid sequence duration")
+        for index, step in enumerate(self.steps):
+            try:
+                error_field = "value"
+                if not isinstance(step, dict) or set(step) - {
+                    "operator",
+                    "value",
+                    "duration_mode",
+                    "enabled",
+                    "duration",
+                    "duration_max",
+                }:
+                    raise ValueError("Invalid sequence step")
                 if (
-                    isinstance(value, bool)
-                    or not isinstance(value, int)
-                    or not 0 <= value <= 31_536_000
+                    step.get("operator") not in OPERATORS
+                    or step.get("operator") == "unchanged"
+                    or "value" not in step
                 ):
-                    raise ValueError("Invalid sequence duration")
-            if (
-                (mode == "less_than" and duration == 0)
-                or (mode == "between" and maximum <= duration)
-                or (mode != "between" and maximum)
-            ):
-                raise ValueError("Invalid sequence duration bounds")
-            replace(
-                self,
-                source="value",
-                steps=[],
-                sequence_timeout=0,
-                operator=step["operator"],
-                value=step["value"],
-            ).validate()
+                    raise ValueError("Invalid sequence step")
+                if not isinstance(step.get("enabled", True), bool):
+                    raise ValueError("Invalid sequence step")
+                mode = step.get("duration_mode", "at_least")
+                duration = step.get("duration", 0)
+                maximum = step.get("duration_max", 0)
+                error_field = "duration_mode"
+                if mode not in ("at_least", "less_than", "between"):
+                    raise ValueError("Invalid sequence duration mode")
+                for duration_field, value in (
+                    ("duration", duration),
+                    ("duration_max", maximum),
+                ):
+                    error_field = duration_field
+                    if (
+                        isinstance(value, bool)
+                        or not isinstance(value, int)
+                        or not 0 <= value <= 31_536_000
+                    ):
+                        raise ValueError("Invalid sequence duration")
+                error_field = "duration_max" if mode == "between" else "duration"
+                if (
+                    (mode == "less_than" and duration == 0)
+                    or (mode == "between" and maximum <= duration)
+                    or (mode != "between" and maximum)
+                ):
+                    raise ValueError("Invalid sequence duration bounds")
+                error_field = "value"
+                replace(
+                    self,
+                    source="value",
+                    steps=[],
+                    sequence_timeout=0,
+                    operator=step["operator"],
+                    value=step["value"],
+                ).validate()
+            except ValueError as err:
+                raise ValueError(f"steps[{index}].{error_field}: {err}") from err
         self.steps = [
             {"duration_mode": "at_least", "duration": 0, **step} for step in self.steps
         ]

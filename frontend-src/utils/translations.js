@@ -105,6 +105,20 @@ export function errorText(error) {
     const code = error?.code ?? error?.body?.code;
     const message = error?.message ?? error?.body?.message;
     if (code === "invalid_format" && typeof message === "string" && message) {
+      const contextual = message.match(/^(steps\[(\d+)\]\.(value|duration|duration_max|duration_mode)|auto_resolve|sequence_timeout|resolve_condition): (.+)$/);
+      if (contextual) {
+        const labels = {
+          value: "rules.values", duration: "rules.sequence_duration",
+          duration_max: "rules.sequence_maximum", duration_mode: "rules.sequence_timing",
+          auto_resolve: "rules.auto_resolve", sequence_timeout: "rules.sequence_timeout",
+          resolve_condition: "rules.resolve_mode_condition",
+        };
+        const field = this._t(labels[contextual[3] ?? contextual[1]]);
+        const detail = errorText.call(this, { code, message: contextual[4] });
+        return this._t(contextual[2] === undefined ? "errors.field_context" : "errors.sequence_field_context", {
+          field, step: Number(contextual[2]) + 1, detail,
+        });
+      }
       const exactKey = VALIDATION_ERROR_KEYS.get(message);
       if (exactKey) return this._t(`errors.${exactKey}`);
       const prefix = VALIDATION_ERROR_PREFIX_KEYS.find(([value]) => message.startsWith(value));

@@ -46,11 +46,11 @@ _EXCEPTION_KEYS = {"selector_type", "selector_id", "selector_ids", *_POLICY_KEYS
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
 _NOTIFICATION_ICONS = {
-    "started": ("mdi:alert-circle", "🚨"),
-    "reminder": ("mdi:bell-ring", "🔔"),
-    "resolved": ("mdi:check-circle", "✅"),
-    "started_resolved": ("mdi:check-circle", "✅"),
-    "test": ("mdi:bell-check", ""),
+    "started": ("mdi:alert-circle", "🚨", "#F44336"),
+    "reminder": ("mdi:bell-ring", "🔔", "#FF9800"),
+    "resolved": ("mdi:check-circle", "✅", "#4CAF50"),
+    "started_resolved": ("mdi:check-circle", "✅", "#2196F3"),
+    "test": ("mdi:bell-check", "", "#2196F3"),
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ class NotificationManager:
     ) -> str | None:
         """Call one native notify entity and return a bounded known error."""
         try:
-            icon, emoji = _NOTIFICATION_ICONS.get(kind or "", (None, ""))
+            icon, emoji, color = _NOTIFICATION_ICONS.get(kind or "", (None, "", None))
             mobile_service = (
                 self._mobile_notify_service(target) if click_url or icon else None
             )
@@ -184,6 +184,7 @@ class NotificationManager:
                     data.update(url=click_url, clickAction=click_url)
                 if icon:
                     data["notification_icon"] = icon
+                    data["color"] = color
                 await self._hass.services.async_call(
                     NOTIFY_DOMAIN,
                     mobile_service,

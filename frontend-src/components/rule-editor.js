@@ -97,7 +97,7 @@ export function captureRuleDraftFromForm(form, currentRule = {}, selectorValues 
       sequence_timeout: Number(value("sequence_timeout") ?? currentRule.sequence_timeout ?? 0),
       from_value: String(value("from_value") ?? currentRule.from_value ?? ""),
       to_value: String(value("to_value") ?? currentRule.to_value ?? ""),
-      auto_resolve: Number(value("auto_resolve") ?? currentRule.auto_resolve ?? 600),
+      auto_resolve: Number(value("auto_resolve") ?? currentRule.auto_resolve ?? 1),
       resolve_mode: value("resolve_mode") ?? currentRule.resolve_mode ?? "duration",
       resolve_condition: captureResolutionCondition(form, currentRule.resolve_condition),
       duration: Number(value("duration") ?? currentRule.duration ?? 900),
@@ -180,11 +180,11 @@ export function serializeRuleDraft(draft) {
         : null,
       operator,
       value: comparisonValue,
-      ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 600), resolve_mode: draft.resolve_mode ?? "duration" } : {}),
+      ...(TRANSITION_RULE_SOURCES.has(source) ? { from_value: draft.from_value, to_value: draft.to_value, auto_resolve: Number(draft.auto_resolve ?? 1), resolve_mode: draft.resolve_mode ?? "duration" } : {}),
       ...(source === "value_sequence" ? {
         steps: (draft.steps ?? []).map(({ _expanded, ...step }) => ({ ...step, value: Array.isArray(step.value) ? [...step.value] : step.value })),
         sequence_timeout: Number(draft.sequence_timeout ?? 0),
-        auto_resolve: Number(draft.auto_resolve ?? 600),
+        auto_resolve: Number(draft.auto_resolve ?? 1),
         resolve_mode: draft.resolve_mode ?? "duration",
       } : {}),
       ...((TRANSITION_RULE_SOURCES.has(source) || source === "value_sequence") && draft.resolve_mode === "condition"
@@ -239,6 +239,7 @@ export function refreshRuleConditionSection() {
     }
     section.outerHTML = renderRuleConditionSection({
       rule: normalizeRuleDraft(this._editingRule ?? {}),
+      sequenceUnit: sequenceRuleUnit(this._editingRule, this._hass?.states),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
       t: (key, replacements) => this._t(key, replacements),
@@ -443,6 +444,7 @@ export function renderRuleEditor(context) {
         rule, t, renderTextField, renderNumberField, flappingAvailable,
         testResult,
         renderTestResult: context.renderTestResult,
+        sequenceUnit: context.sequenceUnit,
       });
     const drawer = `<ha-card outlined class="side-drawer rule-editor-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(rule.id ? "rules.aria_edit_dialog" : "rules.aria_create_dialog"))}">
       ${renderDrawerResizeHandle(t("rules.aria_resize"))}
@@ -468,6 +470,7 @@ export function renderRuleEditor(context) {
 export function renderRuleEditorPanel() {
     return renderRuleEditor({
       rule: normalizeRuleDraft(this._editingRule ?? {}),
+      sequenceUnit: sequenceRuleUnit(this._editingRule, this._hass?.states),
       mode: this._ruleEditorMode,
       busy: this._busy,
       editorError: this._ruleEditorError,
@@ -496,7 +499,7 @@ export function renderRuleVisualEditor(context) {
             <div class="field full"><span class="field-label">${esc(t("rules.entities"))}</span><ha-selector id="rule-entity-ids"></ha-selector><small>${esc(t("rules.entities_help"))}</small></div>
           </div>
         </section>
-        ${renderRuleConditionSection({ rule, t, renderTextField, renderNumberField })}
+        ${renderRuleConditionSection({ rule, t, renderTextField, renderNumberField, sequenceUnit: context.sequenceUnit })}
         <section class="rule-editor-section">
           <div class="rule-section-heading"><div><h3>${esc(t("rules.editor_trigger"))}</h3><small>${esc(t("rules.editor_trigger_help"))}</small></div></div>
           <div class="fields">
@@ -514,7 +517,7 @@ export function renderRuleVisualEditor(context) {
         </section>` : ""}`;
 }
 
-export function renderRuleConditionSection({ rule, t, renderTextField, renderNumberField }) {
+export function renderRuleConditionSection({ rule, t, renderTextField, renderNumberField, sequenceUnit = "" }) {
     const jinjaOnly = rule.source === "jinja";
     const variation = VARIATION_RULE_SOURCES.has(rule.source);
     const unchanged = rule.source === "unchanged";
@@ -527,7 +530,7 @@ export function renderRuleConditionSection({ rule, t, renderTextField, renderNum
           <div class="field"><span class="field-label">${esc(t("rules.source"))}</span><ha-select id="rule-source" data-field="source"></ha-select></div>
           <div class="field rule-attribute-field" ${ATTRIBUTE_RULE_SOURCES.has(rule.source) ? "" : "hidden"}><span class="field-label">${esc(t("rules.attribute_name"))}</span><ha-selector id="rule-attribute" data-field="attribute"></ha-selector><small>${esc(t(["value_variation", "value_transition", "value_sequence"].includes(rule.source) ? "rules.attribute_variation_path_help" : "rules.attribute_path_help"))}</small></div>
           ${transition ? `${renderTextField("from_value", t("rules.from_value"), rule.from_value ?? "", true, "name")}${renderTextField("to_value", t("rules.to_value"), rule.to_value ?? "", true, "name")}${renderResolutionEditor({ rule, t, renderNumberField })}<small class="full">${esc(t("rules.transition_help"))}</small>` : ""}
-          ${sequence ? renderSequenceEditor({ rule, t, renderNumberField }) + renderResolutionEditor({ rule, t, renderNumberField }) : ""}
+          ${sequence ? renderSequenceEditor({ rule, t, renderNumberField, unit: sequenceUnit }) + renderResolutionEditor({ rule, t, renderNumberField }) : ""}
           ${comparisonFree ? "" : `<div class="field full"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-operator" data-field="operator"></ha-select></div>${renderRuleValues({ rule, t })}`}
           ${sequence ? "" : `<div class="field full rule-template-field"><span class="field-label">${esc(t(jinjaOnly ? "rules.condition_template_only" : variation ? "rules.condition_template_variation" : "rules.condition_template"))}</span><ha-selector id="rule-condition-template" ${jinjaOnly || variation ? 'required aria-required="true"' : ""}></ha-selector><small>${esc(t(jinjaOnly ? "rules.condition_template_only_help" : variation ? "rules.condition_template_variation_help" : unchanged ? "rules.condition_template_unchanged_help" : rule.operator === "unchanged" ? "rules.condition_template_selected_unchanged_help" : "rules.condition_template_help"))}</small></div>`}
         </div>
@@ -994,19 +997,23 @@ export function hydrateRuleEditorControls() {
       this._refreshRuleConditionSection();
     },
     onEntitiesChanged: (value) => {
+      this._captureRuleDraft();
       this._editingRule.entity_ids = this._multipleSelectorValue(
         value,
         this._editingRule.entity_ids,
       );
       this._ruleDirty = true;
+      if (this._editingRule.source === "value_sequence") this._refreshRuleConditionSection();
     },
     onLabelsChanged: (value) => {
       this._editingRule.label_ids = this._multipleSelectorValue(value, this._editingRule.label_ids);
       this._ruleDirty = true;
     },
     onAttributeChanged: (value) => {
+      this._captureRuleDraft();
       this._editingRule.attribute = String(value ?? "");
       this._ruleDirty = true;
+      if (this._editingRule.source === "value_sequence") this._refreshRuleConditionSection();
     },
     onConditionTemplateChanged: (value) => {
       this._editingRule.condition_template = String(value ?? "");
@@ -1026,7 +1033,7 @@ export function hydrateRuleEditorControls() {
   });
 }
 
-export function renderSequenceEditor({ rule, t, renderNumberField }) {
+export function renderSequenceEditor({ rule, t, renderNumberField, unit = "" }) {
   const steps = rule.steps ?? [newSequenceStep(), newSequenceStep()];
   const duration = (index, key, label, value, minimum = 0) => renderNumberField(
     `sequence-${index}-${key}`, label, value, t("units.seconds"), minimum, MAX_DURATION_SECONDS, { nameMode: "name" },
@@ -1036,7 +1043,7 @@ export function renderSequenceEditor({ rule, t, renderNumberField }) {
       const mode = step.duration_mode ?? "at_least";
 
       const title = t(index === 0 ? "rules.sequence_first" : "rules.sequence_then", { index: index + 1 });
-      const summary = sequenceStepSummary(step, t);
+      const summary = sequenceStepSummary(step, t, unit);
       return `<ha-expansion-panel left-chevron class="sequence-step${step.enabled === false ? " sequence-step-disabled" : ""}" data-sequence-step="${index}" header="${esc(title)}" secondary="${step._expanded ? "" : esc(summary)}" ${step._expanded ? "expanded" : ""}>
         <div slot="header" class="sequence-step-header"><ha-icon-button class="sequence-step-reorder" data-index="${index}" aria-label="${esc(t("rules.sequence_reorder", { index: index + 1 }))}" title="${esc(t("rules.sequence_reorder_help"))}"><ha-icon icon="mdi:reorder-horizontal"></ha-icon></ha-icon-button><div class="sequence-step-heading-text"><div>${esc(title)}</div><small class="sequence-step-summary" ${step._expanded ? "hidden" : ""}>${esc(summary)}</small></div></div>
         <div slot="icons" class="sequence-step-actions"><ha-switch data-sequence-enabled aria-label="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" title="${esc(t("rules.sequence_enabled", { index: index + 1 }))}" ${step.enabled !== false ? "checked" : ""}></ha-switch>${steps.length > 2 ? renderConfigurationRemove(t("rules.sequence_remove", { index: index + 1 }), "remove-sequence-step", { "data-index": index }) : ""}</div><div class="sequence-step-content">
@@ -1087,7 +1094,7 @@ function hydrateSequenceEditor() {
         this._captureRuleDraft();
         const current = this._editingRule.steps[index];
         current._expanded = event.detail.expanded;
-        const text = sequenceStepSummary(current, (key, values) => this._t(key, values));
+        const text = sequenceStepSummary(current, (key, values) => this._t(key, values), sequenceRuleUnit(this._editingRule, this._hass?.states));
         expansion.secondary = current._expanded ? "" : text;
         const summary = expansion.querySelector(".sequence-step-summary");
         if (summary) {
@@ -1141,8 +1148,14 @@ function ruleComparisonOptions(t) {
   return ["above", "below", "equals", "not_equals", "contains", "not_contains", "between", "outside"].map((value) => ({ value, label: t(`operators.${value}`) }));
 }
 
-export function sequenceStepSummary(step, t) {
-  const comparison = `${t(`operators.${step.operator}`)} ${ruleValueList(step.value).join(" / ")}`;
+export function sequenceRuleUnit(rule, states = {}) {
+  if (rule?.attribute || !rule?.entity_ids?.length) return "";
+  const units = rule.entity_ids.map((id) => states[id]?.attributes?.unit_of_measurement ?? "");
+  return units.every((unit) => unit === units[0]) ? units[0] : "";
+}
+
+export function sequenceStepSummary(step, t, unit = "") {
+  const comparison = `${t(`operators.${step.operator}`)} ${ruleValueList(step.value).map((value) => unit ? `${value} ${unit}` : value).join(" / ")}`;
   const duration = (seconds) => durationText.call({ _t: t }, seconds ?? 0);
   const timing = `${t(`rules.sequence_${step.duration_mode ?? "at_least"}`)} ${duration(step.duration)}${step.duration_mode === "between" ? ` – ${duration(step.duration_max)}` : ""}`;
   return `${step.enabled === false ? `${t("rules.sequence_disabled")} · ` : ""}${comparison} · ${timing}`;
@@ -1152,7 +1165,7 @@ export function renderResolutionEditor({ rule, t, renderNumberField }) {
   const mode = rule.resolve_mode ?? "duration";
   const condition = rule.resolve_condition ?? { operator: "below", value: "" };
   return `<div class="field full"><span class="field-label">${esc(t("rules.resolve_mode"))}</span><ha-select id="rule-resolve-mode" data-field="resolve_mode"></ha-select></div>
-    ${mode === "duration" ? renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 600, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" }) : ""}
+    ${mode === "duration" ? renderNumberField("auto_resolve", t("rules.auto_resolve"), rule.auto_resolve ?? 1, t("units.seconds"), 1, MAX_DURATION_SECONDS, { nameMode: "name" }) : ""}
     ${mode === "condition" ? `<div class="sequence-comparison full" data-resolution-condition><div class="field"><span class="field-label">${esc(t("rules.operator"))}</span><ha-select id="rule-resolution-operator" data-field="operator"></ha-select></div><div class="fields sequence-values">${renderRuleValues({ rule: condition, t })}</div></div><small class="full">${esc(t("rules.resolve_condition_help"))}</small>` : ""}
     ${mode === "state" && rule.source === "value_sequence" ? `<small class="full">${esc(t("rules.resolve_last_step_help"))}</small>` : ""}`;
 }

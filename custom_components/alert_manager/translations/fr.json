@@ -316,12 +316,14 @@
       "transition_resolution_mode": "Choisissez un mode de résolution de transition valide.",
       "sequence_steps": "Une séquence doit contenir entre 2 et 20 étapes.",
       "sequence_options": "Une séquence utilise duration: 0 et aucune condition Jinja.",
-      "sequence_duration": "Les durées doivent être des secondes entières entre 0 et 31536000 ; la résolution doit durer au moins 1 seconde.",
+      "sequence_duration": "La durée doit être un nombre entier de secondes entre 0 et 31 536 000 (minimum 1 pour la résolution).",
       "sequence_step": "Choisissez un opérateur de comparaison et une valeur valides pour chaque étape.",
       "sequence_mode": "Choisissez « Au moins », « Moins de » ou « Entre deux durées ».",
       "sequence_bounds": "La durée maximale doit dépasser la minimale ; « Moins de » exige une durée supérieure à 0.",
       "sequence_source": "Les champs de séquence exigent source: value_sequence.",
-      "resolution_condition": "Choisissez une comparaison et une valeur de résolution valides."
+      "resolution_condition": "Choisissez une comparaison et une valeur de résolution valides.",
+      "field_context": "{field} : {detail}",
+      "sequence_field_context": "Étape {step} — {field} : {detail}"
     },
     "loading": "Chargement d’Alert Manager…",
     "history": {

@@ -1276,3 +1276,35 @@ def test_pending_sequence_label_edit_preserves_progress(hass, entry, via_import)
     # A configuration rebuild must also preserve the new presentation.
     run(manager.async_update_config({"excluded_labels": ["unrelated"]}))
     assert manager.public_snapshot()["pending"][0]["labels"] == ["new"]
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"auto_resolve": 0}, "auto_resolve"),
+        ({"sequence_timeout": -1}, "sequence_timeout"),
+    ],
+)
+def test_sequence_global_duration_errors_identify_field(changes, field):
+    with pytest.raises(ValueError, match=f"^{field}: Invalid sequence duration"):
+        sequence(**changes)
+
+
+@pytest.mark.parametrize(
+    ("step", "field"),
+    [
+        ({"duration": -1}, "duration"),
+        ({"duration_mode": "between", "duration_max": -1}, "duration_max"),
+        ({"duration_mode": "between", "duration_max": 0}, "duration_max"),
+        ({"duration_mode": "less_than", "duration": 0}, "duration"),
+        ({"value": "not a number"}, "value"),
+    ],
+)
+def test_sequence_step_errors_identify_index_and_field(step, field):
+    with pytest.raises(ValueError, match=rf"^steps\[1\]\.{field}:"):
+        sequence(
+            steps=[
+                {"operator": "above", "value": 100},
+                {"operator": "below", "value": 10, **step},
+            ]
+        )

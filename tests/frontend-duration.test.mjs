@@ -205,3 +205,37 @@ test("transition duration is hydrated after each partial resolution-mode refresh
     assert.equal(inputEvents, 2);
   }
 });
+
+test("invalid duration reports the visible field label and sequence step before saving", () => {
+  for (const [name, label, expected] of [
+    ["auto_resolve", "Résolution automatique", "Résolution automatique"],
+    ["sequence-1-duration", "Durée", "Étape 2 — Durée"],
+  ]) {
+    const field = {
+      dataset: { durationValue: "0", durationMin: "1", durationMax: "31536000", field: name },
+      value: { seconds: 0 }, required: true,
+      getAttribute: () => label,
+    };
+    const form = { reportValidity: () => true, querySelectorAll: (selector) => selector === "[data-duration-value]" ? [field] : [] };
+    const panel = {
+      _editingRule: {}, _durationText: (value) => `${value} s`,
+      _t: (key, params) => key === "errors.duration_field_bounds" ? `Entre ${params.min} et ${params.max}`
+        : `${key === "errors.sequence_field_context" ? `Étape ${params.step} — ` : ""}${params.field} : ${params.detail}`,
+      _captureRuleDraft() {}, _refreshRuleEditor() {}, _refreshUiState() {},
+    };
+    assert.equal(reportFormValidity.call(panel, form), false);
+    assert.ok(panel._ruleEditorError.startsWith(expected), panel._ruleEditorError);
+    assert.match(panel._ruleEditorError, /Entre 1 s et 31536000 s/);
+  }
+});
+
+test("new sequence and transition rules display and serialize one-second resolution", async () => {
+  const { normalizeRuleDraft, serializeRuleDraft, renderResolutionEditor } = await import("../frontend-src/components/rule-editor.js");
+  for (const source of ["value_sequence", "value_transition"]) {
+    const rule = normalizeRuleDraft({ source });
+    assert.equal(serializeRuleDraft(rule).auto_resolve, 1);
+    const html = renderResolutionEditor({ rule, t: (key) => key, renderNumberField: (id, label, value, _unit, min, max) => renderDurationControl(id, label, value, min, max) });
+    assert.match(html, /data-duration-value="1"/);
+    assert.match(html, /data-duration-min="1"/);
+  }
+});

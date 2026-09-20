@@ -168,6 +168,7 @@ const newRuleDefaults = () => ({
   operator: "equals",
   value: [""],
   duration: 900,
+  auto_resolve: 1,
   message: "",
   update_message_when_active: false,
   condition_template: "",

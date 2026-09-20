@@ -10,15 +10,16 @@ from custom_components.alert_manager.notifications import NotificationManager
 
 
 @pytest.mark.parametrize(
-    ("kind", "icon", "emoji"),
+    ("kind", "icon", "emoji", "color"),
     [
-        ("started", "mdi:alert-circle", "🚨"),
-        ("reminder", "mdi:bell-ring", "🔔"),
-        ("resolved", "mdi:check-circle", "✅"),
+        ("started", "mdi:alert-circle", "🚨", "#F44336"),
+        ("reminder", "mdi:bell-ring", "🔔", "#FF9800"),
+        ("resolved", "mdi:check-circle", "✅", "#4CAF50"),
+        ("started_resolved", "mdi:check-circle", "✅", "#2196F3"),
     ],
 )
 def test_native_icon_for_mobile_and_emoji_fallback(
-    hass, registry_entry, config_entry, kind, icon, emoji
+    hass, registry_entry, config_entry, kind, icon, emoji, color
 ) -> None:
     """Use native Companion icons while generic targets retain title emojis."""
     entry = config_entry(hass, "mobile_app")
@@ -57,6 +58,7 @@ def test_native_icon_for_mobile_and_emoji_fallback(
             "url": "/alert-manager",
             "clickAction": "/alert-manager",
             "notification_icon": icon,
+            "color": color,
         },
     }
     generic = calls["send_message"]

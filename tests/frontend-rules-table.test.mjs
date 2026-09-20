@@ -319,3 +319,14 @@ test("rules display their title without a status icon on desktop and mobile", ()
     assert.ok(cell.children.every((child) => child.tagName !== "HA-ICON"));
   }
 });
+
+test("sequence rows omit duration while simple rules retain zero delay", async () => {
+  const { buildRuleTableRows } = await import("../frontend-src/views/rules.js");
+  const rows = buildRuleTableRows([
+    { id: "sequence", source: "value_sequence", duration: 0 },
+    { id: "simple", source: "value", duration: 0 },
+  ], { t: (key) => key, summarizeRule: () => "", formatDuration: (value) => `${value} s` });
+  assert.equal(rows[0].duration, "");
+  assert.equal(rows[0].durationSort, null);
+  assert.equal(rows[1].duration, "0 s");
+});

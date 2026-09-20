@@ -54,7 +54,7 @@ export function hydrateDurationFields(root, panel, onChange) {
   });
 }
 
-export function validateDurationFields(root, panel) {
+export function validateDurationFields(root, panel, onInvalid) {
   let valid = true;
   for (const field of root?.querySelectorAll?.("[data-duration-value]") ?? []) {
     const value = durationFieldValue(field);
@@ -65,7 +65,10 @@ export function validateDurationFields(root, panel) {
     field.helper = fieldValid ? undefined : panel._t("errors.duration_field_bounds", {
       min: panel._durationText(min), max: panel._durationText(max),
     });
-    if (!fieldValid) field.reportValidity?.();
+    if (!fieldValid) {
+      field.reportValidity?.();
+      onInvalid?.(field);
+    }
     valid = fieldValid && valid;
   }
   return valid;
@@ -80,13 +83,21 @@ export function reportFormValidity(form, { includeDrawer = true } = {}) {
       valid = false;
     }
   });
-  if (!validateDurationFields(form, this)) {
+  let durationError;
+  if (!validateDurationFields(form, this, (field) => {
+    if (durationError) return;
+    const label = field.getAttribute?.("aria-label");
+    const step = field.dataset.field?.match(/^sequence-(\d+)-/);
+    durationError = label ? this._t(step ? "errors.sequence_field_context" : "errors.field_context", {
+      field: label, step: Number(step?.[1]) + 1, detail: field.helper,
+    }) : this._t("errors.duration_field_range");
+  })) {
     if (this._editingRule) {
-      this._ruleEditorError = this._t("errors.duration_field_range");
+      this._ruleEditorError = durationError;
       this._captureRuleDraft(form);
       this._refreshRuleEditor();
     } else {
-      this[includeDrawer ? "_notice" : "_pageNotice"] = { kind: "error", text: this._t("errors.duration_field_range") };
+      this[includeDrawer ? "_notice" : "_pageNotice"] = { kind: "error", text: durationError };
     }
     this._refreshUiState();
     valid = false;
