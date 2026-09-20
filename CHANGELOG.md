@@ -7,8 +7,18 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.6**, dated **2026-09-19**.
+Current release candidate: **2.4.0-rc.7**, dated **2026-09-20**.
 This is a prerelease for testing, not a stable release.
+
+### Rule editor and notifications
+
+- Use notification icon backgrounds matching the event: red for activation, green
+  for resolution, orange for reminders, and blue for combined activation/resolution.
+- Show entity units in sequence step summaries and leave the rule table's global
+  duration empty for sequences.
+- Default new transition and sequence rules to one-second timed resolution while
+  preserving existing configured delays.
+- Identify the invalid duration field and sequence step in validation errors.
 
 ### Reliability fixes
 
