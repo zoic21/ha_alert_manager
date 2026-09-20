@@ -67,6 +67,7 @@ test("rules rendering consumes an explicit context without a panel instance", ()
   assert.match(markup, /--rule-editor-width:640px/);
   assert.match(markup, /&lt;Rules&gt;/);
   assert.match(markup, /<filters label="rules.status">active,inactive<\/filters>/);
+  assert.match(markup, /<filters label="rules.filter_labels">/);
   assert.match(markup, /<aside>editor<\/aside>/);
 });
 

@@ -6705,7 +6705,7 @@ function renderRuleFilters({ t, renderFacetFilter, labels = [], entityFilters = 
     return renderFacetFilter("rules", "enabled", t("rules.status"), [
       { value: "active", label: t("rules.status_active") },
       { value: "inactive", label: t("rules.status_inactive") },
-    ]) + renderFacetFilter("rules", "labels", t("table.filters.labels"), labels)
+    ]) + renderFacetFilter("rules", "labels", t("rules.filter_labels"), labels)
       + Object.entries(RULE_ENTITY_FILTERS).map(([key, translation]) => (
         renderFacetFilter("rules", key, t(translation), entityFilters[key] ?? [])
       )).join("");

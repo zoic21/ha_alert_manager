@@ -560,6 +560,7 @@
       }
     },
     "rules": {
+      "filter_labels": "Rule labels",
       "aria_close": "Close",
       "aria_create_dialog": "Create a rule",
       "aria_disable": "Disable rule {name}",

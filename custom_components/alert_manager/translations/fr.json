@@ -560,6 +560,7 @@
       }
     },
     "rules": {
+      "filter_labels": "Étiquettes de la règle",
       "aria_close": "Fermer",
       "aria_create_dialog": "Créer une règle",
       "aria_disable": "Désactiver la règle {name}",
