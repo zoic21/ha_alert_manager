@@ -59,7 +59,7 @@ def _evaluate(
 
 PACK = AutomaticPack(
     config_fields=configuration_fields(),
-    target_filter={"integration": "unifi"},
+    target_filter={"domain": "device_tracker", "integration": "unifi"},
     order=2,
     id=CATEGORY_UNIFI,
     translation_key="unifi",

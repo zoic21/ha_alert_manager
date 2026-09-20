@@ -104,7 +104,7 @@ If a known field in the saved configuration has an invalid value at startup, the
 
 Older configurations, version-1 YAML and backups convert shared trigger delays into explicit pack defaults and per-entity delays into pack exceptions, including disabled packs. Battery thresholds, consecutive failed-cycle counts and source-priority flapping values retain their behavior.
 
-Direct entity/device exclusions become disabled exceptions in every pack while preserving thresholds and delays. Global label exclusions remain unchanged; no Home Assistant labels or registry entries are created or modified. Missing targets remain in exception maps so they stay excluded if they return. Invalid source data leaves the original configuration recoverable.
+Direct entity/device exclusions become disabled exceptions in compatible packs while preserving applicable thresholds and delays. Unsupported target kinds and entity domains are removed, including from configurations already migrated to 2.4 and flapping source-pack exceptions. Automation/script errors accept only `automation` and `script` entities, battery accepts `sensor` entities, connectivity accepts `binary_sensor` entities, UniFi accepts `device_tracker` entities, and available updates accepts only `update` entities. Automation/script errors and available updates do not accept device exceptions. Device classes and integration ownership are not used for destructive cleanup because they may be unknown at startup or change later. Global label exclusions remain unchanged; no Home Assistant labels or registry entries are created or modified. Missing targets remain in exception maps so they stay excluded if they return. Invalid source data leaves the original configuration recoverable.
 
 ## Runtime diagnostics
 

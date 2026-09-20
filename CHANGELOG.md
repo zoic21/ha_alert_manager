@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.7**, dated **2026-09-20**.
+Current release candidate: **2.4.0-rc.8**, dated **2026-09-20**.
 This is a prerelease for testing, not a stable release.
 
 ### Rule editor and notifications
@@ -21,6 +21,10 @@ This is a prerelease for testing, not a stable release.
 - Identify the invalid duration field and sequence step in validation errors.
 
 ### Reliability fixes
+
+- Filter migrated pack exclusions and legacy delay exceptions by supported target
+  kind and entity domain, including flapping source-pack exceptions. Clean already
+  migrated configurations on load and retain potentially valid absent targets.
 
 - Preserve notifications for alerts that resolve before batch delivery. Activation-only
   profiles retain the original message; profiles requesting activation and recovery

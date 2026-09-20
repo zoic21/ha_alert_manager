@@ -74,7 +74,10 @@ def test_conversion_preserves_effective_values_and_sparse_inheritance():
         if pack_id == "flapping":
             continue
         assert pack["delay"] == (0 if pack_id == "execution_errors" else 123)
-        assert pack["entity_overrides"]["sensor.battery"] == {"delay": 0}
+        if pack_id in ("connectivity", "unifi", "execution_errors"):
+            assert "sensor.battery" not in pack["entity_overrides"]
+        else:
+            assert pack["entity_overrides"]["sensor.battery"] == {"delay": 0}
     assert config["automatic"]["battery"]["device_overrides"]["a" * 32] == {
         "threshold": 20
     }
@@ -103,8 +106,14 @@ def test_exclusions_become_disabled_pack_exceptions_without_registry_writes(hass
             assert pack["entity_overrides"] == {}
             assert "device_overrides" not in pack
             continue
-        assert pack["entity_overrides"]["sensor.battery"]["enabled"] is False
-        assert pack["device_overrides"]["a" * 32]["enabled"] is False
+        if pack_id in ("connectivity", "unifi", "execution_errors"):
+            assert "sensor.battery" not in pack["entity_overrides"]
+        else:
+            assert pack["entity_overrides"]["sensor.battery"]["enabled"] is False
+        if pack_id == "execution_errors":
+            assert pack["device_overrides"] == {}
+        else:
+            assert pack["device_overrides"]["a" * 32]["enabled"] is False
     assert (
         config["automatic"]["battery"]["device_overrides"]["a" * 32]["threshold"] == 20
     )
@@ -138,8 +147,16 @@ def test_orphan_exclusions_are_retained_and_override_enabled_exceptions():
             assert pack["entity_overrides"] == {}
             assert "device_overrides" not in pack
             continue
-        assert resolve_settings(pack, "sensor.battery", None)[0]["enabled"] is False
-        assert resolve_settings(pack, "sensor.future", "a" * 32)[0]["enabled"] is False
+        if pack_id in ("connectivity", "unifi", "execution_errors"):
+            assert "sensor.battery" not in pack["entity_overrides"]
+        else:
+            assert resolve_settings(pack, "sensor.battery", None)[0]["enabled"] is False
+        if pack_id == "execution_errors":
+            assert pack["device_overrides"] == {}
+        else:
+            assert (
+                resolve_settings(pack, "sensor.future", "a" * 32)[0]["enabled"] is False
+            )
     assert (
         resolve_settings(
             config["automatic"]["flapping"],
@@ -179,7 +196,7 @@ def test_old_yaml_uses_the_same_boundary_conversion(hass):
     )
     assert "excluded_entities" not in imported
     assert "excluded_devices" not in imported
-    assert import_summary(imported)["pack_exceptions"] >= 12
+    assert import_summary(imported)["pack_exceptions"] == 10
     loaded, _ = _migrate_config_shape(raw)
     assert validate_config(migrate_exclusions(imported)) == validate_config(
         migrate_exclusions(loaded)
@@ -218,3 +235,108 @@ def test_failed_startup_migration_keeps_original_store_without_reconciliation(
     assert not manager.records
     assert hass.stores["alert_manager"] == original
     assert not hass.bus.fired
+
+
+@pytest.mark.parametrize(
+    "pack_id,expected",
+    [
+        (
+            "unavailable",
+            {
+                "sensor.future",
+                "binary_sensor.future",
+                "device_tracker.future",
+                "automation.future",
+                "script.future",
+                "update.future",
+            },
+        ),
+        (
+            "flapping",
+            {
+                "sensor.future",
+                "binary_sensor.future",
+                "device_tracker.future",
+                "automation.future",
+                "script.future",
+                "update.future",
+            },
+        ),
+        ("battery", {"sensor.future"}),
+        ("connectivity", {"binary_sensor.future"}),
+        ("unifi", {"device_tracker.future"}),
+        ("execution_errors", {"automation.future", "script.future"}),
+        ("update_available", {"update.future"}),
+    ],
+)
+def test_exclusion_migration_filters_each_pack_without_losing_possible_targets(
+    pack_id, expected
+):
+    raw = {
+        "excluded_entities": [
+            "sensor.future",
+            "binary_sensor.future",
+            "device_tracker.future",
+            "automation.future",
+            "script.future",
+            "update.future",
+        ],
+        "excluded_devices": ["a" * 32],
+    }
+    config = migrate_exclusions(raw)
+    pack = config["automatic"][pack_id]
+    assert pack["entity_overrides"] == {
+        target: {"enabled": False} for target in expected
+    }
+    devices = (
+        {}
+        if pack_id in ("execution_errors", "update_available")
+        else {"a" * 32: {"enabled": False}}
+    )
+    assert pack.get("device_overrides", {}) == devices
+    assert migrate_exclusions(config) == config
+
+
+def test_already_migrated_exceptions_are_cleaned_and_persisted(hass, entry):
+    from custom_components.alert_manager.manager import AlertManager
+
+    config = deepcopy(DEFAULT_CONFIG)
+    config["automatic"]["execution_errors"]["entity_overrides"] = {
+        "sensor.impossible": {"enabled": False, "delay": 12},
+        "automation.future": {"enabled": False, "failure_threshold": 3},
+    }
+    config["automatic"]["execution_errors"]["device_overrides"] = {
+        "a" * 32: {"enabled": False}
+    }
+    config["automatic"]["flapping"]["source_packs"].update(
+        {
+            "execution_errors": {
+                "entity_overrides": {
+                    "binary_sensor.impossible": {"enabled": False},
+                    "script.future": {"enabled": False, "occurrences": 4},
+                },
+                "device_overrides": {"a" * 32: {"enabled": False}},
+            }
+        }
+    )
+    before = deepcopy(config)
+    cleaned = migrate_exclusions(config)
+    assert config == before
+    execution = cleaned["automatic"]["execution_errors"]
+    assert execution["entity_overrides"] == {
+        "automation.future": {"enabled": False, "failure_threshold": 3}
+    }
+    assert execution["device_overrides"] == {}
+    source = cleaned["automatic"]["flapping"]["source_packs"]["execution_errors"]
+    assert source["entity_overrides"] == {
+        "script.future": {"enabled": False, "occurrences": 4}
+    }
+    assert source["device_overrides"] == {}
+    assert validate_config(config) == cleaned
+    assert parse_config_yaml(dump_config_yaml(config)) == cleaned
+    hass.stores["alert_manager"] = {"config": config, "alerts": {}}
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    assert not manager.recovery_active
+    assert manager.config == cleaned
+    assert hass.stores["alert_manager"]["config"] == cleaned

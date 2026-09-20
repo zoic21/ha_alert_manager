@@ -392,7 +392,7 @@ def _normalize_pack_field(
                 and target_id in ALERT_MANAGER_ENTITY_IDS
             ):
                 raise ValueError("Alert Manager entities cannot be configured")
-            normalized_settings[target_id] = {
+            settings = {
                 setting_id: _normalize_pack_field(
                     pack_id,
                     setting,
@@ -401,6 +401,9 @@ def _normalize_pack_field(
                 for setting_id, setting in allowed.items()
                 if setting_id in raw_settings
             }
+            kind = "entity" if field.type == "entity_settings_map" else "device"
+            if PACKS_BY_ID[pack_id].supports_exception_target(kind, target_id):
+                normalized_settings[target_id] = settings
         return normalized_settings
     if field.type == "pack_settings_map":
         if not isinstance(value, dict):
@@ -423,7 +426,7 @@ def _normalize_pack_field(
                 if raw_settings.get(setting_id) is None
                 and not setting.type.endswith("_map")
                 else _normalize_pack_field(
-                    pack_id,
+                    source_pack_id,
                     setting,
                     raw_settings.get(setting_id, {}),
                 )

@@ -178,6 +178,21 @@ class AutomaticPack:
     exception_targets: tuple[str, ...] = ("device", "entity")
     occurrence_batch_handler: PackOccurrenceBatchHandler | None = None
 
+    def supports_exception_target(self, kind: str, target_id: str) -> bool:
+        """Reject structurally impossible targets, retaining absent entities.
+
+        Device classes and integration ownership can be unknown during startup
+        or change later; only the target kind and entity domain are immutable.
+        """
+        if kind not in self.exception_targets:
+            return False
+        domains = self.target_filter.get("domain")
+        if kind != "entity" or domains is None:
+            return True
+        if isinstance(domains, str):
+            domains = (domains,)
+        return target_id.partition(".")[0] in domains
+
     def default_config(self) -> dict[str, Any]:
         """Create independent defaults from this pack's own declarations."""
         result = {"enabled": self.default_enabled, "label_ids": []}

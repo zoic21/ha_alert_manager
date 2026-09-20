@@ -111,16 +111,18 @@ def migrate_exclusions(raw: dict[str, Any]) -> dict[str, Any]:
     # Keep orphan targets: they must stay excluded if they reappear later.
     validated = validate_config(config)
     if not entities and not devices:
-        return config
+        return validated
     for pack in PACKS:
         settings = validated["automatic"][pack.id]
         fields = {field.id: field for field in pack.config_fields}
         for kind, targets in (("entity", entities), ("device", devices)):
             key = f"{kind}_overrides"
-            if key not in fields:
+            if key not in fields or kind not in pack.exception_targets:
                 continue
             overrides = settings.setdefault(key, {})
             for target_id in targets:
+                if not pack.supports_exception_target(kind, target_id):
+                    continue
                 domains = fields[key].entity_domains
                 if (
                     kind == "entity"

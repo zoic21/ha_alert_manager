@@ -937,9 +937,7 @@ def test_pack_declared_entity_number_map_is_strictly_validated():
             }
         }
     )
-    assert orphan["automatic"]["execution_errors"]["entity_overrides"][
-        "sensor.test"
-    ] == {"failure_threshold": 3}
+    assert orphan["automatic"]["execution_errors"]["entity_overrides"] == {}
     with pytest.raises(ValueError, match="must be an integer"):
         validate_config(
             {

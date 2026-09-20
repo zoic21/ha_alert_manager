@@ -20,16 +20,23 @@ from custom_components.alert_manager.validation import validate_config
 
 
 @pytest.mark.parametrize(
-    "pack_id", ["unavailable", "connectivity", "unifi", "battery", "execution_errors"]
+    "pack_id,entity_id",
+    [
+        ("unavailable", "sensor.example"),
+        ("connectivity", "binary_sensor.example"),
+        ("unifi", "device_tracker.example"),
+        ("battery", "sensor.example"),
+        ("execution_errors", "automation.example"),
+    ],
 )
 def test_legacy_entity_delay_beats_pack_default_even_when_disabled(
-    hass, entry, pack_id
+    hass, entry, pack_id, entity_id
 ):
     manager = AlertManager(hass, entry)
     manager.config = deepcopy(DEFAULT_CONFIG)
     manager.config.pop("pack_config_version")
     manager.config["entity_delays"] = {}
-    state = hass.states.set("sensor.example", "unavailable")
+    state = hass.states.set(entity_id, "unavailable")
     manager.config["global_delay"] = 900
     manager.config["automatic"][pack_id].update(enabled=False, delay=1800)
     manager.config["entity_delays"][state.entity_id] = 0
