@@ -110,7 +110,7 @@ const hydrationContext = (changes = {}) => ({
   },
   sourceRows: [{ id: "rule-1" }],
   visibleRows: [{ id: "rule-1" }],
-  selectedFilters: [],
+  selectedFilters: { enabled: [], labels: [] },
   filterPaneOpen: false,
   t,
   renderNameCell: (row) => row.name,

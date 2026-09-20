@@ -404,7 +404,7 @@ function ensureRulesTableState() {
     const optionalOrder = storedOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column));
     this._tableState.rules = {
       search: "",
-      filters: { enabled: [] },
+      filters: { enabled: [], labels: [] },
       columnOrder: [
         "name",
         ...optionalOrder,
@@ -6423,6 +6423,22 @@ async function applyRuleTableEditorState(tablePage, editingRuleId) {
     table?.select?.(selectedId ? [selectedId] : [], true);
 }
 
+function ruleTableFilterData(sourceRows, filters) {
+    const selectedFilters = {
+      enabled: filterValues(filters.enabled),
+      labels: filterValues(filters.labels),
+    };
+    const enabled = new Set(selectedFilters.enabled);
+    const labels = new Set(selectedFilters.labels);
+    return {
+      selectedFilters,
+      visibleRows: sourceRows.filter((row) => (
+        (!enabled.size || enabled.has(row.enabledKey))
+        && (!labels.size || row.labels.some((label) => labels.has(label.id)))
+      )),
+    };
+}
+
 function refreshRulesData() {
     if (this._activeTab !== "rules") return;
     const tablePage = this.shadowRoot?.querySelector?.("[data-rules-table-page]");
@@ -6432,14 +6448,11 @@ function refreshRulesData() {
     }
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
-    const enabledFilters = new Set(this._filterValues(state.filters.enabled));
-    const visibleRows = sourceRows.filter((row) => (
-      !enabledFilters.size || enabledFilters.has(row.enabledKey)
-    ));
+    const { selectedFilters, visibleRows } = ruleTableFilterData(sourceRows, state.filters);
     tablePage.hass = this._hass;
     tablePage.data = visibleRows;
     tablePage._alertManagerRows = visibleRows;
-    tablePage.filters = enabledFilters.size ? 1 : 0;
+    tablePage.filters = Object.values(selectedFilters).filter((values) => values.length).length;
     tablePage.noDataText = sourceRows.length
       ? this._t("rules.empty_filtered")
       : this._t("rules.empty");
@@ -6523,7 +6536,7 @@ function hydrateRules(root, context) {
     tablePage.clickable = true;
     tablePage.searchLabel = context.t("rules.search");
     tablePage.filter = state.search;
-    tablePage.filters = selectedFilters.length ? 1 : 0;
+    tablePage.filters = Object.values(selectedFilters).filter((values) => values.length).length;
     tablePage.showFilters = context.filterPaneOpen;
     tablePage.columns = ruleTableColumns(context);
     tablePage.columnOrder = [...state.columnOrder];
@@ -6553,13 +6566,14 @@ function hydrateRules(root, context) {
       tablePage[RULES_TABLE_HYDRATED] = true;
     }
     tablePage.querySelectorAll?.("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
+      const key = checkbox.dataset.tableFilterOption;
       const value = checkbox.dataset.filterValue;
-      checkbox.checked = selectedFilters.includes(value);
+      checkbox.checked = selectedFilters[key].includes(value);
       checkbox[RULES_TABLE_CONTEXT] = context;
       if (checkbox[RULES_FILTER_HYDRATED]) return;
       checkbox.addEventListener("change", (event) => {
         event.stopPropagation();
-        checkbox[RULES_TABLE_CONTEXT].onFilterChanged(value, checkbox.checked);
+        checkbox[RULES_TABLE_CONTEXT].onFilterChanged(key, value, checkbox.checked);
       });
       checkbox[RULES_FILTER_HYDRATED] = true;
     });
@@ -6570,11 +6584,7 @@ function hydrateRuleTable() {
     if (!this._config) return;
     const state = this._ensureRulesTableState();
     const sourceRows = this._ruleTableRows();
-    const selectedFilters = this._filterValues(state.filters.enabled);
-    const enabledFilters = new Set(selectedFilters);
-    const visibleRows = sourceRows.filter((row) => (
-      !enabledFilters.size || enabledFilters.has(row.enabledKey)
-    ));
+    const { selectedFilters, visibleRows } = ruleTableFilterData(sourceRows, state.filters);
     hydrateRules(this.shadowRoot, {
       hass: this._hass,
       narrow: Boolean(this._narrow),
@@ -6592,6 +6602,7 @@ function hydrateRuleTable() {
       onSearch: (search) => { state.search = search; },
       onClearFilter: () => {
         state.filters.enabled = [];
+        state.filters.labels = [];
         this._filterPaneKind = "rules";
         this._render();
       },
@@ -6622,11 +6633,11 @@ function hydrateRuleTable() {
       onRowClick: (ruleId) => {
         this._openRuleEditor(ruleId);
       },
-      onFilterChanged: (value, checked) => {
-        const selected = new Set(this._filterValues(state.filters.enabled));
+      onFilterChanged: (key, value, checked) => {
+        const selected = new Set(this._filterValues(state.filters[key]));
         if (checked) selected.add(value);
         else selected.delete(value);
-        state.filters.enabled = [...selected];
+        state.filters[key] = [...selected];
         this._filterPaneKind = "rules";
         this._render();
       },
@@ -6663,7 +6674,7 @@ function nativeRuleToggleCell(row) {
 }
 
 function renderRules(context) {
-    const { editorOpen, editor, editorWidth, pageMessages, t, renderFacetFilter } = context;
+    const { editorOpen, editor, editorWidth, pageMessages, t, renderFacetFilter, labels = [] } = context;
     const statuses = [
       { value: "active", label: t("rules.status_active") },
       { value: "inactive", label: t("rules.status_inactive") },
@@ -6689,6 +6700,7 @@ function renderRules(context) {
         </div>
         <div slot="filter-pane" class="filter-pane-content">
           ${renderFacetFilter("rules", "enabled", t("rules.status"), statuses)}
+          ${renderFacetFilter("rules", "labels", t("table.filters.labels"), labels)}
         </div>
       </hass-tabs-subpage-data-table>
       ${editor}
@@ -6700,6 +6712,9 @@ function renderRulesPanel() {
     const editorOpen = this._editingRule !== null;
     return renderRules({
       editorOpen,
+      labels: [...new Map(this._ruleTableRows().flatMap((row) => row.labels)
+        .map((label) => [label.id, { value: label.id, label: label.name }])).values()]
+        .sort((left, right) => left.label.localeCompare(right.label, this._language, { numeric: true })),
       editor: editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),

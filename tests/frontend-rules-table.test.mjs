@@ -330,3 +330,75 @@ test("sequence rows omit duration while simple rules retain zero delay", async (
   assert.equal(rows[0].durationSort, null);
   assert.equal(rows[1].duration, "0 s");
 });
+
+test("rule label filters combine with status and survive targeted data refreshes", () => {
+  const panel = new Panel();
+  const table = tablePage();
+  panel._activeTab = "rules";
+  panel._config = { rules: [
+    { ...rules()[0], label_ids: ["cold", "shared"] },
+    { ...rules()[1], label_ids: ["wet", "shared"] },
+    { ...rules()[0], id: "unlabelled" },
+  ] };
+  panel._labels = [{ label_id: "cold", name: "Freezer" }];
+  panel.shadowRoot.querySelector = (selector) => (
+    selector === "[data-rules-table-page]" ? table : null
+  );
+  panel._refreshUiState = () => {};
+  const state = panel._ensureRulesTableState();
+  assert.deepEqual(state.filters.labels, []);
+  state.filters.labels = ["cold", "wet"];
+  panel._hydrateRuleTable();
+  assert.deepEqual(table.data.map((row) => row.id), ["active-rule", "inactive-rule"]);
+  assert.equal(table.filters, 1);
+  state.filters.enabled = ["inactive"];
+  panel._refreshRulesData();
+  assert.deepEqual(table.data.map((row) => row.id), ["inactive-rule"]);
+  assert.equal(table.filters, 2);
+  state.filters.labels = ["cold"];
+  panel._refreshRulesData();
+  assert.deepEqual(table.data, []);
+  panel._config.rules[1].label_ids.push("cold");
+  panel._refreshRulesData();
+  assert.deepEqual(table.data.map((row) => row.id), ["inactive-rule"]);
+  panel._render = () => {};
+  table.listeners["clear-filter"]();
+  assert.deepEqual(state.filters, { enabled: [], labels: [] });
+  panel._hydrateRuleTable();
+  assert.equal(table.data.length, 3);
+  assert.equal(table.filters, 0);
+});
+
+test("rule label facets use rule labels and checkbox events update only their own filter", () => {
+  const panel = new Panel();
+  panel._config = { rules: [
+    { ...rules()[0], label_ids: ["cold", "missing"] },
+    { ...rules()[1], label_ids: ["cold"] },
+  ] };
+  panel._labels = [
+    { label_id: "cold", name: "Freezer <1>" },
+    { label_id: "unused", name: "Unused" },
+  ];
+  const rendered = panel._renderRules();
+  assert.match(rendered, /Freezer &lt;1&gt;/);
+  assert.equal((rendered.match(/data-table-filter-option="labels"/g) ?? []).length, 2);
+  assert.doesNotMatch(rendered, /Unused/);
+  const checkbox = fakeDomElement("ha-checkbox");
+  checkbox.dataset = { tableFilterOption: "labels", filterValue: "cold" };
+  const table = tablePage();
+  table.querySelectorAll = () => [checkbox];
+  panel.shadowRoot.querySelector = () => table;
+  panel._render = () => {};
+  const state = panel._ensureRulesTableState();
+  state.filters.enabled = ["active"];
+  panel._hydrateRuleTable();
+  assert.equal(checkbox.checked, false);
+  checkbox.checked = true;
+  checkbox.listeners.change({ stopPropagation() {} });
+  assert.deepEqual(state.filters, { enabled: ["active"], labels: ["cold"] });
+  panel._hydrateRuleTable();
+  assert.equal(checkbox.checked, true);
+  checkbox.checked = false;
+  checkbox.listeners.change({ stopPropagation() {} });
+  assert.deepEqual(state.filters, { enabled: ["active"], labels: [] });
+});

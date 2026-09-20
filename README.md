@@ -36,6 +36,8 @@ Monitor a fridge consuming more than 200 W for two hours, a temperature outside 
 
 Rules support states, nested attributes, numeric and text comparisons, inactivity, variations, transitions, ordered sequences and Jinja conditions. One rule can monitor several entities independently. Edit visually or in YAML, duplicate a rule and test an unsaved draft against current values, including the notification profiles that would match. Custom Jinja messages can explain the problem and optionally stay updated while it is active.
 
+Filter the rules list by active/inactive status and by labels assigned to rules. Selecting several labels shows rules matching at least one of them.
+
 Sequences recognize 2–20 steps on the same value, with a minimum hold, an exit before a limit or a hold between two bounds, plus an optional overall timeout. Steps collapse into summaries and can be individually disabled or reordered by dragging or using the keyboard. From the first step’s hold, the sequence appears in pending alerts with its progress and remaining time. Abandoned or expired progress disappears without history or a recovery notification. Unfinished sequences start from a fresh observation after a restart, without counting downtime.
 
 Transitions and sequences offer three resolution modes: after a duration, when the arrival value or last enabled step no longer matches, or using a separate value comparison. State/condition resolution can send recovery notifications; automatic expiration remains silent. The [custom rules guide](docs/custom-rules.md) explains durations, progression and YAML examples.
