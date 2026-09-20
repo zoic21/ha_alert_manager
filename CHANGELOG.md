@@ -7,8 +7,9 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.9**, dated **2026-09-20**.
+Current release candidate: **2.4.0-rc.10**, dated **2026-09-20**.
 This is a prerelease for testing, not a stable release.
+RC.10 republishes RC.9 with a new version and frontend cache identity; there are no functional changes.
 
 ### Rule editor and notifications
 
