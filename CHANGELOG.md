@@ -7,10 +7,16 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.8**, dated **2026-09-20**.
+Current release candidate: **2.4.0-rc.9**, dated **2026-09-20**.
 This is a prerelease for testing, not a stable release.
 
 ### Rule editor and notifications
+
+- Add Standard / Neutral presentation to label-based notification exceptions,
+  including their collapsed summaries and YAML. Neutral notifications use a blue
+  information icon and a neutral title while preserving custom event messages.
+  Keep standard and neutral batches separate, including reminders, without
+  changing delivery policies or timeline event types.
 
 - Use notification icon backgrounds matching the event: red for activation, green
   for resolution, orange for reminders, and blue for combined activation/resolution.

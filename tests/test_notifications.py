@@ -73,6 +73,7 @@ def test_policy_resolution_is_partial_and_uses_documented_priority() -> None:
         "notify_on_start": True,
         "notify_on_resolved": True,
         "reminder_interval": 1800,
+        "presentation": "standard",
     }
 
 
@@ -770,4 +771,40 @@ def test_notification_yaml_uses_complete_profile_validation(change):
     with pytest.raises(ValueError):
         parse_notification_profile_yaml(
             yaml.safe_dump({**_profile(), **change}), "loic"
+        )
+
+
+@pytest.mark.parametrize("presentation", ["standard", "neutral"])
+def test_presentation_exception_round_trips_and_respects_priority(presentation):
+    """Presentation-only exceptions survive YAML and use first-match ordering."""
+    profile = _profile()
+    profile["exceptions"][0] = {
+        "selector_type": "label",
+        "selector_ids": ["important"],
+        "presentation": presentation,
+    }
+    profile["exceptions"][1]["presentation"] = "neutral"
+    config = validate_config(
+        {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+    )
+    restored = parse_config_yaml(dump_config_yaml(config))
+    saved = restored["notification_profiles"][0]
+    assert saved == config["notification_profiles"][0]
+    policy = resolve_notification_policy(saved, label_ids={"important", "secondary"})
+    assert policy.presentation == presentation
+    assert policy.notify_on_start is True
+    assert policy.reminder_interval is None
+    assert (
+        resolve_notification_policy(saved, label_ids=set()).presentation == "standard"
+    )
+
+
+@pytest.mark.parametrize("value", [None, True, 1, [], {}, "urgent", ""])
+def test_invalid_notification_presentation_is_rejected(value):
+    """Untrusted presentation values never reach batching or delivery."""
+    profile = _profile()
+    profile["exceptions"][0]["presentation"] = value
+    with pytest.raises(ValueError, match="presentation must be standard or neutral"):
+        validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
         )

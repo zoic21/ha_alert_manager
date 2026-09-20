@@ -397,7 +397,7 @@
       "reorder_help": "Drag to reorder; keyboard: Up/Down arrows, Home/End",
       "exceptions": "Exceptions",
       "new_exception": "New exception",
-      "exception_summary": "New: {start} · Resolved: {resolved} · Reminder: {reminder}",
+      "exception_summary": "{presentation} · New: {start} · Resolved: {resolved} · Reminder: {reminder}",
       "exceptions_help": "The first matching exception overrides the selected profile options.",
       "grouped_alerts": "{count} alerts",
       "grouped_resolved": "{count} alerts resolved",
@@ -462,7 +462,12 @@
       "test_saved_help": "Tests the saved profile. Save changes before testing.",
       "started_resolved_title": "Alert occurred and resolved",
       "started_resolved_title_plural": "{count} alerts occurred and resolved",
-      "started_resolved_message": "{details} — back to normal"
+      "started_resolved_message": "{details} — back to normal",
+      "presentation": "Presentation",
+      "presentation_standard": "Standard",
+      "presentation_neutral": "Neutral",
+      "presentation_help": "Neutral: “Notification” title and blue information icon. Messages and delivery conditions stay the same.",
+      "neutral_title": "Notification"
     },
     "recovery": {
       "backups_help": "The three newest daily valid configuration exports are kept independently from runtime and history.",

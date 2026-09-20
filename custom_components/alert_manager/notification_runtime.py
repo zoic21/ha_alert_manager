@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
@@ -61,6 +61,7 @@ class _NotificationItem:
     detected_at: str | None = None
     labels: tuple[str, ...] = ()
     resolved_before_send: bool = False
+    presentation: str = "standard"
 
     @classmethod
     def from_event(cls, data: Mapping[str, Any]) -> _NotificationItem | None:
@@ -475,6 +476,7 @@ class NotificationRuntime:
                 if event_type != EVENT_ALERT_RESOLVED or not tracks_alert:
                     continue
                 policy = resolve_notification_policy(profile, label_ids=labels)
+            profile_item = replace(item, presentation=policy.presentation)
             if event_type == EVENT_ALERT_STARTED:
                 runtime = self._runtime.setdefault(profile_id, {}).setdefault(
                     item.alert_id, _RuntimeEntry()
@@ -492,7 +494,7 @@ class NotificationRuntime:
                             [item], profile, "matched_reminder", now
                         )
                 if policy.notify_on_start:
-                    self._queue_batch(profile_id, "started", item)
+                    self._queue_batch(profile_id, "started", profile_item)
                 changed = True
             elif event_type == EVENT_ALERT_RESOLVED:
                 notify_resolved = policy.notify_on_resolved and not (
@@ -505,7 +507,7 @@ class NotificationRuntime:
                 if pending is not None and pending.detected_at == item.detected_at:
                     pending.resolved_before_send = notify_resolved
                 elif notify_resolved:
-                    self._queue_batch(profile_id, "resolved", item)
+                    self._queue_batch(profile_id, "resolved", profile_item)
                 self._runtime.get(profile_id, {}).pop(item.alert_id, None)
                 changed = True
             elif event_type == EVENT_ALERT_ACKNOWLEDGED:
@@ -525,7 +527,7 @@ class NotificationRuntime:
                 if data.get("acknowledgement_expired") and policy.notify_on_start:
                     if self._record_notification is not None:
                         await self._record_notification([item], profile, "matched", now)
-                    self._queue_batch(profile_id, "started", item)
+                    self._queue_batch(profile_id, "started", profile_item)
                 changed = True
         if changed:
             self._schedule_runtime_save()
@@ -597,36 +599,32 @@ class NotificationRuntime:
         self, profile: dict[str, Any], kind: str, items: list[_NotificationItem]
     ) -> None:
         """Deliver and account for one homogeneous part of a collected batch."""
-        title, message = self._render_batch(kind, items)
-        url = self._batch_url(kind, items)
-        if self._unloading:
-            return
-        result = await self._delivery.async_send(
-            targets=profile["targets"],
-            title=title,
-            message=message,
-            click_url=url,
-            kind=kind,
-        )
-        await self._async_record_delivery(profile, kind, items, result)
-
-    async def _async_send_reminders(self) -> None:
-        """Send all due reminders in one grouped delivery per profile."""
-        async with self._runtime_lock:
-            if self._unloading:
-                return
-            deliveries = await self._async_collect_due_reminders_locked()
-        for profile, title, message, url, items in deliveries:
+        for presentation in ("standard", "neutral"):
+            selected = [item for item in items if item.presentation == presentation]
+            if not selected:
+                continue
+            title, message = self._render_batch(kind, selected)
+            if presentation == "neutral":
+                title = self._delivery.text("neutral_title", "Notification")
             if self._unloading:
                 return
             result = await self._delivery.async_send(
                 targets=profile["targets"],
                 title=title,
                 message=message,
-                click_url=url,
-                kind="reminder",
+                click_url=self._batch_url(kind, selected),
+                kind="neutral" if presentation == "neutral" else kind,
             )
-            await self._async_record_delivery(profile, "reminder", items, result)
+            await self._async_record_delivery(profile, kind, selected, result)
+
+    async def _async_send_reminders(self) -> None:
+        """Send due reminders grouped by profile and presentation."""
+        async with self._runtime_lock:
+            if self._unloading:
+                return
+            deliveries = await self._async_collect_due_reminders_locked()
+        for profile, items in deliveries:
+            await self._async_deliver_batch(profile, "reminder", items)
 
     async def _async_record_delivery(
         self,
@@ -675,7 +673,7 @@ class NotificationRuntime:
 
     async def _async_collect_due_reminders_locked(
         self,
-    ) -> list[tuple[dict[str, Any], str, str, str, list[_NotificationItem]]]:
+    ) -> list[tuple[dict[str, Any], list[_NotificationItem]]]:
         """Advance due reminders atomically and return deliveries to perform."""
         self._reminder_cancel = None
         config = self._config_getter()
@@ -684,9 +682,7 @@ class NotificationRuntime:
         now = dt_util.now().astimezone(UTC)
         records = self._records_getter()
         changed = False
-        deliveries: list[
-            tuple[dict[str, Any], str, str, str, list[_NotificationItem]]
-        ] = []
+        deliveries: list[tuple[dict[str, Any], list[_NotificationItem]]] = []
         for profile in config.get("notification_profiles", []):
             if not profile.get("enabled"):
                 continue
@@ -720,22 +716,13 @@ class NotificationRuntime:
                     continue
                 item = _NotificationItem.from_event(record.as_public_dict())
                 if item is not None:
-                    due_items.append(item)
+                    due_items.append(replace(item, presentation=policy.presentation))
                 runtime.next_reminder = now + timedelta(
                     seconds=policy.reminder_interval
                 )
                 changed = True
             if due_items:
-                title, message = self._render_batch("reminder", due_items)
-                deliveries.append(
-                    (
-                        profile,
-                        title,
-                        message,
-                        self._batch_url("started", due_items),
-                        due_items,
-                    )
-                )
+                deliveries.append((profile, due_items))
         if changed:
             self._schedule_runtime_save()
         self._schedule_reminder_timer()
@@ -864,6 +851,11 @@ class NotificationRuntime:
                 summary = self._delivery.text(
                     "started_resolved_message", "{details} — back to normal"
                 ).replace("{details}", details)
+            elif first.presentation == "neutral" and kind != "resolved":
+                summary = "; ".join(
+                    item.message or item.condition or item.alert_type
+                    for item in grouped_items
+                )
             elif len(grouped_items) > 1:
                 summary = self._delivery.text(
                     "grouped_resolved" if kind == "resolved" else "grouped_alerts",

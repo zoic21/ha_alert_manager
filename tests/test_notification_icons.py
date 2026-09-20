@@ -16,6 +16,7 @@ from custom_components.alert_manager.notifications import NotificationManager
         ("reminder", "mdi:bell-ring", "🔔", "#FF9800"),
         ("resolved", "mdi:check-circle", "✅", "#4CAF50"),
         ("started_resolved", "mdi:check-circle", "✅", "#2196F3"),
+        ("neutral", "mdi:information", "\u2139\ufe0f", "#2196F3"),
     ],
 )
 def test_native_icon_for_mobile_and_emoji_fallback(

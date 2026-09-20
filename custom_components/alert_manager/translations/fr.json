@@ -397,7 +397,7 @@
       "reorder_help": "Glisser pour déplacer ; au clavier : flèches haut/bas, début/fin",
       "exceptions": "Exceptions",
       "new_exception": "Nouvelle exception",
-      "exception_summary": "Nouvelle : {start} · Résolue : {resolved} · Rappel : {reminder}",
+      "exception_summary": "{presentation} · Nouvelle : {start} · Résolue : {resolved} · Rappel : {reminder}",
       "exceptions_help": "La première exception correspondante remplace les options choisies du profil.",
       "grouped_alerts": "{count} alertes",
       "grouped_resolved": "{count} alertes résolues",
@@ -462,7 +462,12 @@
       "test_saved_help": "Teste la version enregistrée du profil. Enregistrez vos modifications avant le test.",
       "started_resolved_title": "Alerte survenue puis résolue",
       "started_resolved_title_plural": "{count} alertes survenues puis résolues",
-      "started_resolved_message": "{details} — retour à la normale"
+      "started_resolved_message": "{details} — retour à la normale",
+      "presentation": "Présentation",
+      "presentation_standard": "Standard",
+      "presentation_neutral": "Neutre",
+      "presentation_help": "Neutre : titre « Notification », icône d’information bleue. Les messages et les conditions d’envoi restent identiques.",
+      "neutral_title": "Notification"
     },
     "recovery": {
       "backups_help": "Les trois derniers exports quotidiens valides de la configuration sont conservés indépendamment du runtime et de l’historique.",

@@ -50,7 +50,7 @@ The included dashboard card presents a compact view grouped by device. Choose de
 
 ### Choose when to notify and check configuration health
 
-Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The first exception whose labels all match applies. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
+Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The first exception whose labels all match applies. Label exceptions can select a neutral presentation: blue information icon, “Notification” title and preserved custom messages, delivered separately from standard alerts. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
 
 If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
 

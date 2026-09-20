@@ -59,8 +59,8 @@ const profile = {
 };
 
 for (const [language, emptyTitle, summary] of [
-  ["fr", "Nouvelle exception", "Nouvelle : Oui · Résolue : Oui · Rappel : Jamais"],
-  ["en", "New exception", "New: Yes · Resolved: Yes · Reminder: Never"],
+  ["fr", "Nouvelle exception", "Standard · Nouvelle : Oui · Résolue : Oui · Rappel : Jamais"],
+  ["en", "New exception", "Standard · New: Yes · Resolved: Yes · Reminder: Never"],
 ]) {
   test(`notification summaries resolve real ${language} resources with and without labels`, () => {
     const catalog = JSON.parse(readFileSync(new URL(
@@ -86,6 +86,14 @@ for (const [language, emptyTitle, summary] of [
     assert.match(markup, /header="Battery"/);
     assert.ok(markup.includes(`header="${emptyTitle}"`));
     assert.equal(markup.split(`secondary="${summary}"`).length - 1, 2);
+    draft.exceptions[0].presentation = "neutral";
+    const neutralMarkup = renderNotificationProfileDrawer({ draft, t });
+    const neutralSummary = summary.replace("Standard", language === "fr" ? "Neutre" : "Neutral");
+    assert.ok(neutralMarkup.includes(`secondary="${neutralSummary}"`));
+    assert.match(neutralMarkup, /id="notification-exception-presentation-0"/);
+    assert.equal(notificationProfileValidationError({
+      ...draft, exceptions: [{ selector_ids: ["events"], presentation: "neutral" }],
+    }, t), null);
     assert.doesNotMatch(markup, /component\.alert_manager\.config_panel|\{(?:start|resolved|reminder)\}/);
   });
 }
@@ -126,6 +134,10 @@ test("exception header uses dense native badges and refreshes selected labels wi
     assert.equal(badge.children[0].attributes.icon, "mdi:battery");
     callbacks["notification-exception-selector-0"](["missing"]);
     assert.equal(header.child.children[0].textContent, "missing");
+    callbacks["notification-exception-presentation-0"]("neutral");
+    assert.equal(draft.exceptions[0].presentation, "neutral");
+    callbacks["notification-exception-presentation-0"]("invalid");
+    assert.equal(draft.exceptions[0].presentation, "neutral");
     callbacks["notification-exception-selector-0"]([]);
     assert.equal(header.textContent, "notifications.new_exception");
     assert.match(settingsStyles, /\.notification-exception-labels > span\s*\{ flex-wrap: wrap;/);

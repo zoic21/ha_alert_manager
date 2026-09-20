@@ -42,7 +42,13 @@ _PROFILE_KEYS = {
     "default_policy",
     "exceptions",
 }
-_EXCEPTION_KEYS = {"selector_type", "selector_id", "selector_ids", *_POLICY_KEYS}
+_EXCEPTION_KEYS = {
+    "selector_type",
+    "selector_id",
+    "selector_ids",
+    "presentation",
+    *_POLICY_KEYS,
+}
 _TEST_TITLE = "Alert Manager — Test notification"
 _TEST_MESSAGE = "This confirms that the notification profile works."
 _NOTIFICATION_ICONS = {
@@ -51,6 +57,7 @@ _NOTIFICATION_ICONS = {
     "resolved": ("mdi:check-circle", "✅", "#4CAF50"),
     "started_resolved": ("mdi:check-circle", "✅", "#2196F3"),
     "test": ("mdi:bell-check", "", "#2196F3"),
+    "neutral": ("mdi:information", "\u2139\ufe0f", "#2196F3"),
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,8 +70,9 @@ class NotificationPolicy:
     notify_on_start: bool
     notify_on_resolved: bool
     reminder_interval: int | None
+    presentation: str = "standard"
 
-    def as_dict(self) -> dict[str, bool | int | None]:
+    def as_dict(self) -> dict[str, str | bool | int | None]:
         """Return the JSON-safe policy representation."""
         return asdict(self)
 
@@ -285,7 +293,11 @@ def resolve_notification_policy(
     for exception in profile["exceptions"]:
         if all(label_id in label_ids for label_id in exception["selector_ids"]):
             effective.update(
-                {key: exception[key] for key in _POLICY_KEYS if key in exception}
+                {
+                    key: exception[key]
+                    for key in (*_POLICY_KEYS, "presentation")
+                    if key in exception
+                }
             )
             break
     return NotificationPolicy(**effective)
@@ -387,6 +399,10 @@ def _validate_policy(value: Any, path: str, *, partial: bool) -> dict[str, Any]:
         raise ValueError(f"Missing {path} field: {sorted(missing)[0]}")
 
     result: dict[str, Any] = {}
+    if partial and "presentation" in value:
+        if value["presentation"] not in ("standard", "neutral"):
+            raise ValueError(f"{path}.presentation must be standard or neutral")
+        result["presentation"] = value["presentation"]
     for key in ("notify_on_start", "notify_on_resolved"):
         if key not in value:
             continue

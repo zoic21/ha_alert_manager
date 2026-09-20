@@ -147,6 +147,7 @@ function notificationExceptionTitle(exception, labels, t) {
 function notificationExceptionSummary(exception, defaults, t) {
   const policy = { ...defaults, ...exception };
   return t("notifications.exception_summary", {
+    presentation: t(`notifications.presentation_${policy.presentation ?? "standard"}`),
     start: t(policy.notify_on_start ? "notifications.yes" : "notifications.no"),
     resolved: t(policy.notify_on_resolved ? "notifications.yes" : "notifications.no"),
     reminder: policy.reminder_interval == null ? t("notifications.never")
@@ -162,9 +163,10 @@ function hydrateNotificationExceptionHeader(expansion, exception, panel) {
   ));
   if (metadata.length) header.replaceChildren(nativeLabelBadges(metadata, panel._hass));
   else header.textContent = panel._t("notifications.new_exception");
-  expansion.querySelector(".notification-exception-summary").textContent =
-    notificationExceptionSummary(exception, panel._notificationProfileDraft.default_policy,
-      (key, params) => panel._t(key, params));
+  const summary = notificationExceptionSummary(exception,
+    panel._notificationProfileDraft.default_policy, (key, params) => panel._t(key, params));
+  expansion.secondary = summary;
+  expansion.querySelector(".notification-exception-summary").textContent = summary;
 }
 
 function renderException(exception, index, t, defaults, labels, expandedExceptions) {
@@ -176,6 +178,7 @@ function renderException(exception, index, t, defaults, labels, expandedExceptio
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       <div class="notification-policy-card full">
+        <div class="field full"><span class="field-label">${esc(t("notifications.presentation"))}</span><ha-selector id="notification-exception-presentation-${index}" aria-label="${esc(t("notifications.presentation"))}"></ha-selector><small>${esc(t("notifications.presentation_help"))}</small></div>
         <div class="notification-policy-switches">
           ${renderPolicySwitch(`notification-exception-start-${index}`, t("notifications.on_start"), policy.notify_on_start)}
           ${renderPolicySwitch(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), policy.notify_on_resolved)}
@@ -262,6 +265,19 @@ export function hydrateNotificationProfileControls(panel) {
         if (button.dataset.action) button.onkeydown = (event) => event.stopPropagation();
       });
     }
+    panel._configureSelector(
+      `notification-exception-presentation-${index}`,
+      { select: { mode: "dropdown", options: ["standard", "neutral"].map((value) => ({
+        value, label: panel._t(`notifications.presentation_${value}`),
+      })) } },
+      exception.presentation ?? "standard",
+      (value) => {
+        if (!["standard", "neutral"].includes(value)) return;
+        exception.presentation = value;
+        captureNotificationProfileDraft(panel);
+        if (expansion) hydrateNotificationExceptionHeader(expansion, exception, panel);
+      },
+    );
     const selectorId = `notification-exception-selector-${index}`;
     panel._configureSelector(
       selectorId,
@@ -327,7 +343,7 @@ export function notificationProfileValidationError(draft, t) {
   }
   for (const exception of draft.exceptions) {
     if (!exceptionLabelIds(exception).length) return t("notifications.validation.selector");
-    const fields = ["notify_on_start", "notify_on_resolved", "reminder_interval"];
+    const fields = ["notify_on_start", "notify_on_resolved", "reminder_interval", "presentation"];
     if (!fields.some((field) => Object.hasOwn(exception, field))) {
       return t("notifications.validation.override");
     }

@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -2066,6 +2066,145 @@ def test_combined_delivery_history_roundtrip(hass, entry, success):
         )
         restored, _ = await manager.history_storage.async_load()
         assert restored[0].notifications == stats
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "kind", ["started", "resolved", "started_resolved", "reminder"]
+)
+def test_neutral_and_standard_batches_are_separate(hass, entry, kind):
+    """Presentation splits delivery, preserves links and records lifecycle kinds."""
+
+    async def scenario():
+        delivery = _DeliverySpy()
+        recorded = AsyncMock()
+        config = {"notification_profiles": [_profile()]}
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: {}, delivery, recorded
+        )
+        items = []
+        for name, presentation in (
+            ("fault", "standard"),
+            ("washer", "neutral"),
+            ("dryer", "neutral"),
+        ):
+            item = _NotificationItem.from_event(
+                _event_data(name, entity_id=f"sensor.{name}", device_id="shared")
+            )
+            item.presentation = presentation
+            item.message = f"Message {name}"
+            items.append(item)
+        await runtime._async_deliver_batch(_profile(), kind, items)
+        standard, neutral = delivery.calls
+        assert standard["kind"] == kind
+        assert neutral["kind"] == "neutral"
+        assert neutral["title"] == "Notification"
+        assert "Message washer" not in standard["message"]
+        assert "Message fault" not in neutral["message"]
+        if kind != "resolved":
+            assert "Message washer" in neutral["message"]
+            assert "Message dryer" in neutral["message"]
+        assert neutral["click_url"] == (
+            "/alert-manager/history"
+            if kind in ("resolved", "started_resolved")
+            else "/alert-manager"
+        )
+        assert [call.args[2] for call in recorded.await_args_list] == [kind, kind]
+        assert runtime.usage_snapshot()["last_24h"]["profile"] == 2
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("automatic", [True, False])
+def test_neutral_short_sequence_is_isolated_per_profile(hass, entry, automatic):
+    """Timed sequence expiry keeps the custom start message and per-profile style."""
+
+    async def scenario():
+        neutral = _profile()
+        neutral["exceptions"] = [
+            {
+                "selector_type": "label",
+                "selector_ids": ["events"],
+                "presentation": "neutral",
+                "notify_on_resolved": False,
+            }
+        ]
+        standard = _profile()
+        standard["id"] = "standard"
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [neutral, standard]}
+        )
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(hass, entry, lambda: config, lambda: {}, delivery)
+        await runtime.async_setup()
+        event = _event_data("washer", entity_id="sensor.washer", device_id=None)
+        event.update(
+            source="value_sequence",
+            labels=["events"],
+            message="Le lave-linge a terminé",
+            detected_at="2026-09-20T12:00:00+00:00",
+        )
+        await runtime._async_handle_event(EVENT_ALERT_STARTED, event)
+        await runtime._async_handle_event(
+            EVENT_ALERT_RESOLVED,
+            {
+                **event,
+                "condition_params": {
+                    "resolution_reason": "automatic" if automatic else "condition"
+                },
+            },
+        )
+        for profile_id in ("profile", "standard"):
+            await runtime._async_flush_batch(profile_id, "started")
+            await runtime._async_flush_batch(profile_id, "resolved")
+        assert [call["kind"] for call in delivery.calls] == [
+            "neutral",
+            "started" if automatic else "started_resolved",
+        ]
+        assert delivery.calls[0]["title"] == "Notification"
+        assert (
+            delivery.calls[0]["message"] == "• sensor.washer — Le lave-linge a terminé"
+        )
+        await runtime.async_unload()
+
+    asyncio.run(scenario())
+
+
+def test_neutral_reminder_uses_current_label_exception(hass, entry, set_now):
+    """Restored reminders resolve presentation and split mixed profiles at send time."""
+
+    async def scenario():
+        now = datetime(2026, 9, 20, 12, tzinfo=UTC)
+        set_now(now)
+        profile = _profile(reminder_interval=60)
+        profile["exceptions"] = [
+            {
+                "selector_type": "label",
+                "selector_ids": ["events"],
+                "presentation": "neutral",
+            }
+        ]
+        config = validate_config(
+            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
+        )
+        standard = _active_record(now)
+        neutral = deepcopy(standard)
+        neutral.details.id = "washer"
+        neutral.details.entity_id = "sensor.washer"
+        neutral.details.labels = ["events"]
+        records = {record.details.id: record for record in (standard, neutral)}
+        delivery = _DeliverySpy()
+        runtime = NotificationRuntime(
+            hass, entry, lambda: config, lambda: records, delivery
+        )
+        await runtime.async_setup()
+        for state in runtime._runtime["profile"].values():
+            state.next_reminder = now
+        await runtime._async_send_reminders()
+        assert [call["kind"] for call in delivery.calls] == ["reminder", "neutral"]
+        assert delivery.calls[1]["title"] == "Notification"
         await runtime.async_unload()
 
     asyncio.run(scenario())
