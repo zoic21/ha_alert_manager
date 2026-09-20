@@ -209,7 +209,7 @@ export function ensureRulesTableState() {
     const optionalOrder = storedOrder.filter((column) => RULES_SECONDARY_COLUMNS.has(column));
     this._tableState.rules = {
       search: "",
-      filters: { enabled: [], labels: [] },
+      filters: { enabled: [], labels: [], integration: [], device: [], domain: [], area: [] },
       columnOrder: [
         "name",
         ...optionalOrder,

@@ -7,11 +7,16 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.10**, dated **2026-09-20**.
+Current release candidate: **2.4.0-rc.11**, dated **2026-09-20**.
 This is a prerelease for testing, not a stable release.
-RC.10 republishes RC.9 with a new version and frontend cache identity; there are no functional changes.
+RC.11 adds custom-rule filters for labels, integration, device, domain and area.
 
 ### Rule editor and notifications
+
+- Filter custom rules by status, rule labels, integration, device, domain and area.
+  Entity filters use only the configured target entities, excluding Jinja and message
+  references. Entity areas take precedence over device areas. Multiple selections
+  within a filter match any selected value; different filters combine.
 
 - Add Standard / Neutral presentation to label-based notification exceptions,
   including their collapsed summaries and YAML. Neutral notifications use a blue

@@ -5,6 +5,13 @@ import { MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_RULES_TABLE_STATE, RULES_COLUMNS, RULES_SECONDARY_COLUMNS } from "../utils/table-preferences.js";
 
+const RULE_ENTITY_FILTERS = {
+  integration: "table.filters.integration",
+  device: "table.columns.device",
+  domain: "table.filters.domain",
+  area: "table.columns.area",
+};
+
 const RULES_TABLE_CONTEXT = Symbol("alert-manager-rules-table-context");
 const RULES_TABLE_HYDRATED = Symbol("alert-manager-rules-table-hydrated");
 const RULES_FILTER_HYDRATED = Symbol("alert-manager-rules-filter-hydrated");
@@ -29,14 +36,20 @@ function ruleTableFilterData(sourceRows, filters) {
     const selectedFilters = {
       enabled: filterValues(filters.enabled),
       labels: filterValues(filters.labels),
+      ...Object.fromEntries(Object.keys(RULE_ENTITY_FILTERS)
+        .map((key) => [key, filterValues(filters[key])])),
     };
     const enabled = new Set(selectedFilters.enabled);
     const labels = new Set(selectedFilters.labels);
+    const entityFilters = Object.keys(RULE_ENTITY_FILTERS)
+      .map((key) => [key, new Set(selectedFilters[key])])
+      .filter(([, values]) => values.size);
     return {
       selectedFilters,
       visibleRows: sourceRows.filter((row) => (
         (!enabled.size || enabled.has(row.enabledKey))
         && (!labels.size || row.labels.some((label) => labels.has(label.id)))
+        && entityFilters.every(([key, values]) => row.targets.some((target) => values.has(target[key])))
       )),
     };
 }
@@ -58,6 +71,11 @@ export function refreshRulesData() {
     tablePage.noDataText = sourceRows.length
       ? this._t("rules.empty_filtered")
       : this._t("rules.empty");
+    const filterPane = tablePage.querySelector?.("[data-rules-filters]");
+    if (filterPane) {
+      filterPane.innerHTML = renderRuleFilters(ruleFilterContext(this, sourceRows));
+      hydrateRuleFilters(tablePage, { ...tablePage[RULES_TABLE_CONTEXT], selectedFilters });
+    }
     void applyRuleTableEditorState(tablePage, this._editingRule?.id);
     this._refreshUiState();
 }
@@ -167,6 +185,12 @@ export function hydrateRules(root, context) {
       });
       tablePage[RULES_TABLE_HYDRATED] = true;
     }
+    hydrateRuleFilters(tablePage, context);
+    void applyRuleTableEditorState(tablePage, context.editingRuleId);
+}
+
+function hydrateRuleFilters(tablePage, context) {
+    const { selectedFilters } = context;
     tablePage.querySelectorAll?.("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
       const key = checkbox.dataset.tableFilterOption;
       const value = checkbox.dataset.filterValue;
@@ -179,7 +203,6 @@ export function hydrateRules(root, context) {
       });
       checkbox[RULES_FILTER_HYDRATED] = true;
     });
-    void applyRuleTableEditorState(tablePage, context.editingRuleId);
 }
 
 export function hydrateRuleTable() {
@@ -203,8 +226,7 @@ export function hydrateRuleTable() {
       renderToggleCell: (row) => this._nativeRuleToggleCell(row),
       onSearch: (search) => { state.search = search; },
       onClearFilter: () => {
-        state.filters.enabled = [];
-        state.filters.labels = [];
+        for (const key of Object.keys(selectedFilters)) state.filters[key] = [];
         this._filterPaneKind = "rules";
         this._render();
       },
@@ -275,12 +297,44 @@ export function nativeRuleToggleCell(row) {
     return toggle;
 }
 
-export function renderRules(context) {
-    const { editorOpen, editor, editorWidth, pageMessages, t, renderFacetFilter, labels = [] } = context;
-    const statuses = [
+function renderRuleFilters({ t, renderFacetFilter, labels = [], entityFilters = {} }) {
+    return renderFacetFilter("rules", "enabled", t("rules.status"), [
       { value: "active", label: t("rules.status_active") },
       { value: "inactive", label: t("rules.status_inactive") },
-    ];
+    ]) + renderFacetFilter("rules", "labels", t("table.filters.labels"), labels)
+      + Object.entries(RULE_ENTITY_FILTERS).map(([key, translation]) => (
+        renderFacetFilter("rules", key, t(translation), entityFilters[key] ?? [])
+      )).join("");
+}
+
+function ruleFilterContext(panel, rows) {
+    const sortOptions = (options) => options.sort((left, right) => (
+      left.label.localeCompare(right.label, panel._language, { numeric: true })
+    ));
+    const hass = panel._hass;
+    const targets = rows.flatMap((row) => row.targets);
+    const entityFilters = Object.fromEntries(Object.keys(RULE_ENTITY_FILTERS).map((key) => {
+      const values = [...new Set(targets.map((target) => target[key]).filter(Boolean))];
+      return [key, sortOptions(values.map((value) => {
+        const device = key === "device" ? hass?.devices?.[value] : null;
+        const label = key === "integration" ? panel._integrationLabel(value)
+          : key === "device" ? device?.name_by_user || device?.name || value
+          : key === "area" ? hass?.areas?.[value]?.name || value
+          : value;
+        return { value, label };
+      }))];
+    }));
+    return {
+      t: (key, replacements) => panel._t(key, replacements),
+      renderFacetFilter: (...args) => panel._renderFacetFilter(...args),
+      labels: sortOptions([...new Map(rows.flatMap((row) => row.labels)
+        .map((label) => [label.id, { value: label.id, label: label.name }])).values()]),
+      entityFilters,
+    };
+}
+
+export function renderRules(context) {
+    const { editorOpen, editor, editorWidth, pageMessages, t } = context;
     return `<div class="rules-layout ${editorOpen ? "has-editor" : ""}" style="--rule-editor-width:${editorWidth}px">
       <hass-tabs-subpage-data-table
         id="panel-shell"
@@ -300,9 +354,8 @@ export function renderRules(context) {
             </div>
           </ha-card>
         </div>
-        <div slot="filter-pane" class="filter-pane-content">
-          ${renderFacetFilter("rules", "enabled", t("rules.status"), statuses)}
-          ${renderFacetFilter("rules", "labels", t("table.filters.labels"), labels)}
+        <div slot="filter-pane" class="filter-pane-content" data-rules-filters>
+          ${renderRuleFilters(context)}
         </div>
       </hass-tabs-subpage-data-table>
       ${editor}
@@ -314,19 +367,15 @@ export function renderRulesPanel() {
     const editorOpen = this._editingRule !== null;
     return renderRules({
       editorOpen,
-      labels: [...new Map(this._ruleTableRows().flatMap((row) => row.labels)
-        .map((label) => [label.id, { value: label.id, label: label.name }])).values()]
-        .sort((left, right) => left.label.localeCompare(right.label, this._language, { numeric: true })),
+      ...ruleFilterContext(this, this._ruleTableRows()),
       editor: editorOpen ? this._renderRuleEditor() : "",
       editorWidth: this._ruleEditorWidth,
       pageMessages: this._renderPageMessages(),
-      t: (key, replacements) => this._t(key, replacements),
-      renderFacetFilter: (...args) => this._renderFacetFilter(...args),
     });
 }
 
 export function buildRuleTableRows(rules, context) {
-    const { t, summarizeRule, formatDuration, labels = [] } = context;
+    const { t, summarizeRule, formatDuration, labels = [], hass } = context;
     const labelRegistry = new Map(labels.map((label) => [label.label_id, label]));
     return rules.map((rule) => {
       const enabled = rule.enabled !== false;
@@ -335,6 +384,16 @@ export function buildRuleTableRows(rules, context) {
         name: rule.name,
         labels: labelMetadata(rule.label_ids ?? [], labelRegistry),
         entityIds: [...(rule.entity_ids ?? [])],
+        targets: (rule.entity_ids ?? []).map((entityId) => {
+          const entity = hass?.entities?.[entityId];
+          const device = hass?.devices?.[entity?.device_id];
+          return {
+            integration: entity?.platform || "",
+            device: entity?.device_id || "",
+            domain: entityId.split(".", 1)[0],
+            area: entity?.area_id || device?.area_id || "",
+          };
+        }),
         entities: (rule.entity_ids ?? []).join(", "),
         condition: summarizeRule(rule),
         duration: rule.source === "value_sequence" ? "" : formatDuration(rule.duration),
@@ -362,6 +421,7 @@ export function ruleTableRows() {
       summarizeRule: (rule) => this._ruleSummary(rule),
       formatDuration: (duration) => this._durationText(duration),
       labels: this._labels ?? [],
+      hass: this._hass,
     });
 }
 

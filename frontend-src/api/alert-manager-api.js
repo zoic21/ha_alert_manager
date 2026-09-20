@@ -62,6 +62,9 @@ export function setHass(value) {
       scannedAt && scannedAt !== this._coherenceScannedAt,
     );
     this._coherenceScannedAt = scannedAt;
+    const ruleRegistriesChanged = ["entities", "devices", "areas"].some(
+      (key) => value?.[key] !== this._hass?.[key],
+    );
     const wasReadOnly = this._readOnly;
     this._hass = value;
     if (wasReadOnly !== this._readOnly) {
@@ -84,6 +87,9 @@ export function setHass(value) {
     const historyChanged = historyRevision !== this._historyRevision;
     this._historyRevision = historyRevision;
     this._updateHassReferences();
+    if (this.isConnected && this._config && this._activeTab === "rules" && ruleRegistriesChanged) {
+      this._refreshRulesData();
+    }
     if (this.isConnected && this._config && (this._activeTab === "history" || this._alertDetailsDialog) && historyChanged) {
       void this._refreshHistory();
     }

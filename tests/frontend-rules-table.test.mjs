@@ -363,7 +363,7 @@ test("rule label filters combine with status and survive targeted data refreshes
   assert.deepEqual(table.data.map((row) => row.id), ["inactive-rule"]);
   panel._render = () => {};
   table.listeners["clear-filter"]();
-  assert.deepEqual(state.filters, { enabled: [], labels: [] });
+  assert.deepEqual(state.filters, { integration: [], device: [], domain: [], area: [], enabled: [], labels: [] });
   panel._hydrateRuleTable();
   assert.equal(table.data.length, 3);
   assert.equal(table.filters, 0);
@@ -395,10 +395,132 @@ test("rule label facets use rule labels and checkbox events update only their ow
   assert.equal(checkbox.checked, false);
   checkbox.checked = true;
   checkbox.listeners.change({ stopPropagation() {} });
-  assert.deepEqual(state.filters, { enabled: ["active"], labels: ["cold"] });
+  assert.deepEqual(state.filters, { integration: [], device: [], domain: [], area: [], enabled: ["active"], labels: ["cold"] });
   panel._hydrateRuleTable();
   assert.equal(checkbox.checked, true);
   checkbox.checked = false;
   checkbox.listeners.change({ stopPropagation() {} });
-  assert.deepEqual(state.filters, { enabled: ["active"], labels: [] });
+  assert.deepEqual(state.filters, { integration: [], device: [], domain: [], area: [], enabled: ["active"], labels: [] });
+});
+
+const ruleRegistryHass = () => ({
+  entities: {
+    "sensor.temperature": { platform: "mqtt", device_id: "device-a", area_id: "office" },
+    "binary_sensor.door": { platform: "zha", device_id: "device-b" },
+    "light.ignored": { platform: "hue", device_id: "ignored-device" },
+  },
+  devices: {
+    "device-a": { name: "Factory name", name_by_user: "Same name", area_id: "kitchen" },
+    "device-b": { name: "Same name", area_id: "hall" },
+    "ignored-device": { name: "Ignored device", area_id: "garden" },
+  },
+  areas: { office: { name: "Office" }, kitchen: { name: "Kitchen" }, hall: { name: "Hall" } },
+  localize: (key) => key === "component.mqtt.title" ? "MQTT" : "",
+});
+
+test("rule target metadata uses only configured entities with entity area overriding device area", () => {
+  const panel = new Panel();
+  panel._hass = ruleRegistryHass();
+  panel._config = { rules: [{ ...rules()[0],
+    entity_ids: ["sensor.temperature", "binary_sensor.door", "sensor.deleted"],
+    condition_template: "{{ is_state('light.ignored', 'on') }}",
+    message: "{{ states('light.ignored') }}",
+  }] };
+  const [row] = panel._ruleTableRows();
+  assert.deepEqual(row.targets, [
+    { integration: "mqtt", device: "device-a", domain: "sensor", area: "office" },
+    { integration: "zha", device: "device-b", domain: "binary_sensor", area: "hall" },
+    { integration: "", device: "", domain: "sensor", area: "" },
+  ]);
+  const markup = panel._renderRules();
+  for (const value of ["mqtt", "zha", "device-a", "device-b", "sensor", "binary_sensor", "office", "hall"]) {
+    assert.ok(markup.includes(`data-filter-value="${value}"`), value);
+  }
+  assert.match(markup, />MQTT<\/span>/);
+  assert.match(markup, />Same name<\/span>/);
+  assert.match(markup, />Office<\/span>/);
+  for (const value of ["hue", "ignored-device", "light", "garden", "kitchen"]) {
+    assert.ok(!markup.includes(`data-filter-value="${value}"`), value);
+  }
+});
+
+test("entity facets match any configured target and combine with status and rule labels", () => {
+  const panel = new Panel();
+  panel._activeTab = "rules";
+  panel._hass = ruleRegistryHass();
+  panel._config = { rules: [
+    { ...rules()[0], id: "multi", entity_ids: ["sensor.temperature", "binary_sensor.door"], label_ids: ["cold"] },
+    { ...rules()[1], id: "door", entity_ids: ["binary_sensor.door"] },
+    { ...rules()[0], id: "missing", entity_ids: ["sensor.deleted"] },
+    { ...rules()[0], id: "template-only", entity_ids: [], source: "template", condition_template: "{{ states('sensor.temperature') }}" },
+  ] };
+  const table = tablePage();
+  panel.shadowRoot.querySelector = (selector) => selector === "[data-rules-table-page]" ? table : null;
+  panel._refreshUiState = () => {};
+  const state = panel._ensureRulesTableState();
+  const check = (filters, ids, count) => {
+    state.filters = { enabled: [], labels: [], integration: [], device: [], domain: [], area: [], ...filters };
+    panel._hydrateRuleTable();
+    assert.deepEqual(table.data.map((row) => row.id), ids);
+    assert.equal(table.filters, count);
+    panel._refreshRulesData();
+    assert.deepEqual(table.data.map((row) => row.id), ids);
+  };
+  check({ integration: ["mqtt"] }, ["multi"], 1);
+  check({ device: ["device-b"] }, ["multi", "door"], 1);
+  check({ domain: ["sensor"] }, ["multi", "missing"], 1);
+  check({ area: ["office", "hall"] }, ["multi", "door"], 1);
+  check({ integration: ["mqtt", "zha"], device: ["device-b"], domain: ["binary_sensor"], area: ["hall"], enabled: ["active"], labels: ["cold"] }, ["multi"], 6);
+  check({ area: ["kitchen"] }, [], 1);
+  check({ area: ["hall"], enabled: ["inactive"] }, ["door"], 2);
+  panel._render = () => {};
+  table.listeners["clear-filter"]();
+  assert.ok(Object.values(state.filters).every((values) => values.length === 0));
+  panel._hydrateRuleTable();
+  assert.equal(table.data.length, 4);
+});
+
+test("targeted refresh updates facet options and checkbox bindings after a rule edit", () => {
+  const panel = new Panel();
+  panel._activeTab = "rules";
+  panel._hass = ruleRegistryHass();
+  panel._config = { rules: [{ ...rules()[0] }] };
+  const table = tablePage();
+  const pane = { innerHTML: "" };
+  table.querySelector = (selector) => selector === "[data-rules-filters]" ? pane : null;
+  panel.shadowRoot.querySelector = (selector) => selector === "[data-rules-table-page]" ? table : null;
+  panel._refreshUiState = () => {};
+  panel._render = () => {};
+  panel._hydrateRuleTable();
+  panel._config.rules[0].entity_ids = ["binary_sensor.door"];
+  const checkbox = fakeDomElement("ha-checkbox");
+  checkbox.dataset = { tableFilterOption: "device", filterValue: "device-b" };
+  table.querySelectorAll = () => [checkbox];
+  panel._refreshRulesData();
+  assert.match(pane.innerHTML, /data-filter-value="device-b"/);
+  assert.doesNotMatch(pane.innerHTML, /data-filter-value="device-a"/);
+  checkbox.checked = true;
+  checkbox.listeners.change({ stopPropagation() {} });
+  assert.deepEqual(panel._tableState.rules.filters.device, ["device-b"]);
+});
+
+test("rules refresh on registry changes without refreshing on ordinary state updates", () => {
+  const panel = new Panel();
+  panel._config = { rules: rules() };
+  panel._activeTab = "rules";
+  panel._hass = { ...ruleRegistryHass(), user: { is_admin: true }, locale: { language: "en" } };
+  panel._language = "en";
+  panel._syncSensor = () => false;
+  panel._updateHassReferences = () => {};
+  let refreshes = 0;
+  panel._refreshRulesData = () => { refreshes += 1; };
+  panel.hass = { ...panel._hass, states: { "sensor.temperature": { state: "20" } } };
+  assert.equal(refreshes, 0);
+  for (const key of ["entities", "devices", "areas"]) {
+    panel.hass = { ...panel._hass, [key]: { ...panel._hass[key] } };
+  }
+  assert.equal(refreshes, 3);
+  panel._activeTab = "overview";
+  panel.hass = { ...panel._hass, areas: {} };
+  assert.equal(refreshes, 3);
 });
