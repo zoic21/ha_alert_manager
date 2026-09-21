@@ -88,9 +88,11 @@ for (const [language, emptyTitle, summary] of [
     assert.equal(markup.split(`secondary="${summary}"`).length - 1, 2);
     draft.exceptions[0].presentation = "neutral";
     const neutralMarkup = renderNotificationProfileDrawer({ draft, t });
-    const neutralSummary = summary.replace("Standard", language === "fr" ? "Neutre" : "Neutral");
+    const neutralSummary = summary.replace("Standard", language === "fr" ? "Informative" : "Informational");
     assert.ok(neutralMarkup.includes(`secondary="${neutralSummary}"`));
-    assert.match(neutralMarkup, /id="notification-exception-presentation-0"/);
+    assert.match(neutralMarkup, /<ha-switch id="notification-exception-presentation-0"[^>]*checked/);
+    assert.doesNotMatch(markup, /<ha-switch id="notification-exception-presentation-0"[^>]*checked/);
+    assert.ok(neutralMarkup.indexOf('id="notification-exception-presentation-0"') > neutralMarkup.indexOf('id="notification-exception-reminder-0"'));
     assert.equal(notificationProfileValidationError({
       ...draft, exceptions: [{ selector_ids: ["events"], presentation: "neutral" }],
     }, t), null);
@@ -116,12 +118,13 @@ test("exception header uses dense native badges and refreshes selected labels wi
       querySelectorAll: () => [], hasAttribute: () => false, addEventListener() {},
     };
     const callbacks = {};
+    const presentation = { checked: false };
     const panel = {
       _notificationProfileDraft: draft,
       _labels: [{ label_id: "battery", name: "Battery", color: "blue", icon: "mdi:battery" }],
       _t: t, _multipleSelectorValue: (value) => value,
       _configureSelector: (id, config, value, callback) => { callbacks[id] = callback; },
-      shadowRoot: { querySelector: (selector) => selector === '[data-notification-expansion="0"]' ? expansion : null },
+      shadowRoot: { querySelector: (selector) => selector === '[data-notification-expansion="0"]' ? expansion : selector === "#notification-exception-presentation-0" ? presentation : null },
     };
     hydrateNotificationProfileControls(panel);
     const badge = header.child.children[0];
@@ -134,10 +137,12 @@ test("exception header uses dense native badges and refreshes selected labels wi
     assert.equal(badge.children[0].attributes.icon, "mdi:battery");
     callbacks["notification-exception-selector-0"](["missing"]);
     assert.equal(header.child.children[0].textContent, "missing");
-    callbacks["notification-exception-presentation-0"]("neutral");
+    presentation.checked = true;
+    presentation.onchange();
     assert.equal(draft.exceptions[0].presentation, "neutral");
-    callbacks["notification-exception-presentation-0"]("invalid");
-    assert.equal(draft.exceptions[0].presentation, "neutral");
+    presentation.checked = false;
+    presentation.onchange();
+    assert.equal(draft.exceptions[0].presentation, "standard");
     callbacks["notification-exception-selector-0"]([]);
     assert.equal(header.textContent, "notifications.new_exception");
     assert.match(settingsStyles, /\.notification-exception-labels > span\s*\{ flex-wrap: wrap;/);
@@ -897,17 +902,21 @@ test("notification exceptions preserve effective legacy values and save explicit
     "#notification-exception-start-0": { checked: false },
     "#notification-exception-resolved-0": { checked: true },
     "#notification-exception-reminder-0": { value: "" },
+    "#notification-exception-presentation-0": { checked: true },
   };
   const panel = { _notificationProfileDraft: draft, shadowRoot: { querySelector: (id) => controls[id] } };
   captureNotificationProfileDraft(panel);
   assert.equal(draft.exceptions[0].notify_on_start, false);
   assert.equal(draft.exceptions[0].notify_on_resolved, true);
   assert.equal(draft.exceptions[0].reminder_interval, null);
+  assert.equal(draft.exceptions[0].presentation, "neutral");
+  controls["#notification-exception-presentation-0"].checked = false;
   controls["#notification-exception-start-0"].checked = true;
   controls["#notification-exception-reminder-0"].value = 600;
   captureNotificationProfileDraft(panel);
   assert.equal(draft.exceptions[0].notify_on_start, true);
   assert.equal(draft.exceptions[0].reminder_interval, 600);
+  assert.equal(draft.exceptions[0].presentation, "standard");
 });
 
 test("exception summaries escape label names, inherit policy and preserve expansion through reordering", () => {

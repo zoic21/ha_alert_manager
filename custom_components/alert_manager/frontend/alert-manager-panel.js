@@ -3889,12 +3889,15 @@ function renderException(exception, index, t, defaults, labels, expandedExceptio
     <div class="notification-exception-grid">
       <div class="field full"><span class="field-label">${esc(t("notifications.selector"))}</span><ha-selector id="notification-exception-selector-${index}"></ha-selector><small>${esc(t("notifications.selector_help"))}</small></div>
       <div class="notification-policy-card full">
-        <div class="field full"><span class="field-label">${esc(t("notifications.presentation"))}</span><ha-selector id="notification-exception-presentation-${index}" aria-label="${esc(t("notifications.presentation"))}"></ha-selector><small>${esc(t("notifications.presentation_help"))}</small></div>
         <div class="notification-policy-switches">
           ${renderPolicySwitch(`notification-exception-start-${index}`, t("notifications.on_start"), policy.notify_on_start)}
           ${renderPolicySwitch(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), policy.notify_on_resolved)}
         </div>
         <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
+      </div>
+      <div class="field full">
+        ${renderPolicySwitch(`notification-exception-presentation-${index}`, t("notifications.informative"), policy.presentation === "neutral")}
+        <small>${esc(t("notifications.presentation_help"))}</small>
       </div>
     </div>
     </ha-expansion-panel>
@@ -3976,19 +3979,12 @@ function hydrateNotificationProfileControls(panel) {
         if (button.dataset.action) button.onkeydown = (event) => event.stopPropagation();
       });
     }
-    panel._configureSelector(
-      `notification-exception-presentation-${index}`,
-      { select: { mode: "dropdown", options: ["standard", "neutral"].map((value) => ({
-        value, label: panel._t(`notifications.presentation_${value}`),
-      })) } },
-      exception.presentation ?? "standard",
-      (value) => {
-        if (!["standard", "neutral"].includes(value)) return;
-        exception.presentation = value;
-        captureNotificationProfileDraft(panel);
-        if (expansion) hydrateNotificationExceptionHeader(expansion, exception, panel);
-      },
-    );
+    const presentation = panel.shadowRoot?.querySelector(`#notification-exception-presentation-${index}`);
+    if (presentation) presentation.onchange = () => {
+      exception.presentation = presentation.checked ? "neutral" : "standard";
+      captureNotificationProfileDraft(panel);
+      if (expansion) hydrateNotificationExceptionHeader(expansion, exception, panel);
+    };
     const selectorId = `notification-exception-selector-${index}`;
     panel._configureSelector(
       selectorId,
@@ -4040,6 +4036,8 @@ function captureNotificationProfileDraft(panel) {
       const control = panel.shadowRoot.querySelector(`#notification-exception-${suffix}-${index}`);
       if (control) exception[key] = Boolean(control.checked);
     }
+    const presentation = panel.shadowRoot.querySelector(`#notification-exception-presentation-${index}`);
+    if (presentation) exception.presentation = presentation.checked ? "neutral" : "standard";
     const value = durationFieldValue(panel.shadowRoot.querySelector(`#notification-exception-reminder-${index}`));
     if (value !== undefined) exception.reminder_interval = value === "" ? null : Number(value);
   });

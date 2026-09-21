@@ -463,10 +463,10 @@
       "started_resolved_title": "Alerte survenue puis résolue",
       "started_resolved_title_plural": "{count} alertes survenues puis résolues",
       "started_resolved_message": "{details} — retour à la normale",
-      "presentation": "Présentation",
+      "informative": "Notification informative",
       "presentation_standard": "Standard",
-      "presentation_neutral": "Neutre",
-      "presentation_help": "Neutre : titre « Notification », icône d’information bleue. Les messages et les conditions d’envoi restent identiques.",
+      "presentation_neutral": "Informative",
+      "presentation_help": "Titre « Notification » et icône d’information bleue.",
       "neutral_title": "Notification"
     },
     "recovery": {

@@ -7,9 +7,10 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.11**, dated **2026-09-20**.
+Current release candidate: **2.4.0-rc.12**, dated **2026-09-21**.
 This is a prerelease for testing, not a stable release.
-RC.11 adds custom-rule filters for labels, integration, device, domain and area.
+RC.12 replaces the notification presentation dropdown with a compact informational
+notification switch below the delivery settings, with shorter help and updated summaries.
 
 ### Rule editor and notifications
 
@@ -18,7 +19,7 @@ RC.11 adds custom-rule filters for labels, integration, device, domain and area.
   references. Entity areas take precedence over device areas. Multiple selections
   within a filter match any selected value; different filters combine.
 
-- Add Standard / Neutral presentation to label-based notification exceptions,
+- Add an informational notification switch to label-based notification exceptions,
   including their collapsed summaries and YAML. Neutral notifications use a blue
   information icon and a neutral title while preserving custom event messages.
   Keep standard and neutral batches separate, including reminders, without
