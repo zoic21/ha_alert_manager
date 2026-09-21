@@ -17,6 +17,17 @@ Install and add the integration using the [installation instructions](../README.
 
 The [dashboard and history guide](dashboard-and-history.md) explains how to review and acknowledge the resulting alerts. The [custom rules guide](custom-rules.md#examples) includes examples to adapt to your own entity IDs.
 
+## Common tasks
+
+- Announce an appliance cycle without an alarm-style message: [informational notifications](configuration.md#informational-neutral-notifications) and [ordered sequences](custom-rules.md#ordered-sequences).
+- Find rules by labels or their configured entities: [rule filters](custom-rules.md#find-and-organize-rules).
+- Understand step progress, notification sends and acknowledgements: [the alert timeline](dashboard-and-history.md#read-the-timeline).
+- Configure the compact dashboard view: [card options](dashboard-and-history.md#add-the-dashboard-card).
+- Review a 2.3 configuration after upgrading: [pack migration](configuration.md#migration-from-earlier-configurations).
+- Check whether event handling needed a catch-up: [periodic safety check diagnostics](configuration.md#periodic-safety-check).
+
+Screenshots illustrate the current interface and are listed in the [visual asset inventory](assets/README.md#screenshots).
+
 ## Access and documentation scope
 
 Authenticated users can view the dashboard card, Overview, History and their details. Configuration, other tabs and all actions require an administrator.

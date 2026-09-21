@@ -4,6 +4,8 @@
 
 **Configuration** brings together automatic monitoring, notification profiles, alert display/history settings, coherence scheduling, YAML and backups. Configuration changes require an administrator.
 
+<img src="assets/screenshots/configuration.png" alt="Configuration with quick access, general settings and automatic monitoring packs">
+
 ## Automatic monitoring
 
 Open **Configuration → Automatic monitoring** to enable and configure the packs relevant to your installation. Packs identify common problems without creating a custom rule for every entity. Each pack can be enabled independently and can carry Home Assistant labels for filtering and notification routing.
@@ -44,7 +46,7 @@ Flapping can detect repeated short anomalies that clear before the normal trigge
 
 Unavailable entities and connectivity are the preselected sources; their source packs must be enabled. Settings can be adjusted at pack level, per source pack, per device, per entity or per custom rule. Custom rules participate through their flapping option.
 
-An instability alert is separate from its source alert. Its details retain the count/threshold and occurrence times in a collapsible section, including in resolved history. Evidence follows the detector's bounded rolling window rather than providing an unlimited event log.
+An instability alert is separate from its source alert. Its details retain the count/threshold and show occurrence times in the always-visible timeline, including in resolved history. Evidence follows the detector's bounded rolling window rather than providing an unlimited event log.
 
 ## Notification profiles
 
@@ -56,13 +58,40 @@ The profile's three-dot menu offers **YAML mode**, **Duplicate** and **Test**. D
 
 ### Labels and exceptions
 
-A profile can cover all alerts or match **any selected label (OR)**. Matching combines the labels of the entity, its device and the custom rule or automatic pack that produced the alert.
+A profile can cover all alerts or match **any selected label (OR)**. Matching combines the labels of the entity, its device and the custom rule or automatic pack that produced the alert. **The profile filter is evaluated before exceptions**: an exception cannot bring an otherwise excluded alert into the profile. For example, a profile filtered to `important` with an exception for `information` requires the alert to carry both labels. Leave the profile filter empty, or include `information` among its selected labels, if informational events should also enter the profile independently.
 
 An exception requires **all its selected labels (AND)**. The **first matching exception in list order** wins; inherited settings keep the profile defaults. Exceptions can independently override new-alert, recovery and reminder behavior. The visual editor uses explicit switches and a reminder interval; clearing the interval disables reminders. Sparse exceptions display effective profile values, and YAML can omit fields to inherit defaults. In YAML exceptions use `selector_ids`; legacy `selector_id` remains accepted.
 
-Each label exception also offers **Presentation: Standard / Neutral**, shown in its collapsed summary. Standard is the default for existing profiles. Neutral uses a blue information icon and the title **Notification**, preserving custom activation/reminder messages, including when several events share a device. It changes presentation only: delivery switches, resolution behavior and timeline events stay the same. Use a rule label such as `events` and an activation-only neutral exception for “The washing machine has finished”; a timed sequence resolution remains silent. In YAML, add `presentation: neutral` (or `standard`) to the exception; it can be the only override. As with other settings, only the first matching exception applies.
-
 For example, a profile may notify every new alert, while its first exception disables reminders for alerts carrying both a maintenance label and a particular rule label. An alert matching only one of those labels does not match that exception.
+
+### Informational (neutral) notifications
+
+Enable **Informational notification** (**Notification informative** in French) in a label exception to announce an event such as “The washing machine has finished”. The switch sits with **New alert** and **Back to normal**, next to the reminder interval; the collapsed exception summary includes its effective presentation and delivery settings. Existing exceptions use the standard presentation unless explicitly changed.
+
+Neutral notifications use a blue information icon and the title **Notification**. Custom activation/reminder messages are preserved, including when several events share a device. A recovery still uses recovery wording; a combined activation/recovery includes the original details followed by the return-to-normal text. This option changes presentation only: it does not introduce severity, change alert status, alter resolution, enable delivery switches or change timeline event types.
+
+For a completed appliance cycle:
+
+1. Add a Home Assistant label such as `information` to the custom rule and set its message to “The washing machine has finished”.
+2. Make sure the notification profile accepts that label, or leave its label filter empty.
+3. Add a label exception for `information`, enable **New alert** and **Informational notification**, disable **Back to normal**, and leave reminders empty.
+4. For a short-lived sequence alert, select timed resolution, for example **1 second**. Automatic expiration is silent, and its queued activation notification is still delivered after the batching delay.
+
+In the profile YAML editor, add this entry to the existing `exceptions` list, using the actual Home Assistant label ID:
+
+```yaml
+exceptions:
+  - selector_type: label
+    selector_ids: [information]
+    notify_on_start: true
+    notify_on_resolved: false
+    reminder_interval: null
+    presentation: neutral
+```
+
+`presentation` belongs to an exception, not to the rule or the profile's `default_policy`. Its values are `neutral` and `standard`; it may be the only override when the other settings should inherit. Only the first matching exception applies, so place it before another exception that could also match the same alert. An individual label cannot be repeated across exceptions within the same profile.
+
+<img src="assets/screenshots/notification.png" width="572" alt="Notification profile showing standard and informational label exceptions">
 
 ### Batching and reminders
 
@@ -72,7 +101,17 @@ Reminders are grouped per profile and stop on acknowledgement or resolution. Aft
 
 ### Mobile navigation and delivery details
 
-Recognized Companion targets receive native `notification_icon` metadata and an emoji-free title; actual icon rendering depends on the client. Generic targets retain the new-alert, reminder and recovery emoji prefixes. Tapping a supported Companion notification opens a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
+Recognized Companion targets receive native `notification_icon` and `color` metadata and an emoji-free title. Actual icon/color rendering depends on the client. Generic targets receive the corresponding emoji prefix in the title.
+
+| Delivery | Icon | Color |
+| --- | --- | --- |
+| New alert | Alert circle | Red |
+| Recovery | Check circle | Green |
+| Reminder | Ringing bell | Orange |
+| Combined activation and recovery | Check circle | Blue |
+| Informational exception, for any enabled delivery | Information | Blue |
+
+Tapping a supported Companion notification opens a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
 
 Alert details separate activation and reminder deliveries; history also records recovery deliveries, matching profiles and last delivery times. A batch counts once per profile and alert when at least one target succeeds. Tests and complete failures are excluded. These details survive restarts, are hidden for pending alerts and do not count notifications sent by external automations.
 
@@ -114,20 +153,6 @@ Configuration shows custom-rule evaluation counts and average/maximum/total proc
 
 An evaluation is one rule/entity pair, including its condition and excluding asynchronous waiting. Tests, automatic packs and coherence scans are excluded from timing. This does **not** measure Home Assistant event-loop load. Activity counts actual transitions, not the current number of alerts; restored alerts are not counted as new activations.
 
-## Home Assistant entities and events
-
-| Entity | Purpose |
-| --- | --- |
-| `switch.alert_manager_main_monitoring` | Enable or pause monitoring. |
-| `sensor.alert_manager_main_active` | Active, unacknowledged alert count. |
-| `sensor.alert_manager_main_pending` | Pending alert count. |
-| `sensor.alert_manager_main_acknowledge` | Acknowledged alert count. |
-| `sensor.alert_manager_coherence_issue` | Coherence findings. |
-
-Lifecycle events are `alert_manager_alert_started`, `alert_manager_alert_resolved`, `alert_manager_alert_acknowledged` and `alert_manager_alert_unacknowledged`. Acknowledgement actions are `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
-
-These entities, events and actions remain available for your own dashboards and automations, whether or not you use built-in notification profiles.
-
 ### Periodic safety check
 
 Every 10 minutes, while monitoring is running, Alert Manager checks the current
@@ -145,3 +170,17 @@ it. Like the other diagnostics, it uses the current UTC hour and previous 23 hou
 buckets, lives only in memory and resets on reload/restart. An unchanged pass does
 not save or publish alert state. Repeated recoveries indicate an event/timer bug to
 investigate, not normal polling behavior.
+
+## Home Assistant entities and events
+
+| Entity | Purpose |
+| --- | --- |
+| `switch.alert_manager_main_monitoring` | Enable or pause monitoring. |
+| `sensor.alert_manager_main_active` | Active, unacknowledged alert count. |
+| `sensor.alert_manager_main_pending` | Pending alert count. |
+| `sensor.alert_manager_main_acknowledge` | Acknowledged alert count. |
+| `sensor.alert_manager_coherence_issue` | Coherence findings. |
+
+Lifecycle events are `alert_manager_alert_started`, `alert_manager_alert_resolved`, `alert_manager_alert_acknowledged` and `alert_manager_alert_unacknowledged`. Acknowledgement actions are `alert_manager.acknowledge` and `alert_manager.unacknowledge`.
+
+These entities, events and actions remain available for your own dashboards and automations, whether or not you use built-in notification profiles.

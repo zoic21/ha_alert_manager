@@ -14,6 +14,18 @@ The **Test** button evaluates the unsaved draft against current values. For each
 
 Home Assistant labels can be attached to a rule. They help organize rules and participate in [notification selection](configuration.md#labels-and-exceptions), alongside entity and device labels. They do **not** dynamically select the entities monitored by the rule.
 
+## Find and organize rules
+
+The rules table supports search, sorting, configurable columns and filters for enabled/disabled status, labels, integration, device, domain and area. Active/inactive here means the rule is enabled/disabled, not that it currently has an alert.
+
+- **Labels** matches only labels attached directly to the rule. Entity/device labels participate in notification routing and alert filtering, but are not inherited by this rules-list filter.
+- **Integration, device, domain and area** use only the target entities selected at the top of the rule. References inside Jinja conditions or messages are ignored. An entity's own area takes precedence over its device's area.
+- Multiple selections within a filter match any selected value; different filters combine. For a multi-entity rule, each entity filter may be satisfied by a different target of that rule.
+
+The global Duration column is empty for sequences: holds belong to individual steps.
+
+<img src="assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules table and visual rule editor">
+
 ## Operations and comparisons
 
 | Operation | YAML source | Use it to |
@@ -49,18 +61,20 @@ With `duration` greater than zero, the arrival value must remain unchanged for t
 
 Choose a resolution mode after activation:
 
-- **After a duration** (`resolve_mode: duration`, the default): the alert expires after `auto_resolve` seconds (**600 by default**, minimum 1). Leaving the arrival value does not resolve it. Another confirmed transition extends the same alert's deadline and preserves its acknowledgement.
+- **After a duration** (`resolve_mode: duration`, the default): the alert expires after `auto_resolve` seconds (minimum **1 second**, maximum one year). Leaving the arrival value does not resolve it. Another confirmed transition extends the same alert's deadline and preserves its acknowledgement.
 - **While the arrival value is maintained** (`resolve_mode: state`): the alert has no expiration deadline. A known value different from `to_value` resolves it through the normal lifecycle, including recovery notifications when enabled. Unknown/unavailable states and missing attributes preserve the active alert until a known value is observed. Unrelated attribute updates do not resolve it. This applies to both entity states and selected attributes.
 - **When a value condition is true** (`resolve_mode: condition`): `resolve_condition` uses the same comparison operators as sequence steps (`above`, `below`, `between`, `outside`, `equals`, `not_equals`, `contains`, `not_contains`) on the same entity and attribute. For example, `resolve_condition: {operator: below, value: 10}` resolves below 10. There is no hold delay or expiration timer. Unknown/unavailable or invalid numeric values cannot resolve the alert. This test is independent of the trigger's Jinja condition.
 
 
-Existing rules keep the duration mode. Active alerts retain their acknowledgement across restarts; the state mode rechecks the current value on restart or monitoring resume. Changing the resolution mode keeps the current episode and removes its deadline or starts the configured expiration duration from the change.
+New rules created in the visual editor start with **1 second** of timed resolution. YAML that omits `auto_resolve` retains the backend compatibility default of **600 seconds**; specify it explicitly when the duration matters. Existing configured durations and resolution modes are preserved. Active alerts retain their acknowledgement across restarts; the state mode rechecks the current value on restart or monitoring resume. Changing the resolution mode keeps the current episode and removes its deadline or starts the configured expiration duration from the change.
 
 Automatic expiration is recorded in history but sends **no recovery notification**. New-alert notifications and reminders still apply. Unconfirmed holds do not survive a restart or monitoring pause; active/acknowledged expiration deadlines survive restarts. After a pause, a new activation requires a fresh edge.
 
 ### Ordered sequences
 
 Choose **Sequence** to detect an ordered scenario, such as the end of an appliance cycle. Add or remove steps, enable or disable them individually, and reorder them by dragging their handle or using the keyboard (arrow keys, Home and End). Disabled steps are skipped; if every step is disabled, the sequence cannot trigger. Final-step resolution follows the last enabled step. The editor uses native HA selectors and stacks fields when the drawer is narrow.
+
+<img src="assets/screenshots/sequence.png" width="574" alt="Sequence editor with enabled steps, hold summaries, timeout and resolution mode">
 
 Each of the **2–20 steps** compares the same selected scalar state or nested attribute, using the ordinary numeric/text operators. Wildcards and per-step entities or attributes are not supported. Each entity has independent progress; only one sequence per rule/entity can be in progress.
 
@@ -98,11 +112,15 @@ steps:
     duration: 120
 sequence_timeout: 21600
 duration: 0
-auto_resolve: 600
+auto_resolve: 1
 resolve_mode: duration
+label_ids: [information]
+message: "The washing machine has finished."
 ```
 
-Steps use native collapsible panels: a collapsed step shows its comparison and hold duration. Expanding, reordering or collapsing a step preserves its fields; newly added steps open for editing.
+Adapt these power thresholds and holds to the appliance, and replace `information` with an existing Home Assistant label ID. The 1-second expiration keeps the completed event in history while allowing an activation-only [informational notification](configuration.md#informational-neutral-notifications) to be sent even after expiration. It does not send a recovery notification.
+
+Steps use native collapsible panels: a collapsed step shows its comparison, available entity unit and hold duration. Expanding, reordering or collapsing a step preserves its fields; newly added steps open for editing.
 
 Existing rules keep their resolution mode and require no migration.
 

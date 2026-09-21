@@ -4,8 +4,6 @@
 
 **Coherence** finds configuration that still points to an entity or ZHA device that no longer exists. It is useful after renaming or removing entities, replacing equipment or reorganizing automations. It checks references, not whether equipment is currently online.
 
-<img src="assets/screenshots/coherence.png" alt="Configuration coherence scan results">
-
 ## Run a scan
 
 Open **Coherence** and start an analysis. The results identify the missing reference and its source. When a matching Home Assistant editor or object is available, **Open** takes you there; a finding in a custom rule opens that rule's editor.
@@ -53,6 +51,8 @@ Findings are also exposed through `sensor.alert_manager_coherence_issue` for you
 ## Deleted entities
 
 The page provides the latest **50 deleted entities** still retained by Home Assistant, including deletion date and integration. This comes directly from Home Assistant's entity registry; Alert Manager does not maintain a separate deletion history. It can help explain a missing reference, but is not an unlimited record of everything ever deleted.
+
+<img src="assets/screenshots/coherence.png" alt="Coherence page with the retained deleted-entity list">
 
 ## Working through findings
 

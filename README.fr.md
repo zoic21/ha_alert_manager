@@ -36,7 +36,7 @@ Surveillez un réfrigérateur consommant plus de 200 W pendant deux heures, une 
 
 Les règles prennent en charge états, attributs imbriqués, comparaisons numériques et textuelles, absence de changement, variations, transitions, séquences ordonnées et conditions Jinja. Une règle peut surveiller plusieurs entités indépendamment. Éditez visuellement ou en YAML, dupliquez une règle et testez un brouillon sur les valeurs réelles, avec les profils de notification correspondants. Les messages Jinja expliquent le problème et peuvent rester actualisés tant que l’alerte est active.
 
-Filtrez la liste des règles par statut actif/inactif, étiquettes de la règle, intégration, appareil, domaine et zone. Les filtres d’entités utilisent uniquement les entités sélectionnées en haut de la règle, sans analyser les conditions Jinja ni les messages. La zone de l’entité prime sur celle de son appareil. Plusieurs sélections dans un filtre correspondent à au moins une valeur choisie ; les différents filtres se combinent.
+Filtrez la liste des règles par statut actif/inactif (règle activée ou désactivée), étiquettes de la règle, intégration, appareil, domaine et zone. Le filtre d’étiquettes utilise uniquement celles de la règle, sans remonter celles des entités ou appareils. Les filtres d’entités utilisent uniquement les entités sélectionnées en haut de la règle, sans analyser les conditions Jinja ni les messages. La zone de l’entité prime sur celle de son appareil. Plusieurs sélections dans un filtre correspondent à au moins une valeur choisie ; les différents filtres se combinent.
 
 Les séquences reconnaissent de 2 à 20 étapes sur la même valeur, avec un maintien minimum, une sortie avant une limite ou une durée comprise entre deux bornes, et un délai total facultatif. Les étapes sont repliables, désactivables individuellement et réordonnables par glisser-déposer ou au clavier. Dès le maintien de la première étape, la séquence apparaît dans les alertes à venir avec sa progression et le temps restant. Une progression abandonnée ou expirée disparaît sans historique ni notification de résolution. Les séquences inachevées repartent d’une nouvelle observation après un redémarrage, sans compter le temps d’arrêt.
 
@@ -52,7 +52,9 @@ La carte de dashboard intégrée propose une vue compacte regroupée par équipe
 
 ### Choisir les notifications et vérifier la configuration
 
-Les profils de notification intégrés et facultatifs gèrent plusieurs destinataires `notify`, les nouvelles alertes, les retours à la normale, les rappels et le regroupement des envois. Sélectionnez les alertes par étiquette et définissez des exceptions ordonnées ; les étiquettes de l’entité, de l’appareil et de la règle ou du pack participent à la sélection. La première exception dont toutes les étiquettes correspondent s’applique. Les exceptions par étiquette peuvent choisir une présentation neutre : icône d’information bleue, titre « Notification » et messages personnalisés conservés, avec des envois séparés des alertes standard. Les profils peuvent être testés, dupliqués et édités en YAML. Les notifications Companion prises en charge ouvrent l’alerte ou la vue concernée au toucher. Vos automatisations basées sur les événements restent utilisables.
+Les profils de notification intégrés et facultatifs gèrent plusieurs destinataires `notify`, les nouvelles alertes, les retours à la normale, les rappels et le regroupement des envois. Sélectionnez les alertes par étiquette et définissez des exceptions ordonnées ; les étiquettes de l’entité, de l’appareil et de la règle ou du pack participent à la sélection. Le filtre d’étiquettes du profil doit d’abord correspondre ; la première exception dont toutes les étiquettes correspondent s’applique ensuite. Les exceptions par étiquette proposent l’interrupteur **Notification informative** pour une présentation neutre : icône d’information bleue, titre « Notification » et messages personnalisés conservés, avec des envois séparés des alertes standard.
+
+Cela change uniquement la présentation de la notification, sans ajouter de sévérité ni modifier le cycle de vie de l’alerte. Les notifications Companion standard utilisent le rouge pour l’activation, le vert pour la résolution, l’orange pour les rappels et le bleu avec une coche pour l’activation/résolution combinée, selon les capacités du client. Le [guide des notifications](docs/configuration.md#informational-neutral-notifications) détaille la configuration et le YAML. Les profils peuvent être testés, dupliqués et édités en YAML. Les notifications Companion prises en charge ouvrent l’alerte ou la vue concernée au toucher. Vos automatisations basées sur les événements restent utilisables.
 
 Si une alerte se résout avant l’envoi du lot, les profils notifiant seulement l’activation la reçoivent quand même ; ceux notifiant aussi la résolution reçoivent un message combiné, identifié comme tel dans la chronologie. L’expiration automatique d’une transition ou séquence ne constitue pas un retour à la normale.
 
@@ -73,21 +75,33 @@ L’interface est disponible en **français et en anglais**, sur ordinateur et m
 
 <img src="docs/assets/screenshots/card.png" alt="Carte de dashboard compacte Alert Manager">
 
+### Configuration de la carte
+
+<img src="docs/assets/screenshots/card%20configuration.png" alt="Éditeur visuel de la carte avec limites, tri et étiquettes">
+
 ### Alertes à venir
 
 <img src="docs/assets/screenshots/incomming.png" alt="Alertes en attente de leur délai de déclenchement">
 
-### Historique
+### Détails et chronologie d’une alerte
 
-<img src="docs/assets/screenshots/history.png" alt="Historique des alertes et filtres">
+<img src="docs/assets/screenshots/alert.png" width="596" alt="Séquence résolue avec ses étapes et sa notification dans la chronologie">
 
 ### Règles personnalisées
 
 <img src="docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Règles personnalisées Alert Manager">
 
+### Séquences
+
+<img src="docs/assets/screenshots/sequence.png" width="574" alt="Éditeur de séquence avec étapes repliables et mode de résolution">
+
+### Profils de notification
+
+<img src="docs/assets/screenshots/notification.png" width="572" alt="Profil de notification avec exceptions standard et informative">
+
 ### Cohérence de la configuration
 
-<img src="docs/assets/screenshots/coherence.png" alt="Résultats de l’analyse de cohérence">
+<img src="docs/assets/screenshots/coherence.png" alt="Page de cohérence et liste des entités supprimées">
 
 ### Configuration
 

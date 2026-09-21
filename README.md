@@ -36,7 +36,7 @@ Monitor a fridge consuming more than 200 W for two hours, a temperature outside 
 
 Rules support states, nested attributes, numeric and text comparisons, inactivity, variations, transitions, ordered sequences and Jinja conditions. One rule can monitor several entities independently. Edit visually or in YAML, duplicate a rule and test an unsaved draft against current values, including the notification profiles that would match. Custom Jinja messages can explain the problem and optionally stay updated while it is active.
 
-Filter the rules list by active/inactive status, rule labels, integration, device, domain and area. Entity filters use only the entities selected at the top of the rule, without inspecting Jinja conditions or messages. An entity’s area overrides its device’s area. Multiple selections within a filter match any selected value; different filters combine.
+Filter the rules list by enabled/disabled status, rule labels, integration, device, domain and area. The label filter uses only labels attached to the rule, without inheriting entity or device labels. Entity filters use only the entities selected at the top of the rule, without inspecting Jinja conditions or messages. An entity’s area overrides its device’s area. Multiple selections within a filter match any selected value; different filters combine.
 
 Sequences recognize 2–20 steps on the same value, with a minimum hold, an exit before a limit or a hold between two bounds, plus an optional overall timeout. Steps collapse into summaries and can be individually disabled or reordered by dragging or using the keyboard. From the first step’s hold, the sequence appears in pending alerts with its progress and remaining time. Abandoned or expired progress disappears without history or a recovery notification. Unfinished sequences start from a fresh observation after a restart, without counting downtime.
 
@@ -52,7 +52,9 @@ The included dashboard card presents a compact view grouped by device. Choose de
 
 ### Choose when to notify and check configuration health
 
-Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The first exception whose labels all match applies. Label exceptions can enable “Informational notification”: blue information icon, “Notification” title and preserved custom messages, delivered separately from standard alerts. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
+Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The profile’s label filter must match first; then the first exception whose labels all match applies. Label exceptions can enable “Informational notification”: blue information icon, “Notification” title and preserved custom messages, delivered separately from standard alerts.
+
+This changes notification presentation only, without introducing alert severity or changing the alert lifecycle. Standard Companion notifications use red for activation, green for recovery, orange for reminders and blue with a check icon for combined activation/recovery, where supported by the client. See the [notification guide](docs/configuration.md#informational-neutral-notifications) for setup and YAML. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
 
 If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
 
@@ -73,21 +75,33 @@ The interface is available in **English and French**, on desktop and mobile. All
 
 <img src="docs/assets/screenshots/card.png" alt="Compact Alert Manager dashboard card">
 
+### Card configuration
+
+<img src="docs/assets/screenshots/card%20configuration.png" alt="Visual card editor with tile limits, sorting and labels">
+
 ### Upcoming alerts
 
 <img src="docs/assets/screenshots/incomming.png" alt="Alerts waiting for their trigger delay">
 
-### History
+### Alert details and timeline
 
-<img src="docs/assets/screenshots/history.png" alt="Alert history and filtering">
+<img src="docs/assets/screenshots/alert.png" width="596" alt="Resolved sequence with its steps and notification in the timeline">
 
 ### Custom rules
 
 <img src="docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules in Alert Manager">
 
+### Sequences
+
+<img src="docs/assets/screenshots/sequence.png" width="574" alt="Sequence editor with collapsible steps and resolution mode">
+
+### Notification profiles
+
+<img src="docs/assets/screenshots/notification.png" width="572" alt="Notification profile with standard and informational exceptions">
+
 ### Configuration coherence
 
-<img src="docs/assets/screenshots/coherence.png" alt="Configuration coherence results">
+<img src="docs/assets/screenshots/coherence.png" alt="Coherence page and deleted-entity list">
 
 ### Configuration
 

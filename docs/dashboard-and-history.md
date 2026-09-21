@@ -6,9 +6,9 @@ Use **Overview** to see what needs attention now, the dashboard card for a compa
 
 ## Overview and alert states
 
-An ongoing alert is **Upcoming**, **Active** or **Acknowledged**. Upcoming means its trigger delay is still running; Active means the condition has been confirmed. Acknowledging an alert records that the problem is known, but does not fix or hide it. Acknowledged alerts do not contribute to the active count.
+An ongoing alert is **Upcoming**, **Active** or **Acknowledged**. Upcoming means a trigger hold or an ordered sequence is in progress; Active means the condition has been confirmed. Acknowledging an alert records that the problem is known, but does not fix or hide it. Acknowledged alerts do not contribute to the active count.
 
-When a condition clears, the alert is resolved and can be retained in History. A pending condition that disappears before activation does not enter history. Transition rules have their own [automatic expiration behavior](custom-rules.md#transitions-and-automatic-resolution).
+When a condition clears, the alert is resolved and can be retained in History. A pending condition that disappears before activation does not enter history. Transitions and sequences have their own [automatic expiration behavior](custom-rules.md#transitions-and-automatic-resolution).
 
 <img src="assets/screenshots/dashboard.png" alt="Overview of current Alert Manager alerts">
 
@@ -20,7 +20,21 @@ use current labels. On resolution, their IDs, names, colors and icons are saved 
 history and retained across restarts, even if a label is later edited or deleted.
 Older history entries retain only the label information originally recorded.
 
-A clickable previous-occurrence count opens History filtered to the same stable alert ID. The filter can be changed or cleared. Flapping alerts also show their count/threshold and a collapsible list of retained occurrence times.
+A clickable previous-occurrence count opens History filtered to the same stable alert ID. The filter can be changed or cleared. Flapping alerts also show their count/threshold and retained occurrence times in the timeline.
+
+### Read the timeline
+
+Alert details always show a chronological timeline in pending, active and historical views. Colored markers distinguish detection, activation, resolution, sequence steps, acknowledgement and notification deliveries. Values appear with their recorded units; transitions show departure → arrival, and completed sequences retain observed step values, times and durations. Older occurrences without recorded sequence evidence show that it is unavailable.
+
+The heading shows the duration or pending countdown. Expiration and temporary-acknowledgement deadlines appear beside their lifecycle events. Today's events display the time only; older events retain their date. The dialog uses a single scroll area rather than a collapsed timeline or a second scrollbar.
+
+Activation and recovery deliveries show send times and profile names. A combined activation/recovery is identified as one delivery; reminders are summarized by count and profiles. The ten latest acknowledgement/unacknowledgement actions, including automatic expiry, retain their timestamps and known actors across resolution and restarts. Older actions drop off this bounded list. Known users use their Home Assistant badge; automation/script origins are identified when available, without guessing unknown actors.
+
+<img src="assets/screenshots/alert.png" width="596" alt="Resolved appliance sequence with step values, activation, expiration and notification delivery">
+
+Pending sequences show progress from the first step's hold, including the remaining hold or exit limit. Abandoned or expired progress disappears without a historical occurrence or recovery notification. See [Ordered sequences](custom-rules.md#ordered-sequences) for restart and timeout behavior.
+
+<img src="assets/screenshots/incomming.png" alt="Upcoming alerts with pending alert details and countdown">
 
 ### Reevaluate an alert
 
@@ -66,6 +80,8 @@ alignment: left
 | `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. |
 | `label` | Legacy single label ID, normalized to `labels` when read. An explicit `labels` list takes precedence. |
 
+<img src="assets/screenshots/card%20configuration.png" alt="Native visual editor for card tile limits, sorting, labels and grouping">
+
 These settings belong to each card and are also available in the native visual editor. They do not change monitoring, notifications, global counters or History. Label filtering uses the existing alert-label resolution and runs before grouping. A filtered-out alert never contributes to a group, its count, age or sorting.
 
 Sorting runs before the tile limit. Grouped cards use the newest or oldest retained activation time for date sorting; equal values are ordered by stable identifiers. Updating an alert message does not change its activation date. Alphabetical sorting follows the Home Assistant language and the displayed name.
@@ -87,8 +103,6 @@ Loading, disabled monitoring and unavailability remain visible. Example alerts a
 ## History
 
 History keeps resolved occurrences up to the configured retention limit. It shows what happened previously rather than only the current alert state.
-
-<img src="assets/screenshots/history.png" alt="Resolved alert history and filters">
 
 Filter the table by the relevant entity, device, rule or period, or open it directly from an alert's occurrence count. Details retain the values and available occurrence evidence, as well as notification-delivery information. Activation, reminders and recovery deliveries are shown separately where available; external notification automations are not counted.
 
