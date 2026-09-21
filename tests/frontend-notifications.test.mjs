@@ -92,7 +92,7 @@ for (const [language, emptyTitle, summary] of [
     assert.ok(neutralMarkup.includes(`secondary="${neutralSummary}"`));
     assert.match(neutralMarkup, /<ha-switch id="notification-exception-presentation-0"[^>]*checked/);
     assert.doesNotMatch(markup, /<ha-switch id="notification-exception-presentation-0"[^>]*checked/);
-    assert.ok(neutralMarkup.indexOf('id="notification-exception-presentation-0"') > neutralMarkup.indexOf('id="notification-exception-reminder-0"'));
+    assert.ok(neutralMarkup.indexOf('id="notification-exception-presentation-0"') < neutralMarkup.indexOf('id="notification-exception-reminder-0"'));
     assert.equal(notificationProfileValidationError({
       ...draft, exceptions: [{ selector_ids: ["events"], presentation: "neutral" }],
     }, t), null);

@@ -7,10 +7,10 @@ before a stable release are intentionally omitted.
 
 ## 2.4 — Release candidate
 
-Current release candidate: **2.4.0-rc.12**, dated **2026-09-21**.
+Current release candidate: **2.4.0-rc.13**, dated **2026-09-21**.
 This is a prerelease for testing, not a stable release.
-RC.12 replaces the notification presentation dropdown with a compact informational
-notification switch below the delivery settings, with shorter help and updated summaries.
+RC.13 groups all three notification exception switches together, places the reminder
+alongside them and removes excess spacing, with compact inline informational help.
 
 ### Rule editor and notifications
 

@@ -466,7 +466,7 @@
       "informative": "Informational notification",
       "presentation_standard": "Standard",
       "presentation_neutral": "Informational",
-      "presentation_help": "“Notification” title and blue information icon.",
+      "presentation_help": "Neutral title, blue icon.",
       "neutral_title": "Notification"
     },
     "recovery": {

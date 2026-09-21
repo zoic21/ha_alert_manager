@@ -134,8 +134,8 @@ export function renderNotificationProfileDrawer({
   });
 }
 
-function renderPolicySwitch(id, label, checked) {
-  return `<div class="field"><div class="switch-field-row"><span class="field-label">${esc(label)}</span><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
+function renderPolicySwitch(id, label, checked, help = "") {
+  return `<div class="field"><div class="switch-field-row"><div><span class="field-label">${esc(label)}</span>${help ? `<small class="notification-switch-help">${esc(help)}</small>` : ""}</div><ha-switch id="${id}" aria-label="${esc(label)}" ${checked ? "checked" : ""}></ha-switch></div></div>`;
 }
 
 function notificationExceptionTitle(exception, labels, t) {
@@ -181,12 +181,9 @@ function renderException(exception, index, t, defaults, labels, expandedExceptio
         <div class="notification-policy-switches">
           ${renderPolicySwitch(`notification-exception-start-${index}`, t("notifications.on_start"), policy.notify_on_start)}
           ${renderPolicySwitch(`notification-exception-resolved-${index}`, t("notifications.on_resolved"), policy.notify_on_resolved)}
+          ${renderPolicySwitch(`notification-exception-presentation-${index}`, t("notifications.informative"), policy.presentation === "neutral", t("notifications.presentation_help"))}
         </div>
         <div class="field notification-policy-reminder"><span class="field-label">${esc(t("notifications.reminder"))}</span>${renderDurationControl(`notification-exception-reminder-${index}`, t("notifications.reminder"), policy.reminder_interval, MIN_NOTIFICATION_REMINDER_SECONDS, MAX_DURATION_SECONDS, { required: false })}<small>${esc(t("notifications.reminder_help"))}</small></div>
-      </div>
-      <div class="field full">
-        ${renderPolicySwitch(`notification-exception-presentation-${index}`, t("notifications.informative"), policy.presentation === "neutral")}
-        <small>${esc(t("notifications.presentation_help"))}</small>
       </div>
     </div>
     </ha-expansion-panel>

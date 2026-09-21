@@ -341,7 +341,18 @@ export const settingsStyles = `
     margin-top: 4px;
     overflow-wrap: anywhere;
   }
-  .notification-exception-grid { padding: 0 12px 12px; }
+  .notification-exception-grid {
+    padding: 0 12px 12px;
+    gap: 8px;
+  }
+  .notification-exception-grid > .full { margin-top: 0; }
+  .notification-exception-grid > .notification-policy-card { padding: 0; }
+  .notification-exception-grid .notification-policy-switches { align-content: start; }
+  .notification-exception-grid .notification-policy-reminder { justify-content: flex-start; }
+  .notification-switch-help {
+    display: block;
+    margin-top: 2px;
+  }
   .notification-exception-grid > .field {
     justify-content: flex-end;
   }
