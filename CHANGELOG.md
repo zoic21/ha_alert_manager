@@ -5,14 +5,11 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.4 — Release candidate
+## 2.4.0 — September 22, 2026
 
-Current release candidate: **2.4.0-rc.14**, dated **2026-09-21**.
-This is a prerelease for testing, not a stable release.
-RC.14 updates the English/French README files and detailed guides for 2.4, including
-informational notifications, rule filters, sequence resolution, timelines and pack
-migration. It integrates the current screenshots and removes obsolete image links.
-There are no runtime behavior changes since RC.13.
+Stable release of the 2.4 series, including sequence rules, enhanced alert timelines,
+informational notifications, pack exceptions and rule filters.
+The English/French documentation and screenshots reflect the 2.4 features.
 
 ### Rule editor and notifications
 
