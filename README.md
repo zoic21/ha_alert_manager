@@ -48,7 +48,7 @@ Overview separates active, upcoming and acknowledged alerts, with search, filter
 
 An always-visible timeline brings together detection, activation, acknowledgement, resolution, sequence step values and timestamps, instability occurrences and notification deliveries. Start and recovery notifications show their send time and profile; reminders are summarized by count and profiles. Users and automations are identified when known. Today’s events show only the time; other events retain their date.
 
-The included dashboard card presents a compact view grouped by device. Choose desktop/mobile tile limits, sorting, label inclusions/exclusions, optional age and grouping, alignment and icon color; it hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
+The included dashboard card presents a compact view grouped by device. Choose desktop/mobile tile limits, sorting, label inclusions/exclusions, optional age and grouping, alignment and icon color. Keep the default Classic style or choose Bubble for rounded capsules with a pastel background derived from the selected color, without installing Bubble Card. The card hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
 
 ### Choose when to notify and check configuration health
 

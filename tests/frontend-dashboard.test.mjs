@@ -314,6 +314,79 @@ test("native palette colors resolve through the theme and previous RGB colors re
   }
 });
 
+test("style selector defaults to Classic and preserves color and filters when switching", () => {
+  for (const style of [null, "", "pastel", 1, '<img src=x>']) {
+    assert.throws(() => validateDashboardConfig({ style }, "fr"), /style/);
+  }
+  assert.deepEqual(validateDashboardConfig({}), { max_tiles: 5 });
+  const editor = new AlertManagerCardEditor();
+  editor.hass = { locale: { language: "fr" } };
+  const initial = { max_tiles: 3, icon_color: [0, 128, 255], labels: ["home"], exclude_labels: ["maintenance"] };
+  editor.setConfig(initial);
+  assert.equal(editor._form.data.style, "classic");
+  assert.deepEqual(editor._form.schema.find((field) => field.name === "style").selector.select.options,
+    [{ value: "classic", label: "Classique" }, { value: "bubble", label: "Bubble" }]);
+  let config;
+  editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
+  for (const style of ["bubble", "classic"]) {
+    editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { style } } }));
+    assert.deepEqual(config, { ...initial, icon_color: "#0080ff", style });
+    editor.setConfig(config);
+    assert.equal(editor._form.data.style, style);
+    assert.equal(Boolean(editor._form.computeHelper({ name: "icon_color" })), style === "bubble");
+  }
+  editor.hass = { locale: { language: "en" } };
+  assert.equal(editor._form.schema.find((field) => field.name === "style").selector.select.options[0].label, "Classic");
+  editor.setConfig({ ...config, style: "bubble" });
+  editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { icon_color: undefined } } }));
+  assert.equal(config.style, "bubble");
+  assert.equal(Object.hasOwn(config, "icon_color"), false);
+});
+
+test("Bubble keeps grouped navigation, age, limits and startup while Classic keeps type icons", () => {
+  const card = new AlertManagerCard();
+  card.hass = { locale: { language: "fr" } };
+  const config = { max_tiles: 1, labels: ["home"], exclude_labels: ["maintenance"], show_age: true, icon_color: "red" };
+  const items = [
+    alert("a", { device_id: "d", type: "unavailable", labels: ["home"], active_since: "2026-09-03T00:00:00Z" }),
+    alert("b", { device_id: "d", labels: ["home"] }),
+    alert("excluded", { device_id: "d", labels: ["home", "maintenance"] }),
+    alert("ack", { device_id: "d", labels: ["home"], acknowledged: true }),
+    alert("other", { labels: ["home"] }),
+  ];
+  card._value = { status: "ready", snapshot: { alerts: items } };
+  card.setConfig(config);
+  const markup = () => card.shadowRoot.innerHTML.split("</style>")[1];
+  const links = () => [...markup().matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
+  const classicLinks = links();
+  assert.match(markup(), /data-style="classic"/);
+  assert.match(markup(), /class="types"/);
+  assert.doesNotMatch(markup(), /class="bubble-icon"/);
+  card.setConfig({ ...config, style: "bubble" });
+  assert.deepEqual(links(), classicLinks);
+  assert.equal(card._tileCount, 1);
+  assert.match(markup(), /--alert-icon-color: var\(--red-color\)/);
+  assert.match(markup(), /class="bubble-count" aria-hidden="true">2<\/span>/);
+  assert.match(markup(), /data-age="2026-09-01T12:00:00.000Z"/);
+  assert.match(markup(), /\+1<\/span>/);
+  assert.doesNotMatch(markup(), /class="types"|mdi:chevron-right/);
+  for (const type of ["battery", "unavailable"]) assert.ok(markup().includes(card._typeName(type)));
+  card._value.snapshot.startup = { in_progress: true };
+  card._render();
+  assert.match(markup(), /mdi:timer-sand/);
+  assert.match(markup(), /\+1<\/span>/);
+  card.setConfig({ ...config, style: "classic" });
+  assert.match(markup(), /class="types"/);
+  assert.doesNotMatch(markup(), /class="bubble-count"/);
+  assert.deepEqual(links(), classicLinks);
+  card.setConfig({ ...config, style: "bubble", group_by_device: false });
+  assert.doesNotMatch(markup(), /class="bubble-count"/);
+  assert.match(markup(), /overview\?alert=a/);
+  card._value = { status: "ready", snapshot: { alerts: [] } };
+  card._render();
+  assert.equal(card.hidden, true);
+});
+
 test("overflow stays inside the tile row and counts hidden tiles after filtering and grouping", () => {
   const card = new AlertManagerCard();
   card.hass = { locale: { language: "fr" } };

@@ -35,6 +35,23 @@ export const dashboardStyles = `
     height: 44px; min-width: 64px; padding: 0 12px; color: var(--secondary-text-color); font-size: 16px; font-weight: 500; }
   .more ha-icon { color: inherit; background: none; padding: 0; }
   .status { padding: 12px; color: var(--secondary-text-color); font-size: 14px; }
+  [data-style="bubble"] { --bubble-base-color: var(--ha-card-background, var(--card-background-color)); }
+  [data-style="bubble"] .tiles ha-card { --ha-card-border-radius: 34px;
+    background: color-mix(in srgb, var(--alert-icon-color) 14%, var(--bubble-base-color));
+    border: none; box-shadow: none; }
+  [data-style="bubble"] .tile { min-height: 62px; padding: 8px; gap: 10px; }
+  .bubble-icon { position: relative; display: grid; place-items: center; flex: 0 0 44px;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: color-mix(in srgb, var(--alert-icon-color) 6%, var(--bubble-base-color)); }
+  .bubble-icon ha-icon { padding: 0; background: none; }
+  .bubble-count { position: absolute; top: -3px; right: -2px; display: grid; place-items: center;
+    box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 10px;
+    font-size: 11px; line-height: 18px; font-weight: 500; color: var(--primary-text-color);
+    background: color-mix(in srgb, var(--alert-icon-color) 28%, var(--bubble-base-color)); }
+  [data-style="bubble"] .message { font-size: 12px; line-height: 18px; }
+  [data-style="bubble"] .tile-tail > .overflow {
+    background: color-mix(in srgb, var(--secondary-text-color) 10%, var(--bubble-base-color)); }
+  [data-style="bubble"] .more { min-width: 44px; padding: 0 10px; font-size: 14px; }
   @media ${DASHBOARD_MOBILE_QUERY} {
     .tiles > ha-card, .tiles > .tile-tail { flex: 0 0 100%; }
     .tile-tail > ha-card:not(.overflow) { flex: 1 1 0; width: 0; }

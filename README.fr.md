@@ -48,7 +48,7 @@ L’Accueil distingue les alertes actives, à venir et acquittées, avec recherc
 
 Une chronologie toujours visible rassemble détection, activation, acquittements, résolution, valeurs et horodatages des étapes de séquence, occurrences d’instabilité et envois de notifications. Les notifications de début et de résolution affichent leur horaire et leur profil ; les rappels sont regroupés par nombre et profils. Les utilisateurs et automatisations sont identifiés lorsqu’ils sont connus. Les événements du jour affichent seulement l’heure ; les autres conservent leur date.
 
-La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez les limites desktop/mobile, le tri, les labels à afficher ou masquer, l’ancienneté et le regroupement facultatifs, l’alignement et la couleur des icônes ; elle se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
+La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez les limites desktop/mobile, le tri, les labels à afficher ou masquer, l’ancienneté et le regroupement facultatifs, l’alignement et la couleur des icônes. Gardez le style Classique par défaut ou choisissez Bubble pour des capsules arrondies dont le fond pastel reprend la couleur sélectionnée, sans installer Bubble Card. La carte se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
 
 ### Choisir les notifications et vérifier la configuration
 

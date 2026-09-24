@@ -32,6 +32,9 @@ export function validateDashboardConfig(config, language) {
   if (config.alignment !== undefined && !["left", "center", "right"].includes(config.alignment)) {
     throw new Error(dashboardText(language, "dashboard.invalid_alignment"));
   }
+  if (config.style !== undefined && !["classic", "bubble"].includes(config.style)) {
+    throw new Error(dashboardText(language, "dashboard.invalid_style"));
+  }
   let color = config.icon_color;
   // Keep colors selected with the previous RGB editor when opening the native picker.
   if (Array.isArray(color) && color.length === 3
@@ -82,8 +85,11 @@ export class AlertManagerCardEditor extends HTMLElement {
   }
   _update() {
     this._form.hass = this._hass;
-    this._form.data = { alignment: "left", sort: "newest", group_by_device: true, show_age: false, ...this._config };
+    this._form.data = { style: "classic", alignment: "left", sort: "newest", group_by_device: true, show_age: false, ...this._config };
     this._form.schema = [
+      { name: "style", required: true, selector: { select: { mode: "dropdown", options: ["classic", "bubble"].map((value) => ({
+        value, label: dashboardText(this._hass?.locale?.language, `dashboard.style_${value}`),
+      })) } } },
       { name: "max_tiles", required: true, selector: { number: { min: 1, max: 100, mode: "box" } } },
       { name: "max_tiles_mobile", selector: { number: { min: 1, max: 100, mode: "box" } } },
       { name: "sort", selector: { select: { mode: "dropdown", options: ["newest", "oldest", "alphabetical"].map((value) => ({
@@ -99,5 +105,7 @@ export class AlertManagerCardEditor extends HTMLElement {
       })) } } },
     ];
     this._form.computeLabel = ({ name }) => dashboardText(this._hass?.locale?.language, `dashboard.${name}`);
+    this._form.computeHelper = ({ name }) => name === "icon_color" && this._config?.style === "bubble"
+      ? dashboardText(this._hass?.locale?.language, "dashboard.bubble_color_help") : "";
   }
 }

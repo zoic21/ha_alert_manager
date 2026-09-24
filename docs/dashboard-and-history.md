@@ -58,6 +58,7 @@ Choose **Alert Manager** in the dashboard card picker. The integration registers
 type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
+# style: bubble
 # icon_color: red
 # max_tiles_mobile: 2
 # labels: [home, outdoors]
@@ -77,12 +78,20 @@ alignment: left
 | `show_age` | Show localized relative activation time next to the message; default `false`. |
 | `group_by_device` | Group matching alerts by device; default `true`. Without a device, each alert remains separate. |
 | `alignment` | `left`, `center` or `right`; default `left`. |
-| `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. |
+| `style` | `classic` (default) or `bubble`. Bubble uses rounded capsules, a circular icon and a count badge for grouped alerts. No Bubble Card dependency. |
+| `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. In Bubble style, it also tints the count badge and pastel background, adapted to the current theme. |
 | `label` | Legacy single label ID, normalized to `labels` when read. An explicit `labels` list takes precedence. |
 
 <img src="assets/screenshots/card%20configuration.png" alt="Native visual editor for card tile limits, sorting, labels and grouping">
 
 These settings belong to each card and are also available in the native visual editor. They do not change monitoring, notifications, global counters or History. Label filtering uses the existing alert-label resolution and runs before grouping. A filtered-out alert never contributes to a group, its count, age or sorting.
+
+Choose **Style → Bubble** in the editor to use the capsule presentation. The existing
+color picker controls its accent; the background is a soft mix of that color and the
+theme's card background. Grouped capsules show the first alert's icon with the number
+of matching alerts in a badge; the icon's tooltip lists the group's alert types.
+Classic keeps the existing presentation with an icon for each alert type. Both styles
+keep the same filtering, limits, sorting, age, visibility and navigation behavior.
 
 Sorting runs before the tile limit. Grouped cards use the newest or oldest retained activation time for date sorting; equal values are ordered by stable identifiers. Updating an alert message does not change its activation date. Alphabetical sorting follows the Home Assistant language and the displayed name.
 
