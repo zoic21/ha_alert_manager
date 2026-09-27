@@ -7,14 +7,18 @@ before a stable release are intentionally omitted.
 
 ## 2.5 — Development prerelease
 
-Current development release: **2.5.0-dev.1**, dated **2026-09-24**.
+Current development release: **2.5.0-dev.2**, dated **2026-09-27**.
 This is a development prerelease for testing, not a stable release.
 
-- Add an optional Bubble dashboard card style with rounded capsules and a pastel
-  background derived from the selected Home Assistant color. Grouped alerts show
-  a count badge; Classic remains the default style.
-- Preserve card filtering, grouping, navigation, mobile limits and optional age
-  in both styles. Update the visual editor, English/French translations and guides.
+- Add custom CSS for dashboard alert tiles through the visual editor or
+  `alert_styles` in YAML, with documented stable selectors and isolated styles
+  for each card.
+- Replace the built-in Bubble preset and style selector with a ready-to-use CSS
+  example, including themed pastel backgrounds, round icons and grouped counts.
+  Legacy `style` options remain accepted but no longer change the appearance;
+  use the documented CSS example to retain the Bubble look.
+- Preserve filtering, grouping, navigation, mobile limits and optional age.
+  Update the English/French editor translations and documentation.
 
 ## 2.4.0 — September 22, 2026
 
