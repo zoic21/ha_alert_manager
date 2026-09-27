@@ -21,6 +21,7 @@ export class AlertManagerCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+    this._alertStyles = document.createElement("style");
     this.shadowRoot.addEventListener("click", (event) => {
       if (event.composedPath().some((node) => node?.dataset?.retry !== undefined)) {
         this._subscription?.retry();
@@ -102,7 +103,7 @@ export class AlertManagerCard extends HTMLElement {
   }
   _icon(type, label = this._typeName(type)) {
     const name = esc(label);
-    return `<ha-icon icon="${Object.hasOwn(DASHBOARD_ICONS, type) ? DASHBOARD_ICONS[type] : "mdi:alert-circle-outline"}" role="img" aria-label="${name}" title="${name}"></ha-icon>`;
+    return `<ha-icon class="alert-icon" icon="${Object.hasOwn(DASHBOARD_ICONS, type) ? DASHBOARD_ICONS[type] : "mdi:alert-circle-outline"}" role="img" aria-label="${name}" title="${name}"></ha-icon>`;
   }
   _tile(group) {
     const alert = group.alerts[0];
@@ -117,16 +118,15 @@ export class AlertManagerCard extends HTMLElement {
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
     const age = this._config.show_age && group.oldest !== null && Number.isFinite(group.oldest)
-      ? `<span class="age">· <ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
-    const icon = this._config.style === "bubble"
-      ? `<div class="bubble-icon">${this._icon(alert.type, group.types.map((type) => this._typeName(type)).join(" · "))}
-        ${multiple ? `<span class="bubble-count" aria-hidden="true">${group.alerts.length}</span>` : ""}</div>`
-      : multiple ? `<div class="types">${group.types.map((type) => this._icon(type)).join("")}</div>` : this._icon(alert.type);
-    return `<ha-card><a class="tile" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config))}">
+      ? `<span class="age alert-age">· <ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
+    const icon = `<div class="alert-icons${multiple ? " types" : ""}" title="${esc(group.types.map((type) => this._typeName(type)).join(" · "))}">
+      ${multiple ? group.types.map((type) => this._icon(type)).join("") : this._icon(alert.type)}
+      ${multiple ? `<span class="alert-count" aria-hidden="true">${group.alerts.length}</span>` : ""}</div>`;
+    return `<ha-card class="alert-tile" data-grouped="${multiple}"><a class="tile alert-link" data-key="${esc(group.key)}" href="${esc(this._sample ? "/alert-manager/overview" : dashboardTarget(group, this._config))}">
       <ha-ripple></ha-ripple>
       ${icon}
-      <div class="content"><div class="name" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message${age ? " with-age" : ""}" title="${esc(multiple ? message : fullMessage)}">${age ? `<span class="message-text">${esc(message)}</span>${age}` : esc(message)}</div></div>
+      <div class="content alert-content"><div class="name alert-title" title="${esc(fullName)}">${esc(name)}</div>
+      <div class="message alert-message${age ? " with-age" : ""}" title="${esc(multiple ? message : fullMessage)}">${age ? `<span class="message-text">${esc(message)}</span>${age}` : esc(message)}</div></div>
     </a></ha-card>`;
   }
   _render() {
@@ -164,7 +164,7 @@ export class AlertManagerCard extends HTMLElement {
       const target = dashboardTarget(null, this._config);
       const bubble = `<ha-card class="overflow"><a class="more" data-key="overflow" href="${esc(target)}" aria-label="${label}" title="${label}">
         <ha-ripple></ha-ripple>${startup ? '<ha-icon icon="mdi:timer-sand" aria-hidden="true"></ha-icon>' : ""}
-        ${count ? `<span aria-hidden="true">+${count}</span>` : ""}${startup || this._config.style === "bubble" ? "" : '<ha-icon icon="mdi:chevron-right" aria-hidden="true"></ha-icon>'}
+        ${count ? `<span aria-hidden="true">+${count}</span>` : ""}${startup ? "" : '<ha-icon class="overflow-chevron" icon="mdi:chevron-right" aria-hidden="true"></ha-icon>'}
       </a></ha-card>`;
       // Keep the bubble attached to the last alert when the row wraps.
       visibleTiles.push(`<div class="tile-tail">${visibleTiles.pop()}${bubble}</div>`);
@@ -176,8 +176,9 @@ export class AlertManagerCard extends HTMLElement {
       ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
-    const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-style="${this._config.style ?? "classic"}" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;
-    if (markup === this._markup) {
+    const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;
+    const alertStyles = this._config.alert_styles ?? "";
+    if (markup === this._markup && alertStyles === this._alertStyles.textContent) {
       // Locale settings can change without changing the surrounding markup.
       this._hydrateAge();
       return;
@@ -185,6 +186,10 @@ export class AlertManagerCard extends HTMLElement {
     const focused = this.shadowRoot.activeElement?.dataset?.key;
     this._markup = markup;
     this.shadowRoot.innerHTML = markup;
+    // Keep CSS out of the HTML parser, even if it contains a closing style tag.
+    // The shadow root isolates each card; later rules override the default style.
+    this._alertStyles.textContent = alertStyles;
+    this.shadowRoot.append(this._alertStyles);
     this._hydrateAge();
     if (focused) [...this.shadowRoot.querySelectorAll("[data-key]")].find((node) => node.dataset.key === focused)?.focus();
     this.dispatchEvent(new CustomEvent("card-updated", { bubbles: true, composed: true }));

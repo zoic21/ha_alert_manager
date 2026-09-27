@@ -58,7 +58,6 @@ Choose **Alert Manager** in the dashboard card picker. The integration registers
 type: custom:alert-manager-card
 max_tiles: 5
 alignment: left
-# style: bubble
 # icon_color: red
 # max_tiles_mobile: 2
 # labels: [home, outdoors]
@@ -78,20 +77,13 @@ alignment: left
 | `show_age` | Show localized relative activation time next to the message; default `false`. |
 | `group_by_device` | Group matching alerts by device; default `true`. Without a device, each alert remains separate. |
 | `alignment` | `left`, `center` or `right`; default `left`. |
-| `style` | `classic` (default) or `bubble`. Bubble uses rounded capsules, a circular icon and a count badge for grouped alerts. No Bubble Card dependency. |
-| `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. In Bubble style, it also tints the count badge and pastel background, adapted to the current theme. |
+| `alert_styles` | Optional CSS string applied after the default styles, inside this card only. Available as **Custom CSS** in the editor; see the selectors and Bubble example below. |
+| `icon_color` | Optional color from Home Assistant's native palette; the theme applies when omitted. Available in custom CSS as `var(--alert-icon-color)`. |
 | `label` | Legacy single label ID, normalized to `labels` when read. An explicit `labels` list takes precedence. |
 
 <img src="assets/screenshots/card%20configuration.png" alt="Native visual editor for card tile limits, sorting, labels and grouping">
 
 These settings belong to each card and are also available in the native visual editor. They do not change monitoring, notifications, global counters or History. Label filtering uses the existing alert-label resolution and runs before grouping. A filtered-out alert never contributes to a group, its count, age or sorting.
-
-Choose **Style → Bubble** in the editor to use the capsule presentation. The existing
-color picker controls its accent; the background is a soft mix of that color and the
-theme's card background. Grouped capsules show the first alert's icon with the number
-of matching alerts in a badge; the icon's tooltip lists the group's alert types.
-Classic keeps the existing presentation with an icon for each alert type. Both styles
-keep the same filtering, limits, sorting, age, visibility and navigation behavior.
 
 Sorting runs before the tile limit. Grouped cards use the newest or oldest retained activation time for date sorting; equal values are ordered by stable identifiers. Updating an alert message does not change its activation date. Alphabetical sorting follows the Home Assistant language and the displayed name.
 
@@ -100,6 +92,140 @@ When enabled, age uses the oldest active, unacknowledged alert retained in the t
 A single-alert tile opens its details; a grouped tile opens the device-filtered list. The **+N** bubble counts remaining **tiles** after filtering and grouping: devices in grouped mode (with separate tiles for alerts without a device), or alerts in individual mode. Group and overflow links preserve label inclusions and exclusions; these filters can be cleared in Overview.
 
 The mobile limit uses the same **600 px viewport breakpoint** as the layout and responds to width/orientation changes. A limit of two does not force two tiles side by side: mobile keeps one tile per row. Tiles are capped at 300 px on wider screens. The overflow bubble and hourglass do not consume a tile slot.
+
+### Custom CSS
+
+Use **Custom CSS** in the visual editor, or `alert_styles: |` in YAML, to change
+alert tile backgrounds, borders, icons, text and spacing. Leave it empty to restore
+the default appearance. Each card has its own isolated stylesheet, applied after
+the default rules; it does not affect other cards or the Alert Manager panel.
+CSS specificity still applies. Use the documented classes rather than relying on
+the internal element structure. These selectors are the supported styling interface:
+
+| Selector / variable | Target |
+| --- | --- |
+| `.alert-tile` | Alert tile surface (`ha-card`): background, border, rounding. |
+| `.alert-tile[data-grouped="true"]` | A tile containing more than one matching alert. |
+| `.alert-link` | Clickable tile content: padding, gap, minimum height. |
+| `.alert-icons` | Icon container; its tooltip lists the alert types. |
+| `.alert-icon` | Each alert type icon; use `.alert-icons .alert-icon` to override grouped icon sizing. |
+| `.alert-count` | Number of matching alerts in a grouped tile, hidden by default. |
+| `.alert-content` | Text container. |
+| `.alert-title` | Device or alert name. |
+| `.alert-message` | Secondary text, including optional age. |
+| `.alert-age` | Relative time, when `show_age: true`. |
+| `.dashboard`, `.tile-tail` | Card style scope and the last tile/overflow pair. |
+| `.overflow`, `.more`, `.overflow-chevron` | Overflow surface, link and chevron; also used with the startup hourglass. |
+| `--alert-icon-color` | Selected `icon_color`, resolved from the Home Assistant theme. |
+
+For example:
+
+```yaml
+type: custom:alert-manager-card
+alert_styles: |
+  .alert-tile {
+    border-radius: 18px;
+  }
+  .alert-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+```
+
+Only CSS is supported: no JavaScript, Jinja or HTML. CSS changes presentation,
+not filtering, navigation or alert state. The card only displays active,
+unacknowledged alerts, so there are no upcoming or acknowledged tile selectors.
+Home Assistant components have their own shadow roots: style their exposed host
+or CSS variables rather than internal elements. Keep visible keyboard focus and
+readable contrast when customizing.
+
+The old **Style** selector and built-in Bubble preset have been removed.
+Legacy `style: classic` / `style: bubble` values are ignored and removed when the
+visual editor next saves the card. Existing cards remain valid and use the default
+appearance until custom CSS is supplied. Other settings are preserved.
+
+#### Bubble example
+
+This complete example creates rounded pastel capsules with a circular icon and a
+count badge for grouped alerts. Change `icon_color` in YAML or the visual editor to
+change the accent, background and badge together. Theme variables keep the example
+usable with light and dark themes. No Bubble Card or card-mod installation is needed.
+
+```yaml
+type: custom:alert-manager-card
+max_tiles: 5
+icon_color: red
+alert_styles: |
+  .dashboard {
+    --bubble-base-color: var(--ha-card-background, var(--card-background-color));
+  }
+  .alert-tile {
+    --ha-card-border-radius: 34px;
+    background: color-mix(in srgb, var(--alert-icon-color) 14%, var(--bubble-base-color));
+    border: none;
+    box-shadow: none;
+  }
+  .alert-link {
+    min-height: 62px;
+    padding: 8px;
+    gap: 10px;
+    border-radius: inherit;
+  }
+  .alert-icons {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--alert-icon-color) 6%, var(--bubble-base-color));
+  }
+  .alert-icons .alert-icon {
+    --mdc-icon-size: 24px;
+    padding: 0;
+    background: none;
+  }
+  .alert-icon ~ .alert-icon {
+    display: none;
+  }
+  .alert-count {
+    position: absolute;
+    top: -3px;
+    right: -2px;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 10px;
+    font-size: 11px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--primary-text-color);
+    background: color-mix(in srgb, var(--alert-icon-color) 28%, var(--bubble-base-color));
+  }
+  .alert-message {
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .tile-tail > .overflow {
+    background: color-mix(in srgb, var(--secondary-text-color) 10%, var(--bubble-base-color));
+  }
+  .more {
+    min-width: 44px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+  .overflow-chevron {
+    display: none;
+  }
+```
+
+The example preserves tile limits, mobile wrapping, filtering, sorting, age,
+visibility, focus and navigation. Grouped tiles keep their textual alert count;
+the badge is decorative, and the icon container's tooltip lists all retained types.
 
 ### Visibility, startup and mobile layout
 

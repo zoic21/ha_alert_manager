@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+globalThis.document = { createElement: () => ({ textContent: "" }) };
 globalThis.HTMLElement = class {
   attachShadow() {
     this.shadowRoot = {

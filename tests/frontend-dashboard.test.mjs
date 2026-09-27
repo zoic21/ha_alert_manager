@@ -172,7 +172,7 @@ class TestElement extends EventTarget {
     this.shadowRoot = new EventTarget();
     this.shadowRoot.innerHTML = "";
     this.shadowRoot.querySelectorAll = () => [];
-    this.shadowRoot.append = () => {};
+    this.shadowRoot.append = (node) => { this.shadowRoot.lastAppended = node; };
     return this.shadowRoot;
   }
 }
@@ -219,12 +219,13 @@ test("card enforces group limit, escapes names, translates conditions and shows 
     alert("b", { device_id: "d", type: "rule" }), alert("c"),
   ] } };
   card._render();
-  assert.equal((card.shadowRoot.innerHTML.match(/class="tile"/g) ?? []).length, 1);
+  assert.equal((card.shadowRoot.innerHTML.match(/class="tile alert-link"/g) ?? []).length, 1);
   assert.match(card.shadowRoot.innerHTML, /Voir plus d’appareils/);
   assert.doesNotMatch(card.shadowRoot.innerHTML, /<img/);
   assert.match(card.shadowRoot.innerHTML, /&lt;img/);
   assert.match(card.shadowRoot.innerHTML, /2 alertes/);
-  assert.match(card.shadowRoot.innerHTML, /<div class="types">(?:<ha-icon[^>]*><\/ha-icon>)+<\/div>\s*<div class="content">/);
+  assert.match(card.shadowRoot.innerHTML, /class="alert-icons types"/);
+  assert.equal((card.shadowRoot.innerHTML.match(/class="alert-icon"/g) ?? []).length, 2);
   card._value = { status: "ready", snapshot: { alerts: [], startup: { in_progress: true } } };
   card._render();
   assert.equal(card.hidden, true);
@@ -314,36 +315,63 @@ test("native palette colors resolve through the theme and previous RGB colors re
   }
 });
 
-test("style selector defaults to Classic and preserves color and filters when switching", () => {
-  for (const style of [null, "", "pastel", 1, '<img src=x>']) {
-    assert.throws(() => validateDashboardConfig({ style }, "fr"), /style/);
+test("custom CSS validates, uses the native editor and can be cleared without losing settings", () => {
+  for (const alert_styles of [null, 1, false, [], {}]) {
+    assert.throws(() => validateDashboardConfig({ alert_styles }, "fr"), /CSS personnalisé/);
+    assert.throws(() => validateDashboardConfig({ alert_styles }, "en"), /Custom CSS/);
   }
-  assert.deepEqual(validateDashboardConfig({}), { max_tiles: 5 });
   const editor = new AlertManagerCardEditor();
   editor.hass = { locale: { language: "fr" } };
-  const initial = { max_tiles: 3, icon_color: [0, 128, 255], labels: ["home"], exclude_labels: ["maintenance"] };
-  editor.setConfig(initial);
-  assert.equal(editor._form.data.style, "classic");
-  assert.deepEqual(editor._form.schema.find((field) => field.name === "style").selector.select.options,
-    [{ value: "classic", label: "Classique" }, { value: "bubble", label: "Bubble" }]);
+  const initial = { max_tiles: 3, icon_color: "blue", labels: ["home"], exclude_labels: ["maintenance"] };
+  editor.setConfig({ ...initial, style: "bubble" });
+  assert.deepEqual(editor._config, initial);
+  assert.equal(editor._form.schema.some((field) => field.name === "style"), false);
+  assert.deepEqual(editor._form.schema.find((field) => field.name === "alert_styles").selector,
+    { text: { multiline: true } });
+  assert.equal(editor._form.computeLabel({ name: "alert_styles" }), "CSS personnalisé (facultatif)");
+  assert.match(editor._form.computeHelper({ name: "alert_styles" }), /\.alert-tile/);
   let config;
   editor.addEventListener("config-changed", (event) => { config = event.detail.config; });
-  for (const style of ["bubble", "classic"]) {
-    editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { style } } }));
-    assert.deepEqual(config, { ...initial, icon_color: "#0080ff", style });
-    editor.setConfig(config);
-    assert.equal(editor._form.data.style, style);
-    assert.equal(Boolean(editor._form.computeHelper({ name: "icon_color" })), style === "bubble");
-  }
+  const css = ".alert-title {\n  font-size: 16px;\n}";
+  editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { alert_styles: css } } }));
+  assert.deepEqual(config, { ...initial, alert_styles: css });
+  editor.setConfig(config);
+  assert.equal(editor._form.data.alert_styles, css);
   editor.hass = { locale: { language: "en" } };
-  assert.equal(editor._form.schema.find((field) => field.name === "style").selector.select.options[0].label, "Classic");
-  editor.setConfig({ ...config, style: "bubble" });
-  editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { icon_color: undefined } } }));
-  assert.equal(config.style, "bubble");
-  assert.equal(Object.hasOwn(config, "icon_color"), false);
+  assert.equal(editor._form.computeLabel({ name: "alert_styles" }), "Custom CSS (optional)");
+  for (const cleared of ["", undefined, null]) {
+    editor.setConfig({ ...initial, alert_styles: css });
+    editor._form.dispatchEvent(new CustomEvent("value-changed", { detail: { value: { alert_styles: cleared } } }));
+    assert.deepEqual(config, initial);
+  }
+  for (const style of ["classic", "bubble"]) {
+    const legacy = { ...initial, style, alert_styles: css };
+    assert.deepEqual(validateDashboardConfig(legacy), { ...initial, alert_styles: css });
+    assert.equal(legacy.style, style);
+  }
 });
 
-test("Bubble keeps grouped navigation, age, limits and startup while Classic keeps type icons", () => {
+test("custom CSS is text in a card-local stylesheet and updates, survives renders and clears", () => {
+  const card = new AlertManagerCard();
+  const other = new AlertManagerCard();
+  const css = '.alert-title::after { content: "<>&"; }\n/* </style><img src=x onerror="bad"> */';
+  card.preview = true;
+  card.setConfig({ alert_styles: css });
+  assert.equal(card.shadowRoot.lastAppended.textContent, css);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /<img|onerror/);
+  assert.notEqual(card._alertStyles, other._alertStyles);
+  other.setConfig({});
+  assert.equal(other.shadowRoot.lastAppended.textContent, "");
+  card.hass = { locale: { language: "fr" } };
+  assert.equal(card.shadowRoot.lastAppended.textContent, css);
+  card.setConfig({ alert_styles: ".alert-title { font-size: 18px; }" });
+  assert.equal(card.shadowRoot.lastAppended.textContent, ".alert-title { font-size: 18px; }");
+  card.setConfig({});
+  assert.equal(card.shadowRoot.lastAppended.textContent, "");
+  assert.match(card.shadowRoot.innerHTML, /class="alert-tile"/);
+});
+
+test("custom styling keeps grouping, navigation, age, limits and startup with stable selectors", () => {
   const card = new AlertManagerCard();
   card.hass = { locale: { language: "fr" } };
   const config = { max_tiles: 1, labels: ["home"], exclude_labels: ["maintenance"], show_age: true, icon_color: "red" };
@@ -358,29 +386,29 @@ test("Bubble keeps grouped navigation, age, limits and startup while Classic kee
   card.setConfig(config);
   const markup = () => card.shadowRoot.innerHTML.split("</style>")[1];
   const links = () => [...markup().matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
-  const classicLinks = links();
-  assert.match(markup(), /data-style="classic"/);
-  assert.match(markup(), /class="types"/);
-  assert.doesNotMatch(markup(), /class="bubble-icon"/);
-  card.setConfig({ ...config, style: "bubble" });
-  assert.deepEqual(links(), classicLinks);
+  const initialLinks = links();
+  assert.match(markup(), /class="alert-icons types"/);
+  card.setConfig({ ...config, alert_styles: ".alert-tile { border-radius: 34px; }" });
+  assert.deepEqual(links(), initialLinks);
   assert.equal(card._tileCount, 1);
   assert.match(markup(), /--alert-icon-color: var\(--red-color\)/);
-  assert.match(markup(), /class="bubble-count" aria-hidden="true">2<\/span>/);
+  assert.match(markup(), /class="alert-count" aria-hidden="true">2<\/span>/);
+  assert.match(markup(), /data-grouped="true"/);
+  for (const selector of ["alert-link", "alert-icon", "alert-content", "alert-title", "alert-message", "alert-age"]) {
+    assert.ok(markup().includes(selector));
+  }
   assert.match(markup(), /data-age="2026-09-01T12:00:00.000Z"/);
   assert.match(markup(), /\+1<\/span>/);
-  assert.doesNotMatch(markup(), /class="types"|mdi:chevron-right/);
   for (const type of ["battery", "unavailable"]) assert.ok(markup().includes(card._typeName(type)));
   card._value.snapshot.startup = { in_progress: true };
   card._render();
   assert.match(markup(), /mdi:timer-sand/);
   assert.match(markup(), /\+1<\/span>/);
-  card.setConfig({ ...config, style: "classic" });
-  assert.match(markup(), /class="types"/);
-  assert.doesNotMatch(markup(), /class="bubble-count"/);
-  assert.deepEqual(links(), classicLinks);
-  card.setConfig({ ...config, style: "bubble", group_by_device: false });
-  assert.doesNotMatch(markup(), /class="bubble-count"/);
+  assert.deepEqual(links(), initialLinks);
+  assert.equal(card.shadowRoot.lastAppended.textContent, ".alert-tile { border-radius: 34px; }");
+  card.setConfig({ ...config, group_by_device: false });
+  assert.doesNotMatch(markup(), /class="alert-count"/);
+  assert.match(markup(), /data-grouped="false"/);
   assert.match(markup(), /overview\?alert=a/);
   card._value = { status: "ready", snapshot: { alerts: [] } };
   card._render();
@@ -433,7 +461,7 @@ test("startup retains restored alerts and combines the hourglass with overflow",
   for (const preview of [false, true]) {
     card.preview = preview;
     assert.equal(card.hidden, false);
-    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card>/);
+    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card class="alert-tile"/);
     assert.match(card.shadowRoot.innerHTML, /data-alignment="right"/);
     assert.match(card.shadowRoot.innerHTML, /alert=restored-a/);
     assert.match(card.shadowRoot.innerHTML, /mdi:timer-sand/);
@@ -681,7 +709,7 @@ test("mobile limits follow the layout breakpoint and release listeners on discon
     media.dispatchEvent(new Event("change"));
     assert.equal(card._tileCount, 2);
     assert.match(card.shadowRoot.innerHTML, /\+4<\/span>/);
-    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card>/);
+    assert.match(card.shadowRoot.innerHTML, /class="tile-tail"><ha-card class="alert-tile"/);
     const other = new AlertManagerCard();
     other.connectedCallback();
     other.setConfig({ max_tiles: 3 });
