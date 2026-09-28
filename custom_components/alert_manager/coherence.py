@@ -56,6 +56,7 @@ _IGNORED_DIRECTORIES: Final = frozenset(
         "__pycache__",
         "backups",
         "blueprints",
+        "bubble_card",
         "custom_components",
         "deps",
         "media",
