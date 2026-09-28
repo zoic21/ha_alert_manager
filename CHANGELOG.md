@@ -5,10 +5,10 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.5 — Development prerelease
+## 2.5 — Beta prerelease
 
-Current development release: **2.5.0-dev.2**, dated **2026-09-27**.
-This is a development prerelease for testing, not a stable release.
+Current beta release: **2.5.0-beta.1**, dated **2026-09-28**.
+This is a beta prerelease for testing, not a stable release.
 
 - Add custom CSS for dashboard alert tiles through the visual editor or
   `alert_styles` in YAML, with documented stable selectors and isolated styles
@@ -19,6 +19,9 @@ This is a development prerelease for testing, not a stable release.
   use the documented CSS example to retain the Bubble look.
 - Preserve filtering, grouping, navigation, mobile limits and optional age.
   Update the English/French editor translations and documentation.
+
+- Exclude `bubble_card` and its subdirectories from coherence scans to avoid
+  false positives from module code and example entity references.
 
 ## 2.4.0 — September 22, 2026
 
