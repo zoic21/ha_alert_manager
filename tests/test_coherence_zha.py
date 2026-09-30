@@ -151,7 +151,7 @@ def test_metadata_snapshot_and_registry_ownership(hass, tmp_path):
     hass.config_entries.async_entries = lambda domain: entries
     hass.device_registry.devices = {
         "remote": SimpleNamespace(
-            config_entries={"zha1"},
+            config_entry_id="zha1",
             identifiers={("zha", IEEE.upper())},
             disabled_by="user",
         )
@@ -162,13 +162,13 @@ def test_metadata_snapshot_and_registry_ownership(hass, tmp_path):
 
     assert not scan()["results"]  # Disabled, no entities or state required.
     entries.append(SimpleNamespace(entry_id="zha2", state=ConfigEntryState.LOADED))
-    hass.device_registry.devices["remote"].config_entries = {"zha2"}
+    hass.device_registry.devices["remote"].config_entry_id = "zha2"
     assert not scan()["results"]  # Combine all loaded entries.
     entries.pop()
 
-    hass.device_registry.devices["remote"].config_entries = {"other"}
+    hass.device_registry.devices["remote"].config_entry_id = "other"
     assert scan()["missing_count"] == 1
-    hass.device_registry.devices["remote"].config_entries = {"zha1"}
+    hass.device_registry.devices["remote"].config_entry_id = "zha1"
     hass.device_registry.devices["remote"].identifiers = {("zigbee", IEEE)}
     assert scan()["missing_count"] == 1
     entries.append(SimpleNamespace(entry_id="zha2", state="setup_error"))
@@ -182,6 +182,27 @@ def test_metadata_snapshot_and_registry_ownership(hass, tmp_path):
     result = scan()
     assert result["checks"]["zha_device_ieee"] == "metadata_error"
     assert not result["results"]
+
+
+@pytest.mark.parametrize("entry_id", ["zha1", "other", None])
+def test_snapshot_does_not_read_deprecated_device_entries(hass, entry_id):
+    from custom_components.alert_manager.coherence_checks import zha
+
+    class Device:
+        config_entry_id = entry_id
+        identifiers = {("zha", IEEE.upper())}
+
+        @property
+        def config_entries(self):
+            raise AssertionError("Deprecated device property was accessed")
+
+    hass.config_entries.async_entries = lambda domain: [
+        SimpleNamespace(entry_id="zha1", state=ConfigEntryState.LOADED)
+    ]
+    hass.device_registry.devices = {"remote": Device()}
+
+    expected = frozenset({IEEE}) if entry_id == "zha1" else frozenset()
+    assert zha.snapshot(hass) == (expected, "executed")
 
 
 def test_exclusion_validation_remains_exact():
