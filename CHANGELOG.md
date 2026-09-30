@@ -7,7 +7,7 @@ before a stable release are intentionally omitted.
 
 ## 2.5 — Beta prerelease
 
-Current beta release: **2.5.0-beta.1**, dated **2026-09-28**.
+Current beta release: **2.5.0-beta.2**, dated **2026-09-30**.
 This is a beta prerelease for testing, not a stable release.
 
 - Add custom CSS for dashboard alert tiles through the visual editor or
@@ -22,6 +22,13 @@ This is a beta prerelease for testing, not a stable release.
 
 - Exclude `bubble_card` and its subdirectories from coherence scans to avoid
   false positives from module code and example entity references.
+- Add **Export entities (JSON)** below **Deleted entities** on the Coherence
+  page. Download all known Home Assistant entities grouped by device, including
+  their integrations, current states, full attributes, timestamps, areas and labels.
+  Include disabled and hidden registry flags and their reasons; device-level hiding
+  is reported as unknown because Home Assistant does not expose that flag.
+  The administrator-only snapshot is generated on demand, without refreshing
+  equipment, running a coherence scan or storing data on the server.
 
 ## 2.4.0 — September 22, 2026
 
