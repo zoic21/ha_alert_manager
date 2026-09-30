@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).parents[1]
@@ -56,3 +59,72 @@ def test_release_workflow_never_rewrites_an_existing_tag() -> None:
     assert "already exists" in workflow
     assert "force=true" not in workflow
     assert "release edit" not in workflow
+
+
+@pytest.mark.parametrize(
+    ("version", "prerelease", "missing_notes"),
+    [
+        ("2.5.0", "false", False),
+        ("2.5.0-beta.3", "true", False),
+        ("2.5.1", "false", True),
+    ],
+)
+def test_release_uses_user_notes_and_rejects_missing_stable_notes(
+    tmp_path: Path, version: str, prerelease: str, missing_notes: bool
+) -> None:
+    """Execute publication with a fake gh; stable notes must match the version."""
+    workflow = yaml.load(
+        (ROOT / ".github" / "workflows" / "release.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    step = workflow["jobs"]["release"]["steps"][-1]
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## 2.5.0 — September 30, 2026\n\n"
+        "### New features\n\nUser-friendly release notes.\n\n"
+        "## 2.4.0 — September 22, 2026\n\nPrevious release notes.\n"
+    )
+    bin_path = tmp_path / "bin"
+    bin_path.mkdir()
+    gh = bin_path / "gh"
+    gh.write_text(
+        '#!/bin/bash\nif [[ "$1" == "api" ]]; then exit 1; fi\n'
+        'printf "%s\\n" "$@" > "$RELEASE_ARGS"\n'
+    )
+    gh.chmod(0o755)
+    args_file = tmp_path / "args.txt"
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", step["run"]],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{bin_path}{os.pathsep}{os.environ['PATH']}",
+            "VERSION": version,
+            "TAG": f"v{version}",
+            "PRERELEASE": prerelease,
+            "RUNNER_TEMP": str(tmp_path),
+            "RELEASE_ARGS": str(args_file),
+            "GITHUB_REPOSITORY": "zoic21/ha_alert_manager",
+            "GITHUB_SHA": "candidate-sha",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if missing_notes:
+        assert result.returncode != 0
+        assert "Missing changelog entry" in result.stderr
+        assert not args_file.exists()
+        return
+
+    assert result.returncode == 0, result.stderr
+    args = args_file.read_text().splitlines()
+    assert args[:3] == ["release", "create", f"v{version}"]
+    if prerelease == "true":
+        assert "--prerelease" in args
+        assert "--generate-notes" in args
+        assert "--notes-file" not in args
+    else:
+        assert "--prerelease" not in args
+        assert "--generate-notes" not in args
+        notes = Path(args[args.index("--notes-file") + 1]).read_text().strip()
+        assert notes == "### New features\n\nUser-friendly release notes."

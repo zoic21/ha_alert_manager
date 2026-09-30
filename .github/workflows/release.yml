@@ -64,9 +64,23 @@ jobs:
             --repo "$GITHUB_REPOSITORY"
             --target "$GITHUB_SHA"
             --title "Alert Manager $VERSION"
-            --generate-notes
           )
           if [[ "$PRERELEASE" == "true" ]]; then
-            args+=(--prerelease)
+            args+=(--prerelease --generate-notes)
+          else
+            notes_file="$RUNNER_TEMP/release-notes.md"
+            awk -v version="$VERSION" '
+              /^## / {
+                if (found) exit
+                found = ($2 == version)
+                next
+              }
+              found { print }
+            ' CHANGELOG.md > "$notes_file"
+            if ! grep -q '[^[:space:]]' "$notes_file"; then
+              echo "Missing changelog entry for stable version $VERSION." >&2
+              exit 1
+            fi
+            args+=(--notes-file "$notes_file")
           fi
           gh release create "${args[@]}"

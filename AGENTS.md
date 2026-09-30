@@ -209,8 +209,9 @@ pushed commit and requires it to pass, including bundle reproducibility.
 - Inspect `.github/workflows/release.yml` before pushing. Currently a push that
   changes the manifest on `main`, `release/2.2` or `release/2.3` validates the commit
   with the reusable CI workflow, then automatically creates the tag
-  `v<version>` at the pushed commit and a GitHub release with generated notes.
-  Versions containing a hyphen are published with `prerelease: true`.
+  `v<version>` at the pushed commit and a GitHub release. Stable releases use the
+  matching version entry from `CHANGELOG.md` and fail if it is missing or empty.
+  Versions containing a hyphen use generated notes and `prerelease: true`.
 - Push the validated commit to the requested branch. Let the workflow create the
   tag and release; do not also create them manually.
 - Verify the Release workflow, CI (Python, frontend, Home Assistant validation and

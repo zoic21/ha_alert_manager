@@ -5,30 +5,28 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
-## 2.5 — Beta prerelease
+## 2.5.0 — September 30, 2026
 
-Current beta release: **2.5.0-beta.2**, dated **2026-09-30**.
-This is a beta prerelease for testing, not a stable release.
+### Customize your dashboard alerts
 
-- Add custom CSS for dashboard alert tiles through the visual editor or
-  `alert_styles` in YAML, with documented stable selectors and isolated styles
-  for each card.
-- Replace the built-in Bubble preset and style selector with a ready-to-use CSS
-  example, including themed pastel backgrounds, round icons and grouped counts.
-  Legacy `style` options remain accepted but no longer change the appearance;
-  use the documented CSS example to retain the Bubble look.
-- Preserve filtering, grouping, navigation, mobile limits and optional age.
-  Update the English/French editor translations and documentation.
+Personalize the appearance of your alert tiles, including colors, rounded corners,
+icons and text. A ready-to-use Bubble-style example is included in the documentation,
+with no additional card installation required.
 
-- Exclude `bubble_card` and its subdirectories from coherence scans to avoid
-  false positives from module code and example entity references.
-- Add **Export entities (JSON)** below **Deleted entities** on the Coherence
-  page. Download all known Home Assistant entities grouped by device, including
-  their integrations, current states, full attributes, timestamps, areas and labels.
-  Include disabled and hidden registry flags and their reasons; device-level hiding
-  is reported as unknown because Home Assistant does not expose that flag.
-  The administrator-only snapshot is generated on demand, without refreshing
-  equipment, running a coherence scan or storing data on the server.
+### Export your Home Assistant entities
+
+The Coherence page now includes an **Export entities (JSON)** button.
+
+Download a snapshot of all your entities, grouped by device, including their
+integrations, latest known values and attributes. Disabled and hidden entities are
+included and clearly identified, even when they are absent from your dashboards.
+
+### More accurate coherence checks
+
+Bubble Card module files are now excluded from coherence scans, preventing false
+warnings caused by example entity references. Your dashboards remain checked.
+
+Your existing rules, notification profiles and alert history are preserved.
 
 ## 2.4.0 — September 22, 2026
 
