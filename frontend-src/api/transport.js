@@ -18,6 +18,10 @@ export class AlertManagerApi {
     return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
   }
 
+  exportEntities() {
+    return this.call({ type: "alert_manager/coherence/entities/export" });
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",

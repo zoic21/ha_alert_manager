@@ -101,6 +101,7 @@ const ACTION_ICONS = Object.freeze({
   "save-configuration": "mdi:content-save",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
+  "export-entities": "mdi:download",
 });
 
 // Source: frontend-src/utils/integration-entities.js
@@ -414,6 +415,10 @@ class AlertManagerApi {
 
   reevaluateAlert(alertId) {
     return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
+  }
+
+  exportEntities() {
+    return this.call({ type: "alert_manager/coherence/entities/export" });
   }
 
   testRule(rule, ruleId = "") {

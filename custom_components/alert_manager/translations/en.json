@@ -220,6 +220,11 @@
         "type": "Type"
       },
       "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability. Alert Manager custom rules are also checked.",
+      "export": {
+        "button": "Export entities (JSON)",
+        "loading": "Exporting…",
+        "error": "Unable to export entities. Check the Home Assistant connection and that their attributes can be represented as JSON."
+      },
       "deleted_entities": {
         "button": "Deleted entities",
         "close": "Close deleted entities",

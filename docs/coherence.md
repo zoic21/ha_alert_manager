@@ -56,6 +56,46 @@ The page provides the latest **50 deleted entities** still retained by Home Assi
 
 <img src="assets/screenshots/coherence.png" alt="Coherence page with the retained deleted-entity list">
 
+## Export all Home Assistant entities
+
+Below **Deleted entities**, **Export entities (JSON)** downloads a private,
+versioned JSON snapshot. It is available to administrators, even before the first
+coherence scan. It does not run a scan or change any entity, alert or configuration.
+
+The export combines the entity registry and current HA states, including entities
+outside dashboards, disabled/hidden entities and entities without a unique ID.
+Registered devices contain their entities; `entities_without_device` contains the
+rest. Devices without entities are included. Deleted registry entries are excluded.
+
+The root contains `schema_version`, `exported_at`, Home Assistant and Alert Manager
+versions, counts, `devices` and `entities_without_device`. Each entity includes its
+ID, name, integration platform, config-entry ID, unique ID, category, labels, explicit
+and effective area, state, full attributes, and change/update/report timestamps.
+Device metadata includes name, manufacturer, model, software/hardware versions,
+area, labels and integrations. Devices, entities and labels are sorted by ID for
+repeatable comparisons; attribute arrays retain their original order.
+
+| Field | Meaning |
+| --- | --- |
+| `disabled` / `disabled_by` | Registry disable flag and reason (`user`, `integration`, `device`, `config_entry`, etc.). Available for both devices and registered entities. |
+| `hidden` / `hidden_by` | Registry hiding flag and reason for entities. HA has no device-level hiding flag, so both are `null` for devices. |
+| `registered` | Whether the entity exists in the entity registry. For state-only entities, registry flags and integration are `null` when unknown. |
+| `state` / `attributes` | Raw HA state string and all published attributes, preserving JSON types. Both are `null` when HA has no state; actual `unknown` and `unavailable` strings are preserved. |
+| `area` / `effective_area` | The entity's explicit area and the area after inheriting from its device. |
+
+Disabled, hidden, unavailable and an ordinary `off` state are different concepts.
+A device's disable flag is exported separately from each entity's own registry flag;
+visibility is never guessed from whether its entities appear on a dashboard.
+
+The snapshot reflects the **last values known to HA**, not a forced refresh of the
+equipment. Capture happens before yielding to a worker; grouping and JSON encoding
+run off the event loop. Nothing is polled or saved on the server. The filename and
+export timestamp use UTC (`Z` or `+00:00`). No historical values, integration
+credentials/configuration or import/restore mechanism are included. Published state
+attributes themselves can contain locations, URLs or tokens: keep the file private.
+If an attribute cannot be encoded as JSON, the export fails visibly rather than
+silently dropping data or downloading an incomplete inventory.
+
 ## Working through findings
 
 Open the affected automation, script, dashboard or custom rule and check whether the reference should be replaced or removed. Exclude it only when it is intentional. Run the scan again to validate the correction; an unresolved or incomplete check must not be mistaken for a confirmed recovery.
