@@ -277,7 +277,13 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
     return `<div class="coherence-actions">
       <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
       <ha-button appearance="outlined" data-action="open-deleted-entities" ${deletedEntitiesLoading ? "disabled" : ""}>${esc(t("coherence.deleted_entities.button"))}</ha-button>
-      <ha-button appearance="outlined" data-action="export-entities" ${entityExportLoading ? "disabled" : ""}><span data-action-label>${esc(t(entityExportLoading ? "coherence.export.loading" : "coherence.export.button"))}</span></ha-button>
+      <ha-button appearance="outlined" data-action="export-entities" ${entityExportLoading ? "disabled" : ""}>
+        <span class="coherence-export-label">
+          <span aria-hidden="true">${esc(t("coherence.export.button"))}</span>
+          <span aria-hidden="true">${esc(t("coherence.export.loading"))}</span>
+          <span data-action-label>${esc(t(entityExportLoading ? "coherence.export.loading" : "coherence.export.button"))}</span>
+        </span>
+      </ha-button>
     </div>`;
 }
 

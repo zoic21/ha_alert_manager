@@ -543,6 +543,15 @@ export const settingsStyles = `
     flex: none;
     gap: 8px;
   }
+  .coherence-export-label {
+    display: inline-grid;
+  }
+  .coherence-export-label > span {
+    grid-area: 1 / 1;
+  }
+  .coherence-export-label > [aria-hidden="true"] {
+    visibility: hidden;
+  }
   .coherence-stats {
     display: flex;
     flex-wrap: wrap;
