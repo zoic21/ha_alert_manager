@@ -59,6 +59,69 @@ await import("../frontend-src/alert-manager-panel.js");
 
 const Panel = customElements.get("alert-manager-panel");
 
+test("rename history is in the adjacent action column before and after a scan", async () => {
+  const { renderCoherence } = await import("../frontend-src/views/coherence.js");
+  for (const result of [null, { results: [] }]) {
+    const markup = renderCoherence({ result, t: (key) => key });
+    assert.match(markup, /<div class="coherence-action-column">\s*<ha-button appearance="outlined" data-action="open-entity-renames"/);
+    assert.ok(markup.indexOf('data-action="open-entity-renames"') > markup.indexOf('data-action="export-entities"'));
+  }
+});
+
+test("rename drawer loads on demand once, closes while loading and refreshes on reopen", async () => {
+  const { handleCoherenceAction } = await import("../frontend-src/views/coherence.js");
+  const { AlertManagerApi } = await import("../frontend-src/api/transport.js");
+  let resolveLoad;
+  let calls = 0;
+  const context = {
+    _readOnly: false,
+    _entityRenamesState: { data: null, loading: false, error: null },
+    _render() {},
+    _errorText: (error) => error.message,
+    _api: new AlertManagerApi(() => ({ callWS(message) {
+      assert.deepEqual(message, { type: "alert_manager/coherence/entity_renames/list" });
+      calls += 1;
+      return new Promise((resolve) => { resolveLoad = resolve; });
+    } })),
+  };
+  const pending = handleCoherenceAction.call(context, "open-entity-renames");
+  assert.deepEqual(context._configurationDrawer, { kind: "entity-renames" });
+  assert.equal(context._entityRenamesState.loading, true);
+  await handleCoherenceAction.call(context, "open-entity-renames");
+  assert.equal(calls, 1);
+  await handleCoherenceAction.call(context, "close-entity-renames");
+  resolveLoad({ renames: [] });
+  await pending;
+  assert.equal(context._configurationDrawer, null);
+  assert.equal(context._entityRenamesState.loading, false);
+  const reopened = handleCoherenceAction.call(context, "open-entity-renames");
+  assert.equal(calls, 2);
+  resolveLoad({ renames: [{ new_entity_id: "sensor.new" }] });
+  await reopened;
+  assert.equal(context._entityRenamesState.data.renames.length, 1);
+  context._api = { entityRenames: async () => { throw new Error("offline"); } };
+  await handleCoherenceAction.call(context, "open-entity-renames");
+  assert.equal(context._entityRenamesState.error, "offline");
+  assert.equal(context._entityRenamesState.loading, false);
+  context._readOnly = true;
+  context._api = { entityRenames() { assert.fail("Read-only users cannot read coherence history"); } };
+  await handleCoherenceAction.call(context, "open-entity-renames");
+});
+
+test("rename information icon uses the existing Home Assistant more-info action", async () => {
+  const { handleAlertTableAction } = await import("../frontend-src/components/alert-table.js");
+  const opened = [];
+  const context = {
+    _closeAlertDetailsDialog: (callback) => callback(),
+    _openMoreInfo: (entityId) => opened.push(entityId),
+  };
+  const handled = await handleAlertTableAction.call(context, "more-info", {
+    dataset: { entityId: "sensor.current" },
+  }, { preventDefault() {}, stopPropagation() {} });
+  assert.equal(handled, true);
+  assert.deepEqual(opened, ["sensor.current"]);
+});
+
 test("entity export is below deleted entities before and after a coherence scan", async () => {
   const { renderCoherence } = await import("../frontend-src/views/coherence.js");
   for (const result of [null, { results: [] }]) {

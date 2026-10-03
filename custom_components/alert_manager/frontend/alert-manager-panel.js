@@ -179,6 +179,10 @@ class AlertManagerApi {
     return this.call({ type: "alert_manager/coherence/entities/export" });
   }
 
+  entityRenames() {
+    return this.call({ type: "alert_manager/coherence/entity_renames/list" });
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",
@@ -3275,6 +3279,7 @@ const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
   "open-automatic-configuration",
   "open-deleted-entities",
+  "open-entity-renames",
   "open-settings-configuration",
   "new-notification-profile",
   "edit-notification-profile",
@@ -6259,6 +6264,22 @@ function nativeCoherenceActionCell(row) {
     return button;
 }
 
+function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottomSheet, t }) {
+    const drawer = `<ha-card outlined class="side-drawer ${kind}-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(`${translationKey}.title`))}">
+        <ha-dialog-header show-border>
+          <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-${kind}" aria-label="${esc(t(`${translationKey}.close`))}"></ha-icon-button>
+          <span slot="title">${esc(t(`${translationKey}.title`))}</span>
+        </ha-dialog-header>
+        <div class="side-drawer-form"><section class="side-drawer-section">${content}</section></div>
+      </ha-card>`;
+    return renderSideDrawer({
+      drawer,
+      backdropClass: `${kind}-drawer-backdrop`,
+      closeAction: `close-${kind}`,
+      useBottomSheet,
+    });
+}
+
 function renderDeletedEntitiesDrawer({
   data, loading, error, formatDate, useBottomSheet = false, t,
 }) {
@@ -6281,25 +6302,50 @@ function renderDeletedEntitiesDrawer({
                 </div>
               </div>`).join("")}</div>`
             : `<div class="empty compact">${esc(t("coherence.deleted_entities.empty"))}</div>`}`;
-    const drawer = `<ha-card outlined class="side-drawer deleted-entities-drawer" role="dialog" aria-modal="false" aria-label="${esc(t("coherence.deleted_entities.title"))}">
-        <ha-dialog-header show-border>
-          <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-deleted-entities" aria-label="${esc(t("coherence.deleted_entities.close"))}"></ha-icon-button>
-          <span slot="title">${esc(t("coherence.deleted_entities.title"))}</span>
-        </ha-dialog-header>
-        <div class="side-drawer-form">
-          <section class="side-drawer-section">${content}</section>
-        </div>
-      </ha-card>`;
-    return renderSideDrawer({
-      drawer,
-      backdropClass: "deleted-entities-drawer-backdrop",
-      closeAction: "close-deleted-entities",
+    return renderCoherenceHistoryDrawer({
+      kind: "deleted-entities",
+      translationKey: "coherence.deleted_entities",
+      content,
       useBottomSheet,
+      t,
+    });
+}
+
+function renderEntityRenamesDrawer({
+  data, loading, error, formatDate, useBottomSheet = false, t,
+}) {
+    const renames = data?.renames ?? [];
+    const content = loading
+      ? `<div class="loading compact">${esc(t("coherence.entity_renames.loading"))}</div>`
+      : error
+        ? `<ha-alert alert-type="error">${esc(error)}</ha-alert>`
+        : `<p class="deleted-entities-description">${esc(t("coherence.entity_renames.description"))}</p>
+          ${renames.length
+            ? `<div class="deleted-entities-list" role="list">${renames.map((entry) => `
+              <div class="deleted-entity-row entity-rename-row" role="listitem">
+                <div class="entity-rename-ids">
+                  <code title="${esc(t("coherence.entity_renames.old"))}">${esc(entry.old_entity_id)}</code>
+                  <div class="entity-rename-new">
+                    <ha-icon icon="mdi:arrow-right" aria-hidden="true"></ha-icon>
+                    <code title="${esc(t("coherence.entity_renames.new"))}">${esc(entry.new_entity_id)}</code>
+                  </div>
+                </div>
+                <time class="deleted-entity-metadata" datetime="${esc(entry.renamed_at)}">${esc(formatDate(entry.renamed_at))}</time>
+                <ha-icon-button data-action="more-info" data-entity-id="${esc(entry.current_entity_id ?? "")}" ${entry.current_entity_id ? "" : "disabled"} aria-label="${esc(t("coherence.entity_renames.more_info"))}" title="${esc(t("coherence.entity_renames.more_info"))}"><ha-icon icon="mdi:information-outline"></ha-icon></ha-icon-button>
+              </div>`).join("")}</div>`
+            : `<div class="empty compact">${esc(t("coherence.entity_renames.empty"))}</div>`}`;
+    return renderCoherenceHistoryDrawer({
+      kind: "entity-renames",
+      translationKey: "coherence.entity_renames",
+      content,
+      useBottomSheet,
+      t,
     });
 }
 
 function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportLoading, t }) {
     return `<div class="coherence-actions">
+      <div class="coherence-action-column">
       <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
       <ha-button appearance="outlined" data-action="open-deleted-entities" ${deletedEntitiesLoading ? "disabled" : ""}>${esc(t("coherence.deleted_entities.button"))}</ha-button>
       <ha-button appearance="outlined" data-action="export-entities" ${entityExportLoading ? "disabled" : ""}>
@@ -6309,6 +6355,10 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
           <span data-action-label>${esc(t(entityExportLoading ? "coherence.export.loading" : "coherence.export.button"))}</span>
         </span>
       </ha-button>
+      </div>
+      <div class="coherence-action-column">
+        <ha-button appearance="outlined" data-action="open-entity-renames">${esc(t("coherence.entity_renames.button"))}</ha-button>
+      </div>
     </div>`;
 }
 
@@ -6322,6 +6372,10 @@ function renderCoherence(context) {
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
       deletedEntitiesOpen = false,
+      entityRenames = null,
+      entityRenamesLoading = false,
+      entityRenamesError = null,
+      entityRenamesOpen = false,
       entityExportLoading = false,
       useBottomSheet = false,
       formatDate = (value) => value,
@@ -6337,7 +6391,16 @@ function renderCoherence(context) {
           useBottomSheet,
           t,
         })
-      : "";
+      : entityRenamesOpen
+        ? renderEntityRenamesDrawer({
+            data: entityRenames,
+            loading: entityRenamesLoading,
+            error: entityRenamesError,
+            formatDate,
+            useBottomSheet,
+            t,
+          })
+        : "";
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
@@ -6375,6 +6438,10 @@ function renderCoherencePanel() {
       deletedEntitiesLoading: this._deletedEntitiesState.loading,
       deletedEntitiesError: this._deletedEntitiesState.error,
       deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      entityRenames: this._entityRenamesState.data,
+      entityRenamesLoading: this._entityRenamesState.loading,
+      entityRenamesError: this._entityRenamesState.error,
+      entityRenamesOpen: this._configurationDrawer?.kind === "entity-renames",
       entityExportLoading: this._entityExportLoading,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
@@ -6399,23 +6466,25 @@ async function handleCoherenceAction(action) {
     }
     return true;
   }
-  if (action === "close-deleted-entities") {
-    if (this._configurationDrawer?.kind !== "deleted-entities") return false;
+  if (["close-deleted-entities", "close-entity-renames"].includes(action)) {
+    if (this._configurationDrawer?.kind !== action.slice(6)) return false;
     this._configurationDrawer = null;
     this._render();
     return true;
   }
-  if (action === "open-deleted-entities") {
-    const state = this._deletedEntitiesState;
+  if (["open-deleted-entities", "open-entity-renames"].includes(action)) {
+    if (this._readOnly) return true;
+    const isRenames = action === "open-entity-renames";
+    const state = isRenames ? this._entityRenamesState : this._deletedEntitiesState;
     if (state.loading) return true;
-    this._configurationDrawer = { kind: "deleted-entities" };
+    this._configurationDrawer = { kind: action.slice(5) };
     state.loading = true;
     state.error = null;
     this._render();
     try {
-      state.data = await this._api.call({
-        type: "alert_manager/coherence/deleted_entities/list",
-      });
+      state.data = isRenames
+        ? await this._api.entityRenames()
+        : await this._api.call({ type: "alert_manager/coherence/deleted_entities/list" });
     } catch (error) {
       state.error = this._errorText(error);
     } finally {
@@ -9278,6 +9347,14 @@ const settingsStyles = `
     flex: none;
     gap: 8px;
   }
+  .coherence-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .coherence-action-column {
+    display: grid;
+    gap: 8px;
+  }
   .coherence-export-label {
     display: inline-grid;
   }
@@ -9341,6 +9418,33 @@ const settingsStyles = `
   .deleted-entity-metadata {
     align-items: flex-end;
     text-align: end;
+  }
+  .entity-rename-ids {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .entity-rename-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .entity-rename-ids code {
+    overflow-wrap: anywhere;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .entity-rename-new ha-icon {
+    flex: none;
+    --mdc-icon-size: 18px;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new code {
+    color: var(--primary-text-color);
   }
 
   /* Code */
@@ -10174,6 +10278,17 @@ const responsiveStyles = `
       align-items: flex-start;
       text-align: start;
     }
+    .entity-rename-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+    }
+    .entity-rename-row time {
+      grid-column: 1;
+    }
+    .entity-rename-row ha-icon-button {
+      grid-column: 2;
+      grid-row: 1 / 3;
+    }
     .actions ha-button {
       width: 100%;
     }
@@ -10581,12 +10696,12 @@ class AlertManagerPanel extends HTMLElement {
     this._configRecovery = { active: false, backups: [] };
     this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
-    this._coherence = null;
+    this._coherence = this._coherenceScannedAt = null;
     this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
-    this._coherenceScannedAt = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
+    this._entityRenamesState = { data: null, loading: false, error: null };
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
     this._activeTab = "overview";

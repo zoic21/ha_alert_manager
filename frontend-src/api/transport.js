@@ -22,6 +22,10 @@ export class AlertManagerApi {
     return this.call({ type: "alert_manager/coherence/entities/export" });
   }
 
+  entityRenames() {
+    return this.call({ type: "alert_manager/coherence/entity_renames/list" });
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",

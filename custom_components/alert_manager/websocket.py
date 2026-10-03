@@ -186,6 +186,19 @@ async def websocket_deleted_entities_list(
 @websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/coherence/entity_renames/list"}
+)
+async def websocket_entity_renames_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return recorded entity-ID changes to an administrator."""
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(msg["id"], manager.entity_renames_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
     {vol.Required("type"): "alert_manager/coherence/entities/export"}
 )
 async def websocket_entities_export(
@@ -682,6 +695,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_coherence_get,
         websocket_coherence_scan,
         websocket_deleted_entities_list,
+        websocket_entity_renames_list,
         websocket_entities_export,
         websocket_history_config_get,
         websocket_history_config_update,

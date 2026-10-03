@@ -161,6 +161,17 @@ export const responsiveStyles = `
       align-items: flex-start;
       text-align: start;
     }
+    .entity-rename-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+    }
+    .entity-rename-row time {
+      grid-column: 1;
+    }
+    .entity-rename-row ha-icon-button {
+      grid-column: 2;
+      grid-row: 1 / 3;
+    }
     .actions ha-button {
       width: 100%;
     }

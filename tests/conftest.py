@@ -299,7 +299,14 @@ class Registry:
         return self.async_update_entity(device_id, **kwargs)
 
     def async_get(self, item_id):
-        return self.entries.get(item_id)
+        return self.entries.get(item_id) or next(
+            (
+                item
+                for item in self.entries.values()
+                if getattr(item, "id", None) == item_id
+            ),
+            None,
+        )
 
     def async_get_area(self, item_id):
         return self.entries.get(item_id)
@@ -502,13 +509,18 @@ class Store:
         self.key = key
         self.options = kwargs
         self.hass.store_options[key] = kwargs
+        self.delayed_save = None
 
     async def async_load(self):
         return self.hass.stores.get(self.key)
 
     async def async_save(self, data):
+        self.delayed_save = None
         self.hass.store_save_count += 1
         self.hass.stores[self.key] = data
+
+    def async_delay_save(self, data_func, delay=0):
+        self.delayed_save = (data_func, delay)
 
 
 storage.Store = Store

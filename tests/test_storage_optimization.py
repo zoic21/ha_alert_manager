@@ -13,6 +13,7 @@ from homeassistant.core import CoreState, Event
 from custom_components.alert_manager import storage as storage_module
 from custom_components.alert_manager.const import (
     CONFIG_BACKUP_STORAGE_KEY,
+    ENTITY_RENAME_STORAGE_KEY,
     HISTORY_STORAGE_KEY,
     NOTIFICATION_STORAGE_KEY,
     PENDING_PERSISTENCE_DELAY_SECONDS,
@@ -404,6 +405,9 @@ def test_runtime_stores_serialize_outside_the_event_loop(hass, entry):
     assert manager.storage._store.options["serialize_in_event_loop"] is False
     assert manager.history_storage._store.options["serialize_in_event_loop"] is False
     assert (
+        manager.entity_rename_history._store.options["serialize_in_event_loop"] is False
+    )
+    assert (
         manager.config_backup_storage._store.options["serialize_in_event_loop"] is False
     )
     assert (
@@ -412,6 +416,7 @@ def test_runtime_stores_serialize_outside_the_event_loop(hass, entry):
     assert set(hass.store_options) == {
         STORAGE_KEY,
         HISTORY_STORAGE_KEY,
+        ENTITY_RENAME_STORAGE_KEY,
         CONFIG_BACKUP_STORAGE_KEY,
         NOTIFICATION_STORAGE_KEY,
     }
