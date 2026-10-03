@@ -13,6 +13,19 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def test_scan_ignores_tagged_scalars_without_resolving_them(tmp_path):
+    _write(
+        tmp_path / "configuration.yaml",
+        "entity_id: light.missing\nsecret: !secret light.secret\n"
+        "input: !input light.input\ninclude: !include light.include\n"
+        "environment: !env_var light.environment\n",
+    )
+
+    result = scan_configuration(tmp_path, frozenset())
+
+    assert [row["entity_id"] for row in result["results"]] == ["light.missing"]
+
+
 def test_scan_finds_missing_entities_with_editable_object_context(tmp_path):
     """Automations, scripts and templates retain useful editor targets."""
     _write(

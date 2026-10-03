@@ -143,9 +143,9 @@ or script name. Uncheck any occurrence to leave it unchanged, then choose **Repl
 
 | Source | Save and activation |
 | --- | --- |
-| Automations, scripts and scenes in the native editor files | The panel uses Home Assistant's authenticated configuration REST APIs. HA validates the objects and schedules their reload, as when saving in its editors. No restart is needed. |
+| Automations, scripts and scenes in the native editor files without YAML tags | The panel uses Home Assistant's authenticated configuration REST APIs. HA validates the objects and schedules their reload, as when saving in its editors. No restart is needed. |
 | Dashboards managed in the UI | The integration reads the live dashboard configuration and uses its native save API, which updates storage and notifies the frontend. No direct `.storage` edit or restart. |
-| Other YAML, including packages, external automation/script files and YAML dashboards | Selected text is replaced while preserving the remaining formatting, comments and HA tags. Reload the affected configuration; restart only for integrations without a reload action. |
+| YAML files containing tags, and other YAML including packages, external automation/script files and YAML dashboards | Selected text is replaced while preserving the remaining formatting, comments and HA tags. Secrets and includes are not resolved or sent to the browser. Reload the affected configuration; restart only for integrations without a reload action. |
 | ESPHome | The existing ESPHome scan setting applies. Validate and install the updated configuration on the device through ESPHome. Editing YAML does not flash firmware. |
 
 Home Assistant may stop running automation/script actions when reloading. Its own
@@ -153,18 +153,26 @@ editors also control the formatting of the YAML they save.
 
 Replacement uses the coherence scanner's file exclusions and static-reference
 traversal. Definition IDs/names, comments, documentation branches, dynamically constructed IDs and
-blueprint definitions are skipped. Other HA storage files and Alert Manager custom
-rules are outside this replacement workflow. Unreadable or invalid files are
+blueprint definitions are skipped. Tagged scalars such as `!secret`, `!input` and
+`!include` are not entity references and are left unchanged. Other HA storage files
+and Alert Manager custom rules are outside this replacement workflow. Unreadable or invalid files are
 reported as skipped in the preview.
 
 Before saving, the backend rechecks that the target entity exists, selected files
 still match the preview, and each candidate is valid YAML. A replacement that would
 merge two entity mapping keys is rejected. After the native editor API calls, the
 backend verifies the YAML they saved before committing other sources. External YAML
-is also parsed after writing. If an operation fails, the workflow restores written
-YAML/dashboard sources and restores attempted native-editor changes through the
-same HA APIs. Keep the panel open until the operation completes: the native REST
-APIs do not provide a transaction spanning several objects.
+is also parsed after writing. If an operation fails, the workflow attempts to restore
+every written YAML/dashboard source and attempted native-editor change, even if one
+restoration fails. An incomplete restoration is reported separately from a successful
+rollback. The backend finishes admitted writes or restorations even if the requesting
+connection disconnects.
+
+Keep the panel open until the operation completes: the native REST APIs do not
+provide a transaction spanning several objects. If the backend's final reply is lost,
+the panel reports an unconfirmed result and does not undo native objects that may
+belong to a successfully committed batch. Check the affected sources and generate a
+new preview before retrying after an incomplete or unconfirmed operation.
 
 Run a new coherence scan after activation to update the retained findings.
 

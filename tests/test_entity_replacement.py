@@ -438,3 +438,198 @@ def test_literal_entity_id_ending_in_underscore_is_not_a_dynamic_prefix(
     write(tmp_path, "config.yaml", "entity_id: light.old_\n")
     preview = asyncio.run(replacement.async_preview("light.old_", "light.new"))
     assert preview["replacement_count"] == 1
+
+
+@pytest.mark.parametrize("tag", ["!secret", "!input", "!include", "!env_var"])
+def test_tagged_scalars_are_not_entity_references(replacement, tmp_path, tag):
+    original = f"entity_id: light.old\nvalue: {tag} light.old\n"
+    path = write(tmp_path, "configuration.yaml", original)
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        assert preview["replacement_count"] == 1
+        await apply(replacement, preview)
+
+    asyncio.run(run())
+    assert path.read_text() == original.replace(
+        "entity_id: light.old", "entity_id: light.new"
+    )
+
+
+@pytest.mark.parametrize(
+    "filename,content",
+    [
+        (
+            "automations.yaml",
+            "- id: changed\n  triggers:\n    - trigger: state\n"
+            "      entity_id: light.old\n- id: untouched\n  variables:\n"
+            "    token: !secret missing\n    input: !input light.old\n"
+            "    sequence: !include missing.yaml\n",
+        ),
+        (
+            "scripts.yaml",
+            "changed:\n  sequence:\n    - action: light.turn_on\n"
+            "      target:\n        entity_id: light.old\nuntouched:\n"
+            "  variables:\n    token: !secret missing\n"
+            "  sequence: !include missing.yaml\n",
+        ),
+        (
+            "scenes.yaml",
+            "- id: changed\n  name: Lights\n  entities:\n    light.old: on\n"
+            "- id: untouched\n  name: Other\n  entities: !include missing.yaml\n",
+        ),
+    ],
+)
+def test_tags_in_untouched_native_objects_use_text_saves(
+    replacement, tmp_path, monkeypatch, filename, content
+):
+    from custom_components.alert_manager import entity_replacement as module
+
+    original = content.replace("\n", "\r\n")
+    path = write(tmp_path, filename, original)
+    monkeypatch.setattr(
+        module, "parse_yaml", lambda *_args: pytest.fail("Tags must not be resolved")
+    )
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        assert preview["replacement_count"] == 1
+        plan = await replacement.async_prepare_apply(
+            preview["preview_id"], selected(preview)
+        )
+        assert plan["native_updates"] == []
+        result = await replacement.async_apply(preview["preview_id"], selected(preview))
+        assert result["yaml_changed"] is True
+
+    asyncio.run(run())
+    assert path.read_bytes() == original.replace("light.old", "light.new", 1).encode()
+
+
+def test_exclamation_marks_in_comments_and_strings_keep_native_editor_path(
+    replacement, tmp_path
+):
+    write(
+        tmp_path,
+        "automations.yaml",
+        '# !secret missing\n- id: test\n  alias: "Literal !include example"\n'
+        "  triggers:\n    - trigger: state\n      entity_id: light.old\n",
+    )
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        plan = await replacement.async_prepare_apply(
+            preview["preview_id"], selected(preview)
+        )
+        assert len(plan["native_updates"]) == 1
+        assert plan["native_updates"][0]["domain"] == "automation"
+
+    asyncio.run(run())
+
+
+def test_unexpected_write_error_rolls_back_and_preserves_original_error(
+    replacement, tmp_path, monkeypatch
+):
+    from custom_components.alert_manager import entity_replacement as module
+
+    paths = [
+        write(tmp_path, f"{name}.yaml", "entity_id: light.old\n") for name in ("a", "b")
+    ]
+    real_write = module.write_utf8_file
+    failure = RuntimeError("unexpected persistence failure")
+    calls = []
+
+    def fail_after_second_write(filename, content, **kwargs):
+        calls.append(filename)
+        real_write(filename, content, **kwargs)
+        if len(calls) == 2:
+            raise failure
+
+    monkeypatch.setattr(module, "write_utf8_file", fail_after_second_write)
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        with pytest.raises(ValueError, match=r"^replacement_failed$") as caught:
+            await apply(replacement, preview)
+        assert caught.value.__cause__ is failure
+
+    asyncio.run(run())
+    assert len(calls) == 4
+    assert all(path.read_text() == "entity_id: light.old\n" for path in paths)
+
+
+def test_failed_restore_does_not_stop_other_restores(
+    replacement, tmp_path, monkeypatch, caplog
+):
+    from custom_components.alert_manager import entity_replacement as module
+
+    original = "entity_id: light.old\n"
+    paths = [write(tmp_path, f"{name}.yaml", original) for name in ("a", "b", "c")]
+    real_save = module.save_yaml
+    failure = RuntimeError("apply failed")
+    calls = []
+
+    def failing_save(item, content):
+        calls.append(item.source.relative_path)
+        if item.source.relative_path == "c.yaml" and content == original:
+            raise OSError("restore failed")
+        real_save(item, content)
+        if len(calls) == 3:
+            raise failure
+
+    monkeypatch.setattr(module, "save_yaml", failing_save)
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        with pytest.raises(
+            ValueError, match=r"^replacement_rollback_failed$"
+        ) as caught:
+            await apply(replacement, preview)
+        assert caught.value.__cause__ is failure
+
+    asyncio.run(run())
+    assert calls == ["a.yaml", "b.yaml", "c.yaml", "c.yaml", "b.yaml", "a.yaml"]
+    assert all(path.read_text() == original for path in paths[:2])
+    assert paths[2].read_text() == "entity_id: light.new\n"
+    assert "Could not restore replacement source c.yaml" in caplog.text
+
+
+def test_socket_cancellation_during_rollback_finishes_restoring(
+    replacement, hass, tmp_path, monkeypatch
+):
+    from custom_components.alert_manager import entity_replacement as module
+
+    paths = [
+        write(tmp_path, f"{name}.yaml", "entity_id: light.old\n") for name in ("a", "b")
+    ]
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        ids = selected(preview)
+        await replacement.async_prepare_apply(preview["preview_id"], ids)
+        executor = hass.async_add_executor_job
+        restoring = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def interrupted_executor(target, *args):
+            nonlocal calls
+            if target is module.save_yaml:
+                calls += 1
+                if calls == 2:
+                    raise OSError("write failed")
+                if calls == 3:
+                    restoring.set()
+                    await release.wait()
+            return await executor(target, *args)
+
+        monkeypatch.setattr(hass, "async_add_executor_job", interrupted_executor)
+        task = asyncio.create_task(replacement.async_apply(preview["preview_id"], ids))
+        await asyncio.wait_for(restoring.wait(), timeout=2)
+        task.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert calls == 4
+
+    asyncio.run(run())
+    assert all(path.read_text() == "entity_id: light.old\n" for path in paths)

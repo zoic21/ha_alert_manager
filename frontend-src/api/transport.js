@@ -48,6 +48,7 @@ export class AlertManagerApi {
     const message = { preview_id: previewId, occurrence_ids: occurrenceIds };
     const plan = await this.call({ type: "alert_manager/coherence/entity_replacement/prepare", ...message });
     const written = [];
+    let applying = false;
     try {
       for (const update of plan.native_updates) {
         const path = `config/${update.domain}/config/${encodeURIComponent(update.key)}`;
@@ -58,10 +59,27 @@ export class AlertManagerApi {
         written.push({ path, before: update.before });
         await this._getHass().callApi("POST", path, update.after);
       }
+      applying = true;
       return await this.call({ type: "alert_manager/coherence/entity_replacement/apply", ...message });
     } catch (error) {
+      const code = error?.code ?? error?.body?.code;
+      if (applying && !String(code ?? "").startsWith("replacement_")) {
+        // A lost reply may follow a committed backend batch. Keep native changes
+        // aligned with it instead of rolling back only part of a successful apply.
+        throw Object.assign(new Error("replacement_incomplete", { cause: error }), { code: "replacement_incomplete" });
+      }
+      const rollbackErrors = [];
       for (const update of written.reverse()) {
-        await this._getHass().callApi("POST", update.path, update.before);
+        try {
+          await this._getHass().callApi("POST", update.path, update.before);
+        } catch (rollbackError) {
+          rollbackErrors.push({ path: update.path, error: rollbackError });
+        }
+      }
+      if (rollbackErrors.length) {
+        throw Object.assign(new Error("replacement_rollback_failed", { cause: error }), {
+          code: "replacement_rollback_failed", rollbackErrors,
+        });
       }
       throw error;
     }

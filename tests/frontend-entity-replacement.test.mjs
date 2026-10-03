@@ -250,3 +250,87 @@ test("a concurrent native editor change is preserved and prevents its replacemen
   await assert.rejects(api.applyEntityReplacement("preview", ["one"]), (error) => error.code === "replacement_preview_stale");
   assert.equal(writes, 0);
 });
+
+test("a failed native restoration still restores earlier objects and preserves the apply error", async () => {
+  const failure = new Error("native save failed");
+  const restoreFailure = new Error("native restore failed");
+  const writes = [];
+  const api = new AlertManagerApi(() => ({
+    async callWS(message) {
+      if (message.type.endsWith("prepare")) return { native_updates: updates };
+      assert.fail("backend apply must not start after a native save fails");
+    },
+    async callApi(method, path, value) {
+      if (method === "GET") return path.includes("automation") ? updates[0].before : updates[1].before;
+      writes.push({ path, value });
+      if (writes.length === 2) throw failure;
+      if (writes.length === 3) throw restoreFailure;
+    },
+  }));
+
+  await assert.rejects(api.applyEntityReplacement("preview", ["one", "two"]), (error) => {
+    assert.equal(error.code, "replacement_rollback_failed");
+    assert.equal(error.cause, failure);
+    assert.deepEqual(error.rollbackErrors, [{ path: "config/script/config/test", error: restoreFailure }]);
+    return true;
+  });
+  assert.equal(writes.length, 4);
+  assert.deepEqual(writes.at(-1).value, updates[0].before);
+});
+
+for (const code of ["replacement_failed", "replacement_rollback_failed"]) {
+  test(`confirmed backend ${code} restores native objects and retains the backend error`, async () => {
+    const failure = { body: { code } };
+    const writes = [];
+    const api = new AlertManagerApi(() => ({
+      async callWS(message) {
+        if (message.type.endsWith("prepare")) return { native_updates: updates };
+        throw failure;
+      },
+      async callApi(method, path, value) {
+        if (method === "GET") return path.includes("automation") ? updates[0].before : updates[1].before;
+        writes.push(value);
+      },
+    }));
+    await assert.rejects(api.applyEntityReplacement("preview", ["one", "two"]), (error) => error === failure);
+    assert.deepEqual(writes, [updates[0].after, updates[1].after, updates[1].before, updates[0].before]);
+  });
+}
+
+test("a lost backend apply reply does not undo only the native part of a committed batch", async () => {
+  const failure = new Error("connection lost after commit");
+  const writes = [];
+  let backendCommitted = false;
+  const api = new AlertManagerApi(() => ({
+    async callWS(message) {
+      if (message.type.endsWith("prepare")) return { native_updates: updates };
+      backendCommitted = true;
+      throw failure;
+    },
+    async callApi(method, path, value) {
+      if (method === "GET") return path.includes("automation") ? updates[0].before : updates[1].before;
+      writes.push(value);
+    },
+  }));
+  await assert.rejects(api.applyEntityReplacement("preview", ["one", "two"]), (error) => {
+    assert.equal(error.code, "replacement_incomplete");
+    assert.equal(error.cause, failure);
+    return true;
+  });
+  assert.equal(backendCommitted, true);
+  assert.deepEqual(writes, [updates[0].after, updates[1].after]);
+});
+
+for (const code of ["replacement_rollback_failed", "replacement_incomplete"]) {
+  test(`${code} is translated in the replacement dialog`, async () => {
+    const context = {
+      _entityReplacement: { preview, selected: new Set(["one"]), busy: false },
+      _api: { async applyEntityReplacement() { throw { code }; } },
+      _t: translate, _render() {}, _errorText() { assert.fail("use the replacement diagnosis"); },
+    };
+    await handleEntityReplacementAction.call(context, "apply-entity-replacement");
+    assert.match(context._entityReplacement.error, new RegExp(`coherence.replacement.errors.${code}`));
+    assert.equal(context._entityReplacement.busy, false);
+    assert.equal(context._entityReplacement.result, undefined);
+  });
+}

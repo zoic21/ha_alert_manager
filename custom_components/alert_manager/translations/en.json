@@ -301,14 +301,16 @@
         "success": "{replacement_count} replacement(s) completed across {file_count} file(s).",
         "reload": "Objects saved through Home Assistant editors reload automatically. Reload other affected YAML configurations; a restart is needed only if the integration does not support reloading. For ESPHome, validate and install the configuration on the device.",
         "dashboard_saved": "The objects were saved with Home Assistant APIs. No restart is needed.",
-        "api_help": "Home Assistant validates and reloads automations, scripts and scenes managed by its editors. Reloading may interrupt a running execution.",
+        "api_help": "Home Assistant validates and reloads automations, scripts and scenes managed by its editors. Files containing YAML tags are saved as text and require reloading. Reloading may interrupt a running execution.",
         "errors": {
           "replacement_entity_invalid": "Enter two valid, different entity IDs.",
           "replacement_entity_missing": "The new entity does not exist in Home Assistant. No replacement has started.",
           "replacement_selection_invalid": "Select at least one replacement from this preview.",
           "replacement_yaml_invalid": "The result is not valid YAML. No files were modified.",
           "replacement_preview_stale": "The configuration has changed since the preview. Generate a new preview before replacing.",
-          "replacement_failed": "Replacement failed. The changes have been rolled back."
+          "replacement_failed": "Replacement failed. The changes have been rolled back.",
+          "replacement_rollback_failed": "Replacement failed and some changes could not be rolled back. Check the affected sources and generate a new preview before retrying.",
+          "replacement_incomplete": "The replacement result could not be confirmed. Some changes may already have been saved. Check the affected sources and generate a new preview before retrying."
         }
       }
     },

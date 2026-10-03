@@ -145,7 +145,7 @@ export async function handleEntityReplacementAction(action, button) {
       }
     } catch (error) {
       const code = error?.code ?? error?.body?.code;
-      state.error = ["replacement_entity_invalid", "replacement_entity_missing", "replacement_selection_invalid", "replacement_yaml_invalid", "replacement_preview_stale", "replacement_failed"].includes(code)
+      state.error = ["replacement_entity_invalid", "replacement_entity_missing", "replacement_selection_invalid", "replacement_yaml_invalid", "replacement_preview_stale", "replacement_failed", "replacement_rollback_failed", "replacement_incomplete"].includes(code)
         ? this._t(`coherence.replacement.errors.${code}`) : this._errorText(error);
     } finally {
       state.busy = false;

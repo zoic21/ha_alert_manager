@@ -301,14 +301,16 @@
         "success": "{replacement_count} remplacement(s) effectué(s) dans {file_count} fichier(s).",
         "reload": "Les objets enregistrés par les éditeurs Home Assistant sont rechargés automatiquement. Rechargez les autres configurations YAML concernées ; un redémarrage est nécessaire seulement si l’intégration ne propose pas de rechargement. Pour ESPHome, validez puis installez la configuration sur l’appareil.",
         "dashboard_saved": "Les objets ont été enregistrés avec les API Home Assistant. Aucun redémarrage n’est nécessaire.",
-        "api_help": "Home Assistant valide et recharge les automatisations, scripts et scènes de ses éditeurs. Ce rechargement peut interrompre une exécution en cours.",
+        "api_help": "Home Assistant valide et recharge les automatisations, scripts et scènes de ses éditeurs. Les fichiers contenant des tags YAML sont enregistrés en texte et doivent être rechargés. Le rechargement peut interrompre une exécution en cours.",
         "errors": {
           "replacement_entity_invalid": "Saisissez deux identifiants d’entité valides et différents.",
           "replacement_entity_missing": "La nouvelle entité n’existe pas dans Home Assistant. Aucun remplacement n’a été lancé.",
           "replacement_selection_invalid": "Sélectionnez au moins un remplacement de cet aperçu.",
           "replacement_yaml_invalid": "Le résultat n’est pas un YAML valide. Aucun fichier n’a été modifié.",
           "replacement_preview_stale": "La configuration a changé depuis l’aperçu. Relancez l’aperçu avant de remplacer.",
-          "replacement_failed": "Le remplacement a échoué. Les modifications ont été annulées."
+          "replacement_failed": "Le remplacement a échoué. Les modifications ont été annulées.",
+          "replacement_rollback_failed": "Le remplacement a échoué et certaines modifications n’ont pas pu être annulées. Vérifiez les sources concernées et relancez un aperçu avant de réessayer.",
+          "replacement_incomplete": "Le résultat du remplacement n’a pas pu être confirmé. Certaines modifications peuvent déjà avoir été enregistrées. Vérifiez les sources concernées et relancez un aperçu avant de réessayer."
         }
       }
     },

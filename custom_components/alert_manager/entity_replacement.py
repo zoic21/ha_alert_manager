@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from io import StringIO
@@ -13,11 +14,11 @@ from uuid import uuid4
 
 import yaml
 from homeassistant.core import HomeAssistant, valid_entity_id
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.file import write_utf8_file
 from homeassistant.util.yaml import Secrets, parse_yaml
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
+from yaml.tokens import TagToken
 
 from .coherence import (
     _Context,
@@ -30,6 +31,8 @@ from .coherence import (
     configuration_scan_metadata,
 )
 from .transactions import async_finish_non_interruptible
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -252,7 +255,11 @@ def native_config_updates(
     for item, content in changes:
         item.native_updates = []
         domain = domains.get(item.source.relative_path)
-        if domain is None:
+        # REST saves rewrite the whole file. Preserve tags even in untouched objects,
+        # without resolving secrets or includes in the plan sent to the browser.
+        if domain is None or any(
+            isinstance(token, TagToken) for token in yaml.scan(item.content)
+        ):
             continue
         parsed = []
         for text in (item.content, content):
@@ -596,18 +603,31 @@ class EntityReplacement:
                             dashboard_configuration, item, content
                         )
                         await item.dashboard.async_save(candidate)
-            except OSError, UnicodeError, yaml.YAMLError, HomeAssistantError:
+            except Exception as err:
+                _LOGGER.exception("Entity reference replacement failed")
+                rollback_failed = False
                 for item in reversed(written):
-                    if item.dashboard is None:
-                        await self.hass.async_add_executor_job(
-                            save_yaml, item, item.content
+                    try:
+                        if item.dashboard is None:
+                            await self.hass.async_add_executor_job(
+                                save_yaml, item, item.content
+                            )
+                        else:
+                            original = await self.hass.async_add_executor_job(
+                                dashboard_configuration, item, item.content
+                            )
+                            await item.dashboard.async_save(original)
+                    except Exception:
+                        rollback_failed = True
+                        _LOGGER.exception(
+                            "Could not restore replacement source %s",
+                            item.source.relative_path,
                         )
-                    else:
-                        original = await self.hass.async_add_executor_job(
-                            dashboard_configuration, item, item.content
-                        )
-                        await item.dashboard.async_save(original)
-                raise ValueError("replacement_failed") from None
+                raise ValueError(
+                    "replacement_rollback_failed"
+                    if rollback_failed
+                    else "replacement_failed"
+                ) from err
             self._preview_id = None
             self._prepared_ids = None
             self._files = []

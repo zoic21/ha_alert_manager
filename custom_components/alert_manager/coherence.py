@@ -409,6 +409,8 @@ def _record_scalar(
     skip_plain_value: bool = False,
 ) -> None:
     """Record missing entity IDs found in one scalar node."""
+    if node.tag.startswith("!"):
+        return
     if state.scalar_visitor is not None:
         state.scalar_visitor(node, context, source)
         return
