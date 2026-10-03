@@ -48,6 +48,8 @@ Templates, blueprint inputs and malformed IEEE values are skipped; blueprints ar
 
 In **Configuration → Coherence analysis**, choose manual-only analysis or a **daily, weekly or monthly** schedule. ESPHome scanning can be disabled independently.
 
+ESPHome's generated `.esphome` directories are excluded from scans and reference replacements. Device YAML files and other hidden configuration directories remain eligible for scanning.
+
 The `bubble_card` directory and its subdirectories are excluded from file scanning to avoid false positives from module code and example entity references. Dashboard configurations outside that directory are still checked.
 
 Use the reference exclusions for known or intentional references. An exact ZHA IEEE address can be excluded through the same mechanism. These exclusions concern coherence findings; they are separate from the labels and exclusions used by automatic alert monitoring.

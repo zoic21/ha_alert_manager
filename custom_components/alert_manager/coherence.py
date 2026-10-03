@@ -48,8 +48,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_YAML_LOADER: Final = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
 _IGNORED_DIRECTORIES: Final = frozenset(
     {
+        ".esphome",
         ".git",
         ".storage",
         ".venv",
@@ -621,6 +624,14 @@ def _dashboard_sources(config_dir: Path) -> dict[str, tuple[str, str]]:
     return dashboards
 
 
+def _compose_yaml_documents(content: str) -> tuple[list[Node | None], int]:
+    """Compose without resolving HA tags; return the original-text BOM offset."""
+    # LibYAML omits a leading BOM from mark indexes, unlike the Python parser.
+    # Strip it for both loaders so physical replacements use one offset rule.
+    offset = int(content.startswith("\ufeff"))
+    return list(yaml.compose_all(content[offset:], Loader=_YAML_LOADER)), offset
+
+
 def _discover_sources(
     config_dir: Path,
     yaml_dashboards: dict[str, tuple[str, str]] | None = None,
@@ -722,7 +733,7 @@ def scan_configuration(
     for source in sources:
         try:
             content = source.path.read_text(encoding="utf-8")
-            documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
+            documents, _ = _compose_yaml_documents(content)
             root_context = _Context(
                 source.kind if source.kind != "config_entries" else "file",
                 source.name or source.relative_path,

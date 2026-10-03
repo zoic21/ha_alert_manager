@@ -864,6 +864,19 @@ def entry():
     return ConfigEntry()
 
 
+@pytest.fixture(params=["SafeLoader", "CSafeLoader"])
+def coherence_yaml_loader(request, monkeypatch):
+    """Exercise coherence and replacement behavior with either YAML parser."""
+    import yaml
+
+    from custom_components.alert_manager import coherence
+
+    loader = getattr(yaml, request.param, None)
+    if loader is None:
+        pytest.skip("LibYAML is not available")
+    monkeypatch.setattr(coherence, "_YAML_LOADER", loader)
+
+
 @pytest.fixture
 def config_entry():
     def create(

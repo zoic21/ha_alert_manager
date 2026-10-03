@@ -109,6 +109,51 @@ def test_selection_preserves_yaml_comments_tags_crlf_and_other_occurrences(
     assert path.read_bytes() == original.replace("[light.old", "[light.new").encode()
 
 
+@pytest.mark.parametrize("bom", ["", "\ufeff"])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_replacement_preserves_bom_unicode_and_physical_yaml_positions(
+    replacement, hass, tmp_path, coherence_yaml_loader, bom, newline
+):
+    hass.states.set("light.new_long", "unavailable")
+    lines = [
+        "entity_id: light.old",
+        "# É 🏠 light.old",
+        "entity: &target light.old",
+        "entities: [*target, 'light.old']",
+        "automation: !include light.old",
+        "password: !secret light.old",
+        "state: >-",
+        "  {{ states('light.old') }} {{ states.light.old.state }}",
+        "---",
+        "entity_id: light.old",
+    ]
+    original = bom + newline.join(lines) + newline
+    path = write(tmp_path, "configuration.yaml", original)
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new_long")
+        rows = preview["replacements"]
+        assert [row["line"] for row in rows] == [1, 3, 4, 8, 8, 10]
+        assert rows[0]["column"] == 12 + len(bom)
+        assert rows[1]["column"] == 17
+        assert rows[2]["column"] == 22
+        assert rows[0]["id"] == f"configuration.yaml:{11 + len(bom)}"
+        await apply(replacement, preview)
+
+    asyncio.run(run())
+    expected = (
+        bom
+        + newline.join(
+            line.replace("light.old", "light.new_long")
+            if index in {0, 2, 3, 7, 9}
+            else line
+            for index, line in enumerate(lines)
+        )
+        + newline
+    )
+    assert path.read_bytes() == expected.encode("utf-8")
+
+
 def test_exact_static_references_and_physical_yaml_aliases(replacement, tmp_path):
     write(
         tmp_path,
@@ -178,7 +223,9 @@ def test_changed_file_and_forged_selection_are_rejected(replacement, tmp_path):
     assert path.read_text().endswith("name: edited\n")
 
 
-def test_mapping_key_collision_invalidates_entire_batch(replacement, tmp_path):
+def test_mapping_key_collision_invalidates_entire_batch(
+    replacement, tmp_path, coherence_yaml_loader
+):
     first = write(tmp_path, "a.yaml", "entity_id: light.old\n")
     scene = write(
         tmp_path,
@@ -202,7 +249,7 @@ def test_mapping_key_collision_invalidates_entire_batch(replacement, tmp_path):
 
 
 def test_post_write_yaml_failure_restores_every_file(
-    replacement, tmp_path, monkeypatch
+    replacement, tmp_path, monkeypatch, coherence_yaml_loader
 ):
     from custom_components.alert_manager import entity_replacement as module
 
@@ -381,6 +428,34 @@ def test_esphome_exclusions_invalid_files_and_read_only_storage(replacement, tmp
     preview = asyncio.run(replacement.async_preview("light.old", "light.new"))
     assert preview["replacement_count"] == 1
     assert preview["replacements"][0]["file"] == "esphome/device.yaml"
+
+
+def test_replacement_skips_esphome_builds_and_keeps_hidden_configuration(
+    replacement, tmp_path
+):
+    original = "entity_id: light.old\n"
+    editable = [
+        write(tmp_path, filename, original)
+        for filename in ("esphome/device.yaml", ".packages/hidden.yaml")
+    ]
+    generated = write(
+        tmp_path, "esphome/.esphome/build/dependency/.github/ci.yml", original
+    )
+    malformed = write(tmp_path, "esphome/.esphome/broken.yml", "entities: [\n")
+
+    async def run():
+        preview = await replacement.async_preview("light.old", "light.new")
+        assert {row["file"] for row in preview["replacements"]} == {
+            "esphome/device.yaml",
+            ".packages/hidden.yaml",
+        }
+        assert preview["files_skipped"] == 0
+        await apply(replacement, preview)
+
+    asyncio.run(run())
+    assert all(path.read_text() == "entity_id: light.new\n" for path in editable)
+    assert generated.read_text() == original
+    assert malformed.read_text() == "entities: [\n"
 
 
 @pytest.mark.parametrize(

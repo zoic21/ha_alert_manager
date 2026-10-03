@@ -21,6 +21,7 @@ from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from yaml.tokens import TagToken
 
 from .coherence import (
+    _compose_yaml_documents,
     _Context,
     _discover_sources,
     _entity_pattern,
@@ -49,7 +50,7 @@ class ReplacementFile:
 
 def _validate_yaml(content: str, targets: set[str] | None = None) -> None:
     """Parse every document, accepting native HA tags without resolving them."""
-    documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
+    documents, _ = _compose_yaml_documents(content)
     if targets is None:
         return
     pending = [node for node in documents if node is not None]
@@ -128,14 +129,15 @@ def _replacement_file(
 ) -> ReplacementFile:
     """Collect physical occurrences within one coherence object traversal."""
     pattern = _entity_pattern(frozenset(targets))
-    documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
+    documents, offset = _compose_yaml_documents(content)
     replacement = ReplacementFile(source, content)
     seen: set[int] = set()
 
     def visit(node: ScalarNode, context: _Context, _source: _Source) -> None:
-        # Marks point into the original text, preserving comments, quotes,
+        # Translate marks back into the original text, preserving comments, quotes,
         # multiline templates, CRLF and !include/!secret tags.
-        raw = content[node.start_mark.index : node.end_mark.index]
+        node_start = node.start_mark.index + offset
+        raw = content[node_start : node.end_mark.index + offset]
         for match in pattern.finditer(raw):
             old_entity_id = match.group(1).lower()
             if old_entity_id not in targets or (
@@ -143,7 +145,7 @@ def _replacement_file(
                 and _is_dynamic_reference(raw, match)
             ):
                 continue
-            start = node.start_mark.index + match.start(1)
+            start = node_start + match.start(1)
             if start in seen:
                 continue
             seen.add(start)
