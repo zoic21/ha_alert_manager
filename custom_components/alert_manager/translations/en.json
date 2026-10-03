@@ -224,6 +224,8 @@
       "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability. Alert Manager custom rules are also checked.",
       "export": {
         "button": "Export entities (JSON)",
+        "download": "Download",
+        "warning": "Known sensitive attributes (tokens, credentials, picture URLs, GPS coordinates, MAC and IP addresses) are masked. Names, identifiers, states and other attributes remain: review the file before sharing it publicly.",
         "loading": "Exporting…",
         "error": "Unable to export entities. Check the Home Assistant connection and that their attributes can be represented as JSON."
       },

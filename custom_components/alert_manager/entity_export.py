@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
@@ -16,6 +17,35 @@ from homeassistant.helpers.json import JSONEncoder
 from homeassistant.util import dt as dt_util
 
 from .const import INTEGRATION_VERSION
+
+_SENSITIVE_ATTRIBUTES = frozenset(
+    {
+        "access_token",
+        "refresh_token",
+        "token",
+        "api_key",
+        "api_token",
+        "password",
+        "secret",
+        "authorization",
+        "entity_picture",
+        "entity_picture_local",
+        "latitude",
+        "longitude",
+        "gps",
+        "mac",
+        "mac_address",
+        "ip",
+        "ip_address",
+        "ip_addresses",
+        "local_ip",
+        "public_ip",
+        "external_ip",
+        "internal_ip",
+        "ipv4",
+        "ipv6",
+    }
+)
 
 
 async def async_export_entities(hass: HomeAssistant) -> dict[str, str]:
@@ -151,7 +181,7 @@ def _serialize_inventory(
             "hidden": hidden_by is not None if entry is not None else None,
             "hidden_by": hidden_by,
             "state": state["state"] if state is not None else None,
-            "attributes": attributes,
+            "attributes": async_redact_data(attributes, _SENSITIVE_ATTRIBUTES),
             "last_changed": state["last_changed"] if state is not None else None,
             "last_updated": state["last_updated"] if state is not None else None,
             "last_reported": state["last_reported"] if state is not None else None,

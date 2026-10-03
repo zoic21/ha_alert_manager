@@ -34,7 +34,7 @@ jobs:
       - run: npm run lint:frontend
       - run: npm run test:frontend
       - name: Check generated frontend bundle
-        run: git diff --exit-code -- custom_components/alert_manager/frontend
+        run: git diff --exit-code -- custom_components/alert_manager/frontend custom_components/alert_manager/frontend_version.py
 
   home-assistant-validation:
     runs-on: ubuntu-latest

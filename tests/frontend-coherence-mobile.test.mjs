@@ -146,6 +146,7 @@ test("entity export downloads JSON once and releases busy state on success or fa
   const link = { click() { downloaded += 1; } };
   const context = {
     _readOnly: false,
+    _render() {},
     _refreshCoherenceData() {},
     _t: (key) => key,
     _api: new AlertManagerApi(() => ({
@@ -160,9 +161,19 @@ test("entity export downloads JSON once and releases busy state on success or fa
     globalThis.document = { createElement(tag) { assert.equal(tag, "a"); return link; } };
     URL.createObjectURL = (value) => { blob = value; return "blob:export"; };
     URL.revokeObjectURL = (value) => { revoked = value; };
-    const pending = handleCoherenceAction.call(context, "export-entities");
-    assert.equal(context._entityExportLoading, true);
+    await handleCoherenceAction.call(context, "download-entities");
+    assert.equal(calls, 0);
     await handleCoherenceAction.call(context, "export-entities");
+    assert.equal(context._entityExportOpen, true);
+    assert.equal(calls, 0);
+    await handleCoherenceAction.call(context, "close-entity-export");
+    assert.equal(context._entityExportOpen, false);
+    assert.equal(calls, 0);
+    await handleCoherenceAction.call(context, "export-entities");
+    const pending = handleCoherenceAction.call(context, "download-entities");
+    assert.equal(context._entityExportOpen, false);
+    assert.equal(context._entityExportLoading, true);
+    await handleCoherenceAction.call(context, "download-entities");
     assert.equal(calls, 1);
     const content = '{"attributes":{"friendly_name":"<salon>"}}';
     resolveExport({ content, filename: "entities.json", content_type: "application/json;charset=utf-8" });
@@ -175,17 +186,49 @@ test("entity export downloads JSON once and releases busy state on success or fa
     assert.equal(revoked, "blob:export");
     context._api = { exportEntities: async () => { throw new Error("offline"); } };
     await handleCoherenceAction.call(context, "export-entities");
+    await handleCoherenceAction.call(context, "download-entities");
     assert.equal(context._entityExportLoading, false);
     assert.deepEqual(context._pageNotice, { kind: "error", text: "coherence.export.error" });
     assert.equal(downloaded, 1);
     context._readOnly = true;
     context._api = { exportEntities() { assert.fail("Read-only users cannot export"); } };
     await handleCoherenceAction.call(context, "export-entities");
+    assert.equal(context._entityExportOpen, false);
+    context._entityExportOpen = true;
+    await handleCoherenceAction.call(context, "download-entities");
   } finally {
     globalThis.document = originalDocument;
     URL.createObjectURL = originalCreate;
     URL.revokeObjectURL = originalRevoke;
   }
+});
+
+test("entity export warning is escaped and shown before download with or without a scan", async () => {
+  const { renderCoherence, hydrateEntityExport } = await import("../frontend-src/views/coherence.js");
+  for (const result of [null, { results: [] }]) {
+    const markup = renderCoherence({
+      result,
+      entityExportOpen: true,
+      t: (key) => key === "coherence.export.warning" ? "Review <private> data" : key,
+    });
+    assert.match(markup, /<ha-dialog id="entity-export-dialog"/);
+    assert.match(markup, /aria-describedby="entity-export-warning"/);
+    assert.match(markup, /alert-type="warning">Review &lt;private&gt; data/);
+    assert.match(markup, /data-action="download-entities"/);
+    assert.match(markup, /data-action="close-entity-export"/);
+  }
+  const dialog = fakeDomElement("ha-dialog");
+  const context = { _entityExportOpen: true, _hass: {}, _render() {} };
+  const root = { querySelector: () => dialog };
+  hydrateEntityExport(root, context);
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.hass, context._hass);
+  assert.equal(dialog.escapeKeyAction, "close");
+  const closed = dialog.listeners.closed;
+  hydrateEntityExport(root, context);
+  assert.equal(dialog.listeners.closed, closed);
+  closed();
+  assert.equal(context._entityExportOpen, false);
 });
 
 const coherenceResult = () => ({

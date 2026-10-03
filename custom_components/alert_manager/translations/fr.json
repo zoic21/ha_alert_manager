@@ -224,6 +224,8 @@
       "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements. Les règles personnalisées d’Alert Manager sont également analysées.",
       "export": {
         "button": "Exporter les entités (JSON)",
+        "download": "Télécharger",
+        "warning": "Les attributs sensibles connus (jetons, identifiants d’accès, URLs des images, coordonnées GPS, adresses MAC et IP) sont masqués. Les noms, identifiants, états et autres attributs restent présents : vérifiez le fichier avant de le partager publiquement.",
         "loading": "Export en cours…",
         "error": "Impossible d’exporter les entités. Vérifiez la connexion à Home Assistant et que leurs attributs peuvent être représentés en JSON."
       },

@@ -415,3 +415,93 @@ def test_event_during_batch_yield_keeps_normal_transition_evidence(
         assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == 1
 
     run(scenario())
+
+
+@pytest.mark.parametrize("mutation", ["disable", "delete", "update", "rollback"])
+def test_configuration_mutations_can_complete_between_periodic_batches(
+    hass, entry, monkeypatch, mutation
+):
+    """Each batch reads current config and preserves already committed repairs."""
+    from custom_components.alert_manager import manager_runtime
+
+    async def scenario():
+        entity_ids = ["sensor.a", "sensor.b", "sensor.c"]
+        for entity_id in entity_ids:
+            hass.states.set(entity_id, "0")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config(
+            {
+                "automatic": {
+                    pack_id: {"enabled": False}
+                    for pack_id in manager.config["automatic"]
+                }
+            }
+        )
+        rule = await manager.async_create_rule(
+            {
+                "name": "Value",
+                "entity_ids": entity_ids,
+                "operator": "above",
+                "value": 10,
+                "duration": 0,
+            }
+        )
+        for entity_id in entity_ids:
+            hass.states.set(entity_id, "20")
+        seen = []
+        mutation_tasks = []
+        original_evaluate = manager.async_evaluate_entity
+        original_save = manager.storage.async_save
+        key = f"rule:{rule['id']}:sensor.a"
+
+        async def mutate():
+            if mutation == "disable":
+                await manager.async_set_monitoring(False)
+            elif mutation == "delete":
+                await manager.async_delete_rule(rule["id"])
+            elif mutation == "update":
+                await manager.async_update_rule(rule["id"], {"value": 30})
+            else:
+
+                async def fail_save(*args, **kwargs):
+                    if manager.config["rules"][0]["value"] == 30:
+                        raise OSError("storage unavailable")
+                    await original_save(*args, **kwargs)
+
+                monkeypatch.setattr(manager.storage, "async_save", fail_save)
+                with pytest.raises(OSError, match="storage unavailable"):
+                    await manager.async_update_rule(rule["id"], {"value": 30})
+                monkeypatch.setattr(manager.storage, "async_save", original_save)
+                assert key in manager.records
+            assert manager._periodic_check_running
+            assert seen == ["sensor.a"]
+
+        async def evaluate(entity_id, **kwargs):
+            result = await original_evaluate(entity_id, **kwargs)
+            if kwargs.get("reconciliation"):
+                seen.append(entity_id)
+                if len(seen) == 1:
+                    mutation_tasks.append(asyncio.create_task(mutate()))
+            return result
+
+        monkeypatch.setattr(manager, "async_evaluate_entity", evaluate)
+        monkeypatch.setattr(manager_runtime, "_EVALUATION_BATCH_SIZE", 1)
+        await manager._async_periodic_check(dt_util.now())
+        await asyncio.gather(*mutation_tasks)
+        assert not manager._periodic_check_running
+        if mutation in ("disable", "delete"):
+            assert seen == ["sensor.a"]
+        else:
+            assert seen == entity_ids
+        if mutation == "disable":
+            assert set(manager.records) == {key}
+            assert not manager.monitoring_enabled
+        elif mutation == "rollback":
+            assert len(manager.records) == 3
+            assert manager.statistics.snapshot()["periodic_recoveries"] == 3
+            assert len([e for e in hass.bus.fired if e[0] == EVENT_ALERT_STARTED]) == 3
+        else:
+            assert not manager.records
+
+    run(scenario())

@@ -8,6 +8,8 @@ import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+from homeassistant.components.diagnostics import REDACTED
 from homeassistant.helpers.entity import entity_sources
 from test_websocket import Connection
 
@@ -179,3 +181,69 @@ def test_export_does_not_silently_drop_unserializable_private_attributes(hass):
     asyncio.run(websocket_entities_export(hass, connection, {"id": 1}))
     assert connection.results == []
     assert connection.errors == [(1, "entity_export_failed", "entity_export_failed")]
+
+
+@pytest.mark.parametrize("domain", ["person", "device_tracker", "sensor"])
+def test_export_masks_known_sensitive_attributes_without_mutating_states(hass, domain):
+    """Known secrets and location/network fields cannot leak, even when nested."""
+    attributes = {
+        "access_token": "access-secret",
+        "refresh_token": "refresh-secret",
+        "entity_picture": "/api/image/serve/person?token=picture-secret",
+        "entity_picture_local": "/local/person.jpg",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "gps": [48.8566, 2.3522],
+        "mac": "aa:bb:cc:dd:ee:ff",
+        "ip": "192.168.1.10",
+        "friendly_name": "Source",
+        "battery_level": 75,
+        "nested": {
+            "password": "password-secret",
+            "entries": [
+                {"api_key": "api-secret", "mac_address": "11:22:33:44:55:66"},
+                {"ip_address": "2001:db8::1", "mode": "home"},
+            ],
+        },
+    }
+    entity_id = f"{domain}.source"
+    hass.states.set(entity_id, "home", attributes)
+    payload = asyncio.run(async_export_entities(hass))
+    result = json.loads(payload["content"])
+    item = result["entities_without_device"][0]
+    exported = item["attributes"]
+    assert item["name"] == "Source" and item["state"] == "home"
+    assert exported["battery_level"] == 75
+    for key in (
+        "access_token",
+        "refresh_token",
+        "entity_picture",
+        "entity_picture_local",
+        "latitude",
+        "longitude",
+        "gps",
+        "mac",
+        "ip",
+    ):
+        assert exported[key] == REDACTED
+    assert exported["nested"] == {
+        "password": REDACTED,
+        "entries": [
+            {"api_key": REDACTED, "mac_address": REDACTED},
+            {"ip_address": REDACTED, "mode": "home"},
+        ],
+    }
+    for sensitive in ("access-secret", "picture-secret", "192.168.1.10", "48.8566"):
+        assert sensitive not in payload["content"]
+    assert hass.states.get(entity_id).attributes == attributes
+
+
+def test_export_redacts_unserializable_known_secret_before_encoding(hass):
+    """A known secret is replaced before JSON serialization ever sees it."""
+    secret = object()
+    hass.states.set("sensor.source", "1", {"access_token": secret})
+    result = json.loads(asyncio.run(async_export_entities(hass))["content"])
+    assert result["entities_without_device"][0]["attributes"] == {
+        "access_token": REDACTED
+    }
+    assert hass.states.get("sensor.source").attributes["access_token"] is secret

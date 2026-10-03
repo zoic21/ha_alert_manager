@@ -1305,18 +1305,34 @@ class _RuntimeMixin:
                     return
                 # Real events retain their occurrence semantics and take precedence.
                 await self._async_process_queued_evaluations()
-                entity_ids = (
+                entity_ids = sorted(
                     self._automatic_tracked_entities
                     | self._rules_by_entity.keys()
                     | self._record_ids_by_entity.keys()
                 )
-                recovered = 0
-                for index, entity_id in enumerate(entity_ids, 1):
+            recovered = 0
+            for offset in range(0, len(entity_ids), _EVALUATION_BATCH_SIZE):
+                async with self._config_mutation_lock:
                     if not self._periodic_check_ready():
                         break
-                    # A state event received during a batch yield belongs to the
-                    # normal worker, including its flapping/execution evidence.
-                    if entity_id not in self._queued_evaluation_entities:
+                    batch_recovered = 0
+                    for entity_id in entity_ids[
+                        offset : offset + _EVALUATION_BATCH_SIZE
+                    ]:
+                        if not self._periodic_check_ready():
+                            break
+                        # Read current indexes/config after each lock admission:
+                        # a rule or source may have disappeared between batches.
+                        if (
+                            entity_id not in self._automatic_tracked_entities
+                            and entity_id not in self._rules_by_entity
+                            and entity_id not in self._record_ids_by_entity
+                        ):
+                            continue
+                        # Real events retain flapping/execution evidence and
+                        # belong to the normal worker, not this safety check.
+                        if entity_id in self._queued_evaluation_entities:
+                            continue
                         before = self._entity_lifecycle_snapshot(entity_id)
                         changed = self._reconcile_sequence_timers(entity_id)
                         await self.async_evaluate_entity(
@@ -1351,17 +1367,19 @@ class _RuntimeMixin:
                         if changed or before != self._entity_lifecycle_snapshot(
                             entity_id
                         ):
-                            recovered += 1
+                            batch_recovered += 1
                             self.statistics.record_recovery()
-                    if index % _EVALUATION_BATCH_SIZE == 0:
-                        await asyncio.sleep(0)
-                save_required = self._immediate_state_save_required
-                if save_required:
-                    await self._async_save_state()
-                if recovered or save_required:
-                    self._publish_if_changed()
-                if recovered:
-                    _LOGGER.debug("Periodic check reconciled %s entities", recovered)
+                    # Commit completed repairs before another mutation can take
+                    # a snapshot or the next batch can be interrupted.
+                    save_required = self._immediate_state_save_required
+                    if save_required:
+                        await self._async_save_state()
+                    if batch_recovered or save_required:
+                        self._publish_if_changed()
+                    recovered += batch_recovered
+                await asyncio.sleep(0)
+            if recovered:
+                _LOGGER.debug("Periodic check reconciled %s entities", recovered)
         finally:
             self._periodic_check_running = False
 

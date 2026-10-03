@@ -7,11 +7,12 @@ from typing import Final
 from homeassistant.const import Platform
 from homeassistant.util.hass_dict import HassKey
 
+from .frontend_version import FRONTEND_BUNDLE_HASH
+
 DOMAIN: Final = "alert_manager"
-# This version is also used as the frontend module cache key. It must change
-# whenever the distributed panel bundle changes.
 INTEGRATION_VERSION: Final = "2.5.0"
-FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.38"
+# Build-time identity covers both distributed bundles without import-time I/O.
+FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.{FRONTEND_BUNDLE_HASH}"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 
 EVENT_ALERT_STARTED: Final = "alert_manager_alert_started"

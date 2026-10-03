@@ -71,7 +71,7 @@ Paths in this table are relative to `custom_components/alert_manager/`.
 | `coherence_rules.py` | Immutable custom-rule snapshots and reference-bearing fields for the shared coherence scanner. |
 | `coherence_checks/__init__.py`, `coherence_checks/zha.py` | Explicit integration-check registry and isolated ZHA check; snapshot HA metadata on the event loop; each check owns its traversal scopes and node selection in the existing scanner executor. |
 | `sensor.py`, `switch.py`, `button.py` | Home Assistant entity adapters for counts/status, monitoring control, and actions. |
-| `const.py`, `manifest.json` | Shared constants/defaults, version/cache identity, and Home Assistant integration metadata. |
+| `const.py`, `manifest.json`, `frontend_version.py` | Shared constants/defaults, build-generated frontend cache identity, and Home Assistant integration metadata. Never edit `frontend_version.py` directly. |
 | `translations/en.json`, `translations/fr.json`, `services.yaml`, `icons.json` | English/French UI and condition text, service descriptions, and native entity icon metadata. |
 
 ### Frontend and tooling
@@ -171,7 +171,7 @@ changes to `main` or synchronizing it also requires an explicit request.
    | File | Required change |
    | --- | --- |
    | `custom_components/alert_manager/manifest.json` | Set `version` to the new release version. This file triggers publication. |
-   | `custom_components/alert_manager/const.py` | Set `INTEGRATION_VERSION` to exactly the same version. `FRONTEND_CACHE_VERSION` derives from it; preserve that relationship. Its existing extra suffix does not need a separate bump when `INTEGRATION_VERSION` changes. |
+   | `custom_components/alert_manager/const.py` | Set `INTEGRATION_VERSION` to exactly the same version. `FRONTEND_CACHE_VERSION` combines it with the build-generated hash of both bundles; preserve that relationship. Never bump the hash manually. |
    | `package.json` | Set `version` to exactly the same version. |
    | `CHANGELOG.md` | Add a dated entry describing the actual changes and identify beta/RC versions as prereleases. |
 
@@ -179,7 +179,8 @@ changes to `main` or synchronizing it also requires an explicit request.
    frontend cache key and is covered by a version-consistency regression test.
 3. Run `npm run build` and include
    `custom_components/alert_manager/frontend/alert-manager-panel.js` if the
-   generated bundle changes. Never edit this file manually. Update frontend
+   generated bundle changes, together with the generated `frontend_version.py`.
+   Never edit these generated files manually. Update frontend
    sources, both translations, and documentation when the release's functional
    changes require them. README files describe current functionality; they do not
    need a release changelog or a version-only edit.

@@ -81,6 +81,7 @@ export function refreshCoherenceData() {
 }
 
 export function hydrateCoherenceTable() {
+    hydrateEntityExport(this.shadowRoot, this);
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) return;
     const state = this._ensureCoherenceTableState();
@@ -385,6 +386,32 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
     </div>`;
 }
 
+export function renderEntityExportDialog({ t }) {
+    return `<ha-dialog id="entity-export-dialog" type="alert" width="small" header-title="${esc(t("coherence.export.button"))}" aria-describedby="entity-export-warning">
+      <ha-alert id="entity-export-warning" alert-type="warning">${esc(t("coherence.export.warning"))}</ha-alert>
+      <ha-dialog-footer slot="footer">
+        <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-export">${esc(t("buttons.cancel"))}</ha-button>
+        <ha-button slot="primaryAction" appearance="accent" data-action="download-entities">${esc(t("coherence.export.download"))}</ha-button>
+      </ha-dialog-footer>
+    </ha-dialog>`;
+}
+
+export function hydrateEntityExport(root, context) {
+    if (!context._entityExportOpen) return;
+    const dialog = root?.querySelector?.("#entity-export-dialog");
+    if (!dialog || dialog.dataset.configured) return;
+    dialog.dataset.configured = "true";
+    dialog.hass = context._hass;
+    dialog.scrimClickAction = "close";
+    dialog.escapeKeyAction = "close";
+    dialog.addEventListener("closed", () => {
+      if (!context._entityExportOpen) return;
+      context._entityExportOpen = false;
+      context._render();
+    });
+    dialog.open = true;
+}
+
 export function renderCoherence(context) {
     const {
       result,
@@ -400,6 +427,7 @@ export function renderCoherence(context) {
       entityRenamesError = null,
       entityRenamesOpen = false,
       entityExportLoading = false,
+      entityExportOpen = false,
       entityReplacement = null,
       useBottomSheet = false,
       formatDate = (value) => value,
@@ -426,6 +454,7 @@ export function renderCoherence(context) {
           })
         : "";
     const replacementDialog = renderEntityReplacement({ state: entityReplacement, t });
+    const exportDialog = entityExportOpen ? renderEntityExportDialog({ t }) : "";
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
@@ -433,7 +462,7 @@ export function renderCoherence(context) {
           ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
-      </ha-card>${drawer}${replacementDialog}`;
+      </ha-card>${drawer}${replacementDialog}${exportDialog}`;
     }
     return `<hass-tabs-subpage-data-table
       id="panel-shell"
@@ -453,7 +482,7 @@ export function renderCoherence(context) {
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
-    </hass-tabs-subpage-data-table>${drawer}${replacementDialog}`;
+    </hass-tabs-subpage-data-table>${drawer}${replacementDialog}${exportDialog}`;
 }
 
 export function renderCoherencePanel() {
@@ -471,6 +500,7 @@ export function renderCoherencePanel() {
       entityRenamesError: this._entityRenamesState.error,
       entityRenamesOpen: this._configurationDrawer?.kind === "entity-renames",
       entityExportLoading: this._entityExportLoading,
+      entityExportOpen: this._entityExportOpen,
       entityReplacement: this._entityReplacement,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
@@ -482,9 +512,21 @@ export async function handleCoherenceAction(action, button) {
   if (action.endsWith("-entity-replacement") || ["correct-coherence", "correct-selected-coherence"].includes(action)) return handleEntityReplacementAction.call(this, action, button);
   if (action === "export-entities") {
     if (this._readOnly || this._entityExportLoading) return true;
+    this._entityExportOpen = true;
+    this._render();
+    return true;
+  }
+  if (action === "close-entity-export") {
+    this._entityExportOpen = false;
+    this._render();
+    return true;
+  }
+  if (action === "download-entities") {
+    if (this._readOnly || this._entityExportLoading || !this._entityExportOpen) return true;
+    this._entityExportOpen = false;
     this._entityExportLoading = true;
     this._pageNotice = null;
-    this._refreshCoherenceData();
+    this._render();
     try {
       const payload = await this._api.exportEntities();
       if (!downloadTextPayload(payload)) throw new Error("entity_export_failed");

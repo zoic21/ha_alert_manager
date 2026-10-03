@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN
 
@@ -18,7 +17,7 @@ class AlertManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Confirm installation; all options live in the dedicated panel."""
         if user_input is not None:
             return self.async_create_entry(title="Alert Manager", data={})
