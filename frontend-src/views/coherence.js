@@ -3,6 +3,7 @@ import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { renderSideDrawer } from "../components/configuration-drawer.js";
 import { downloadTextPayload } from "../components/config-backups.js";
+import { restoreNativeTableSelection } from "../components/alert-table.js";
 import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
 
 export function coherenceStatsMarkup() {
@@ -27,7 +28,10 @@ export function coherenceTableRows() {
       const reference = result.reference ?? result.entity_id;
       const row = {
         id: `${reference}:${result.file}:${result.line}:${index}`,
+        index,
         entity: reference,
+        target: result.correction_target ?? "",
+        selectable: Boolean(result.correction_target) && !this._readOnly,
         message: result.reference_type === "zha_device_ieee"
           ? this._t("coherence.zha_missing") : "",
         type: this._t(`coherence.types.${result.source_type}`),
@@ -37,7 +41,7 @@ export function coherenceTableRows() {
         lineSort: Number(result.line),
         link: result.link ?? null,
       };
-      row.search_index = [row.entity, row.type, row.source, row.file, row.line].join(" ");
+      row.search_index = [row.entity, row.target, row.type, row.source, row.file, row.line].join(" ");
       return row;
     });
 }
@@ -72,6 +76,7 @@ export function refreshCoherenceData() {
     tablePage.data = data;
     tablePage._alertManagerRows = data;
     tablePage.noDataText = this._t("coherence.empty");
+    updateCoherenceSelection.call(this, tablePage);
     this._refreshUiState();
 }
 
@@ -102,6 +107,12 @@ export function hydrateCoherenceTable() {
         flex: 1.2,
         template: (row) => this._nativeCoherenceEntityCell(row, Boolean(this._narrow)),
       },
+      target: {
+        title: this._t("coherence.columns.target"),
+        sortable: true,
+        minWidth: "190px",
+        flex: 1.2,
+      },
       type: {
         title: this._t("coherence.columns.type"),
         sortable: true,
@@ -130,9 +141,9 @@ export function hydrateCoherenceTable() {
       },
       action: {
         title: "",
-        label: this._t("coherence.open"),
-        minWidth: "100px",
-        flex: 0.5,
+        label: this._t("coherence.columns.action"),
+        minWidth: "180px",
+        flex: 0.8,
         template: (row) => this._nativeCoherenceActionCell(row),
       },
       search_index: {
@@ -149,6 +160,17 @@ export function hydrateCoherenceTable() {
     tablePage.data = data;
     tablePage._alertManagerRows = data;
     tablePage.noDataText = this._t("coherence.empty");
+    tablePage.selectable = !this._readOnly;
+    tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
+    updateCoherenceSelection.call(this, tablePage);
+    restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
+    if (tablePage._alertManagerCoherenceHydrated) return;
+    tablePage._alertManagerCoherenceHydrated = true;
+    tablePage.addEventListener("selection-changed", (event) => {
+      const available = new Set(tablePage._alertManagerRows.filter((row) => row.selectable).map((row) => row.id));
+      this._selectedCoherenceIds = new Set((event.detail?.value ?? []).map(String).filter((id) => available.has(id)));
+      updateCoherenceSelection.call(this, tablePage);
+    });
     tablePage.addEventListener("search-changed", (event) => {
       state.search = String(event.detail?.value ?? "");
     });
@@ -177,6 +199,20 @@ export function hydrateCoherenceTable() {
         .filter((column) => COHERENCE_COLUMNS.includes(column) && column !== "entity");
       this._saveCoherenceTableState();
     });
+}
+
+function updateCoherenceSelection(tablePage) {
+    const available = new Set(tablePage._alertManagerRows.filter((row) => row.selectable).map((row) => row.id));
+    for (const id of this._selectedCoherenceIds) {
+      if (!available.has(id)) this._selectedCoherenceIds.delete(id);
+    }
+    const count = this._selectedCoherenceIds.size;
+    tablePage.selected = count;
+    const button = tablePage.querySelector?.('[data-action="correct-selected-coherence"]');
+    if (button) {
+      button.textContent = this._t("coherence.correction.selected", { count });
+      button.disabled = !count || Boolean(this._entityReplacement?.busy);
+    }
 }
 
 export function nativeCoherenceEntityCell(row, narrow = false) {
@@ -224,15 +260,30 @@ export function openCoherenceLink(link) {
 }
 
 export function nativeCoherenceActionCell(row) {
-    if (!row.link || !globalThis.document?.createElement) return "";
-    const button = document.createElement("ha-button");
-    button.setAttribute("appearance", "plain");
-    button.textContent = this._t("coherence.open");
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._openCoherenceLink(row.link);
-    });
-    return button;
+    if (!globalThis.document?.createElement) return "";
+    const content = document.createElement("span");
+    if (row.target && !this._readOnly) {
+      const correct = document.createElement("ha-button");
+      correct.setAttribute("appearance", "plain");
+      correct.textContent = this._t("coherence.correction.button");
+      correct.disabled = Boolean(this._entityReplacement?.busy);
+      correct.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void handleEntityReplacementAction.call(this, "correct-coherence", { dataset: { rowIndex: row.index } });
+      });
+      content.append(correct);
+    }
+    if (row.link) {
+      const open = document.createElement("ha-button");
+      open.setAttribute("appearance", "plain");
+      open.textContent = this._t("coherence.open");
+      open.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._openCoherenceLink(row.link);
+      });
+      content.append(open);
+    }
+    return content.children.length === 1 ? content.children[0] : content;
 }
 
 function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottomSheet, t }) {
@@ -389,6 +440,9 @@ export function renderCoherence(context) {
       data-coherence-table-page
       main-page
     >
+      <div slot="selection-bar" class="selection-actions">
+        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled>${esc(t("coherence.correction.selected", { count: 0 }))}</ha-button>
+      </div>
       <div slot="top-header" class="table-page-top">
         ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
@@ -424,8 +478,8 @@ export function renderCoherencePanel() {
     });
 }
 
-export async function handleCoherenceAction(action) {
-  if (action.endsWith("-entity-replacement")) return handleEntityReplacementAction.call(this, action);
+export async function handleCoherenceAction(action, button) {
+  if (action.endsWith("-entity-replacement") || ["correct-coherence", "correct-selected-coherence"].includes(action)) return handleEntityReplacementAction.call(this, action, button);
   if (action === "export-entities") {
     if (this._readOnly || this._entityExportLoading) return true;
     this._entityExportLoading = true;

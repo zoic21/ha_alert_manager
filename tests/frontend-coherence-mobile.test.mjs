@@ -264,7 +264,7 @@ test("coherence table exposes search, sorting, grouping and column settings", ()
   assert.equal(tablePage.columns.search_index.filterable, true);
   assert.deepEqual(
     tablePage.columnOrder,
-    ["entity", "type", "source", "file", "line", "action"],
+    ["entity", "target", "type", "source", "file", "line", "action"],
   );
   assert.equal(tablePage.initialSorting.column, "entity");
   assert.equal(tablePage.initialSorting.direction, "asc");
@@ -294,9 +294,62 @@ test("coherence table exposes search, sorting, grouping and column settings", ()
   });
   assert.deepEqual(
     panel._coherenceTableState.columnOrder,
-    ["entity", "line", "file", "type", "source", "action"],
+    ["entity", "line", "file", "type", "source", "action", "target"],
   );
   assert.deepEqual(panel._coherenceTableState.hiddenColumns, ["source"]);
+});
+
+test("coherence target and native checkboxes are available only for editable findings", async () => {
+  const panel = new Panel();
+  panel._hass = { user: { is_admin: true } };
+  panel._coherence = coherenceResult();
+  panel._coherence.results[0].correction_target = "sensor.current";
+  panel._coherence.results.push({
+    entity_id: "sensor.deleted", file: ".storage/core.config_entries", line: 1,
+    source_type: "file", source_name: "Home Assistant",
+  });
+  const bulk = {};
+  const nativeTable = { requestUpdate() { this.updated = true; } };
+  const tablePage = {
+    listeners: {},
+    addEventListener(name, callback) { this.listeners[name] = callback; },
+    querySelector() { return bulk; },
+    shadowRoot: { querySelector() { return nativeTable; } },
+  };
+  panel.shadowRoot.querySelector = () => tablePage;
+  panel._render = () => assert.fail("Selection must not remount the table");
+  panel._hydrateCoherenceTable();
+  const [editable, deleted] = tablePage.data;
+  assert.equal(editable.target, "sensor.current");
+  assert.match(editable.search_index, /sensor.current/);
+  assert.equal(editable.selectable, true);
+  assert.equal(deleted.selectable, false);
+  assert.equal(tablePage.selectable, true);
+  const listener = tablePage.listeners["selection-changed"];
+  listener({ detail: { value: [editable.id, deleted.id] } });
+  assert.deepEqual([...panel._selectedCoherenceIds], [editable.id]);
+  assert.equal(tablePage.selected, 1);
+  assert.equal(bulk.disabled, false);
+  panel._hydrateCoherenceTable();
+  await Promise.resolve();
+  assert.equal(tablePage.listeners["selection-changed"], listener);
+  assert.deepEqual(nativeTable._checkedRows, [editable.id]);
+  assert.equal(nativeTable.updated, true);
+});
+
+test("coherence mobile metadata includes the target and correct is available without an Open link", () => {
+  const panel = new Panel();
+  panel._hass = { user: { is_admin: true } };
+  const row = {
+    index: 0, entity: "sensor.old", target: "sensor.current", type: "File",
+    source: "Source", file: "config.yaml", line: "4",
+  };
+  const cell = panel._nativeCoherenceEntityCell(row, true);
+  assert.match(cell.children[1].textContent, /sensor.current/);
+  const action = panel._nativeCoherenceActionCell(row);
+  assert.equal(action.tagName, "HA-BUTTON");
+  assert.equal(action.textContent, panel._t("coherence.correction.button"));
+  assert.equal(typeof action.listeners.click, "function");
 });
 
 test("coherence opens the exact Home Assistant target only through the Open button", () => {

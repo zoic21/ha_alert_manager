@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass, field
 from io import StringIO
 from pathlib import Path
@@ -39,13 +40,14 @@ class ReplacementFile:
     content: str
     occurrences: list[dict[str, Any]] = field(default_factory=list)
     dashboard: Any = None
+    dashboard_wrapped: bool = False
     native_updates: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _validate_yaml(content: str, new_entity_id: str | None = None) -> None:
+def _validate_yaml(content: str, targets: set[str] | None = None) -> None:
     """Parse every document, accepting native HA tags without resolving them."""
     documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
-    if new_entity_id is None:
+    if targets is None:
         return
     pending = [node for node in documents if node is not None]
     seen = set()
@@ -56,14 +58,12 @@ def _validate_yaml(content: str, new_entity_id: str | None = None) -> None:
         seen.add(id(node))
         if isinstance(node, MappingNode):
             # Replacing a scene/entity mapping key must never merge two entries.
-            if (
-                sum(
-                    isinstance(key, ScalarNode) and key.value == new_entity_id
-                    for key, _ in node.value
-                )
-                > 1
-            ):
-                raise ValueError("replacement_yaml_invalid")
+            keys = set()
+            for key, _ in node.value:
+                if isinstance(key, ScalarNode) and key.value in targets:
+                    if key.value in keys:
+                        raise ValueError("replacement_yaml_invalid")
+                    keys.add(key.value)
             pending.extend(value for _, value in node.value)
         elif isinstance(node, SequenceNode):
             pending.extend(node.value)
@@ -71,32 +71,47 @@ def _validate_yaml(content: str, new_entity_id: str | None = None) -> None:
 
 def prepare_replacement(
     config_dir: Path,
-    old_entity_id: str,
+    targets: dict[str, str],
     metadata: dict[str, Any],
     scan_esphome: bool,
-    dashboards: dict[str, tuple[_Source, str]],
+    dashboards: dict[str, tuple[_Source, str | None]],
+    sources: list[_Source] | None = None,
 ) -> tuple[list[ReplacementFile], int]:
     """Reuse coherence traversal and contexts; run entirely in the executor."""
-    sources = [
-        source
-        for source in _discover_sources(
-            config_dir, metadata["yaml_dashboards"], scan_esphome=scan_esphome
-        )
-        if source.path.suffix.casefold() in {".yaml", ".yml"}
-        and ".storage" not in source.path.parts
-        and not source.path.is_symlink()
-    ]
-    sources.extend(source for source, _ in dashboards.values())
+    sources = (
+        sources
+        if sources is not None
+        else [
+            source
+            for source in _discover_sources(
+                config_dir, metadata["yaml_dashboards"], scan_esphome=scan_esphome
+            )
+            if source.path.suffix.casefold() in {".yaml", ".yml"}
+            and ".storage" not in source.path.parts
+            and not source.path.is_symlink()
+        ]
+    )
+    sources = [*sources, *(source for source, _ in dashboards.values())]
     files: list[ReplacementFile] = []
     skipped = 0
     for source in sorted(sources, key=lambda item: item.relative_path):
         try:
+            dashboard_content = dashboards.get(source.relative_path, (None, None))[1]
+            if dashboard_content is None and (
+                source.path.is_symlink()
+                or not (
+                    os.access(source.path, os.W_OK)
+                    and os.access(source.path.parent, os.W_OK)
+                )
+            ):
+                skipped += 1
+                continue
             content = (
-                dashboards[source.relative_path][1]
-                if source.relative_path in dashboards
+                dashboard_content
+                if dashboard_content is not None
                 else source.path.read_bytes().decode("utf-8")
             )
-            replacement = _replacement_file(source, content, old_entity_id, metadata)
+            replacement = _replacement_file(source, content, targets, metadata)
         except OSError, UnicodeError, yaml.YAMLError:
             skipped += 1
             continue
@@ -106,10 +121,10 @@ def prepare_replacement(
 
 
 def _replacement_file(
-    source: _Source, content: str, old_entity_id: str, metadata: dict[str, Any]
+    source: _Source, content: str, targets: dict[str, str], metadata: dict[str, Any]
 ) -> ReplacementFile:
     """Collect physical occurrences within one coherence object traversal."""
-    pattern = _entity_pattern(frozenset({old_entity_id}))
+    pattern = _entity_pattern(frozenset(targets))
     documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
     replacement = ReplacementFile(source, content)
     seen: set[int] = set()
@@ -119,7 +134,8 @@ def _replacement_file(
         # multiline templates, CRLF and !include/!secret tags.
         raw = content[node.start_mark.index : node.end_mark.index]
         for match in pattern.finditer(raw):
-            if match.group(1).lower() != old_entity_id or (
+            old_entity_id = match.group(1).lower()
+            if old_entity_id not in targets or (
                 node.value.lower() != old_entity_id
                 and _is_dynamic_reference(raw, match)
             ):
@@ -131,6 +147,8 @@ def _replacement_file(
             replacement.occurrences.append(
                 {
                     "id": f"{source.relative_path}:{start}",
+                    "old_entity_id": old_entity_id,
+                    "new_entity_id": targets[old_entity_id],
                     "start": start,
                     "end": start + len(old_entity_id),
                     "file": source.relative_path,
@@ -165,7 +183,7 @@ def _replacement_file(
 
 
 def replacement_contents(
-    files: list[ReplacementFile], selected: set[str], new_entity_id: str
+    files: list[ReplacementFile], selected: set[str]
 ) -> list[tuple[ReplacementFile, str]]:
     """Validate the full candidate batch before any file or dashboard is saved."""
     known = {row["id"] for item in files for row in item.occurrences}
@@ -178,15 +196,28 @@ def replacement_contents(
             continue
         content = item.content
         for row in sorted(rows, key=lambda row: row["start"], reverse=True):
-            content = content[: row["start"]] + new_entity_id + content[row["end"] :]
+            content = (
+                content[: row["start"]] + row["new_entity_id"] + content[row["end"] :]
+            )
         try:
-            _validate_yaml(content, new_entity_id)
+            _validate_yaml(content, {row["new_entity_id"] for row in rows})
             if item.dashboard is not None:
                 json.loads(content)
         except yaml.YAMLError, ValueError:
             raise ValueError("replacement_yaml_invalid") from None
         changes.append((item, content))
     return changes
+
+
+def dashboard_configuration(item: ReplacementFile, content: str) -> Any:
+    """Extract native config while retaining storage-file line numbers."""
+    payload = json.loads(content)
+    return payload["data"]["config"] if item.dashboard_wrapped else payload
+
+
+def correction_signature(row: dict[str, Any]) -> tuple[str, str, int]:
+    """One coherence finding covers all occurrences of an entity on its line."""
+    return row.get("old_entity_id", row.get("entity_id", "")), row["file"], row["line"]
 
 
 def verify_files(changes: list[tuple[ReplacementFile, str]]) -> None:
@@ -286,7 +317,6 @@ class EntityReplacement:
         self._lock = asyncio.Lock()
         self._preview_id: str | None = None
         self._files: list[ReplacementFile] = []
-        self._new_entity_id = ""
         self._prepared_ids: set[str] | None = None
 
     async def async_preview(
@@ -301,66 +331,201 @@ class EntityReplacement:
             raise ValueError("replacement_entity_invalid")
         self._validate_target(new_entity_id)
         async with self._lock:
-            metadata = configuration_scan_metadata(self.hass)
-            config_dir = Path(self.hass.config.path())
-            dashboard_inputs = {}
-            dashboard_objects = {}
-            lovelace = self.hass.data.get("lovelace")
-            for url_path, dashboard in getattr(lovelace, "dashboards", {}).items():
-                if dashboard.mode != "storage":
+            files, skipped = await self._async_collect_files(
+                {old_entity_id: new_entity_id}, scan_esphome=scan_esphome
+            )
+            return {
+                **self._store_preview(files, skipped),
+                "old_entity_id": old_entity_id,
+                "new_entity_id": new_entity_id,
+            }
+
+    async def _async_collect_files(
+        self,
+        targets: dict[str, str],
+        *,
+        scan_esphome: bool = True,
+        findings: list[dict[str, Any]] | None = None,
+    ) -> tuple[list[ReplacementFile], int]:
+        """Snapshot dashboards and traverse each requested file once."""
+        metadata = configuration_scan_metadata(self.hass)
+        config_dir = Path(self.hass.config.path())
+        filenames = {row["file"] for row in findings} if findings is not None else None
+        sources = None
+        if filenames is not None:
+            sources = []
+            for filename in sorted(filenames):
+                path = config_dir / filename
+                if path.suffix.casefold() not in {".yaml", ".yml"}:
                     continue
-                if (await dashboard.async_get_info()).get("mode") == "auto-gen":
+                if ".storage" in path.parts:
                     continue
-                config = await dashboard.async_load(False)
+                dashboard = metadata["yaml_dashboards"].get(filename)
+                sources.append(
+                    _Source(
+                        path,
+                        filename,
+                        "dashboard" if dashboard else "file",
+                        dashboard[0] if dashboard else "",
+                        dashboard[1] if dashboard else None,
+                    )
+                )
+        dashboard_inputs = {}
+        dashboard_objects = {}
+        dashboard_configs = {}
+        lovelace = self.hass.data.get("lovelace")
+        for url_path, dashboard in getattr(lovelace, "dashboards", {}).items():
+            if dashboard.mode != "storage":
+                continue
+            info = dashboard.config or {}
+            filename = "lovelace" + (f".{info['id']}" if info.get("id") else "")
+            relative_path = f".storage/{filename}"
+            if filenames is not None and relative_path not in filenames:
+                continue
+            if (await dashboard.async_get_info()).get("mode") == "auto-gen":
+                continue
+            config = await dashboard.async_load(False)
+            # Coherence scans the persisted wrapper; keep its exact line numbers.
+            content = None
+            if findings is None:
                 content = await self.hass.async_add_executor_job(
                     lambda config=config: json.dumps(
                         config, ensure_ascii=False, indent=2
                     )
                 )
-                info = dashboard.config or {}
-                filename = "lovelace" + (f".{info['id']}" if info.get("id") else "")
-                relative_path = f".storage/{filename}"
-                source = _Source(
-                    config_dir / relative_path,
-                    relative_path,
-                    "dashboard",
-                    info.get("title") or "Lovelace",
-                    f"/{url_path or 'lovelace'}",
-                )
-                dashboard_inputs[relative_path] = (source, content)
-                dashboard_objects[relative_path] = dashboard
-            files, skipped = await self.hass.async_add_executor_job(
-                prepare_replacement,
-                config_dir,
-                old_entity_id,
-                metadata,
-                scan_esphome,
-                dashboard_inputs,
+            source = _Source(
+                config_dir / relative_path,
+                relative_path,
+                "dashboard",
+                info.get("title") or "Lovelace",
+                f"/{url_path or 'lovelace'}",
             )
-            for item in files:
-                item.dashboard = dashboard_objects.get(item.source.relative_path)
-            self._prepared_ids = None
-            self._files = files
-            self._new_entity_id = new_entity_id
-            self._preview_id = uuid4().hex
-            rows = [
-                {
-                    key: value
-                    for key, value in row.items()
-                    if key not in {"start", "end"}
-                }
-                for item in files
-                for row in item.occurrences
-            ]
-            return {
-                "preview_id": self._preview_id,
-                "old_entity_id": old_entity_id,
-                "new_entity_id": new_entity_id,
-                "replacements": rows,
-                "replacement_count": len(rows),
-                "file_count": len(files),
-                "files_skipped": skipped,
+            dashboard_inputs[relative_path] = (source, content)
+            dashboard_objects[relative_path] = dashboard
+            dashboard_configs[relative_path] = config
+        files, skipped = await self.hass.async_add_executor_job(
+            prepare_replacement,
+            config_dir,
+            targets,
+            metadata,
+            scan_esphome,
+            dashboard_inputs,
+            sources,
+        )
+        matched = []
+        signatures = {correction_signature(row) for row in findings or []}
+        for item in files:
+            item.dashboard = dashboard_objects.get(item.source.relative_path)
+            item.dashboard_wrapped = findings is not None and item.dashboard is not None
+            if item.dashboard_wrapped:
+                original = await self.hass.async_add_executor_job(
+                    dashboard_configuration, item, item.content
+                )
+                if original != dashboard_configs[item.source.relative_path]:
+                    continue
+            if findings is not None:
+                item.occurrences = [
+                    row
+                    for row in item.occurrences
+                    if correction_signature(row) in signatures
+                ]
+            if item.occurrences:
+                matched.append(item)
+        return matched, skipped
+
+    async def _async_correction_files(
+        self, findings: list[dict[str, Any]], renames: list[dict[str, Any]]
+    ) -> tuple[list[ReplacementFile], int]:
+        """Resolve newest registry identities and collect only matching findings."""
+        latest = {}
+        for rename in renames:  # History is newest first, including deleted targets.
+            latest.setdefault(rename["old_entity_id"], rename["current_entity_id"])
+        missing = {
+            row["entity_id"] for row in findings if row.get("entity_id") in latest
+        }
+        registry = er.async_get(self.hass)
+        targets = {
+            entity_id: latest[entity_id]
+            for entity_id in missing
+            if latest[entity_id]
+            and latest[entity_id] != entity_id
+            and self.hass.states.get(entity_id) is None
+            and registry.async_get(entity_id) is None
+        }
+        if not targets:
+            return [], 0
+        return await self._async_collect_files(
+            targets,
+            findings=[row for row in findings if row.get("entity_id") in targets],
+        )
+
+    async def async_coherence_report(
+        self, report: dict[str, Any] | None, renames: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """Add currently editable targets without mutating the persisted report."""
+        if report is None:
+            return None
+        files, _ = await self._async_correction_files(report["results"], renames)
+        if not files:
+            return report
+        targets = {
+            correction_signature(row): row["new_entity_id"]
+            for item in files
+            for row in item.occurrences
+        }
+        return {
+            **report,
+            "results": [
+                {**row, "correction_target": targets[correction_signature(row)]}
+                if correction_signature(row) in targets
+                else row
+                for row in report["results"]
+            ],
+        }
+
+    async def async_preview_corrections(
+        self, findings: list[dict[str, Any]], renames: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Preview one batch restricted to the selected coherence lines."""
+        async with self._lock:
+            files, skipped = await self._async_correction_files(findings, renames)
+            available = {
+                correction_signature(row) for item in files for row in item.occurrences
             }
+            if not findings or available != {
+                correction_signature(row) for row in findings
+            }:
+                raise ValueError("replacement_preview_stale")
+            return {**self._store_preview(files, skipped), "coherence_correction": True}
+
+    def _store_preview(
+        self, files: list[ReplacementFile], skipped: int
+    ) -> dict[str, Any]:
+        """Use the same admission, native API and rollback path for every batch."""
+        self._prepared_ids = None
+        self._files = files
+        self._preview_id = uuid4().hex
+        rows = [
+            {key: value for key, value in row.items() if key not in {"start", "end"}}
+            for item in files
+            for row in item.occurrences
+        ]
+        return {
+            "preview_id": self._preview_id,
+            "replacements": rows,
+            "replacement_count": len(rows),
+            "file_count": len(files),
+            "files_skipped": skipped,
+        }
+
+    def _validate_selected_targets(self, selected: set[str]) -> None:
+        for target in {
+            row["new_entity_id"]
+            for item in self._files
+            for row in item.occurrences
+            if row["id"] in selected
+        }:
+            self._validate_target(target)
 
     def _validate_target(self, new_entity_id: str) -> None:
         """A replacement must point to a state or a registered HA entity."""
@@ -377,12 +542,11 @@ class EntityReplacement:
         async with self._lock:
             if preview_id != self._preview_id:
                 raise ValueError("replacement_preview_stale")
-            self._validate_target(self._new_entity_id)
+            self._validate_selected_targets(set(occurrence_ids))
             changes = await self.hass.async_add_executor_job(
                 replacement_contents,
                 self._files,
                 set(occurrence_ids),
-                self._new_entity_id,
             )
             for item, _ in changes:
                 item.native_updates = []
@@ -405,9 +569,9 @@ class EntityReplacement:
         async with self._lock:
             if preview_id != self._preview_id or selected != self._prepared_ids:
                 raise ValueError("replacement_preview_stale")
-            self._validate_target(self._new_entity_id)
+            self._validate_selected_targets(selected)
             changes = await self.hass.async_add_executor_job(
-                replacement_contents, self._files, selected, self._new_entity_id
+                replacement_contents, self._files, selected
             )
             await self.hass.async_add_executor_job(verify_files, changes)
             await self.hass.async_add_executor_job(verify_native_files, changes)
@@ -415,7 +579,7 @@ class EntityReplacement:
                 if item.dashboard is not None:
                     current = await item.dashboard.async_load(False)
                     original = await self.hass.async_add_executor_job(
-                        json.loads, item.content
+                        dashboard_configuration, item, item.content
                     )
                     if current != original:
                         raise ValueError("replacement_preview_stale")
@@ -429,7 +593,7 @@ class EntityReplacement:
                         await self.hass.async_add_executor_job(save_yaml, item, content)
                     else:
                         candidate = await self.hass.async_add_executor_job(
-                            json.loads, content
+                            dashboard_configuration, item, content
                         )
                         await item.dashboard.async_save(candidate)
             except OSError, UnicodeError, yaml.YAMLError, HomeAssistantError:
@@ -440,7 +604,7 @@ class EntityReplacement:
                         )
                     else:
                         original = await self.hass.async_add_executor_job(
-                            json.loads, item.content
+                            dashboard_configuration, item, item.content
                         )
                         await item.dashboard.async_save(original)
                 raise ValueError("replacement_failed") from None

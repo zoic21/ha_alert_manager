@@ -161,9 +161,10 @@ async def websocket_coherence_scan(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Scan Home Assistant configuration for missing entity references."""
-    if _manager(hass, connection, msg["id"]) is None:
+    if (manager := _manager(hass, connection, msg["id"])) is None:
         return
-    connection.send_result(msg["id"], await async_run_coherence_scan(hass))
+    report = await async_run_coherence_scan(hass)
+    connection.send_result(msg["id"], await manager.async_coherence_snapshot(report))
 
 
 @websocket_api.require_admin
@@ -173,8 +174,40 @@ async def websocket_coherence_get(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Return the latest persisted coherence report without starting a scan."""
-    if _manager(hass, connection, msg["id"]) is not None:
-        connection.send_result(msg["id"], hass.data.get(DATA_COHERENCE_RESULT))
+    if (manager := _manager(hass, connection, msg["id"])) is not None:
+        connection.send_result(
+            msg["id"],
+            await manager.async_coherence_snapshot(
+                hass.data.get(DATA_COHERENCE_RESULT)
+            ),
+        )
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/corrections/preview",
+        vol.Required("scanned_at"): str,
+        vol.Required("row_indices"): vol.All(
+            [vol.All(int, vol.Range(min=0))], vol.Length(min=1)
+        ),
+    }
+)
+async def websocket_coherence_corrections_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview selected correctable rows through the existing replacement engine."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.async_preview_coherence_corrections(
+            msg["scanned_at"], msg["row_indices"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], str(err), str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin
@@ -776,6 +809,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,
+        websocket_coherence_corrections_preview,
         websocket_entity_replacement_preview,
         websocket_entity_replacement_prepare,
         websocket_entity_replacement_apply,

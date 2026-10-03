@@ -10,6 +10,18 @@ Open **Coherence** and start an analysis. The results identify the missing refer
 
 Reports are kept between restarts. Changing the configuration does not itself mean that a stored finding has been checked again: run another scan after correcting the reference.
 
+When a missing entity appears in the retained rename history and its source can be
+edited, the table shows its current **Target entity** and a **Correct** button.
+Successive renames resolve to the current registry identity. Deleted entities,
+read-only sources and sources outside the replacement workflow cannot be selected.
+
+Use the table's selection control to check several correctable rows, then choose
+**Correct selected rows**. The confirmation lists each old identifier and its target,
+with the affected source and location. Only references on the selected lines are
+included, through the same native Home Assistant APIs or YAML replacement workflow
+described below. After a successful correction, a new scan refreshes the findings.
+Follow the reload or ESPHome installation instructions shown in the result.
+
 ## What is checked
 
 | Source | Coverage |

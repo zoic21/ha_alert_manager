@@ -190,6 +190,17 @@ class AlertManagerApi {
     });
   }
 
+  previewCoherenceCorrections(scannedAt, rowIndices) {
+    return this.call({
+      type: "alert_manager/coherence/corrections/preview",
+      scanned_at: scannedAt, row_indices: rowIndices,
+    });
+  }
+
+  scanCoherence() {
+    return this.call({ type: "alert_manager/coherence/scan" });
+  }
+
   async applyEntityReplacement(previewId, occurrenceIds) {
     const message = { preview_id: previewId, occurrence_ids: occurrenceIds };
     const plan = await this.call({ type: "alert_manager/coherence/entity_replacement/prepare", ...message });
@@ -248,9 +259,9 @@ const RULES_TABLE_PREFERENCES_KEY = "alert-manager-rules-table-preferences-v1";
 
 const COHERENCE_STALE_MS = 48 * 60 * 60 * 1000;
 
-const COHERENCE_COLUMNS = ["entity", "type", "source", "file", "line", "action"];
+const COHERENCE_COLUMNS = ["entity", "target", "type", "source", "file", "line", "action"];
 
-const COHERENCE_SECONDARY_COLUMNS = new Set(["type", "source", "file", "line"]);
+const COHERENCE_SECONDARY_COLUMNS = new Set(["target", "type", "source", "file", "line"]);
 
 const RULES_COLUMNS = ["name", "entities", "condition", "duration", "enabled"];
 
@@ -933,6 +944,8 @@ function setHass(value) {
       this._editingRule = null;
       this._selectedAlertIds?.clear();
       this._selectedHistoryIds?.clear();
+      this._selectedCoherenceIds?.clear();
+      this._entityReplacement = null;
       this._selectionMode = this._historySelectionMode = false;
     }
     if (this._readOnly && !["overview", "history"].includes(this._activeTab)) this._activeTab = "overview";
@@ -1398,6 +1411,17 @@ function configureDateRangePicker(kind, container) {
     container.replaceChildren(picker);
 }
 
+function restoreNativeTableSelection(tablePage, selectedIds) {
+    if (!selectedIds.size) return;
+    Promise.resolve(tablePage.updateComplete).then(() => {
+      const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+      if (!nativeTable) return;
+      // HA exposes clear/select-all, but no public setter for a retained selection.
+      nativeTable._checkedRows = [...selectedIds];
+      nativeTable.requestUpdate?.();
+    });
+}
+
 function hydrateDataTables() {
     for (const kind of ["overview", "history"]) {
       const tablePage = this.shadowRoot.querySelector(`[data-alert-table-page="${kind}"]`);
@@ -1502,11 +1526,7 @@ function hydrateDataTables() {
         this._updateSelectionToolbar();
       });
       if (selectionMode && this[selectionKey].size && tablePage.shadowRoot) {
-        const restoreSelection = () => {
-          const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-          nativeTable?.select?.([...this[selectionKey]], true);
-        };
-        Promise.resolve(tablePage.updateComplete).then(restoreSelection);
+        restoreNativeTableSelection(tablePage, this[selectionKey]);
       }
       tablePage.querySelectorAll("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
         const key = checkbox.dataset.tableFilterOption;
@@ -6075,26 +6095,27 @@ function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleL
 function renderEntityReplacement({ state, t }) {
   if (!state) return "";
   const preview = state.preview;
+  const correction = state.coherenceCorrection;
   const selected = state.selected?.size ?? 0;
   const content = state.result
     ? `<ha-alert alert-type="success">${esc(t("coherence.replacement.success", state.result))}</ha-alert>
        <p>${esc(t(state.result.yaml_changed ? "coherence.replacement.reload" : "coherence.replacement.dashboard_saved"))}</p>`
     : preview
-      ? `<p>${esc(preview.old_entity_id)} → ${esc(preview.new_entity_id)}</p>
+      ? `${correction ? `<p>${esc(t("coherence.correction.confirm"))}</p>` : `<p>${esc(preview.old_entity_id)} → ${esc(preview.new_entity_id)}</p>`}
          <p>${esc(t("coherence.replacement.api_help"))}</p>
          <p role="status" data-replacement-count>${esc(t("coherence.replacement.count", { count: selected, total: preview.replacement_count, files: preview.file_count }))}</p>
          ${preview.files_skipped ? `<ha-alert alert-type="warning">${esc(t("coherence.stats.skipped", { count: preview.files_skipped }))}</ha-alert>` : ""}
          ${preview.replacement_count ? `<div class="entity-replacement-list">${preview.replacements.map((row) => `
            <label class="entity-replacement-row">
              <ha-checkbox data-replacement-id="${esc(row.id)}" ${state.selected.has(row.id) ? "checked" : ""} ${state.busy ? "disabled" : ""} aria-label="${esc(`${row.source_name} · ${row.file}:${row.line}:${row.column}`)}"></ha-checkbox>
-             <span><strong>${esc(row.source_name)}</strong><small>${esc(t(`coherence.types.${row.source_type}`))} · ${esc(row.file)} · ${esc(t("coherence.replacement.location", row))}</small></span>
+             <span>${correction ? `<strong>${esc(row.old_entity_id)} → ${esc(row.new_entity_id)}</strong><small>${esc(row.source_name)}</small>` : `<strong>${esc(row.source_name)}</strong>`}<small>${esc(t(`coherence.types.${row.source_type}`))} · ${esc(row.file)} · ${esc(t("coherence.replacement.location", row))}</small></span>
            </label>`).join("")}</div>` : `<p>${esc(t("coherence.replacement.empty"))}</p>`}`
-      : `<p>${esc(t("coherence.replacement.help"))}</p>
+      : correction ? `<p role="status">${esc(t(state.busy ? "coherence.replacement.busy" : "coherence.correction.confirm"))}</p>` : `<p>${esc(t("coherence.replacement.help"))}</p>
          <div class="entity-replacement-fields">
            <ha-selector data-replacement-field="old_entity_id" aria-label="${esc(t("coherence.replacement.old"))}"></ha-selector>
            <ha-selector data-replacement-field="new_entity_id" aria-label="${esc(t("coherence.replacement.new"))}"></ha-selector>
          </div>`;
-  return `<ha-dialog id="entity-replacement-dialog" width="large" header-title="${esc(t(preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button"))}">
+  return `<ha-dialog id="entity-replacement-dialog" width="large" header-title="${esc(t(correction ? "coherence.correction.title" : preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button"))}">
     <ha-icon-button slot="headerNavigationIcon" path="${MDI_CLOSE}" data-action="close-entity-replacement" aria-label="${esc(t("buttons.close"))}" ${state.busy ? "disabled" : ""}></ha-icon-button>
     <div class="entity-replacement-content">
       ${state.error ? `<ha-alert alert-type="error" role="alert">${esc(state.error)}</ha-alert>` : ""}
@@ -6102,8 +6123,8 @@ function renderEntityReplacement({ state, t }) {
     </div>
     <ha-dialog-footer slot="footer">
       <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t(state.result ? "buttons.close" : "buttons.cancel"))}</ha-button>
-      ${preview && !state.result ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
-      ${state.result ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}>${esc(t(state.busy ? "coherence.replacement.busy" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
+      ${preview && !state.result && !correction ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
+      ${state.result || (correction && !preview) ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}>${esc(t(state.busy ? "coherence.replacement.busy" : correction ? "coherence.correction.button" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
     </ha-dialog-footer>
   </ha-dialog>`;
 }
@@ -6166,9 +6187,21 @@ function hydrateEntityReplacement(root, context) {
   dialog.open = true;
 }
 
-async function handleEntityReplacementAction(action) {
-  if (!["open", "close", "back", "preview", "apply"].some((prefix) => action === `${prefix}-entity-replacement`)) return false;
+async function handleEntityReplacementAction(action, button) {
+  const correction = ["correct-coherence", "correct-selected-coherence"].includes(action);
+  if (!correction && !["open", "close", "back", "preview", "apply"].some((prefix) => action === `${prefix}-entity-replacement`)) return false;
   if (this._readOnly || this._entityReplacement?.busy) return true;
+  if (correction) {
+    const rows = this._coherenceTableRows().filter((row) => row.selectable && (
+      action === "correct-selected-coherence" ? this._selectedCoherenceIds.has(row.id) : row.index === Number(button?.dataset.rowIndex)
+    ));
+    if (!rows.length) return true;
+    this._entityReplacement = {
+      coherenceCorrection: true, scannedAt: this._coherence.scanned_at,
+      rowIndices: rows.map((row) => row.index), selected: new Set(), busy: false,
+    };
+    action = "preview-entity-replacement";
+  }
   if (action === "open-entity-replacement") {
     this._entityReplacement = { old_entity_id: "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
   } else if (action === "close-entity-replacement") {
@@ -6184,11 +6217,22 @@ async function handleEntityReplacementAction(action) {
     this._render();
     try {
       if (action === "preview-entity-replacement") {
-        state.preview = await this._api.previewEntityReplacement(state.old_entity_id.trim(), state.new_entity_id.trim());
+        state.preview = state.coherenceCorrection
+          ? await this._api.previewCoherenceCorrections(state.scannedAt, state.rowIndices)
+          : await this._api.previewEntityReplacement(state.old_entity_id.trim(), state.new_entity_id.trim());
         state.selected = new Set(state.preview.replacements.map((row) => row.id));
       } else {
         if (!state.preview || !state.selected.size) return true;
         state.result = await this._api.applyEntityReplacement(state.preview.preview_id, [...state.selected]);
+        if (state.coherenceCorrection) {
+          this._selectedCoherenceIds.clear();
+          try {
+            this._coherence = await this._api.scanCoherence();
+            this._coherenceScannedAt = this._coherence.scanned_at;
+          } catch (error) {
+            this._notice = { kind: "error", text: this._errorText(error) };
+          }
+        }
       }
     } catch (error) {
       const code = error?.code ?? error?.body?.code;
@@ -6227,7 +6271,10 @@ function coherenceTableRows() {
       const reference = result.reference ?? result.entity_id;
       const row = {
         id: `${reference}:${result.file}:${result.line}:${index}`,
+        index,
         entity: reference,
+        target: result.correction_target ?? "",
+        selectable: Boolean(result.correction_target) && !this._readOnly,
         message: result.reference_type === "zha_device_ieee"
           ? this._t("coherence.zha_missing") : "",
         type: this._t(`coherence.types.${result.source_type}`),
@@ -6237,7 +6284,7 @@ function coherenceTableRows() {
         lineSort: Number(result.line),
         link: result.link ?? null,
       };
-      row.search_index = [row.entity, row.type, row.source, row.file, row.line].join(" ");
+      row.search_index = [row.entity, row.target, row.type, row.source, row.file, row.line].join(" ");
       return row;
     });
 }
@@ -6272,6 +6319,7 @@ function refreshCoherenceData() {
     tablePage.data = data;
     tablePage._alertManagerRows = data;
     tablePage.noDataText = this._t("coherence.empty");
+    updateCoherenceSelection.call(this, tablePage);
     this._refreshUiState();
 }
 
@@ -6302,6 +6350,12 @@ function hydrateCoherenceTable() {
         flex: 1.2,
         template: (row) => this._nativeCoherenceEntityCell(row, Boolean(this._narrow)),
       },
+      target: {
+        title: this._t("coherence.columns.target"),
+        sortable: true,
+        minWidth: "190px",
+        flex: 1.2,
+      },
       type: {
         title: this._t("coherence.columns.type"),
         sortable: true,
@@ -6330,9 +6384,9 @@ function hydrateCoherenceTable() {
       },
       action: {
         title: "",
-        label: this._t("coherence.open"),
-        minWidth: "100px",
-        flex: 0.5,
+        label: this._t("coherence.columns.action"),
+        minWidth: "180px",
+        flex: 0.8,
         template: (row) => this._nativeCoherenceActionCell(row),
       },
       search_index: {
@@ -6349,6 +6403,17 @@ function hydrateCoherenceTable() {
     tablePage.data = data;
     tablePage._alertManagerRows = data;
     tablePage.noDataText = this._t("coherence.empty");
+    tablePage.selectable = !this._readOnly;
+    tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
+    updateCoherenceSelection.call(this, tablePage);
+    restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
+    if (tablePage._alertManagerCoherenceHydrated) return;
+    tablePage._alertManagerCoherenceHydrated = true;
+    tablePage.addEventListener("selection-changed", (event) => {
+      const available = new Set(tablePage._alertManagerRows.filter((row) => row.selectable).map((row) => row.id));
+      this._selectedCoherenceIds = new Set((event.detail?.value ?? []).map(String).filter((id) => available.has(id)));
+      updateCoherenceSelection.call(this, tablePage);
+    });
     tablePage.addEventListener("search-changed", (event) => {
       state.search = String(event.detail?.value ?? "");
     });
@@ -6377,6 +6442,20 @@ function hydrateCoherenceTable() {
         .filter((column) => COHERENCE_COLUMNS.includes(column) && column !== "entity");
       this._saveCoherenceTableState();
     });
+}
+
+function updateCoherenceSelection(tablePage) {
+    const available = new Set(tablePage._alertManagerRows.filter((row) => row.selectable).map((row) => row.id));
+    for (const id of this._selectedCoherenceIds) {
+      if (!available.has(id)) this._selectedCoherenceIds.delete(id);
+    }
+    const count = this._selectedCoherenceIds.size;
+    tablePage.selected = count;
+    const button = tablePage.querySelector?.('[data-action="correct-selected-coherence"]');
+    if (button) {
+      button.textContent = this._t("coherence.correction.selected", { count });
+      button.disabled = !count || Boolean(this._entityReplacement?.busy);
+    }
 }
 
 function nativeCoherenceEntityCell(row, narrow = false) {
@@ -6424,15 +6503,30 @@ function openCoherenceLink(link) {
 }
 
 function nativeCoherenceActionCell(row) {
-    if (!row.link || !globalThis.document?.createElement) return "";
-    const button = document.createElement("ha-button");
-    button.setAttribute("appearance", "plain");
-    button.textContent = this._t("coherence.open");
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this._openCoherenceLink(row.link);
-    });
-    return button;
+    if (!globalThis.document?.createElement) return "";
+    const content = document.createElement("span");
+    if (row.target && !this._readOnly) {
+      const correct = document.createElement("ha-button");
+      correct.setAttribute("appearance", "plain");
+      correct.textContent = this._t("coherence.correction.button");
+      correct.disabled = Boolean(this._entityReplacement?.busy);
+      correct.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void handleEntityReplacementAction.call(this, "correct-coherence", { dataset: { rowIndex: row.index } });
+      });
+      content.append(correct);
+    }
+    if (row.link) {
+      const open = document.createElement("ha-button");
+      open.setAttribute("appearance", "plain");
+      open.textContent = this._t("coherence.open");
+      open.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this._openCoherenceLink(row.link);
+      });
+      content.append(open);
+    }
+    return content.children.length === 1 ? content.children[0] : content;
 }
 
 function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottomSheet, t }) {
@@ -6589,6 +6683,9 @@ function renderCoherence(context) {
       data-coherence-table-page
       main-page
     >
+      <div slot="selection-bar" class="selection-actions">
+        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled>${esc(t("coherence.correction.selected", { count: 0 }))}</ha-button>
+      </div>
       <div slot="top-header" class="table-page-top">
         ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
@@ -6624,8 +6721,8 @@ function renderCoherencePanel() {
     });
 }
 
-async function handleCoherenceAction(action) {
-  if (action.endsWith("-entity-replacement")) return handleEntityReplacementAction.call(this, action);
+async function handleCoherenceAction(action, button) {
+  if (action.endsWith("-entity-replacement") || ["correct-coherence", "correct-selected-coherence"].includes(action)) return handleEntityReplacementAction.call(this, action, button);
   if (action === "export-entities") {
     if (this._readOnly || this._entityExportLoading) return true;
     this._entityExportLoading = true;
@@ -10893,7 +10990,7 @@ class AlertManagerPanel extends HTMLElement {
     this._backupRestoreCandidate = null;
     this._coherence = this._coherenceScannedAt = null;
     this._coherenceLoaded = false; this._coherenceLoading = false; this._entityReplacement = null;
-    this._coherenceLoadPromise = null;
+    this._coherenceLoadPromise = null; this._selectedCoherenceIds = new Set();
     this._deletedEntitiesState = { data: null, loading: false, error: null };
     this._entityRenamesState = { data: null, loading: false, error: null };
     this._alertsRefreshPromise = null;

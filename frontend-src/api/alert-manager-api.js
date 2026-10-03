@@ -76,6 +76,8 @@ export function setHass(value) {
       this._editingRule = null;
       this._selectedAlertIds?.clear();
       this._selectedHistoryIds?.clear();
+      this._selectedCoherenceIds?.clear();
+      this._entityReplacement = null;
       this._selectionMode = this._historySelectionMode = false;
     }
     if (this._readOnly && !["overview", "history"].includes(this._activeTab)) this._activeTab = "overview";

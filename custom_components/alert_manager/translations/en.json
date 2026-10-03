@@ -213,7 +213,9 @@
     },
     "coherence": {
       "columns": {
+        "action": "Actions",
         "entity": "Missing reference",
+        "target": "Target entity",
         "file": "File",
         "line": "Line",
         "source": "Configuration",
@@ -236,6 +238,12 @@
       "empty": "No missing references.",
       "not_scanned": "The scan has not been run yet.",
       "open": "Open",
+      "correction": {
+        "button": "Correct",
+        "selected": "Correct selected rows ({count})",
+        "title": "Confirm corrections",
+        "confirm": "The selected references will be replaced with the target entities shown below."
+      },
       "scan": "Run scan",
       "scanning": "Scanning…",
       "stats": {

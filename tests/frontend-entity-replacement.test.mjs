@@ -119,6 +119,77 @@ test("read-only users never preview or apply replacements", async () => {
   assert.equal(context._entityReplacement, undefined);
 });
 
+test("single and bulk coherence corrections preview only selected rows and wait for confirmation", async () => {
+  const rows = [
+    { id: "a", index: 0, selectable: true },
+    { id: "b", index: 1, selectable: true },
+    { id: "deleted", index: 2, selectable: false },
+  ];
+  let requested;
+  let writes = 0;
+  let scans = 0;
+  const correctionPreview = {
+    ...preview,
+    replacements: preview.replacements.map((row) => ({ ...row, old_entity_id: "light.old", new_entity_id: "light.current" })),
+    coherence_correction: true,
+  };
+  const context = {
+    _coherence: { scanned_at: "scan-time" },
+    _selectedCoherenceIds: new Set(["a", "b", "deleted"]),
+    _coherenceTableRows: () => rows,
+    _t: translate, _errorText: () => "generic", _render() {},
+    _api: {
+      async previewCoherenceCorrections(scannedAt, indices) { requested = { scannedAt, indices }; return correctionPreview; },
+      async applyEntityReplacement(id, ids) {
+        writes++;
+        assert.equal(id, "preview");
+        assert.deepEqual(ids, ["one", "two"]);
+        return { replacement_count: 2, file_count: 1, yaml_changed: true };
+      },
+      async scanCoherence() { scans++; return { scanned_at: "after-fix", results: [] }; },
+    },
+  };
+  await handleEntityReplacementAction.call(context, "correct-coherence", { dataset: { rowIndex: "1" } });
+  assert.deepEqual(requested, { scannedAt: "scan-time", indices: [1] });
+  assert.equal(writes, 0);
+  const markup = renderEntityReplacement({ state: context._entityReplacement, t: translate });
+  assert.match(markup, /light.old → light.current/);
+  assert.match(markup, /coherence.correction.confirm/);
+  assert.doesNotMatch(markup, /back-entity-replacement|data-replacement-field/);
+  await handleEntityReplacementAction.call(context, "close-entity-replacement");
+  assert.equal(writes, 0);
+  assert.equal(context._selectedCoherenceIds.size, 3);
+  await handleEntityReplacementAction.call(context, "correct-selected-coherence");
+  assert.deepEqual(requested, { scannedAt: "scan-time", indices: [0, 1] });
+  await handleEntityReplacementAction.call(context, "apply-entity-replacement");
+  assert.equal(writes, 1);
+  assert.equal(scans, 1);
+  assert.equal(context._selectedCoherenceIds.size, 0);
+  assert.deepEqual(context._coherence.results, []);
+  assert.equal(context._coherenceScannedAt, "after-fix");
+  assert.ok(context._entityReplacement.result);
+});
+
+test("correction preview failures and noneditable selections never write", async () => {
+  const context = {
+    _coherence: { scanned_at: "scan-time" },
+    _selectedCoherenceIds: new Set(["deleted"]),
+    _coherenceTableRows: () => [{ id: "deleted", index: 0, selectable: false }],
+    _render() {}, _t: translate, _errorText: () => "generic",
+    _api: { previewCoherenceCorrections() { assert.fail(); } },
+  };
+  await handleEntityReplacementAction.call(context, "correct-selected-coherence");
+  assert.equal(context._entityReplacement, undefined);
+  context._coherenceTableRows = () => [{ id: "editable", index: 1, selectable: true }];
+  context._api.previewCoherenceCorrections = async () => { throw { code: "replacement_preview_stale" }; };
+  await handleEntityReplacementAction.call(context, "correct-coherence", { dataset: { rowIndex: "1" } });
+  assert.match(context._entityReplacement.error, /replacement_preview_stale/);
+  assert.equal(context._entityReplacement.busy, false);
+  assert.doesNotMatch(renderEntityReplacement({ state: context._entityReplacement, t: translate }), /data-action="apply-entity-replacement"/);
+  context._readOnly = true;
+  await handleEntityReplacementAction.call(context, "correct-selected-coherence");
+});
+
 const updates = [
   { domain: "automation", key: "office/é", before: { id: "office/é", entity_id: "light.old" }, after: { id: "office/é", entity_id: "light.new" } },
   { domain: "script", key: "test", before: { sequence: [{ entity_id: "light.old" }] }, after: { sequence: [{ entity_id: "light.new" }] } },
