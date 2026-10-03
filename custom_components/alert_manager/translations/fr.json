@@ -213,7 +213,9 @@
     },
     "coherence": {
       "columns": {
+        "action": "Actions",
         "entity": "Référence manquante",
+        "target": "Entité cible",
         "file": "Fichier",
         "line": "Ligne",
         "source": "Configuration",
@@ -236,6 +238,12 @@
       "empty": "Aucune référence manquante.",
       "not_scanned": "L’analyse n’a pas encore été lancée.",
       "open": "Ouvrir",
+      "correction": {
+        "button": "Corriger",
+        "selected": "Corriger les lignes sélectionnées ({count})",
+        "title": "Confirmer les corrections",
+        "confirm": "Les références sélectionnées seront remplacées par les entités cibles indiquées ci-dessous."
+      },
       "scan": "Lancer l’analyse",
       "scanning": "Analyse en cours…",
       "stats": {

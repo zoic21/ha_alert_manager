@@ -432,6 +432,17 @@ class AlertManagerApi {
     });
   }
 
+  previewCoherenceCorrections(scannedAt, rowIndices) {
+    return this.call({
+      type: "alert_manager/coherence/corrections/preview",
+      scanned_at: scannedAt, row_indices: rowIndices,
+    });
+  }
+
+  scanCoherence() {
+    return this.call({ type: "alert_manager/coherence/scan" });
+  }
+
   async applyEntityReplacement(previewId, occurrenceIds) {
     const message = { preview_id: previewId, occurrence_ids: occurrenceIds };
     const plan = await this.call({ type: "alert_manager/coherence/entity_replacement/prepare", ...message });

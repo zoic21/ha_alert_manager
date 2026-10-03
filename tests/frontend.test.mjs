@@ -2190,7 +2190,7 @@ test("selection mode is delegated to the native subpage table toolbar", async ()
     updateComplete: Promise.resolve(),
     shadowRoot: {
       querySelector() {
-        return { select(ids) { restoredSelection = ids; } };
+        return { requestUpdate() { restoredSelection = this._checkedRows; } };
       },
     },
   };

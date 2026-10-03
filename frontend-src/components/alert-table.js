@@ -72,6 +72,17 @@ export function configureDateRangePicker(kind, container) {
     container.replaceChildren(picker);
 }
 
+export function restoreNativeTableSelection(tablePage, selectedIds) {
+    if (!selectedIds.size) return;
+    Promise.resolve(tablePage.updateComplete).then(() => {
+      const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+      if (!nativeTable) return;
+      // HA exposes clear/select-all, but no public setter for a retained selection.
+      nativeTable._checkedRows = [...selectedIds];
+      nativeTable.requestUpdate?.();
+    });
+}
+
 export function hydrateDataTables() {
     for (const kind of ["overview", "history"]) {
       const tablePage = this.shadowRoot.querySelector(`[data-alert-table-page="${kind}"]`);
@@ -176,11 +187,7 @@ export function hydrateDataTables() {
         this._updateSelectionToolbar();
       });
       if (selectionMode && this[selectionKey].size && tablePage.shadowRoot) {
-        const restoreSelection = () => {
-          const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-          nativeTable?.select?.([...this[selectionKey]], true);
-        };
-        Promise.resolve(tablePage.updateComplete).then(restoreSelection);
+        restoreNativeTableSelection(tablePage, this[selectionKey]);
       }
       tablePage.querySelectorAll("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
         const key = checkbox.dataset.tableFilterOption;

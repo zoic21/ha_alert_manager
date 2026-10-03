@@ -262,7 +262,7 @@ class AlertManagerPanel extends HTMLElement {
     this._backupRestoreCandidate = null;
     this._coherence = this._coherenceScannedAt = null;
     this._coherenceLoaded = false; this._coherenceLoading = false; this._entityReplacement = null;
-    this._coherenceLoadPromise = null;
+    this._coherenceLoadPromise = null; this._selectedCoherenceIds = new Set();
     this._deletedEntitiesState = { data: null, loading: false, error: null };
     this._entityRenamesState = { data: null, loading: false, error: null };
     this._alertsRefreshPromise = null;
