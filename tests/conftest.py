@@ -8,7 +8,6 @@ import re
 import sys
 import unicodedata
 from collections import defaultdict
-from collections.abc import Mapping
 from datetime import UTC, date, datetime, time
 from enum import Enum, StrEnum
 from pathlib import Path
@@ -86,27 +85,6 @@ class JSONEncoder(json.JSONEncoder):
 
 
 json_helper.JSONEncoder = JSONEncoder
-diagnostics_component = _module("homeassistant.components.diagnostics")
-diagnostics_component.REDACTED = "**REDACTED**"
-
-
-def async_redact_data(data, to_redact):
-    """Match HA's pure mapping/list diagnostic redaction helper."""
-    if isinstance(data, list):
-        return [async_redact_data(value, to_redact) for value in data]
-    if not isinstance(data, Mapping):
-        return data
-    return {
-        key: (
-            diagnostics_component.REDACTED
-            if key in to_redact and value is not None and value != ""
-            else async_redact_data(value, to_redact)
-        )
-        for key, value in data.items()
-    }
-
-
-diagnostics_component.async_redact_data = async_redact_data
 file_util = _module("homeassistant.util.file")
 
 

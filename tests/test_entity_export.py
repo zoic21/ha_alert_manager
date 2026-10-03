@@ -6,10 +6,9 @@ import asyncio
 import json
 import threading
 from datetime import UTC, datetime
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
-from homeassistant.components.diagnostics import REDACTED
 from homeassistant.helpers.entity import entity_sources
 from test_websocket import Connection
 
@@ -19,6 +18,8 @@ from custom_components.alert_manager.websocket import (
     async_register_websocket_commands,
     websocket_entities_export,
 )
+
+REDACTED = "**REDACTED**"
 
 
 def test_export_preserves_inventory_states_and_registry_flags(
@@ -247,3 +248,25 @@ def test_export_redacts_unserializable_known_secret_before_encoding(hass):
         "access_token": REDACTED
     }
     assert hass.states.get("sensor.source").attributes["access_token"] is secret
+
+
+def test_export_masks_secrets_inside_read_only_mappings_and_tuples(hass):
+    """HA attribute containers retain safe values without requiring diagnostics."""
+    nested = MappingProxyType({"api_key": "nested-secret", "mode": "auto"})
+    attributes = {
+        "nested": (nested, {"password": None, "access_token": ""}),
+        "temperature": 0,
+    }
+    hass.states.set("sensor.source", "0", attributes)
+    payload = asyncio.run(async_export_entities(hass))
+    result = json.loads(payload["content"])
+    assert result["entities_without_device"][0]["attributes"] == {
+        "nested": [
+            {"api_key": REDACTED, "mode": "auto"},
+            {"password": None, "access_token": ""},
+        ],
+        "temperature": 0,
+    }
+    assert "nested-secret" not in payload["content"]
+    assert hass.states.get("sensor.source").attributes["nested"][0] is nested
+    assert nested["api_key"] == "nested-secret"
