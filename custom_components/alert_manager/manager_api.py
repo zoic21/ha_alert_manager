@@ -447,6 +447,16 @@ class _ApiMixin:
             "duration_reached": elapsed >= rule.duration,
         }
 
+    def entity_renames_snapshot(self) -> dict[str, Any]:
+        """Resolve more-info targets without changing historical identifiers."""
+        renames = self.entity_rename_history.snapshot()
+        for rename in renames:
+            entry = self._entity_registry.async_get(
+                rename["registry_entry_id"] or rename["new_entity_id"]
+            )
+            rename["current_entity_id"] = entry.entity_id if entry else None
+        return {"renames": renames}
+
     def deleted_entities_snapshot(self) -> dict[str, Any]:
         """Return the newest deleted entities still retained by Home Assistant."""
         entries = sorted(

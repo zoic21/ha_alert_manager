@@ -263,7 +263,18 @@
         "metadata_error": "ZHA check skipped: metadata unavailable."
       },
       "alert_enabled": "Create an alert for coherence issues",
-      "alert_help": "One alert remains until a complete check finds no issues. Normal notification profiles apply."
+      "alert_help": "One alert remains until a complete check finds no issues. Normal notification profiles apply.",
+      "entity_renames": {
+        "button": "Entity renames",
+        "title": "Entity rename history",
+        "close": "Close entity rename history",
+        "loading": "Loading entity renames…",
+        "description": "The latest 500 entity ID changes, newest first. Recording starts when this feature is installed. The information button opens the current entity.",
+        "empty": "No entity renames recorded yet.",
+        "old": "Previous entity ID",
+        "new": "New entity ID",
+        "more_info": "Show entity information"
+      }
     },
     "duration": {
       "activation": "Activating…",

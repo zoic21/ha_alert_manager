@@ -20,6 +20,9 @@ from .const import (
     CONFIG_BACKUP_LIMIT,
     CONFIG_BACKUP_STORAGE_KEY,
     CONFIG_BACKUP_STORAGE_VERSION,
+    ENTITY_RENAME_HISTORY_LIMIT,
+    ENTITY_RENAME_SAVE_DELAY_SECONDS,
+    ENTITY_RENAME_STORAGE_KEY,
     HISTORY_STORAGE_KEY,
     HISTORY_STORAGE_VERSION,
     LEGACY_RULE_SOURCES,
@@ -38,6 +41,61 @@ from .validation import remove_unknown_stored_config_fields
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class EntityRenameHistoryStorage:
+    """Keep a bounded entity-ID history independently of alert configuration."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._store = Store[dict[str, Any]](
+            hass,
+            1,
+            ENTITY_RENAME_STORAGE_KEY,
+            private=True,
+            atomic_writes=True,
+            serialize_in_event_loop=False,
+        )
+        self._renames: list[dict[str, Any]] = []
+        self._dirty = False
+
+    async def async_load(self) -> None:
+        """Restore the newest retained renames."""
+        data = await self._store.async_load()
+        if data is not None:
+            self._renames = data["renames"][-ENTITY_RENAME_HISTORY_LIMIT:]
+
+    def record(
+        self,
+        old_entity_id: str,
+        new_entity_id: str,
+        registry_entry_id: str | None,
+        renamed_at: datetime,
+    ) -> None:
+        """Record one event and postpone writing until the burst has settled."""
+        # Replace the list; queued snapshots and their entries are never mutated,
+        # so HA can serialize and write them safely in its executor.
+        self._renames = [
+            *self._renames[-(ENTITY_RENAME_HISTORY_LIMIT - 1) :],
+            {
+                "old_entity_id": old_entity_id,
+                "new_entity_id": new_entity_id,
+                "registry_entry_id": registry_entry_id,
+                "renamed_at": renamed_at.isoformat(),
+            },
+        ]
+        self._dirty = True
+        payload = {"renames": self._renames}
+        self._store.async_delay_save(lambda: payload, ENTITY_RENAME_SAVE_DELAY_SECONDS)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        """Return copies in newest-first order."""
+        return [entry.copy() for entry in reversed(self._renames)]
+
+    async def async_flush(self) -> None:
+        """Finish a pending write when the integration is unloaded."""
+        if self._dirty:
+            await self._store.async_save({"renames": self._renames})
+            self._dirty = False
 
 
 class ConfigStorageError(ValueError):

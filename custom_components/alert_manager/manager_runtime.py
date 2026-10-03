@@ -880,6 +880,13 @@ class _RuntimeMixin:
             and old_entity_id != new_entity_id
         )
         if is_rename:
+            entry = self._entity_registry.async_get(new_entity_id)
+            self.entity_rename_history.record(
+                old_entity_id,
+                new_entity_id,
+                getattr(entry, "id", None),
+                dt_util.utcnow(),
+            )
             self._pending_entity_renames[old_entity_id] = new_entity_id
         elif not self.monitoring_enabled:
             return

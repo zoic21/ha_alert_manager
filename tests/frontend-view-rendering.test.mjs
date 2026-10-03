@@ -13,7 +13,7 @@ import {
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
-  renderCoherence, renderDeletedEntitiesDrawer,
+  renderCoherence, renderDeletedEntitiesDrawer, renderEntityRenamesDrawer,
 } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import {
@@ -170,6 +170,44 @@ test("deleted entity drawer renders retained registry entries safely", () => {
   assert.match(markup, /Old sensor/);
   assert.match(markup, /24\/08\/2026 12:00:00/);
   assert.doesNotMatch(markup, /sensor\.deleted_<unsafe>/);
+});
+
+test("rename history shows old/new IDs and a separate information icon at the end", () => {
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: [{
+      old_entity_id: "sensor.old_<unsafe>",
+      new_entity_id: "sensor.intermediate",
+      current_entity_id: "sensor.current",
+      renamed_at: "2026-10-03T12:00:00+00:00",
+    }, {
+      old_entity_id: "sensor.deleted_old",
+      new_entity_id: "sensor.deleted_new",
+      current_entity_id: null,
+      renamed_at: "2026-10-02T12:00:00+00:00",
+    }] },
+    formatDate: (value) => `date:${value}`,
+    t,
+  });
+  assert.match(markup, /sensor\.old_&lt;unsafe&gt;/);
+  assert.match(markup, /<code[^>]*>sensor\.intermediate<\/code>/);
+  assert.match(markup, /<ha-icon-button data-action="more-info" data-entity-id="sensor.current"/);
+  assert.match(markup, /<ha-icon icon="mdi:information-outline"><\/ha-icon><\/ha-icon-button>/);
+  assert.match(markup, /data-entity-id="" disabled/);
+  assert.match(markup, /aria-label="coherence.entity_renames.more_info"/);
+  assert.ok(markup.indexOf('data-action="more-info"') > markup.indexOf("</time>"));
+  assert.match(markup, /date:2026-10-03T12:00:00\+00:00/);
+  assert.doesNotMatch(markup, /sensor\.old_<unsafe>|<ha-button/);
+});
+
+test("rename history supports loading, errors, empty history and native mobile close", () => {
+  const render = (values) => renderEntityRenamesDrawer({ formatDate: (value) => value, t, ...values });
+  assert.match(render({ loading: true }), /coherence.entity_renames.loading/);
+  assert.match(render({ error: "<offline>" }), /<ha-alert alert-type="error">&lt;offline&gt;<\/ha-alert>/);
+  assert.match(render({ data: { renames: [] } }), /coherence.entity_renames.empty/);
+  const mobile = render({ useBottomSheet: true });
+  assert.match(mobile, /^<ha-resizable-bottom-sheet/);
+  assert.match(mobile, /data-close-action="close-entity-renames"/);
+  assert.doesNotMatch(mobile, /side-drawer-backdrop/);
 });
 
 test("mobile drawers use Home Assistant's resizable bottom sheet", () => {

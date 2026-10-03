@@ -56,6 +56,26 @@ The page provides the latest **50 deleted entities** still retained by Home Assi
 
 <img src="assets/screenshots/coherence.png" alt="Coherence page with the retained deleted-entity list">
 
+## Entity rename history
+
+**Entity renames**, in the adjacent button column, opens the latest **500 entity ID
+changes**, newest first. Each row shows the previous ID, the new ID and the date of
+the change in your Home Assistant locale. The information icon at the end of the
+row opens Home Assistant's more-info window for the current entity, including when
+it has been renamed again. The icon is disabled if the entity has been deleted.
+
+Recording starts when this feature is installed and continues even when alert
+monitoring is disabled. Earlier changes cannot be recovered. Changes to display
+names alone are not recorded; this history tracks identifiers such as
+`sensor.old_name` → `sensor.new_name`.
+
+The history survives restarts in the separate
+`.storage/alert_manager.entity_renames` file. Writes are grouped until **5 seconds
+after the last rename**, with a final save on unload or shutdown. JSON encoding
+and disk writes use Home Assistant's executor. No scan or polling is needed, and
+the oldest entry is dropped automatically when the limit is reached. Access is
+restricted to administrators, as with the rest of Coherence.
+
 ## Export all Home Assistant entities
 
 Below **Deleted entities**, **Export entities (JSON)** downloads a private,

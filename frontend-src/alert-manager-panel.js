@@ -259,12 +259,12 @@ class AlertManagerPanel extends HTMLElement {
     this._configRecovery = { active: false, backups: [] };
     this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
-    this._coherence = null;
+    this._coherence = this._coherenceScannedAt = null;
     this._coherenceLoaded = false;
     this._coherenceLoading = false;
     this._coherenceLoadPromise = null;
-    this._coherenceScannedAt = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
+    this._entityRenamesState = { data: null, loading: false, error: null };
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
     this._activeTab = "overview";

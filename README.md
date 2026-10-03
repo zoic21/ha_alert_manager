@@ -58,7 +58,7 @@ This changes notification presentation only, without introducing alert severity 
 
 If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
 
-Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. The page also exports a JSON snapshot of all known Home Assistant entities, grouped by device, with states, attributes and disabled/hidden flags. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
+Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. The page also exports a JSON snapshot of all known Home Assistant entities, grouped by device, with states, attributes and disabled/hidden flags. Coherence also keeps the latest 500 entity ID changes across restarts, with an information icon to open the current entity. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
 
 ### Inspect runtime diagnostics
 

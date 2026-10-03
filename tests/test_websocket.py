@@ -26,6 +26,7 @@ from custom_components.alert_manager.websocket import (
     websocket_config_update,
     websocket_configuration_field_yaml_validate,
     websocket_deleted_entities_list,
+    websocket_entity_renames_list,
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
@@ -355,6 +356,7 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
         (websocket_deleted_entities_list, {"id": 23}),
+        (websocket_entity_renames_list, {"id": 24}),
         (websocket_config_recovery_get, {"id": 20}),
         (websocket_config_backup_download, {"id": 21, "backup_id": "one"}),
         (
@@ -363,7 +365,7 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 22
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 23
     assert connection.results == []
 
 

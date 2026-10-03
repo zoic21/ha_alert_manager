@@ -543,6 +543,14 @@ export const settingsStyles = `
     flex: none;
     gap: 8px;
   }
+  .coherence-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .coherence-action-column {
+    display: grid;
+    gap: 8px;
+  }
   .coherence-export-label {
     display: inline-grid;
   }
@@ -606,6 +614,33 @@ export const settingsStyles = `
   .deleted-entity-metadata {
     align-items: flex-end;
     text-align: end;
+  }
+  .entity-rename-ids {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .entity-rename-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .entity-rename-ids code {
+    overflow-wrap: anywhere;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .entity-rename-new ha-icon {
+    flex: none;
+    --mdc-icon-size: 18px;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new code {
+    color: var(--primary-text-color);
   }
 
   /* Code */

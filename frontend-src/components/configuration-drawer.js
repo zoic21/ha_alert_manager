@@ -17,6 +17,7 @@ export const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "new-rule",
   "open-automatic-configuration",
   "open-deleted-entities",
+  "open-entity-renames",
   "open-settings-configuration",
   "new-notification-profile",
   "edit-notification-profile",
