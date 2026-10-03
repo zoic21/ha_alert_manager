@@ -64,6 +64,8 @@ Coherence scans find static references to missing entities and ZHA devices in su
 
 Configuration shows rule evaluation counts and processing times, alert transitions and notification sends over 24 hourly buckets, kept only in memory and reset on restart.
 
+The **Data on disk** diagnostic shows the total size of Alert Manager’s data files and the measurement time. It is measured when Configuration opens and cached for five minutes, with no automatic refresh. Program files and Home Assistant’s recorder database are excluded.
+
 Detection is driven by Home Assistant events. A safety check every 10 minutes also checks the current states of already tracked entities, without requesting entity updates or reconstructing missed transitions. Newly detected conditions start at the check time. A recovery counter in diagnostics shows whether this check corrected discrepancies.
 
 The interface is available in **English and French**, on desktop and mobile. All authenticated users can read the card, Overview and History; configuration and all actions, including acknowledgement, require an administrator.

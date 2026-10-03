@@ -988,6 +988,16 @@
     },
     "statistics": {
       "title": "Diagnostic de fonctionnement",
+      "disk_usage": "Données sur disque",
+      "disk_help": "Fichiers de données d’Alert Manager : configuration, alertes, historique, sauvegardes, notifications, cohérence et renommages d’entités. Hors fichiers du programme et base d’historique de Home Assistant. Mesure à l’ouverture de Configuration, conservée 5 minutes ; sans actualisation automatique.",
+      "disk_measured_at": "Mesure du {date}.",
+      "disk_unavailable": "Indisponible",
+      "disk_units": {
+        "bytes": "o",
+        "kibibytes": "Kio",
+        "mebibytes": "Mio",
+        "gibibytes": "Gio"
+      },
       "scope": "Règles personnalisées : une évaluation par couple règle/entité, condition comprise. Traitement synchrone uniquement ; hors tests, packs automatiques, cohérence et attentes asynchrones. Ce n’est pas la charge de la boucle événementielle de Home Assistant.",
       "periodic_recoveries": "Rattrapages du contrôle périodique",
       "evaluation_count": "Évaluations de règles",

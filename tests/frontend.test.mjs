@@ -1049,6 +1049,7 @@ test("initial load defers history and coherence data until their tabs open", asy
   const panel = new Panel();
   panel._render = () => {};
   const calls = [];
+  const statisticsRequests = [];
   const responses = {
     "alert_manager/config/get": completeConfig(),
     "alert_manager/alerts/list": {
@@ -1070,6 +1071,7 @@ test("initial load defers history and coherence data until their tabs open", asy
     states: {},
     callWS: async (message) => {
       calls.push(message.type);
+      if (message.type === "alert_manager/notifications/stats/get") statisticsRequests.push(message);
       if (message.type === "frontend/get_translations") {
         return { resources: TRANSLATIONS[message.language] };
       }
@@ -1093,6 +1095,52 @@ test("initial load defers history and coherence data until their tabs open", asy
   assert.deepEqual(panel._packs, completePacks());
   assert.equal(panel._historyLoaded, false);
   assert.equal(panel._coherenceLoaded, false);
+  assert.equal(statisticsRequests[0].include_disk_usage, undefined);
+
+  panel._activeTab = "settings";
+  await panel._load();
+  assert.equal(statisticsRequests[1].include_disk_usage, true);
+  await panel._refreshNotificationStats();
+  assert.equal(statisticsRequests[2].include_disk_usage, true);
+});
+
+test("opening Configuration during bootstrap still requests disk diagnostics after loading", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  const statisticsRequests = [];
+  let completeBootstrap;
+  const bootstrap = new Promise((resolve) => { completeBootstrap = resolve; });
+  panel._hass = {
+    states: {},
+    callWS: async (message) => {
+      if (message.type === "alert_manager/notifications/stats/get") {
+        statisticsRequests.push(message);
+        return { last_24h: {}, diagnostics: message.include_disk_usage
+          ? { disk_usage: { bytes: 1024, measured_at: "2026-10-03T12:00:00Z" } } : {} };
+      }
+      if (message.type === "alert_manager/config/get") {
+        await bootstrap;
+        return completeConfig();
+      }
+      if (message.type === "alert_manager/packs/list") return completePacks();
+      if (message.type === "alert_manager/alerts/list") return { alerts: [], pending: [] };
+      if (message.type === "config/label_registry/list") return [];
+      if (message.type === "frontend/get_translations") return { resources: TRANSLATIONS[message.language] };
+      return {};
+    },
+  };
+  const loading = panel._load();
+  panel._activeTab = "settings";
+  panel._refreshTabData("settings");
+  assert.equal(statisticsRequests.length, 1);
+  assert.equal(statisticsRequests[0].include_disk_usage, undefined);
+  completeBootstrap();
+  await loading;
+  await panel._notificationStatsLoadPromise;
+  assert.equal(statisticsRequests.length, 2);
+  assert.equal(statisticsRequests[1].include_disk_usage, true);
+  assert.equal(panel._notificationStats.diagnostics.disk_usage.bytes, 1024);
 });
 
 test("history and coherence data load when their tabs open", async () => {

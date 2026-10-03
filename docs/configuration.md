@@ -153,6 +153,15 @@ Configuration shows custom-rule evaluation counts and average/maximum/total proc
 
 An evaluation is one rule/entity pair, including its condition and excluding asynchronous waiting. Tests, automatic packs and coherence scans are excluded from timing. This does **not** measure Home Assistant event-loop load. Activity counts actual transitions, not the current number of alerts; restored alerts are not counted as new activations.
 
+**Data on disk** reports the combined file sizes for configuration/runtime alerts,
+resolved history, valid-configuration backups, notification reminders, the coherence
+report and entity rename history. Program files and Home Assistant’s recorder
+database are excluded. Only metadata for these six known files is read, outside the
+event loop, when Configuration opens. The result and measurement time are cached
+for five minutes and are not refreshed automatically. Missing files count as zero;
+an inaccessible file makes the measurement unavailable rather than showing a
+partial total. The measurement does not write or flush pending data to disk.
+
 ### Periodic safety check
 
 Every 10 minutes, while monitoring is running, Alert Manager checks the current

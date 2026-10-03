@@ -107,6 +107,18 @@ export function formatStatisticsTime(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
+export function formatStorageSize(bytes, t) {
+  if (!Number.isFinite(bytes) || bytes < 0) return t("statistics.disk_unavailable");
+  const units = ["bytes", "kibibytes", "mebibytes", "gibibytes"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 2)} ${t(`statistics.disk_units.${units[unit]}`)}`;
+}
+
 export function renderRuntimeStatistics({ statistics, date, t }) {
   const title = `<h2>${esc(t("statistics.title"))}</h2>`;
   if (!statistics) return title;
@@ -121,7 +133,10 @@ export function renderRuntimeStatistics({ statistics, date, t }) {
       return `<div><dt>${esc(t(`statistics.${key}`))}</dt><dd>${esc(key.endsWith("_ms") ? formatStatisticsTime(value) : value)}</dd></div>`;
     }).join("")}</dl>
     <small>${esc(t("statistics.period", { start: date(statistics.observed_from), end: date(statistics.observed_until) }))}</small>
-    <small>${esc(t("statistics.window"))}</small>`;
+    <small>${esc(t("statistics.window"))}</small>
+    ${statistics.disk_usage ? `<dl class="statistics-grid"><div><dt>${esc(t("statistics.disk_usage"))}</dt><dd>${esc(formatStorageSize(statistics.disk_usage.bytes, t))}</dd></div></dl>
+      <small>${esc(t("statistics.disk_help"))}</small>
+      ${statistics.disk_usage.bytes != null ? `<small>${esc(t("statistics.disk_measured_at", { date: date(statistics.disk_usage.measured_at) }))}</small>` : ""}` : ""}`;
 }
 
 export function renderSettingsNavigation(t) {

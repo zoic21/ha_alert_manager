@@ -64,6 +64,8 @@ L’analyse de cohérence retrouve les références statiques vers des entités 
 
 La configuration présente les évaluations de règles, leurs temps de traitement, les transitions d’alertes et les envois de notifications sur 24 tranches horaires, conservées uniquement en mémoire et réinitialisées au redémarrage.
 
+Le diagnostic **Données sur disque** indique la taille totale des fichiers de données d’Alert Manager et l’heure de la mesure. Le calcul se fait à l’ouverture de Configuration, avec un cache de cinq minutes et sans actualisation automatique. Les fichiers du programme et la base d’historique de Home Assistant sont exclus.
+
 La détection repose sur les événements Home Assistant. Une vérification de sécurité toutes les 10 minutes contrôle aussi les états des entités déjà suivies, sans demander leur actualisation ni reconstituer les transitions manquées. Une condition nouvellement détectée commence à l’heure du contrôle. Le compteur de rattrapages dans les diagnostics permet de voir si cette vérification a corrigé des écarts.
 
 L’interface est disponible en **français et en anglais**, sur ordinateur et mobile. Tous les utilisateurs connectés peuvent consulter la carte, l’Accueil et l’Historique ; la configuration et toutes les actions, dont l’acquittement, sont réservées aux administrateurs.

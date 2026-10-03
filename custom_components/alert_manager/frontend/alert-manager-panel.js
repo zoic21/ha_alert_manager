@@ -997,13 +997,17 @@ async function load() {
     const initialLoad = !this._config;
     this._cachedStateNeedsRefresh = false;
     const readOnly = this._readOnly;
+    const includeDiskUsage = !readOnly && this._activeTab === "settings";
     this._loadPromise = Promise.all([
       readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
       readOnly ? Promise.resolve([]) : this._api.call({ type: "alert_manager/packs/list" }),
       readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/history/config/get" }),
       readOnly ? Promise.resolve(null) : this._api.call({ type: "alert_manager/config/recovery/get" }),
-      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({ type: "alert_manager/notifications/stats/get" }),
+      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({
+        type: "alert_manager/notifications/stats/get",
+        ...(includeDiskUsage ? { include_disk_usage: true } : {}),
+      }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -1064,6 +1068,9 @@ async function load() {
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
+      if (!readOnly && this._config && this._activeTab === "settings" && !includeDiskUsage) {
+        void this._refreshNotificationStats();
+      }
       if (this._cachedStateNeedsRefresh && this.isConnected) void this._load();
     }
 }
@@ -1151,6 +1158,7 @@ async function refreshNotificationStats() {
     }
     this._notificationStatsLoadPromise = this._api.call({
       type: "alert_manager/notifications/stats/get",
+      include_disk_usage: true,
     });
     try {
       this._notificationStats = await this._notificationStatsLoadPromise
@@ -7919,6 +7927,18 @@ function formatStatisticsTime(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
+function formatStorageSize(bytes, t) {
+  if (!Number.isFinite(bytes) || bytes < 0) return t("statistics.disk_unavailable");
+  const units = ["bytes", "kibibytes", "mebibytes", "gibibytes"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 2)} ${t(`statistics.disk_units.${units[unit]}`)}`;
+}
+
 function renderRuntimeStatistics({ statistics, date, t }) {
   const title = `<h2>${esc(t("statistics.title"))}</h2>`;
   if (!statistics) return title;
@@ -7933,7 +7953,10 @@ function renderRuntimeStatistics({ statistics, date, t }) {
       return `<div><dt>${esc(t(`statistics.${key}`))}</dt><dd>${esc(key.endsWith("_ms") ? formatStatisticsTime(value) : value)}</dd></div>`;
     }).join("")}</dl>
     <small>${esc(t("statistics.period", { start: date(statistics.observed_from), end: date(statistics.observed_until) }))}</small>
-    <small>${esc(t("statistics.window"))}</small>`;
+    <small>${esc(t("statistics.window"))}</small>
+    ${statistics.disk_usage ? `<dl class="statistics-grid"><div><dt>${esc(t("statistics.disk_usage"))}</dt><dd>${esc(formatStorageSize(statistics.disk_usage.bytes, t))}</dd></div></dl>
+      <small>${esc(t("statistics.disk_help"))}</small>
+      ${statistics.disk_usage.bytes != null ? `<small>${esc(t("statistics.disk_measured_at", { date: date(statistics.disk_usage.measured_at) }))}</small>` : ""}` : ""}`;
 }
 
 function renderSettingsNavigation(t) {

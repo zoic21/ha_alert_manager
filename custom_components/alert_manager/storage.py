@@ -9,14 +9,17 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .config_defaults import DEFAULT_CONFIG
 from .const import (
+    COHERENCE_STORAGE_KEY,
     CONFIG_BACKUP_LIMIT,
     CONFIG_BACKUP_STORAGE_KEY,
     CONFIG_BACKUP_STORAGE_VERSION,
@@ -27,6 +30,7 @@ from .const import (
     HISTORY_STORAGE_VERSION,
     LEGACY_RULE_SOURCES,
     MAX_RULES,
+    NOTIFICATION_STORAGE_KEY,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
@@ -41,6 +45,31 @@ from .validation import remove_unknown_stored_config_fields
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
+
+_DISK_USAGE_CACHE_SECONDS = 300
+_DISK_USAGE_STORAGE_KEYS = (
+    STORAGE_KEY,
+    HISTORY_STORAGE_KEY,
+    COHERENCE_STORAGE_KEY,
+    CONFIG_BACKUP_STORAGE_KEY,
+    NOTIFICATION_STORAGE_KEY,
+    ENTITY_RENAME_STORAGE_KEY,
+)
+
+
+def _measure_storage_bytes(storage_dir: Path) -> int | None:
+    """Read metadata for our data files only; run in the executor."""
+    total = 0
+    try:
+        for key in _DISK_USAGE_STORAGE_KEYS:
+            try:
+                total += (storage_dir / key).stat().st_size
+            except FileNotFoundError:
+                continue
+    except OSError as err:
+        _LOGGER.warning("Unable to measure Alert Manager storage size: %s", err)
+        return None
+    return total
 
 
 class EntityRenameHistoryStorage:
@@ -169,6 +198,26 @@ class AlertManagerStorage:
         self.variation_baselines: dict[str, float] = {}
         self.pack_runtime: dict[str, dict[str, Any]] = {}
         self.has_stored_snapshot = False
+        self._disk_usage_lock = asyncio.Lock()
+        self._disk_usage_cached_at = 0.0
+        self._disk_usage_snapshot: dict[str, Any] | None = None
+
+    async def async_disk_usage(self) -> dict[str, Any]:
+        """Measure stored data on demand, sharing a five-minute cache."""
+        async with self._disk_usage_lock:
+            if (
+                self._disk_usage_snapshot is None
+                or monotonic() - self._disk_usage_cached_at >= _DISK_USAGE_CACHE_SECONDS
+            ):
+                size = await self._hass.async_add_executor_job(
+                    _measure_storage_bytes, Path(self._hass.config.path(".storage"))
+                )
+                self._disk_usage_snapshot = {
+                    "bytes": size,
+                    "measured_at": dt_util.now().astimezone(UTC).isoformat(),
+                }
+                self._disk_usage_cached_at = monotonic()
+            return self._disk_usage_snapshot.copy()
 
     async def async_load(
         self,

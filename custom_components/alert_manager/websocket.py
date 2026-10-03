@@ -472,18 +472,29 @@ async def websocket_notification_test(
 @websocket_api.require_admin
 @websocket_api.async_response
 @websocket_api.websocket_command(
-    {vol.Required("type"): "alert_manager/notifications/stats/get"}
+    {
+        vol.Required("type"): "alert_manager/notifications/stats/get",
+        vol.Optional("include_disk_usage", default=False): bool,
+    }
 )
 async def websocket_notification_stats_get(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Return recent per-profile delivery counts without configuration data."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
+        disk_usage = (
+            await manager.storage.async_disk_usage()
+            if msg.get("include_disk_usage", False)
+            else None
+        )
+        diagnostics = manager.statistics.snapshot()
+        if disk_usage is not None:
+            diagnostics["disk_usage"] = disk_usage
         connection.send_result(
             msg["id"],
             {
                 **manager.notification_runtime.usage_snapshot(),
-                "diagnostics": manager.statistics.snapshot(),
+                "diagnostics": diagnostics,
             },
         )
 

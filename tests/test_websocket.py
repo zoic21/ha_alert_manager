@@ -409,6 +409,52 @@ def test_notification_stats_websocket_is_separate_from_configuration(hass, entry
     assert "usage" not in manager.get_config()
 
 
+def test_disk_usage_requires_explicit_request_and_admin_access(
+    hass, entry, monkeypatch
+):
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    calls = []
+    usage = {"bytes": 1024, "measured_at": "2026-10-03T12:00:00+00:00"}
+
+    async def disk_usage():
+        calls.append(True)
+        return usage
+
+    monkeypatch.setattr(manager.storage, "async_disk_usage", disk_usage)
+    connection = Connection(admin=True)
+    asyncio.run(websocket_notification_stats_get(hass, connection, {"id": 1}))
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, connection, {"id": 2, "include_disk_usage": False}
+        )
+    )
+    assert calls == []
+    assert all(
+        "disk_usage" not in result["diagnostics"] for _, result in connection.results
+    )
+    unauthorized = Connection(admin=False)
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, unauthorized, {"id": 3, "include_disk_usage": True}
+        )
+    )
+    assert calls == []
+    assert unauthorized.results == []
+    assert unauthorized.errors == [(3, "unauthorized", "Unauthorized")]
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, connection, {"id": 4, "include_disk_usage": True}
+        )
+    )
+    assert calls == [True]
+    result = connection.results[-1][1]
+    assert result["diagnostics"]["disk_usage"] == usage
+    assert result["diagnostics"]["notifications"] == 0
+    assert result["last_24h"] == {}
+
+
 def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypatch):
     """The admin-only endpoint returns the isolated scanner payload unchanged."""
     manager = AlertManager(hass, entry)

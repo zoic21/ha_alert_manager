@@ -24,6 +24,7 @@ import {
   renderSettings,
   renderRuntimeStatistics,
   formatStatisticsTime,
+  formatStorageSize,
   refreshNotificationProfileUsage,
 } from "../frontend-src/views/settings.js";
 
@@ -671,6 +672,34 @@ test("runtime diagnostics render scope, period and aggregates with escaped value
   assert.match(markup, /2.00 s/);
   assert.equal(formatStatisticsTime(0), "0 ms");
   assert.equal(formatStatisticsTime(1000), "1.00 s");
+});
+
+test("disk diagnostics format units, escape the measurement date and distinguish unavailable from zero", () => {
+  const diskT = (key, values) => key === "statistics.disk_measured_at"
+    ? `Mesure du ${values.date}` : ({
+      "statistics.disk_units.bytes": "o",
+      "statistics.disk_units.kibibytes": "Kio",
+      "statistics.disk_units.mebibytes": "Mio",
+      "statistics.disk_units.gibibytes": "Gio",
+      "statistics.disk_unavailable": "Indisponible",
+    }[key] ?? key);
+  for (const [bytes, expected] of [
+    [0, "0 o"], [1023, "1023 o"], [1024, "1.00 Kio"],
+    [1536, "1.50 Kio"], [1024 ** 2, "1.00 Mio"], [1024 ** 3, "1.00 Gio"],
+    [null, "Indisponible"], [undefined, "Indisponible"], [-1, "Indisponible"],
+  ]) assert.equal(formatStorageSize(bytes, diskT), expected);
+  const render = (bytes) => renderRuntimeStatistics({
+    statistics: { disk_usage: { bytes, measured_at: "<time>" } },
+    date: (value) => value,
+    t: diskT,
+  });
+  const markup = render(1536);
+  assert.match(markup, /statistics.disk_usage<\/dt><dd>1.50 Kio<\/dd>/);
+  assert.match(markup, /statistics.disk_help/);
+  assert.match(markup, /Mesure du &lt;time&gt;/);
+  assert.match(render(0), /<dd>0 o<\/dd>/);
+  assert.match(render(null), /<dd>Indisponible<\/dd>/);
+  assert.doesNotMatch(render(null), /Mesure du|<dd>0 o<\/dd>/);
 });
 
 test("statistics refresh replaces only the diagnostic content and profile counts", () => {

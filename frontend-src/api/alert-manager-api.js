@@ -129,13 +129,17 @@ export async function load() {
     const initialLoad = !this._config;
     this._cachedStateNeedsRefresh = false;
     const readOnly = this._readOnly;
+    const includeDiskUsage = !readOnly && this._activeTab === "settings";
     this._loadPromise = Promise.all([
       readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/config/get" }),
       this._api.call({ type: "alert_manager/alerts/list" }),
       readOnly ? Promise.resolve([]) : this._api.call({ type: "alert_manager/packs/list" }),
       readOnly ? Promise.resolve({}) : this._api.call({ type: "alert_manager/history/config/get" }),
       readOnly ? Promise.resolve(null) : this._api.call({ type: "alert_manager/config/recovery/get" }),
-      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({ type: "alert_manager/notifications/stats/get" }),
+      readOnly ? Promise.resolve({ last_24h: {} }) : this._api.call({
+        type: "alert_manager/notifications/stats/get",
+        ...(includeDiskUsage ? { include_disk_usage: true } : {}),
+      }),
       this._api.call({ type: "config/label_registry/list" }).catch(() => []),
       this._fetchTranslations(this._language),
     ]);
@@ -196,6 +200,9 @@ export async function load() {
         this._hydrateSelectors();
       }
       this._openAlertDeepLink();
+      if (!readOnly && this._config && this._activeTab === "settings" && !includeDiskUsage) {
+        void this._refreshNotificationStats();
+      }
       if (this._cachedStateNeedsRefresh && this.isConnected) void this._load();
     }
 }
@@ -283,6 +290,7 @@ export async function refreshNotificationStats() {
     }
     this._notificationStatsLoadPromise = this._api.call({
       type: "alert_manager/notifications/stats/get",
+      include_disk_usage: true,
     });
     try {
       this._notificationStats = await this._notificationStatsLoadPromise

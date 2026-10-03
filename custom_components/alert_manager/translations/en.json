@@ -988,6 +988,16 @@
     },
     "statistics": {
       "title": "Runtime diagnostics",
+      "disk_usage": "Data on disk",
+      "disk_help": "Alert Manager data files: configuration, alerts, history, backups, notifications, coherence and entity renames. Excludes program files and Home Assistant’s recorder database. Measured when Configuration opens, cached for 5 minutes; no automatic refresh.",
+      "disk_measured_at": "Measured at {date}.",
+      "disk_unavailable": "Unavailable",
+      "disk_units": {
+        "bytes": "B",
+        "kibibytes": "KiB",
+        "mebibytes": "MiB",
+        "gibibytes": "GiB"
+      },
       "scope": "Custom rules: one evaluation per rule/entity pair, including its condition. Synchronous processing only; excludes tests, automatic packs, coherence scans and asynchronous waits. This is not Home Assistant event-loop load.",
       "periodic_recoveries": "Periodic check recoveries",
       "evaluation_count": "Rule evaluations",
