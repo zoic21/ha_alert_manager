@@ -274,6 +274,32 @@
         "old": "Previous entity ID",
         "new": "New entity ID",
         "more_info": "Show entity information"
+      },
+      "replacement": {
+        "button": "Entity replacement",
+        "preview_title": "Replacement preview",
+        "old": "Previous entity ID",
+        "new": "New entity ID",
+        "help": "Search for an entity or type its ID. The new entity must exist in Home Assistant. YAML files and dashboards are checked, including blueprint inputs.",
+        "preview": "Preview replacement",
+        "apply": "Replace",
+        "back": "Edit entity IDs",
+        "busy": "Working…",
+        "count": "{count} of {total} replacement(s) selected across {files} file(s).",
+        "location": "Line {line}, column {column}",
+        "empty": "No references to replace.",
+        "success": "{replacement_count} replacement(s) completed across {file_count} file(s).",
+        "reload": "Objects saved through Home Assistant editors reload automatically. Reload other affected YAML configurations; a restart is needed only if the integration does not support reloading. For ESPHome, validate and install the configuration on the device.",
+        "dashboard_saved": "The objects were saved with Home Assistant APIs. No restart is needed.",
+        "api_help": "Home Assistant validates and reloads automations, scripts and scenes managed by its editors. Reloading may interrupt a running execution.",
+        "errors": {
+          "replacement_entity_invalid": "Enter two valid, different entity IDs.",
+          "replacement_entity_missing": "The new entity does not exist in Home Assistant. No replacement has started.",
+          "replacement_selection_invalid": "Select at least one replacement from this preview.",
+          "replacement_yaml_invalid": "The result is not valid YAML. No files were modified.",
+          "replacement_preview_stale": "The configuration has changed since the preview. Generate a new preview before replacing.",
+          "replacement_failed": "Replacement failed. The changes have been rolled back."
+        }
       }
     },
     "duration": {

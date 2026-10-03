@@ -560,6 +560,25 @@ export const settingsStyles = `
   .coherence-export-label > [aria-hidden="true"] {
     visibility: hidden;
   }
+  .entity-replacement-content {
+    display: grid;
+    gap: 12px;
+    padding: 20px 24px;
+    min-width: 0;
+  }
+  .entity-replacement-content p { margin: 0; }
+  .entity-replacement-fields { display: grid; gap: 16px; }
+  .entity-replacement-list { display: grid; gap: 4px; }
+  .entity-replacement-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 0;
+  }
+  .entity-replacement-row > span { min-width: 0; overflow-wrap: anywhere; }
+  .entity-replacement-row strong, .entity-replacement-row small { display: block; }
+  .entity-replacement-row small { color: var(--secondary-text-color); }
   .coherence-stats {
     display: flex;
     flex-wrap: wrap;

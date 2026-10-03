@@ -30,6 +30,7 @@ import {
   ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth, testRule,
   startRuleEditorResize, stopRuleEditorResize, switchRuleEditor, updateRuleTestDisplay,
 } from "./components/rule-editor.js";
+import { hydrateEntityReplacement } from "./views/entity-replacement.js";
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
 import { esc } from "./utils/escaping.js";
@@ -260,8 +261,7 @@ class AlertManagerPanel extends HTMLElement {
     this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
     this._coherence = this._coherenceScannedAt = null;
-    this._coherenceLoaded = false;
-    this._coherenceLoading = false;
+    this._coherenceLoaded = false; this._coherenceLoading = false; this._entityReplacement = null;
     this._coherenceLoadPromise = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
     this._entityRenamesState = { data: null, loading: false, error: null };
@@ -426,7 +426,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
-    this._hydrateCoherenceTable();
+    this._hydrateCoherenceTable(); hydrateEntityReplacement(this.shadowRoot, this);
     hydrateHistoryStatistics(this.shadowRoot, this);
     this._hydrateYamlEditor();
     this._hydrateConfigBackups();

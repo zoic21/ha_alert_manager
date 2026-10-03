@@ -85,6 +85,34 @@ class JSONEncoder(json.JSONEncoder):
 
 
 json_helper.JSONEncoder = JSONEncoder
+file_util = _module("homeassistant.util.file")
+
+
+def write_utf8_file(filename, utf8_data, private=False, mode="w"):
+    """Small equivalent of HA's file writer for isolated replacement tests."""
+    path = Path(filename)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    if "b" in mode:
+        temporary.write_bytes(utf8_data)
+    else:
+        temporary.write_text(utf8_data, encoding="utf-8")
+    temporary.replace(path)
+
+
+file_util.write_utf8_file = write_utf8_file
+
+yaml_util = _module("homeassistant.util.yaml")
+
+
+def _parse_yaml(content, secrets=None):
+    import yaml
+
+    return yaml.safe_load(content)
+
+
+yaml_util.parse_yaml = _parse_yaml
+yaml_util.Secrets = lambda path: path
+
 entity_helper = _module("homeassistant.helpers.entity")
 entity_helper.entity_sources = lambda hass: hass.data.setdefault("entity_info", {})
 

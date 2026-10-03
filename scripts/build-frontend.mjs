@@ -23,6 +23,7 @@ const sourceNames = [
   "components/rule-editor.js",
   "views/overview.js",
   "views/history.js",
+  "views/entity-replacement.js",
   "views/coherence.js",
   "views/rules.js",
   "views/automatic.js",

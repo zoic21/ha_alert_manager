@@ -1,3 +1,4 @@
+import { handleEntityReplacementAction, renderEntityReplacement } from "./entity-replacement.js";
 import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { renderSideDrawer } from "../components/configuration-drawer.js";
@@ -328,6 +329,7 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
       </div>
       <div class="coherence-action-column">
         <ha-button appearance="outlined" data-action="open-entity-renames">${esc(t("coherence.entity_renames.button"))}</ha-button>
+        <ha-button appearance="outlined" data-action="open-entity-replacement">${esc(t("coherence.replacement.button"))}</ha-button>
       </div>
     </div>`;
 }
@@ -347,6 +349,7 @@ export function renderCoherence(context) {
       entityRenamesError = null,
       entityRenamesOpen = false,
       entityExportLoading = false,
+      entityReplacement = null,
       useBottomSheet = false,
       formatDate = (value) => value,
       t,
@@ -371,6 +374,7 @@ export function renderCoherence(context) {
             t,
           })
         : "";
+    const replacementDialog = renderEntityReplacement({ state: entityReplacement, t });
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
@@ -378,7 +382,7 @@ export function renderCoherence(context) {
           ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
-      </ha-card>${drawer}`;
+      </ha-card>${drawer}${replacementDialog}`;
     }
     return `<hass-tabs-subpage-data-table
       id="panel-shell"
@@ -395,7 +399,7 @@ export function renderCoherence(context) {
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
-    </hass-tabs-subpage-data-table>${drawer}`;
+    </hass-tabs-subpage-data-table>${drawer}${replacementDialog}`;
 }
 
 export function renderCoherencePanel() {
@@ -413,6 +417,7 @@ export function renderCoherencePanel() {
       entityRenamesError: this._entityRenamesState.error,
       entityRenamesOpen: this._configurationDrawer?.kind === "entity-renames",
       entityExportLoading: this._entityExportLoading,
+      entityReplacement: this._entityReplacement,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
@@ -420,6 +425,7 @@ export function renderCoherencePanel() {
 }
 
 export async function handleCoherenceAction(action) {
+  if (action.endsWith("-entity-replacement")) return handleEntityReplacementAction.call(this, action);
   if (action === "export-entities") {
     if (this._readOnly || this._entityExportLoading) return true;
     this._entityExportLoading = true;

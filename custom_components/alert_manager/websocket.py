@@ -21,6 +21,13 @@ ALERT_IDS_SCHEMA = vol.All(
     vol.Length(min=1, max=1000),
 )
 
+REPLACEMENT_SELECTION_SCHEMA = {
+    vol.Required("preview_id"): vol.All(str, vol.Length(min=32, max=32)),
+    vol.Required("occurrence_ids"): vol.All(
+        [vol.All(str, vol.Length(min=1, max=4096))], vol.Length(min=1)
+    ),
+}
+
 
 def _manager(
     hass: HomeAssistant, connection: ActiveConnection, message_id: int
@@ -168,6 +175,81 @@ async def websocket_coherence_get(
     """Return the latest persisted coherence report without starting a scan."""
     if _manager(hass, connection, msg["id"]) is not None:
         connection.send_result(msg["id"], hass.data.get(DATA_COHERENCE_RESULT))
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/entity_replacement/preview",
+        vol.Required("old_entity_id"): vol.All(str, vol.Length(min=3, max=255)),
+        vol.Required("new_entity_id"): vol.All(str, vol.Length(min=3, max=255)),
+    }
+)
+async def websocket_entity_replacement_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview exact reference occurrences without writing configuration."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.entity_replacement.async_preview(
+            msg["old_entity_id"],
+            msg["new_entity_id"],
+            scan_esphome=manager.config["coherence_scan_esphome"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], str(err), str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/entity_replacement/prepare",
+        **REPLACEMENT_SELECTION_SCHEMA,
+    }
+)
+async def websocket_entity_replacement_prepare(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Prepare validated changes for the native HA configuration REST APIs."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.entity_replacement.async_prepare_apply(
+            msg["preview_id"], msg["occurrence_ids"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], str(err), str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/entity_replacement/apply",
+        **REPLACEMENT_SELECTION_SCHEMA,
+    }
+)
+async def websocket_entity_replacement_apply(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Apply only occurrences retained in the server-side preview."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        result = await manager.entity_replacement.async_apply(
+            msg["preview_id"], msg["occurrence_ids"]
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], str(err), str(err))
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin
@@ -694,6 +776,9 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,
+        websocket_entity_replacement_preview,
+        websocket_entity_replacement_prepare,
+        websocket_entity_replacement_apply,
         websocket_deleted_entities_list,
         websocket_entity_renames_list,
         websocket_entities_export,
