@@ -183,6 +183,36 @@ class AlertManagerApi {
     return this.call({ type: "alert_manager/coherence/entity_renames/list" });
   }
 
+  previewEntityReplacement(oldEntityId, newEntityId) {
+    return this.call({
+      type: "alert_manager/coherence/entity_replacement/preview",
+      old_entity_id: oldEntityId, new_entity_id: newEntityId,
+    });
+  }
+
+  async applyEntityReplacement(previewId, occurrenceIds) {
+    const message = { preview_id: previewId, occurrence_ids: occurrenceIds };
+    const plan = await this.call({ type: "alert_manager/coherence/entity_replacement/prepare", ...message });
+    const written = [];
+    try {
+      for (const update of plan.native_updates) {
+        const path = `config/${update.domain}/config/${encodeURIComponent(update.key)}`;
+        const current = await this._getHass().callApi("GET", path);
+        if (!sameReplacementConfiguration(current, update.before)) {
+          throw Object.assign(new Error("replacement_preview_stale"), { code: "replacement_preview_stale" });
+        }
+        written.push({ path, before: update.before });
+        await this._getHass().callApi("POST", path, update.after);
+      }
+      return await this.call({ type: "alert_manager/coherence/entity_replacement/apply", ...message });
+    } catch (error) {
+      for (const update of written.reverse()) {
+        await this._getHass().callApi("POST", update.path, update.before);
+      }
+      throw error;
+    }
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",
@@ -190,6 +220,14 @@ class AlertManagerApi {
       ...(ruleId ? { rule_id: ruleId } : {}),
     });
   }
+}
+
+function sameReplacementConfiguration(left, right) {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length
+    && keys.every((key) => Object.hasOwn(right, key) && sameReplacementConfiguration(left[key], right[key]));
 }
 
 // Source: frontend-src/utils/escaping.js
@@ -6033,6 +6071,139 @@ function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleL
   }).join("");
 }
 
+// Source: frontend-src/views/entity-replacement.js
+function renderEntityReplacement({ state, t }) {
+  if (!state) return "";
+  const preview = state.preview;
+  const selected = state.selected?.size ?? 0;
+  const content = state.result
+    ? `<ha-alert alert-type="success">${esc(t("coherence.replacement.success", state.result))}</ha-alert>
+       <p>${esc(t(state.result.yaml_changed ? "coherence.replacement.reload" : "coherence.replacement.dashboard_saved"))}</p>`
+    : preview
+      ? `<p>${esc(preview.old_entity_id)} → ${esc(preview.new_entity_id)}</p>
+         <p>${esc(t("coherence.replacement.api_help"))}</p>
+         <p role="status" data-replacement-count>${esc(t("coherence.replacement.count", { count: selected, total: preview.replacement_count, files: preview.file_count }))}</p>
+         ${preview.files_skipped ? `<ha-alert alert-type="warning">${esc(t("coherence.stats.skipped", { count: preview.files_skipped }))}</ha-alert>` : ""}
+         ${preview.replacement_count ? `<div class="entity-replacement-list">${preview.replacements.map((row) => `
+           <label class="entity-replacement-row">
+             <ha-checkbox data-replacement-id="${esc(row.id)}" ${state.selected.has(row.id) ? "checked" : ""} ${state.busy ? "disabled" : ""} aria-label="${esc(`${row.source_name} · ${row.file}:${row.line}:${row.column}`)}"></ha-checkbox>
+             <span><strong>${esc(row.source_name)}</strong><small>${esc(t(`coherence.types.${row.source_type}`))} · ${esc(row.file)} · ${esc(t("coherence.replacement.location", row))}</small></span>
+           </label>`).join("")}</div>` : `<p>${esc(t("coherence.replacement.empty"))}</p>`}`
+      : `<p>${esc(t("coherence.replacement.help"))}</p>
+         <div class="entity-replacement-fields">
+           <ha-selector data-replacement-field="old_entity_id" aria-label="${esc(t("coherence.replacement.old"))}"></ha-selector>
+           <ha-selector data-replacement-field="new_entity_id" aria-label="${esc(t("coherence.replacement.new"))}"></ha-selector>
+         </div>`;
+  return `<ha-dialog id="entity-replacement-dialog" width="large" header-title="${esc(t(preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button"))}">
+    <ha-icon-button slot="headerNavigationIcon" path="${MDI_CLOSE}" data-action="close-entity-replacement" aria-label="${esc(t("buttons.close"))}" ${state.busy ? "disabled" : ""}></ha-icon-button>
+    <div class="entity-replacement-content">
+      ${state.error ? `<ha-alert alert-type="error" role="alert">${esc(state.error)}</ha-alert>` : ""}
+      ${content}
+    </div>
+    <ha-dialog-footer slot="footer">
+      <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t(state.result ? "buttons.close" : "buttons.cancel"))}</ha-button>
+      ${preview && !state.result ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
+      ${state.result ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}>${esc(t(state.busy ? "coherence.replacement.busy" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
+    </ha-dialog-footer>
+  </ha-dialog>`;
+}
+
+function hydrateEntityReplacement(root, context) {
+  const dialog = root?.querySelector?.("#entity-replacement-dialog");
+  const state = context._entityReplacement;
+  if (!dialog || !state) return;
+  dialog.hass = context._hass;
+  dialog.preventScrimClose = state.busy;
+  dialog.scrimClickAction = state.busy ? "" : "close";
+  dialog.escapeKeyAction = state.busy ? "" : "close";
+  if (!dialog.dataset.configured) {
+    dialog.dataset.configured = "true";
+    dialog.addEventListener("closed", (event) => {
+      if (event.target !== dialog || context._entityReplacement !== state) return;
+      if (state.busy) { dialog.open = true; return; }
+      context._entityReplacement = null;
+      context._render();
+    });
+  }
+  const fields = dialog.querySelectorAll("[data-replacement-field]");
+  const entityIds = new Set(fields.length ? [
+    ...Object.keys(context._hass?.states ?? {}),
+    ...Object.keys(context._hass?.entities ?? {}),
+  ] : []);
+  const options = [...entityIds].sort().map((value) => {
+    const name = context._hass?.states?.[value]?.attributes?.friendly_name;
+    return { value, label: name ? `${name} (${value})` : value };
+  });
+  fields.forEach((control) => {
+    const field = control.dataset.replacementField;
+    control.hass = context._hass;
+    control.label = context._t(`coherence.replacement.${field === "old_entity_id" ? "old" : "new"}`);
+    control.selector = { select: { options, custom_value: true, mode: "dropdown" } };
+    control.value = state[field];
+    control.disabled = state.busy;
+    if (control.dataset.configured) return;
+    control.dataset.configured = "true";
+    control.addEventListener("value-changed", (event) => {
+      if (state.busy) return;
+      state[field] = String(event.detail?.value ?? "");
+      control.value = state[field];
+    });
+  });
+  dialog.querySelectorAll("[data-replacement-id]").forEach((checkbox) => {
+    if (checkbox.dataset.configured) return;
+    checkbox.dataset.configured = "true";
+    checkbox.addEventListener("change", () => {
+      if (state.busy) return;
+      const id = checkbox.dataset.replacementId;
+      if (checkbox.checked) state.selected.add(id);
+      else state.selected.delete(id);
+      dialog.querySelector("[data-replacement-count]").textContent = context._t("coherence.replacement.count", {
+        count: state.selected.size, total: state.preview.replacement_count, files: state.preview.file_count,
+      });
+      dialog.querySelector('[data-action="apply-entity-replacement"]').disabled = !state.selected.size;
+    });
+  });
+  dialog.open = true;
+}
+
+async function handleEntityReplacementAction(action) {
+  if (!["open", "close", "back", "preview", "apply"].some((prefix) => action === `${prefix}-entity-replacement`)) return false;
+  if (this._readOnly || this._entityReplacement?.busy) return true;
+  if (action === "open-entity-replacement") {
+    this._entityReplacement = { old_entity_id: "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
+  } else if (action === "close-entity-replacement") {
+    this._entityReplacement = null;
+  } else if (action === "back-entity-replacement") {
+    this._entityReplacement.preview = null;
+    this._entityReplacement.error = null;
+  } else {
+    const state = this._entityReplacement;
+    if (!state) return true;
+    state.error = null;
+    state.busy = true;
+    this._render();
+    try {
+      if (action === "preview-entity-replacement") {
+        state.preview = await this._api.previewEntityReplacement(state.old_entity_id.trim(), state.new_entity_id.trim());
+        state.selected = new Set(state.preview.replacements.map((row) => row.id));
+      } else {
+        if (!state.preview || !state.selected.size) return true;
+        state.result = await this._api.applyEntityReplacement(state.preview.preview_id, [...state.selected]);
+      }
+    } catch (error) {
+      const code = error?.code ?? error?.body?.code;
+      state.error = ["replacement_entity_invalid", "replacement_entity_missing", "replacement_selection_invalid", "replacement_yaml_invalid", "replacement_preview_stale", "replacement_failed"].includes(code)
+        ? this._t(`coherence.replacement.errors.${code}`) : this._errorText(error);
+    } finally {
+      state.busy = false;
+      this._render();
+    }
+    return true;
+  }
+  this._render();
+  return true;
+}
+
 // Source: frontend-src/views/coherence.js
 function coherenceStatsMarkup() {
     const result = this._coherence;
@@ -6358,6 +6529,7 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
       </div>
       <div class="coherence-action-column">
         <ha-button appearance="outlined" data-action="open-entity-renames">${esc(t("coherence.entity_renames.button"))}</ha-button>
+        <ha-button appearance="outlined" data-action="open-entity-replacement">${esc(t("coherence.replacement.button"))}</ha-button>
       </div>
     </div>`;
 }
@@ -6377,6 +6549,7 @@ function renderCoherence(context) {
       entityRenamesError = null,
       entityRenamesOpen = false,
       entityExportLoading = false,
+      entityReplacement = null,
       useBottomSheet = false,
       formatDate = (value) => value,
       t,
@@ -6401,6 +6574,7 @@ function renderCoherence(context) {
             t,
           })
         : "";
+    const replacementDialog = renderEntityReplacement({ state: entityReplacement, t });
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
@@ -6408,7 +6582,7 @@ function renderCoherence(context) {
           ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
-      </ha-card>${drawer}`;
+      </ha-card>${drawer}${replacementDialog}`;
     }
     return `<hass-tabs-subpage-data-table
       id="panel-shell"
@@ -6425,7 +6599,7 @@ function renderCoherence(context) {
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
         </ha-card>
       </div>
-    </hass-tabs-subpage-data-table>${drawer}`;
+    </hass-tabs-subpage-data-table>${drawer}${replacementDialog}`;
 }
 
 function renderCoherencePanel() {
@@ -6443,6 +6617,7 @@ function renderCoherencePanel() {
       entityRenamesError: this._entityRenamesState.error,
       entityRenamesOpen: this._configurationDrawer?.kind === "entity-renames",
       entityExportLoading: this._entityExportLoading,
+      entityReplacement: this._entityReplacement,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
@@ -6450,6 +6625,7 @@ function renderCoherencePanel() {
 }
 
 async function handleCoherenceAction(action) {
+  if (action.endsWith("-entity-replacement")) return handleEntityReplacementAction.call(this, action);
   if (action === "export-entities") {
     if (this._readOnly || this._entityExportLoading) return true;
     this._entityExportLoading = true;
@@ -9364,6 +9540,25 @@ const settingsStyles = `
   .coherence-export-label > [aria-hidden="true"] {
     visibility: hidden;
   }
+  .entity-replacement-content {
+    display: grid;
+    gap: 12px;
+    padding: 20px 24px;
+    min-width: 0;
+  }
+  .entity-replacement-content p { margin: 0; }
+  .entity-replacement-fields { display: grid; gap: 16px; }
+  .entity-replacement-list { display: grid; gap: 4px; }
+  .entity-replacement-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 0;
+  }
+  .entity-replacement-row > span { min-width: 0; overflow-wrap: anywhere; }
+  .entity-replacement-row strong, .entity-replacement-row small { display: block; }
+  .entity-replacement-row small { color: var(--secondary-text-color); }
   .coherence-stats {
     display: flex;
     flex-wrap: wrap;
@@ -10697,8 +10892,7 @@ class AlertManagerPanel extends HTMLElement {
     this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
     this._coherence = this._coherenceScannedAt = null;
-    this._coherenceLoaded = false;
-    this._coherenceLoading = false;
+    this._coherenceLoaded = false; this._coherenceLoading = false; this._entityReplacement = null;
     this._coherenceLoadPromise = null;
     this._deletedEntitiesState = { data: null, loading: false, error: null };
     this._entityRenamesState = { data: null, loading: false, error: null };
@@ -10863,7 +11057,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
-    this._hydrateCoherenceTable();
+    this._hydrateCoherenceTable(); hydrateEntityReplacement(this.shadowRoot, this);
     hydrateHistoryStatistics(this.shadowRoot, this);
     this._hydrateYamlEditor();
     this._hydrateConfigBackups();

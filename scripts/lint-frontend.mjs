@@ -36,6 +36,7 @@ const filenames = [
   "utils/table-preferences.js",
   "utils/translations.js",
   "views/automatic.js",
+  "views/entity-replacement.js",
   "views/coherence.js",
   "views/history.js",
   "views/overview.js",

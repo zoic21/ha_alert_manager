@@ -21,6 +21,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
+from .entity_replacement import EntityReplacement
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
@@ -68,6 +69,7 @@ class AlertManager(
         """Initialize the manager."""
         self.hass = hass
         self.entry = entry
+        self.entity_replacement = EntityReplacement(hass)
         self.storage = AlertManagerStorage(hass)
         self.history_storage = AlertManagerHistoryStorage(hass)
         self.entity_rename_history = EntityRenameHistoryStorage(hass)

@@ -116,6 +116,46 @@ attributes themselves can contain locations, URLs or tokens: keep the file priva
 If an attribute cannot be encoded as JSON, the export fails visibly rather than
 silently dropping data or downloading an incomplete inventory.
 
+## Replace an entity reference
+
+**Entity replacement** is available to administrators before or after a coherence
+scan. Select or type the previous and new entity IDs, then choose **Preview
+replacement**. The new ID must exist in Home Assistant's states or entity registry;
+the previous ID may belong to a deleted entity. This replaces references and does
+not rename an entity or change its history.
+
+The preview counts every physical occurrence, including multiple references on one
+line. It shows automation, script, scene, template and dashboard/view names, with
+the file, line and column underneath. Blueprint instances retain their automation
+or script name. Uncheck any occurrence to leave it unchanged, then choose **Replace**.
+
+| Source | Save and activation |
+| --- | --- |
+| Automations, scripts and scenes in the native editor files | The panel uses Home Assistant's authenticated configuration REST APIs. HA validates the objects and schedules their reload, as when saving in its editors. No restart is needed. |
+| Dashboards managed in the UI | The integration reads the live dashboard configuration and uses its native save API, which updates storage and notifies the frontend. No direct `.storage` edit or restart. |
+| Other YAML, including packages, external automation/script files and YAML dashboards | Selected text is replaced while preserving the remaining formatting, comments and HA tags. Reload the affected configuration; restart only for integrations without a reload action. |
+| ESPHome | The existing ESPHome scan setting applies. Validate and install the updated configuration on the device through ESPHome. Editing YAML does not flash firmware. |
+
+Home Assistant may stop running automation/script actions when reloading. Its own
+editors also control the formatting of the YAML they save.
+
+Replacement uses the coherence scanner's file exclusions and static-reference
+traversal. Definition IDs/names, comments, documentation branches, dynamically constructed IDs and
+blueprint definitions are skipped. Other HA storage files and Alert Manager custom
+rules are outside this replacement workflow. Unreadable or invalid files are
+reported as skipped in the preview.
+
+Before saving, the backend rechecks that the target entity exists, selected files
+still match the preview, and each candidate is valid YAML. A replacement that would
+merge two entity mapping keys is rejected. After the native editor API calls, the
+backend verifies the YAML they saved before committing other sources. External YAML
+is also parsed after writing. If an operation fails, the workflow restores written
+YAML/dashboard sources and restores attempted native-editor changes through the
+same HA APIs. Keep the panel open until the operation completes: the native REST
+APIs do not provide a transaction spanning several objects.
+
+Run a new coherence scan after activation to update the retained findings.
+
 ## Working through findings
 
 Open the affected automation, script, dashboard or custom rule and check whether the reference should be replaced or removed. Exclude it only when it is intentional. Run the scan again to validate the correction; an unresolved or incomplete check must not be mistaken for a confirmed recovery.

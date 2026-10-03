@@ -274,6 +274,32 @@
         "old": "Ancien identifiant",
         "new": "Nouvel identifiant",
         "more_info": "Afficher les informations de l’entité"
+      },
+      "replacement": {
+        "button": "Remplacement d’entité",
+        "preview_title": "Aperçu du remplacement",
+        "old": "Ancien identifiant d’entité",
+        "new": "Nouvel identifiant d’entité",
+        "help": "Recherchez une entité ou saisissez son identifiant. La nouvelle entité doit exister dans Home Assistant. Les fichiers YAML et dashboards sont analysés, y compris les entrées des blueprints.",
+        "preview": "Avant le remplacement",
+        "apply": "Remplacer",
+        "back": "Modifier les identifiants",
+        "busy": "Traitement en cours…",
+        "count": "{count} remplacement(s) sélectionné(s) sur {total}, dans {files} fichier(s).",
+        "location": "Ligne {line}, colonne {column}",
+        "empty": "Aucune référence à remplacer.",
+        "success": "{replacement_count} remplacement(s) effectué(s) dans {file_count} fichier(s).",
+        "reload": "Les objets enregistrés par les éditeurs Home Assistant sont rechargés automatiquement. Rechargez les autres configurations YAML concernées ; un redémarrage est nécessaire seulement si l’intégration ne propose pas de rechargement. Pour ESPHome, validez puis installez la configuration sur l’appareil.",
+        "dashboard_saved": "Les objets ont été enregistrés avec les API Home Assistant. Aucun redémarrage n’est nécessaire.",
+        "api_help": "Home Assistant valide et recharge les automatisations, scripts et scènes de ses éditeurs. Ce rechargement peut interrompre une exécution en cours.",
+        "errors": {
+          "replacement_entity_invalid": "Saisissez deux identifiants d’entité valides et différents.",
+          "replacement_entity_missing": "La nouvelle entité n’existe pas dans Home Assistant. Aucun remplacement n’a été lancé.",
+          "replacement_selection_invalid": "Sélectionnez au moins un remplacement de cet aperçu.",
+          "replacement_yaml_invalid": "Le résultat n’est pas un YAML valide. Aucun fichier n’a été modifié.",
+          "replacement_preview_stale": "La configuration a changé depuis l’aperçu. Relancez l’aperçu avant de remplacer.",
+          "replacement_failed": "Le remplacement a échoué. Les modifications ont été annulées."
+        }
       }
     },
     "duration": {
