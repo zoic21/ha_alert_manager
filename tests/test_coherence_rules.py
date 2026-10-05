@@ -3,6 +3,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from custom_components.alert_manager.coherence import (
     async_scan_configuration,
     scan_configuration,
@@ -29,11 +31,12 @@ def rule(**changes):
     return Rule(**(values | changes))
 
 
-def test_rule_fields_exclusions_and_snapshot(tmp_path):
-    source = rule()
-    snapshot = snapshot_rules([source])
-    source.entity_ids.clear()
-    source.condition_template = "{{ states('sensor.changed') }}"
+@pytest.mark.parametrize("source", ["value", "jinja"])
+def test_rule_fields_exclusions_and_snapshot(tmp_path, source):
+    original = rule(source=source)
+    snapshot = snapshot_rules([original])
+    original.entity_ids.clear()
+    original.condition_template = "{{ states('sensor.changed') }}"
     report = scan_configuration(
         tmp_path,
         frozenset({"sensor.condition"}),
@@ -57,10 +60,10 @@ def test_rule_fields_exclusions_and_snapshot(tmp_path):
     )["results"]
 
 
-def test_jinja_rule_ignores_source_placeholder_and_plain_messages(tmp_path):
+def test_jinja_rule_ignores_plain_messages(tmp_path):
     report = scan_configuration(
         tmp_path,
-        frozenset(),
+        frozenset({"sensor.missing"}),
         custom_rules=snapshot_rules(
             [
                 rule(
@@ -74,8 +77,12 @@ def test_jinja_rule_ignores_source_placeholder_and_plain_messages(tmp_path):
     assert report["results"] == []
 
 
-def test_same_reference_in_two_rules_and_recovery(tmp_path):
-    rules = [rule(id=key, condition_template=None, message=None) for key in ("a", "b")]
+@pytest.mark.parametrize("source", ["value", "jinja"])
+def test_same_reference_in_two_rules_and_recovery(tmp_path, source):
+    rules = [
+        rule(id=key, source=source, condition_template="{{ true }}", message=None)
+        for key in ("a", "b")
+    ]
     report = scan_configuration(
         tmp_path, frozenset(), custom_rules=snapshot_rules(rules)
     )
@@ -98,3 +105,46 @@ def test_async_scan_includes_manager_rules(hass, tmp_path):
         "sensor.condition",
         "sensor.message",
     }
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "value",
+        "value_variation",
+        "value_sequence",
+        "value_transition",
+        "unchanged",
+        "jinja",
+        "none",
+    ],
+)
+@pytest.mark.parametrize("enabled", [False, True])
+def test_async_scan_reports_deleted_camera_sources(hass, tmp_path, source, enabled):
+    hass.config.path = lambda: str(tmp_path)
+    missing = [f"camera.deleted_{index}" for index in range(10)]
+    hass.states.set("camera.existing", "unavailable")
+    hass.data[DATA_MANAGER] = SimpleNamespace(
+        rules=[
+            rule(
+                name="Cameras",
+                entity_ids=[*missing, "camera.existing"],
+                source=source,
+                enabled=enabled,
+                condition_template="{{ is_state(entity_id, 'unavailable') }}",
+                message="Look at camera.example",
+            )
+        ]
+    )
+
+    report = asyncio.run(async_scan_configuration(hass))
+
+    assert {row["entity_id"] for row in report["results"]} == set(missing)
+    assert report["missing_count"] == report["missing_entity_count"] == 10
+    assert report["references_checked"] == 11
+    assert report["files_scanned"] == 0
+    for row in report["results"]:
+        assert row["source_type"] == "custom_rule"
+        assert row["source_name"] == "Cameras"
+        assert row["file"] == "alert_manager/rules/rule-1/entity_ids"
+        assert row["link"] == {"type": "custom_rule", "path": "rule-1"}
