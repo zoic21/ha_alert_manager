@@ -10,7 +10,7 @@ from homeassistant.util.hass_dict import HassKey
 from .frontend_version import FRONTEND_BUNDLE_HASH
 
 DOMAIN: Final = "alert_manager"
-INTEGRATION_VERSION: Final = "2.5.0"
+INTEGRATION_VERSION: Final = "2.6.0-dev.1"
 # Build-time identity covers both distributed bundles without import-time I/O.
 FRONTEND_CACHE_VERSION: Final = f"{INTEGRATION_VERSION}.{FRONTEND_BUNDLE_HASH}"
 PLATFORMS: Final = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]

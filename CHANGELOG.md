@@ -1,9 +1,29 @@
 # Changelog
 
 This changelog intentionally tracks only significant release-level changes in Alert Manager.
-Development, beta and release-candidate iterations are not listed separately. Intermediate
+The first prerelease of a new series may summarize upcoming changes. Subsequent
+development, beta and release-candidate iterations are not listed separately. Intermediate
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
+
+## 2.6.0-dev.1 — October 7, 2026
+
+Development prerelease of the 2.6 series.
+
+- Review the latest 500 entity renames from Coherence, including the old and new
+  identifiers and a shortcut to the current entity.
+- Preview entity reference replacements and correct supported coherence findings,
+  individually or in a selection, after an entity rename.
+- Show the shared entity unit in numeric rule conditions, such as **State below
+  200 V**, when all selected entities use the same unit.
+- View Alert Manager's data usage on disk from configuration diagnostics.
+- Improve coherence scan performance and skip generated ESPHome cache files.
+- Preserve Home Assistant YAML tags when replacing references, improve export
+  protection and reliability, and keep the entity export button width stable.
+- Update compatibility with Home Assistant 2026.10 and improve frontend cache
+  refreshes and runtime reliability.
+
+Existing rules, notification profiles and alert history are preserved.
 
 ## 2.5.0 — September 30, 2026
 
