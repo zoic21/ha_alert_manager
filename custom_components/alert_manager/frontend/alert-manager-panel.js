@@ -5017,7 +5017,10 @@ function ruleSummary(rule) {
     if (rule.operator === "unchanged") {
       return this._t("conditions.rule.selected_unchanged", { source, duration: "" });
     }
-    const expected = this._ruleValueList(rule.value).join(" / ");
+    const unit = VARIATION_RULE_OPERATORS.has(rule.operator)
+      ? sequenceRuleUnit(rule, this._hass?.states) : "";
+    const expected = this._ruleValueList(rule.value)
+      .map((value) => unit ? `${value} ${unit}` : value).join(" / ");
     return `${source} ${this._t(`operators.${rule.operator}`)} ${expected}`;
 }
 
