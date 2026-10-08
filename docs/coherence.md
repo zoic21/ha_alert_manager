@@ -29,7 +29,7 @@ Follow the reload or ESPHome installation instructions shown in the result.
 | Automations and scripts | Static entity references, including supported template references. |
 | Dashboards and templates | Static references found by the configuration scanner. |
 | ESPHome | References in the scanned configuration when ESPHome scanning is enabled. |
-| Custom rules | Selected entities and static references in Jinja conditions/messages, including disabled rules. |
+| Custom rules | Selected entities for every operation, including Jinja, and static references in Jinja conditions/messages, including disabled rules. |
 | ZHA event triggers | Static `device_ieee` references in `zha_event` triggers and script/automation `wait_for_trigger` steps. |
 
 Custom rules are checked from an in-memory snapshot and do not increase the scanned-file count. Dynamic references and plain message text are skipped: the scanner does not try to execute a template to guess every entity it might use.

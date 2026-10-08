@@ -28,7 +28,7 @@ def snapshot_rules(rules: Iterable[Rule]) -> tuple[RuleSnapshot, ...]:
         RuleSnapshot(
             rule.id,
             rule.name,
-            tuple(rule.entity_ids) if rule.source != "jinja" else (),
+            tuple(rule.entity_ids),
             rule.condition_template,
             rule.message,
         )
