@@ -87,6 +87,14 @@ _IGNORED_ENTITY_REFERENCES: Final = frozenset(
         "script.stop",
         "select.set",
         "script.is_running",
+        "calendar.state",
+        "event.description",
+        "event.end",
+        "event.start",
+        "event.manual",
+        "event.seconds",
+        "event.station",
+        "event.summary",
     }
 )
 _ENTITY_DOMAINS: Final = frozenset(
