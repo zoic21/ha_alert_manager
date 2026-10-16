@@ -4,6 +4,7 @@ updates:
   # Actions utilisées par les workflows GitHub (CI et releases).
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -21,6 +22,7 @@ updates:
   # Dépendances Python déclarées dans requirements_test.txt.
   - package-ecosystem: "pip"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
