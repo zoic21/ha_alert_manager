@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="docs/assets/alert-manager-logo.svg" width="520" alt="Alert Manager">
+  <img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/alert-manager-logo.svg" width="520" alt="Alert Manager">
 </p>
 
 <p align="center">
-  🇬🇧 <strong>English</strong> · 🇫🇷 <a href="README.fr.md">Français</a>
+  🇬🇧 <strong>English</strong> · 🇫🇷 <a href="https://github.com/zoic21/ha_alert_manager/blob/main/README.fr.md">Français</a>
 </p>
 
 # Alert Manager for Home Assistant
@@ -14,10 +14,10 @@ Alert Manager brings Home Assistant problems into one place: unavailable devices
 
 Use automatic monitoring for common failures and custom rules for your own equipment. A problem stays visible while it needs attention; acknowledging it records that you know about it without pretending it is fixed. Resolved occurrences can be kept in history to make recurring problems easier to spot.
 
-[Installation](#installation) · [Documentation](docs/user-guide.md) · [Report an issue](https://github.com/zoic21/ha_alert_manager/issues)
+[Installation](https://github.com/zoic21/ha_alert_manager/blob/main/README.md#installation) · [Documentation](https://github.com/zoic21/ha_alert_manager/blob/main/docs/user-guide.md) · [Report an issue](https://github.com/zoic21/ha_alert_manager/issues)
 
 <p align="center">
-  <img src="docs/assets/screenshots/dashboard.png" alt="Alert Manager overview with current alerts">
+  <img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/dashboard.png" alt="Alert Manager overview with current alerts">
 </p>
 
 ## What you can do
@@ -40,7 +40,7 @@ Filter the rules list by enabled/disabled status, rule labels, integration, devi
 
 Sequences recognize 2–20 steps on the same value, with a minimum hold, an exit before a limit or a hold between two bounds, plus an optional overall timeout. Steps collapse into summaries and can be individually disabled or reordered by dragging or using the keyboard. From the first step’s hold, the sequence appears in pending alerts with its progress and remaining time. Abandoned or expired progress disappears without history or a recovery notification. Unfinished sequences start from a fresh observation after a restart, without counting downtime.
 
-Transitions and sequences offer three resolution modes: after a duration, when the arrival value or last enabled step no longer matches, or using a separate value comparison. State/condition resolution can send recovery notifications; automatic expiration remains silent. The [custom rules guide](docs/custom-rules.md) explains durations, progression and YAML examples.
+Transitions and sequences offer three resolution modes: after a duration, when the arrival value or last enabled step no longer matches, or using a separate value comparison. State/condition resolution can send recovery notifications; automatic expiration remains silent. The [custom rules guide](https://github.com/zoic21/ha_alert_manager/blob/main/docs/custom-rules.md) explains durations, progression and YAML examples.
 
 ### Follow alerts from the dashboard to history
 
@@ -54,7 +54,7 @@ The included dashboard card presents a compact view grouped by device. Choose de
 
 Optional built-in notification profiles support multiple `notify` recipients, new alerts, recoveries, reminders and batched delivery. Select alerts by label and define ordered exceptions; labels from the entity, device and custom rule or pack participate in matching. The profile’s label filter must match first; then the first exception whose labels all match applies. Label exceptions can enable “Informational notification”: blue information icon, “Notification” title and preserved custom messages, delivered separately from standard alerts.
 
-This changes notification presentation only, without introducing alert severity or changing the alert lifecycle. Standard Companion notifications use red for activation, green for recovery, orange for reminders and blue with a check icon for combined activation/recovery, where supported by the client. See the [notification guide](docs/configuration.md#informational-neutral-notifications) for setup and YAML. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
+This changes notification presentation only, without introducing alert severity or changing the alert lifecycle. Standard Companion notifications use red for activation, green for recovery, orange for reminders and blue with a check icon for combined activation/recovery, where supported by the client. See the [notification guide](https://github.com/zoic21/ha_alert_manager/blob/main/docs/configuration.md#informational-neutral-notifications) for setup and YAML. Profiles can be tested, duplicated and edited in YAML. Supported Companion notifications open the relevant alert or view when tapped. Your own event-based notification automations remain available.
 
 If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
 
@@ -73,39 +73,39 @@ The interface is available in **English and French**, on desktop and mobile. All
 
 ### Dashboard card
 
-<img src="docs/assets/screenshots/card.png" alt="Compact Alert Manager dashboard card">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/card.png" alt="Compact Alert Manager dashboard card">
 
 ### Card configuration
 
-<img src="docs/assets/screenshots/card%20configuration.png" alt="Visual card editor with tile limits, sorting and labels">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/card%20configuration.png" alt="Visual card editor with tile limits, sorting and labels">
 
 ### Upcoming alerts
 
-<img src="docs/assets/screenshots/incomming.png" alt="Alerts waiting for their trigger delay">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/incomming.png" alt="Alerts waiting for their trigger delay">
 
 ### Alert details and timeline
 
-<img src="docs/assets/screenshots/alert.png" width="596" alt="Resolved sequence with its steps and notification in the timeline">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/alert.png" width="596" alt="Resolved sequence with its steps and notification in the timeline">
 
 ### Custom rules
 
-<img src="docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules in Alert Manager">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules in Alert Manager">
 
 ### Sequences
 
-<img src="docs/assets/screenshots/sequence.png" width="574" alt="Sequence editor with collapsible steps and resolution mode">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/sequence.png" width="574" alt="Sequence editor with collapsible steps and resolution mode">
 
 ### Notification profiles
 
-<img src="docs/assets/screenshots/notification.png" width="572" alt="Notification profile with standard and informational exceptions">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/notification.png" width="572" alt="Notification profile with standard and informational exceptions">
 
 ### Configuration coherence
 
-<img src="docs/assets/screenshots/coherence.png" alt="Coherence page and deleted-entity list">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/coherence.png" alt="Coherence page and deleted-entity list">
 
 ### Configuration
 
-<img src="docs/assets/screenshots/configuration.png" alt="Alert Manager configuration">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/configuration.png" alt="Alert Manager configuration">
 
 </details>
 
@@ -115,7 +115,7 @@ Requires **Home Assistant 2026.8 or newer**. One Alert Manager instance is suppo
 
 ### HACS
 
-1. In **HACS → Custom repositories**, add `https://github.com/zoic21/ha_alert_manager` with category **Integration**.
+1. Open **HACS** and search for **Alert Manager**.
 2. Install **Alert Manager** and restart Home Assistant.
 3. Open **Settings → Devices & services → Add integration** and search for **Alert Manager**.
 
@@ -146,12 +146,12 @@ The detailed documentation is maintained **in English**:
 
 | Guide | What it covers |
 | --- | --- |
-| [Custom rules](docs/custom-rules.md) | Operations, attributes, Jinja, variations, transitions, sequences, rule testing and practical YAML examples. |
-| [Configuration](docs/configuration.md) | Monitoring packs, delays, exclusions, notification profiles, YAML, backups and diagnostics. |
-| [Configuration coherence](docs/coherence.md) | Reference scans, ZHA checks, exclusions, schedules and coherence alerts. |
-| [Dashboard and history](docs/dashboard-and-history.md) | Overview, card options, acknowledgement, startup, history and recurrence statistics. |
+| [Custom rules](https://github.com/zoic21/ha_alert_manager/blob/main/docs/custom-rules.md) | Operations, attributes, Jinja, variations, transitions, sequences, rule testing and practical YAML examples. |
+| [Configuration](https://github.com/zoic21/ha_alert_manager/blob/main/docs/configuration.md) | Monitoring packs, delays, exclusions, notification profiles, YAML, backups and diagnostics. |
+| [Configuration coherence](https://github.com/zoic21/ha_alert_manager/blob/main/docs/coherence.md) | Reference scans, ZHA checks, exclusions, schedules and coherence alerts. |
+| [Dashboard and history](https://github.com/zoic21/ha_alert_manager/blob/main/docs/dashboard-and-history.md) | Overview, card options, acknowledgement, startup, history and recurrence statistics. |
 
-The [documentation index](docs/user-guide.md) provides an entry point to all four guides. Documentation follows the branch being read; use the matching release branch or tag for an installed version.
+The [documentation index](https://github.com/zoic21/ha_alert_manager/blob/main/docs/user-guide.md) provides an entry point to all four guides. For documentation matching an installed version, select its release branch or tag on GitHub.
 
 Questions, bugs and monitoring ideas are welcome through **[GitHub Issues](https://github.com/zoic21/ha_alert_manager/issues)**.
 
