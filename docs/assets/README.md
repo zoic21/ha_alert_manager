@@ -2,8 +2,13 @@
 
 - `alert-manager-mark.svg`: maintainable square vector source for avatars and small sizes.
 - `alert-manager-logo.svg`: adaptable horizontal wordmark for documentation.
-- `../../../custom_components/alert_manager/brand/icon.png`: 256 × 256 HACS
-  integration icon generated from the square vector source.
+- `../../../custom_components/alert_manager/brand/icon.png`: 256 × 256 integration
+  icon generated from the square vector source.
+- `../../../custom_components/alert_manager/brand/icon@2x.png`: 512 × 512 version
+  for high-density displays.
+
+The turquoise outline and coral alert use the same artwork on light and dark
+backgrounds; no separate dark icon is needed.
 
 The artwork is original to Alert Manager, uses a transparent background and does
 not reuse the Home Assistant logo. The sidebar deliberately keeps the native

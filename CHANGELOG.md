@@ -5,6 +5,13 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.5.2 — October 19, 2026
+
+- Refreshed the icon and README logo for better visibility on light and dark backgrounds.
+- Simplified the English and French READMEs, with clearer installation and update instructions.
+
+**To update:** update Alert Manager through HACS, restart Home Assistant and refresh your browser.
+
 ## 2.5.1 — October 19, 2026
 
 - Fixed missing images and broken documentation links on the HACS page.
