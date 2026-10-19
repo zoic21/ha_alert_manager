@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import struct
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -127,15 +128,36 @@ def test_documented_brand_assets_exist_and_are_referenced() -> None:
     assert mark.is_file()
     assert logo.is_file()
     assert icon.is_file()
-    assert "prefers-color-scheme: dark" in mark.read_text()
+    # The shared outline must remain visible without SVG media-query support.
+    outline = ET.parse(mark).find(".//{http://www.w3.org/2000/svg}g")
+    assert outline is not None
+    color = outline.attrib["stroke"]
+
+    def luminance(hex_color: str) -> float:
+        channels = [int(hex_color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [
+            value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+            for value in channels
+        ]
+        return sum(
+            value * weight
+            for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)
+        )
+
+    for background in ("#FFFFFF", "#1C1C1C"):
+        lower, upper = sorted((luminance(color), luminance(background)))
+        assert (upper + 0.05) / (lower + 0.05) >= 3
     assert "prefers-color-scheme: dark" in logo.read_text()
     for readme in (ROOT / "README.md", ROOT / "README.fr.md"):
         content = readme.read_text()
         assert "docs/assets/alert-manager-logo.svg" in content
         assert "🇫🇷" in content and "🇬🇧" in content
-    with icon.open("rb") as stream:
-        assert stream.read(8) == b"\x89PNG\r\n\x1a\n"
-        length = struct.unpack(">I", stream.read(4))[0]
-        assert stream.read(4) == b"IHDR"
-        width, height = struct.unpack(">II", stream.read(length)[:8])
-    assert (width, height) == (256, 256)
+    for filename, size in (("icon.png", 256), ("icon@2x.png", 512)):
+        with (icon.parent / filename).open("rb") as stream:
+            assert stream.read(8) == b"\x89PNG\r\n\x1a\n"
+            length = struct.unpack(">I", stream.read(4))[0]
+            assert stream.read(4) == b"IHDR"
+            header = stream.read(length)
+            width, height = struct.unpack(">II", header[:8])
+        assert (width, height) == (size, size)
+        assert header[9] == 6  # RGBA preserves the transparent background.
