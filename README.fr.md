@@ -1,162 +1,135 @@
 <p align="center">
-  <img src="docs/assets/alert-manager-logo.svg" width="520" alt="Alert Manager">
+  <img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/alert-manager-logo.svg" width="520" alt="Alert Manager">
 </p>
 
-<p align="center">
-  🇬🇧 <a href="README.md">English</a> · 🇫🇷 <strong>Français</strong>
-</p>
+🇬🇧 [English](README.md) · 🇫🇷 **Français**
 
 # Alert Manager pour Home Assistant
 
-**Savoir quand quelque chose ne va pas — et garder le problème visible jusqu’à sa résolution.**
+**Repérez les problèmes de votre maison — et suivez-les jusqu’à leur résolution.**
 
-Alert Manager rassemble les problèmes de Home Assistant : équipements indisponibles, batteries faibles, automatisations en erreur, valeurs anormales ou références cassées dans la configuration. Chaque alerte est suivie de sa détection à sa résolution, plutôt que de se limiter à une notification facile à manquer.
+Équipements indisponibles, batteries faibles, automatisations en erreur ou valeurs
+anormales : Alert Manager rassemble les problèmes dans un seul panneau, avec des
+notifications, une carte de dashboard et un historique.
 
-Utilisez la surveillance automatique pour les problèmes courants et les règles personnalisées pour vos équipements. Un problème reste visible tant qu’il nécessite votre attention ; l’acquitter indique que vous en avez connaissance, pas qu’il est corrigé. Les occurrences résolues peuvent être conservées dans l’historique pour repérer les problèmes récurrents.
-
-[Installation](#installation) · [Documentation](docs/user-guide.md) · [Signaler un problème](https://github.com/zoic21/ha_alert_manager/issues)
+[Documentation](docs/user-guide.md) ·
+[Signaler un problème](https://github.com/zoic21/ha_alert_manager/issues)
 
 <p align="center">
-  <img src="docs/assets/screenshots/dashboard.png" alt="Accueil Alert Manager avec les alertes en cours">
+  <img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/dashboard.png" alt="Accueil Alert Manager avec les alertes en cours">
 </p>
 
-## Possibilités
+## Ce que vous pouvez faire
 
-### Surveiller automatiquement les problèmes courants
+- **Surveiller les problèmes courants.** Détectez les entités indisponibles, pertes
+  de connexion, batteries faibles, équipements UniFi absents, mises à jour disponibles,
+  erreurs d’automatisation/script et instabilités répétées.
+- **Créer vos propres règles.** Surveillez une température, une consommation anormale,
+  un capteur qui ne change plus ou la fin d’un cycle d’appareil. Utilisez l’éditeur
+  visuel ou le YAML.
+- **Suivre chaque alerte.** Consultez les alertes actives, à venir et acquittées,
+  leur chronologie et leurs occurrences passées. Acquitter une alerte indique que
+  vous en avez connaissance, sans considérer le problème comme résolu.
+- **Choisir vos notifications.** Sélectionnez les alertes par étiquette, avec des
+  rappels, des messages groupés et des notifications informatives facultatives.
+- **Afficher les alertes sur votre dashboard.** La carte intégrée les regroupe par
+  équipement et accepte du CSS personnalisé.
+- **Retrouver les références cassées.** Consultez les renommages d’entités et
+  prévisualisez les remplacements avant de les appliquer.
 
-Activez les packs d’entités indisponibles, pertes de connectivité, batteries faibles, équipements UniFi absents, mises à jour disponibles, erreurs d’exécution d’automatisation/script et instabilités répétées. Chaque pack dispose de ses paramètres et étiquettes. Adaptez les délais, seuils et exceptions par appareil ou entité selon le pack, depuis un éditeur visuel compact ou en YAML. Les exceptions peuvent désactiver une surveillance ; les exclusions globales par étiquette restent disponibles. Le pack de mises à jour suit les entités `update` de Home Assistant et permet d’exclure celles de votre choix.
+L’interface est disponible en **français et en anglais**, sur ordinateur et mobile.
 
-Depuis une alerte automatique, ouvrez directement la configuration de la surveillance concernée. Les exceptions se replient en résumés pour garder les configurations longues lisibles.
+## Installation
 
-Tout se configure depuis le panneau. Les étiquettes servent à organiser les alertes et sélectionner les notifications ; les entités de surveillance et événements restent disponibles pour vos propres automatisations.
+Nécessite **Home Assistant 2026.8 ou ultérieur**.
 
-### Définir des règles propres à votre installation
+1. Dans **HACS**, recherchez et installez **Alert Manager**.
+2. Redémarrez Home Assistant.
+3. Ouvrez **Paramètres → Appareils et services → Ajouter une intégration**, puis
+   recherchez **Alert Manager**.
 
-Surveillez un réfrigérateur consommant plus de 200 W pendant deux heures, une température hors plage, un chauffage sans hausse de température suffisante, un capteur qui ne change plus ou la fin d’un cycle d’appareil.
+Le panneau apparaît dans la barre latérale. Ouvrez **Configuration → Surveillance
+automatique** pour vérifier les packs activés et leurs délais, puis ajoutez des
+règles ou des profils de notification selon vos besoins.
 
-Les règles prennent en charge états, attributs imbriqués, comparaisons numériques et textuelles, absence de changement, variations, transitions, séquences ordonnées et conditions Jinja. Une règle peut surveiller plusieurs entités indépendamment. Éditez visuellement ou en YAML, dupliquez une règle et testez un brouillon sur les valeurs réelles, avec les profils de notification correspondants. Les messages Jinja expliquent le problème et peuvent rester actualisés tant que l’alerte est active.
+**Mise à jour :** mettez à jour depuis HACS, redémarrez Home Assistant et actualisez
+votre navigateur.
 
-Filtrez la liste des règles par statut actif/inactif (règle activée ou désactivée), étiquettes de la règle, intégration, appareil, domaine et zone. Le filtre d’étiquettes utilise uniquement celles de la règle, sans remonter celles des entités ou appareils. Les filtres d’entités utilisent uniquement les entités sélectionnées en haut de la règle, sans analyser les conditions Jinja ni les messages. La zone de l’entité prime sur celle de son appareil. Plusieurs sélections dans un filtre correspondent à au moins une valeur choisie ; les différents filtres se combinent.
+<details>
+<summary>Installation manuelle</summary>
 
-Les séquences reconnaissent de 2 à 20 étapes sur la même valeur, avec un maintien minimum, une sortie avant une limite ou une durée comprise entre deux bornes, et un délai total facultatif. Les étapes sont repliables, désactivables individuellement et réordonnables par glisser-déposer ou au clavier. Dès le maintien de la première étape, la séquence apparaît dans les alertes à venir avec sa progression et le temps restant. Une progression abandonnée ou expirée disparaît sans historique ni notification de résolution. Les séquences inachevées repartent d’une nouvelle observation après un redémarrage, sans compter le temps d’arrêt.
+Copiez `custom_components/alert_manager` dans `/config/custom_components/alert_manager`,
+redémarrez Home Assistant, puis ajoutez **Alert Manager** depuis
+**Paramètres → Appareils et services**.
 
-Transitions et séquences proposent trois modes de résolution : après une durée, lorsque la valeur d’arrivée ou la dernière étape activée n’est plus vraie, ou selon une comparaison de valeur distincte. La résolution par état ou condition peut notifier le retour à la normale ; l’expiration automatique reste silencieuse. Le [guide des règles](docs/custom-rules.md) détaille les durées, la progression et les exemples YAML.
+</details>
 
-### Suivre les alertes du dashboard à l’historique
+### Ajouter la carte de dashboard
 
-L’Accueil distingue les alertes actives, à venir et acquittées, avec recherche, filtres, tri, groupement par équipement, colonnes personnalisables et sélection multiple. Ouvrez une alerte pour consulter ses valeurs au déclenchement et actuelles, ses notifications et ses occurrences précédentes. L’acquittement peut être illimité ou temporaire. Les 10 derniers acquittements et désacquittements (y compris les expirations automatiques) sont horodatés dans la chronologie et conservés après résolution et redémarrage ; le plus ancien est supprimé au-delà de cette limite.
+Choisissez **Alert Manager** dans le sélecteur de cartes du dashboard. La carte est
+incluse avec l’intégration ; actualisez votre navigateur après une installation ou
+une mise à jour.
 
-Une chronologie toujours visible rassemble détection, activation, acquittements, résolution, valeurs et horodatages des étapes de séquence, occurrences d’instabilité et envois de notifications. Les notifications de début et de résolution affichent leur horaire et leur profil ; les rappels sont regroupés par nombre et profils. Les utilisateurs et automatisations sont identifiés lorsqu’ils sont connus. Les événements du jour affichent seulement l’heure ; les autres conservent leur date.
+## Documentation
 
-La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez les limites desktop/mobile, le tri, les labels à afficher ou masquer, l’ancienneté et le regroupement facultatifs, l’alignement et la couleur des icônes. Personnalisez les sous-tuiles avec le champ **CSS personnalisé** (`alert_styles`) : [sélecteurs documentés et exemple Bubble prêt à copier](docs/dashboard-and-history.md#custom-css). Aucune dépendance à Bubble Card ou card-mod n’est nécessaire. La carte se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
+Les guides détaillés sont maintenus **en anglais** :
 
-### Choisir les notifications et vérifier la configuration
+| Guide | Pour… |
+| --- | --- |
+| [Règles personnalisées](docs/custom-rules.md) | Créer des règles, séquences et conditions Jinja, avec des exemples. |
+| [Configuration](docs/configuration.md) | Régler la surveillance, les notifications, les sauvegardes et les diagnostics. |
+| [Cohérence de la configuration](docs/coherence.md) | Vérifier les références, consulter les renommages, appliquer des remplacements et exporter les entités. |
+| [Dashboard et historique](docs/dashboard-and-history.md) | Configurer la carte, acquitter les alertes et explorer l’historique. |
 
-Les profils de notification intégrés et facultatifs gèrent plusieurs destinataires `notify`, les nouvelles alertes, les retours à la normale, les rappels et le regroupement des envois. Sélectionnez les alertes par étiquette et définissez des exceptions ordonnées ; les étiquettes de l’entité, de l’appareil et de la règle ou du pack participent à la sélection. Le filtre d’étiquettes du profil doit d’abord correspondre ; la première exception dont toutes les étiquettes correspondent s’applique ensuite. Les exceptions par étiquette proposent l’interrupteur **Notification informative** pour une présentation neutre : icône d’information bleue, titre « Notification » et messages personnalisés conservés, avec des envois séparés des alertes standard.
-
-Cela change uniquement la présentation de la notification, sans ajouter de sévérité ni modifier le cycle de vie de l’alerte. Les notifications Companion standard utilisent le rouge pour l’activation, le vert pour la résolution, l’orange pour les rappels et le bleu avec une coche pour l’activation/résolution combinée, selon les capacités du client. Le [guide des notifications](docs/configuration.md#informational-neutral-notifications) détaille la configuration et le YAML. Les profils peuvent être testés, dupliqués et édités en YAML. Les notifications Companion prises en charge ouvrent l’alerte ou la vue concernée au toucher. Vos automatisations basées sur les événements restent utilisables.
-
-Si une alerte se résout avant l’envoi du lot, les profils notifiant seulement l’activation la reçoivent quand même ; ceux notifiant aussi la résolution reçoivent un message combiné, identifié comme tel dans la chronologie. L’expiration automatique d’une transition ou séquence ne constitue pas un retour à la normale.
-
-L’analyse de cohérence retrouve les références statiques vers des entités et appareils ZHA absents dans les sources de configuration prises en charge. Lancez-la à la demande ou selon un planning, ouvrez la configuration concernée lorsque c’est possible et conservez éventuellement une alerte tant que des problèmes subsistent. La page permet aussi d’exporter un instantané JSON de toutes les entités connues de Home Assistant, regroupées par appareil, avec leurs états, attributs et statuts désactivé/masqué. La page Cohérence conserve aussi les 500 derniers changements d’identifiant après redémarrage, avec une icône d’information pour ouvrir l’entité actuelle. L’import/export YAML et les sauvegardes automatiques permettent aussi de récupérer la configuration. La page permet aussi de prévisualiser et sélectionner les références d’entité à remplacer dans le YAML et les dashboards, avec les API natives des éditeurs Home Assistant lorsque disponibles ; l’entité finale doit exister. Les fichiers contenant des tags YAML sont modifiés en texte, sans résoudre les secrets ni les inclusions ; les scalaires portant ces tags restent inchangés. Ils doivent ensuite être rechargés. Une restauration incomplète ou un résultat non confirmé est signalé pour permettre de vérifier les sources avant de réessayer. Les lignes corrigeables affichent le dernier identifiant connu dans l’historique des renommages et peuvent être corrigées individuellement ou en masse, après confirmation des remplacements.
-
-L’export des entités masque toujours les attributs sensibles connus (jetons, identifiants d’accès, URLs des images, coordonnées GPS, adresses MAC et IP), y compris dans les dictionnaires et listes imbriqués. Aucune option d’export brut n’est proposée. **Vérifiez le fichier avant de le partager publiquement :** les noms, identifiants, états et autres attributs restent présents ; cet inventaire n’est donc pas entièrement anonymisé. Le dialogue de téléchargement affiche le même avertissement.
-
-### Consulter les diagnostics de fonctionnement
-
-La configuration présente les évaluations de règles, leurs temps de traitement, les transitions d’alertes et les envois de notifications sur 24 tranches horaires, conservées uniquement en mémoire et réinitialisées au redémarrage.
-
-Le diagnostic **Données sur disque** indique la taille totale des fichiers de données d’Alert Manager et l’heure de la mesure. Le calcul se fait à l’ouverture de Configuration, avec un cache de cinq minutes et sans actualisation automatique. Les fichiers du programme et la base d’historique de Home Assistant sont exclus.
-
-La détection repose sur les événements Home Assistant. Une vérification de sécurité toutes les 10 minutes contrôle aussi les états des entités déjà suivies, sans demander leur actualisation ni reconstituer les transitions manquées. Une condition nouvellement détectée commence à l’heure du contrôle. Le compteur de rattrapages dans les diagnostics permet de voir si cette vérification a corrigé des écarts.
-
-L’interface est disponible en **français et en anglais**, sur ordinateur et mobile. Tous les utilisateurs connectés peuvent consulter la carte, l’Accueil et l’Historique ; la configuration et toutes les actions, dont l’acquittement, sont réservées aux administrateurs.
+L’[index de documentation](docs/user-guide.md) propose aussi les tâches courantes.
+Pour une version installée, sélectionnez son tag de release sur GitHub.
 
 <details>
 <summary><strong>Voir plus de captures</strong></summary>
 
 ### Carte de dashboard
 
-<img src="docs/assets/screenshots/card.png" alt="Carte de dashboard compacte Alert Manager">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/card.png" alt="Carte de dashboard compacte Alert Manager">
 
 ### Configuration de la carte
 
-<img src="docs/assets/screenshots/card%20configuration.png" alt="Éditeur visuel de la carte avec limites, tri et étiquettes">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/card%20configuration.png" alt="Éditeur visuel de la carte de dashboard">
 
 ### Alertes à venir
 
-<img src="docs/assets/screenshots/incomming.png" alt="Alertes en attente de leur délai de déclenchement">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/incomming.png" alt="Alertes en attente de leur délai de déclenchement">
 
 ### Détails et chronologie d’une alerte
 
-<img src="docs/assets/screenshots/alert.png" width="596" alt="Séquence résolue avec ses étapes et sa notification dans la chronologie">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/alert.png" width="596" alt="Détails d’une alerte avec les étapes de séquence et les notifications">
 
 ### Règles personnalisées
 
-<img src="docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Règles personnalisées Alert Manager">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/regle%20personalis%C3%A9e.png" alt="Règles personnalisées Alert Manager">
 
 ### Séquences
 
-<img src="docs/assets/screenshots/sequence.png" width="574" alt="Éditeur de séquence avec étapes repliables et mode de résolution">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/sequence.png" width="574" alt="Éditeur de séquence avec étapes repliables">
 
 ### Profils de notification
 
-<img src="docs/assets/screenshots/notification.png" width="572" alt="Profil de notification avec exceptions standard et informative">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/notification.png" width="572" alt="Profil de notification avec exceptions standard et informative">
 
 ### Cohérence de la configuration
 
-<img src="docs/assets/screenshots/coherence.png" alt="Page de cohérence et liste des entités supprimées">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/coherence.png" alt="Vérifications de cohérence de la configuration">
 
 ### Configuration
 
-<img src="docs/assets/screenshots/configuration.png" alt="Configuration Alert Manager">
+<img src="https://raw.githubusercontent.com/zoic21/ha_alert_manager/main/docs/assets/screenshots/configuration.png" alt="Configuration Alert Manager">
 
 </details>
 
-## Installation
+Tous les utilisateurs connectés peuvent consulter la carte, l’Accueil et l’Historique.
+La configuration et les actions, dont l’acquittement, nécessitent un administrateur.
+Une seule instance d’Alert Manager est prise en charge par installation Home Assistant.
 
-Nécessite **Home Assistant 2026.8 ou ultérieur**. Une seule instance d’Alert Manager est prise en charge par installation Home Assistant.
+Une question ou une idée ? [Ouvrez une issue GitHub](https://github.com/zoic21/ha_alert_manager/issues).
 
-### HACS
-
-1. Dans **HACS → Dépôts personnalisés**, ajoutez `https://github.com/zoic21/ha_alert_manager` avec la catégorie **Integration**.
-2. Installez **Alert Manager**, puis redémarrez Home Assistant.
-3. Ouvrez **Paramètres → Appareils et services → Ajouter une intégration**, puis recherchez **Alert Manager**.
-
-Le panneau apparaît dans la barre latérale de Home Assistant. Aucune configuration YAML n’est nécessaire.
-
-<details>
-<summary>Installation manuelle</summary>
-
-Copiez `custom_components/alert_manager` dans `/config/custom_components/alert_manager`, redémarrez Home Assistant, puis ajoutez **Alert Manager** depuis **Paramètres → Appareils et services**.
-
-</details>
-
-### Ajouter la carte de dashboard
-
-Choisissez **Alert Manager** dans le sélecteur de cartes du dashboard. Aucune installation frontend séparée ni ressource Lovelace manuelle n’est nécessaire ; actualisez le navigateur après une installation ou une mise à jour.
-
-```yaml
-type: custom:alert-manager-card
-max_tiles: 5
-alignment: left
-```
-
-## Documentation
-
-Commencez dans **Configuration → Surveillance automatique**, vérifiez les packs activés et leurs délais, puis ajoutez des règles propres à votre installation. Les profils de notification sont facultatifs.
-
-La documentation détaillée est maintenue **uniquement en anglais** :
-
-| Guide | Contenu |
-| --- | --- |
-| [Règles personnalisées](docs/custom-rules.md) | Opérations, attributs, Jinja, variations, transitions, séquences, testeur et exemples YAML. |
-| [Configuration](docs/configuration.md) | Packs, délais, exclusions, profils de notification, YAML, sauvegardes et diagnostics. |
-| [Cohérence de la configuration](docs/coherence.md) | Références, vérifications ZHA, exclusions, planification et alertes de cohérence. |
-| [Dashboard et historique](docs/dashboard-and-history.md) | Accueil, carte, acquittement, démarrage, historique et statistiques de récurrence. |
-
-L’[index de documentation](docs/user-guide.md) donne accès aux quatre guides. La documentation suit la branche consultée ; utilisez la branche de release ou le tag correspondant à votre version installée.
-
-Questions, bugs et idées de surveillance sont les bienvenus dans les **[issues GitHub](https://github.com/zoic21/ha_alert_manager/issues)**.
-
-Alert Manager est une intégration communautaire non officielle, sans affiliation avec Home Assistant. Ce code a été écrit en partie avec l’aide de l’IA.
+Alert Manager est une intégration communautaire non officielle, sans affiliation
+avec Home Assistant. Ce code a été écrit en partie avec l’aide de l’IA.
