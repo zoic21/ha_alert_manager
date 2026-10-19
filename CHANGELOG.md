@@ -5,6 +5,13 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.5.1 — October 19, 2026
+
+- Fixed missing images and broken documentation links on the HACS page.
+- Updated installation instructions: find Alert Manager directly in HACS.
+
+**To update:** update Alert Manager through HACS, then restart Home Assistant.
+
 ## 2.5.0 — September 30, 2026
 
 ### Customize your dashboard alerts
