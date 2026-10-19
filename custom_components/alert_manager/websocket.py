@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .coherence import async_run_coherence_scan
 from .const import DATA_COHERENCE_RESULT, DATA_MANAGER
+from .entity_export import async_export_entities
 from .manager import AlertManager
 
 ERR_NOT_LOADED = "not_loaded"
@@ -180,6 +181,27 @@ async def websocket_deleted_entities_list(
     """Return deleted entities retained by Home Assistant's entity registry."""
     if (manager := _manager(hass, connection, msg["id"])) is not None:
         connection.send_result(msg["id"], manager.deleted_entities_snapshot())
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {vol.Required("type"): "alert_manager/coherence/entities/export"}
+)
+async def websocket_entities_export(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Download all known entities without changing HA or running a scan."""
+    if _manager(hass, connection, msg["id"]) is None:
+        return
+    try:
+        result = await async_export_entities(hass)
+    except TypeError, ValueError:
+        # Do not echo private attributes in errors if an integration publishes
+        # a value which cannot be represented in JSON.
+        connection.send_error(msg["id"], "entity_export_failed", "entity_export_failed")
+        return
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.require_admin
@@ -660,6 +682,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_coherence_get,
         websocket_coherence_scan,
         websocket_deleted_entities_list,
+        websocket_entities_export,
         websocket_history_config_get,
         websocket_history_config_update,
         websocket_history_clear,

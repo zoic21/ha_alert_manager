@@ -32,6 +32,9 @@ export function validateDashboardConfig(config, language) {
   if (config.alignment !== undefined && !["left", "center", "right"].includes(config.alignment)) {
     throw new Error(dashboardText(language, "dashboard.invalid_alignment"));
   }
+  if (config.alert_styles !== undefined && typeof config.alert_styles !== "string") {
+    throw new Error(dashboardText(language, "dashboard.invalid_alert_styles"));
+  }
   let color = config.icon_color;
   // Keep colors selected with the previous RGB editor when opening the native picker.
   if (Array.isArray(color) && color.length === 3
@@ -45,6 +48,8 @@ export function validateDashboardConfig(config, language) {
     throw new Error(dashboardText(language, "dashboard.invalid_icon_color"));
   }
   const normalized = { ...config, max_tiles: max, ...(color !== undefined ? { icon_color: color } : {}) };
+  // Retired display presets must not invalidate existing dashboard cards.
+  delete normalized.style;
   if (mobile == null || mobile === "") delete normalized.max_tiles_mobile;
   // Normalize old YAML in memory; explicit empty inclusions override the legacy label.
   if (config.labels !== undefined || config.label) {
@@ -66,6 +71,7 @@ export class AlertManagerCardEditor extends HTMLElement {
       const config = { ...this._config, ...event.detail.value };
       if (!config.label) delete config.label;
       if (config.icon_color == null) delete config.icon_color;
+      if (config.alert_styles == null || config.alert_styles === "") delete config.alert_styles;
       this._config = validateDashboardConfig(config, this._hass?.locale?.language);
       this.dispatchEvent(new CustomEvent("config-changed", {
         detail: { config: this._config }, bubbles: true, composed: true,
@@ -97,7 +103,10 @@ export class AlertManagerCardEditor extends HTMLElement {
       { name: "alignment", selector: { select: { mode: "dropdown", options: ["left", "center", "right"].map((value) => ({
         value, label: dashboardText(this._hass?.locale?.language, `dashboard.align_${value}`),
       })) } } },
+      { name: "alert_styles", selector: { text: { multiline: true } } },
     ];
     this._form.computeLabel = ({ name }) => dashboardText(this._hass?.locale?.language, `dashboard.${name}`);
+    this._form.computeHelper = ({ name }) => name === "alert_styles"
+      ? dashboardText(this._hass?.locale?.language, "dashboard.alert_styles_help") : "";
   }
 }

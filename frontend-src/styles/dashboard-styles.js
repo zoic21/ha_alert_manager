@@ -23,6 +23,8 @@ export const dashboardStyles = `
   .message.with-age { display: flex; gap: 4px; }
   .message-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .age { flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+  .alert-icons { display: flex; flex: none; align-items: center; }
+  .alert-count { display: none; }
   .types { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; max-width: 60px; align-items: center; }
   ha-icon { color: var(--alert-icon-color); flex: none; border-radius: 50%; padding: 8px;
     background: color-mix(in srgb, var(--alert-icon-color) 12%, transparent); }

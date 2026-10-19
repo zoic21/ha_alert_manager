@@ -207,10 +207,12 @@ pushed commit and requires it to pass, including bundle reproducibility.
 ### Publish and verify
 
 - Inspect `.github/workflows/release.yml` before pushing. Currently a push that
-  changes the manifest on `main`, `release/2.2` or `release/2.3` validates the commit
+  changes the manifest on `main`, `release/2.2`, `release/2.3` or `release/2.4`
+  validates the commit
   with the reusable CI workflow, then automatically creates the tag
-  `v<version>` at the pushed commit and a GitHub release with generated notes.
-  Versions containing a hyphen are published with `prerelease: true`.
+  `v<version>` at the pushed commit and a GitHub release. Stable releases use the
+  matching version entry from `CHANGELOG.md` and fail if it is missing or empty.
+  Versions containing a hyphen use generated notes and `prerelease: true`.
 - Push the validated commit to the requested branch. Let the workflow create the
   tag and release; do not also create them manually.
 - Verify the Release workflow, CI (Python, frontend, Home Assistant validation and
@@ -219,8 +221,8 @@ pushed commit and requires it to pass, including bundle reproducibility.
   if a correction is needed, prepare and validate a new version.
 - Synchronize `main` only when requested, preserving any independent commits. If
   both branches can be fast-forwarded to the same commit, verify that they match.
-  With the current workflow, synchronizing a manifest change also triggers release
-  publication on `main`; it refuses the already existing tag. Verify that this is
-  the cause of that workflow failure and that the original release is correct.
+  Synchronizing a manifest change also triggers release validation on `main`.
+  After CI passes, an existing tag skips publication successfully, preserving the
+  original tag and release. Verify that they are unchanged.
   Do not overwrite the tag, invent another version solely for branch synchronization,
   or skip CI to hide the duplicate-publication failure.
