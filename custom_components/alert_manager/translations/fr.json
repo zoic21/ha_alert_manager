@@ -220,6 +220,11 @@
         "type": "Type"
       },
       "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements. Les règles personnalisées d’Alert Manager sont également analysées.",
+      "export": {
+        "button": "Exporter les entités (JSON)",
+        "loading": "Export en cours…",
+        "error": "Impossible d’exporter les entités. Vérifiez la connexion à Home Assistant et que leurs attributs peuvent être représentés en JSON."
+      },
       "deleted_entities": {
         "button": "Entités supprimées",
         "close": "Fermer les entités supprimées",
@@ -972,6 +977,9 @@
       "preview_device": "Capteur du salon",
       "preview_message": "Batterie à 10 %",
       "icon_color": "Couleur des icônes (facultatif)",
+      "alert_styles": "CSS personnalisé (facultatif)",
+      "alert_styles_help": "Personnalisez cette carte avec .alert-tile, .alert-title, .alert-message et .alert-icon. Utilisez var(--alert-icon-color) pour la couleur choisie. CSS uniquement, sans templates.",
+      "invalid_alert_styles": "Le CSS personnalisé doit être une chaîne de texte.",
       "alignment": "Alignement des tuiles",
       "align_left": "Gauche",
       "align_center": "Centre",

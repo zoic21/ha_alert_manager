@@ -220,6 +220,11 @@
         "type": "Type"
       },
       "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability. Alert Manager custom rules are also checked.",
+      "export": {
+        "button": "Export entities (JSON)",
+        "loading": "Exporting…",
+        "error": "Unable to export entities. Check the Home Assistant connection and that their attributes can be represented as JSON."
+      },
       "deleted_entities": {
         "button": "Deleted entities",
         "close": "Close deleted entities",
@@ -972,6 +977,9 @@
       "preview_device": "Living room sensor",
       "preview_message": "Battery at 10%",
       "icon_color": "Icon color (optional)",
+      "alert_styles": "Custom CSS (optional)",
+      "alert_styles_help": "Style this card with .alert-tile, .alert-title, .alert-message and .alert-icon. Use var(--alert-icon-color) for the selected color. CSS only; no templates.",
+      "invalid_alert_styles": "Custom CSS must be a text string.",
       "alignment": "Tile alignment",
       "align_left": "Left",
       "align_center": "Center",

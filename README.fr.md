@@ -48,7 +48,7 @@ L’Accueil distingue les alertes actives, à venir et acquittées, avec recherc
 
 Une chronologie toujours visible rassemble détection, activation, acquittements, résolution, valeurs et horodatages des étapes de séquence, occurrences d’instabilité et envois de notifications. Les notifications de début et de résolution affichent leur horaire et leur profil ; les rappels sont regroupés par nombre et profils. Les utilisateurs et automatisations sont identifiés lorsqu’ils sont connus. Les événements du jour affichent seulement l’heure ; les autres conservent leur date.
 
-La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez les limites desktop/mobile, le tri, les labels à afficher ou masquer, l’ancienneté et le regroupement facultatifs, l’alignement et la couleur des icônes ; elle se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
+La carte de dashboard intégrée propose une vue compacte regroupée par équipement. Choisissez les limites desktop/mobile, le tri, les labels à afficher ou masquer, l’ancienneté et le regroupement facultatifs, l’alignement et la couleur des icônes. Personnalisez les sous-tuiles avec le champ **CSS personnalisé** (`alert_styles`) : [sélecteurs documentés et exemple Bubble prêt à copier](https://github.com/zoic21/ha_alert_manager/blob/main/docs/dashboard-and-history.md#custom-css). Aucune dépendance à Bubble Card ou card-mod n’est nécessaire. La carte se masque sans alerte correspondante et ouvre les détails au clic. L’Historique permet de consulter les occurrences résolues et leurs statistiques de récurrence : alertes fréquentes, équipements touchés et durées actives cumulées.
 
 ### Choisir les notifications et vérifier la configuration
 
@@ -58,7 +58,7 @@ Cela change uniquement la présentation de la notification, sans ajouter de sév
 
 Si une alerte se résout avant l’envoi du lot, les profils notifiant seulement l’activation la reçoivent quand même ; ceux notifiant aussi la résolution reçoivent un message combiné, identifié comme tel dans la chronologie. L’expiration automatique d’une transition ou séquence ne constitue pas un retour à la normale.
 
-L’analyse de cohérence retrouve les références statiques vers des entités et appareils ZHA absents dans les sources de configuration prises en charge. Lancez-la à la demande ou selon un planning, ouvrez la configuration concernée lorsque c’est possible et conservez éventuellement une alerte tant que des problèmes subsistent. L’import/export YAML et les sauvegardes automatiques permettent aussi de récupérer la configuration.
+L’analyse de cohérence retrouve les références statiques vers des entités et appareils ZHA absents dans les sources de configuration prises en charge. Lancez-la à la demande ou selon un planning, ouvrez la configuration concernée lorsque c’est possible et conservez éventuellement une alerte tant que des problèmes subsistent. La page permet aussi d’exporter un instantané JSON de toutes les entités connues de Home Assistant, regroupées par appareil, avec leurs états, attributs et statuts désactivé/masqué. L’import/export YAML et les sauvegardes automatiques permettent aussi de récupérer la configuration.
 
 ### Consulter les diagnostics de fonctionnement
 

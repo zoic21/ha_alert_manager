@@ -5,6 +5,29 @@ Development, beta and release-candidate iterations are not listed separately. In
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.5.0 — September 30, 2026
+
+### Customize your dashboard alerts
+
+Personalize the appearance of your alert tiles, including colors, rounded corners,
+icons and text. A ready-to-use Bubble-style example is included in the documentation,
+with no additional card installation required.
+
+### Export your Home Assistant entities
+
+The Coherence page now includes an **Export entities (JSON)** button.
+
+Download a snapshot of all your entities, grouped by device, including their
+integrations, latest known values and attributes. Disabled and hidden entities are
+included and clearly identified, even when they are absent from your dashboards.
+
+### More accurate coherence checks
+
+Bubble Card module files are now excluded from coherence scans, preventing false
+warnings caused by example entity references. Your dashboards remain checked.
+
+Your existing rules, notification profiles and alert history are preserved.
+
 ## 2.4.0 — September 22, 2026
 
 Stable release of the 2.4 series, including sequence rules, enhanced alert timelines,

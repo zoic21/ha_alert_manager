@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import sys
 import unicodedata
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from enum import Enum, StrEnum
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -65,6 +66,27 @@ trace_const = _module("homeassistant.components.trace.const")
 trace_const.DATA_TRACE = "trace"
 
 const = _module("homeassistant.const")
+const.__version__ = "2026.9.0"
+
+json_helper = _module("homeassistant.helpers.json")
+
+
+class JSONEncoder(json.JSONEncoder):
+    """Match HA's JSON encoder for state attributes used in isolated tests."""
+
+    def default(self, value):
+        if isinstance(value, (date, time)):
+            return value.isoformat()
+        if isinstance(value, set):
+            return list(value)
+        if hasattr(value, "as_dict"):
+            return value.as_dict()
+        return super().default(value)
+
+
+json_helper.JSONEncoder = JSONEncoder
+entity_helper = _module("homeassistant.helpers.entity")
+entity_helper.entity_sources = lambda hass: hass.data.setdefault("entity_info", {})
 
 
 class Platform:
@@ -137,6 +159,8 @@ class State:
         self.state = state
         self.attributes = attributes or {}
         self.last_updated = last_updated or _clock["now"]
+        self.last_changed = self.last_updated
+        self.last_reported = self.last_updated
 
 
 core.callback = callback
@@ -245,6 +269,8 @@ class Registry:
         self.kind = kind
         self.entries = {}
         self.entities = self.entries
+        self.devices = self.entries
+        self.areas = self.entries
         self.deleted_entities = {}
         self.labels = {}
         self.saved = None
@@ -521,6 +547,7 @@ config_validation.string = lambda value: str(value)
 dt_module = _module("homeassistant.util.dt")
 _clock = {"now": datetime(2026, 8, 24, 12, 0, tzinfo=UTC)}
 dt_module.now = lambda: _clock["now"]
+dt_module.utcnow = lambda: _clock["now"].astimezone(UTC)
 util.dt = dt_module
 
 async_module = _module("homeassistant.util.async_")

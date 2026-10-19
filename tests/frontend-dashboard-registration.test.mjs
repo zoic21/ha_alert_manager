@@ -36,6 +36,7 @@ for (const [name, path] of [
     globalThis.customElements = nativeRegistry;
     globalThis.HTMLElement = NativeElement;
     globalThis.window = { customCards: [] };
+    globalThis.document = { createElement: () => ({ textContent: "" }) };
     const importing = import(path);
     // Allow ESM dependencies to load and reach the frontend readiness barrier.
     // Wait on the observed call, rather than assuming a fixed import latency.

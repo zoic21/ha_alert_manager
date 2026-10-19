@@ -90,6 +90,7 @@ const ACTION_ICONS = Object.freeze({
   "save-configuration": "mdi:content-save",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
+  "export-entities": "mdi:download",
 });
 
 // Source: frontend-src/utils/integration-entities.js
@@ -172,6 +173,10 @@ class AlertManagerApi {
 
   reevaluateAlert(alertId) {
     return this.call({ type: "alert_manager/alerts/reevaluate", alert_id: alertId });
+  }
+
+  exportEntities() {
+    return this.call({ type: "alert_manager/coherence/entities/export" });
   }
 
   testRule(rule, ruleId = "") {
@@ -6063,6 +6068,14 @@ function coherenceTableRows() {
 
 function refreshCoherenceData() {
     if (this._activeTab !== "coherence") return;
+    const exportButton = this.shadowRoot?.querySelector?.('[data-action="export-entities"]');
+    if (exportButton) {
+      exportButton.disabled = Boolean(this._entityExportLoading);
+      const label = exportButton.querySelector?.("[data-action-label]");
+      if (label) label.textContent = this._t(
+        this._entityExportLoading ? "coherence.export.loading" : "coherence.export.button",
+      );
+    }
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) {
       this._render();
@@ -6285,10 +6298,11 @@ function renderDeletedEntitiesDrawer({
     });
 }
 
-function coherenceActionsMarkup({ loading, deletedEntitiesLoading, t }) {
+function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportLoading, t }) {
     return `<div class="coherence-actions">
       <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
       <ha-button appearance="outlined" data-action="open-deleted-entities" ${deletedEntitiesLoading ? "disabled" : ""}>${esc(t("coherence.deleted_entities.button"))}</ha-button>
+      <ha-button appearance="outlined" data-action="export-entities" ${entityExportLoading ? "disabled" : ""}><span data-action-label>${esc(t(entityExportLoading ? "coherence.export.loading" : "coherence.export.button"))}</span></ha-button>
     </div>`;
 }
 
@@ -6302,11 +6316,12 @@ function renderCoherence(context) {
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
       deletedEntitiesOpen = false,
+      entityExportLoading = false,
       useBottomSheet = false,
       formatDate = (value) => value,
       t,
     } = context;
-    const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
+    const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportLoading, t });
     const drawer = deletedEntitiesOpen
       ? renderDeletedEntitiesDrawer({
           data: deletedEntities,
@@ -6354,6 +6369,7 @@ function renderCoherencePanel() {
       deletedEntitiesLoading: this._deletedEntitiesState.loading,
       deletedEntitiesError: this._deletedEntitiesState.error,
       deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      entityExportLoading: this._entityExportLoading,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
@@ -6361,6 +6377,22 @@ function renderCoherencePanel() {
 }
 
 async function handleCoherenceAction(action) {
+  if (action === "export-entities") {
+    if (this._readOnly || this._entityExportLoading) return true;
+    this._entityExportLoading = true;
+    this._pageNotice = null;
+    this._refreshCoherenceData();
+    try {
+      const payload = await this._api.exportEntities();
+      if (!downloadTextPayload(payload)) throw new Error("entity_export_failed");
+    } catch (_error) {
+      this._pageNotice = { kind: "error", text: this._t("coherence.export.error") };
+    } finally {
+      this._entityExportLoading = false;
+      this._refreshCoherenceData();
+    }
+    return true;
+  }
   if (action === "close-deleted-entities") {
     if (this._configurationDrawer?.kind !== "deleted-entities") return false;
     this._configurationDrawer = null;

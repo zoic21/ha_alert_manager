@@ -48,7 +48,7 @@ Overview separates active, upcoming and acknowledged alerts, with search, filter
 
 An always-visible timeline brings together detection, activation, acknowledgement, resolution, sequence step values and timestamps, instability occurrences and notification deliveries. Start and recovery notifications show their send time and profile; reminders are summarized by count and profiles. Users and automations are identified when known. Today’s events show only the time; other events retain their date.
 
-The included dashboard card presents a compact view grouped by device. Choose desktop/mobile tile limits, sorting, label inclusions/exclusions, optional age and grouping, alignment and icon color; it hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
+The included dashboard card presents a compact view grouped by device. Choose desktop/mobile tile limits, sorting, label inclusions/exclusions, optional age and grouping, alignment and icon color. Customize alert tiles with the **Custom CSS** field (`alert_styles`), using [documented selectors and a ready-to-use Bubble example](https://github.com/zoic21/ha_alert_manager/blob/main/docs/dashboard-and-history.md#custom-css). No Bubble Card or card-mod dependency is needed. The card hides when there are no matching alerts and opens the relevant details on click. In History, review resolved occurrences and use recurrence statistics to identify frequent alerts, affected devices and cumulative active duration.
 
 ### Choose when to notify and check configuration health
 
@@ -58,7 +58,7 @@ This changes notification presentation only, without introducing alert severity 
 
 If an alert resolves before its batch is sent, activation-only profiles still receive it; profiles requesting both activation and recovery receive one combined message, identified as such in the timeline. Automatic transition/sequence expiry does not imply recovery.
 
-Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
+Coherence scans find static references to missing entities and ZHA devices in supported configuration sources. Run them on demand or on a schedule, open the affected configuration where possible, and optionally keep an alert while findings remain. The page also exports a JSON snapshot of all known Home Assistant entities, grouped by device, with states, attributes and disabled/hidden flags. YAML import/export and automatic configuration backups provide a separate path for configuration recovery.
 
 ### Inspect runtime diagnostics
 

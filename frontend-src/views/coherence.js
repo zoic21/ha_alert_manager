@@ -1,6 +1,7 @@
 import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
 import { renderSideDrawer } from "../components/configuration-drawer.js";
+import { downloadTextPayload } from "../components/config-backups.js";
 import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
 
 export function coherenceStatsMarkup() {
@@ -42,6 +43,14 @@ export function coherenceTableRows() {
 
 export function refreshCoherenceData() {
     if (this._activeTab !== "coherence") return;
+    const exportButton = this.shadowRoot?.querySelector?.('[data-action="export-entities"]');
+    if (exportButton) {
+      exportButton.disabled = Boolean(this._entityExportLoading);
+      const label = exportButton.querySelector?.("[data-action-label]");
+      if (label) label.textContent = this._t(
+        this._entityExportLoading ? "coherence.export.loading" : "coherence.export.button",
+      );
+    }
     const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
     if (!tablePage || !this._coherence) {
       this._render();
@@ -264,10 +273,11 @@ export function renderDeletedEntitiesDrawer({
     });
 }
 
-function coherenceActionsMarkup({ loading, deletedEntitiesLoading, t }) {
+function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportLoading, t }) {
     return `<div class="coherence-actions">
       <ha-button appearance="accent" variant="brand" data-action="scan-coherence" ${loading ? "disabled" : ""}><span data-action-label>${esc(t(loading ? "coherence.scanning" : "coherence.scan"))}</span></ha-button>
       <ha-button appearance="outlined" data-action="open-deleted-entities" ${deletedEntitiesLoading ? "disabled" : ""}>${esc(t("coherence.deleted_entities.button"))}</ha-button>
+      <ha-button appearance="outlined" data-action="export-entities" ${entityExportLoading ? "disabled" : ""}><span data-action-label>${esc(t(entityExportLoading ? "coherence.export.loading" : "coherence.export.button"))}</span></ha-button>
     </div>`;
 }
 
@@ -281,11 +291,12 @@ export function renderCoherence(context) {
       deletedEntitiesLoading = false,
       deletedEntitiesError = null,
       deletedEntitiesOpen = false,
+      entityExportLoading = false,
       useBottomSheet = false,
       formatDate = (value) => value,
       t,
     } = context;
-    const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, t });
+    const actions = coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportLoading, t });
     const drawer = deletedEntitiesOpen
       ? renderDeletedEntitiesDrawer({
           data: deletedEntities,
@@ -333,6 +344,7 @@ export function renderCoherencePanel() {
       deletedEntitiesLoading: this._deletedEntitiesState.loading,
       deletedEntitiesError: this._deletedEntitiesState.error,
       deletedEntitiesOpen: this._configurationDrawer?.kind === "deleted-entities",
+      entityExportLoading: this._entityExportLoading,
       useBottomSheet: this._useNativeBottomSheet(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
@@ -340,6 +352,22 @@ export function renderCoherencePanel() {
 }
 
 export async function handleCoherenceAction(action) {
+  if (action === "export-entities") {
+    if (this._readOnly || this._entityExportLoading) return true;
+    this._entityExportLoading = true;
+    this._pageNotice = null;
+    this._refreshCoherenceData();
+    try {
+      const payload = await this._api.exportEntities();
+      if (!downloadTextPayload(payload)) throw new Error("entity_export_failed");
+    } catch (_error) {
+      this._pageNotice = { kind: "error", text: this._t("coherence.export.error") };
+    } finally {
+      this._entityExportLoading = false;
+      this._refreshCoherenceData();
+    }
+    return true;
+  }
   if (action === "close-deleted-entities") {
     if (this._configurationDrawer?.kind !== "deleted-entities") return false;
     this._configurationDrawer = null;

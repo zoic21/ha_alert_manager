@@ -212,6 +212,11 @@ sensor:
         tmp_path / "custom_components" / "demo" / "config.yaml",
         "entity_id: sensor.must_not_be_scanned\n",
     )
+    _write(
+        tmp_path / "bubble_card" / "modules" / "design_pastel.yaml",
+        "entity_id: sensor.bubble_example\n",
+    )
+    _write(tmp_path / "bubble_card" / "broken.yaml", "sensor: [broken")
 
     result = scan_configuration(tmp_path, frozenset())
 

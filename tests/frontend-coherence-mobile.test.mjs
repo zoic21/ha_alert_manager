@@ -59,6 +59,72 @@ await import("../frontend-src/alert-manager-panel.js");
 
 const Panel = customElements.get("alert-manager-panel");
 
+test("entity export is below deleted entities before and after a coherence scan", async () => {
+  const { renderCoherence } = await import("../frontend-src/views/coherence.js");
+  for (const result of [null, { results: [] }]) {
+    const markup = renderCoherence({ result, t: (key) => key, entityExportLoading: true });
+    assert.ok(markup.indexOf('data-action="export-entities"') > markup.indexOf('data-action="open-deleted-entities"'));
+    assert.match(markup, /data-action="export-entities" disabled/);
+    assert.match(markup, /coherence.export.loading/);
+  }
+});
+
+test("entity export downloads JSON once and releases busy state on success or failure", async () => {
+  const { handleCoherenceAction } = await import("../frontend-src/views/coherence.js");
+  const { AlertManagerApi } = await import("../frontend-src/api/transport.js");
+  const originalDocument = globalThis.document;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  let resolveExport;
+  let calls = 0;
+  let downloaded = 0;
+  let blob;
+  let revoked;
+  const link = { click() { downloaded += 1; } };
+  const context = {
+    _readOnly: false,
+    _refreshCoherenceData() {},
+    _t: (key) => key,
+    _api: new AlertManagerApi(() => ({
+      callWS(message) {
+        assert.deepEqual(message, { type: "alert_manager/coherence/entities/export" });
+        calls += 1;
+        return new Promise((resolve) => { resolveExport = resolve; });
+      },
+    })),
+  };
+  try {
+    globalThis.document = { createElement(tag) { assert.equal(tag, "a"); return link; } };
+    URL.createObjectURL = (value) => { blob = value; return "blob:export"; };
+    URL.revokeObjectURL = (value) => { revoked = value; };
+    const pending = handleCoherenceAction.call(context, "export-entities");
+    assert.equal(context._entityExportLoading, true);
+    await handleCoherenceAction.call(context, "export-entities");
+    assert.equal(calls, 1);
+    const content = '{"attributes":{"friendly_name":"<salon>"}}';
+    resolveExport({ content, filename: "entities.json", content_type: "application/json;charset=utf-8" });
+    await pending;
+    assert.equal(context._entityExportLoading, false);
+    assert.equal(downloaded, 1);
+    assert.equal(link.download, "entities.json");
+    assert.equal(blob.type, "application/json;charset=utf-8");
+    assert.equal(await blob.text(), content);
+    assert.equal(revoked, "blob:export");
+    context._api = { exportEntities: async () => { throw new Error("offline"); } };
+    await handleCoherenceAction.call(context, "export-entities");
+    assert.equal(context._entityExportLoading, false);
+    assert.deepEqual(context._pageNotice, { kind: "error", text: "coherence.export.error" });
+    assert.equal(downloaded, 1);
+    context._readOnly = true;
+    context._api = { exportEntities() { assert.fail("Read-only users cannot export"); } };
+    await handleCoherenceAction.call(context, "export-entities");
+  } finally {
+    globalThis.document = originalDocument;
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+});
+
 const coherenceResult = () => ({
   results: [{
     entity_id: "sensor.missing_entity",
