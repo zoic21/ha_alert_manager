@@ -3352,6 +3352,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   panel._render = () => {};
   panel._settingsDraft = {
     coherence_alert_enabled: true,
+    coherence_report_disabled_entities: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -3392,6 +3393,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -4600,6 +4602,7 @@ test("combined settings save sends one configuration update and preserves drafts
   panel._render = () => {};
   panel._settingsDraft = {
     coherence_alert_enabled: true,
+    coherence_report_disabled_entities: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -4653,6 +4656,7 @@ test("combined settings save sends one configuration update and preserves drafts
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -5464,24 +5468,29 @@ test("statistics use the standard scrolling page while history keeps its native 
   assert.match(panel.shadowRoot.innerHTML.split("</style>")[1], /hass-tabs-subpage-data-table/);
 });
 
-test("coherence alert setting preserves its draft across renders and reloads saved state", () => {
-  const panel = new (customElements.get("alert-manager-panel"))();
-  panel._config = completeConfig();
-  panel._ensureSettingsDraft();
-  assert.equal(panel._settingsDraft.coherence_alert_enabled, false);
-  for (const checked of [true, false]) {
-    panel._handleChange({ target: { id: "coherence-alert-enabled", checked } });
+for (const [key, id] of [
+  ["coherence_alert_enabled", "coherence-alert-enabled"],
+  ["coherence_report_disabled_entities", "coherence-report-disabled-entities"],
+]) {
+  test(`${key} preserves its draft across renders and reloads saved state`, () => {
+    const panel = new (customElements.get("alert-manager-panel"))();
+    panel._config = completeConfig();
     panel._ensureSettingsDraft();
-    assert.equal(panel._settingsDraft.coherence_alert_enabled, checked);
-    assert.equal(Boolean(panel._config.coherence_alert_enabled), false);
-    const control = panel._renderSettings().match(/<ha-switch id="coherence-alert-enabled"[^>]*>/)[0];
-    assert.equal(/ checked/.test(control), checked);
-  }
-  panel._config.coherence_alert_enabled = true;
-  panel._resetSettingsDraft();
-  panel._ensureSettingsDraft();
-  assert.equal(panel._settingsDraft.coherence_alert_enabled, true);
-});
+    assert.equal(panel._settingsDraft[key], false);
+    for (const checked of [true, false]) {
+      panel._handleChange({ target: { id, checked } });
+      panel._ensureSettingsDraft();
+      assert.equal(panel._settingsDraft[key], checked);
+      assert.equal(Boolean(panel._config[key]), false);
+      const control = panel._renderSettings().match(new RegExp(`<ha-switch id="${id}"[^>]*>`))[0];
+      assert.equal(/ checked/.test(control), checked);
+    }
+    panel._config[key] = true;
+    panel._resetSettingsDraft();
+    panel._ensureSettingsDraft();
+    assert.equal(panel._settingsDraft[key], true);
+  });
+}
 
 
 test("returning from a dashboard can reopen the same alert or device deep link", () => {

@@ -2,17 +2,49 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
-from custom_components.alert_manager.coherence import scan_configuration
+from custom_components.alert_manager.coherence import (
+    async_scan_configuration,
+    scan_configuration,
+)
 
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+@pytest.mark.parametrize("report_disabled_entities", [False, True])
+def test_scan_disabled_entity_references_are_opt_in(
+    hass, tmp_path, registry_entry, report_disabled_entities
+):
+    hass.config.path = lambda: str(tmp_path)
+    registry_entry(hass, "sensor.disabled", disabled_by="user")
+    hass.states.set("sensor.live", "1")
+    _write(
+        tmp_path / "configuration.yaml",
+        "entity_id: [sensor.live, sensor.disabled, sensor.missing]\n",
+    )
+    options = {"report_disabled_entities": True} if report_disabled_entities else {}
+    report = asyncio.run(async_scan_configuration(hass, **options))
+    expected = {"sensor.missing"}
+    if report_disabled_entities:
+        expected.add("sensor.disabled")
+    assert {row["entity_id"] for row in report["results"]} == expected
+
+    ignored = asyncio.run(
+        async_scan_configuration(
+            hass,
+            **options,
+            ignored_entity_references=frozenset({"sensor.disabled"}),
+        )
+    )
+    assert {row["entity_id"] for row in ignored["results"]} == {"sensor.missing"}
 
 
 def test_scan_ignores_tagged_scalars_without_resolving_them(tmp_path):

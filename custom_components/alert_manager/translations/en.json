@@ -810,6 +810,8 @@
       "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
       "coherence_scan_esphome": "Scan the ESPHome folder",
       "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
+      "coherence_report_disabled_entities": "Report references to disabled entities",
+      "coherence_report_disabled_entities_help": "Also reports references to entities disabled in Home Assistant. Off by default; takes effect on the next scan.",
       "coherence_ignored_entity_references": "References ignored by the coherence scan",
       "coherence_ignored_entity_references_help": "Add an exact entity reference (toto.plop) or ZHA IEEE address (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",

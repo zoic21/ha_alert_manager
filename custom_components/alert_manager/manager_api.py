@@ -1021,6 +1021,7 @@ class _ApiMixin:
             - {
                 "coherence_schedule",
                 "coherence_scan_esphome",
+                "coherence_report_disabled_entities",
                 "coherence_alert_enabled",
                 "coherence_ignored_entity_references",
                 "pending_display_delay",

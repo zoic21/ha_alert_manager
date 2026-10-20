@@ -810,6 +810,8 @@
       "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
       "coherence_scan_esphome": "Analyser le dossier ESPHome",
       "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
+      "coherence_report_disabled_entities": "Signaler les références aux entités désactivées",
+      "coherence_report_disabled_entities_help": "Signale aussi les références aux entités désactivées dans Home Assistant. Décoché par défaut ; s’applique à la prochaine analyse.",
       "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
       "coherence_ignored_entity_references_help": "Ajoutez une référence exacte d’entité (toto.plop) ou une adresse IEEE ZHA (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Exemple : toto.plop",

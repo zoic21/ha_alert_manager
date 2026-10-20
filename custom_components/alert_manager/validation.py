@@ -35,6 +35,7 @@ _CONFIG_UPDATE_KEYS = {
     "pending_display_delay",
     "coherence_schedule",
     "coherence_scan_esphome",
+    "coherence_report_disabled_entities",
     "coherence_alert_enabled",
     "coherence_ignored_entity_references",
     "excluded_labels",
@@ -211,6 +212,13 @@ def validate_config(config: Any) -> dict[str, Any]:
     if not isinstance(coherence_scan_esphome, bool):
         raise ValueError("coherence_scan_esphome must be a boolean")
     result["coherence_scan_esphome"] = coherence_scan_esphome
+    coherence_report_disabled_entities = config.get(
+        "coherence_report_disabled_entities",
+        result["coherence_report_disabled_entities"],
+    )
+    if not isinstance(coherence_report_disabled_entities, bool):
+        raise ValueError("coherence_report_disabled_entities must be a boolean")
+    result["coherence_report_disabled_entities"] = coherence_report_disabled_entities
     coherence_alert_enabled = config.get("coherence_alert_enabled", False)
     if not isinstance(coherence_alert_enabled, bool):
         raise ValueError("coherence_alert_enabled must be a boolean")

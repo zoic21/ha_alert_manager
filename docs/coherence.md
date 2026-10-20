@@ -48,6 +48,8 @@ Templates, blueprint inputs and malformed IEEE values are skipped; blueprints ar
 
 In **Configuration → Coherence analysis**, choose manual-only analysis or a **daily, weekly or monthly** schedule. ESPHome scanning can be disabled independently.
 
+**Report references to disabled entities** also flags references to entities disabled in Home Assistant. It is off by default, so disabled entities continue to count as present unless you enable it. The setting applies to the next manual or scheduled scan, including references in custom rules, and respects reference exclusions. It is available as `coherence_report_disabled_entities` in configuration YAML.
+
 ESPHome's generated `.esphome` directories are excluded from scans and reference replacements. Device YAML files and other hidden configuration directories remain eligible for scanning.
 
 The `bubble_card` directory and its subdirectories are excluded from file scanning to avoid false positives from module code and example entity references. Dashboard configurations outside that directory are still checked.

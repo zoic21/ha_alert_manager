@@ -121,7 +121,7 @@ Profile usage counters cover the current hour and previous 23 hours since startu
 
 Adjust pending-alert visibility separately from trigger delays. The history limit controls how many resolved occurrences are retained; deleted or discarded occurrences are no longer available to history statistics. See [Dashboard and history](dashboard-and-history.md) for acknowledgement, filtering and recurrence reports.
 
-Coherence settings control scheduling, ESPHome scanning, reference exclusions and the optional persistent coherence alert. See the [Coherence guide](coherence.md) for supported references and incomplete-scan behavior.
+Coherence settings control scheduling, ESPHome scanning, optional reporting of references to disabled entities (off by default), reference exclusions and the optional persistent coherence alert. See the [Coherence guide](coherence.md) for supported references and incomplete-scan behavior.
 
 ## YAML editing
 

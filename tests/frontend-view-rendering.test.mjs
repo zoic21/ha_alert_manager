@@ -371,6 +371,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     settingsDraft: {
       coherence_scan_esphome: true,
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_ignored_entity_references: ["sensor.old"],
       excluded_labels: [],
       excluded_entities: [],
@@ -413,6 +414,8 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(coherenceCard, /class="coherence-options"/);
   assert.match(coherenceCard, /id="coherence-alert-enabled"[^>]*checked/);
   assert.match(coherenceCard, /aria-describedby="coherence-alert-help"/);
+  assert.match(coherenceCard, /id="coherence-report-disabled-entities"[^>]*checked/);
+  assert.match(coherenceCard, /aria-describedby="coherence-report-disabled-entities-help"/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
   assert.doesNotMatch(markup, /settings-entity_delays-configuration/);

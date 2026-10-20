@@ -801,15 +801,21 @@ def _registry_entries(registry: Any) -> list[Any]:
     return list(entries.values())
 
 
-def configuration_scan_metadata(hass: HomeAssistant) -> dict[str, Any]:
+def configuration_scan_metadata(
+    hass: HomeAssistant, *, report_disabled_entities: bool = False
+) -> dict[str, Any]:
     """Snapshot native metadata shared by coherence and entity replacement."""
     registry_entries = _registry_entries(er.async_get(hass))
     existing_entities = {state.entity_id.lower() for state in hass.states.async_all()}
-    existing_entities.update(
+    disabled_entities = {
         entry.entity_id.lower()
         for entry in registry_entries
         if getattr(entry, "disabled_by", None) is not None
-    )
+    }
+    if report_disabled_entities:
+        existing_entities.difference_update(disabled_entities)
+    else:
+        existing_entities.update(disabled_entities)
 
     template_by_unique_id: dict[str, str] = {}
     template_by_name: dict[str, str] = {}
@@ -867,10 +873,13 @@ async def async_scan_configuration(
     hass: HomeAssistant,
     *,
     scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
+    report_disabled_entities: bool = False,
     ignored_entity_references: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Collect live HA metadata and run one configuration scan in the executor."""
-    metadata = configuration_scan_metadata(hass)
+    metadata = configuration_scan_metadata(
+        hass, report_disabled_entities=report_disabled_entities
+    )
     check_snapshots = {check.REFERENCE_TYPE: check.snapshot(hass) for check in CHECKS}
     manager = hass.data.get(DATA_MANAGER)
     custom_rules = snapshot_rules(manager.rules if manager is not None else ())
@@ -898,6 +907,9 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
         hass,
         scan_esphome=config.get(
             "coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME
+        ),
+        report_disabled_entities=config.get(
+            "coherence_report_disabled_entities", False
         ),
         ignored_entity_references=frozenset(
             config.get("coherence_ignored_entity_references", [])

@@ -1082,6 +1082,7 @@ def test_runtime_rule_cleanup_remains_silent(hass, entry):
     [
         ({"coherence_schedule": "daily"}, 0, 0, 0),
         ({"coherence_scan_esphome": False}, 0, 0, 0),
+        ({"coherence_report_disabled_entities": True}, 0, 0, 0),
         ({"coherence_ignored_entity_references": ["sensor.missing"]}, 0, 0, 0),
         ({"pending_display_delay": 23}, 0, 1, 0),
         (

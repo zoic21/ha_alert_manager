@@ -3,6 +3,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from custom_components.alert_manager.coherence import (
     async_scan_configuration,
     scan_configuration,
@@ -98,3 +100,28 @@ def test_async_scan_includes_manager_rules(hass, tmp_path):
         "sensor.condition",
         "sensor.message",
     }
+
+
+@pytest.mark.parametrize("report_disabled_entities", [False, True])
+def test_disabled_entity_option_applies_to_custom_rules(
+    hass, tmp_path, registry_entry, report_disabled_entities
+):
+    hass.config.path = lambda: str(tmp_path)
+    registry_entry(hass, "sensor.disabled", disabled_by="integration")
+    hass.data[DATA_MANAGER] = SimpleNamespace(
+        rules=[
+            rule(
+                entity_ids=["sensor.disabled"],
+                condition_template=None,
+                message=None,
+            )
+        ]
+    )
+    report = asyncio.run(
+        async_scan_configuration(
+            hass, report_disabled_entities=report_disabled_entities
+        )
+    )
+    assert report["missing_count"] == int(report_disabled_entities)
+    if report_disabled_entities:
+        assert report["results"][0]["entity_id"] == "sensor.disabled"

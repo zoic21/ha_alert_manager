@@ -18,6 +18,7 @@ DEFAULT_CONFIG: Final = {
     "history_limit": DEFAULT_HISTORY_LIMIT,
     "coherence_schedule": DEFAULT_COHERENCE_SCHEDULE,
     "coherence_scan_esphome": DEFAULT_COHERENCE_SCAN_ESPHOME,
+    "coherence_report_disabled_entities": False,
     "coherence_alert_enabled": False,
     "coherence_ignored_entity_references": [],
     "pack_config_version": 2,
