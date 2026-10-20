@@ -111,7 +111,7 @@ Recognized Companion targets receive native `notification_icon` and `color` meta
 | Combined activation and recovery | Check circle | Blue |
 | Informational exception, for any enabled delivery | Information | Blue |
 
-Tapping a supported Companion notification opens a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
+Tapping a supported Companion notification containing only available-update alerts opens Home Assistant Settings, including for reminders and recoveries. Other notifications open a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
 
 Alert details separate activation and reminder deliveries; history also records recovery deliveries, matching profiles and last delivery times. A batch counts once per profile and alert when at least one target succeeds. Tests and complete failures are excluded. These details survive restarts, are hidden for pending alerts and do not count notifications sent by external automations.
 
