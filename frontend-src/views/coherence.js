@@ -212,7 +212,8 @@ function updateCoherenceSelection(tablePage) {
     tablePage.selected = count;
     const button = tablePage.querySelector?.('[data-action="correct-selected-coherence"]');
     if (button) {
-      button.textContent = this._t("coherence.correction.selected", { count });
+      const label = button.querySelector?.("[data-action-label]") ?? button;
+      label.textContent = this._t("coherence.correction.selected", { count });
       button.disabled = !count || Boolean(this._entityReplacement?.busy);
     }
 }
@@ -268,12 +269,11 @@ export function nativeCoherenceActionCell(row) {
       const correct = document.createElement("ha-button");
       correct.setAttribute("appearance", "plain");
       correct.textContent = this._t(row.target ? "coherence.correction.button" : "coherence.replacement.apply");
-      if (!row.target) {
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("slot", "start");
-        icon.setAttribute("icon", "mdi:swap-horizontal");
-        correct.append(icon);
-      }
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", row.target ? "mdi:check" : "mdi:swap-horizontal");
+      icon.setAttribute("aria-hidden", "true");
+      correct.append(icon);
       correct.disabled = Boolean(this._entityReplacement?.busy);
       correct.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -285,6 +285,11 @@ export function nativeCoherenceActionCell(row) {
       const open = document.createElement("ha-button");
       open.setAttribute("appearance", "plain");
       open.textContent = this._t("coherence.open");
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", "mdi:open-in-new");
+      icon.setAttribute("aria-hidden", "true");
+      open.append(icon);
       open.addEventListener("click", (event) => {
         event.stopPropagation();
         this._openCoherenceLink(row.link);
@@ -477,7 +482,7 @@ export function renderCoherence(context) {
       main-page
     >
       <div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled>${esc(t("coherence.correction.selected", { count: 0 }))}</ha-button>
+        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled><span data-action-label>${esc(t("coherence.correction.selected", { count: 0 }))}</span></ha-button>
       </div>
       <div slot="top-header" class="table-page-top">
         ${pageMessages}

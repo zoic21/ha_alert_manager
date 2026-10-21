@@ -488,15 +488,15 @@ class AlertManagerPanel extends HTMLElement {
 
   _decorateActionIcons() {
     if (!globalThis.document?.createElement) return;
-    for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
-      for (const button of this.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? []) {
-        if (button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("slot", "start");
-        icon.setAttribute("icon", iconName);
-        icon.setAttribute("data-alert-manager-action-icon", "");
-        button.prepend(icon);
-      }
+    for (const button of this.shadowRoot?.querySelectorAll?.("ha-button[data-action]") ?? []) {
+      const iconName = ACTION_ICONS[button.dataset.action];
+      if (!iconName || button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", iconName);
+      icon.setAttribute("aria-hidden", "true");
+      icon.setAttribute("data-alert-manager-action-icon", "");
+      button.prepend(icon);
     }
   }
 

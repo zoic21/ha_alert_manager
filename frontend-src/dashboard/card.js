@@ -173,7 +173,7 @@ export class AlertManagerCard extends HTMLElement {
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
-      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
+      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry><ha-icon slot="start" icon="mdi:refresh" aria-hidden="true"></ha-icon>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
     const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;

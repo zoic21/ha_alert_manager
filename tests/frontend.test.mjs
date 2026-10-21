@@ -5813,7 +5813,7 @@ test("action decoration preserves authored icons and stays idempotent across ref
       return button;
     }));
   panel.shadowRoot.querySelectorAll = (selector) => buttons.filter((button) =>
-    selector === `[data-action="${button.dataset.action}"]`);
+    selector === "ha-button[data-action]");
   for (let refresh = 0; refresh < 3; refresh++) panel._decorateActionIcons();
   for (const button of buttons) assert.equal(button.children.length, 1, button.dataset.action);
 });

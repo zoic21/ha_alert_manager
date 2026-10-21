@@ -88,11 +88,27 @@ const ACTION_ICONS = Object.freeze({
   "save-rule": "mdi:content-save",
   "save-settings": "mdi:content-save",
   "save-configuration": "mdi:content-save",
+  "save-notification-profile": "mdi:content-save",
+  "enable-monitoring": "mdi:play",
+  "open-history-settings": "mdi:cog",
+  "history-statistics-period": "mdi:calendar-range",
+  "clear-history": "mdi:delete-sweep-outline",
+  "delete-history": "mdi:delete-outline",
+  "bulk-acknowledge": "mdi:check-all",
+  "bulk-unacknowledge": "mdi:undo-variant",
+  "open-settings-configuration": "mdi:cog",
+  "edit-notification-profile": "mdi:pencil",
+  "restore-config-backup": "mdi:backup-restore",
+  "cancel-config-backup-restore": "mdi:close",
+  "confirm-config-backup-restore": "mdi:backup-restore",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
   "open-entity-renames": "mdi:rename-box",
   "open-entity-replacement": "mdi:swap-horizontal",
   "export-entities": "mdi:download",
+  "close-entity-export": "mdi:close",
+  "download-entities": "mdi:download",
+  "correct-selected-coherence": "mdi:check-all",
 });
 
 // Source: frontend-src/utils/integration-entities.js
@@ -1592,7 +1608,8 @@ function updateSelectionToolbar() {
       const button = historyPage.querySelector('[data-action="delete-history"]');
       if (button) {
         button.hidden = count === 0;
-        button.textContent = this._t("history.delete_selected", { count });
+        const label = button.querySelector?.("[data-action-label]") ?? button;
+        label.textContent = this._t("history.delete_selected", { count });
       }
       historyPage.selected = count;
       return;
@@ -1605,12 +1622,14 @@ function updateSelectionToolbar() {
     const acknowledge = this.shadowRoot.querySelector('[data-selection-action="acknowledge"]');
     if (acknowledge) {
       acknowledge.hidden = acknowledgeCount === 0;
-      acknowledge.textContent = this._t("table.selection.acknowledge", { count: acknowledgeCount });
+      const label = acknowledge.querySelector?.("[data-action-label]") ?? acknowledge;
+      label.textContent = this._t("table.selection.acknowledge", { count: acknowledgeCount });
     }
     const unacknowledge = this.shadowRoot.querySelector('[data-selection-action="unacknowledge"]');
     if (unacknowledge) {
       unacknowledge.hidden = unacknowledgeCount === 0;
-      unacknowledge.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
+      const label = unacknowledge.querySelector?.("[data-action-label]") ?? unacknowledge;
+      label.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
     }
     const tablePage = this.shadowRoot.querySelector('[data-alert-table-page="overview"]');
     if (tablePage) tablePage.selected = selectedRows.length;
@@ -1954,10 +1973,10 @@ function renderAlertTable(kind, sourceRows, topHeader = "") {
       ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
       <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>
       ${this._readOnly ? "" : kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
-        <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
+        <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</span></ha-button>
+        <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</span></ha-button>
       </div>` : `<div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="danger" data-action="delete-history" ${this._selectedHistoryIds.size ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("history.delete_selected", { count: this._selectedHistoryIds.size }))}</ha-button>
+        <ha-button appearance="plain" variant="danger" data-action="delete-history" ${this._selectedHistoryIds.size ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("history.delete_selected", { count: this._selectedHistoryIds.size }))}</span></ha-button>
       </div>`}
     </hass-tabs-subpage-data-table>`;
 }
@@ -2848,8 +2867,8 @@ function openTimedAcknowledgement(alertId) {
         <ha-alert alert-type="error" hidden></ha-alert>
       </div>
       <div slot="footer" class="timed-acknowledgement-footer">
-        <ha-button appearance="plain" data-timed-ack="cancel">${esc(this._t("buttons.cancel"))}</ha-button>
-        <ha-button data-timed-ack="confirm">${esc(this._t("overview.acknowledge"))}</ha-button>
+        <ha-button appearance="plain" data-timed-ack="cancel"><ha-icon slot="start" icon="mdi:close" aria-hidden="true"></ha-icon>${esc(this._t("buttons.cancel"))}</ha-button>
+        <ha-button data-timed-ack="confirm"><ha-icon slot="start" icon="mdi:check" aria-hidden="true"></ha-icon>${esc(this._t("overview.acknowledge"))}</ha-button>
       </div>`;
     // Sibling native dialogs share HA's modal stack. Never replace or close the details.
     this._timedAcknowledgementDialog = dialog;
@@ -5911,7 +5930,7 @@ function renderHistory(context) {
       <ha-card outlined class="panel history-statistics-banner">
         <div class="history-statistics-toolbar">
           ${statisticsControls}
-          <ha-button size="s" appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.back"))}</ha-button>
+          <ha-button size="s" appearance="plain" data-action="toggle-history-statistics"><ha-icon slot="start" icon="mdi:arrow-left" aria-hidden="true"></ha-icon>${esc(t("history.statistics.back"))}</ha-button>
         </div>
         <div class="history-statistics-summary" data-history-statistics-summary></div>
       </ha-card>
@@ -5923,7 +5942,7 @@ function renderHistory(context) {
       <div class="history-header">
         <div><h2>${esc(t("history.title"))}</h2></div>
         <div class="history-page-actions">
-          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
+          <ha-button appearance="plain" data-action="toggle-history-statistics"><ha-icon slot="start" icon="mdi:chart-box-outline" aria-hidden="true"></ha-icon>${esc(t("history.statistics.title"))}</ha-button>
           ${readOnly ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
@@ -6114,7 +6133,7 @@ function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleL
             const name = kind === "integration" ? integrationLabel(row.id) : kind === "pack" ? ruleLabel(row) : row.name || row.id;
             const value = metric === "occurrences" ? row.occurrences : duration(row.total_duration_seconds);
             const exact = metric === "occurrences" ? value : exactDuration(row.total_duration_seconds);
-            return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;
+            return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><ha-icon slot="start" icon="mdi:filter-outline" aria-hidden="true"></ha-icon><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;
           }).join("")}</ol>` : `<p>${esc(t(statistics ? "history.statistics.empty" : "loading"))}</p>`}
         </section>`;
       }).join("")}
@@ -6507,7 +6526,8 @@ function updateCoherenceSelection(tablePage) {
     tablePage.selected = count;
     const button = tablePage.querySelector?.('[data-action="correct-selected-coherence"]');
     if (button) {
-      button.textContent = this._t("coherence.correction.selected", { count });
+      const label = button.querySelector?.("[data-action-label]") ?? button;
+      label.textContent = this._t("coherence.correction.selected", { count });
       button.disabled = !count || Boolean(this._entityReplacement?.busy);
     }
 }
@@ -6563,12 +6583,11 @@ function nativeCoherenceActionCell(row) {
       const correct = document.createElement("ha-button");
       correct.setAttribute("appearance", "plain");
       correct.textContent = this._t(row.target ? "coherence.correction.button" : "coherence.replacement.apply");
-      if (!row.target) {
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("slot", "start");
-        icon.setAttribute("icon", "mdi:swap-horizontal");
-        correct.append(icon);
-      }
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", row.target ? "mdi:check" : "mdi:swap-horizontal");
+      icon.setAttribute("aria-hidden", "true");
+      correct.append(icon);
       correct.disabled = Boolean(this._entityReplacement?.busy);
       correct.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -6580,6 +6599,11 @@ function nativeCoherenceActionCell(row) {
       const open = document.createElement("ha-button");
       open.setAttribute("appearance", "plain");
       open.textContent = this._t("coherence.open");
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", "mdi:open-in-new");
+      icon.setAttribute("aria-hidden", "true");
+      open.append(icon);
       open.addEventListener("click", (event) => {
         event.stopPropagation();
         this._openCoherenceLink(row.link);
@@ -6772,7 +6796,7 @@ function renderCoherence(context) {
       main-page
     >
       <div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled>${esc(t("coherence.correction.selected", { count: 0 }))}</ha-button>
+        <ha-button appearance="plain" variant="brand" data-action="correct-selected-coherence" disabled><span data-action-label>${esc(t("coherence.correction.selected", { count: 0 }))}</span></ha-button>
       </div>
       <div slot="top-header" class="table-page-top">
         ${pageMessages}
@@ -8057,7 +8081,7 @@ function renderSettingsNavigation(t) {
 }
 
 function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}"><span data-action-label>${esc(t("buttons.configuration_named", { name: label, count }))}</span></ha-button></div>`;
 }
 
 function renderSettingsConfigurationDrawer(context) {
@@ -8558,7 +8582,8 @@ function updateSettingsConfigurationCount(id) {
   const count = id === "entity_delays"
     ? this._entityDelayDraft.length
     : this._settingsDraft[id].length;
-  button.textContent = this._t("buttons.configuration_named", {
+  const label = button.querySelector?.("[data-action-label]") ?? button;
+  label.textContent = this._t("buttons.configuration_named", {
     name: button.dataset.configurationLabel,
     count,
   });
@@ -11342,15 +11367,15 @@ class AlertManagerPanel extends HTMLElement {
 
   _decorateActionIcons() {
     if (!globalThis.document?.createElement) return;
-    for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
-      for (const button of this.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? []) {
-        if (button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("slot", "start");
-        icon.setAttribute("icon", iconName);
-        icon.setAttribute("data-alert-manager-action-icon", "");
-        button.prepend(icon);
-      }
+    for (const button of this.shadowRoot?.querySelectorAll?.("ha-button[data-action]") ?? []) {
+      const iconName = ACTION_ICONS[button.dataset.action];
+      if (!iconName || button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", iconName);
+      icon.setAttribute("aria-hidden", "true");
+      icon.setAttribute("data-alert-manager-action-icon", "");
+      button.prepend(icon);
     }
   }
 

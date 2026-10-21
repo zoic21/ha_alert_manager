@@ -99,11 +99,27 @@ const ACTION_ICONS = Object.freeze({
   "save-rule": "mdi:content-save",
   "save-settings": "mdi:content-save",
   "save-configuration": "mdi:content-save",
+  "save-notification-profile": "mdi:content-save",
+  "enable-monitoring": "mdi:play",
+  "open-history-settings": "mdi:cog",
+  "history-statistics-period": "mdi:calendar-range",
+  "clear-history": "mdi:delete-sweep-outline",
+  "delete-history": "mdi:delete-outline",
+  "bulk-acknowledge": "mdi:check-all",
+  "bulk-unacknowledge": "mdi:undo-variant",
+  "open-settings-configuration": "mdi:cog",
+  "edit-notification-profile": "mdi:pencil",
+  "restore-config-backup": "mdi:backup-restore",
+  "cancel-config-backup-restore": "mdi:close",
+  "confirm-config-backup-restore": "mdi:backup-restore",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
   "open-entity-renames": "mdi:rename-box",
   "open-entity-replacement": "mdi:swap-horizontal",
   "export-entities": "mdi:download",
+  "close-entity-export": "mdi:close",
+  "download-entities": "mdi:download",
+  "correct-selected-coherence": "mdi:check-all",
 });
 
 // Source: frontend-src/utils/integration-entities.js
@@ -1020,7 +1036,7 @@ class AlertManagerCard extends HTMLElement {
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
-      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
+      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry><ha-icon slot="start" icon="mdi:refresh" aria-hidden="true"></ha-icon>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
     const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;
