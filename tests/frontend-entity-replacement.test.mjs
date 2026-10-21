@@ -111,6 +111,45 @@ test("dialog previews before applying, retains selection on error and blocks dup
   assert.equal(context._entityReplacement.old_entity_id, "light.old");
 });
 
+test("returning to entity IDs ignores the replaced preview dialog's closing event", async () => {
+  const state = {
+    old_entity_id: "light.old", new_entity_id: "light.new",
+    preview, selected: new Set(["one"]), busy: false, error: "previous error",
+  };
+  let dialog;
+  let fields;
+  const root = { querySelector: () => dialog };
+  const context = {
+    _entityReplacement: state, _t: translate,
+    _render() {
+      if (!this._entityReplacement) { dialog = null; return; }
+      dialog = element();
+      fields = this._entityReplacement.preview ? [] : [
+        element({ replacementField: "old_entity_id" }),
+        element({ replacementField: "new_entity_id" }),
+      ];
+      dialog.querySelectorAll = (selector) => selector === "[data-replacement-field]" ? fields : [];
+      hydrateEntityReplacement(root, this);
+    },
+  };
+  context._render();
+  const previewDialog = dialog;
+  await handleEntityReplacementAction.call(context, "back-entity-replacement");
+  const editorDialog = dialog;
+  assert.notEqual(editorDialog, previewDialog);
+  previewDialog.handlers.closed({ target: previewDialog });
+  assert.equal(context._entityReplacement, state);
+  assert.equal(dialog, editorDialog);
+  assert.equal(editorDialog.open, true);
+  assert.equal(state.preview, null);
+  assert.equal(state.error, null);
+  assert.deepEqual(fields.map((field) => field.value), ["light.old", "light.new"]);
+
+  editorDialog.handlers.closed({ target: editorDialog });
+  assert.equal(context._entityReplacement, null);
+  assert.equal(dialog, null);
+});
+
 test("read-only users never preview or apply replacements", async () => {
   const context = { _readOnly: true, _api: { previewEntityReplacement() { assert.fail(); } } };
   for (const action of ["open", "preview", "apply"]) {

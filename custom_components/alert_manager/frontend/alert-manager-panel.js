@@ -6172,6 +6172,7 @@ function hydrateEntityReplacement(root, context) {
     dialog.dataset.configured = "true";
     dialog.addEventListener("closed", (event) => {
       if (event.target !== dialog || context._entityReplacement !== state) return;
+      if (root.querySelector("#entity-replacement-dialog") !== dialog) return;
       if (state.busy) { dialog.open = true; return; }
       context._entityReplacement = null;
       context._render();
