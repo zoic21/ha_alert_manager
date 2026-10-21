@@ -6253,7 +6253,7 @@ async function handleEntityReplacementAction(action, button) {
     action = "preview-entity-replacement";
   }
   if (action === "open-entity-replacement") {
-    this._entityReplacement = { old_entity_id: "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
+    this._entityReplacement = { old_entity_id: button?.dataset?.entityId ?? "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
   } else if (action === "close-entity-replacement") {
     this._entityReplacement = null;
   } else if (action === "back-entity-replacement") {
@@ -6326,6 +6326,7 @@ function coherenceTableRows() {
         index,
         entity: reference,
         target: result.correction_target ?? "",
+        replaceable: Boolean(result.replacement_available) && !this._readOnly,
         selectable: Boolean(result.correction_target) && !this._readOnly,
         message: result.reference_type === "zha_device_ieee"
           ? this._t("coherence.zha_missing") : "",
@@ -6558,14 +6559,20 @@ function openCoherenceLink(link) {
 function nativeCoherenceActionCell(row) {
     if (!globalThis.document?.createElement) return "";
     const content = document.createElement("span");
-    if (row.target && !this._readOnly) {
+    if ((row.target || row.replaceable) && !this._readOnly) {
       const correct = document.createElement("ha-button");
       correct.setAttribute("appearance", "plain");
-      correct.textContent = this._t("coherence.correction.button");
+      correct.textContent = this._t(row.target ? "coherence.correction.button" : "coherence.replacement.apply");
+      if (!row.target) {
+        const icon = document.createElement("ha-icon");
+        icon.setAttribute("slot", "start");
+        icon.setAttribute("icon", "mdi:swap-horizontal");
+        correct.append(icon);
+      }
       correct.disabled = Boolean(this._entityReplacement?.busy);
       correct.addEventListener("click", (event) => {
         event.stopPropagation();
-        void handleEntityReplacementAction.call(this, "correct-coherence", { dataset: { rowIndex: row.index } });
+        void handleEntityReplacementAction.call(this, row.target ? "correct-coherence" : "open-entity-replacement", { dataset: { rowIndex: row.index, entityId: row.entity } });
       });
       content.append(correct);
     }

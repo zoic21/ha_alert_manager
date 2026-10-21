@@ -395,6 +395,31 @@ test("coherence mobile metadata includes the target and correct is available wit
   assert.equal(typeof action.listeners.click, "function");
 });
 
+test("replace is offered only for supported findings without an automatic target", () => {
+  const panel = new Panel();
+  panel._hass = { user: { is_admin: true } };
+  panel._coherence = { results: [
+    { entity_id: "sensor.deleted", file: "config.yaml", line: 1, replacement_available: true },
+    { entity_id: "sensor.known", file: "config.yaml", line: 2, replacement_available: true, correction_target: "sensor.current" },
+    { entity_id: "sensor.internal", file: ".storage/core.config_entries", line: 1 },
+    { reference_type: "zha_device_ieee", reference: "00:11:22:33:44:55:66:77", file: "config.yaml", line: 3 },
+  ] };
+  panel._render = () => {};
+  const rows = panel._coherenceTableRows();
+  const replace = panel._nativeCoherenceActionCell(rows[0]);
+  assert.equal(replace.textContent, panel._t("coherence.replacement.apply"));
+  assert.equal(replace.children[0].attributes.icon, "mdi:swap-horizontal");
+  replace.listeners.click({ stopPropagation() {} });
+  assert.equal(panel._entityReplacement.old_entity_id, "sensor.deleted");
+  assert.equal(panel._entityReplacement.new_entity_id, "");
+  assert.equal(panel._entityReplacement.coherenceCorrection, undefined);
+  assert.equal(panel._nativeCoherenceActionCell(rows[1]).textContent, panel._t("coherence.correction.button"));
+  for (const row of rows.slice(2)) assert.equal(panel._nativeCoherenceActionCell(row).children.length, 0);
+
+  panel._hass.user.is_admin = false;
+  assert.equal(panel._nativeCoherenceActionCell(rows[0]).children.length, 0);
+});
+
 test("coherence opens the exact Home Assistant target only through the Open button", () => {
   const panel = new Panel();
   const tablePage = {

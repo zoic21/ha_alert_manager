@@ -7,6 +7,7 @@ import importlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
@@ -546,8 +547,18 @@ def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, en
     assert connection.results[-1][1]["config"] == manager.get_config()
 
 
-def test_coherence_get_websocket_restores_last_result_without_scanning(hass, entry):
+def test_coherence_get_websocket_restores_last_result_without_scanning(
+    hass, entry, tmp_path, monkeypatch
+):
     """Opening the panel retrieves the retained report without a new scan."""
+    from custom_components.alert_manager import entity_replacement as module
+
+    hass.config.path = lambda *parts: str(tmp_path.joinpath(*parts))
+    monkeypatch.setattr(
+        module,
+        "_discover_sources",
+        lambda *_args, **_kwargs: pytest.fail("A retained report must not scan"),
+    )
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
@@ -559,7 +570,7 @@ def test_coherence_get_websocket_restores_last_result_without_scanning(hass, ent
     expected = {
         "scanned_at": "2026-08-24T12:00:00+00:00",
         "missing_entity_count": 1,
-        "results": [{"entity_id": "sensor.gone"}],
+        "results": [{"entity_id": "sensor.gone", "file": "removed.yaml", "line": 1}],
     }
     hass.data[DATA_COHERENCE_RESULT] = expected
     asyncio.run(websocket_coherence_get(hass, connection, {"id": 42}))

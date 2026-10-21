@@ -100,8 +100,59 @@ def test_report_resolves_final_name_and_only_editable_references(
         }
         assert {row["file"] for row in correctable} == {"config.yaml"}
         assert {row["correction_target"] for row in correctable} == {"light.current"}
+        replaceable = [
+            row for row in snapshot["results"] if row.get("replacement_available")
+        ]
+        assert {row["entity_id"] for row in replaceable} == {
+            "light.original",
+            "light.old",
+            "light.deleted",
+        }
+        assert {row["file"] for row in replaceable} == {"config.yaml"}
         assert stored == original
         assert all("correction_target" not in row for row in stored["results"])
+
+    asyncio.run(run())
+
+
+def test_manual_replacement_without_rename_history_keeps_global_preview(
+    manager, tmp_path, monkeypatch
+):
+    from custom_components.alert_manager import entity_replacement as module
+
+    write(tmp_path, "first.yaml", "entity_id: light.untracked\n")
+    write(tmp_path, "second.yaml", "entities: [light.untracked, light.untracked]\n")
+    real_discover = module._discover_sources
+
+    async def run():
+        stored = await report(manager)
+        original = deepcopy(stored)
+        monkeypatch.setattr(
+            module,
+            "_discover_sources",
+            lambda *_args, **_kwargs: pytest.fail(
+                "Report actions must only read files with findings"
+            ),
+        )
+        snapshot = await manager.async_coherence_snapshot(stored)
+        assert len(snapshot["results"]) == 2
+        assert all(row["replacement_available"] for row in snapshot["results"])
+        assert all("correction_target" not in row for row in snapshot["results"])
+        assert stored == original
+
+        monkeypatch.setattr(module, "_discover_sources", real_discover)
+        preview = await manager.entity_replacement.async_preview(
+            "light.untracked", "light.current"
+        )
+        assert preview["replacement_count"] == 3
+        assert {row["file"] for row in preview["replacements"]} == {
+            "first.yaml",
+            "second.yaml",
+        }
+        assert all(
+            path.read_text().count("light.untracked")
+            for path in tmp_path.glob("*.yaml")
+        )
 
     asyncio.run(run())
 
@@ -228,7 +279,9 @@ def test_reused_old_identifier_and_deleted_newest_identity_disable_correction(
         manager.entity_rename_history.record(
             "light.old", "light.deleted", "missing-identity", datetime.now(UTC)
         )
-        assert await manager.async_coherence_snapshot(stored) == stored
+        snapshot = await manager.async_coherence_snapshot(stored)
+        assert all("correction_target" not in row for row in snapshot["results"])
+        assert all(row["replacement_available"] for row in snapshot["results"])
 
     asyncio.run(run())
 

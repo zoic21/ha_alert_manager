@@ -443,24 +443,33 @@ class EntityReplacement:
         return matched, skipped
 
     async def _async_correction_files(
-        self, findings: list[dict[str, Any]], renames: list[dict[str, Any]]
+        self,
+        findings: list[dict[str, Any]],
+        renames: list[dict[str, Any]],
+        *,
+        include_unresolved: bool = False,
     ) -> tuple[list[ReplacementFile], int]:
         """Resolve newest registry identities and collect only matching findings."""
         latest = {}
         for rename in renames:  # History is newest first, including deleted targets.
             latest.setdefault(rename["old_entity_id"], rename["current_entity_id"])
-        missing = {
-            row["entity_id"] for row in findings if row.get("entity_id") in latest
-        }
         registry = er.async_get(self.hass)
+        missing = {
+            row["entity_id"]
+            for row in findings
+            if row.get("entity_id")
+            and self.hass.states.get(row["entity_id"]) is None
+            and registry.async_get(row["entity_id"]) is None
+        }
         targets = {
             entity_id: latest[entity_id]
             for entity_id in missing
-            if latest[entity_id]
-            and latest[entity_id] != entity_id
-            and self.hass.states.get(entity_id) is None
-            and registry.async_get(entity_id) is None
+            if latest.get(entity_id) and latest[entity_id] != entity_id
         }
+        if include_unresolved:
+            # Identity mappings find editable references without suggesting a target.
+            for entity_id in missing:
+                targets.setdefault(entity_id, entity_id)
         if not targets:
             return [], 0
         return await self._async_collect_files(
@@ -471,22 +480,31 @@ class EntityReplacement:
     async def async_coherence_report(
         self, report: dict[str, Any] | None, renames: list[dict[str, Any]]
     ) -> dict[str, Any] | None:
-        """Add currently editable targets without mutating the persisted report."""
+        """Add available replacement actions without changing the stored report."""
         if report is None:
             return None
-        files, _ = await self._async_correction_files(report["results"], renames)
+        files, _ = await self._async_correction_files(
+            report["results"], renames, include_unresolved=True
+        )
         if not files:
             return report
-        targets = {
-            correction_signature(row): row["new_entity_id"]
+        actions = {
+            correction_signature(row): {
+                "replacement_available": True,
+                **(
+                    {"correction_target": row["new_entity_id"]}
+                    if row["new_entity_id"] != row["old_entity_id"]
+                    else {}
+                ),
+            }
             for item in files
             for row in item.occurrences
         }
         return {
             **report,
             "results": [
-                {**row, "correction_target": targets[correction_signature(row)]}
-                if correction_signature(row) in targets
+                {**row, **actions[correction_signature(row)]}
+                if correction_signature(row) in actions
                 else row
                 for row in report["results"]
             ],

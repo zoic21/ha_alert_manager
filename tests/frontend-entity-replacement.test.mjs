@@ -217,6 +217,30 @@ test("read-only users never preview or apply replacements", async () => {
   assert.equal(context._entityReplacement, undefined);
 });
 
+test("a prefilled replacement previews every source and selects all occurrences", async () => {
+  const globalPreview = {
+    ...preview,
+    replacements: preview.replacements.map((row, index) => ({ ...row, file: `${index}.yaml` })),
+  };
+  const context = {
+    _render() {}, _t: translate, _errorText: () => "generic",
+    _api: {
+      async previewEntityReplacement(...ids) {
+        assert.deepEqual(ids, ["light.old", "light.new"]);
+        return globalPreview;
+      },
+      previewCoherenceCorrections() { assert.fail("Manual replacements must use the global preview"); },
+    },
+  };
+  await handleEntityReplacementAction.call(context, "open-entity-replacement", { dataset: { entityId: "light.old" } });
+  assert.equal(context._entityReplacement.old_entity_id, "light.old");
+  assert.equal(context._entityReplacement.new_entity_id, "");
+  context._entityReplacement.new_entity_id = "light.new";
+  await handleEntityReplacementAction.call(context, "preview-entity-replacement");
+  assert.equal(context._entityReplacement.preview, globalPreview);
+  assert.deepEqual([...context._entityReplacement.selected], ["one", "two"]);
+});
+
 test("single and bulk coherence corrections preview only selected rows and wait for confirmation", async () => {
   const rows = [
     { id: "a", index: 0, selectable: true },

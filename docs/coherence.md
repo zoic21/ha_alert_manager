@@ -22,6 +22,12 @@ included, through the same native Home Assistant APIs or YAML replacement workfl
 described below. After a successful correction, a new scan refreshes the findings.
 Follow the reload or ESPHome installation instructions shown in the result.
 
+When no automatic correction is available but the source supports replacement,
+**Replace** opens entity replacement with the missing identifier already filled in.
+Choose the new entity and preview all matching references across the supported
+configuration, not just the file or line you clicked. All occurrences are selected
+by default; uncheck any you want to keep.
+
 ## What is checked
 
 | Source | Coverage |
@@ -135,8 +141,8 @@ silently dropping data or downloading an incomplete inventory.
 ## Replace an entity reference
 
 **Entity replacement** is available to administrators before or after a coherence
-scan. Select or type the previous and new entity IDs, then choose **Preview
-replacement**. The new ID must exist in Home Assistant's states or entity registry;
+scan. Select or type the previous and new entity IDs, then choose **Preview**.
+The new ID must exist in Home Assistant's states or entity registry;
 the previous ID may belong to a deleted entity. This replaces references and does
 not rename an entity or change its history.
 

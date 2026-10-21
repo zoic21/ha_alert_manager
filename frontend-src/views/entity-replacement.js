@@ -131,7 +131,7 @@ export async function handleEntityReplacementAction(action, button) {
     action = "preview-entity-replacement";
   }
   if (action === "open-entity-replacement") {
-    this._entityReplacement = { old_entity_id: "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
+    this._entityReplacement = { old_entity_id: button?.dataset?.entityId ?? "", new_entity_id: "", preview: null, selected: new Set(), busy: false, error: null, result: null };
   } else if (action === "close-entity-replacement") {
     this._entityReplacement = null;
   } else if (action === "back-entity-replacement") {
