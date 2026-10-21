@@ -5,6 +5,30 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.0-beta.1 — October 21, 2026
+
+First beta prerelease of the 2.6 series.
+
+- Review the latest 500 entity renames from Coherence and open the current entity
+  directly from its history.
+- Preview and correct references after an entity rename. When no automatic
+  correction is available, use **Replace** to choose a new entity and review
+  matching references across your configuration.
+- Keep the replacement dialog open while processing and display the result in
+  the same window. Return to the entity fields without losing the entered IDs.
+- Optionally include disabled entities in coherence checks. This option remains
+  off by default. Reduce false warnings and improve scan and replacement reliability.
+- Open Home Assistant settings from application update notifications.
+- Show entity units in numeric rule summaries and configuration storage usage in
+  diagnostics. Keep grouped dashboard alert counts in the icon badge only.
+- Access pack settings from the cog beside each switch and find consistent icons
+  on action buttons throughout the interface.
+
+Existing rules, notification profiles and alert history are preserved.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
 ## 2.6.0-dev.2 — October 21, 2026
 
 Development prerelease of the 2.6 series.
