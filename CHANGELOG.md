@@ -1,10 +1,25 @@
 # Changelog
 
 This changelog intentionally tracks only significant release-level changes in Alert Manager.
-The first prerelease of a new series may summarize upcoming changes. Subsequent
-development, beta and release-candidate iterations are not listed separately. Intermediate
+Development, beta and release-candidate entries summarize user-facing changes. Intermediate
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
+
+## 2.6.0-dev.2 — October 21, 2026
+
+Development prerelease of the 2.6 series.
+
+- Optionally report coherence issues for disabled entities. This option is off by
+  default and can be enabled in configuration.
+- Open Home Assistant settings when tapping an application update notification.
+- Keep grouped dashboard alert counts in the icon badge only, removing the
+  duplicate count below the device name.
+- Avoid false coherence warnings for calendar and event template references.
+- Improve icon visibility on light and dark backgrounds and simplify the English
+  and French READMEs, including installation and update instructions.
+
+**To update:** select this prerelease in HACS, update Alert Manager, restart
+Home Assistant and refresh your browser.
 
 ## 2.6.0-dev.1 — October 7, 2026
 

@@ -209,7 +209,7 @@ pushed commit and requires it to pass, including bundle reproducibility.
 ### Publish and verify
 
 - Inspect `.github/workflows/release.yml` before pushing. Currently a push that
-  changes the manifest on `main`, `release/2.2` or `release/2.3` validates the commit
+  changes the manifest on `main`, `dev`, `release/2.2` or `release/2.3` validates the commit
   with the reusable CI workflow, then automatically creates the tag
   `v<version>` at the pushed commit and a GitHub release. Stable releases use the
   matching version entry from `CHANGELOG.md` and fail if it is missing or empty.
