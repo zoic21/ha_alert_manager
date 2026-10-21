@@ -279,10 +279,13 @@
         "title": "Historique des renommages",
         "close": "Fermer l’historique des renommages",
         "loading": "Chargement des renommages…",
-        "description": "Les 500 derniers changements d’identifiant, du plus récent au plus ancien. L’enregistrement commence à l’installation de cette fonctionnalité. Le bouton d’information ouvre l’entité actuelle.",
+        "description": "Les 500 derniers changements d’identifiant, regroupés par entité. Dépliez une ligne pour voir les étapes. L’enregistrement commence à l’installation de cette fonctionnalité.",
         "empty": "Aucun renommage enregistré pour le moment.",
         "old": "Ancien identifiant",
         "new": "Nouvel identifiant",
+        "initial": "Premier identifiant enregistré",
+        "final": "Dernier identifiant enregistré",
+        "changes": "Renommages : {count}",
         "more_info": "Afficher les informations de l’entité"
       },
       "replacement": {

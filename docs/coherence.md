@@ -81,10 +81,14 @@ The page provides the latest **50 deleted entities** still retained by Home Assi
 ## Entity rename history
 
 **Entity renames**, in the adjacent button column, opens the latest **500 entity ID
-changes**, newest first. Each row shows the previous ID, the new ID and the date of
-the change in your Home Assistant locale. The information icon at the end of the
-row opens Home Assistant's more-info window for the current entity, including when
-it has been renamed again. The icon is disabled if the entity has been deleted.
+changes**, grouped by entity with the most recently renamed entity first. Each row
+shows the first and last recorded IDs, the number of changes and the latest change's
+date in your Home Assistant locale. Expand a row to see every retained step in
+chronological order, including changes back to a previously used ID. Groups use
+Home Assistant's stable registry identity, so reusing an ID for another entity does
+not merge their histories. The information icon at the end of the row opens Home
+Assistant's more-info window for the current entity. The icon is disabled if the
+entity has been deleted.
 
 Recording starts when this feature is installed and continues even when alert
 monitoring is disabled. Earlier changes cannot be recovered. Changes to display

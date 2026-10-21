@@ -13,7 +13,7 @@ import {
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
-  renderCoherence, renderDeletedEntitiesDrawer, renderEntityRenamesDrawer,
+  groupEntityRenames, renderCoherence, renderDeletedEntitiesDrawer, renderEntityRenamesDrawer,
 } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import {
@@ -173,7 +173,64 @@ test("deleted entity drawer renders retained registry entries safely", () => {
   assert.doesNotMatch(markup, /sensor\.deleted_<unsafe>/);
 });
 
-test("rename history shows old/new IDs and a separate information icon at the end", () => {
+test("rename history groups stable identities and keeps reused IDs and unknown identities separate", () => {
+  const events = [
+    { registry_entry_id: "first", old_entity_id: "sensor.middle", new_entity_id: "sensor.original", current_entity_id: null },
+    { registry_entry_id: "second", old_entity_id: "sensor.original", new_entity_id: "sensor.other", current_entity_id: "sensor.other" },
+    { registry_entry_id: "first", old_entity_id: "sensor.original", new_entity_id: "sensor.middle", current_entity_id: null },
+    { registry_entry_id: null, old_entity_id: "sensor.unknown", new_entity_id: "sensor.original" },
+    { registry_entry_id: null, old_entity_id: "sensor.original", new_entity_id: "sensor.unknown" },
+  ];
+  const snapshot = structuredClone(events);
+  assert.deepEqual(groupEntityRenames(events), [
+    [events[0], events[2]], [events[1]], [events[3]], [events[4]],
+  ]);
+  assert.deepEqual(events, snapshot);
+});
+
+test("rename history summarizes initial to final IDs and expands all steps chronologically", () => {
+  const events = [
+    { old_entity_id: "sensor.middle_2", new_entity_id: "sensor.final", renamed_at: "2026-10-03T12:03:00+00:00" },
+    { old_entity_id: "sensor.middle_1", new_entity_id: "sensor.middle_2", renamed_at: "2026-10-03T12:02:00+00:00" },
+    { old_entity_id: "sensor.initial", new_entity_id: "sensor.middle_1", renamed_at: "2026-10-03T12:01:00+00:00" },
+  ].map((entry) => ({ ...entry, registry_entry_id: "same-entity", current_entity_id: "sensor.final" }));
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: events }, formatDate: (value) => `date:${value}`,
+    t: (key, values) => key === "coherence.entity_renames.changes" ? `Renames: ${values.count}` : key,
+  });
+  assert.equal((markup.match(/<ha-expansion-panel/g) ?? []).length, 1);
+  assert.match(markup, /<ha-expansion-panel left-chevron>/);
+  assert.doesNotMatch(markup, /<ha-expansion-panel[^>]*\bexpanded\b/);
+  const summary = markup.slice(markup.indexOf('slot="header"'), markup.indexOf('<ol class="entity-rename-steps">'));
+  assert.match(summary, /<code[^>]*>sensor.initial<\/code>/);
+  assert.match(summary, /<code[^>]*>sensor.final<\/code>/);
+  assert.match(summary, /Renames: 3/);
+  assert.match(summary, /date:2026-10-03T12:03:00\+00:00/);
+  assert.doesNotMatch(summary, /sensor.middle/);
+  const steps = markup.match(/<ol class="entity-rename-steps">([\s\S]*?)<\/ol>/)[1];
+  assert.equal((steps.match(/<li /g) ?? []).length, 3);
+  assert.ok(steps.indexOf("12:01:00") < steps.indexOf("12:02:00"));
+  assert.ok(steps.indexOf("12:02:00") < steps.indexOf("12:03:00"));
+  assert.match(steps, /sensor.middle_1/);
+  assert.match(steps, /sensor.middle_2/);
+  assert.match(markup, /<\/ha-expansion-panel>\s*<ha-icon-button data-action="more-info" data-entity-id="sensor.final"/);
+  assert.deepEqual(events.map((entry) => entry.new_entity_id), ["sensor.final", "sensor.middle_2", "sensor.middle_1"]);
+});
+
+test("rename history retains every step when an entity returns to its original ID", () => {
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: [
+      { old_entity_id: "sensor.temporary", new_entity_id: "sensor.original", registry_entry_id: "same-entity", renamed_at: "later" },
+      { old_entity_id: "sensor.original", new_entity_id: "sensor.temporary", registry_entry_id: "same-entity", renamed_at: "earlier" },
+    ] }, formatDate: (value) => value, t,
+  });
+  const summary = markup.slice(markup.indexOf('slot="header"'), markup.indexOf('<ol class="entity-rename-steps">'));
+  assert.equal((summary.match(/>sensor.original<\/code>/g) ?? []).length, 2);
+  assert.doesNotMatch(summary, /sensor.temporary/);
+  assert.equal((markup.match(/<li class="entity-rename-step">/g) ?? []).length, 2);
+});
+
+test("rename history shows escaped IDs and a separate information icon outside the expandable row", () => {
   const markup = renderEntityRenamesDrawer({
     data: { renames: [{
       old_entity_id: "sensor.old_<unsafe>",
@@ -194,6 +251,7 @@ test("rename history shows old/new IDs and a separate information icon at the en
   assert.match(markup, /<ha-icon-button data-action="more-info" data-entity-id="sensor.current"/);
   assert.match(markup, /<ha-icon icon="mdi:information-outline"><\/ha-icon><\/ha-icon-button>/);
   assert.match(markup, /data-entity-id="" disabled/);
+  assert.equal((markup.match(/<ha-expansion-panel left-chevron>/g) ?? []).length, 2);
   assert.match(markup, /aria-label="coherence.entity_renames.more_info"/);
   assert.ok(markup.indexOf('data-action="more-info"') > markup.indexOf("</time>"));
   assert.match(markup, /date:2026-10-03T12:00:00\+00:00/);

@@ -279,10 +279,13 @@
         "title": "Entity rename history",
         "close": "Close entity rename history",
         "loading": "Loading entity renames…",
-        "description": "The latest 500 entity ID changes, newest first. Recording starts when this feature is installed. The information button opens the current entity.",
+        "description": "The latest 500 entity ID changes, grouped by entity. Expand a row to see each step. Recording starts when this feature is installed.",
         "empty": "No entity renames recorded yet.",
         "old": "Previous entity ID",
         "new": "New entity ID",
+        "initial": "First recorded entity ID",
+        "final": "Last recorded entity ID",
+        "changes": "Renames: {count}",
         "more_info": "Show entity information"
       },
       "replacement": {

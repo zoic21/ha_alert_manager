@@ -6660,28 +6660,59 @@ function renderDeletedEntitiesDrawer({
     });
 }
 
+function groupEntityRenames(renames) {
+    const groups = new Map();
+    for (const entry of renames) {
+      // Names can be reused by another entity; only registry identity joins events.
+      const key = entry.registry_entry_id || entry;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(entry);
+    }
+    return [...groups.values()];
+}
+
+function entityRenameIds(oldId, newId, oldLabel, newLabel) {
+    return `<div class="entity-rename-ids">
+      <code title="${esc(oldLabel)}">${esc(oldId)}</code>
+      <div class="entity-rename-new">
+        <ha-icon icon="mdi:arrow-right" aria-hidden="true"></ha-icon>
+        <code title="${esc(newLabel)}">${esc(newId)}</code>
+      </div>
+    </div>`;
+}
+
 function renderEntityRenamesDrawer({
   data, loading, error, formatDate, useBottomSheet = false, t,
 }) {
-    const renames = data?.renames ?? [];
+    const groups = groupEntityRenames(data?.renames ?? []);
     const content = loading
       ? `<div class="loading compact">${esc(t("coherence.entity_renames.loading"))}</div>`
       : error
         ? `<ha-alert alert-type="error">${esc(error)}</ha-alert>`
         : `<p class="deleted-entities-description">${esc(t("coherence.entity_renames.description"))}</p>
-          ${renames.length
-            ? `<div class="deleted-entities-list" role="list">${renames.map((entry) => `
-              <div class="deleted-entity-row entity-rename-row" role="listitem">
-                <div class="entity-rename-ids">
-                  <code title="${esc(t("coherence.entity_renames.old"))}">${esc(entry.old_entity_id)}</code>
-                  <div class="entity-rename-new">
-                    <ha-icon icon="mdi:arrow-right" aria-hidden="true"></ha-icon>
-                    <code title="${esc(t("coherence.entity_renames.new"))}">${esc(entry.new_entity_id)}</code>
+          ${groups.length
+            ? `<div class="deleted-entities-list" role="list">${groups.map((entries) => {
+              const latest = entries[0];
+              const first = entries[entries.length - 1];
+              return `<div class="entity-rename-group" role="listitem">
+                <ha-expansion-panel left-chevron>
+                  <div slot="header" class="entity-rename-summary">
+                    ${entityRenameIds(first.old_entity_id, latest.new_entity_id, t("coherence.entity_renames.initial"), t("coherence.entity_renames.final"))}
+                    <div class="entity-rename-metadata">
+                      <span>${esc(t("coherence.entity_renames.changes", { count: entries.length }))}</span>
+                      <time datetime="${esc(latest.renamed_at)}">${esc(formatDate(latest.renamed_at))}</time>
+                    </div>
                   </div>
-                </div>
-                <time class="deleted-entity-metadata" datetime="${esc(entry.renamed_at)}">${esc(formatDate(entry.renamed_at))}</time>
-                <ha-icon-button data-action="more-info" data-entity-id="${esc(entry.current_entity_id ?? "")}" ${entry.current_entity_id ? "" : "disabled"} aria-label="${esc(t("coherence.entity_renames.more_info"))}" title="${esc(t("coherence.entity_renames.more_info"))}"><ha-icon icon="mdi:information-outline"></ha-icon></ha-icon-button>
-              </div>`).join("")}</div>`
+                  <ol class="entity-rename-steps">${[...entries].reverse().map((entry) => `
+                    <li class="entity-rename-step">
+                      ${entityRenameIds(entry.old_entity_id, entry.new_entity_id, t("coherence.entity_renames.old"), t("coherence.entity_renames.new"))}
+                      <time class="entity-rename-metadata" datetime="${esc(entry.renamed_at)}">${esc(formatDate(entry.renamed_at))}</time>
+                    </li>`).join("")}
+                  </ol>
+                </ha-expansion-panel>
+                <ha-icon-button data-action="more-info" data-entity-id="${esc(latest.current_entity_id ?? "")}" ${latest.current_entity_id ? "" : "disabled"} aria-label="${esc(t("coherence.entity_renames.more_info"))}" title="${esc(t("coherence.entity_renames.more_info"))}"><ha-icon icon="mdi:information-outline"></ha-icon></ha-icon-button>
+              </div>`;
+            }).join("")}</div>`
             : `<div class="empty compact">${esc(t("coherence.entity_renames.empty"))}</div>`}`;
     return renderCoherenceHistoryDrawer({
       kind: "entity-renames",
@@ -9867,8 +9898,45 @@ const settingsStyles = `
     flex-direction: column;
     gap: 4px;
   }
-  .entity-rename-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+  .entity-rename-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px;
+    padding: 8px 0;
+    border-top: 1px solid var(--divider-color);
+  }
+  .entity-rename-group > ha-expansion-panel {
+    min-width: 0;
+    --expansion-panel-summary-padding: 8px 0;
+    --expansion-panel-content-padding: 0 0 0 32px;
+  }
+  .entity-rename-group > ha-icon-button {
+    margin-top: 8px;
+  }
+  .entity-rename-summary {
+    min-width: 0;
+  }
+  .entity-rename-summary code {
+    font-size: var(--ha-font-size-m, 14px);
+  }
+  .entity-rename-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 6px;
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+    font-weight: normal;
+  }
+  .entity-rename-steps {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entity-rename-step {
+    padding: 12px 0;
+    border-top: 1px solid var(--divider-color);
   }
   .entity-rename-ids code {
     overflow-wrap: anywhere;
@@ -10720,17 +10788,6 @@ const responsiveStyles = `
     .deleted-entity-metadata {
       align-items: flex-start;
       text-align: start;
-    }
-    .entity-rename-row {
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 4px 8px;
-    }
-    .entity-rename-row time {
-      grid-column: 1;
-    }
-    .entity-rename-row ha-icon-button {
-      grid-column: 2;
-      grid-row: 1 / 3;
     }
     .actions ha-button {
       width: 100%;

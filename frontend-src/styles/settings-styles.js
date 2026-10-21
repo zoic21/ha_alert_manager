@@ -643,8 +643,45 @@ export const settingsStyles = `
     flex-direction: column;
     gap: 4px;
   }
-  .entity-rename-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+  .entity-rename-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px;
+    padding: 8px 0;
+    border-top: 1px solid var(--divider-color);
+  }
+  .entity-rename-group > ha-expansion-panel {
+    min-width: 0;
+    --expansion-panel-summary-padding: 8px 0;
+    --expansion-panel-content-padding: 0 0 0 32px;
+  }
+  .entity-rename-group > ha-icon-button {
+    margin-top: 8px;
+  }
+  .entity-rename-summary {
+    min-width: 0;
+  }
+  .entity-rename-summary code {
+    font-size: var(--ha-font-size-m, 14px);
+  }
+  .entity-rename-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 6px;
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+    font-weight: normal;
+  }
+  .entity-rename-steps {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entity-rename-step {
+    padding: 12px 0;
+    border-top: 1px solid var(--divider-color);
   }
   .entity-rename-ids code {
     overflow-wrap: anywhere;
