@@ -2632,8 +2632,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
-  assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
-  assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
+  assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto auto;align-items:center/);
   assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.settings-page,\.settings-form,\.automatic-section\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
@@ -3272,13 +3271,13 @@ test("disabled packs remain configurable and switches preserve their exceptions"
   assert.equal(panel._automaticMapDraft.battery.threshold, 15);
 });
 
-test("one configuration button counts all pack exceptions and global settings expose labels", () => {
+test("each configuration icon exposes its pack exception count and global settings expose labels", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
   const automatic = panel._renderAutomatic();
   assert.equal((automatic.match(/data-action="open-automatic-configuration"/g) ?? []).length, 5);
-  assert.match(automatic, /data-pack-id="battery">Configuration \(0\)/);
-  assert.match(automatic, /data-pack-id="execution_errors">Configuration \(1\)/);
+  assert.match(automatic, /data-pack-id="battery"[^>]*title="Configuration \(0\)"/);
+  assert.match(automatic, /data-pack-id="execution_errors"[^>]*title="Configuration \(1\)"/);
   const settings = panel._renderSettings();
   assert.match(settings, /id="excluded-labels"/);
   assert.doesNotMatch(settings, /id="global-delay"|settings-entity_delays-configuration|settings-excluded_entities-configuration|settings-excluded_devices-configuration/);

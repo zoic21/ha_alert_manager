@@ -692,15 +692,16 @@ export const settingsStyles = `
   }
   .category-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
   }
   .category-header h2 {
     margin: 0;
   }
-  .category-header ha-switch {
-    align-self: start;
+  .category-header ha-icon-button {
+    --mdc-icon-size: 20px;
+    color: var(--secondary-text-color);
   }
   .category-card p {
     font-size: 13px;

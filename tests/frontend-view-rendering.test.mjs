@@ -343,6 +343,8 @@ test("automatic rendering is pure and places defaults with sparse exceptions", (
   assert.deepEqual(context.draft, before);
   assert.match(markup, /^<ha-card id="settings-section-automatic" outlined/);
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
+  assert.match(markup, /<ha-icon-button data-action="open-automatic-configuration" data-pack-id="battery" aria-label="settings.configure_aria" title="buttons.configuration"><ha-icon icon="mdi:cog"><\/ha-icon><\/ha-icon-button><ha-switch id="auto-battery-enabled"/);
+  assert.doesNotMatch(markup, /<ha-button[^>]*data-action="open-automatic-configuration"/);
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold/);
   assert.match(markup, /auto-battery-device_overrides-target-0/);

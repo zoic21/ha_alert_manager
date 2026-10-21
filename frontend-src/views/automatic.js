@@ -48,9 +48,8 @@ export function renderAutomatic(context) {
       const settings = draft[pack.id];
       const name = t(`packs.${pack.translation_key || pack.id}.name`);
       const summary = [pack.uses_delay === false ? "" : `${t("automatic.pack_delay")}: ${formatSetting(settings.delay, { unit: "s" }, t)}`, ...settingFields(pack).map((field) => `${t(`automatic.fields.${field.translation_key}.label`)}: ${formatSetting(settings[field.id], field, t)}`)].filter(Boolean).join(" · ");
-      return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
-        <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}
-        <ha-button appearance="plain" data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}">${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}</ha-button></section>`;
+      return `<section class="category-card automatic-pack-row"><div class="category-header"><h2>${esc(name)}</h2><ha-icon-button data-action="open-automatic-configuration" data-pack-id="${esc(pack.id)}" aria-label="${esc(t("settings.configure_aria", { name }))}" title="${esc(t("buttons.configuration", { count: totalExceptions(settings) }))}"><ha-icon icon="mdi:cog"></ha-icon></ha-icon-button><ha-switch id="auto-${pack.id}-enabled" aria-label="${esc(t("automatic.aria_enable", { name }))}" ${settings.enabled ? "checked" : ""}></ha-switch></div>
+        <small>${esc(summary)}</small>${pack.available === false ? `<small>${esc(t("automatic.unavailable_pack"))}</small>` : ""}</section>`;
     }).join("")}</div>${renderAutomaticConfigurationDrawer(context)}</ha-card>`;
 }
 
