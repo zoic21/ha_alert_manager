@@ -120,21 +120,25 @@ test("returning to entity IDs ignores the replaced preview dialog's closing even
   let fields;
   const root = { querySelector: () => dialog };
   const context = {
-    _entityReplacement: state, _t: translate,
+    _entityReplacement: state, _t: translate, shadowRoot: root,
     _render() {
       if (!this._entityReplacement) { dialog = null; return; }
       dialog = element();
-      fields = this._entityReplacement.preview ? [] : [
+      fields = [
         element({ replacementField: "old_entity_id" }),
         element({ replacementField: "new_entity_id" }),
       ];
-      dialog.querySelectorAll = (selector) => selector === "[data-replacement-field]" ? fields : [];
+      dialog.querySelectorAll = (selector) => selector === "[data-replacement-field]" && !this._entityReplacement.preview ? fields : [];
       hydrateEntityReplacement(root, this);
     },
   };
   context._render();
   const previewDialog = dialog;
   await handleEntityReplacementAction.call(context, "back-entity-replacement");
+  assert.equal(dialog, previewDialog);
+  assert.deepEqual(fields.map((field) => field.value), ["light.old", "light.new"]);
+  // An unrelated panel refresh can still replace the open dialog.
+  context._render();
   const editorDialog = dialog;
   assert.notEqual(editorDialog, previewDialog);
   previewDialog.handlers.closed({ target: previewDialog });
@@ -149,6 +153,61 @@ test("returning to entity IDs ignores the replaced preview dialog's closing even
   assert.equal(context._entityReplacement, null);
   assert.equal(dialog, null);
 });
+
+for (const outcome of ["success", "failure"]) {
+  test(`replacement ${outcome} updates the open dialog without remounting it`, async () => {
+    const state = { preview, selected: new Set(["one"]), busy: false };
+    const dialog = element();
+    dialog.querySelectorAll = () => [];
+    let complete;
+    let calls = 0;
+    const context = {
+      _entityReplacement: state,
+      shadowRoot: { querySelector: () => dialog },
+      _t: translate, _errorText: () => "generic",
+      _render() { assert.fail("Updating replacement progress must keep the mounted dialog"); },
+      _api: {
+        applyEntityReplacement(id, ids) {
+          calls++;
+          assert.equal(id, preview.preview_id);
+          assert.deepEqual(ids, ["one"]);
+          return new Promise((resolve, reject) => {
+            complete = () => outcome === "success"
+              ? resolve({ replacement_count: 1, file_count: 1, yaml_changed: true })
+              : reject({ code: "replacement_failed" });
+          });
+        },
+      },
+    };
+    const pending = handleEntityReplacementAction.call(context, "apply-entity-replacement");
+    assert.equal(state.busy, true);
+    assert.equal(dialog.open, true);
+    assert.equal(dialog.preventScrimClose, true);
+    assert.match(dialog.innerHTML, /aria-busy="true"/);
+    assert.match(dialog.innerHTML, /data-action="apply-entity-replacement" disabled loading/);
+    await handleEntityReplacementAction.call(context, "apply-entity-replacement");
+    await handleEntityReplacementAction.call(context, "close-entity-replacement");
+    assert.equal(calls, 1);
+    assert.equal(context._entityReplacement, state);
+
+    complete();
+    await pending;
+    assert.equal(context.shadowRoot.querySelector(), dialog);
+    assert.equal(dialog.open, true);
+    assert.equal(dialog.preventScrimClose, false);
+    assert.equal(state.busy, false);
+    assert.match(dialog.innerHTML, /aria-busy="false"/);
+    if (outcome === "success") {
+      assert.equal(dialog.headerTitle, translate("coherence.replacement.button"));
+      assert.match(dialog.innerHTML, /alert-type="success"/);
+      assert.doesNotMatch(dialog.innerHTML, /data-action="apply-entity-replacement"/);
+    } else {
+      assert.match(dialog.innerHTML, /coherence.replacement.errors.replacement_failed/);
+      assert.match(dialog.innerHTML, /data-action="apply-entity-replacement"/);
+      assert.deepEqual([...state.selected], ["one"]);
+    }
+  });
+}
 
 test("read-only users never preview or apply replacements", async () => {
   const context = { _readOnly: true, _api: { previewEntityReplacement() { assert.fail(); } } };
@@ -167,6 +226,7 @@ test("single and bulk coherence corrections preview only selected rows and wait 
   let requested;
   let writes = 0;
   let scans = 0;
+  let refreshes = 0;
   const correctionPreview = {
     ...preview,
     replacements: preview.replacements.map((row) => ({ ...row, old_entity_id: "light.old", new_entity_id: "light.current" })),
@@ -177,6 +237,7 @@ test("single and bulk coherence corrections preview only selected rows and wait 
     _selectedCoherenceIds: new Set(["a", "b", "deleted"]),
     _coherenceTableRows: () => rows,
     _t: translate, _errorText: () => "generic", _render() {},
+    _refreshCoherenceData() { refreshes++; },
     _api: {
       async previewCoherenceCorrections(scannedAt, indices) { requested = { scannedAt, indices }; return correctionPreview; },
       async applyEntityReplacement(id, ids) {
@@ -203,6 +264,7 @@ test("single and bulk coherence corrections preview only selected rows and wait 
   await handleEntityReplacementAction.call(context, "apply-entity-replacement");
   assert.equal(writes, 1);
   assert.equal(scans, 1);
+  assert.equal(refreshes, 1);
   assert.equal(context._selectedCoherenceIds.size, 0);
   assert.deepEqual(context._coherence.results, []);
   assert.equal(context._coherenceScannedAt, "after-fix");

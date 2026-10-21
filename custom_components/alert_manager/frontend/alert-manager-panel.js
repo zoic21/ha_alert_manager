@@ -6123,8 +6123,18 @@ function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel, ruleL
 }
 
 // Source: frontend-src/views/entity-replacement.js
+function entityReplacementTitle(state, t) {
+  return t(state.coherenceCorrection ? "coherence.correction.title" : state.preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button");
+}
+
 function renderEntityReplacement({ state, t }) {
   if (!state) return "";
+  return `<ha-dialog id="entity-replacement-dialog" width="large" header-title="${esc(entityReplacementTitle(state, t))}">
+    ${renderEntityReplacementBody({ state, t })}
+  </ha-dialog>`;
+}
+
+function renderEntityReplacementBody({ state, t }) {
   const preview = state.preview;
   const correction = state.coherenceCorrection;
   const selected = state.selected?.size ?? 0;
@@ -6146,18 +6156,26 @@ function renderEntityReplacement({ state, t }) {
            <ha-selector data-replacement-field="old_entity_id" aria-label="${esc(t("coherence.replacement.old"))}"></ha-selector>
            <ha-selector data-replacement-field="new_entity_id" aria-label="${esc(t("coherence.replacement.new"))}"></ha-selector>
          </div>`;
-  return `<ha-dialog id="entity-replacement-dialog" width="large" header-title="${esc(t(correction ? "coherence.correction.title" : preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button"))}">
-    <ha-icon-button slot="headerNavigationIcon" path="${MDI_CLOSE}" data-action="close-entity-replacement" aria-label="${esc(t("buttons.close"))}" ${state.busy ? "disabled" : ""}></ha-icon-button>
-    <div class="entity-replacement-content">
+  return `<ha-icon-button slot="headerNavigationIcon" path="${MDI_CLOSE}" data-action="close-entity-replacement" aria-label="${esc(t("buttons.close"))}" ${state.busy ? "disabled" : ""}></ha-icon-button>
+    <div class="entity-replacement-content" aria-busy="${Boolean(state.busy)}">
       ${state.error ? `<ha-alert alert-type="error" role="alert">${esc(state.error)}</ha-alert>` : ""}
       ${content}
     </div>
     <ha-dialog-footer slot="footer">
       <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-replacement" ${state.busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:close"></ha-icon>${esc(t(state.result ? "buttons.close" : "buttons.cancel"))}</ha-button>
       ${preview && !state.result && !correction ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:pencil"></ha-icon>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
-      ${state.result || (correction && !preview) ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}><ha-icon slot="start" icon="${preview ? "mdi:swap-horizontal" : "mdi:eye-outline"}"></ha-icon>${esc(t(state.busy ? "coherence.replacement.busy" : correction ? "coherence.correction.button" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
-    </ha-dialog-footer>
-  </ha-dialog>`;
+      ${state.result || (correction && !preview) ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy ? "disabled loading" : preview && !selected ? "disabled" : ""}><ha-icon slot="start" icon="${preview ? "mdi:swap-horizontal" : "mdi:eye-outline"}"></ha-icon>${esc(t(state.busy ? "coherence.replacement.busy" : correction ? "coherence.correction.button" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
+    </ha-dialog-footer>`;
+}
+
+function refreshEntityReplacement(context) {
+  const state = context._entityReplacement;
+  const dialog = context.shadowRoot?.querySelector?.("#entity-replacement-dialog");
+  if (!dialog || !state) { context._render(); return; }
+  const t = (key, values) => context._t(key, values);
+  dialog.headerTitle = entityReplacementTitle(state, t);
+  dialog.innerHTML = renderEntityReplacementBody({ state, t });
+  hydrateEntityReplacement(context.shadowRoot, context);
 }
 
 function hydrateEntityReplacement(root, context) {
@@ -6246,7 +6264,7 @@ async function handleEntityReplacementAction(action, button) {
     if (!state) return true;
     state.error = null;
     state.busy = true;
-    this._render();
+    refreshEntityReplacement(this);
     try {
       if (action === "preview-entity-replacement") {
         state.preview = state.coherenceCorrection
@@ -6272,11 +6290,13 @@ async function handleEntityReplacementAction(action, button) {
         ? this._t(`coherence.replacement.errors.${code}`) : this._errorText(error);
     } finally {
       state.busy = false;
-      this._render();
+      refreshEntityReplacement(this);
+      if (state.coherenceCorrection && state.result) this._refreshCoherenceData();
     }
     return true;
   }
-  this._render();
+  if (action === "back-entity-replacement") refreshEntityReplacement(this);
+  else this._render();
   return true;
 }
 
