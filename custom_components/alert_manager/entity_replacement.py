@@ -15,7 +15,7 @@ from uuid import uuid4
 import yaml
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers import entity_registry as er
-from homeassistant.util.file import write_utf8_file
+from homeassistant.util.file import write_utf8_file_atomic
 from homeassistant.util.yaml import Secrets, parse_yaml
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from yaml.tokens import TagToken
@@ -239,8 +239,8 @@ def verify_files(changes: list[tuple[ReplacementFile, str]]) -> None:
 
 
 def save_yaml(item: ReplacementFile, content: str) -> None:
-    """Save with HA's atomic file helper and validate the persisted YAML."""
-    write_utf8_file(str(item.source.path), content.encode("utf-8"), mode="wb")
+    """Save with HA's fsync-backed atomic helper and validate the persisted YAML."""
+    write_utf8_file_atomic(str(item.source.path), content.encode("utf-8"), mode="wb")
     _validate_yaml(item.source.path.read_bytes().decode("utf-8"))
 
 

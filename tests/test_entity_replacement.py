@@ -256,7 +256,7 @@ def test_post_write_yaml_failure_restores_every_file(
     paths = [
         write(tmp_path, f"{name}.yaml", "entity_id: light.old\n") for name in ("a", "b")
     ]
-    real_write = module.write_utf8_file
+    real_write = module.write_utf8_file_atomic
     calls = []
 
     def corrupt_second(filename, content, **kwargs):
@@ -265,7 +265,7 @@ def test_post_write_yaml_failure_restores_every_file(
             content = b"entities: [\n"
         real_write(filename, content, **kwargs)
 
-    monkeypatch.setattr(module, "write_utf8_file", corrupt_second)
+    monkeypatch.setattr(module, "write_utf8_file_atomic", corrupt_second)
 
     async def run():
         preview = await replacement.async_preview("light.old", "light.new")
@@ -609,7 +609,7 @@ def test_unexpected_write_error_rolls_back_and_preserves_original_error(
     paths = [
         write(tmp_path, f"{name}.yaml", "entity_id: light.old\n") for name in ("a", "b")
     ]
-    real_write = module.write_utf8_file
+    real_write = module.write_utf8_file_atomic
     failure = RuntimeError("unexpected persistence failure")
     calls = []
 
@@ -619,7 +619,7 @@ def test_unexpected_write_error_rolls_back_and_preserves_original_error(
         if len(calls) == 2:
             raise failure
 
-    monkeypatch.setattr(module, "write_utf8_file", fail_after_second_write)
+    monkeypatch.setattr(module, "write_utf8_file_atomic", fail_after_second_write)
 
     async def run():
         preview = await replacement.async_preview("light.old", "light.new")
