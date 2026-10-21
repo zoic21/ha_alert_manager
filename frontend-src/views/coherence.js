@@ -144,7 +144,7 @@ export function hydrateCoherenceTable() {
       action: {
         title: "",
         label: this._t("coherence.columns.action"),
-        minWidth: "180px",
+        minWidth: "200px",
         flex: 0.8,
         template: (row) => this._nativeCoherenceActionCell(row),
       },
@@ -265,8 +265,10 @@ export function openCoherenceLink(link) {
 export function nativeCoherenceActionCell(row) {
     if (!globalThis.document?.createElement) return "";
     const content = document.createElement("span");
+    content.style.cssText = "display:inline-flex;align-items:center;gap:4px;white-space:nowrap";
     if ((row.target || row.replaceable) && !this._readOnly) {
       const correct = document.createElement("ha-button");
+      correct.style.flex = "none";
       correct.setAttribute("appearance", "plain");
       correct.textContent = this._t(row.target ? "coherence.correction.button" : "coherence.replacement.apply");
       const icon = document.createElement("ha-icon");
@@ -282,11 +284,11 @@ export function nativeCoherenceActionCell(row) {
       content.append(correct);
     }
     if (row.link) {
-      const open = document.createElement("ha-button");
-      open.setAttribute("appearance", "plain");
-      open.textContent = this._t("coherence.open");
+      const open = document.createElement("ha-icon-button");
+      open.setAttribute("aria-label", this._t("coherence.open"));
+      open.setAttribute("title", this._t("coherence.open"));
+      open.style.cssText = "flex:none;color:var(--primary-color)";
       const icon = document.createElement("ha-icon");
-      icon.setAttribute("slot", "start");
       icon.setAttribute("icon", "mdi:open-in-new");
       icon.setAttribute("aria-hidden", "true");
       open.append(icon);

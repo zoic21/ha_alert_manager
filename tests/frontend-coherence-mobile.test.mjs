@@ -437,6 +437,10 @@ test("coherence opens the exact Home Assistant target only through the Open butt
   panel._navigate = (path, newTab) => { navigated = [path, newTab]; };
   assert.equal(tablePage.listeners["row-click"], undefined);
   const button = tablePage.columns.action.template(tablePage.data[0]);
+  assert.equal(button.tagName, "HA-ICON-BUTTON");
+  assert.equal(button.attributes["aria-label"], panel._t("coherence.open"));
+  assert.equal(button.attributes.title, panel._t("coherence.open"));
+  assert.equal(button.textContent, "");
   button.listeners.click({ stopPropagation() {} });
   assert.deepEqual(navigated, ["/config/automation/edit/123", true]);
 
