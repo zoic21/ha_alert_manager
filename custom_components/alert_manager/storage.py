@@ -13,7 +13,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -88,10 +88,39 @@ class EntityRenameHistoryStorage:
         self._dirty = False
 
     async def async_load(self) -> None:
-        """Restore the newest retained renames."""
+        """Restore valid retained renames without blocking setup on malformed data."""
         data = await self._store.async_load()
-        if data is not None:
-            self._renames = data["renames"][-ENTITY_RENAME_HISTORY_LIMIT:]
+        if data is None:
+            return
+        if not isinstance(data, dict) or not isinstance(data.get("renames"), list):
+            _LOGGER.warning("Ignoring invalid persisted entity rename history")
+            return
+        valid: list[dict[str, Any]] = []
+        for item in data["renames"]:
+            if (
+                not isinstance(item, dict)
+                or any(
+                    not isinstance(item.get(field), str)
+                    for field in ("old_entity_id", "new_entity_id", "renamed_at")
+                )
+                or not valid_entity_id(item["old_entity_id"])
+                or not valid_entity_id(item["new_entity_id"])
+                or "registry_entry_id" not in item
+                or (
+                    item["registry_entry_id"] is not None
+                    and not isinstance(item["registry_entry_id"], str)
+                )
+            ):
+                continue
+            try:
+                if datetime.fromisoformat(item["renamed_at"]).tzinfo is None:
+                    continue
+            except ValueError:
+                continue
+            valid.append(item)
+        if len(valid) != len(data["renames"]):
+            _LOGGER.warning("Ignoring invalid persisted entity rename history entries")
+        self._renames = valid[-ENTITY_RENAME_HISTORY_LIMIT:]
 
     def record(
         self,

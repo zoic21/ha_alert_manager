@@ -6,6 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
 from homeassistant.core import Event
 
 from custom_components.alert_manager import manager_runtime
@@ -18,6 +19,95 @@ from custom_components.alert_manager.const import (
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.storage import EntityRenameHistoryStorage
 from custom_components.alert_manager.websocket import websocket_entity_renames_list
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [None, {}, [], "invalid", {"renames": None}, {"renames": {}}, {"renames": "bad"}],
+)
+def test_malformed_history_does_not_prevent_startup(hass, entry, caplog, stored):
+    """Missing or invalid collections cannot block the integration setup."""
+    hass.stores[ENTITY_RENAME_STORAGE_KEY] = stored
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        assert await manager.async_setup()
+        assert manager.entity_renames_snapshot() == {"renames": []}
+        assert hass.stores[ENTITY_RENAME_STORAGE_KEY] == stored
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+    if stored is None:
+        assert "invalid persisted entity rename history" not in caplog.text
+    else:
+        assert "invalid persisted entity rename history" in caplog.text
+
+
+def test_load_skips_invalid_entries_and_preserves_valid_renames(hass, entry, caplog):
+    """Malformed fields cannot break snapshots, and surviving entries keep order."""
+    valid = {
+        "old_entity_id": "sensor.old",
+        "new_entity_id": "sensor.new",
+        "registry_entry_id": None,
+        "renamed_at": datetime(2026, 10, 3, 12, tzinfo=UTC).isoformat(),
+    }
+    invalid_entries = [None, 42, "invalid", [], {}]
+    for key in valid:
+        invalid_entries.append(
+            {name: value for name, value in valid.items() if name != key}
+        )
+        invalid_entries.extend({**valid, key: value} for value in ([], {}, 42))
+    invalid_entries.extend(
+        {**valid, **fields}
+        for fields in (
+            {"old_entity_id": None},
+            {"old_entity_id": ""},
+            {"old_entity_id": "invalid"},
+            {"new_entity_id": None},
+            {"new_entity_id": ""},
+            {"new_entity_id": "invalid"},
+            {"renamed_at": None},
+            {"renamed_at": ""},
+            {"renamed_at": "invalid"},
+            {"renamed_at": "2026-10-03T12:00:00"},
+        )
+    )
+    latest = {
+        **valid,
+        "new_entity_id": "sensor.latest",
+        "registry_entry_id": "stable-id",
+    }
+    stored = {"renames": [valid, *invalid_entries, latest]}
+    hass.stores[ENTITY_RENAME_STORAGE_KEY] = stored
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        assert await manager.async_setup()
+        assert manager.entity_rename_history.snapshot() == [latest, valid]
+        assert len(manager.entity_renames_snapshot()["renames"]) == 2
+        assert hass.stores[ENTITY_RENAME_STORAGE_KEY] == stored
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+    assert "invalid persisted entity rename history entries" in caplog.text
+
+
+def test_load_retains_latest_500_valid_renames(hass):
+    """Filtering malformed entries does not displace valid retained history."""
+    renames = [
+        {
+            "old_entity_id": f"sensor.old_{index}",
+            "new_entity_id": f"sensor.new_{index}",
+            "registry_entry_id": None,
+            "renamed_at": datetime(2026, 10, 3, 12, tzinfo=UTC).isoformat(),
+        }
+        for index in range(ENTITY_RENAME_HISTORY_LIMIT + 1)
+    ]
+    hass.stores[ENTITY_RENAME_STORAGE_KEY] = {"renames": [*renames, None]}
+    history = EntityRenameHistoryStorage(hass)
+    asyncio.run(history.async_load())
+    assert history.snapshot() == list(reversed(renames[1:]))
+    assert hass.store_save_count == 0
 
 
 def test_registry_records_only_id_changes_even_with_monitoring_disabled(
