@@ -144,6 +144,9 @@ silently dropping data or downloading an incomplete inventory.
 
 ## Replace an entity reference
 
+Before applying replacements, make sure you have a recent Home Assistant backup
+that includes your configuration.
+
 **Entity replacement** is available to administrators before or after a coherence
 scan. Select or type the previous and new entity IDs, then choose **Preview**.
 The new ID must exist in Home Assistant's states or entity registry;
