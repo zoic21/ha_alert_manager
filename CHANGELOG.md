@@ -5,6 +5,19 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.0-beta.2 — October 21, 2026
+
+Second beta prerelease of the 2.6 series.
+
+- Group entity rename history by entity, showing its first and last recorded
+  identifiers. Expand a row to see every intermediate rename and its date.
+- Automatically refresh coherence findings and counts after every successful
+  entity reference replacement.
+- Keep source links compact and readable beside the **Replace** button.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
 ## 2.6.0-beta.1 — October 21, 2026
 
 First beta prerelease of the 2.6 series.
