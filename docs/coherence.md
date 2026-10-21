@@ -184,7 +184,10 @@ the panel reports an unconfirmed result and does not undo native objects that ma
 belong to a successfully committed batch. Check the affected sources and generate a
 new preview before retrying after an incomplete or unconfirmed operation.
 
-Run a new coherence scan after activation to update the retained findings.
+After a successful replacement, the panel automatically runs a complete coherence
+scan and updates the findings, counts and coherence alert. Unchecked occurrences
+remain in the report if they still refer to missing entities. Any required YAML
+reload or ESPHome installation still needs to be performed as described above.
 
 ## Working through findings
 

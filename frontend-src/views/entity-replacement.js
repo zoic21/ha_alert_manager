@@ -152,14 +152,12 @@ export async function handleEntityReplacementAction(action, button) {
       } else {
         if (!state.preview || !state.selected.size) return true;
         state.result = await this._api.applyEntityReplacement(state.preview.preview_id, [...state.selected]);
-        if (state.coherenceCorrection) {
-          this._selectedCoherenceIds.clear();
-          try {
-            this._coherence = await this._api.scanCoherence();
-            this._coherenceScannedAt = this._coherence.scanned_at;
-          } catch (error) {
-            this._notice = { kind: "error", text: this._errorText(error) };
-          }
+        this._selectedCoherenceIds.clear();
+        try {
+          this._coherence = await this._api.scanCoherence();
+          this._coherenceScannedAt = this._coherence.scanned_at;
+        } catch (error) {
+          this._notice = { kind: "error", text: this._errorText(error) };
         }
       }
     } catch (error) {
@@ -169,7 +167,7 @@ export async function handleEntityReplacementAction(action, button) {
     } finally {
       state.busy = false;
       refreshEntityReplacement(this);
-      if (state.coherenceCorrection && state.result) this._refreshCoherenceData();
+      if (state.result) this._refreshCoherenceData();
     }
     return true;
   }

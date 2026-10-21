@@ -161,11 +161,20 @@ for (const outcome of ["success", "failure"]) {
     dialog.querySelectorAll = () => [];
     let complete;
     let calls = 0;
+    let scans = 0;
+    let refreshes = 0;
+    let completeScan;
+    let scanStarted;
+    const scanning = new Promise((resolve) => { scanStarted = resolve; });
+    const updatedReport = { scanned_at: "after-replacement", results: [] };
     const context = {
       _entityReplacement: state,
+      _coherence: { scanned_at: "before-replacement", results: [{ entity_id: "light.old" }] },
+      _selectedCoherenceIds: new Set(["old-finding"]),
       shadowRoot: { querySelector: () => dialog },
       _t: translate, _errorText: () => "generic",
       _render() { assert.fail("Updating replacement progress must keep the mounted dialog"); },
+      _refreshCoherenceData() { refreshes++; },
       _api: {
         applyEntityReplacement(id, ids) {
           calls++;
@@ -176,6 +185,11 @@ for (const outcome of ["success", "failure"]) {
               ? resolve({ replacement_count: 1, file_count: 1, yaml_changed: true })
               : reject({ code: "replacement_failed" });
           });
+        },
+        scanCoherence() {
+          scans++;
+          scanStarted();
+          return new Promise((resolve) => { completeScan = () => resolve(updatedReport); });
         },
       },
     };
@@ -191,6 +205,14 @@ for (const outcome of ["success", "failure"]) {
     assert.equal(context._entityReplacement, state);
 
     complete();
+    if (outcome === "success") {
+      await scanning;
+      assert.equal(state.busy, true);
+      assert.equal(context.shadowRoot.querySelector(), dialog);
+      assert.equal(dialog.preventScrimClose, true);
+      assert.equal(context._selectedCoherenceIds.size, 0);
+      completeScan();
+    }
     await pending;
     assert.equal(context.shadowRoot.querySelector(), dialog);
     assert.equal(dialog.open, true);
@@ -198,16 +220,47 @@ for (const outcome of ["success", "failure"]) {
     assert.equal(state.busy, false);
     assert.match(dialog.innerHTML, /aria-busy="false"/);
     if (outcome === "success") {
+      assert.equal(scans, 1);
+      assert.equal(refreshes, 1);
+      assert.equal(context._coherence, updatedReport);
+      assert.equal(context._coherenceScannedAt, "after-replacement");
       assert.equal(dialog.headerTitle, translate("coherence.replacement.button"));
       assert.match(dialog.innerHTML, /alert-type="success"/);
       assert.doesNotMatch(dialog.innerHTML, /data-action="apply-entity-replacement"/);
     } else {
+      assert.equal(scans, 0);
+      assert.equal(refreshes, 0);
+      assert.equal(context._selectedCoherenceIds.size, 1);
+      assert.equal(context._coherence.scanned_at, "before-replacement");
       assert.match(dialog.innerHTML, /coherence.replacement.errors.replacement_failed/);
       assert.match(dialog.innerHTML, /data-action="apply-entity-replacement"/);
       assert.deepEqual([...state.selected], ["one"]);
     }
   });
 }
+
+test("a failed post-replacement scan preserves the successful replacement and previous report", async () => {
+  const state = { preview, selected: new Set(["one"]), busy: false };
+  const report = { scanned_at: "previous-scan", results: [{ entity_id: "light.old" }] };
+  const result = { replacement_count: 1, file_count: 1, yaml_changed: true };
+  const context = {
+    _entityReplacement: state, _coherence: report,
+    _selectedCoherenceIds: new Set(),
+    _t: translate, _errorText: (error) => error.message,
+    _render() {}, _refreshCoherenceData() {},
+    _api: {
+      async applyEntityReplacement() { return result; },
+      async scanCoherence() { throw new Error("Scan failed"); },
+    },
+  };
+  await handleEntityReplacementAction.call(context, "apply-entity-replacement");
+  assert.equal(state.result, result);
+  assert.equal(state.error, null);
+  assert.equal(state.busy, false);
+  assert.equal(context._coherence, report);
+  assert.deepEqual(context._notice, { kind: "error", text: "Scan failed" });
+  assert.doesNotMatch(renderEntityReplacement({ state, t: translate }), /data-action="apply-entity-replacement"/);
+});
 
 test("read-only users never preview or apply replacements", async () => {
   const context = { _readOnly: true, _api: { previewEntityReplacement() { assert.fail(); } } };
