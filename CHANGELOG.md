@@ -5,6 +5,16 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.0-beta.3 — October 21, 2026
+
+Third beta prerelease of the 2.6 series.
+
+- Align the **Correct** and **Replace** buttons and source-link icons consistently
+  across all Coherence rows, including rows that only have a source link.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
 ## 2.6.0-beta.2 — October 21, 2026
 
 Second beta prerelease of the 2.6 series.
