@@ -6153,9 +6153,9 @@ function renderEntityReplacement({ state, t }) {
       ${content}
     </div>
     <ha-dialog-footer slot="footer">
-      <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t(state.result ? "buttons.close" : "buttons.cancel"))}</ha-button>
-      ${preview && !state.result && !correction ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
-      ${state.result || (correction && !preview) ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}>${esc(t(state.busy ? "coherence.replacement.busy" : correction ? "coherence.correction.button" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
+      <ha-button slot="secondaryAction" appearance="plain" data-action="close-entity-replacement" ${state.busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:close"></ha-icon>${esc(t(state.result ? "buttons.close" : "buttons.cancel"))}</ha-button>
+      ${preview && !state.result && !correction ? `<ha-button slot="secondaryAction" appearance="plain" data-action="back-entity-replacement" ${state.busy ? "disabled" : ""}><ha-icon slot="start" icon="mdi:pencil"></ha-icon>${esc(t("coherence.replacement.back"))}</ha-button>` : ""}
+      ${state.result || (correction && !preview) ? "" : `<ha-button slot="primaryAction" appearance="accent" data-action="${preview ? "apply" : "preview"}-entity-replacement" ${state.busy || (preview && !selected) ? "disabled" : ""}><ha-icon slot="start" icon="${preview ? "mdi:swap-horizontal" : "mdi:eye-outline"}"></ha-icon>${esc(t(state.busy ? "coherence.replacement.busy" : correction ? "coherence.correction.button" : preview ? "coherence.replacement.apply" : "coherence.replacement.preview"))}</ha-button>`}
     </ha-dialog-footer>
   </ha-dialog>`;
 }

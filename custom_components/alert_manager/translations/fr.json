@@ -291,7 +291,7 @@
         "old": "Ancien identifiant d’entité",
         "new": "Nouvel identifiant d’entité",
         "help": "Recherchez une entité ou saisissez son identifiant. La nouvelle entité doit exister dans Home Assistant. Les fichiers YAML et dashboards sont analysés, y compris les entrées des blueprints.",
-        "preview": "Avant le remplacement",
+        "preview": "Prévisualiser",
         "apply": "Remplacer",
         "back": "Modifier les identifiants",
         "busy": "Traitement en cours…",

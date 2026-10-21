@@ -291,7 +291,7 @@
         "old": "Previous entity ID",
         "new": "New entity ID",
         "help": "Search for an entity or type its ID. The new entity must exist in Home Assistant. YAML files and dashboards are checked, including blueprint inputs.",
-        "preview": "Preview replacement",
+        "preview": "Preview",
         "apply": "Replace",
         "back": "Edit entity IDs",
         "busy": "Working…",
