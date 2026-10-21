@@ -414,13 +414,13 @@ test("coherence result actions open their exact Home Assistant target", () => {
   const navigation = panel._nativeCoherenceActionCell({
     link: { type: "navigate", path: "/config/automation/edit/123" },
   });
-  navigation.listeners.click({ stopPropagation() {} });
+  navigation.children[0].listeners.click({ stopPropagation() {} });
   assert.equal(navigatedTo, "/config/automation/edit/123");
 
   const template = panel._nativeCoherenceActionCell({
     link: { type: "more_info", entity_id: "sensor.template_result" },
   });
-  template.listeners.click({ stopPropagation() {} });
+  template.children[0].listeners.click({ stopPropagation() {} });
   assert.equal(moreInfo, "sensor.template_result");
 });
 

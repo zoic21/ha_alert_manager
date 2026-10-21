@@ -265,7 +265,7 @@ export function openCoherenceLink(link) {
 export function nativeCoherenceActionCell(row) {
     if (!globalThis.document?.createElement) return "";
     const content = document.createElement("span");
-    content.style.cssText = "display:inline-flex;align-items:center;gap:4px;white-space:nowrap";
+    content.style.cssText = "display:flex;width:100%;align-items:center;gap:4px;white-space:nowrap";
     if ((row.target || row.replaceable) && !this._readOnly) {
       const correct = document.createElement("ha-button");
       correct.style.flex = "none";
@@ -287,7 +287,7 @@ export function nativeCoherenceActionCell(row) {
       const open = document.createElement("ha-icon-button");
       open.setAttribute("aria-label", this._t("coherence.open"));
       open.setAttribute("title", this._t("coherence.open"));
-      open.style.cssText = "flex:none;color:var(--primary-color)";
+      open.style.cssText = "flex:none;margin-inline-start:auto;color:var(--primary-color)";
       const icon = document.createElement("ha-icon");
       icon.setAttribute("icon", "mdi:open-in-new");
       icon.setAttribute("aria-hidden", "true");
@@ -298,7 +298,7 @@ export function nativeCoherenceActionCell(row) {
       });
       content.append(open);
     }
-    return content.children.length === 1 ? content.children[0] : content;
+    return content;
 }
 
 function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottomSheet, t }) {

@@ -389,7 +389,7 @@ test("coherence mobile metadata includes the target and correct is available wit
   };
   const cell = panel._nativeCoherenceEntityCell(row, true);
   assert.match(cell.children[1].textContent, /sensor.current/);
-  const action = panel._nativeCoherenceActionCell(row);
+  const action = panel._nativeCoherenceActionCell(row).children[0];
   assert.equal(action.tagName, "HA-BUTTON");
   assert.equal(action.textContent, panel._t("coherence.correction.button"));
   assert.equal(typeof action.listeners.click, "function");
@@ -406,14 +406,14 @@ test("replace is offered only for supported findings without an automatic target
   ] };
   panel._render = () => {};
   const rows = panel._coherenceTableRows();
-  const replace = panel._nativeCoherenceActionCell(rows[0]);
+  const replace = panel._nativeCoherenceActionCell(rows[0]).children[0];
   assert.equal(replace.textContent, panel._t("coherence.replacement.apply"));
   assert.equal(replace.children[0].attributes.icon, "mdi:swap-horizontal");
   replace.listeners.click({ stopPropagation() {} });
   assert.equal(panel._entityReplacement.old_entity_id, "sensor.deleted");
   assert.equal(panel._entityReplacement.new_entity_id, "");
   assert.equal(panel._entityReplacement.coherenceCorrection, undefined);
-  assert.equal(panel._nativeCoherenceActionCell(rows[1]).textContent, panel._t("coherence.correction.button"));
+  assert.equal(panel._nativeCoherenceActionCell(rows[1]).children[0].textContent, panel._t("coherence.correction.button"));
   for (const row of rows.slice(2)) assert.equal(panel._nativeCoherenceActionCell(row).children.length, 0);
 
   panel._hass.user.is_admin = false;
@@ -436,7 +436,7 @@ test("coherence opens the exact Home Assistant target only through the Open butt
   let navigated = null;
   panel._navigate = (path, newTab) => { navigated = [path, newTab]; };
   assert.equal(tablePage.listeners["row-click"], undefined);
-  const button = tablePage.columns.action.template(tablePage.data[0]);
+  const button = tablePage.columns.action.template(tablePage.data[0]).children[0];
   assert.equal(button.tagName, "HA-ICON-BUTTON");
   assert.equal(button.attributes["aria-label"], panel._t("coherence.open"));
   assert.equal(button.attributes.title, panel._t("coherence.open"));
@@ -447,7 +447,7 @@ test("coherence opens the exact Home Assistant target only through the Open butt
   let moreInfo = null;
   panel._openMoreInfo = (entityId) => { moreInfo = entityId; };
   tablePage.data[0].link = { type: "more_info", entity_id: "sensor.template_result" };
-  const moreInfoButton = tablePage.columns.action.template(tablePage.data[0]);
+  const moreInfoButton = tablePage.columns.action.template(tablePage.data[0]).children[0];
   moreInfoButton.listeners.click({ stopPropagation() {} });
   assert.equal(moreInfo, "sensor.template_result");
 });
@@ -482,9 +482,9 @@ test("coherence Open uses the rule editor and respects read-only access", () => 
   const opened = [];
   panel._openRuleEditor = (...args) => opened.push(args);
   const row = { link: { type: "custom_rule", path: "rule-1" } };
-  panel._nativeCoherenceActionCell(row).listeners.click({ stopPropagation() {} });
+  panel._nativeCoherenceActionCell(row).children[0].listeners.click({ stopPropagation() {} });
   assert.deepEqual(opened, [["rule-1", { navigate: true }]]);
   panel._hass.user.is_admin = false;
-  panel._nativeCoherenceActionCell(row).listeners.click({ stopPropagation() {} });
+  panel._nativeCoherenceActionCell(row).children[0].listeners.click({ stopPropagation() {} });
   assert.equal(opened.length, 1);
 });
