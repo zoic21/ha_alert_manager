@@ -87,6 +87,8 @@ const ACTION_ICONS = Object.freeze({
   "save-configuration": "mdi:content-save",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
+  "open-entity-renames": "mdi:rename-box",
+  "open-entity-replacement": "mdi:swap-horizontal",
   "export-entities": "mdi:download",
 });
 
