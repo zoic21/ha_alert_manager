@@ -9249,6 +9249,9 @@ const settingsStyles = `
     gap: 20px 24px;
     max-width: 920px;
   }
+  #settings-section-coherence .settings-grid {
+    max-width: none;
+  }
   .settings-wide {
     grid-column: 1/-1;
   }
