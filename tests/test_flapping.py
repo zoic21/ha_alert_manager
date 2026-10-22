@@ -1213,6 +1213,12 @@ def test_reconciliation_flapping_compound_id_survives_entity_rename(
         assert current.acknowledged is True
         assert current.acknowledged_at == original.acknowledged_at
         assert restarted._record_ids_by_entity[new_entity_id] == {new_alert_id}
+        assert restarted._pack_runtime["flapping"] == {
+            f"unavailable:{new_entity_id}": [
+                start.timestamp(),
+                (start + timedelta(seconds=10)).timestamp(),
+            ]
+        }
         assert (
             old_entity_id
             not in restarted.config["automatic"]["flapping"]["entity_overrides"]
@@ -1238,8 +1244,30 @@ def test_reconciliation_flapping_compound_id_survives_entity_rename(
     run(scenario())
 
 
+@pytest.mark.parametrize(
+    "source_config",
+    [
+        {"source": "value", "operator": "equals", "value": "on"},
+        {
+            "source": "value_transition",
+            "from_value": "off",
+            "to_value": "on",
+            "resolve_mode": "state",
+        },
+        {
+            "source": "value_sequence",
+            "steps": [
+                {"operator": "equals", "value": "off"},
+                {"operator": "equals", "value": "on"},
+            ],
+            "resolve_mode": "duration",
+            "auto_resolve": 60,
+        },
+    ],
+    ids=["value", "transition", "sequence"],
+)
 def test_automatic_exclusion_labels_do_not_block_custom_rule_flapping(
-    hass, entry, set_now
+    hass, entry, set_now, source_config
 ):
     from types import SimpleNamespace
 
@@ -1265,15 +1293,15 @@ def test_automatic_exclusion_labels_do_not_block_custom_rule_flapping(
             {
                 "name": "Explicit source",
                 "entity_ids": ["sensor.test"],
-                "operator": "equals",
-                "value": "on",
                 "duration": 0,
                 "flapping_enabled": True,
+                **source_config,
             }
         )
     )
     for offset in (0, 10):
         set_now(start + timedelta(seconds=offset))
+        live_state(manager, hass, "sensor.test", "off")
         live_state(manager, hass, "sensor.test", "on")
         live_state(manager, hass, "sensor.test", "off")
     alert_id = f"flapping:rule:{rule['id']}:sensor.test"
@@ -1281,6 +1309,107 @@ def test_automatic_exclusion_labels_do_not_block_custom_rule_flapping(
     assert manager.records[alert_id].status is AlertStatus.ACTIVE
     run(manager.async_update_config({"automatic": {"unavailable": {"enabled": False}}}))
     assert alert_id in manager.records
+
+
+@pytest.mark.parametrize("custom_rule", [False, True])
+@pytest.mark.parametrize("chained", [False, True])
+def test_flapping_evidence_follows_registry_rename_and_restart(
+    hass, entry, registry_entry, set_now, custom_rule, chained
+):
+    """The next occurrence retains evidence from before a persisted rename."""
+    start = datetime(2026, 10, 22, 10, tzinfo=UTC)
+    set_now(start)
+    old_entity_id = "sensor.old_gateway"
+    new_entity_id = "sensor.new_gateway"
+
+    async def scenario():
+        hass.states.set(old_entity_id, "ok")
+        registered = registry_entry(hass, old_entity_id)
+        registered.id = "gateway-id"
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config(
+            {"automatic": {"flapping": {"enabled": True, "occurrences": 2}}}
+        )
+        source_prefix = "unavailable:"
+        bad_state = "unavailable"
+        if custom_rule:
+            rule = await manager.async_create_rule(
+                {
+                    "name": "Gateway error",
+                    "entity_ids": [old_entity_id],
+                    "operator": "equals",
+                    "value": "bad",
+                    "duration": 0,
+                    "flapping_enabled": True,
+                }
+            )
+            source_prefix = f"rule:{rule['id']}:"
+            bad_state = "bad"
+
+        async def observe(entity_id, value):
+            previous = hass.states.get(entity_id)
+            current = hass.states.set(entity_id, value)
+            manager._state_changed(
+                Event(
+                    {
+                        "entity_id": entity_id,
+                        "old_state": previous,
+                        "new_state": current,
+                    }
+                )
+            )
+            await manager._async_flush_queued_evaluations()
+
+        await observe(old_entity_id, bad_state)
+        await observe(old_entity_id, "ok")
+        old_source_id = f"{source_prefix}{old_entity_id}"
+        new_source_id = f"{source_prefix}{new_entity_id}"
+        evidence = list(manager._pack_runtime["flapping"][old_source_id])
+        assert evidence == [start.timestamp()]
+
+        current_id = old_entity_id
+        targets = ["sensor.intermediate", new_entity_id] if chained else [new_entity_id]
+        for target_id in targets:
+            hass.entity_registry.entries.pop(current_id)
+            registered.entity_id = target_id
+            hass.entity_registry.entries[target_id] = registered
+            hass.states.data.pop(current_id)
+            hass.states.set(target_id, "ok")
+            manager._registry_changed(
+                Event(
+                    {
+                        "action": "update",
+                        "old_entity_id": current_id,
+                        "entity_id": target_id,
+                    }
+                )
+            )
+            current_id = target_id
+        await manager._async_flush_registry_evaluation()
+
+        assert manager._pack_runtime["flapping"] == {new_source_id: evidence}
+        assert hass.stores["alert_manager"]["pack_runtime"]["flapping"] == {
+            new_source_id: evidence
+        }
+        assert not manager.records
+        await manager.async_unload()
+
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager._async_finish_startup_reconciliation()
+        assert manager._pack_runtime["flapping"] == {new_source_id: evidence}
+        set_now(start + timedelta(seconds=10))
+        await observe(new_entity_id, bad_state)
+        alert_id = f"flapping:{new_source_id}"
+        assert manager.records[alert_id].status is AlertStatus.ACTIVE
+        assert manager._pack_runtime["flapping"][new_source_id] == [
+            start.timestamp(),
+            (start + timedelta(seconds=10)).timestamp(),
+        ]
+        await manager.async_unload()
+
+    run(scenario())
 
 
 def test_flapping_recovery_edit_keeps_occurrence_evidence_and_last_observation(

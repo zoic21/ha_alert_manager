@@ -986,6 +986,8 @@ class _RuntimeMixin:
                         overrides[new_entity_id] = overrides.pop(old_entity_id)
                         changed = True
 
+            changed |= self._rename_flapping_sources(old_entity_id, new_entity_id)
+
             retained_renamed_rules: set[str] = set()
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
                 if alert_id == COHERENCE_ALERT_ID:
@@ -1106,6 +1108,25 @@ class _RuntimeMixin:
             reconciliation_transaction.record_entity_renames(renames)
         elif durable_identity_changed and durable_alert_ids is not None:
             self.storage.stage_durable_alert_ids(durable_alert_ids)
+        return changed
+
+    def _rename_flapping_sources(self, old_entity_id: str, new_entity_id: str) -> bool:
+        """Move indexed source evidence without combining different entity windows."""
+        data = self._pack_runtime.get(CATEGORY_FLAPPING, {})
+        source_ids = (
+            *(f"{pack.id}:{old_entity_id}" for pack in PACKS),
+            *(
+                f"rule:{rule.id}:{old_entity_id}"
+                for rule in self._rules_by_entity.get(old_entity_id, ())
+            ),
+        )
+        changed = False
+        for source_id in source_ids:
+            if source_id not in data:
+                continue
+            target_id = f"{source_id[: -len(old_entity_id)]}{new_entity_id}"
+            data.setdefault(target_id, data.pop(source_id))
+            changed = True
         return changed
 
     async def _async_flush_registry_evaluation(self) -> None:
