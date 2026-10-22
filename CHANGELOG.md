@@ -5,6 +5,17 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.0-rc.1 — October 22, 2026
+
+First release-candidate prerelease of the 2.6 series, including all changes from
+the previous betas.
+
+- Align History action buttons with Coherence and the other pages, including
+  statistics, period selection, navigation, and history settings.
+
+**To update:** select this release candidate in HACS, update Alert Manager,
+restart Home Assistant and refresh your browser.
+
 ## 2.6.0-beta.4 — October 22, 2026
 
 Fourth beta prerelease of the 2.6 series.
