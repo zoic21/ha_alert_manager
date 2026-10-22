@@ -72,6 +72,29 @@ def _measure_storage_bytes(storage_dir: Path) -> int | None:
     return total
 
 
+def _is_valid_rename(item: Any) -> bool:
+    """Validate one persisted rename before exposing it to history consumers."""
+    if (
+        not isinstance(item, dict)
+        or any(
+            not isinstance(item.get(field), str)
+            for field in ("old_entity_id", "new_entity_id", "renamed_at")
+        )
+        or not valid_entity_id(item["old_entity_id"])
+        or not valid_entity_id(item["new_entity_id"])
+        or "registry_entry_id" not in item
+        or (
+            item["registry_entry_id"] is not None
+            and not isinstance(item["registry_entry_id"], str)
+        )
+    ):
+        return False
+    try:
+        return datetime.fromisoformat(item["renamed_at"]).tzinfo is not None
+    except ValueError:
+        return False
+
+
 class EntityRenameHistoryStorage:
     """Keep a bounded entity-ID history independently of alert configuration."""
 
@@ -95,29 +118,7 @@ class EntityRenameHistoryStorage:
         if not isinstance(data, dict) or not isinstance(data.get("renames"), list):
             _LOGGER.warning("Ignoring invalid persisted entity rename history")
             return
-        valid: list[dict[str, Any]] = []
-        for item in data["renames"]:
-            if (
-                not isinstance(item, dict)
-                or any(
-                    not isinstance(item.get(field), str)
-                    for field in ("old_entity_id", "new_entity_id", "renamed_at")
-                )
-                or not valid_entity_id(item["old_entity_id"])
-                or not valid_entity_id(item["new_entity_id"])
-                or "registry_entry_id" not in item
-                or (
-                    item["registry_entry_id"] is not None
-                    and not isinstance(item["registry_entry_id"], str)
-                )
-            ):
-                continue
-            try:
-                if datetime.fromisoformat(item["renamed_at"]).tzinfo is None:
-                    continue
-            except ValueError:
-                continue
-            valid.append(item)
+        valid = [item for item in data["renames"] if _is_valid_rename(item)]
         if len(valid) != len(data["renames"]):
             _LOGGER.warning("Ignoring invalid persisted entity rename history entries")
         self._renames = valid[-ENTITY_RENAME_HISTORY_LIMIT:]

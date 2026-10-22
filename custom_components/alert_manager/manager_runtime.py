@@ -676,9 +676,7 @@ class _RuntimeMixin:
                 continue
             # Stateful execution filters must never ingest excluded cycles.
             if pack.reset_entity_handler is not None:
-                automatic_eligible = self._is_base_eligible(
-                    entity_id
-                ) and self._is_automatic_eligible(entity_id)
+                automatic_eligible = self._is_eligible_automatic_source(entity_id)
                 if not automatic_eligible:
                     pack.reset_entity_handler(self.hass, entity_id)
                     continue
@@ -695,9 +693,7 @@ class _RuntimeMixin:
         if not pack_relevant:
             return False
         if automatic_eligible is None:
-            automatic_eligible = self._is_base_eligible(
-                entity_id
-            ) and self._is_automatic_eligible(entity_id)
+            automatic_eligible = self._is_eligible_automatic_source(entity_id)
         return automatic_eligible
 
     def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
@@ -2194,6 +2190,12 @@ class _RuntimeMixin:
             device is not None and self._excluded_labels.intersection(device.labels)
         )
 
+    def _is_eligible_automatic_source(self, entity_id: str) -> bool:
+        """Apply base eligibility and exclusions before automatic pack selection."""
+        return self._is_base_eligible(entity_id) and self._is_automatic_eligible(
+            entity_id
+        )
+
     def _pack_settings(
         self, pack_id: str, entity_id: str, *, source_id: str | None = None
     ) -> dict[str, Any]:
@@ -2264,8 +2266,7 @@ class _RuntimeMixin:
         if details.type not in PACKS_BY_ID:
             return True
         return (
-            self._is_base_eligible(details.entity_id)
-            and self._is_automatic_eligible(details.entity_id)
+            self._is_eligible_automatic_source(details.entity_id)
             and self._pack_settings(details.type, details.entity_id)["enabled"]
             and self._pack_is_available(details.type)
         )
@@ -2375,16 +2376,13 @@ class _RuntimeMixin:
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
-        if not self._is_base_eligible(entity_id):
-            return False
-        if entity_id in self._rules_by_entity:
-            return True
-        if entity_id in self._record_ids_by_entity:
-            return True
-        if not self._is_automatic_eligible(entity_id):
-            return False
+        if (
+            entity_id in self._rules_by_entity
+            or entity_id in self._record_ids_by_entity
+        ):
+            return self._is_base_eligible(entity_id)
         state = self.hass.states.get(entity_id)
-        return state is not None and self._has_applicable_automatic_pack(state)
+        return state is not None and self._is_automatically_tracked(state)
 
     def _tracked_count(self) -> int:
         """Count enabled custom instances and unique automatic sources."""
@@ -2420,11 +2418,9 @@ class _RuntimeMixin:
 
     def _is_automatically_tracked(self, state: State) -> bool:
         """Return whether at least one enabled automatic pack monitors a state."""
-        return (
-            self._is_base_eligible(state.entity_id)
-            and self._is_automatic_eligible(state.entity_id)
-            and self._has_applicable_automatic_pack(state)
-        )
+        return self._is_eligible_automatic_source(
+            state.entity_id
+        ) and self._has_applicable_automatic_pack(state)
 
     def _has_applicable_automatic_pack(self, state: State) -> bool:
         """Return whether an enabled and available pack applies to a state."""
