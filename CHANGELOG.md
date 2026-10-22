@@ -5,6 +5,21 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.0-beta.4 — October 22, 2026
+
+Fourth beta prerelease of the 2.6 series.
+
+- Keep flapping detection working for custom transition and repeated sequence
+  rules when their entities have labels excluded from automatic detection.
+- Preserve flapping counters across entity renames, including successive renames
+  and Home Assistant restarts.
+- Tolerate malformed entries in stored entity rename history at startup.
+- Sync replacement YAML files to disk before applying the atomic replacement,
+  and recommend a Home Assistant backup before replacing entity references.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
 ## 2.6.0-beta.3 — October 21, 2026
 
 Third beta prerelease of the 2.6 series.
