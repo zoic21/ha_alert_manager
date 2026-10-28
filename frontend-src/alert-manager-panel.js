@@ -30,6 +30,7 @@ import {
   ruleSummary, ruleValueList, saveRule, saveRuleYaml, setRuleEditorWidth, testRule,
   startRuleEditorResize, stopRuleEditorResize, switchRuleEditor, updateRuleTestDisplay,
 } from "./components/rule-editor.js";
+import { hydrateEntityReplacement } from "./views/entity-replacement.js";
 import { panelStyles } from "./styles/panel-styles.js";
 import { ACTION_ICONS, TABS } from "./utils/constants.js";
 import { esc } from "./utils/escaping.js";
@@ -259,12 +260,11 @@ class AlertManagerPanel extends HTMLElement {
     this._configRecovery = { active: false, backups: [] };
     this._notificationStats = { last_24h: {} }; this._notificationStatsLoadPromise = null;
     this._backupRestoreCandidate = null;
-    this._coherence = null;
-    this._coherenceLoaded = false;
-    this._coherenceLoading = false;
-    this._coherenceLoadPromise = null;
-    this._coherenceScannedAt = null;
+    this._coherence = this._coherenceScannedAt = null;
+    this._coherenceLoaded = false; this._coherenceLoading = false; this._entityReplacement = null;
+    this._coherenceLoadPromise = null; this._selectedCoherenceIds = new Set();
     this._deletedEntitiesState = { data: null, loading: false, error: null };
+    this._entityRenamesState = { data: null, loading: false, error: null };
     this._alertsRefreshPromise = null;
     this._alertsRefreshRequested = false;
     this._activeTab = "overview";
@@ -426,7 +426,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateSelectors();
     this._hydrateDataTables();
     this._hydrateRuleTable();
-    this._hydrateCoherenceTable();
+    this._hydrateCoherenceTable(); hydrateEntityReplacement(this.shadowRoot, this);
     hydrateHistoryStatistics(this.shadowRoot, this);
     this._hydrateYamlEditor();
     this._hydrateConfigBackups();
@@ -488,15 +488,15 @@ class AlertManagerPanel extends HTMLElement {
 
   _decorateActionIcons() {
     if (!globalThis.document?.createElement) return;
-    for (const [action, iconName] of Object.entries(ACTION_ICONS)) {
-      for (const button of this.shadowRoot?.querySelectorAll?.(`[data-action="${action}"]`) ?? []) {
-        if (button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
-        const icon = document.createElement("ha-icon");
-        icon.setAttribute("slot", "start");
-        icon.setAttribute("icon", iconName);
-        icon.setAttribute("data-alert-manager-action-icon", "");
-        button.prepend(icon);
-      }
+    for (const button of this.shadowRoot?.querySelectorAll?.("ha-button[data-action]") ?? []) {
+      const iconName = ACTION_ICONS[button.dataset.action];
+      if (!iconName || button.querySelector?.(':scope > [slot="start"], [data-alert-manager-action-icon]')) continue;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("slot", "start");
+      icon.setAttribute("icon", iconName);
+      icon.setAttribute("aria-hidden", "true");
+      icon.setAttribute("data-alert-manager-action-icon", "");
+      button.prepend(icon);
     }
   }
 

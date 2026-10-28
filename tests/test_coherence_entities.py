@@ -166,6 +166,7 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     hass.data[DATA_MANAGER] = SimpleNamespace(
         config={
             "coherence_scan_esphome": False,
+            "coherence_report_disabled_entities": True,
             "coherence_ignored_entity_references": ["toto.plop"],
         },
         async_reconcile_coherence_alert=reconcile,
@@ -188,6 +189,7 @@ def test_shared_scan_entry_point_stores_result_and_updates_sensor(hass, monkeypa
     assert sensor.writes == 1
     assert scan_options == {
         "scan_esphome": False,
+        "report_disabled_entities": True,
         "ignored_entity_references": frozenset({"toto.plop"}),
     }
 

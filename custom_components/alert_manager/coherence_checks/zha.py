@@ -108,7 +108,7 @@ def snapshot(hass: HomeAssistant) -> tuple[frozenset[str] | None, str]:
         ieees = frozenset(
             identifier.lower()
             for device in registry.devices.values()
-            if entry_ids.intersection(device.config_entries)
+            if device.config_entry_id in entry_ids
             for domain, identifier in device.identifiers
             if domain == "zha"
         )

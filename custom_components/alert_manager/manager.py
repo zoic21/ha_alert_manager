@@ -21,6 +21,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 
 from .coherence import schedule_coherence_scans
+from .entity_replacement import EntityReplacement
 from .manager_api import _ApiMixin
 from .manager_recovery import _RecoveryMixin
 from .manager_runtime import _RuntimeMixin
@@ -39,6 +40,7 @@ from .storage import (
     AlertManagerHistoryStorage,
     AlertManagerStorage,
     ConfigMigrationError,
+    EntityRenameHistoryStorage,
 )
 from .transactions import (
     StartupReconciliationTransaction,
@@ -67,8 +69,10 @@ class AlertManager(
         """Initialize the manager."""
         self.hass = hass
         self.entry = entry
+        self.entity_replacement = EntityReplacement(hass)
         self.storage = AlertManagerStorage(hass)
         self.history_storage = AlertManagerHistoryStorage(hass)
+        self.entity_rename_history = EntityRenameHistoryStorage(hass)
         self.config_backup_storage = AlertManagerConfigBackupStorage(hass)
         self._startup_reconciliation_snapshot = None
         self.statistics = RuntimeStatistics()
@@ -194,6 +198,7 @@ class AlertManager(
         """Load persisted state and start event-driven evaluation."""
         if self._runtime_phase is RuntimePhase.STOPPING:
             return False
+        await self.entity_rename_history.async_load()
         loaded_config: dict[str, Any] | None = None
         try:
             loaded_config, records, migrated = await self.storage.async_load()
@@ -385,6 +390,7 @@ class AlertManager(
 
         async def persist_final_snapshot() -> None:
             """Drain any in-flight mutation and persist its rolled-back result."""
+            await self.entity_rename_history.async_flush()
             async with self._config_mutation_lock:
                 if self._persistence_ready and not self.recovery_active:
                     await self._async_save_state()

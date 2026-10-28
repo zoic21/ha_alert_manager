@@ -77,6 +77,9 @@ export const settingsStyles = `
     gap: 20px 24px;
     max-width: 920px;
   }
+  #settings-section-coherence .settings-grid {
+    max-width: none;
+  }
   .settings-wide {
     grid-column: 1/-1;
   }
@@ -543,6 +546,42 @@ export const settingsStyles = `
     flex: none;
     gap: 8px;
   }
+  .coherence-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .coherence-action-column {
+    display: grid;
+    gap: 8px;
+  }
+  .coherence-export-label {
+    display: inline-grid;
+  }
+  .coherence-export-label > span {
+    grid-area: 1 / 1;
+  }
+  .coherence-export-label > [aria-hidden="true"] {
+    visibility: hidden;
+  }
+  .entity-replacement-content {
+    display: grid;
+    gap: 12px;
+    padding: 20px 24px;
+    min-width: 0;
+  }
+  .entity-replacement-content p { margin: 0; }
+  .entity-replacement-fields { display: grid; gap: 16px; }
+  .entity-replacement-list { display: grid; gap: 4px; }
+  .entity-replacement-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 0;
+  }
+  .entity-replacement-row > span { min-width: 0; overflow-wrap: anywhere; }
+  .entity-replacement-row strong, .entity-replacement-row small { display: block; }
+  .entity-replacement-row small { color: var(--secondary-text-color); }
   .coherence-stats {
     display: flex;
     flex-wrap: wrap;
@@ -598,6 +637,70 @@ export const settingsStyles = `
     align-items: flex-end;
     text-align: end;
   }
+  .entity-rename-ids {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .entity-rename-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px;
+    padding: 8px 0;
+    border-top: 1px solid var(--divider-color);
+  }
+  .entity-rename-group > ha-expansion-panel {
+    min-width: 0;
+    --expansion-panel-summary-padding: 8px 0;
+    --expansion-panel-content-padding: 0 0 0 32px;
+  }
+  .entity-rename-group > ha-icon-button {
+    margin-top: 8px;
+  }
+  .entity-rename-summary {
+    min-width: 0;
+  }
+  .entity-rename-summary code {
+    font-size: var(--ha-font-size-m, 14px);
+  }
+  .entity-rename-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 6px;
+    color: var(--secondary-text-color);
+    font-size: var(--ha-font-size-s, 12px);
+    font-weight: normal;
+  }
+  .entity-rename-steps {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .entity-rename-step {
+    padding: 12px 0;
+    border-top: 1px solid var(--divider-color);
+  }
+  .entity-rename-ids code {
+    overflow-wrap: anywhere;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .entity-rename-new ha-icon {
+    flex: none;
+    --mdc-icon-size: 18px;
+    color: var(--secondary-text-color);
+  }
+  .entity-rename-new code {
+    color: var(--primary-text-color);
+  }
 
   /* Code */
   code {
@@ -626,15 +729,16 @@ export const settingsStyles = `
   }
   .category-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
   }
   .category-header h2 {
     margin: 0;
   }
-  .category-header ha-switch {
-    align-self: start;
+  .category-header ha-icon-button {
+    --mdc-icon-size: 20px;
+    color: var(--secondary-text-color);
   }
   .category-card p {
     font-size: 13px;

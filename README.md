@@ -33,8 +33,8 @@ and a history of resolved alerts.
   grouped messages and optional informational notifications.
 - **Keep alerts on your dashboard.** The included card groups alerts by device and
   supports custom CSS.
-- **Find broken configuration references.** Check missing entity references and
-  export your Home Assistant entities.
+- **Find broken configuration references.** Review entity renames and preview
+  replacements before applying them.
 
 The interface is available in **English and French**, on desktop and mobile.
 
@@ -74,7 +74,7 @@ The detailed guides are maintained **in English**:
 | --- | --- |
 | [Custom rules](docs/custom-rules.md) | Create rules, sequences and Jinja conditions, with examples. |
 | [Configuration](docs/configuration.md) | Set up monitoring, notifications, backups and diagnostics. |
-| [Configuration coherence](docs/coherence.md) | Check configuration references and export entities. |
+| [Configuration coherence](docs/coherence.md) | Check references, review renames, apply replacements and export entities. |
 | [Dashboard and history](docs/dashboard-and-history.md) | Configure the card, acknowledge alerts and explore history. |
 
 See the [documentation index](docs/user-guide.md) for common tasks.

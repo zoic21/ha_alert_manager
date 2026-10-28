@@ -475,9 +475,7 @@ class _TransitionsMixin:
                     min(self.config["pending_display_delay"], rule.duration),
                 )
                 self._set_record(record)
-                if new_occurrences is not None and self._is_automatic_eligible(
-                    entity_id
-                ):
+                if new_occurrences is not None:
                     new_occurrences.append(
                         PackOccurrence(source=details, occurred_at=now)
                     )
@@ -503,11 +501,7 @@ class _TransitionsMixin:
                         "evidence": observation.evidence,
                         "last_occurrence": observation.observed_at.isoformat(),
                     }
-                if (
-                    repeated_sequence
-                    and new_occurrences is not None
-                    and self._is_automatic_eligible(entity_id)
-                ):
+                if repeated_sequence and new_occurrences is not None:
                     new_occurrences.append(
                         PackOccurrence(source=record.details, occurred_at=now)
                     )

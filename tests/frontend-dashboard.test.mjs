@@ -223,7 +223,8 @@ test("card enforces group limit, escapes names, translates conditions and shows 
   assert.match(card.shadowRoot.innerHTML, /Voir plus d’appareils/);
   assert.doesNotMatch(card.shadowRoot.innerHTML, /<img/);
   assert.match(card.shadowRoot.innerHTML, /&lt;img/);
-  assert.match(card.shadowRoot.innerHTML, /2 alertes/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /2 alertes/);
+  assert.match(card.shadowRoot.innerHTML, /class="alert-count"[^>]*>2<\/span>/);
   assert.match(card.shadowRoot.innerHTML, /class="alert-icons types"/);
   assert.equal((card.shadowRoot.innerHTML.match(/class="alert-icon"/g) ?? []).length, 2);
   card._value = { status: "ready", snapshot: { alerts: [], startup: { in_progress: true } } };
@@ -748,7 +749,8 @@ test("age uses native relative time with the oldest eligible activation, indepen
     card.setConfig({ sort, show_age: true });
     assert.equal((card.shadowRoot.innerHTML.match(/<ha-relative-time /g) ?? []).length, 1);
     assert.match(card.shadowRoot.innerHTML, /data-age="2026-09-01T00:00:00.000Z"/);
-    assert.match(card.shadowRoot.innerHTML, /message-text">2 alerts/);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /message-text">2 alerts|alert-age">·/);
+    assert.match(card.shadowRoot.innerHTML, /class="alert-count"[^>]*>2<\/span>/);
     assert.equal(native.datetime, native.dataset.age);
   }
   card.setConfig({ group_by_device: false, show_age: true, max_tiles: 1 });
@@ -777,4 +779,14 @@ test("group and overflow links preserve OR inclusion and priority exclusions in 
   openAlertDeepLink.call(panel);
   assert.deepEqual(filteredTableRows.call(panel, "overview", rows).map((row) => row.id), ["a", "b", "other"]);
   assert.deepEqual(panel._tableState.overview.filters.exclude_labels, ["maintenance&test"]);
+});
+
+
+test("grouped tiles display five alerts only in the icon badge", () => {
+  const card = new AlertManagerCard();
+  card._value = { status: "ready", snapshot: { alerts: Array.from({ length: 5 }, (_, i) =>
+    alert(String(i), { device_id: "d", device_name: "Device" })) } };
+  card.setConfig({});
+  assert.match(card.shadowRoot.innerHTML, /class="alert-count"[^>]*>5<\/span>/);
+  assert.doesNotMatch(card.shadowRoot.innerHTML, /5 alerts|class="message alert-message/);
 });

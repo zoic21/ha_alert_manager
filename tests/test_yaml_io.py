@@ -298,6 +298,17 @@ def test_v15_export_without_monitoring_state_defaults_to_enabled() -> None:
     assert parse_config_yaml(legacy)["monitoring_enabled"] is True
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+def test_coherence_disabled_entity_option_yaml_round_trip(enabled):
+    key = "coherence_report_disabled_entities"
+    config = deepcopy(DEFAULT_CONFIG)
+    config[key] = enabled
+    exported = dump_config_yaml(config)
+    assert parse_config_yaml(exported)[key] is enabled
+    legacy = exported.replace(f"  {key}: {str(enabled).lower()}\n", "")
+    assert parse_config_yaml(legacy)[key] is False
+
+
 def test_older_export_without_coherence_schedule_defaults_to_none() -> None:
     """Exports created before scheduled scans remain importable."""
     exported = dump_config_yaml(deepcopy(DEFAULT_CONFIG))

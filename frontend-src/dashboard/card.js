@@ -113,12 +113,12 @@ export class AlertManagerCard extends HTMLElement {
     const name = dashboardName(alert, this._t);
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
-    const message = multiple ? this._t("dashboard.count", { count: group.alerts.length })
+    const message = multiple ? ""
       : coherence && Number.isInteger(count) && count >= 0
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
     const age = this._config.show_age && group.oldest !== null && Number.isFinite(group.oldest)
-      ? `<span class="age alert-age">· <ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
+      ? `<span class="age alert-age">${multiple ? "" : "· "}<ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
     const icon = `<div class="alert-icons${multiple ? " types" : ""}" title="${esc(group.types.map((type) => this._typeName(type)).join(" · "))}">
       ${multiple ? group.types.map((type) => this._icon(type)).join("") : this._icon(alert.type)}
       ${multiple ? `<span class="alert-count" aria-hidden="true">${group.alerts.length}</span>` : ""}</div>`;
@@ -126,7 +126,7 @@ export class AlertManagerCard extends HTMLElement {
       <ha-ripple></ha-ripple>
       ${icon}
       <div class="content alert-content"><div class="name alert-title" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message alert-message${age ? " with-age" : ""}" title="${esc(multiple ? message : fullMessage)}">${age ? `<span class="message-text">${esc(message)}</span>${age}` : esc(message)}</div></div>
+      ${message || age ? `<div class="message alert-message${age ? " with-age" : ""}" title="${esc(multiple ? "" : fullMessage)}">${age ? `${message ? `<span class="message-text">${esc(message)}</span>` : ""}${age}` : esc(message)}</div>` : ""}</div>
     </a></ha-card>`;
   }
   _render() {
@@ -173,7 +173,7 @@ export class AlertManagerCard extends HTMLElement {
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
-      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
+      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry><ha-icon slot="start" icon="mdi:refresh" aria-hidden="true"></ha-icon>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
     const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;

@@ -13,7 +13,7 @@ import {
 } from "../frontend-src/components/configuration-drawer.js";
 import { MDI_CLOSE } from "../frontend-src/utils/constants.js";
 import {
-  renderCoherence, renderDeletedEntitiesDrawer,
+  groupEntityRenames, renderCoherence, renderDeletedEntitiesDrawer, renderEntityRenamesDrawer,
 } from "../frontend-src/views/coherence.js";
 import { renderHistory } from "../frontend-src/views/history.js";
 import {
@@ -24,6 +24,7 @@ import {
   renderSettings,
   renderRuntimeStatistics,
   formatStatisticsTime,
+  formatStorageSize,
   refreshNotificationProfileUsage,
 } from "../frontend-src/views/settings.js";
 
@@ -172,6 +173,102 @@ test("deleted entity drawer renders retained registry entries safely", () => {
   assert.doesNotMatch(markup, /sensor\.deleted_<unsafe>/);
 });
 
+test("rename history groups stable identities and keeps reused IDs and unknown identities separate", () => {
+  const events = [
+    { registry_entry_id: "first", old_entity_id: "sensor.middle", new_entity_id: "sensor.original", current_entity_id: null },
+    { registry_entry_id: "second", old_entity_id: "sensor.original", new_entity_id: "sensor.other", current_entity_id: "sensor.other" },
+    { registry_entry_id: "first", old_entity_id: "sensor.original", new_entity_id: "sensor.middle", current_entity_id: null },
+    { registry_entry_id: null, old_entity_id: "sensor.unknown", new_entity_id: "sensor.original" },
+    { registry_entry_id: null, old_entity_id: "sensor.original", new_entity_id: "sensor.unknown" },
+  ];
+  const snapshot = structuredClone(events);
+  assert.deepEqual(groupEntityRenames(events), [
+    [events[0], events[2]], [events[1]], [events[3]], [events[4]],
+  ]);
+  assert.deepEqual(events, snapshot);
+});
+
+test("rename history summarizes initial to final IDs and expands all steps chronologically", () => {
+  const events = [
+    { old_entity_id: "sensor.middle_2", new_entity_id: "sensor.final", renamed_at: "2026-10-03T12:03:00+00:00" },
+    { old_entity_id: "sensor.middle_1", new_entity_id: "sensor.middle_2", renamed_at: "2026-10-03T12:02:00+00:00" },
+    { old_entity_id: "sensor.initial", new_entity_id: "sensor.middle_1", renamed_at: "2026-10-03T12:01:00+00:00" },
+  ].map((entry) => ({ ...entry, registry_entry_id: "same-entity", current_entity_id: "sensor.final" }));
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: events }, formatDate: (value) => `date:${value}`,
+    t: (key, values) => key === "coherence.entity_renames.changes" ? `Renames: ${values.count}` : key,
+  });
+  assert.equal((markup.match(/<ha-expansion-panel/g) ?? []).length, 1);
+  assert.match(markup, /<ha-expansion-panel left-chevron>/);
+  assert.doesNotMatch(markup, /<ha-expansion-panel[^>]*\bexpanded\b/);
+  const summary = markup.slice(markup.indexOf('slot="header"'), markup.indexOf('<ol class="entity-rename-steps">'));
+  assert.match(summary, /<code[^>]*>sensor.initial<\/code>/);
+  assert.match(summary, /<code[^>]*>sensor.final<\/code>/);
+  assert.match(summary, /Renames: 3/);
+  assert.match(summary, /date:2026-10-03T12:03:00\+00:00/);
+  assert.doesNotMatch(summary, /sensor.middle/);
+  const steps = markup.match(/<ol class="entity-rename-steps">([\s\S]*?)<\/ol>/)[1];
+  assert.equal((steps.match(/<li /g) ?? []).length, 3);
+  assert.ok(steps.indexOf("12:01:00") < steps.indexOf("12:02:00"));
+  assert.ok(steps.indexOf("12:02:00") < steps.indexOf("12:03:00"));
+  assert.match(steps, /sensor.middle_1/);
+  assert.match(steps, /sensor.middle_2/);
+  assert.match(markup, /<\/ha-expansion-panel>\s*<ha-icon-button data-action="more-info" data-entity-id="sensor.final"/);
+  assert.deepEqual(events.map((entry) => entry.new_entity_id), ["sensor.final", "sensor.middle_2", "sensor.middle_1"]);
+});
+
+test("rename history retains every step when an entity returns to its original ID", () => {
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: [
+      { old_entity_id: "sensor.temporary", new_entity_id: "sensor.original", registry_entry_id: "same-entity", renamed_at: "later" },
+      { old_entity_id: "sensor.original", new_entity_id: "sensor.temporary", registry_entry_id: "same-entity", renamed_at: "earlier" },
+    ] }, formatDate: (value) => value, t,
+  });
+  const summary = markup.slice(markup.indexOf('slot="header"'), markup.indexOf('<ol class="entity-rename-steps">'));
+  assert.equal((summary.match(/>sensor.original<\/code>/g) ?? []).length, 2);
+  assert.doesNotMatch(summary, /sensor.temporary/);
+  assert.equal((markup.match(/<li class="entity-rename-step">/g) ?? []).length, 2);
+});
+
+test("rename history shows escaped IDs and a separate information icon outside the expandable row", () => {
+  const markup = renderEntityRenamesDrawer({
+    data: { renames: [{
+      old_entity_id: "sensor.old_<unsafe>",
+      new_entity_id: "sensor.intermediate",
+      current_entity_id: "sensor.current",
+      renamed_at: "2026-10-03T12:00:00+00:00",
+    }, {
+      old_entity_id: "sensor.deleted_old",
+      new_entity_id: "sensor.deleted_new",
+      current_entity_id: null,
+      renamed_at: "2026-10-02T12:00:00+00:00",
+    }] },
+    formatDate: (value) => `date:${value}`,
+    t,
+  });
+  assert.match(markup, /sensor\.old_&lt;unsafe&gt;/);
+  assert.match(markup, /<code[^>]*>sensor\.intermediate<\/code>/);
+  assert.match(markup, /<ha-icon-button data-action="more-info" data-entity-id="sensor.current"/);
+  assert.match(markup, /<ha-icon icon="mdi:information-outline"><\/ha-icon><\/ha-icon-button>/);
+  assert.match(markup, /data-entity-id="" disabled/);
+  assert.equal((markup.match(/<ha-expansion-panel left-chevron>/g) ?? []).length, 2);
+  assert.match(markup, /aria-label="coherence.entity_renames.more_info"/);
+  assert.ok(markup.indexOf('data-action="more-info"') > markup.indexOf("</time>"));
+  assert.match(markup, /date:2026-10-03T12:00:00\+00:00/);
+  assert.doesNotMatch(markup, /sensor\.old_<unsafe>|<ha-button/);
+});
+
+test("rename history supports loading, errors, empty history and native mobile close", () => {
+  const render = (values) => renderEntityRenamesDrawer({ formatDate: (value) => value, t, ...values });
+  assert.match(render({ loading: true }), /coherence.entity_renames.loading/);
+  assert.match(render({ error: "<offline>" }), /<ha-alert alert-type="error">&lt;offline&gt;<\/ha-alert>/);
+  assert.match(render({ data: { renames: [] } }), /coherence.entity_renames.empty/);
+  const mobile = render({ useBottomSheet: true });
+  assert.match(mobile, /^<ha-resizable-bottom-sheet/);
+  assert.match(mobile, /data-close-action="close-entity-renames"/);
+  assert.doesNotMatch(mobile, /side-drawer-backdrop/);
+});
+
 test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
   const configuration = renderConfigurationDrawer({
     title: "Configuration",
@@ -304,6 +401,8 @@ test("automatic rendering is pure and places defaults with sparse exceptions", (
   assert.deepEqual(context.draft, before);
   assert.match(markup, /^<ha-card id="settings-section-automatic" outlined/);
   assert.match(markup, /auto-battery-enabled[^>]*checked/);
+  assert.match(markup, /<ha-icon-button data-action="open-automatic-configuration" data-pack-id="battery" aria-label="settings.configure_aria" title="buttons.configuration"><ha-icon icon="mdi:cog"><\/ha-icon><\/ha-icon-button><ha-switch id="auto-battery-enabled"/);
+  assert.doesNotMatch(markup, /<ha-button[^>]*data-action="open-automatic-configuration"/);
   assert.match(markup, /auto-battery-delay/);
   assert.match(markup, /auto-battery-threshold/);
   assert.match(markup, /auto-battery-device_overrides-target-0/);
@@ -332,6 +431,7 @@ test("settings rendering consumes prepared drafts without initializing them", ()
     settingsDraft: {
       coherence_scan_esphome: true,
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_ignored_entity_references: ["sensor.old"],
       excluded_labels: [],
       excluded_entities: [],
@@ -374,6 +474,8 @@ test("settings rendering consumes prepared drafts without initializing them", ()
   assert.match(coherenceCard, /class="coherence-options"/);
   assert.match(coherenceCard, /id="coherence-alert-enabled"[^>]*checked/);
   assert.match(coherenceCard, /aria-describedby="coherence-alert-help"/);
+  assert.match(coherenceCard, /id="coherence-report-disabled-entities"[^>]*checked/);
+  assert.match(coherenceCard, /aria-describedby="coherence-report-disabled-entities-help"/);
   assert.match(markup, /data-ignored-reference="sensor.old"/);
   assert.match(markup, /value="sensor.new"/);
   assert.doesNotMatch(markup, /settings-entity_delays-configuration/);
@@ -633,6 +735,34 @@ test("runtime diagnostics render scope, period and aggregates with escaped value
   assert.match(markup, /2.00 s/);
   assert.equal(formatStatisticsTime(0), "0 ms");
   assert.equal(formatStatisticsTime(1000), "1.00 s");
+});
+
+test("disk diagnostics format units, escape the measurement date and distinguish unavailable from zero", () => {
+  const diskT = (key, values) => key === "statistics.disk_measured_at"
+    ? `Mesure du ${values.date}` : ({
+      "statistics.disk_units.bytes": "o",
+      "statistics.disk_units.kibibytes": "Kio",
+      "statistics.disk_units.mebibytes": "Mio",
+      "statistics.disk_units.gibibytes": "Gio",
+      "statistics.disk_unavailable": "Indisponible",
+    }[key] ?? key);
+  for (const [bytes, expected] of [
+    [0, "0 o"], [1023, "1023 o"], [1024, "1.00 Kio"],
+    [1536, "1.50 Kio"], [1024 ** 2, "1.00 Mio"], [1024 ** 3, "1.00 Gio"],
+    [null, "Indisponible"], [undefined, "Indisponible"], [-1, "Indisponible"],
+  ]) assert.equal(formatStorageSize(bytes, diskT), expected);
+  const render = (bytes) => renderRuntimeStatistics({
+    statistics: { disk_usage: { bytes, measured_at: "<time>" } },
+    date: (value) => value,
+    t: diskT,
+  });
+  const markup = render(1536);
+  assert.match(markup, /statistics.disk_usage<\/dt><dd>1.50 Kio<\/dd>/);
+  assert.match(markup, /statistics.disk_help/);
+  assert.match(markup, /Mesure du &lt;time&gt;/);
+  assert.match(render(0), /<dd>0 o<\/dd>/);
+  assert.match(render(null), /<dd>Indisponible<\/dd>/);
+  assert.doesNotMatch(render(null), /Mesure du|<dd>0 o<\/dd>/);
 });
 
 test("statistics refresh replaces only the diagnostic content and profile counts", () => {

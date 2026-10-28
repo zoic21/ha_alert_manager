@@ -213,7 +213,9 @@
     },
     "coherence": {
       "columns": {
+        "action": "Actions",
         "entity": "Référence manquante",
+        "target": "Entité cible",
         "file": "Fichier",
         "line": "Ligne",
         "source": "Configuration",
@@ -222,6 +224,8 @@
       "description": "Recherche à la demande les entités référencées mais absentes dans les automatisations, scripts, scènes, templates, dashboards et autres fichiers de configuration. Vérifie aussi les adresses IEEE statiques des déclencheurs ZHA lorsque ZHA est chargé, sans contrôler la disponibilité des équipements. Les règles personnalisées d’Alert Manager sont également analysées.",
       "export": {
         "button": "Exporter les entités (JSON)",
+        "download": "Télécharger",
+        "warning": "Les attributs sensibles connus (jetons, identifiants d’accès, URLs des images, coordonnées GPS, adresses MAC et IP) sont masqués. Les noms, identifiants, états et autres attributs restent présents : vérifiez le fichier avant de le partager publiquement.",
         "loading": "Export en cours…",
         "error": "Impossible d’exporter les entités. Vérifiez la connexion à Home Assistant et que leurs attributs peuvent être représentés en JSON."
       },
@@ -236,6 +240,12 @@
       "empty": "Aucune référence manquante.",
       "not_scanned": "L’analyse n’a pas encore été lancée.",
       "open": "Ouvrir",
+      "correction": {
+        "button": "Corriger",
+        "selected": "Corriger les lignes sélectionnées ({count})",
+        "title": "Confirmer les corrections",
+        "confirm": "Les références sélectionnées seront remplacées par les entités cibles indiquées ci-dessous."
+      },
       "scan": "Lancer l’analyse",
       "scanning": "Analyse en cours…",
       "stats": {
@@ -263,7 +273,49 @@
         "metadata_error": "Contrôle ZHA non exécuté : métadonnées indisponibles."
       },
       "alert_enabled": "Créer une alerte en cas d’incohérence",
-      "alert_help": "Une seule alerte reste présente jusqu’à un contrôle complet sans problème. Les profils de notification habituels s’appliquent."
+      "alert_help": "Une seule alerte reste présente jusqu’à un contrôle complet sans problème. Les profils de notification habituels s’appliquent.",
+      "entity_renames": {
+        "button": "Entités renommées",
+        "title": "Historique des renommages",
+        "close": "Fermer l’historique des renommages",
+        "loading": "Chargement des renommages…",
+        "description": "Les 500 derniers changements d’identifiant, regroupés par entité. Dépliez une ligne pour voir les étapes. L’enregistrement commence à l’installation de cette fonctionnalité.",
+        "empty": "Aucun renommage enregistré pour le moment.",
+        "old": "Ancien identifiant",
+        "new": "Nouvel identifiant",
+        "initial": "Premier identifiant enregistré",
+        "final": "Dernier identifiant enregistré",
+        "changes": "Renommages : {count}",
+        "more_info": "Afficher les informations de l’entité"
+      },
+      "replacement": {
+        "button": "Remplacement d’entité",
+        "preview_title": "Aperçu du remplacement",
+        "old": "Ancien identifiant d’entité",
+        "new": "Nouvel identifiant d’entité",
+        "help": "Recherchez une entité ou saisissez son identifiant. La nouvelle entité doit exister dans Home Assistant. Les fichiers YAML et dashboards sont analysés, y compris les entrées des blueprints.",
+        "preview": "Prévisualiser",
+        "apply": "Remplacer",
+        "back": "Modifier les identifiants",
+        "busy": "Traitement en cours…",
+        "count": "{count} remplacement(s) sélectionné(s) sur {total}, dans {files} fichier(s).",
+        "location": "Ligne {line}, colonne {column}",
+        "empty": "Aucune référence à remplacer.",
+        "success": "{replacement_count} remplacement(s) effectué(s) dans {file_count} fichier(s).",
+        "reload": "Les objets enregistrés par les éditeurs Home Assistant sont rechargés automatiquement. Rechargez les autres configurations YAML concernées ; un redémarrage est nécessaire seulement si l’intégration ne propose pas de rechargement. Pour ESPHome, validez puis installez la configuration sur l’appareil.",
+        "dashboard_saved": "Les objets ont été enregistrés avec les API Home Assistant. Aucun redémarrage n’est nécessaire.",
+        "api_help": "Home Assistant valide et recharge les automatisations, scripts et scènes de ses éditeurs. Les fichiers contenant des tags YAML sont enregistrés en texte et doivent être rechargés. Le rechargement peut interrompre une exécution en cours.",
+        "errors": {
+          "replacement_entity_invalid": "Saisissez deux identifiants d’entité valides et différents.",
+          "replacement_entity_missing": "La nouvelle entité n’existe pas dans Home Assistant. Aucun remplacement n’a été lancé.",
+          "replacement_selection_invalid": "Sélectionnez au moins un remplacement de cet aperçu.",
+          "replacement_yaml_invalid": "Le résultat n’est pas un YAML valide. Aucun fichier n’a été modifié.",
+          "replacement_preview_stale": "La configuration a changé depuis l’aperçu. Relancez l’aperçu avant de remplacer.",
+          "replacement_failed": "Le remplacement a échoué. Les modifications ont été annulées.",
+          "replacement_rollback_failed": "Le remplacement a échoué et certaines modifications n’ont pas pu être annulées. Vérifiez les sources concernées et relancez un aperçu avant de réessayer.",
+          "replacement_incomplete": "Le résultat du remplacement n’a pas pu être confirmé. Certaines modifications peuvent déjà avoir été enregistrées. Vérifiez les sources concernées et relancez un aperçu avant de réessayer."
+        }
+      }
     },
     "duration": {
       "activation": "Activation en cours…",
@@ -761,6 +813,8 @@
       "coherence_schedule_help": "Exécutée à 03:05 (heure locale). L’analyse hebdomadaire a lieu le lundi et l’analyse mensuelle le premier jour du mois.",
       "coherence_scan_esphome": "Analyser le dossier ESPHome",
       "coherence_scan_esphome_help": "Inclut les fichiers YAML du dossier /config/esphome dans l’analyse de cohérence.",
+      "coherence_report_disabled_entities": "Signaler les références aux entités désactivées",
+      "coherence_report_disabled_entities_help": "Signale aussi les références aux entités désactivées dans Home Assistant. Décoché par défaut ; s’applique à la prochaine analyse.",
       "coherence_ignored_entity_references": "Références ignorées par l’analyse de cohérence",
       "coherence_ignored_entity_references_help": "Ajoutez une référence exacte d’entité (toto.plop) ou une adresse IEEE ZHA (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Exemple : toto.plop",
@@ -943,6 +997,16 @@
     },
     "statistics": {
       "title": "Diagnostic de fonctionnement",
+      "disk_usage": "Données sur disque",
+      "disk_help": "Fichiers de données d’Alert Manager : configuration, alertes, historique, sauvegardes, notifications, cohérence et renommages d’entités. Hors fichiers du programme et base d’historique de Home Assistant. Mesure à l’ouverture de Configuration, conservée 5 minutes ; sans actualisation automatique.",
+      "disk_measured_at": "Mesure du {date}.",
+      "disk_unavailable": "Indisponible",
+      "disk_units": {
+        "bytes": "o",
+        "kibibytes": "Kio",
+        "mebibytes": "Mio",
+        "gibibytes": "Gio"
+      },
       "scope": "Règles personnalisées : une évaluation par couple règle/entité, condition comprise. Traitement synchrone uniquement ; hors tests, packs automatiques, cohérence et attentes asynchrones. Ce n’est pas la charge de la boucle événementielle de Home Assistant.",
       "periodic_recoveries": "Rattrapages du contrôle périodique",
       "evaluation_count": "Évaluations de règles",
