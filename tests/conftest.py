@@ -85,6 +85,34 @@ class JSONEncoder(json.JSONEncoder):
 
 
 json_helper.JSONEncoder = JSONEncoder
+file_util = _module("homeassistant.util.file")
+
+
+def write_utf8_file_atomic(filename, utf8_data, private=False, mode="w"):
+    """Small stand-in for HA's durable file writer in isolated replacement tests."""
+    path = Path(filename)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    if "b" in mode:
+        temporary.write_bytes(utf8_data)
+    else:
+        temporary.write_text(utf8_data, encoding="utf-8")
+    temporary.replace(path)
+
+
+file_util.write_utf8_file_atomic = write_utf8_file_atomic
+
+yaml_util = _module("homeassistant.util.yaml")
+
+
+def _parse_yaml(content, secrets=None):
+    import yaml
+
+    return yaml.safe_load(content)
+
+
+yaml_util.parse_yaml = _parse_yaml
+yaml_util.Secrets = lambda path: path
+
 entity_helper = _module("homeassistant.helpers.entity")
 entity_helper.entity_sources = lambda hass: hass.data.setdefault("entity_info", {})
 
@@ -258,6 +286,7 @@ config_entries.ConfigEntryChange = ConfigEntryChange
 config_entries.ConfigEntryState = ConfigEntryState
 config_entries.SIGNAL_CONFIG_ENTRY_CHANGED = "config_entry_changed"
 config_entries.ConfigFlow = ConfigFlow
+config_entries.ConfigFlowResult = dict
 homeassistant.config_entries = config_entries
 
 data_entry_flow = _module("homeassistant.data_entry_flow")
@@ -299,7 +328,14 @@ class Registry:
         return self.async_update_entity(device_id, **kwargs)
 
     def async_get(self, item_id):
-        return self.entries.get(item_id)
+        return self.entries.get(item_id) or next(
+            (
+                item
+                for item in self.entries.values()
+                if getattr(item, "id", None) == item_id
+            ),
+            None,
+        )
 
     def async_get_area(self, item_id):
         return self.entries.get(item_id)
@@ -502,13 +538,18 @@ class Store:
         self.key = key
         self.options = kwargs
         self.hass.store_options[key] = kwargs
+        self.delayed_save = None
 
     async def async_load(self):
         return self.hass.stores.get(self.key)
 
     async def async_save(self, data):
+        self.delayed_save = None
         self.hass.store_save_count += 1
         self.hass.stores[self.key] = data
+
+    def async_delay_save(self, data_func, delay=0):
+        self.delayed_save = (data_func, delay)
 
 
 storage.Store = Store
@@ -821,6 +862,19 @@ def hass():
 @pytest.fixture
 def entry():
     return ConfigEntry()
+
+
+@pytest.fixture(params=["SafeLoader", "CSafeLoader"])
+def coherence_yaml_loader(request, monkeypatch):
+    """Exercise coherence and replacement behavior with either YAML parser."""
+    import yaml
+
+    from custom_components.alert_manager import coherence
+
+    loader = getattr(yaml, request.param, None)
+    if loader is None:
+        pytest.skip("LibYAML is not available")
+    monkeypatch.setattr(coherence, "_YAML_LOADER", loader)
 
 
 @pytest.fixture

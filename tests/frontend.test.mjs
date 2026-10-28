@@ -414,13 +414,13 @@ test("coherence result actions open their exact Home Assistant target", () => {
   const navigation = panel._nativeCoherenceActionCell({
     link: { type: "navigate", path: "/config/automation/edit/123" },
   });
-  navigation.listeners.click({ stopPropagation() {} });
+  navigation.children[0].listeners.click({ stopPropagation() {} });
   assert.equal(navigatedTo, "/config/automation/edit/123");
 
   const template = panel._nativeCoherenceActionCell({
     link: { type: "more_info", entity_id: "sensor.template_result" },
   });
-  template.listeners.click({ stopPropagation() {} });
+  template.children[0].listeners.click({ stopPropagation() {} });
   assert.equal(moreInfo, "sensor.template_result");
 });
 
@@ -1049,6 +1049,7 @@ test("initial load defers history and coherence data until their tabs open", asy
   const panel = new Panel();
   panel._render = () => {};
   const calls = [];
+  const statisticsRequests = [];
   const responses = {
     "alert_manager/config/get": completeConfig(),
     "alert_manager/alerts/list": {
@@ -1070,6 +1071,7 @@ test("initial load defers history and coherence data until their tabs open", asy
     states: {},
     callWS: async (message) => {
       calls.push(message.type);
+      if (message.type === "alert_manager/notifications/stats/get") statisticsRequests.push(message);
       if (message.type === "frontend/get_translations") {
         return { resources: TRANSLATIONS[message.language] };
       }
@@ -1093,6 +1095,52 @@ test("initial load defers history and coherence data until their tabs open", asy
   assert.deepEqual(panel._packs, completePacks());
   assert.equal(panel._historyLoaded, false);
   assert.equal(panel._coherenceLoaded, false);
+  assert.equal(statisticsRequests[0].include_disk_usage, undefined);
+
+  panel._activeTab = "settings";
+  await panel._load();
+  assert.equal(statisticsRequests[1].include_disk_usage, true);
+  await panel._refreshNotificationStats();
+  assert.equal(statisticsRequests[2].include_disk_usage, true);
+});
+
+test("opening Configuration during bootstrap still requests disk diagnostics after loading", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._render = () => {};
+  const statisticsRequests = [];
+  let completeBootstrap;
+  const bootstrap = new Promise((resolve) => { completeBootstrap = resolve; });
+  panel._hass = {
+    states: {},
+    callWS: async (message) => {
+      if (message.type === "alert_manager/notifications/stats/get") {
+        statisticsRequests.push(message);
+        return { last_24h: {}, diagnostics: message.include_disk_usage
+          ? { disk_usage: { bytes: 1024, measured_at: "2026-10-03T12:00:00Z" } } : {} };
+      }
+      if (message.type === "alert_manager/config/get") {
+        await bootstrap;
+        return completeConfig();
+      }
+      if (message.type === "alert_manager/packs/list") return completePacks();
+      if (message.type === "alert_manager/alerts/list") return { alerts: [], pending: [] };
+      if (message.type === "config/label_registry/list") return [];
+      if (message.type === "frontend/get_translations") return { resources: TRANSLATIONS[message.language] };
+      return {};
+    },
+  };
+  const loading = panel._load();
+  panel._activeTab = "settings";
+  panel._refreshTabData("settings");
+  assert.equal(statisticsRequests.length, 1);
+  assert.equal(statisticsRequests[0].include_disk_usage, undefined);
+  completeBootstrap();
+  await loading;
+  await panel._notificationStatsLoadPromise;
+  assert.equal(statisticsRequests.length, 2);
+  assert.equal(statisticsRequests[1].include_disk_usage, true);
+  assert.equal(panel._notificationStats.diagnostics.disk_usage.bytes, 1024);
 });
 
 test("history and coherence data load when their tabs open", async () => {
@@ -2190,7 +2238,7 @@ test("selection mode is delegated to the native subpage table toolbar", async ()
     updateComplete: Promise.resolve(),
     shadowRoot: {
       querySelector() {
-        return { select(ids) { restoredSelection = ids; } };
+        return { requestUpdate() { restoredSelection = this._checkedRows; } };
       },
     },
   };
@@ -2584,8 +2632,7 @@ test("forms use native Home Assistant inputs, switches and buttons", () => {
   assert.doesNotMatch(automatic + settings, /class="input-suffix"|class="switch"/);
   assert.match(styles, /ha-input\{--ha-input-padding-bottom:0\}/);
   assert.match(styles, /\.automatic-grid\{[^}]*grid-template-columns:repeat\(2/);
-  assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
-  assert.match(styles, /\.category-header ha-switch\{align-self:start\}/);
+  assert.match(styles, /\.category-header\{[^}]*grid-template-columns:minmax\(0,1fr\) auto auto;align-items:center/);
   assert.match(styles, /\.switch-field-row\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(styles, /\.settings-page,\.settings-form,\.automatic-section\{[^}]*max-width:1120px[^}]*margin-inline:auto/);
   assert.match(styles, /\.settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)[^}]*max-width:920px/);
@@ -3224,13 +3271,13 @@ test("disabled packs remain configurable and switches preserve their exceptions"
   assert.equal(panel._automaticMapDraft.battery.threshold, 15);
 });
 
-test("one configuration button counts all pack exceptions and global settings expose labels", () => {
+test("each configuration icon exposes its pack exception count and global settings expose labels", () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel(); panel._config = completeConfig(); panel._packs = completePacks();
   const automatic = panel._renderAutomatic();
   assert.equal((automatic.match(/data-action="open-automatic-configuration"/g) ?? []).length, 5);
-  assert.match(automatic, /data-pack-id="battery">Configuration \(0\)/);
-  assert.match(automatic, /data-pack-id="execution_errors">Configuration \(1\)/);
+  assert.match(automatic, /data-pack-id="battery"[^>]*title="Configuration \(0\)"/);
+  assert.match(automatic, /data-pack-id="execution_errors"[^>]*title="Configuration \(1\)"/);
   const settings = panel._renderSettings();
   assert.match(settings, /id="excluded-labels"/);
   assert.doesNotMatch(settings, /id="global-delay"|settings-entity_delays-configuration|settings-excluded_entities-configuration|settings-excluded_devices-configuration/);
@@ -3304,6 +3351,7 @@ test("settings action serializes exclusions and entity delays", async () => {
   panel._render = () => {};
   panel._settingsDraft = {
     coherence_alert_enabled: true,
+    coherence_report_disabled_entities: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -3344,6 +3392,7 @@ test("settings action serializes exclusions and entity delays", async () => {
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -4552,6 +4601,7 @@ test("combined settings save sends one configuration update and preserves drafts
   panel._render = () => {};
   panel._settingsDraft = {
     coherence_alert_enabled: true,
+    coherence_report_disabled_entities: true,
     coherence_scan_esphome: false,
     coherence_ignored_entity_references: ["toto.plop"],
     excluded_labels: ["sans_alerte"],
@@ -4605,6 +4655,7 @@ test("combined settings save sends one configuration update and preserves drafts
       notification_batch_delay: 30,
       coherence_schedule: "weekly",
       coherence_alert_enabled: true,
+      coherence_report_disabled_entities: true,
       coherence_scan_esphome: false,
       coherence_ignored_entity_references: ["toto.plop", "another.ref"],
       excluded_labels: ["sans_alerte"],
@@ -5416,24 +5467,29 @@ test("statistics use the standard scrolling page while history keeps its native 
   assert.match(panel.shadowRoot.innerHTML.split("</style>")[1], /hass-tabs-subpage-data-table/);
 });
 
-test("coherence alert setting preserves its draft across renders and reloads saved state", () => {
-  const panel = new (customElements.get("alert-manager-panel"))();
-  panel._config = completeConfig();
-  panel._ensureSettingsDraft();
-  assert.equal(panel._settingsDraft.coherence_alert_enabled, false);
-  for (const checked of [true, false]) {
-    panel._handleChange({ target: { id: "coherence-alert-enabled", checked } });
+for (const [key, id] of [
+  ["coherence_alert_enabled", "coherence-alert-enabled"],
+  ["coherence_report_disabled_entities", "coherence-report-disabled-entities"],
+]) {
+  test(`${key} preserves its draft across renders and reloads saved state`, () => {
+    const panel = new (customElements.get("alert-manager-panel"))();
+    panel._config = completeConfig();
     panel._ensureSettingsDraft();
-    assert.equal(panel._settingsDraft.coherence_alert_enabled, checked);
-    assert.equal(Boolean(panel._config.coherence_alert_enabled), false);
-    const control = panel._renderSettings().match(/<ha-switch id="coherence-alert-enabled"[^>]*>/)[0];
-    assert.equal(/ checked/.test(control), checked);
-  }
-  panel._config.coherence_alert_enabled = true;
-  panel._resetSettingsDraft();
-  panel._ensureSettingsDraft();
-  assert.equal(panel._settingsDraft.coherence_alert_enabled, true);
-});
+    assert.equal(panel._settingsDraft[key], false);
+    for (const checked of [true, false]) {
+      panel._handleChange({ target: { id, checked } });
+      panel._ensureSettingsDraft();
+      assert.equal(panel._settingsDraft[key], checked);
+      assert.equal(Boolean(panel._config[key]), false);
+      const control = panel._renderSettings().match(new RegExp(`<ha-switch id="${id}"[^>]*>`))[0];
+      assert.equal(/ checked/.test(control), checked);
+    }
+    panel._config[key] = true;
+    panel._resetSettingsDraft();
+    panel._ensureSettingsDraft();
+    assert.equal(panel._settingsDraft[key], true);
+  });
+}
 
 
 test("returning from a dashboard can reopen the same alert or device deep link", () => {
@@ -5757,7 +5813,7 @@ test("action decoration preserves authored icons and stays idempotent across ref
       return button;
     }));
   panel.shadowRoot.querySelectorAll = (selector) => buttons.filter((button) =>
-    selector === `[data-action="${button.dataset.action}"]`);
+    selector === "ha-button[data-action]");
   for (let refresh = 0; refresh < 3; refresh++) panel._decorateActionIcons();
   for (const button of buttons) assert.equal(button.children.length, 1, button.dataset.action);
 });

@@ -7,6 +7,7 @@ import importlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from pack_test_helpers import automatic_settings
 
 from custom_components.alert_manager.const import DATA_COHERENCE_RESULT, DATA_MANAGER
@@ -26,6 +27,7 @@ from custom_components.alert_manager.websocket import (
     websocket_config_update,
     websocket_configuration_field_yaml_validate,
     websocket_deleted_entities_list,
+    websocket_entity_renames_list,
     websocket_history_clear,
     websocket_history_config_get,
     websocket_history_config_update,
@@ -355,6 +357,7 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
         (websocket_deleted_entities_list, {"id": 23}),
+        (websocket_entity_renames_list, {"id": 24}),
         (websocket_config_recovery_get, {"id": 20}),
         (websocket_config_backup_download, {"id": 21, "backup_id": "one"}),
         (
@@ -363,7 +366,7 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 22
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 23
     assert connection.results == []
 
 
@@ -405,6 +408,52 @@ def test_notification_stats_websocket_is_separate_from_configuration(hass, entry
     assert connection.results[0][1]["diagnostics"]["notifications"] == 2
     assert manager.notification_runtime.statistics is manager.statistics
     assert "usage" not in manager.get_config()
+
+
+def test_disk_usage_requires_explicit_request_and_admin_access(
+    hass, entry, monkeypatch
+):
+    manager = AlertManager(hass, entry)
+    asyncio.run(manager.async_setup())
+    hass.data[DATA_MANAGER] = manager
+    calls = []
+    usage = {"bytes": 1024, "measured_at": "2026-10-03T12:00:00+00:00"}
+
+    async def disk_usage():
+        calls.append(True)
+        return usage
+
+    monkeypatch.setattr(manager.storage, "async_disk_usage", disk_usage)
+    connection = Connection(admin=True)
+    asyncio.run(websocket_notification_stats_get(hass, connection, {"id": 1}))
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, connection, {"id": 2, "include_disk_usage": False}
+        )
+    )
+    assert calls == []
+    assert all(
+        "disk_usage" not in result["diagnostics"] for _, result in connection.results
+    )
+    unauthorized = Connection(admin=False)
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, unauthorized, {"id": 3, "include_disk_usage": True}
+        )
+    )
+    assert calls == []
+    assert unauthorized.results == []
+    assert unauthorized.errors == [(3, "unauthorized", "Unauthorized")]
+    asyncio.run(
+        websocket_notification_stats_get(
+            hass, connection, {"id": 4, "include_disk_usage": True}
+        )
+    )
+    assert calls == [True]
+    result = connection.results[-1][1]
+    assert result["diagnostics"]["disk_usage"] == usage
+    assert result["diagnostics"]["notifications"] == 0
+    assert result["last_24h"] == {}
 
 
 def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypatch):
@@ -498,8 +547,18 @@ def test_admin_recovery_websockets_list_download_and_restore_one_backup(hass, en
     assert connection.results[-1][1]["config"] == manager.get_config()
 
 
-def test_coherence_get_websocket_restores_last_result_without_scanning(hass, entry):
+def test_coherence_get_websocket_restores_last_result_without_scanning(
+    hass, entry, tmp_path, monkeypatch
+):
     """Opening the panel retrieves the retained report without a new scan."""
+    from custom_components.alert_manager import entity_replacement as module
+
+    hass.config.path = lambda *parts: str(tmp_path.joinpath(*parts))
+    monkeypatch.setattr(
+        module,
+        "_discover_sources",
+        lambda *_args, **_kwargs: pytest.fail("A retained report must not scan"),
+    )
     manager = AlertManager(hass, entry)
     asyncio.run(manager.async_setup())
     hass.data[DATA_MANAGER] = manager
@@ -511,7 +570,7 @@ def test_coherence_get_websocket_restores_last_result_without_scanning(hass, ent
     expected = {
         "scanned_at": "2026-08-24T12:00:00+00:00",
         "missing_entity_count": 1,
-        "results": [{"entity_id": "sensor.gone"}],
+        "results": [{"entity_id": "sensor.gone", "file": "removed.yaml", "line": 1}],
     }
     hass.data[DATA_COHERENCE_RESULT] = expected
     asyncio.run(websocket_coherence_get(hass, connection, {"id": 42}))

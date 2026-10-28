@@ -9,21 +9,28 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .config_defaults import DEFAULT_CONFIG
 from .const import (
+    COHERENCE_STORAGE_KEY,
     CONFIG_BACKUP_LIMIT,
     CONFIG_BACKUP_STORAGE_KEY,
     CONFIG_BACKUP_STORAGE_VERSION,
+    ENTITY_RENAME_HISTORY_LIMIT,
+    ENTITY_RENAME_SAVE_DELAY_SECONDS,
+    ENTITY_RENAME_STORAGE_KEY,
     HISTORY_STORAGE_KEY,
     HISTORY_STORAGE_VERSION,
     LEGACY_RULE_SOURCES,
     MAX_RULES,
+    NOTIFICATION_STORAGE_KEY,
     STORAGE_KEY,
     STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
@@ -38,6 +45,116 @@ from .validation import remove_unknown_stored_config_fields
 from .yaml_io import parse_config_yaml
 
 _LOGGER = logging.getLogger(__name__)
+
+_DISK_USAGE_CACHE_SECONDS = 300
+_DISK_USAGE_STORAGE_KEYS = (
+    STORAGE_KEY,
+    HISTORY_STORAGE_KEY,
+    COHERENCE_STORAGE_KEY,
+    CONFIG_BACKUP_STORAGE_KEY,
+    NOTIFICATION_STORAGE_KEY,
+    ENTITY_RENAME_STORAGE_KEY,
+)
+
+
+def _measure_storage_bytes(storage_dir: Path) -> int | None:
+    """Read metadata for our data files only; run in the executor."""
+    total = 0
+    try:
+        for key in _DISK_USAGE_STORAGE_KEYS:
+            try:
+                total += (storage_dir / key).stat().st_size
+            except FileNotFoundError:
+                continue
+    except OSError as err:
+        _LOGGER.warning("Unable to measure Alert Manager storage size: %s", err)
+        return None
+    return total
+
+
+def _is_valid_rename(item: Any) -> bool:
+    """Validate one persisted rename before exposing it to history consumers."""
+    if (
+        not isinstance(item, dict)
+        or any(
+            not isinstance(item.get(field), str)
+            for field in ("old_entity_id", "new_entity_id", "renamed_at")
+        )
+        or not valid_entity_id(item["old_entity_id"])
+        or not valid_entity_id(item["new_entity_id"])
+        or "registry_entry_id" not in item
+        or (
+            item["registry_entry_id"] is not None
+            and not isinstance(item["registry_entry_id"], str)
+        )
+    ):
+        return False
+    try:
+        return datetime.fromisoformat(item["renamed_at"]).tzinfo is not None
+    except ValueError:
+        return False
+
+
+class EntityRenameHistoryStorage:
+    """Keep a bounded entity-ID history independently of alert configuration."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._store = Store[dict[str, Any]](
+            hass,
+            1,
+            ENTITY_RENAME_STORAGE_KEY,
+            private=True,
+            atomic_writes=True,
+            serialize_in_event_loop=False,
+        )
+        self._renames: list[dict[str, Any]] = []
+        self._dirty = False
+
+    async def async_load(self) -> None:
+        """Restore valid retained renames without blocking setup on malformed data."""
+        data = await self._store.async_load()
+        if data is None:
+            return
+        if not isinstance(data, dict) or not isinstance(data.get("renames"), list):
+            _LOGGER.warning("Ignoring invalid persisted entity rename history")
+            return
+        valid = [item for item in data["renames"] if _is_valid_rename(item)]
+        if len(valid) != len(data["renames"]):
+            _LOGGER.warning("Ignoring invalid persisted entity rename history entries")
+        self._renames = valid[-ENTITY_RENAME_HISTORY_LIMIT:]
+
+    def record(
+        self,
+        old_entity_id: str,
+        new_entity_id: str,
+        registry_entry_id: str | None,
+        renamed_at: datetime,
+    ) -> None:
+        """Record one event and postpone writing until the burst has settled."""
+        # Replace the list; queued snapshots and their entries are never mutated,
+        # so HA can serialize and write them safely in its executor.
+        self._renames = [
+            *self._renames[-(ENTITY_RENAME_HISTORY_LIMIT - 1) :],
+            {
+                "old_entity_id": old_entity_id,
+                "new_entity_id": new_entity_id,
+                "registry_entry_id": registry_entry_id,
+                "renamed_at": renamed_at.isoformat(),
+            },
+        ]
+        self._dirty = True
+        payload = {"renames": self._renames}
+        self._store.async_delay_save(lambda: payload, ENTITY_RENAME_SAVE_DELAY_SECONDS)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        """Return copies in newest-first order."""
+        return [entry.copy() for entry in reversed(self._renames)]
+
+    async def async_flush(self) -> None:
+        """Finish a pending write when the integration is unloaded."""
+        if self._dirty:
+            await self._store.async_save({"renames": self._renames})
+            self._dirty = False
 
 
 class ConfigStorageError(ValueError):
@@ -111,6 +228,26 @@ class AlertManagerStorage:
         self.variation_baselines: dict[str, float] = {}
         self.pack_runtime: dict[str, dict[str, Any]] = {}
         self.has_stored_snapshot = False
+        self._disk_usage_lock = asyncio.Lock()
+        self._disk_usage_cached_at = 0.0
+        self._disk_usage_snapshot: dict[str, Any] | None = None
+
+    async def async_disk_usage(self) -> dict[str, Any]:
+        """Measure stored data on demand, sharing a five-minute cache."""
+        async with self._disk_usage_lock:
+            if (
+                self._disk_usage_snapshot is None
+                or monotonic() - self._disk_usage_cached_at >= _DISK_USAGE_CACHE_SECONDS
+            ):
+                size = await self._hass.async_add_executor_job(
+                    _measure_storage_bytes, Path(self._hass.config.path(".storage"))
+                )
+                self._disk_usage_snapshot = {
+                    "bytes": size,
+                    "measured_at": dt_util.now().astimezone(UTC).isoformat(),
+                }
+                self._disk_usage_cached_at = monotonic()
+            return self._disk_usage_snapshot.copy()
 
     async def async_load(
         self,

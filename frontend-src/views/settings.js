@@ -66,6 +66,7 @@ export function renderSettings(context) {
         <div class="field"><span class="field-label">${esc(t("settings.coherence_schedule"))}</span><ha-select id="coherence-schedule"></ha-select><small>${esc(t("settings.coherence_schedule_help"))}</small></div>
         <div class="coherence-options">
           <div class="switch-field-row"><div class="field"><span class="field-label">${esc(t("settings.coherence_scan_esphome"))}</span><small>${esc(t("settings.coherence_scan_esphome_help"))}</small></div><ha-switch id="coherence-scan-esphome" aria-label="${esc(t("settings.coherence_scan_esphome"))}" ${settingsDraft.coherence_scan_esphome ? "checked" : ""}></ha-switch></div>
+          <div class="switch-field-row"><div class="field"><span class="field-label">${esc(t("settings.coherence_report_disabled_entities"))}</span><small id="coherence-report-disabled-entities-help">${esc(t("settings.coherence_report_disabled_entities_help"))}</small></div><ha-switch id="coherence-report-disabled-entities" aria-label="${esc(t("settings.coherence_report_disabled_entities"))}" aria-describedby="coherence-report-disabled-entities-help" ${settingsDraft.coherence_report_disabled_entities ? "checked" : ""}></ha-switch></div>
           <div class="switch-field-row"><div class="field"><span class="field-label">${esc(t("coherence.alert_enabled"))}</span><small id="coherence-alert-help">${esc(t("coherence.alert_help"))}</small></div><ha-switch id="coherence-alert-enabled" aria-label="${esc(t("coherence.alert_enabled"))}" aria-describedby="coherence-alert-help" ${settingsDraft.coherence_alert_enabled ? "checked" : ""}></ha-switch></div>
         </div>
         <div class="field settings-wide ignored-references-field"><span class="field-label">${esc(t("settings.coherence_ignored_entity_references"))}</span>
@@ -107,6 +108,18 @@ export function formatStatisticsTime(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
+export function formatStorageSize(bytes, t) {
+  if (!Number.isFinite(bytes) || bytes < 0) return t("statistics.disk_unavailable");
+  const units = ["bytes", "kibibytes", "mebibytes", "gibibytes"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 2)} ${t(`statistics.disk_units.${units[unit]}`)}`;
+}
+
 export function renderRuntimeStatistics({ statistics, date, t }) {
   const title = `<h2>${esc(t("statistics.title"))}</h2>`;
   if (!statistics) return title;
@@ -121,7 +134,10 @@ export function renderRuntimeStatistics({ statistics, date, t }) {
       return `<div><dt>${esc(t(`statistics.${key}`))}</dt><dd>${esc(key.endsWith("_ms") ? formatStatisticsTime(value) : value)}</dd></div>`;
     }).join("")}</dl>
     <small>${esc(t("statistics.period", { start: date(statistics.observed_from), end: date(statistics.observed_until) }))}</small>
-    <small>${esc(t("statistics.window"))}</small>`;
+    <small>${esc(t("statistics.window"))}</small>
+    ${statistics.disk_usage ? `<dl class="statistics-grid"><div><dt>${esc(t("statistics.disk_usage"))}</dt><dd>${esc(formatStorageSize(statistics.disk_usage.bytes, t))}</dd></div></dl>
+      <small>${esc(t("statistics.disk_help"))}</small>
+      ${statistics.disk_usage.bytes != null ? `<small>${esc(t("statistics.disk_measured_at", { date: date(statistics.disk_usage.measured_at) }))}</small>` : ""}` : ""}`;
 }
 
 export function renderSettingsNavigation(t) {
@@ -129,7 +145,7 @@ export function renderSettingsNavigation(t) {
 }
 
 export function renderSettingsConfigurationEntry(id, label, count, t) {
-  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}">${esc(t("buttons.configuration_named", { name: label, count }))}</ha-button></div>`;
+  return `<div class="configuration-entry settings-configuration-entry"><ha-button type="button" id="settings-${id}-configuration" appearance="plain" data-action="open-settings-configuration" data-configuration-id="${esc(id)}" data-configuration-label="${esc(label)}" aria-label="${esc(t("settings.configure_aria", { name: label }))}"><span data-action-label>${esc(t("buttons.configuration_named", { name: label, count }))}</span></ha-button></div>`;
 }
 
 export function renderSettingsConfigurationDrawer(context) {
@@ -374,6 +390,7 @@ export async function saveSettings(additionalChanges = {}, { preserveDrawer = fa
       notification_batch_delay: Number(this._settingsDraft.notification_batch_delay ?? 30),
       coherence_schedule: this.shadowRoot.querySelector("#coherence-schedule").value,
       coherence_alert_enabled: Boolean(this._settingsDraft.coherence_alert_enabled),
+      coherence_report_disabled_entities: Boolean(this._settingsDraft.coherence_report_disabled_entities),
       coherence_scan_esphome: Boolean(
         this.shadowRoot.querySelector("#coherence-scan-esphome").checked,
       ),
@@ -452,6 +469,7 @@ export function ensureSettingsDraft() {
       pending_display_delay: this._config.pending_display_delay,
       notification_batch_delay: this._config.notification_batch_delay ?? 30,
       coherence_alert_enabled: Boolean(this._config.coherence_alert_enabled),
+      coherence_report_disabled_entities: Boolean(this._config.coherence_report_disabled_entities),
       coherence_schedule: this._config.coherence_schedule ?? "none",
       coherence_scan_esphome: this._config.coherence_scan_esphome !== false,
       history_limit: this._historyConfig.retention_limit,
@@ -474,6 +492,10 @@ export function handleSettingsInput(event) {
     if (event.target?.id === "coherence-alert-enabled") {
       this._ensureSettingsDraft();
       this._settingsDraft.coherence_alert_enabled = Boolean(event.target.checked);
+    }
+    if (event.target?.id === "coherence-report-disabled-entities") {
+      this._ensureSettingsDraft();
+      this._settingsDraft.coherence_report_disabled_entities = Boolean(event.target.checked);
     }
     if (event.target?.closest?.("#automatic-form")
       || (event.target?.closest?.(".configuration-drawer") && this._configurationDrawer?.kind === "automatic")) {
@@ -624,7 +646,8 @@ export function updateSettingsConfigurationCount(id) {
   const count = id === "entity_delays"
     ? this._entityDelayDraft.length
     : this._settingsDraft[id].length;
-  button.textContent = this._t("buttons.configuration_named", {
+  const label = button.querySelector?.("[data-action-label]") ?? button;
+  label.textContent = this._t("buttons.configuration_named", {
     name: button.dataset.configurationLabel,
     count,
   });

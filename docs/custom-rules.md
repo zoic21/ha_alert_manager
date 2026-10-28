@@ -24,6 +24,11 @@ The rules table supports search, sorting, configurable columns and filters for e
 
 The global Duration column is empty for sequences: holds belong to individual steps.
 
+Numeric conditions in the rules table include the unit when every selected entity
+uses the same unit, for example **State below 200 V**. This applies to state values
+and variations, including both bounds of a range. Mixed or missing units and
+attribute comparisons omit the unit.
+
 <img src="assets/screenshots/regle%20personalis%C3%A9e.png" alt="Custom rules table and visual rule editor">
 
 ## Operations and comparisons

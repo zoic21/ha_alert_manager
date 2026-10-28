@@ -98,6 +98,60 @@ const tablePage = () => ({
   querySelectorAll() { return []; },
 });
 
+test("numeric rule conditions show the shared entity unit for thresholds and bounds", () => {
+  const panel = new Panel();
+  panel._translations = {
+    "component.alert_manager.config_panel.conditions.sources.state": "État",
+    "component.alert_manager.config_panel.conditions.sources.state_variation": "Variation de l’état",
+    "component.alert_manager.config_panel.operators.above": "supérieur à",
+    "component.alert_manager.config_panel.operators.below": "inférieur à",
+    "component.alert_manager.config_panel.operators.between": "est entre",
+    "component.alert_manager.config_panel.operators.outside": "est en dehors",
+  };
+  panel._hass = { states: {
+    "sensor.voltage_a": { attributes: { unit_of_measurement: "V" } },
+    "sensor.voltage_b": { attributes: { unit_of_measurement: "V" } },
+  } };
+  for (const entity_ids of [["sensor.voltage_a"], ["sensor.voltage_a", "sensor.voltage_b"]]) {
+    for (const [operator, value, expected] of [
+      ["below", ["200"], "État inférieur à 200 V"],
+      ["above", 200, "État supérieur à 200 V"],
+      ["between", [200, 250], "État est entre 200 V / 250 V"],
+      ["outside", [200, 250], "État est en dehors 200 V / 250 V"],
+    ]) {
+      panel._config = { rules: [{ ...rules()[0], entity_ids, operator, value }] };
+      const row = panel._ruleTableRows()[0];
+      assert.equal(row.condition, expected);
+      assert.ok(row.search_index.includes(expected));
+    }
+  }
+  assert.equal(panel._ruleSummary({ ...rules()[0], entity_ids: ["sensor.voltage_a"],
+    source: "value_variation", operator: "below", value: -10 }), "Variation de l’état inférieur à -10 V");
+});
+
+test("rule conditions omit units for mixed or missing units, attributes and text comparisons", () => {
+  const panel = new Panel();
+  panel._hass = { states: {
+    "sensor.voltage": { attributes: { unit_of_measurement: "V" } },
+    "sensor.power": { attributes: { unit_of_measurement: "W" } },
+    "sensor.unitless": { attributes: {} },
+  } };
+  const rule = { ...rules()[0], entity_ids: ["sensor.voltage"], operator: "below", value: 200 };
+  for (const entity_ids of [[], ["sensor.missing"], ["sensor.unitless"],
+    ["sensor.voltage", "sensor.power"], ["sensor.voltage", "sensor.unitless"],
+    ["sensor.voltage", "sensor.missing"]]) {
+    assert.ok(panel._ruleSummary({ ...rule, entity_ids }).endsWith(" 200"));
+  }
+  for (const source of ["value", "value_variation", "attribute", "attribute_variation"]) {
+    assert.ok(panel._ruleSummary({ ...rule, source, attribute: "temperature" }).endsWith(" 200"));
+  }
+  for (const operator of ["equals", "not_equals", "contains", "not_contains"]) {
+    assert.ok(panel._ruleSummary({ ...rule, operator }).endsWith(" 200"));
+  }
+  panel._hass = undefined;
+  assert.ok(panel._ruleSummary(rule).endsWith(" 200"));
+});
+
 test("custom rules use the native Home Assistant table toolbar without grouping", () => {
   const panel = new Panel();
   panel._config = { rules: rules() };

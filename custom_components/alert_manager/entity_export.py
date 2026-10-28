@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.const import __version__ as HA_VERSION
@@ -16,6 +17,54 @@ from homeassistant.helpers.json import JSONEncoder
 from homeassistant.util import dt as dt_util
 
 from .const import INTEGRATION_VERSION
+
+_REDACTED = "**REDACTED**"
+_SENSITIVE_ATTRIBUTES = frozenset(
+    {
+        "access_token",
+        "refresh_token",
+        "token",
+        "api_key",
+        "api_token",
+        "password",
+        "secret",
+        "authorization",
+        "entity_picture",
+        "entity_picture_local",
+        "latitude",
+        "longitude",
+        "gps",
+        "mac",
+        "mac_address",
+        "ip",
+        "ip_address",
+        "ip_addresses",
+        "local_ip",
+        "public_ip",
+        "external_ip",
+        "internal_ip",
+        "ipv4",
+        "ipv6",
+    }
+)
+
+
+def _redact_attributes(data: Any) -> Any:
+    """Copy known sensitive fields without requiring an optional HA component."""
+    if isinstance(data, Mapping):
+        return {
+            key: (
+                _REDACTED
+                if key in _SENSITIVE_ATTRIBUTES
+                and value is not None
+                and not (isinstance(value, str) and not value)
+                else _redact_attributes(value)
+            )
+            for key, value in data.items()
+        }
+    if isinstance(data, list | tuple):
+        return [_redact_attributes(value) for value in data]
+    return data
 
 
 async def async_export_entities(hass: HomeAssistant) -> dict[str, str]:
@@ -151,7 +200,7 @@ def _serialize_inventory(
             "hidden": hidden_by is not None if entry is not None else None,
             "hidden_by": hidden_by,
             "state": state["state"] if state is not None else None,
-            "attributes": attributes,
+            "attributes": _redact_attributes(attributes),
             "last_changed": state["last_changed"] if state is not None else None,
             "last_updated": state["last_updated"] if state is not None else None,
             "last_reported": state["last_reported"] if state is not None else None,

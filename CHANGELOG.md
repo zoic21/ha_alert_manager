@@ -1,9 +1,162 @@
 # Changelog
 
 This changelog intentionally tracks only significant release-level changes in Alert Manager.
-Development, beta and release-candidate iterations are not listed separately. Intermediate
+Development, beta and release-candidate entries summarize user-facing changes. Intermediate
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
+
+## 2.6.0 — October 28, 2026
+
+This release makes it easier to keep your Home Assistant configuration working
+when you rename or replace entities.
+
+### Find and fix broken entity references
+
+- **See what was renamed.** Coherence now keeps the latest 500 entity ID changes,
+  grouped by entity. Expand a row to follow each rename and open the current
+  entity directly. Recording starts with this feature; earlier renames cannot
+  be recovered.
+- **Preview replacements before saving.** Choose the old and new entities, review
+  the matching references in supported automations, scripts, scenes, dashboards
+  and YAML files, then select which occurrences to replace.
+- **Correct known renames in fewer steps.** When a finding matches a recorded
+  rename, use **Correct** for one finding or select several and confirm them
+  together. **Replace** lets you choose another target where supported.
+- **See the updated result.** After a successful replacement, Coherence runs a new
+  scan automatically. The result explains any configuration reload or ESPHome
+  installation still needed.
+
+### Clearer checks and everyday controls
+
+- Optionally report references to disabled entities. This setting is **off by
+  default**.
+- Get fewer false warnings for calendar and event templates, with faster checks
+  that skip generated ESPHome cache files.
+- See units such as V or °C in numeric rule summaries and check Alert Manager's
+  storage usage in configuration diagnostics.
+- Open Home Assistant settings directly from update notifications, with more
+  consistent controls in Coherence, History and monitoring settings.
+
+### More reliable monitoring
+
+- Keep repeated-change detection working for custom transition and sequence rules
+  even when their entities are excluded from automatic monitoring by label.
+- Preserve repeated-change counters through entity renames and Home Assistant
+  restarts, and improve startup and configuration replacement reliability.
+
+Your existing rules, notification profiles and alert history are preserved.
+
+**To update:** update Alert Manager through HACS, restart Home Assistant and refresh
+your browser. Before using entity reference replacement, make a Home Assistant
+backup that includes your configuration.
+
+## 2.6.0-rc.1 — October 22, 2026
+
+First release-candidate prerelease of the 2.6 series, including all changes from
+the previous betas.
+
+- Align History action buttons with Coherence and the other pages, including
+  statistics, period selection, navigation, and history settings.
+
+**To update:** select this release candidate in HACS, update Alert Manager,
+restart Home Assistant and refresh your browser.
+
+## 2.6.0-beta.4 — October 22, 2026
+
+Fourth beta prerelease of the 2.6 series.
+
+- Keep flapping detection working for custom transition and repeated sequence
+  rules when their entities have labels excluded from automatic detection.
+- Preserve flapping counters across entity renames, including successive renames
+  and Home Assistant restarts.
+- Tolerate malformed entries in stored entity rename history at startup.
+- Sync replacement YAML files to disk before applying the atomic replacement,
+  and recommend a Home Assistant backup before replacing entity references.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
+## 2.6.0-beta.3 — October 21, 2026
+
+Third beta prerelease of the 2.6 series.
+
+- Align the **Correct** and **Replace** buttons and source-link icons consistently
+  across all Coherence rows, including rows that only have a source link.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
+## 2.6.0-beta.2 — October 21, 2026
+
+Second beta prerelease of the 2.6 series.
+
+- Group entity rename history by entity, showing its first and last recorded
+  identifiers. Expand a row to see every intermediate rename and its date.
+- Automatically refresh coherence findings and counts after every successful
+  entity reference replacement.
+- Keep source links compact and readable beside the **Replace** button.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
+## 2.6.0-beta.1 — October 21, 2026
+
+First beta prerelease of the 2.6 series.
+
+- Review the latest 500 entity renames from Coherence and open the current entity
+  directly from its history.
+- Preview and correct references after an entity rename. When no automatic
+  correction is available, use **Replace** to choose a new entity and review
+  matching references across your configuration.
+- Keep the replacement dialog open while processing and display the result in
+  the same window. Return to the entity fields without losing the entered IDs.
+- Optionally include disabled entities in coherence checks. This option remains
+  off by default. Reduce false warnings and improve scan and replacement reliability.
+- Open Home Assistant settings from application update notifications.
+- Show entity units in numeric rule summaries and configuration storage usage in
+  diagnostics. Keep grouped dashboard alert counts in the icon badge only.
+- Access pack settings from the cog beside each switch and find consistent icons
+  on action buttons throughout the interface.
+
+Existing rules, notification profiles and alert history are preserved.
+
+**To update:** select this beta in HACS, update Alert Manager, restart Home Assistant
+and refresh your browser.
+
+## 2.6.0-dev.2 — October 21, 2026
+
+Development prerelease of the 2.6 series.
+
+- Optionally report coherence issues for disabled entities. This option is off by
+  default and can be enabled in configuration.
+- Open Home Assistant settings when tapping an application update notification.
+- Keep grouped dashboard alert counts in the icon badge only, removing the
+  duplicate count below the device name.
+- Avoid false coherence warnings for calendar and event template references.
+- Improve icon visibility on light and dark backgrounds and simplify the English
+  and French READMEs, including installation and update instructions.
+
+**To update:** select this prerelease in HACS, update Alert Manager, restart
+Home Assistant and refresh your browser.
+
+## 2.6.0-dev.1 — October 7, 2026
+
+Development prerelease of the 2.6 series.
+
+- Review the latest 500 entity renames from Coherence, including the old and new
+  identifiers and a shortcut to the current entity.
+- Preview entity reference replacements and correct supported coherence findings,
+  individually or in a selection, after an entity rename.
+- Show the shared entity unit in numeric rule conditions, such as **State below
+  200 V**, when all selected entities use the same unit.
+- View Alert Manager's data usage on disk from configuration diagnostics.
+- Improve coherence scan performance and skip generated ESPHome cache files.
+- Preserve Home Assistant YAML tags when replacing references, improve export
+  protection and reliability, and keep the entity export button width stable.
+- Update compatibility with Home Assistant 2026.10 and improve frontend cache
+  refreshes and runtime reliability.
+
+Existing rules, notification profiles and alert history are preserved.
 
 ## 2.5.2 — October 19, 2026
 

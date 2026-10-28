@@ -48,8 +48,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+_YAML_LOADER: Final = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
 _IGNORED_DIRECTORIES: Final = frozenset(
     {
+        ".esphome",
         ".git",
         ".storage",
         ".venv",
@@ -84,6 +87,14 @@ _IGNORED_ENTITY_REFERENCES: Final = frozenset(
         "script.stop",
         "select.set",
         "script.is_running",
+        "calendar.state",
+        "event.description",
+        "event.end",
+        "event.start",
+        "event.manual",
+        "event.seconds",
+        "event.station",
+        "event.summary",
     }
 )
 _ENTITY_DOMAINS: Final = frozenset(
@@ -189,6 +200,8 @@ class _ScanState:
     seen: set[tuple[str, str, int]]
     check_snapshots: dict[str, tuple[frozenset[str] | None, str]]
     references_checked: int = 0
+    scalar_visitor: Callable[[ScalarNode, _Context, _Source], None] | None = None
+    visited_nodes: set[int] | None = None
 
 
 def _entity_pattern(existing_entities: frozenset[str]) -> re.Pattern[str]:
@@ -343,7 +356,9 @@ def _derive_context(
     has_action = "action" in values or "actions" in values
     automation_id = _scalar(values.get("id"))
     uses_blueprint = "use_blueprint" in values
-    if (has_trigger and has_action) or (uses_blueprint and automation_id):
+    if (has_trigger and has_action) or (
+        uses_blueprint and (automation_id or sequence_index is not None)
+    ):
         name = _scalar(values.get("alias")) or automation_id or parent.name
         return (
             _Context(
@@ -359,7 +374,7 @@ def _derive_context(
             template_scope,
         )
 
-    if "sequence" in values:
+    if "sequence" in values or (uses_blueprint and parent_key):
         script_id = _scalar(values.get("id")) or parent_key
         name = _scalar(values.get("alias")) or script_id or parent.name
         return (
@@ -405,6 +420,11 @@ def _record_scalar(
     skip_plain_value: bool = False,
 ) -> None:
     """Record missing entity IDs found in one scalar node."""
+    if node.tag.startswith("!"):
+        return
+    if state.scalar_visitor is not None:
+        state.scalar_visitor(node, context, source)
+        return
     value = node.value
     if skip_plain_value and "{{" not in value and "{%" not in value:
         return
@@ -502,6 +522,10 @@ def _walk(
     check_scopes: dict[str, str | None] | None = None,
 ) -> None:
     """Walk YAML/JSON nodes while retaining source locations and object context."""
+    if state.visited_nodes is not None:
+        if id(node) in state.visited_nodes:
+            return
+        state.visited_nodes.add(id(node))
     check_scopes = check_scopes or {}
     if isinstance(node, MappingNode):
         current, template_scope = _derive_context(
@@ -520,6 +544,14 @@ def _walk(
                 _record_scalar(key_node, current, source, state)
             normalized_key = key.casefold() if key else None
             if normalized_key in _IGNORED_BRANCH_KEYS:
+                continue
+            if (
+                state.scalar_visitor is not None
+                and normalized_key in {"id", "unique_id", "alias", "name"}
+                and isinstance(value_node, ScalarNode)
+                and "{{" not in value_node.value
+                and "{%" not in value_node.value
+            ):
                 continue
             child_template_scope = template_scope or normalized_key == "template"
             if isinstance(value_node, ScalarNode):
@@ -598,6 +630,14 @@ def _dashboard_sources(config_dir: Path) -> dict[str, tuple[str, str]]:
             f"/{url_path.strip('/')}",
         )
     return dashboards
+
+
+def _compose_yaml_documents(content: str) -> tuple[list[Node | None], int]:
+    """Compose without resolving HA tags; return the original-text BOM offset."""
+    # LibYAML omits a leading BOM from mark indexes, unlike the Python parser.
+    # Strip it for both loaders so physical replacements use one offset rule.
+    offset = int(content.startswith("\ufeff"))
+    return list(yaml.compose_all(content[offset:], Loader=_YAML_LOADER)), offset
 
 
 def _discover_sources(
@@ -701,7 +741,7 @@ def scan_configuration(
     for source in sources:
         try:
             content = source.path.read_text(encoding="utf-8")
-            documents = list(yaml.compose_all(content, Loader=yaml.SafeLoader))
+            documents, _ = _compose_yaml_documents(content)
             root_context = _Context(
                 source.kind if source.kind != "config_entries" else "file",
                 source.name or source.relative_path,
@@ -761,20 +801,21 @@ def _registry_entries(registry: Any) -> list[Any]:
     return list(entries.values())
 
 
-async def async_scan_configuration(
-    hass: HomeAssistant,
-    *,
-    scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
-    ignored_entity_references: frozenset[str] = frozenset(),
+def configuration_scan_metadata(
+    hass: HomeAssistant, *, report_disabled_entities: bool = False
 ) -> dict[str, Any]:
-    """Collect live HA metadata and run one configuration scan in the executor."""
+    """Snapshot native metadata shared by coherence and entity replacement."""
     registry_entries = _registry_entries(er.async_get(hass))
     existing_entities = {state.entity_id.lower() for state in hass.states.async_all()}
-    existing_entities.update(
+    disabled_entities = {
         entry.entity_id.lower()
         for entry in registry_entries
         if getattr(entry, "disabled_by", None) is not None
-    )
+    }
+    if report_disabled_entities:
+        existing_entities.difference_update(disabled_entities)
+    else:
+        existing_entities.update(disabled_entities)
 
     template_by_unique_id: dict[str, str] = {}
     template_by_name: dict[str, str] = {}
@@ -818,18 +859,39 @@ async def async_scan_configuration(
             f"/{str(url_path or 'lovelace').strip('/')}",
         )
 
+    return {
+        "existing_entities": frozenset(existing_entities),
+        "service_ids": frozenset(service_ids),
+        "template_by_unique_id": template_by_unique_id,
+        "template_by_name": template_by_name,
+        "template_by_config_entry": template_by_config_entry,
+        "yaml_dashboards": yaml_dashboards,
+    }
+
+
+async def async_scan_configuration(
+    hass: HomeAssistant,
+    *,
+    scan_esphome: bool = DEFAULT_COHERENCE_SCAN_ESPHOME,
+    report_disabled_entities: bool = False,
+    ignored_entity_references: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Collect live HA metadata and run one configuration scan in the executor."""
+    metadata = configuration_scan_metadata(
+        hass, report_disabled_entities=report_disabled_entities
+    )
     check_snapshots = {check.REFERENCE_TYPE: check.snapshot(hass) for check in CHECKS}
     manager = hass.data.get(DATA_MANAGER)
     custom_rules = snapshot_rules(manager.rules if manager is not None else ())
     return await hass.async_add_executor_job(
         scan_configuration,
         Path(hass.config.path()),
-        frozenset(existing_entities),
-        frozenset(service_ids),
-        template_by_unique_id,
-        template_by_name,
-        template_by_config_entry,
-        yaml_dashboards,
+        metadata["existing_entities"],
+        metadata["service_ids"],
+        metadata["template_by_unique_id"],
+        metadata["template_by_name"],
+        metadata["template_by_config_entry"],
+        metadata["yaml_dashboards"],
         scan_esphome,
         ignored_entity_references,
         check_snapshots,
@@ -845,6 +907,9 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
         hass,
         scan_esphome=config.get(
             "coherence_scan_esphome", DEFAULT_COHERENCE_SCAN_ESPHOME
+        ),
+        report_disabled_entities=config.get(
+            "coherence_report_disabled_entities", False
         ),
         ignored_entity_references=frozenset(
             config.get("coherence_ignored_entity_references", [])

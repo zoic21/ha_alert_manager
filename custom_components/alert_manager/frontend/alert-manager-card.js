@@ -99,9 +99,27 @@ const ACTION_ICONS = Object.freeze({
   "save-rule": "mdi:content-save",
   "save-settings": "mdi:content-save",
   "save-configuration": "mdi:content-save",
+  "save-notification-profile": "mdi:content-save",
+  "enable-monitoring": "mdi:play",
+  "open-history-settings": "mdi:cog",
+  "history-statistics-period": "mdi:calendar-range",
+  "clear-history": "mdi:delete-sweep-outline",
+  "delete-history": "mdi:delete-outline",
+  "bulk-acknowledge": "mdi:check-all",
+  "bulk-unacknowledge": "mdi:undo-variant",
+  "open-settings-configuration": "mdi:cog",
+  "edit-notification-profile": "mdi:pencil",
+  "restore-config-backup": "mdi:backup-restore",
+  "cancel-config-backup-restore": "mdi:close",
+  "confirm-config-backup-restore": "mdi:backup-restore",
   "scan-coherence": "mdi:refresh",
   "open-deleted-entities": "mdi:delete-clock-outline",
+  "open-entity-renames": "mdi:rename-box",
+  "open-entity-replacement": "mdi:swap-horizontal",
   "export-entities": "mdi:download",
+  "close-entity-export": "mdi:close",
+  "download-entities": "mdi:download",
+  "correct-selected-coherence": "mdi:check-all",
 });
 
 // Source: frontend-src/utils/integration-entities.js
@@ -421,6 +439,69 @@ class AlertManagerApi {
     return this.call({ type: "alert_manager/coherence/entities/export" });
   }
 
+  entityRenames() {
+    return this.call({ type: "alert_manager/coherence/entity_renames/list" });
+  }
+
+  previewEntityReplacement(oldEntityId, newEntityId) {
+    return this.call({
+      type: "alert_manager/coherence/entity_replacement/preview",
+      old_entity_id: oldEntityId, new_entity_id: newEntityId,
+    });
+  }
+
+  previewCoherenceCorrections(scannedAt, rowIndices) {
+    return this.call({
+      type: "alert_manager/coherence/corrections/preview",
+      scanned_at: scannedAt, row_indices: rowIndices,
+    });
+  }
+
+  scanCoherence() {
+    return this.call({ type: "alert_manager/coherence/scan" });
+  }
+
+  async applyEntityReplacement(previewId, occurrenceIds) {
+    const message = { preview_id: previewId, occurrence_ids: occurrenceIds };
+    const plan = await this.call({ type: "alert_manager/coherence/entity_replacement/prepare", ...message });
+    const written = [];
+    let applying = false;
+    try {
+      for (const update of plan.native_updates) {
+        const path = `config/${update.domain}/config/${encodeURIComponent(update.key)}`;
+        const current = await this._getHass().callApi("GET", path);
+        if (!sameReplacementConfiguration(current, update.before)) {
+          throw Object.assign(new Error("replacement_preview_stale"), { code: "replacement_preview_stale" });
+        }
+        written.push({ path, before: update.before });
+        await this._getHass().callApi("POST", path, update.after);
+      }
+      applying = true;
+      return await this.call({ type: "alert_manager/coherence/entity_replacement/apply", ...message });
+    } catch (error) {
+      const code = error?.code ?? error?.body?.code;
+      if (applying && !String(code ?? "").startsWith("replacement_")) {
+        // A lost reply may follow a committed backend batch. Keep native changes
+        // aligned with it instead of rolling back only part of a successful apply.
+        throw Object.assign(new Error("replacement_incomplete", { cause: error }), { code: "replacement_incomplete" });
+      }
+      const rollbackErrors = [];
+      for (const update of written.reverse()) {
+        try {
+          await this._getHass().callApi("POST", update.path, update.before);
+        } catch (rollbackError) {
+          rollbackErrors.push({ path: update.path, error: rollbackError });
+        }
+      }
+      if (rollbackErrors.length) {
+        throw Object.assign(new Error("replacement_rollback_failed", { cause: error }), {
+          code: "replacement_rollback_failed", rollbackErrors,
+        });
+      }
+      throw error;
+    }
+  }
+
   testRule(rule, ruleId = "") {
     return this.call({
       type: "alert_manager/rules/test",
@@ -428,6 +509,14 @@ class AlertManagerApi {
       ...(ruleId ? { rule_id: ruleId } : {}),
     });
   }
+}
+
+function sameReplacementConfiguration(left, right) {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length
+    && keys.every((key) => Object.hasOwn(right, key) && sameReplacementConfiguration(left[key], right[key]));
 }
 
 // Source: frontend-src/api/dashboard.js
@@ -887,12 +976,12 @@ class AlertManagerCard extends HTMLElement {
     const name = dashboardName(alert, this._t);
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
-    const message = multiple ? this._t("dashboard.count", { count: group.alerts.length })
+    const message = multiple ? ""
       : coherence && Number.isInteger(count) && count >= 0
         ? this._t(count === 1 ? "dashboard.coherence_one" : "dashboard.coherence_count", { count })
         : fullMessage;
     const age = this._config.show_age && group.oldest !== null && Number.isFinite(group.oldest)
-      ? `<span class="age alert-age">· <ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
+      ? `<span class="age alert-age">${multiple ? "" : "· "}<ha-relative-time data-age="${esc(new Date(group.oldest).toISOString())}"></ha-relative-time></span>` : "";
     const icon = `<div class="alert-icons${multiple ? " types" : ""}" title="${esc(group.types.map((type) => this._typeName(type)).join(" · "))}">
       ${multiple ? group.types.map((type) => this._icon(type)).join("") : this._icon(alert.type)}
       ${multiple ? `<span class="alert-count" aria-hidden="true">${group.alerts.length}</span>` : ""}</div>`;
@@ -900,7 +989,7 @@ class AlertManagerCard extends HTMLElement {
       <ha-ripple></ha-ripple>
       ${icon}
       <div class="content alert-content"><div class="name alert-title" title="${esc(fullName)}">${esc(name)}</div>
-      <div class="message alert-message${age ? " with-age" : ""}" title="${esc(multiple ? message : fullMessage)}">${age ? `<span class="message-text">${esc(message)}</span>${age}` : esc(message)}</div></div>
+      ${message || age ? `<div class="message alert-message${age ? " with-age" : ""}" title="${esc(multiple ? "" : fullMessage)}">${age ? `${message ? `<span class="message-text">${esc(message)}</span>` : ""}${age}` : esc(message)}</div>` : ""}</div>
     </a></ha-card>`;
   }
   _render() {
@@ -947,7 +1036,7 @@ class AlertManagerCard extends HTMLElement {
     let content = groups.length ? `<div class="tiles">${tiles}</div>` : "";
     if (this._sample) content += `<div class="status">${esc(this._t("dashboard.preview"))}</div>`;
     else if (status !== "ready") content += `<ha-card><div class="status" role="status">${esc(this._t(`dashboard.${status}`))}
-      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
+      ${status === "unavailable" ? `<ha-button appearance="plain" data-retry><ha-icon slot="start" icon="mdi:refresh" aria-hidden="true"></ha-icon>${esc(this._t("dashboard.retry"))}</ha-button>` : ""}</div></ha-card>`;
     const alignment = this._config.alignment ?? "left";
     const color = dashboardIconColor(this._config.icon_color);
     const markup = `<style>${dashboardStyles}</style><div class="dashboard" data-alignment="${alignment}" style="--alert-icon-color: ${esc(color)}">${content}</div>`;

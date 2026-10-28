@@ -31,6 +31,7 @@ from homeassistant.util import dt as dt_util
 from .coherence_alert import COHERENCE_ALERT_ID, COHERENCE_ENTITY_ID
 from .const import (
     ALERT_MANAGER_ENTITY_IDS,
+    DATA_COHERENCE_RESULT,
     DOMAIN,
     MAX_HISTORY_LIMIT,
     MIN_HISTORY_LIMIT,
@@ -446,6 +447,40 @@ class _ApiMixin:
             "unchanged_seconds": elapsed,
             "duration_reached": elapsed >= rule.duration,
         }
+
+    def entity_renames_snapshot(self) -> dict[str, Any]:
+        """Resolve more-info targets without changing historical identifiers."""
+        renames = self.entity_rename_history.snapshot()
+        for rename in renames:
+            entry = self._entity_registry.async_get(
+                rename["registry_entry_id"] or rename["new_entity_id"]
+            )
+            rename["current_entity_id"] = entry.entity_id if entry else None
+        return {"renames": renames}
+
+    async def async_coherence_snapshot(
+        self, report: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Attach correction targets from the existing rename history."""
+        return await self.entity_replacement.async_coherence_report(
+            report, self.entity_renames_snapshot()["renames"]
+        )
+
+    async def async_preview_coherence_corrections(
+        self, scanned_at: str, row_indices: list[int]
+    ) -> dict[str, Any]:
+        """Resolve selections against the retained report, never client file paths."""
+        report = self.hass.data.get(DATA_COHERENCE_RESULT)
+        if report is None or report["scanned_at"] != scanned_at:
+            raise ValueError("replacement_preview_stale")
+        if not row_indices or any(
+            index < 0 or index >= len(report["results"]) for index in row_indices
+        ):
+            raise ValueError("replacement_selection_invalid")
+        return await self.entity_replacement.async_preview_corrections(
+            [report["results"][index] for index in sorted(set(row_indices))],
+            self.entity_renames_snapshot()["renames"],
+        )
 
     def deleted_entities_snapshot(self) -> dict[str, Any]:
         """Return the newest deleted entities still retained by Home Assistant."""
@@ -986,6 +1021,7 @@ class _ApiMixin:
             - {
                 "coherence_schedule",
                 "coherence_scan_esphome",
+                "coherence_report_disabled_entities",
                 "coherence_alert_enabled",
                 "coherence_ignored_entity_references",
                 "pending_display_delay",

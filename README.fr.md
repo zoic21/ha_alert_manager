@@ -34,8 +34,8 @@ notifications, une carte de dashboard et un historique.
   rappels, des messages groupés et des notifications informatives facultatives.
 - **Afficher les alertes sur votre dashboard.** La carte intégrée les regroupe par
   équipement et accepte du CSS personnalisé.
-- **Retrouver les références cassées.** Vérifiez les références à des entités
-  absentes et exportez les entités de Home Assistant.
+- **Retrouver les références cassées.** Consultez les renommages d’entités et
+  prévisualisez les remplacements avant de les appliquer.
 
 L’interface est disponible en **français et en anglais**, sur ordinateur et mobile.
 
@@ -78,7 +78,7 @@ Les guides détaillés sont maintenus **en anglais** :
 | --- | --- |
 | [Règles personnalisées](docs/custom-rules.md) | Créer des règles, séquences et conditions Jinja, avec des exemples. |
 | [Configuration](docs/configuration.md) | Régler la surveillance, les notifications, les sauvegardes et les diagnostics. |
-| [Cohérence de la configuration](docs/coherence.md) | Vérifier les références de configuration et exporter les entités. |
+| [Cohérence de la configuration](docs/coherence.md) | Vérifier les références, consulter les renommages, appliquer des remplacements et exporter les entités. |
 | [Dashboard et historique](docs/dashboard-and-history.md) | Configurer la carte, acquitter les alertes et explorer l’historique. |
 
 L’[index de documentation](docs/user-guide.md) propose aussi les tâches courantes.

@@ -72,6 +72,17 @@ export function configureDateRangePicker(kind, container) {
     container.replaceChildren(picker);
 }
 
+export function restoreNativeTableSelection(tablePage, selectedIds) {
+    if (!selectedIds.size) return;
+    Promise.resolve(tablePage.updateComplete).then(() => {
+      const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+      if (!nativeTable) return;
+      // HA exposes clear/select-all, but no public setter for a retained selection.
+      nativeTable._checkedRows = [...selectedIds];
+      nativeTable.requestUpdate?.();
+    });
+}
+
 export function hydrateDataTables() {
     for (const kind of ["overview", "history"]) {
       const tablePage = this.shadowRoot.querySelector(`[data-alert-table-page="${kind}"]`);
@@ -176,11 +187,7 @@ export function hydrateDataTables() {
         this._updateSelectionToolbar();
       });
       if (selectionMode && this[selectionKey].size && tablePage.shadowRoot) {
-        const restoreSelection = () => {
-          const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-          nativeTable?.select?.([...this[selectionKey]], true);
-        };
-        Promise.resolve(tablePage.updateComplete).then(restoreSelection);
+        restoreNativeTableSelection(tablePage, this[selectionKey]);
       }
       tablePage.querySelectorAll("ha-checkbox[data-table-filter-option]").forEach((checkbox) => {
         const key = checkbox.dataset.tableFilterOption;
@@ -218,7 +225,8 @@ export function updateSelectionToolbar() {
       const button = historyPage.querySelector('[data-action="delete-history"]');
       if (button) {
         button.hidden = count === 0;
-        button.textContent = this._t("history.delete_selected", { count });
+        const label = button.querySelector?.("[data-action-label]") ?? button;
+        label.textContent = this._t("history.delete_selected", { count });
       }
       historyPage.selected = count;
       return;
@@ -231,12 +239,14 @@ export function updateSelectionToolbar() {
     const acknowledge = this.shadowRoot.querySelector('[data-selection-action="acknowledge"]');
     if (acknowledge) {
       acknowledge.hidden = acknowledgeCount === 0;
-      acknowledge.textContent = this._t("table.selection.acknowledge", { count: acknowledgeCount });
+      const label = acknowledge.querySelector?.("[data-action-label]") ?? acknowledge;
+      label.textContent = this._t("table.selection.acknowledge", { count: acknowledgeCount });
     }
     const unacknowledge = this.shadowRoot.querySelector('[data-selection-action="unacknowledge"]');
     if (unacknowledge) {
       unacknowledge.hidden = unacknowledgeCount === 0;
-      unacknowledge.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
+      const label = unacknowledge.querySelector?.("[data-action-label]") ?? unacknowledge;
+      label.textContent = this._t("table.selection.unacknowledge", { count: unacknowledgeCount });
     }
     const tablePage = this.shadowRoot.querySelector('[data-alert-table-page="overview"]');
     if (tablePage) tablePage.selected = selectedRows.length;
@@ -580,10 +590,10 @@ export function renderAlertTable(kind, sourceRows, topHeader = "") {
       ${topHeader ? `<div slot="top-header" class="table-page-top">${topHeader}</div>` : ""}
       <div slot="filter-pane" class="filter-pane-content">${this._renderFilterPane(kind, sourceRows)}</div>
       ${this._readOnly ? "" : kind === "overview" ? `<div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</ha-button>
-        <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</ha-button>
+        <ha-button appearance="plain" variant="brand" data-action="bulk-acknowledge" data-selection-action="acknowledge" ${acknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("table.selection.acknowledge", { count: acknowledgeCount }))}</span></ha-button>
+        <ha-button appearance="plain" variant="danger" data-action="bulk-unacknowledge" data-selection-action="unacknowledge" ${unacknowledgeCount ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("table.selection.unacknowledge", { count: unacknowledgeCount }))}</span></ha-button>
       </div>` : `<div slot="selection-bar" class="selection-actions">
-        <ha-button appearance="plain" variant="danger" data-action="delete-history" ${this._selectedHistoryIds.size ? "" : "hidden"} ${this._busy ? "disabled" : ""}>${esc(this._t("history.delete_selected", { count: this._selectedHistoryIds.size }))}</ha-button>
+        <ha-button appearance="plain" variant="danger" data-action="delete-history" ${this._selectedHistoryIds.size ? "" : "hidden"} ${this._busy ? "disabled" : ""}><span data-action-label>${esc(this._t("history.delete_selected", { count: this._selectedHistoryIds.size }))}</span></ha-button>
       </div>`}
     </hass-tabs-subpage-data-table>`;
 }
@@ -1474,8 +1484,8 @@ export function openTimedAcknowledgement(alertId) {
         <ha-alert alert-type="error" hidden></ha-alert>
       </div>
       <div slot="footer" class="timed-acknowledgement-footer">
-        <ha-button appearance="plain" data-timed-ack="cancel">${esc(this._t("buttons.cancel"))}</ha-button>
-        <ha-button data-timed-ack="confirm">${esc(this._t("overview.acknowledge"))}</ha-button>
+        <ha-button appearance="plain" data-timed-ack="cancel"><ha-icon slot="start" icon="mdi:close" aria-hidden="true"></ha-icon>${esc(this._t("buttons.cancel"))}</ha-button>
+        <ha-button data-timed-ack="confirm"><ha-icon slot="start" icon="mdi:check" aria-hidden="true"></ha-icon>${esc(this._t("overview.acknowledge"))}</ha-button>
       </div>`;
     // Sibling native dialogs share HA's modal stack. Never replace or close the details.
     this._timedAcknowledgementDialog = dialog;

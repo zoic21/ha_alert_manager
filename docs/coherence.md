@@ -10,6 +10,24 @@ Open **Coherence** and start an analysis. The results identify the missing refer
 
 Reports are kept between restarts. Changing the configuration does not itself mean that a stored finding has been checked again: run another scan after correcting the reference.
 
+When a missing entity appears in the retained rename history and its source can be
+edited, the table shows its current **Target entity** and a **Correct** button.
+Successive renames resolve to the current registry identity. Deleted entities,
+read-only sources and sources outside the replacement workflow cannot be selected.
+
+Use the table's selection control to check several correctable rows, then choose
+**Correct selected rows**. The confirmation lists each old identifier and its target,
+with the affected source and location. Only references on the selected lines are
+included, through the same native Home Assistant APIs or YAML replacement workflow
+described below. After a successful correction, a new scan refreshes the findings.
+Follow the reload or ESPHome installation instructions shown in the result.
+
+When no automatic correction is available but the source supports replacement,
+**Replace** opens entity replacement with the missing identifier already filled in.
+Choose the new entity and preview all matching references across the supported
+configuration, not just the file or line you clicked. All occurrences are selected
+by default; uncheck any you want to keep.
+
 ## What is checked
 
 | Source | Coverage |
@@ -36,6 +54,10 @@ Templates, blueprint inputs and malformed IEEE values are skipped; blueprints ar
 
 In **Configuration → Coherence analysis**, choose manual-only analysis or a **daily, weekly or monthly** schedule. ESPHome scanning can be disabled independently.
 
+**Report references to disabled entities** also flags references to entities disabled in Home Assistant. It is off by default, so disabled entities continue to count as present unless you enable it. The setting applies to the next manual or scheduled scan, including references in custom rules, and respects reference exclusions. It is available as `coherence_report_disabled_entities` in configuration YAML.
+
+ESPHome's generated `.esphome` directories are excluded from scans and reference replacements. Device YAML files and other hidden configuration directories remain eligible for scanning.
+
 The `bubble_card` directory and its subdirectories are excluded from file scanning to avoid false positives from module code and example entity references. Dashboard configurations outside that directory are still checked.
 
 Use the reference exclusions for known or intentional references. An exact ZHA IEEE address can be excluded through the same mechanism. These exclusions concern coherence findings; they are separate from the labels and exclusions used by automatic alert monitoring.
@@ -55,6 +77,30 @@ Findings are also exposed through `sensor.alert_manager_coherence_issue` for you
 The page provides the latest **50 deleted entities** still retained by Home Assistant, including deletion date and integration. This comes directly from Home Assistant's entity registry; Alert Manager does not maintain a separate deletion history. It can help explain a missing reference, but is not an unlimited record of everything ever deleted.
 
 <img src="assets/screenshots/coherence.png" alt="Coherence page with the retained deleted-entity list">
+
+## Entity rename history
+
+**Entity renames**, in the adjacent button column, opens the latest **500 entity ID
+changes**, grouped by entity with the most recently renamed entity first. Each row
+shows the first and last recorded IDs, the number of changes and the latest change's
+date in your Home Assistant locale. Expand a row to see every retained step in
+chronological order, including changes back to a previously used ID. Groups use
+Home Assistant's stable registry identity, so reusing an ID for another entity does
+not merge their histories. The information icon at the end of the row opens Home
+Assistant's more-info window for the current entity. The icon is disabled if the
+entity has been deleted.
+
+Recording starts when this feature is installed and continues even when alert
+monitoring is disabled. Earlier changes cannot be recovered. Changes to display
+names alone are not recorded; this history tracks identifiers such as
+`sensor.old_name` → `sensor.new_name`.
+
+The history survives restarts in the separate
+`.storage/alert_manager.entity_renames` file. Writes are grouped until **5 seconds
+after the last rename**, with a final save on unload or shutdown. JSON encoding
+and disk writes use Home Assistant's executor. No scan or polling is needed, and
+the oldest entry is dropped automatically when the limit is reached. Access is
+restricted to administrators, as with the rest of Coherence.
 
 ## Export all Home Assistant entities
 
@@ -95,6 +141,60 @@ credentials/configuration or import/restore mechanism are included. Published st
 attributes themselves can contain locations, URLs or tokens: keep the file private.
 If an attribute cannot be encoded as JSON, the export fails visibly rather than
 silently dropping data or downloading an incomplete inventory.
+
+## Replace an entity reference
+
+Before applying replacements, make sure you have a recent Home Assistant backup
+that includes your configuration.
+
+**Entity replacement** is available to administrators before or after a coherence
+scan. Select or type the previous and new entity IDs, then choose **Preview**.
+The new ID must exist in Home Assistant's states or entity registry;
+the previous ID may belong to a deleted entity. This replaces references and does
+not rename an entity or change its history.
+
+The preview counts every physical occurrence, including multiple references on one
+line. It shows automation, script, scene, template and dashboard/view names, with
+the file, line and column underneath. Blueprint instances retain their automation
+or script name. Uncheck any occurrence to leave it unchanged, then choose **Replace**.
+
+| Source | Save and activation |
+| --- | --- |
+| Automations, scripts and scenes in the native editor files without YAML tags | The panel uses Home Assistant's authenticated configuration REST APIs. HA validates the objects and schedules their reload, as when saving in its editors. No restart is needed. |
+| Dashboards managed in the UI | The integration reads the live dashboard configuration and uses its native save API, which updates storage and notifies the frontend. No direct `.storage` edit or restart. |
+| YAML files containing tags, and other YAML including packages, external automation/script files and YAML dashboards | Selected text is replaced while preserving the remaining formatting, comments and HA tags. Secrets and includes are not resolved or sent to the browser. Reload the affected configuration; restart only for integrations without a reload action. |
+| ESPHome | The existing ESPHome scan setting applies. Validate and install the updated configuration on the device through ESPHome. Editing YAML does not flash firmware. |
+
+Home Assistant may stop running automation/script actions when reloading. Its own
+editors also control the formatting of the YAML they save.
+
+Replacement uses the coherence scanner's file exclusions and static-reference
+traversal. Definition IDs/names, comments, documentation branches, dynamically constructed IDs and
+blueprint definitions are skipped. Tagged scalars such as `!secret`, `!input` and
+`!include` are not entity references and are left unchanged. Other HA storage files
+and Alert Manager custom rules are outside this replacement workflow. Unreadable or invalid files are
+reported as skipped in the preview.
+
+Before saving, the backend rechecks that the target entity exists, selected files
+still match the preview, and each candidate is valid YAML. A replacement that would
+merge two entity mapping keys is rejected. After the native editor API calls, the
+backend verifies the YAML they saved before committing other sources. External YAML
+is also parsed after writing. If an operation fails, the workflow attempts to restore
+every written YAML/dashboard source and attempted native-editor change, even if one
+restoration fails. An incomplete restoration is reported separately from a successful
+rollback. The backend finishes admitted writes or restorations even if the requesting
+connection disconnects.
+
+Keep the panel open until the operation completes: the native REST APIs do not
+provide a transaction spanning several objects. If the backend's final reply is lost,
+the panel reports an unconfirmed result and does not undo native objects that may
+belong to a successfully committed batch. Check the affected sources and generate a
+new preview before retrying after an incomplete or unconfirmed operation.
+
+After a successful replacement, the panel automatically runs a complete coherence
+scan and updates the findings, counts and coherence alert. Unchecked occurrences
+remain in the report if they still refer to missing entities. Any required YAML
+reload or ESPHome installation still needs to be performed as described above.
 
 ## Working through findings
 

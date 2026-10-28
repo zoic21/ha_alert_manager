@@ -213,7 +213,9 @@
     },
     "coherence": {
       "columns": {
+        "action": "Actions",
         "entity": "Missing reference",
+        "target": "Target entity",
         "file": "File",
         "line": "Line",
         "source": "Configuration",
@@ -222,6 +224,8 @@
       "description": "On demand, finds entities that are referenced but absent from automations, scripts, scenes, templates, dashboards and other configuration files. Also checks static IEEE addresses in ZHA triggers when ZHA is loaded, without checking device availability. Alert Manager custom rules are also checked.",
       "export": {
         "button": "Export entities (JSON)",
+        "download": "Download",
+        "warning": "Known sensitive attributes (tokens, credentials, picture URLs, GPS coordinates, MAC and IP addresses) are masked. Names, identifiers, states and other attributes remain: review the file before sharing it publicly.",
         "loading": "Exporting…",
         "error": "Unable to export entities. Check the Home Assistant connection and that their attributes can be represented as JSON."
       },
@@ -236,6 +240,12 @@
       "empty": "No missing references.",
       "not_scanned": "The scan has not been run yet.",
       "open": "Open",
+      "correction": {
+        "button": "Correct",
+        "selected": "Correct selected rows ({count})",
+        "title": "Confirm corrections",
+        "confirm": "The selected references will be replaced with the target entities shown below."
+      },
       "scan": "Run scan",
       "scanning": "Scanning…",
       "stats": {
@@ -263,7 +273,49 @@
         "metadata_error": "ZHA check skipped: metadata unavailable."
       },
       "alert_enabled": "Create an alert for coherence issues",
-      "alert_help": "One alert remains until a complete check finds no issues. Normal notification profiles apply."
+      "alert_help": "One alert remains until a complete check finds no issues. Normal notification profiles apply.",
+      "entity_renames": {
+        "button": "Entity renames",
+        "title": "Entity rename history",
+        "close": "Close entity rename history",
+        "loading": "Loading entity renames…",
+        "description": "The latest 500 entity ID changes, grouped by entity. Expand a row to see each step. Recording starts when this feature is installed.",
+        "empty": "No entity renames recorded yet.",
+        "old": "Previous entity ID",
+        "new": "New entity ID",
+        "initial": "First recorded entity ID",
+        "final": "Last recorded entity ID",
+        "changes": "Renames: {count}",
+        "more_info": "Show entity information"
+      },
+      "replacement": {
+        "button": "Entity replacement",
+        "preview_title": "Replacement preview",
+        "old": "Previous entity ID",
+        "new": "New entity ID",
+        "help": "Search for an entity or type its ID. The new entity must exist in Home Assistant. YAML files and dashboards are checked, including blueprint inputs.",
+        "preview": "Preview",
+        "apply": "Replace",
+        "back": "Edit entity IDs",
+        "busy": "Working…",
+        "count": "{count} of {total} replacement(s) selected across {files} file(s).",
+        "location": "Line {line}, column {column}",
+        "empty": "No references to replace.",
+        "success": "{replacement_count} replacement(s) completed across {file_count} file(s).",
+        "reload": "Objects saved through Home Assistant editors reload automatically. Reload other affected YAML configurations; a restart is needed only if the integration does not support reloading. For ESPHome, validate and install the configuration on the device.",
+        "dashboard_saved": "The objects were saved with Home Assistant APIs. No restart is needed.",
+        "api_help": "Home Assistant validates and reloads automations, scripts and scenes managed by its editors. Files containing YAML tags are saved as text and require reloading. Reloading may interrupt a running execution.",
+        "errors": {
+          "replacement_entity_invalid": "Enter two valid, different entity IDs.",
+          "replacement_entity_missing": "The new entity does not exist in Home Assistant. No replacement has started.",
+          "replacement_selection_invalid": "Select at least one replacement from this preview.",
+          "replacement_yaml_invalid": "The result is not valid YAML. No files were modified.",
+          "replacement_preview_stale": "The configuration has changed since the preview. Generate a new preview before replacing.",
+          "replacement_failed": "Replacement failed. The changes have been rolled back.",
+          "replacement_rollback_failed": "Replacement failed and some changes could not be rolled back. Check the affected sources and generate a new preview before retrying.",
+          "replacement_incomplete": "The replacement result could not be confirmed. Some changes may already have been saved. Check the affected sources and generate a new preview before retrying."
+        }
+      }
     },
     "duration": {
       "activation": "Activating…",
@@ -761,6 +813,8 @@
       "coherence_schedule_help": "Runs at 03:05 local time. Weekly scans run on Monday and monthly scans on the first day of the month.",
       "coherence_scan_esphome": "Scan the ESPHome folder",
       "coherence_scan_esphome_help": "Includes YAML files from /config/esphome in the coherence scan.",
+      "coherence_report_disabled_entities": "Report references to disabled entities",
+      "coherence_report_disabled_entities_help": "Also reports references to entities disabled in Home Assistant. Off by default; takes effect on the next scan.",
       "coherence_ignored_entity_references": "References ignored by the coherence scan",
       "coherence_ignored_entity_references_help": "Add an exact entity reference (toto.plop) or ZHA IEEE address (5c:02:72:ff:fe:d9:be:ec).",
       "coherence_ignored_entity_reference_placeholder": "Example: toto.plop",
@@ -943,6 +997,16 @@
     },
     "statistics": {
       "title": "Runtime diagnostics",
+      "disk_usage": "Data on disk",
+      "disk_help": "Alert Manager data files: configuration, alerts, history, backups, notifications, coherence and entity renames. Excludes program files and Home Assistant’s recorder database. Measured when Configuration opens, cached for 5 minutes; no automatic refresh.",
+      "disk_measured_at": "Measured at {date}.",
+      "disk_unavailable": "Unavailable",
+      "disk_units": {
+        "bytes": "B",
+        "kibibytes": "KiB",
+        "mebibytes": "MiB",
+        "gibibytes": "GiB"
+      },
       "scope": "Custom rules: one evaluation per rule/entity pair, including its condition. Synchronous processing only; excludes tests, automatic packs, coherence scans and asynchronous waits. This is not Home Assistant event-loop load.",
       "periodic_recoveries": "Periodic check recoveries",
       "evaluation_count": "Rule evaluations",

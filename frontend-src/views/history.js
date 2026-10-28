@@ -25,18 +25,18 @@ export function refreshHistoryData() {
 export function renderHistory(context) {
     const { busy, readOnly = false, limit, pageMessages, rows, renderAlertTable, t, statisticsOpen = false, statisticsDays = 7 } = context;
     if (limit === 0) {
-      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2>${readOnly ? "" : `<p>${esc(t("history.disabled_help"))}</p>`}${readOnly ? "" : `<ha-button appearance="plain" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button>`}</div></ha-card>`;
+      return `<ha-card outlined class="history-empty"><div class="empty"><h2>${esc(t("history.disabled_title"))}</h2>${readOnly ? "" : `<p>${esc(t("history.disabled_help"))}</p>`}${readOnly ? "" : `<ha-button appearance="accent" variant="brand" data-action="open-history-settings">${esc(t("history.open_settings"))}</ha-button>`}</div></ha-card>`;
     }
     const statisticsControls = statisticsOpen ? `
       <div class="history-statistics-period" role="group" aria-label="${esc(t("history.statistics.period"))}">
         <span>${esc(t("history.statistics.period"))}</span>
-        ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "plain"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
+        ${[7, 30].map((days) => `<ha-button size="s" appearance="${days === statisticsDays ? "accent" : "outlined"}" variant="brand" aria-pressed="${days === statisticsDays}" data-action="history-statistics-period" data-days="${days}">${esc(t("history.statistics.short_days", { days }))}</ha-button>`).join("")}
       </div>` : "";
     if (statisticsOpen) return `<section data-history-statistics-page aria-label="${esc(t("history.statistics.title"))}">
       <ha-card outlined class="panel history-statistics-banner">
         <div class="history-statistics-toolbar">
           ${statisticsControls}
-          <ha-button size="s" appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.back"))}</ha-button>
+          <ha-button size="s" appearance="outlined" data-action="toggle-history-statistics"><ha-icon slot="start" icon="mdi:arrow-left" aria-hidden="true"></ha-icon>${esc(t("history.statistics.back"))}</ha-button>
         </div>
         <div class="history-statistics-summary" data-history-statistics-summary></div>
       </ha-card>
@@ -48,8 +48,8 @@ export function renderHistory(context) {
       <div class="history-header">
         <div><h2>${esc(t("history.title"))}</h2></div>
         <div class="history-page-actions">
-          <ha-button appearance="plain" data-action="toggle-history-statistics">${esc(t("history.statistics.title"))}</ha-button>
-          ${readOnly ? "" : `<ha-button appearance="plain" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
+          <ha-button appearance="accent" variant="brand" data-action="toggle-history-statistics"><ha-icon slot="start" icon="mdi:chart-box-outline" aria-hidden="true"></ha-icon>${esc(t("history.statistics.title"))}</ha-button>
+          ${readOnly ? "" : `<ha-button appearance="outlined" variant="danger" data-action="clear-history" ${busy || !rows.length ? "disabled" : ""}>${esc(t("settings.history_clear"))}</ha-button>`}
         </div>
       </div>
     </ha-card>`;
@@ -239,7 +239,7 @@ export function renderHistoryStatisticsLeaders({ statistics, t, integrationLabel
             const name = kind === "integration" ? integrationLabel(row.id) : kind === "pack" ? ruleLabel(row) : row.name || row.id;
             const value = metric === "occurrences" ? row.occurrences : duration(row.total_duration_seconds);
             const exact = metric === "occurrences" ? value : exactDuration(row.total_duration_seconds);
-            return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;
+            return `<li><ha-button appearance="plain" data-action="history-statistics-leader" data-kind="${kind}" data-id="${esc(row.id)}" title="${esc(name)} — ${esc(exact)}"><ha-icon slot="start" icon="mdi:filter-outline" aria-hidden="true"></ha-icon><span class="history-statistics-leader-name">${esc(name)}</span><span class="history-statistics-leader-value">${esc(value)}</span></ha-button></li>`;
           }).join("")}</ol>` : `<p>${esc(t(statistics ? "history.statistics.empty" : "loading"))}</p>`}
         </section>`;
       }).join("")}

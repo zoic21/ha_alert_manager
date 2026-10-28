@@ -111,7 +111,7 @@ Recognized Companion targets receive native `notification_icon` and `color` meta
 | Combined activation and recovery | Check circle | Blue |
 | Informational exception, for any enabled delivery | Information | Blue |
 
-Tapping a supported Companion notification opens a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
+Tapping a supported Companion notification containing only available-update alerts opens Home Assistant Settings, including for reminders and recoveries. Other notifications open a single ongoing alert's details, Overview for several ongoing alerts, or History for recoveries. Generic targets receive no appended raw navigation URL.
 
 Alert details separate activation and reminder deliveries; history also records recovery deliveries, matching profiles and last delivery times. A batch counts once per profile and alert when at least one target succeeds. Tests and complete failures are excluded. These details survive restarts, are hidden for pending alerts and do not count notifications sent by external automations.
 
@@ -121,7 +121,7 @@ Profile usage counters cover the current hour and previous 23 hours since startu
 
 Adjust pending-alert visibility separately from trigger delays. The history limit controls how many resolved occurrences are retained; deleted or discarded occurrences are no longer available to history statistics. See [Dashboard and history](dashboard-and-history.md) for acknowledgement, filtering and recurrence reports.
 
-Coherence settings control scheduling, ESPHome scanning, reference exclusions and the optional persistent coherence alert. See the [Coherence guide](coherence.md) for supported references and incomplete-scan behavior.
+Coherence settings control scheduling, ESPHome scanning, optional reporting of references to disabled entities (off by default), reference exclusions and the optional persistent coherence alert. See the [Coherence guide](coherence.md) for supported references and incomplete-scan behavior.
 
 ## YAML editing
 
@@ -152,6 +152,15 @@ Direct entity/device exclusions become disabled exceptions in compatible packs w
 Configuration shows custom-rule evaluation counts and average/maximum/total processing time, alert transitions and successful profile sends. Exactly **24 hourly aggregate buckets** are kept in memory, with no persistence. The observation period starts at integration startup or the oldest retained hour, whichever is later.
 
 An evaluation is one rule/entity pair, including its condition and excluding asynchronous waiting. Tests, automatic packs and coherence scans are excluded from timing. This does **not** measure Home Assistant event-loop load. Activity counts actual transitions, not the current number of alerts; restored alerts are not counted as new activations.
+
+**Data on disk** reports the combined file sizes for configuration/runtime alerts,
+resolved history, valid-configuration backups, notification reminders, the coherence
+report and entity rename history. Program files and Home Assistant’s recorder
+database are excluded. Only metadata for these six known files is read, outside the
+event loop, when Configuration opens. The result and measurement time are cached
+for five minutes and are not refreshed automatically. Missing files count as zero;
+an inaccessible file makes the measurement unavailable rather than showing a
+partial total. The measurement does not write or flush pending data to disk.
 
 ### Periodic safety check
 

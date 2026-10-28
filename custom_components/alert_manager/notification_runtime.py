@@ -873,7 +873,9 @@ class NotificationRuntime:
 
     @staticmethod
     def _batch_url(kind: str, items: list[_NotificationItem]) -> str:
-        """Return a stable panel URL, specializing only unambiguous live alerts."""
+        """Open HA settings for updates, otherwise the relevant alert view."""
+        if all(item.alert_type == "update_available" for item in items):
+            return "/config"
         if kind in ("resolved", "started_resolved"):
             return "/alert-manager/history"
         if len(items) == 1:

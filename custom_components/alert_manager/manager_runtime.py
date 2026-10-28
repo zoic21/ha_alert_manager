@@ -676,9 +676,7 @@ class _RuntimeMixin:
                 continue
             # Stateful execution filters must never ingest excluded cycles.
             if pack.reset_entity_handler is not None:
-                automatic_eligible = self._is_base_eligible(
-                    entity_id
-                ) and self._is_automatic_eligible(entity_id)
+                automatic_eligible = self._is_eligible_automatic_source(entity_id)
                 if not automatic_eligible:
                     pack.reset_entity_handler(self.hass, entity_id)
                     continue
@@ -695,9 +693,7 @@ class _RuntimeMixin:
         if not pack_relevant:
             return False
         if automatic_eligible is None:
-            automatic_eligible = self._is_base_eligible(
-                entity_id
-            ) and self._is_automatic_eligible(entity_id)
+            automatic_eligible = self._is_eligible_automatic_source(entity_id)
         return automatic_eligible
 
     def _update_tracking_for_state_event(self, entity_id: str, event: Event) -> bool:
@@ -880,6 +876,13 @@ class _RuntimeMixin:
             and old_entity_id != new_entity_id
         )
         if is_rename:
+            entry = self._entity_registry.async_get(new_entity_id)
+            self.entity_rename_history.record(
+                old_entity_id,
+                new_entity_id,
+                getattr(entry, "id", None),
+                dt_util.utcnow(),
+            )
             self._pending_entity_renames[old_entity_id] = new_entity_id
         elif not self.monitoring_enabled:
             return
@@ -982,6 +985,8 @@ class _RuntimeMixin:
                             continue
                         overrides[new_entity_id] = overrides.pop(old_entity_id)
                         changed = True
+
+            changed |= self._rename_flapping_sources(old_entity_id, new_entity_id)
 
             retained_renamed_rules: set[str] = set()
             for alert_id in tuple(self._record_ids_by_entity.get(old_entity_id, ())):
@@ -1103,6 +1108,25 @@ class _RuntimeMixin:
             reconciliation_transaction.record_entity_renames(renames)
         elif durable_identity_changed and durable_alert_ids is not None:
             self.storage.stage_durable_alert_ids(durable_alert_ids)
+        return changed
+
+    def _rename_flapping_sources(self, old_entity_id: str, new_entity_id: str) -> bool:
+        """Move indexed source evidence without combining different entity windows."""
+        data = self._pack_runtime.get(CATEGORY_FLAPPING, {})
+        source_ids = (
+            *(f"{pack.id}:{old_entity_id}" for pack in PACKS),
+            *(
+                f"rule:{rule.id}:{old_entity_id}"
+                for rule in self._rules_by_entity.get(old_entity_id, ())
+            ),
+        )
+        changed = False
+        for source_id in source_ids:
+            if source_id not in data:
+                continue
+            target_id = f"{source_id[: -len(old_entity_id)]}{new_entity_id}"
+            data.setdefault(target_id, data.pop(source_id))
+            changed = True
         return changed
 
     async def _async_flush_registry_evaluation(self) -> None:
@@ -1298,18 +1322,34 @@ class _RuntimeMixin:
                     return
                 # Real events retain their occurrence semantics and take precedence.
                 await self._async_process_queued_evaluations()
-                entity_ids = (
+                entity_ids = sorted(
                     self._automatic_tracked_entities
                     | self._rules_by_entity.keys()
                     | self._record_ids_by_entity.keys()
                 )
-                recovered = 0
-                for index, entity_id in enumerate(entity_ids, 1):
+            recovered = 0
+            for offset in range(0, len(entity_ids), _EVALUATION_BATCH_SIZE):
+                async with self._config_mutation_lock:
                     if not self._periodic_check_ready():
                         break
-                    # A state event received during a batch yield belongs to the
-                    # normal worker, including its flapping/execution evidence.
-                    if entity_id not in self._queued_evaluation_entities:
+                    batch_recovered = 0
+                    for entity_id in entity_ids[
+                        offset : offset + _EVALUATION_BATCH_SIZE
+                    ]:
+                        if not self._periodic_check_ready():
+                            break
+                        # Read current indexes/config after each lock admission:
+                        # a rule or source may have disappeared between batches.
+                        if (
+                            entity_id not in self._automatic_tracked_entities
+                            and entity_id not in self._rules_by_entity
+                            and entity_id not in self._record_ids_by_entity
+                        ):
+                            continue
+                        # Real events retain flapping/execution evidence and
+                        # belong to the normal worker, not this safety check.
+                        if entity_id in self._queued_evaluation_entities:
+                            continue
                         before = self._entity_lifecycle_snapshot(entity_id)
                         changed = self._reconcile_sequence_timers(entity_id)
                         await self.async_evaluate_entity(
@@ -1344,17 +1384,19 @@ class _RuntimeMixin:
                         if changed or before != self._entity_lifecycle_snapshot(
                             entity_id
                         ):
-                            recovered += 1
+                            batch_recovered += 1
                             self.statistics.record_recovery()
-                    if index % _EVALUATION_BATCH_SIZE == 0:
-                        await asyncio.sleep(0)
-                save_required = self._immediate_state_save_required
-                if save_required:
-                    await self._async_save_state()
-                if recovered or save_required:
-                    self._publish_if_changed()
-                if recovered:
-                    _LOGGER.debug("Periodic check reconciled %s entities", recovered)
+                    # Commit completed repairs before another mutation can take
+                    # a snapshot or the next batch can be interrupted.
+                    save_required = self._immediate_state_save_required
+                    if save_required:
+                        await self._async_save_state()
+                    if batch_recovered or save_required:
+                        self._publish_if_changed()
+                    recovered += batch_recovered
+                await asyncio.sleep(0)
+            if recovered:
+                _LOGGER.debug("Periodic check reconciled %s entities", recovered)
         finally:
             self._periodic_check_running = False
 
@@ -2169,6 +2211,12 @@ class _RuntimeMixin:
             device is not None and self._excluded_labels.intersection(device.labels)
         )
 
+    def _is_eligible_automatic_source(self, entity_id: str) -> bool:
+        """Apply base eligibility and exclusions before automatic pack selection."""
+        return self._is_base_eligible(entity_id) and self._is_automatic_eligible(
+            entity_id
+        )
+
     def _pack_settings(
         self, pack_id: str, entity_id: str, *, source_id: str | None = None
     ) -> dict[str, Any]:
@@ -2239,8 +2287,7 @@ class _RuntimeMixin:
         if details.type not in PACKS_BY_ID:
             return True
         return (
-            self._is_base_eligible(details.entity_id)
-            and self._is_automatic_eligible(details.entity_id)
+            self._is_eligible_automatic_source(details.entity_id)
             and self._pack_settings(details.type, details.entity_id)["enabled"]
             and self._pack_is_available(details.type)
         )
@@ -2350,16 +2397,13 @@ class _RuntimeMixin:
 
     def _is_relevant_entity_id(self, entity_id: str) -> bool:
         """Return whether a state change can affect an alert or existing record."""
-        if not self._is_base_eligible(entity_id):
-            return False
-        if entity_id in self._rules_by_entity:
-            return True
-        if entity_id in self._record_ids_by_entity:
-            return True
-        if not self._is_automatic_eligible(entity_id):
-            return False
+        if (
+            entity_id in self._rules_by_entity
+            or entity_id in self._record_ids_by_entity
+        ):
+            return self._is_base_eligible(entity_id)
         state = self.hass.states.get(entity_id)
-        return state is not None and self._has_applicable_automatic_pack(state)
+        return state is not None and self._is_automatically_tracked(state)
 
     def _tracked_count(self) -> int:
         """Count enabled custom instances and unique automatic sources."""
@@ -2395,11 +2439,9 @@ class _RuntimeMixin:
 
     def _is_automatically_tracked(self, state: State) -> bool:
         """Return whether at least one enabled automatic pack monitors a state."""
-        return (
-            self._is_base_eligible(state.entity_id)
-            and self._is_automatic_eligible(state.entity_id)
-            and self._has_applicable_automatic_pack(state)
-        )
+        return self._is_eligible_automatic_source(
+            state.entity_id
+        ) and self._has_applicable_automatic_pack(state)
 
     def _has_applicable_automatic_pack(self, state: State) -> bool:
         """Return whether an enabled and available pack applies to a state."""

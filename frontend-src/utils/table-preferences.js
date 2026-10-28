@@ -6,9 +6,9 @@ const RULES_TABLE_PREFERENCES_KEY = "alert-manager-rules-table-preferences-v1";
 
 const COHERENCE_STALE_MS = 48 * 60 * 60 * 1000;
 
-const COHERENCE_COLUMNS = ["entity", "type", "source", "file", "line", "action"];
+const COHERENCE_COLUMNS = ["entity", "target", "type", "source", "file", "line", "action"];
 
-const COHERENCE_SECONDARY_COLUMNS = new Set(["type", "source", "file", "line"]);
+const COHERENCE_SECONDARY_COLUMNS = new Set(["target", "type", "source", "file", "line"]);
 
 const RULES_COLUMNS = ["name", "entities", "condition", "duration", "enabled"];
 

@@ -687,6 +687,16 @@ def test_frontend_payload_validation():
         validate_config({"coherence_ignored_entity_references": ["not valid"]})
 
 
+def test_coherence_disabled_entity_option_validation():
+    key = "coherence_report_disabled_entities"
+    assert validate_config({})[key] is False
+    for value in (True, False):
+        assert validate_config({key: value})[key] is value
+    for value in ("false", 1, None):
+        with pytest.raises(ValueError, match=key):
+            validate_config({key: value})
+
+
 def test_only_coherence_sensor_is_allowed_as_an_alert_manager_rule_source():
     """The loop-safe result sensor is the sole self-monitoring exception."""
     allowed = validate_rule_payload(

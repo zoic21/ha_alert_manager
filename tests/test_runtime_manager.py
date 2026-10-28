@@ -57,6 +57,50 @@ def _state_event(entity_id, old_state, new_state):
     )
 
 
+@pytest.mark.parametrize("source", ["automatic", "custom", "record"])
+@pytest.mark.parametrize(
+    "exclusion",
+    [None, "entity_label", "device_label", "entity_disabled", "device_disabled"],
+)
+def test_source_routing_preserves_eligibility_boundaries(
+    hass, entry, registry_entry, device_entry, source, exclusion
+):
+    """Labels only filter automatic sources; registry disablers filter all sources."""
+    entity_id = "sensor.source"
+    hass.label_registry.labels["skip"] = SimpleNamespace(label_id="skip")
+    device = device_entry(hass)
+    entity = registry_entry(hass, entity_id, device_id=device.id)
+    hass.states.set(entity_id, "unavailable" if source == "record" else "on")
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"excluded_labels": ["skip"]})
+        if source == "custom":
+            await manager.async_create_rule(_rule(value="off"))
+        if source == "record":
+            assert "unavailable:sensor.source" in manager.records
+        else:
+            assert not manager.records
+
+        if exclusion == "entity_label":
+            entity.labels.add("skip")
+        elif exclusion == "device_label":
+            device.labels.add("skip")
+        elif exclusion == "entity_disabled":
+            entity.disabled_by = "user"
+        elif exclusion == "device_disabled":
+            device.disabled_by = "user"
+
+        expected = exclusion is None or (
+            exclusion in ("entity_label", "device_label") and source != "automatic"
+        )
+        assert manager._state_event_affects_source(Event(), entity_id) is expected
+        await manager.async_unload()
+
+    asyncio.run(scenario())
+
+
 def test_jinja_condition_rejects_alert_manager_entity(hass, entry):
     """A self-referential condition is rejected before configuration changes."""
     hass.states.set("sensor.source", "on")
@@ -1082,6 +1126,7 @@ def test_runtime_rule_cleanup_remains_silent(hass, entry):
     [
         ({"coherence_schedule": "daily"}, 0, 0, 0),
         ({"coherence_scan_esphome": False}, 0, 0, 0),
+        ({"coherence_report_disabled_entities": True}, 0, 0, 0),
         ({"coherence_ignored_entity_references": ["sensor.missing"]}, 0, 0, 0),
         ({"pending_display_delay": 23}, 0, 1, 0),
         (
