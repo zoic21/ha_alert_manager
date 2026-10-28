@@ -740,6 +740,72 @@ def test_notification_yaml_websocket_returns_validation_error(hass, entry):
     assert manager.config["notification_profiles"] == []
 
 
+def test_notification_exception_combinations_save_and_survive_restart(hass, entry):
+    """The visual editor can save a label pair alongside its individual labels."""
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        hass.data[DATA_MANAGER] = manager
+        connection = Connection(admin=True)
+        profile = {
+            "id": "loic",
+            "name": "Loïc",
+            "enabled": True,
+            "targets": ["notify.phone"],
+            "label_ids": [],
+            "default_policy": {
+                "notify_on_start": True,
+                "notify_on_resolved": True,
+                "reminder_interval": None,
+            },
+            "exceptions": [
+                {
+                    "selector_type": "label",
+                    "selector_ids": ["important"],
+                    "reminder_interval": 3600,
+                },
+                {
+                    "selector_type": "label",
+                    "selector_ids": ["information"],
+                    "notify_on_resolved": False,
+                    "presentation": "neutral",
+                },
+            ],
+        }
+        message = {
+            "id": 92,
+            "type": "alert_manager/config/update",
+            "config": {"notification_profiles": [profile]},
+        }
+        await websocket_config_update(hass, connection, message)
+        assert connection.errors == []
+        profile["exceptions"].append(
+            {
+                "selector_type": "label",
+                "selector_ids": ["important", "information"],
+                "notify_on_start": True,
+                "notify_on_resolved": True,
+                "reminder_interval": 3600,
+                "presentation": "standard",
+            }
+        )
+        await websocket_config_update(hass, connection, {**message, "id": 93})
+
+        assert connection.errors == []
+        saved = connection.results[-1][1]["notification_profiles"]
+        assert saved[0]["exceptions"] == profile["exceptions"]
+        assert hass.stores["alert_manager"]["config"]["notification_profiles"] == saved
+        await manager.async_unload()
+
+        restarted = AlertManager(hass, entry)
+        assert await restarted.async_setup() is True
+        assert restarted.get_config()["notification_profiles"] == saved
+        await restarted.async_unload()
+
+    asyncio.run(scenario())
+
+
 def test_history_statistics_are_explicitly_requested(hass, entry, monkeypatch):
     """Existing history consumers do not trigger aggregation."""
     manager = AlertManager(hass, entry)

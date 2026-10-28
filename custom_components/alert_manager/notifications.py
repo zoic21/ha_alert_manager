@@ -341,15 +341,15 @@ def _validate_profile(value: Any, path: str) -> dict[str, Any]:
         _validate_exception(item, f"{path}.exceptions[{index}]")
         for index, item in enumerate(raw_exceptions)
     ]
-    duplicate_selectors: set[str] = set()
+    seen_selectors: set[frozenset[str]] = set()
     for exception in exceptions:
-        for selector_id in exception["selector_ids"]:
-            if selector_id in duplicate_selectors:
-                raise ValueError(
-                    f"{path}.exceptions contains duplicate selector: "
-                    f"label:{selector_id}"
-                )
-            duplicate_selectors.add(selector_id)
+        selector_ids = frozenset(exception["selector_ids"])
+        if selector_ids in seen_selectors:
+            raise ValueError(
+                f"{path}.exceptions contains duplicate selector: "
+                f"label:{', '.join(sorted(selector_ids))}"
+            )
+        seen_selectors.add(selector_ids)
 
     return {
         "id": profile_id,

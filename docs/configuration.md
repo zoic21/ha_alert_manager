@@ -62,6 +62,8 @@ A profile can cover all alerts or match **any selected label (OR)**. Matching co
 
 An exception requires **all its selected labels (AND)**. The **first matching exception in list order** wins; inherited settings keep the profile defaults. Exceptions can independently override new-alert, recovery and reminder behavior. The visual editor uses explicit switches and a reminder interval; clearing the interval disables reminders. Sparse exceptions display effective profile values, and YAML can omit fields to inherit defaults. In YAML exceptions use `selector_ids`; legacy `selector_id` remains accepted.
 
+Labels can be reused in different combinations within the same profile. For example, `important` + `information` can coexist with exceptions for `important` and `information` individually. Place the combined exception before the individual ones if it should take priority. Two exceptions with exactly the same set of labels are rejected, regardless of label order.
+
 For example, a profile may notify every new alert, while its first exception disables reminders for alerts carrying both a maintenance label and a particular rule label. An alert matching only one of those labels does not match that exception.
 
 ### Informational (neutral) notifications
@@ -89,7 +91,7 @@ exceptions:
     presentation: neutral
 ```
 
-`presentation` belongs to an exception, not to the rule or the profile's `default_policy`. Its values are `neutral` and `standard`; it may be the only override when the other settings should inherit. Only the first matching exception applies, so place it before another exception that could also match the same alert. An individual label cannot be repeated across exceptions within the same profile.
+`presentation` belongs to an exception, not to the rule or the profile's `default_policy`. Its values are `neutral` and `standard`; it may be the only override when the other settings should inherit. Only the first matching exception applies, so place it before another exception that could also match the same alert.
 
 <img src="assets/screenshots/notification.png" width="572" alt="Notification profile showing standard and informational label exceptions">
 
