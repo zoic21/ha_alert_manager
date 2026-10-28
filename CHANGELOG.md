@@ -5,6 +5,11 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.6.1 — October 28, 2026
+
+- Fix saving notification exceptions that reuse labels in different combinations,
+  such as `important` + `information`.
+
 ## 2.6.0 — October 28, 2026
 
 This release makes it easier to keep your Home Assistant configuration working
