@@ -685,7 +685,7 @@ def test_exception_label_list_is_validated(ids):
         )
 
 
-def test_exception_labels_deduplicate_and_reject_overlaps_or_ambiguous_legacy_input():
+def test_exception_labels_deduplicate_and_reject_ambiguous_legacy_input():
     profile = _profile()
     first = profile["exceptions"][0]
     first["selector_ids"] = ["important", "important", "cold"]
@@ -701,11 +701,83 @@ def test_exception_labels_deduplicate_and_reject_overlaps_or_ambiguous_legacy_in
         "important",
         "cold",
     ]
-    first["selector_ids"].append("secondary")
+
+
+@pytest.mark.parametrize("combination_first", [True, False])
+@pytest.mark.parametrize(
+    ("labels", "interval"),
+    [
+        ({"important", "secondary"}, 1800),
+        ({"important", "secondary", "other"}, 1800),
+        ({"important"}, 1800),
+        ({"secondary"}, 3600),
+        ({"other"}, None),
+        (set(), None),
+    ],
+)
+def test_shared_exception_labels_preserve_first_match_and_yaml_roundtrip(
+    combination_first, labels, interval
+):
+    """A combined exception can coexist with each label's independent policy."""
+    profile = _profile()
+    combination = {
+        "selector_type": "label",
+        "selector_ids": ["important", "secondary"],
+        "notify_on_start": False,
+        "reminder_interval": 300,
+        "presentation": "neutral",
+    }
+    profile["exceptions"].insert(0 if combination_first else 2, combination)
+    config = validate_config({"notification_profiles": [profile]})
+    normalized = config["notification_profiles"][0]
+    combined_match = combination_first and {"important", "secondary"} <= labels
+
+    assert resolve_notification_policy(normalized, label_ids=labels).as_dict() == {
+        "notify_on_start": not combined_match,
+        "notify_on_resolved": True,
+        "reminder_interval": 300 if combined_match else interval,
+        "presentation": "neutral" if combined_match else "standard",
+    }
+    assert normalized["exceptions"][0 if combination_first else 2] == combination
+    assert validate_config(config) == config
+    assert parse_config_yaml(dump_config_yaml(config)) == config
+    assert (
+        parse_notification_profile_yaml(yaml.safe_dump(profile), "loic") == normalized
+    )
+
+
+@pytest.mark.parametrize("labels", [["important"], ["important", "secondary"]])
+def test_duplicate_exception_label_sets_are_rejected(labels):
+    """Identical matches stay invalid despite label order or duplicate entries."""
+    profile = _profile()
+    profile["exceptions"] = [
+        {
+            "selector_type": "label",
+            "selector_ids": labels,
+            "reminder_interval": 300,
+        },
+        {
+            "selector_type": "label",
+            "selector_ids": [*reversed(labels), f" {labels[0]} "],
+            "notify_on_start": False,
+        },
+    ]
     with pytest.raises(ValueError, match="duplicate selector"):
-        validate_config(
-            {**deepcopy(DEFAULT_CONFIG), "notification_profiles": [profile]}
-        )
+        validate_config({"notification_profiles": [profile]})
+
+
+def test_legacy_and_multi_label_duplicate_exceptions_are_rejected():
+    """Legacy selector_id and a singleton selector_ids are the same match."""
+    profile = _profile()
+    profile["exceptions"].append(
+        {
+            "selector_type": "label",
+            "selector_ids": ["important"],
+            "notify_on_start": False,
+        }
+    )
+    with pytest.raises(ValueError, match="duplicate selector"):
+        validate_config({"notification_profiles": [profile]})
 
 
 def test_notification_yaml_roundtrip_and_executor(hass, entry, monkeypatch):
