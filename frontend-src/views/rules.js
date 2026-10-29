@@ -387,11 +387,12 @@ export function buildRuleTableRows(rules, context) {
         targets: (rule.entity_ids ?? []).map((entityId) => {
           const entity = hass?.entities?.[entityId];
           const device = hass?.devices?.[entity?.device_id];
+          const parent = hass?.devices?.[device?.parent_device_id];
           return {
             integration: entity?.platform || "",
             device: entity?.device_id || "",
             domain: entityId.split(".", 1)[0],
-            area: entity?.area_id || device?.area_id || "",
+            area: entity?.area_id || device?.area_id || parent?.area_id || "",
           };
         }),
         entities: (rule.entity_ids ?? []).join(", "),

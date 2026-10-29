@@ -9,6 +9,7 @@ import { handleAlertTableAction } from "../frontend-src/components/alert-table.j
 import { canUsePanelAction } from "../frontend-src/utils/permissions.js";
 
 import { ACTION_ICONS } from "../frontend-src/utils/constants.js";
+import { entityDisplayName } from "../frontend-src/utils/formatting.js";
 
 import { compactCss } from "./frontend-test-helpers.mjs";
 
@@ -1532,6 +1533,37 @@ const tablePanel = () => {
   };
   return panel;
 };
+
+test("live entity names use native formatting while history keeps its recorded name", () => {
+  const panel = tablePanel();
+  const state = panel._hass.states["sensor.rack"];
+  state.attributes = { friendly_name: "Legacy temperature" };
+  panel._alerts.alerts.push(currentAlert({
+    id: "coherence", type: "coherence", entity_id: "sensor.alert_manager_coherence_issue",
+    name: "Configuration coherence",
+  }));
+  panel._hass.states["sensor.alert_manager_coherence_issue"] = { state: "2" };
+  let calls = 0;
+  panel._hass.formatEntityName = (value) => {
+    calls += 1;
+    assert.ok(Object.values(panel._hass.states).includes(value));
+    return value === state ? "Rack Temperature" : "Native entity";
+  };
+  const rows = panel._tableRows("overview");
+  assert.equal(rows.find((row) => row.entityId === "sensor.rack").entityName, "Rack Temperature");
+  assert.equal(rows.find((row) => row.id === "coherence").entityName, "Configuration coherence");
+  calls = 0;
+  const history = panel._tableRows("history", [{
+    ...currentAlert(), event_id: "resolved", entity_name: "Recorded temperature",
+    resolved_at: "2026-08-26T13:00:00Z",
+  }]);
+  assert.equal(history[0].entityName, "Recorded temperature");
+  assert.equal(calls, 0);
+  delete panel._hass.formatEntityName;
+  assert.equal(entityDisplayName(panel._hass, "sensor.rack"), "Legacy temperature");
+  assert.equal(entityDisplayName(panel._hass, "sensor.deleted", "Recorded name"), "Recorded name");
+  assert.equal(entityDisplayName({}, "sensor.deleted"), "sensor.deleted");
+});
 
 test("alert table cells leave every click to the row details action", () => {
   const panel = tablePanel();

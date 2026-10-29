@@ -170,7 +170,7 @@ test("narrow native table action rows stay gray on every table page", () => {
     assert.equal(injectedStyles[0].tagName, "STYLE");
     assert.match(
       injectedStyles[0].textContent,
-      /:host\(\[narrow\]\) \.narrow-header-row \{[\s\S]*background: var\(--primary-background-color\);/,
+      /:host\(\[narrow\]\) \.narrow-header-row \{[\s\S]*background: var\(--ha-panel-toolbar-background, var\(--primary-background-color\)\);/,
     );
     assert.match(
       injectedStyles[0].textContent,

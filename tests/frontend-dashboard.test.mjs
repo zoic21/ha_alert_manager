@@ -49,6 +49,18 @@ test("groups sort by newest activation with stable identity ties and encode deep
   assert.match(dashboardTarget(groups[1]), /alert=a%26b/);
 });
 
+test("device-less dashboard groups sort by current native entity names", () => {
+  const items = [alert("one", { name: "Alpha legacy" }), alert("two", { name: "Zulu legacy" })];
+  const hass = {
+    states: { "sensor.one": { entity_id: "sensor.one" }, "sensor.two": { entity_id: "sensor.two" } },
+    formatEntityName: (state) => state.entity_id === "sensor.one" ? "Zulu native" : "Alpha native",
+  };
+  const groups = dashboardGroups(items, { sort: "alphabetical" }, hass);
+  assert.deepEqual(groups.map((group) => group.name), ["Alpha native", "Zulu native"]);
+  assert.deepEqual(groups.map((group) => group.key), ["alert:two", "alert:one"]);
+  assert.equal(items[0].name, "Alpha legacy");
+});
+
 test("multiple cards share complete snapshots and ignore unrelated entity/history changes", async () => {
   const { hass, requests, revise } = fixture();
   const first = [], second = [];

@@ -1,5 +1,6 @@
 import { MDI_CLOSE } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { entityDisplayName } from "../utils/formatting.js";
 
 function entityReplacementTitle(state, t) {
   return t(state.coherenceCorrection ? "coherence.correction.title" : state.preview && !state.result ? "coherence.replacement.preview_title" : "coherence.replacement.button");
@@ -80,8 +81,8 @@ export function hydrateEntityReplacement(root, context) {
     ...Object.keys(context._hass?.entities ?? {}),
   ] : []);
   const options = [...entityIds].sort().map((value) => {
-    const name = context._hass?.states?.[value]?.attributes?.friendly_name;
-    return { value, label: name ? `${name} (${value})` : value };
+    const name = entityDisplayName(context._hass, value);
+    return { value, label: name && name !== value ? `${name} (${value})` : value };
   });
   fields.forEach((control) => {
     const field = control.dataset.replacementField;

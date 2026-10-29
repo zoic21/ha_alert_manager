@@ -28,6 +28,7 @@ from custom_components.alert_manager.const import (
 from custom_components.alert_manager.manager import AlertManager
 from custom_components.alert_manager.models import (
     AlertDetails,
+    AlertHistoryEntry,
     AlertRecord,
     AlertStatus,
     Rule,
@@ -55,6 +56,59 @@ def make_manager(hass, entry):
     manager = AlertManager(hass, entry)
     run(manager.async_setup())
     return manager
+
+
+@pytest.mark.parametrize(
+    ("entity_area", "child_area", "expected"),
+    [(None, None, "Garage"), (None, "garden", "Garden"), ("office", None, "Office")],
+)
+def test_child_alerts_use_the_effective_native_area(
+    hass, entry, registry_entry, device_entry, entity_area, child_area, expected
+):
+    device_entry(hass, "parent", area_id="garage")
+    child = device_entry(hass, "child", area_id=child_area)
+    child.parent_device_id = "parent"
+    registry_entry(hass, "sensor.child", device_id="child", area_id=entity_area)
+    for area_id, name in [
+        ("garage", "Garage"),
+        ("garden", "Garden"),
+        ("office", "Office"),
+    ]:
+        hass.area_registry.entries[area_id] = SimpleNamespace(id=area_id, name=name)
+    state = hass.states.set("sensor.child", "unavailable")
+    manager = AlertManager(hass, entry)
+    manager.config = {"automatic": {}}
+
+    details = manager._details(state, "unavailable:sensor.child", "unavailable", "")
+
+    assert details.area == expected
+    assert details.device_id == "child"
+    assert manager.records == {}
+
+
+def test_current_native_names_do_not_rewrite_archived_names(
+    hass, entry, registry_entry
+):
+    registered = registry_entry(hass, "sensor.named")
+    registered.name = "Native device Temperature"
+    state = hass.states.set(
+        "sensor.named", "unavailable", {"friendly_name": "Legacy name"}
+    )
+    manager = AlertManager(hass, entry)
+    manager.config = {"automatic": {}}
+    now = dt_util.utcnow()
+    details = manager._details(state, "unavailable:sensor.named", "unavailable", "")
+    assert details.name == "Native device Temperature"
+    record = AlertRecord.pending(details, 0, now)
+    record.status = AlertStatus.ACTIVE
+    record.active_since = now
+    archived = AlertHistoryEntry.resolved(record, now + timedelta(minutes=1))
+
+    registered.name = "Renamed device Temperature"
+    refreshed = manager._details(state, details.id, "unavailable", "")
+
+    assert refreshed.name == "Renamed device Temperature"
+    assert archived.entity_name == "Native device Temperature"
 
 
 def test_rule_creation_respects_the_configuration_limit(hass, entry):

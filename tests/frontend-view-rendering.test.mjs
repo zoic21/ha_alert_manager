@@ -30,6 +30,23 @@ import {
 
 const t = (key) => key;
 
+test("entity exceptions use escaped native names instead of legacy friendly names", () => {
+  const packs = automaticPacks();
+  const config = { automatic: automaticConfig() };
+  config.automatic.battery.entity_overrides = { "sensor.source": { threshold: 12 } };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const markup = renderAutomatic({
+    availablePacks: packs, config, draft, t,
+    configurationDrawer: { kind: "automatic", id: "battery", expandedExceptions: new WeakSet() },
+    hass: {
+      states: { "sensor.source": { attributes: { friendly_name: "Legacy name" } } },
+      formatEntityName: () => "Device <native> Battery",
+    },
+  });
+  assert.match(markup, /header="Device &lt;native&gt; Battery"/);
+  assert.doesNotMatch(markup, /Legacy name|header="Device <native>/);
+});
+
 test("overview rendering uses only its explicit view context", () => {
   let tableCall;
   const markup = renderOverview({

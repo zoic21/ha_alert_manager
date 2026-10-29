@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryChange
 from homeassistant.const import (
-    ATTR_FRIENDLY_NAME,
     ATTR_UNIT_OF_MEASUREMENT,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -56,6 +55,7 @@ from .packs import (
 )
 from .packs.execution_errors import PACK_ID as EXECUTION_ERRORS_PACK_ID
 from .packs.flapping import _settings as flapping_settings
+from .registry_metadata import device_area_id, entity_display_name
 from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 from .runtime_phase import RuntimePhase
 from .transactions import (
@@ -2363,7 +2363,7 @@ class _RuntimeMixin:
         if entity_entry is not None:
             area_id = entity_entry.area_id
         if area_id is None and device is not None:
-            area_id = device.area_id
+            area_id = device_area_id(self.hass, device)
         area_entry = self._area_registry.async_get_area(area_id) if area_id else None
 
         if rule_id is None:
@@ -2373,7 +2373,7 @@ class _RuntimeMixin:
             id=alert_id,
             type=alert_type,
             entity_id=state.entity_id,
-            name=state.attributes.get(ATTR_FRIENDLY_NAME, state.entity_id),
+            name=entity_display_name(self.hass, state.entity_id, state=state),
             device_id=(device.id if device is not None else None),
             device_name=(
                 (device.name_by_user or device.name) if device is not None else None

@@ -10,11 +10,22 @@ from custom_components.alert_manager.coherence import (
     async_scan_configuration,
     scan_configuration,
 )
+from custom_components.alert_manager.coherence_checks.zha import snapshot
 from custom_components.alert_manager.validation import (
     validate_coherence_ignored_entity_references,
 )
 
 IEEE = "5c:02:72:ff:fe:d9:be:ec"
+
+
+def test_metadata_accepts_native_device_collections(hass):
+    hass.config_entries.async_entries = lambda _domain: [
+        SimpleNamespace(entry_id="zha1", state=ConfigEntryState.LOADED)
+    ]
+    hass.device_registry.devices = (
+        SimpleNamespace(config_entry_id="zha1", identifiers={("zha", IEEE)}),
+    )
+    assert snapshot(hass) == (frozenset({IEEE}), "executed")
 
 
 def write_trigger(tmp_path, trigger, section="triggers"):

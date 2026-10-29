@@ -13,7 +13,6 @@ export const tableStyles = `
     box-sizing: border-box;
     width: 100%;
     padding: 24px 24px 0;
-    background: var(--primary-background-color, #fafafa);
   }
   .table-page-top .summary {
     margin-bottom: 20px;

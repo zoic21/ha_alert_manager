@@ -3,7 +3,6 @@ export const baseStyles = `
   :host {
     display: block;
     height: 100%;
-    background: var(--primary-background-color, #fafafa);
   }
 
   /* Base elements */

@@ -2,7 +2,7 @@ import "./frontend-ready.js";
 import { navigate } from "../utils/navigation.js";
 import { connectDashboard } from "../api/dashboard.js";
 import { esc } from "../utils/escaping.js";
-import { conditionText, date, durationText } from "../utils/formatting.js";
+import { conditionText, date, durationText, entityDisplayName } from "../utils/formatting.js";
 import { DASHBOARD_MOBILE_QUERY, dashboardStyles } from "../styles/dashboard-styles.js";
 import { dashboardText } from "./translations.js";
 import { DASHBOARD_ICONS, dashboardGroups, dashboardName, dashboardTarget } from "./groups.js";
@@ -50,7 +50,7 @@ export class AlertManagerCard extends HTMLElement {
   }
   set hass(hass) {
     const changed = hass?.locale?.language !== this._hass?.locale?.language
-      || hass?.entities !== this._hass?.entities;
+      || ["entities", "devices", "areas"].some((key) => hass?.[key] !== this._hass?.[key]);
     this._hass = hass;
     this._language = hass?.locale?.language ?? "en";
     this._connect();
@@ -103,10 +103,11 @@ export class AlertManagerCard extends HTMLElement {
   }
   _tile(group) {
     const alert = group.alerts[0];
-    const fullName = alert.device_name || alert.name || alert.rule_name || alert.entity_id || this._t("dashboard.alert");
     const multiple = group.alerts.length > 1;
     const coherence = !multiple && alert.type === "coherence";
-    const name = dashboardName(alert, this._t);
+    const name = dashboardName(alert, this._t, this._hass);
+    const fullName = multiple ? name : coherence ? alert.name || name
+      : entityDisplayName(this._hass, alert.entity_id, alert.name || alert.device_name || alert.rule_name || alert.entity_id || this._t("dashboard.alert"));
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
     const message = multiple ? ""

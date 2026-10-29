@@ -160,6 +160,91 @@ def test_export_captures_before_worker_and_does_not_read_live_registries(
     )
 
 
+@pytest.mark.parametrize("child_area", [None, "garden"])
+def test_export_includes_children_with_native_names_and_effective_areas(
+    hass, registry_entry, device_entry, monkeypatch, child_area
+):
+    class ChildDevice(SimpleNamespace):
+        def __getattr__(self, name):
+            if name in {
+                "manufacturer",
+                "model",
+                "sw_version",
+                "hw_version",
+                "via_device_id",
+            }:
+                pytest.fail(f"Read hardware-only attribute on a child device: {name}")
+            raise AttributeError(name)
+
+    parent = device_entry(hass, "parent", area_id="garage", name="Power strip")
+    parent.manufacturer = "Manufacturer"
+    parent.config_entry_id = "entry"
+    child = ChildDevice(
+        id="child",
+        name="Outlet",
+        name_by_user=None,
+        parent_device_id="parent",
+        area_id=child_area,
+        config_entry_id="entry",
+        labels=set(),
+        disabled_by=None,
+    )
+    hass.device_registry.entries["child"] = child
+    # Recent HA exposes separate collections, not a mapping of all devices.
+    hass.device_registry.devices = (parent,)
+    hass.device_registry.child_devices = (child,)
+    for area_id, name in [
+        ("garage", "Garage"),
+        ("garden", "Garden"),
+        ("office", "Office"),
+    ]:
+        hass.area_registry.entries[area_id] = SimpleNamespace(id=area_id, name=name)
+    inherited = registry_entry(hass, "switch.child", device_id="child")
+    inherited.name = "Power strip Outlet Switch"
+    registry_entry(hass, "sensor.override", device_id="child", area_id="office")
+    hass.states.set("switch.child", "off", {"friendly_name": "Legacy name"})
+
+    async def executor(target, *args):
+        hass.entity_registry.entries["switch.child"] = SimpleNamespace(
+            **{**vars(inherited), "name": "Changed after capture"}
+        )
+        hass.device_registry.entries["child"] = SimpleNamespace(
+            **{**vars(child), "area_id": "office"}
+        )
+        hass.device_registry.entries.clear()
+        return await asyncio.to_thread(target, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", executor)
+    result = json.loads(asyncio.run(async_export_entities(hass))["content"])
+    assert result["counts"] == {
+        "devices": 2,
+        "entities": 2,
+        "entities_without_device": 0,
+    }
+    exported = {device["device_id"]: device for device in result["devices"]}
+    assert exported["parent"]["manufacturer"] == "Manufacturer"
+    assert exported["parent"]["parent_device_id"] is None
+    child = exported["child"]
+    assert child["parent_device_id"] == "parent"
+    assert child["manufacturer"] is None
+    assert child["area"] == (
+        None if child_area is None else {"id": "garden", "name": "Garden"}
+    )
+    expected_area = (
+        {"id": "garden", "name": "Garden"}
+        if child_area
+        else {"id": "garage", "name": "Garage"}
+    )
+    assert child["effective_area"] == expected_area
+    entities = {item["entity_id"]: item for item in child["entities"]}
+    assert entities["switch.child"]["name"] == "Power strip Outlet Switch"
+    assert entities["switch.child"]["effective_area"] == expected_area
+    assert entities["sensor.override"]["effective_area"] == {
+        "id": "office",
+        "name": "Office",
+    }
+
+
 def test_export_endpoint_requires_admin_and_loaded_manager(hass):
     connection = Connection(admin=False)
     asyncio.run(websocket_entities_export(hass, connection, {"id": 1}))

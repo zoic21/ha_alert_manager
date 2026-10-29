@@ -1,5 +1,13 @@
 import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES } from "./constants.js";
 
+export function entityDisplayName(hass, entityId, fallback = "") {
+  const state = hass?.states?.[entityId];
+  const entry = hass?.entities?.[entityId];
+  return (state && hass?.formatEntityName?.(state))
+    || state?.attributes?.friendly_name || fallback
+    || entry?.name || entry?.original_name || entityId;
+}
+
 const lines = (value) =>
   String(value ?? "")
     .split(/[\n,]+/)

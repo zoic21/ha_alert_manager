@@ -111,15 +111,18 @@ coherence scan. It does not run a scan or change any entity, alert or configurat
 The export combines the entity registry and current HA states, including entities
 outside dashboards, disabled/hidden entities and entities without a unique ID.
 Registered devices contain their entities; `entities_without_device` contains the
-rest. Devices without entities are included. Deleted registry entries are excluded.
+rest. Devices without entities and child devices are included. Deleted registry
+entries are excluded.
 
 The root contains `schema_version`, `exported_at`, Home Assistant and Alert Manager
 versions, counts, `devices` and `entities_without_device`. Each entity includes its
 ID, name, integration platform, config-entry ID, unique ID, category, labels, explicit
 and effective area, state, full attributes, and change/update/report timestamps.
 Device metadata includes name, manufacturer, model, software/hardware versions,
-area, labels and integrations. Devices, entities and labels are sorted by ID for
-repeatable comparisons; attribute arrays retain their original order.
+area, effective area, parent-device ID, labels and integrations. Hardware metadata
+belongs to the parent, so child-device hardware fields are `null`. Names follow
+Home Assistant's current native naming. Devices, entities and labels are sorted by
+ID for repeatable comparisons; attribute arrays retain their original order.
 
 | Field | Meaning |
 | --- | --- |
@@ -127,7 +130,8 @@ repeatable comparisons; attribute arrays retain their original order.
 | `hidden` / `hidden_by` | Registry hiding flag and reason for entities. HA has no device-level hiding flag, so both are `null` for devices. |
 | `registered` | Whether the entity exists in the entity registry. For state-only entities, registry flags and integration are `null` when unknown. |
 | `state` / `attributes` | Raw HA state string and all published attributes, preserving JSON types. Both are `null` when HA has no state; actual `unknown` and `unavailable` strings are preserved. |
-| `area` / `effective_area` | The entity's explicit area and the area after inheriting from its device. |
+| `area` / `effective_area` | The explicit area and the effective area, including inheritance from an entity's device or a child device's parent. |
+| `parent_device_id` | The parent of a child device; `null` for main devices. |
 
 Disabled, hidden, unavailable and an ordinary `off` state are different concepts.
 A device's disable flag is exported separately from each entity's own registry flag;

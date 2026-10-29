@@ -498,6 +498,20 @@ test("rule target metadata uses only configured entities with entity area overri
   }
 });
 
+test("rule area filters inherit child device areas with explicit overrides", () => {
+  const panel = new Panel();
+  panel._hass = {
+    entities: { "sensor.child": { device_id: "child" } },
+    devices: { parent: { area_id: "garage" }, child: { parent_device_id: "parent" } },
+  };
+  panel._config = { rules: [{ ...rules()[0], entity_ids: ["sensor.child"] }] };
+  assert.equal(panel._ruleTableRows()[0].targets[0].area, "garage");
+  panel._hass.devices.child.area_id = "garden";
+  assert.equal(panel._ruleTableRows()[0].targets[0].area, "garden");
+  panel._hass.entities["sensor.child"].area_id = "office";
+  assert.equal(panel._ruleTableRows()[0].targets[0].area, "office");
+});
+
 test("entity facets match any configured target and combine with status and rule labels", () => {
   const panel = new Panel();
   panel._activeTab = "rules";

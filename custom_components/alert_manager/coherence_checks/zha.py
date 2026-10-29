@@ -14,6 +14,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
+from ..registry_metadata import device_entries
+
 _LOGGER = logging.getLogger(__name__)
 REFERENCE_TYPE = "zha_device_ieee"
 
@@ -107,7 +109,7 @@ def snapshot(hass: HomeAssistant) -> tuple[frozenset[str] | None, str]:
         registry = dr.async_get(hass)
         ieees = frozenset(
             identifier.lower()
-            for device in registry.devices.values()
+            for device in device_entries(registry)
             if device.config_entry_id in entry_ids
             for domain, identifier in device.identifiers
             if domain == "zha"

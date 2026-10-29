@@ -381,6 +381,21 @@ class DeviceEntryType(StrEnum):
 device_registry.DeviceEntryType = DeviceEntryType
 device_registry.DeviceInfo = lambda **kwargs: kwargs
 
+
+def _effective_device_area_id(hass, device):
+    if device.area_id is not None:
+        return device.area_id
+    parent = hass.device_registry.async_get(getattr(device, "parent_device_id", None))
+    return parent.area_id if parent else None
+
+
+device_registry.async_get_effective_area_id = _effective_device_area_id
+sys.modules["homeassistant.helpers.entity_registry"].async_get_full_entity_name = (
+    lambda _hass, entry: (
+        getattr(entry, "name", None) or getattr(entry, "original_name", None) or ""
+    )
+)
+
 dispatcher = _module("homeassistant.helpers.dispatcher")
 
 

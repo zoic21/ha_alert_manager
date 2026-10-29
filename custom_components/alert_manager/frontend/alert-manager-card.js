@@ -171,6 +171,14 @@ function navigate(path, newTabInBrowser = false) {
 }
 
 // Source: frontend-src/utils/formatting.js
+function entityDisplayName(hass, entityId, fallback = "") {
+  const state = hass?.states?.[entityId];
+  const entry = hass?.entities?.[entityId];
+  return (state && hass?.formatEntityName?.(state))
+    || state?.attributes?.friendly_name || fallback
+    || entry?.name || entry?.original_name || entityId;
+}
+
 const lines = (value) =>
   String(value ?? "")
     .split(/[\n,]+/)
@@ -706,9 +714,9 @@ function dashboardLabels(config = {}) {
     exclude: config.exclude_labels ?? [] };
 }
 
-function dashboardName(alert, t = (key) => key) {
+function dashboardName(alert, t = (key) => key, hass) {
   return alert.type === "coherence" ? t("dashboard.coherence")
-    : alert.device_name || alert.name || alert.rule_name || alert.entity_id || t("dashboard.alert");
+    : alert.device_name || entityDisplayName(hass, alert.entity_id, alert.name || alert.rule_name || alert.entity_id || t("dashboard.alert"));
 }
 
 function dashboardGroups(alerts, config = {}, hass, t) {
@@ -739,7 +747,7 @@ function dashboardGroups(alerts, config = {}, hass, t) {
   return [...groups.values()].map((group) => {
     group.alerts.sort((a, b) => compare(a.id, b.id));
     group.types = [...new Set(group.alerts.map((alert) => alert.type))].sort(compare);
-    group.name = dashboardName(group.alerts[0], t);
+    group.name = dashboardName(group.alerts[0], t, hass);
     return group;
   }).sort((a, b) => {
     let order;
@@ -962,7 +970,7 @@ class AlertManagerCard extends HTMLElement {
   }
   set hass(hass) {
     const changed = hass?.locale?.language !== this._hass?.locale?.language
-      || hass?.entities !== this._hass?.entities;
+      || ["entities", "devices", "areas"].some((key) => hass?.[key] !== this._hass?.[key]);
     this._hass = hass;
     this._language = hass?.locale?.language ?? "en";
     this._connect();
@@ -1015,10 +1023,11 @@ class AlertManagerCard extends HTMLElement {
   }
   _tile(group) {
     const alert = group.alerts[0];
-    const fullName = alert.device_name || alert.name || alert.rule_name || alert.entity_id || this._t("dashboard.alert");
     const multiple = group.alerts.length > 1;
     const coherence = !multiple && alert.type === "coherence";
-    const name = dashboardName(alert, this._t);
+    const name = dashboardName(alert, this._t, this._hass);
+    const fullName = multiple ? name : coherence ? alert.name || name
+      : entityDisplayName(this._hass, alert.entity_id, alert.name || alert.device_name || alert.rule_name || alert.entity_id || this._t("dashboard.alert"));
     const count = alert.condition_params?.count ?? alert.value;
     const fullMessage = (alert.type === "rule" && alert.message) || conditionText.call(this, alert) || alert.message || this._typeName(alert.type);
     const message = multiple ? ""

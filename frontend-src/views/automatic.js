@@ -2,6 +2,7 @@ import { automaticPackToDraft, automaticDraftToPack, hydrateConfigurationYaml, r
 import { durationFieldValue, renderDurationControl } from "../components/duration-field.js";
 import { MAX_DURATION_SECONDS, MDI_PLUS } from "../utils/constants.js";
 import { esc } from "../utils/escaping.js";
+import { entityDisplayName } from "../utils/formatting.js";
 import { confirmConfigurationDiscard, renderConfigurationDrawer, renderConfigurationRemove, replaceConfigurationDrawer, revealAddedRow } from "../components/configuration-drawer.js";
 
 const EXCEPTION_FIELDS = ["device_overrides", "entity_overrides"];
@@ -134,10 +135,9 @@ export function renderPackField(pack, field, config, context) {
       const parentBlocked = parent.value === false;
       const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
       const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);
-      const entity = hass?.entities?.[row.target_id];
       const device = hass?.devices?.[row.target_id];
       const name = field.id === "device_overrides" ? device?.name_by_user || device?.name
-        : hass?.states?.[row.target_id]?.attributes?.friendly_name || entity?.name || entity?.original_name;
+        : entityDisplayName(hass, row.target_id);
       const title = name || row.target_id || t("automatic.new_exception");
       const expanded = configurationDrawer?.expandedExceptions?.has(row) ?? !row.target_id;
       const renderField = (setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false));

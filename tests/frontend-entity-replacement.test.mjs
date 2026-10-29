@@ -40,7 +40,11 @@ test("native autocomplete allows typed IDs and hydration never stacks callbacks"
   const root = { querySelector() { return dialog; } };
   const context = {
     _entityReplacement: { old_entity_id: "light.deleted", new_entity_id: "", busy: false },
-    _hass: { states: { "light.new": { attributes: { friendly_name: "Bureau" } } }, entities: { "light.disabled": {} } },
+    _hass: {
+      states: { "light.new": { attributes: { friendly_name: "Legacy name" } } },
+      entities: { "light.disabled": {} },
+      formatEntityName: () => "Bureau Lumière",
+    },
     _t: translate, _render() {},
   };
   hydrateEntityReplacement(root, context);
@@ -49,7 +53,7 @@ test("native autocomplete allows typed IDs and hydration never stacks callbacks"
   assert.equal(old.handlers["value-changed"], callback);
   assert.equal(old.selector.select.custom_value, true);
   assert.deepEqual(old.selector.select.options.map((item) => item.value), ["light.disabled", "light.new"]);
-  assert.match(old.selector.select.options[1].label, /Bureau/);
+  assert.equal(old.selector.select.options[1].label, "Bureau Lumière (light.new)");
   callback({ detail: { value: "light.typed" } });
   assert.equal(context._entityReplacement.old_entity_id, "light.typed");
   assert.equal(old.value, "light.typed");

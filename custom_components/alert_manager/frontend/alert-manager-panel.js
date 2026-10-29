@@ -535,6 +535,14 @@ function saveRulesTableState() {
 }
 
 // Source: frontend-src/utils/formatting.js
+function entityDisplayName(hass, entityId, fallback = "") {
+  const state = hass?.states?.[entityId];
+  const entry = hass?.entities?.[entityId];
+  return (state && hass?.formatEntityName?.(state))
+    || state?.attributes?.friendly_name || fallback
+    || entry?.name || entry?.original_name || entityId;
+}
+
 const lines = (value) =>
   String(value ?? "")
     .split(/[\n,]+/)
@@ -1749,7 +1757,9 @@ function tableRows(kind, historyEvents = []) {
     );
     const create = (source, status, history = false) => {
       const metadata = this._entityMetadata(source, labelRegistry);
-      const entityName = history ? (source.entity_name || source.entity_id) : (source.name || source.entity_id);
+      const entityName = history ? (source.entity_name || source.entity_id)
+        : source.type === "coherence" ? source.name || source.entity_id
+          : entityDisplayName(this._hass, source.entity_id, source.name);
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
@@ -3042,7 +3052,7 @@ function syncNarrowTableHeaderBackgrounds() {
       style.id = styleId;
       style.textContent = `
         :host([narrow]) .narrow-header-row {
-          background: var(--primary-background-color);
+          background: var(--ha-panel-toolbar-background, var(--primary-background-color));
           border-bottom: 1px solid var(--divider-color);
           box-sizing: border-box;
         }
@@ -6221,8 +6231,8 @@ function hydrateEntityReplacement(root, context) {
     ...Object.keys(context._hass?.entities ?? {}),
   ] : []);
   const options = [...entityIds].sort().map((value) => {
-    const name = context._hass?.states?.[value]?.attributes?.friendly_name;
-    return { value, label: name ? `${name} (${value})` : value };
+    const name = entityDisplayName(context._hass, value);
+    return { value, label: name && name !== value ? `${name} (${value})` : value };
   });
   fields.forEach((control) => {
     const field = control.dataset.replacementField;
@@ -7322,11 +7332,12 @@ function buildRuleTableRows(rules, context) {
         targets: (rule.entity_ids ?? []).map((entityId) => {
           const entity = hass?.entities?.[entityId];
           const device = hass?.devices?.[entity?.device_id];
+          const parent = hass?.devices?.[device?.parent_device_id];
           return {
             integration: entity?.platform || "",
             device: entity?.device_id || "",
             domain: entityId.split(".", 1)[0],
-            area: entity?.area_id || device?.area_id || "",
+            area: entity?.area_id || device?.area_id || parent?.area_id || "",
           };
         }),
         entities: (rule.entity_ids ?? []).join(", "),
@@ -7716,10 +7727,9 @@ function renderPackField(pack, field, config, context) {
       const parentBlocked = parent.value === false;
       const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
       const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);
-      const entity = hass?.entities?.[row.target_id];
       const device = hass?.devices?.[row.target_id];
       const name = field.id === "device_overrides" ? device?.name_by_user || device?.name
-        : hass?.states?.[row.target_id]?.attributes?.friendly_name || entity?.name || entity?.original_name;
+        : entityDisplayName(hass, row.target_id);
       const title = name || row.target_id || t("automatic.new_exception");
       const expanded = configurationDrawer?.expandedExceptions?.has(row) ?? !row.target_id;
       const renderField = (setting) => renderSetting(setting, row[setting.id], `auto-${pack.id}-${field.id}-${index}-${setting.id}`, { "data-pack-setting": pack.id, "data-pack-field": field.id, "data-pack-index": index, "data-setting-id": setting.id }, t, true, blocked || (setting.id !== "enabled" && row.enabled === false));
@@ -8710,7 +8720,6 @@ const baseStyles = `
   :host {
     display: block;
     height: 100%;
-    background: var(--primary-background-color, #fafafa);
   }
 
   /* Base elements */
@@ -8807,7 +8816,6 @@ const tableStyles = `
     box-sizing: border-box;
     width: 100%;
     padding: 24px 24px 0;
-    background: var(--primary-background-color, #fafafa);
   }
   .table-page-top .summary {
     margin-bottom: 20px;

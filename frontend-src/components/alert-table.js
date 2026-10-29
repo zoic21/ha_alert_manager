@@ -1,4 +1,4 @@
-import { sequenceCountdown } from "../utils/formatting.js";
+import { entityDisplayName, sequenceCountdown } from "../utils/formatting.js";
 import { navigate } from "../utils/navigation.js";
 export { navigate };
 import { alertLabelIds } from "../utils/alert-labels.js";
@@ -366,7 +366,9 @@ export function tableRows(kind, historyEvents = []) {
     );
     const create = (source, status, history = false) => {
       const metadata = this._entityMetadata(source, labelRegistry);
-      const entityName = history ? (source.entity_name || source.entity_id) : (source.name || source.entity_id);
+      const entityName = history ? (source.entity_name || source.entity_id)
+        : source.type === "coherence" ? source.name || source.entity_id
+          : entityDisplayName(this._hass, source.entity_id, source.name);
       const value = history ? source.trigger_value : source.value;
       const condition = history ? this._historyConditionText(source) : this._conditionText(source);
       const rule = history ? this._historyRuleName(source) : this._alertRuleName(source);
@@ -1659,7 +1661,7 @@ export function syncNarrowTableHeaderBackgrounds() {
       style.id = styleId;
       style.textContent = `
         :host([narrow]) .narrow-header-row {
-          background: var(--primary-background-color);
+          background: var(--ha-panel-toolbar-background, var(--primary-background-color));
           border-bottom: 1px solid var(--divider-color);
           box-sizing: border-box;
         }

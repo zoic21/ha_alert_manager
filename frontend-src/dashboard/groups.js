@@ -1,4 +1,5 @@
 import { alertLabelIds } from "../utils/alert-labels.js";
+import { entityDisplayName } from "../utils/formatting.js";
 
 export const DASHBOARD_ICONS = Object.freeze({
   unavailable: "mdi:help-network-outline",
@@ -18,9 +19,9 @@ export function dashboardLabels(config = {}) {
     exclude: config.exclude_labels ?? [] };
 }
 
-export function dashboardName(alert, t = (key) => key) {
+export function dashboardName(alert, t = (key) => key, hass) {
   return alert.type === "coherence" ? t("dashboard.coherence")
-    : alert.device_name || alert.name || alert.rule_name || alert.entity_id || t("dashboard.alert");
+    : alert.device_name || entityDisplayName(hass, alert.entity_id, alert.name || alert.rule_name || alert.entity_id || t("dashboard.alert"));
 }
 
 export function dashboardGroups(alerts, config = {}, hass, t) {
@@ -51,7 +52,7 @@ export function dashboardGroups(alerts, config = {}, hass, t) {
   return [...groups.values()].map((group) => {
     group.alerts.sort((a, b) => compare(a.id, b.id));
     group.types = [...new Set(group.alerts.map((alert) => alert.type))].sort(compare);
-    group.name = dashboardName(group.alerts[0], t);
+    group.name = dashboardName(group.alerts[0], t, hass);
     return group;
   }).sort((a, b) => {
     let order;
