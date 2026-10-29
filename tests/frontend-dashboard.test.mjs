@@ -88,7 +88,8 @@ test("a change during fetching discards stale data and performs one trailing ref
   subscription.disconnect();
 });
 
-test("disconnect, reload, failure and disabled monitoring never imply no alerts", async () => {
+test("disconnect, reload, persistent failure and disabled monitoring never imply no alerts", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { hass, connection, requests } = fixture();
   const values = [];
   const subscription = connectDashboard(hass, (value) => values.push(value));
@@ -96,14 +97,23 @@ test("disconnect, reload, failure and disabled monitoring never imply no alerts"
   connection.dispatchEvent(new Event("disconnected"));
   requests[0].resolve({ alerts: [] });
   await tick();
+  assert.equal(values.at(-1).status, "loading");
+  t.mock.timers.tick(5000);
   assert.equal(values.at(-1).status, "unavailable");
   connection.connected = true;
   connection.dispatchEvent(new Event("ready"));
   requests[1].reject({ code: "not_loaded" });
   await tick();
+  assert.equal(values.at(-1).status, "loading");
+  t.mock.timers.tick(1000);
+  requests[2].reject({ code: "not_loaded" });
+  await tick();
+  t.mock.timers.tick(3000);
+  requests[3].reject({ code: "not_loaded" });
+  await tick();
   assert.equal(values.at(-1).status, "unavailable");
   subscription.retry();
-  requests[2].resolve({ alerts: [] });
+  requests[4].resolve({ alerts: [] });
   await tick();
   assert.equal(values.at(-1).status, "ready");
   hass.states["switch.alert_manager_main_monitoring"].state = "off";
@@ -111,7 +121,151 @@ test("disconnect, reload, failure and disabled monitoring never imply no alerts"
   assert.equal(values.at(-1).status, "paused");
   subscription.disconnect();
   connection.dispatchEvent(new Event("ready"));
+  assert.equal(requests.length, 5);
+});
+
+test("a transient failure retries once for all cards without an alert revision change", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { hass, requests } = fixture();
+  const first = [], second = [];
+  const a = connectDashboard(hass, (value) => first.push(value));
+  const b = connectDashboard(hass, (value) => second.push(value));
+  t.after(() => { a.disconnect(); b.disconnect(); });
+  requests[0].reject({ code: "connection_lost" });
+  await tick();
+  for (let i = 0; i < 10; i += 1) { a.update(hass); b.update(hass); }
+  assert.equal(requests.length, 1);
+  assert.equal(first.at(-1).status, "loading");
+  t.mock.timers.tick(1000);
+  assert.equal(requests.length, 2);
+  requests[1].resolve({ alerts: [] });
+  await tick();
+  assert.equal(first.at(-1).status, "ready");
+  assert.equal(first.at(-1).snapshot, second.at(-1).snapshot);
+  t.mock.timers.tick(30000);
+  assert.equal(requests.length, 2);
+});
+
+test("pending retries are cancelled by a new revision, paused monitoring or the last disconnect", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { hass, requests, revise } = fixture();
+  const values = [];
+  const subscription = connectDashboard(hass, (value) => values.push(value));
+  t.after(() => subscription.disconnect());
+  requests[0].reject({ code: "not_loaded" });
+  await tick();
+  revise(2); subscription.update(hass);
+  requests[1].resolve({ alerts: [] });
+  await tick();
+  t.mock.timers.tick(30000);
+  assert.equal(requests.length, 2);
+  revise(3); subscription.update(hass);
+  requests[2].reject({ code: "not_loaded" });
+  await tick();
+  hass.states["switch.alert_manager_main_monitoring"].state = "off";
+  subscription.update(hass);
+  t.mock.timers.tick(30000);
+  assert.equal(values.at(-1).status, "paused");
   assert.equal(requests.length, 3);
+  hass.states["switch.alert_manager_main_monitoring"].state = "on";
+  subscription.update(hass);
+  requests[3].reject({ code: "not_loaded" });
+  await tick();
+  subscription.disconnect();
+  const count = values.length;
+  t.mock.timers.tick(30000);
+  assert.equal(requests.length, 4);
+  assert.equal(values.length, count);
+});
+
+test("authorization failures immediately replace cached data and do not retry", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { hass, requests } = fixture();
+  const values = [];
+  const subscription = connectDashboard(hass, (value) => values.push(value));
+  t.after(() => subscription.disconnect());
+  requests[0].resolve({ alerts: [alert("private")] });
+  await tick();
+  subscription.retry();
+  requests[1].reject({ code: "unauthorized" });
+  await tick();
+  assert.deepEqual(values.at(-1), { status: "admin" });
+  t.mock.timers.tick(30000);
+  assert.equal(requests.length, 2);
+});
+
+test("returning to a visible dashboard recovers after exhausted retries and removes its listener", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const previousDocument = globalThis.document;
+  const page = Object.assign(new EventTarget(), { visibilityState: "visible" });
+  globalThis.document = page;
+  t.after(() => { globalThis.document = previousDocument; });
+  const { hass, requests } = fixture();
+  const values = [];
+  const a = connectDashboard(hass, (value) => values.push(value));
+  const b = connectDashboard(hass, () => {});
+  t.after(() => { a.disconnect(); b.disconnect(); });
+  requests[0].reject({ code: "not_loaded" });
+  await tick();
+  t.mock.timers.tick(1000);
+  requests[1].reject({ code: "not_loaded" });
+  await tick();
+  t.mock.timers.tick(3000);
+  requests[2].reject({ code: "not_loaded" });
+  await tick();
+  assert.equal(values.at(-1).status, "unavailable");
+  t.mock.timers.tick(30000);
+  page.visibilityState = "hidden";
+  page.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(requests.length, 3);
+  page.visibilityState = "visible";
+  page.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(requests.length, 4);
+  requests[3].resolve({ alerts: [] });
+  await tick();
+  assert.equal(values.at(-1).status, "ready");
+  a.disconnect(); b.disconnect();
+  page.dispatchEvent(new Event("visibilitychange"));
+  t.mock.timers.tick(30000);
+  assert.equal(requests.length, 4);
+});
+
+test("background suspension retains the empty card until visible recovery completes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const previousDocument = globalThis.document;
+  const page = Object.assign(new EventTarget(), {
+    visibilityState: "visible", createElement: previousDocument.createElement,
+  });
+  globalThis.document = page;
+  t.after(() => { globalThis.document = previousDocument; });
+  const { hass, connection, requests } = fixture();
+  const card = new AlertManagerCard();
+  t.after(() => card.disconnectedCallback());
+  card.isConnected = true;
+  card.hass = hass;
+  requests[0].resolve({ alerts: [] });
+  await tick();
+  const markup = card.shadowRoot.innerHTML;
+  connection.connected = false;
+  connection.dispatchEvent(new Event("disconnected"));
+  page.visibilityState = "hidden";
+  page.dispatchEvent(new Event("visibilitychange"));
+  t.mock.timers.tick(60000);
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  connection.connected = true;
+  connection.dispatchEvent(new Event("ready"));
+  requests[1].reject({ code: "connection_lost" });
+  await tick();
+  t.mock.timers.tick(60000);
+  assert.equal(requests.length, 2);
+  assert.equal(card.hidden, true);
+  page.visibilityState = "visible";
+  page.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  requests[2].resolve({ alerts: [alert("new")] });
+  await tick();
+  assert.equal(card.hidden, false);
+  assert.match(card.shadowRoot.innerHTML, /alert=new/);
 });
 
 test("non-admin cards fetch alerts and closed subscriptions never receive stale responses", async () => {
@@ -537,9 +691,76 @@ for (const alerts of [[], [alert("retained")]]) {
     assert.doesNotMatch(card.shadowRoot.innerHTML, /alert=retained/);
     card.disconnectedCallback();
   });
+
+  test(`a recreated card retains ${alerts.length ? "tiles" : "an empty card"} through reconnect and a transient error`, async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { hass, connection, requests } = fixture();
+    const first = new AlertManagerCard();
+    first.isConnected = true;
+    first.hass = hass;
+    requests[0].resolve({ alerts });
+    await tick();
+    const markup = first.shadowRoot.innerHTML;
+    const hidden = first.hidden;
+    first.isConnected = false;
+    first.disconnectedCallback();
+    connection.connected = false;
+    const card = new AlertManagerCard();
+    t.after(() => card.disconnectedCallback());
+    card.isConnected = true;
+    card.hass = hass;
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    assert.equal(card.hidden, hidden);
+    assert.equal(requests.length, 1);
+    t.mock.timers.tick(4000);
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    connection.connected = true;
+    connection.dispatchEvent(new Event("ready"));
+    requests[1].reject({ code: "connection_lost" });
+    await tick();
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    t.mock.timers.tick(1000);
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    requests[2].resolve({ alerts: [alert("updated")] });
+    await tick();
+    assert.equal(card.hidden, false);
+    assert.match(card.shadowRoot.innerHTML, /alert=updated/);
+    t.mock.timers.tick(30000);
+    assert.equal(requests.length, 3);
+    assert.doesNotMatch(card.shadowRoot.innerHTML, /indisponible/);
+  });
+
+  test(`a persistent disconnection exposes an error after retaining ${alerts.length ? "tiles" : "an empty card"}`, async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { hass, connection, requests } = fixture();
+    const card = new AlertManagerCard();
+    t.after(() => card.disconnectedCallback());
+    card.isConnected = true;
+    card.hass = hass;
+    requests[0].resolve({ alerts });
+    await tick();
+    const markup = card.shadowRoot.innerHTML;
+    connection.connected = false;
+    connection.dispatchEvent(new Event("disconnected"));
+    t.mock.timers.tick(2500);
+    card.hass = hass;
+    assert.equal(card.shadowRoot.innerHTML, markup);
+    t.mock.timers.tick(2500);
+    assert.equal(card.hidden, false);
+    assert.match(card.shadowRoot.innerHTML, /indisponible/);
+    assert.equal(requests.length, 1);
+    // HA state delivery can resume before its ready event is handled.
+    connection.connected = true;
+    card.hass = hass;
+    assert.equal(requests.length, 2);
+    requests[1].resolve({ alerts: [] });
+    await tick();
+    assert.equal(card.hidden, true);
+  });
 }
 
-test("WebSocket reconnect keeps tiles, discards in-flight data and exposes refresh errors", async () => {
+test("WebSocket reconnect keeps tiles, discards in-flight data and exposes persistent refresh errors", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const { hass, connection, requests, revise } = fixture();
   const card = new AlertManagerCard();
   card.isConnected = true;
@@ -559,9 +780,16 @@ test("WebSocket reconnect keeps tiles, discards in-flight data and exposes refre
   assert.equal(card.shadowRoot.innerHTML, markup);
   requests[2].reject({ code: "not_loaded" });
   await tick();
+  assert.equal(card.shadowRoot.innerHTML, markup);
+  t.mock.timers.tick(1000);
+  requests[3].reject({ code: "not_loaded" });
+  await tick();
+  t.mock.timers.tick(3000);
+  requests[4].reject({ code: "not_loaded" });
+  await tick();
   assert.match(card.shadowRoot.innerHTML, /indisponible/);
   card._subscription.retry();
-  requests[3].resolve({ alerts: [] });
+  requests[5].resolve({ alerts: [] });
   await tick();
   assert.equal(card.hidden, true);
   card.disconnectedCallback();

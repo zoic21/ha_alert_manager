@@ -51,7 +51,6 @@ export class AlertManagerCard extends HTMLElement {
   set hass(hass) {
     const changed = hass?.locale?.language !== this._hass?.locale?.language
       || hass?.entities !== this._hass?.entities;
-    if (this._hass?.connection !== hass?.connection) this._lastReadyValue = null;
     this._hass = hass;
     this._language = hass?.locale?.language ?? "en";
     this._connect();
@@ -86,9 +85,6 @@ export class AlertManagerCard extends HTMLElement {
       this._subscription?.disconnect();
       this._connection = this._hass.connection;
       this._subscription = connectDashboard(this._hass, (value) => {
-        if (value.status !== "loading") {
-          this._lastReadyValue = value.status === "ready" ? value : null;
-        }
         this._value = value;
         this._render();
       });
@@ -131,9 +127,7 @@ export class AlertManagerCard extends HTMLElement {
   }
   _render() {
     if (!this.shadowRoot) return;
-    // Reattaching a card refreshes in the background, including an empty snapshot.
-    const { status, snapshot } = this._value.status === "loading" && this._lastReadyValue
-      ? this._lastReadyValue : this._value;
+    const { status, snapshot } = this._value;
     const startup = status === "ready" && snapshot.startup?.in_progress;
     let groups = status === "ready"
       ? dashboardGroups(snapshot.alerts, this._config, this._hass, this._t) : [];

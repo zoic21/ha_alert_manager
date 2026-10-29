@@ -521,14 +521,27 @@ function sameReplacementConfiguration(left, right) {
 
 // Source: frontend-src/api/dashboard.js
 const dashboardConnections = new WeakMap();
+const dashboardRetryDelays = [1000, 3000];
+const dashboardDisconnectDelay = 5000;
 
 // One fetch per revision and connection, regardless of the number of cards.
 function connectDashboard(hass, listener) {
   const connection = hass.connection;
   let state = dashboardConnections.get(connection);
-  if (!state) {
-    state = { listeners: new Set(), hass, value: { status: "loading" }, revision: null,
-      generation: 0, fetching: false, requested: false, closed: false, identities: null };
+  if (!state || state.closed) {
+    // Retain one snapshot per HA connection when navigation recreates the cards.
+    const cached = state;
+    state = { listeners: new Set(), hass,
+      value: cached?.value.status === "ready" ? cached.value : { status: "loading" }, revision: null,
+      generation: 0, fetching: false, requested: false, closed: false, identities: cached?.identities ?? null,
+      retryTimer: null, disconnectTimer: null, retryAttempts: 0 };
+    state.clearRecovery = () => {
+      clearTimeout(state.retryTimer);
+      clearTimeout(state.disconnectTimer);
+      state.retryTimer = null;
+      state.disconnectTimer = null;
+      state.retryAttempts = 0;
+    };
     state.observe = () => {
       const states = integrationStates(state.hass, state.identities);
       const sensor = states["sensor.alert_manager_main_active"];
@@ -547,6 +560,20 @@ function connectDashboard(hass, listener) {
       state.value = value;
       for (const callback of state.listeners) callback(value);
     };
+    state.retryLater = () => {
+      // A suspended page resumes recovery through its visibility listener.
+      if (globalThis.document?.visibilityState === "hidden") return;
+      if (state.retryAttempts === dashboardRetryDelays.length) {
+        state.publish({ status: "unavailable" });
+        return;
+      }
+      state.retryTimer = setTimeout(() => {
+        state.retryTimer = null;
+        if (globalThis.document?.visibilityState === "hidden") return;
+        if (connection.connected === false) state.disconnected();
+        else void state.refresh();
+      }, dashboardRetryDelays[state.retryAttempts++]);
+    };
     state.refresh = async () => {
       state.requested = true;
       if (state.fetching || state.closed) return;
@@ -561,15 +588,21 @@ function connectDashboard(hass, listener) {
             });
             if (!Array.isArray(snapshot?.alerts)) throw new Error("Invalid alert snapshot");
             if (generation === state.generation) {
+              state.clearRecovery();
               state.identities = snapshot;
               const observed = state.observe();
               state.revision = observed.revision;
               state.publish(observed.status ? { status: observed.status } : { status: "ready", snapshot });
             }
           } catch (error) {
-            if (generation === state.generation) state.publish({
-              status: error?.code === "unauthorized" ? "admin" : "unavailable",
-            });
+            if (state.closed || generation !== state.generation) continue;
+            if (error?.code === "unauthorized") {
+              state.clearRecovery();
+              state.publish({ status: "admin" });
+            } else {
+              // Keep the previous display during bounded recovery, even if empty.
+              state.retryLater();
+            }
           }
         }
       } finally {
@@ -577,6 +610,7 @@ function connectDashboard(hass, listener) {
       }
     };
     state.update = (next, force = false) => {
+      if (state.closed) return;
       state.hass = next;
       if (connection.connected === false) {
         state.disconnected();
@@ -584,13 +618,14 @@ function connectDashboard(hass, listener) {
       }
       const { status, revision, missing } = state.observe();
       if (!force && revision === state.revision) return;
+      state.clearRecovery();
       state.revision = revision;
       state.generation += 1;
       if (status) {
         state.requested = false;
-        state.publish({ status });
         // Discover registry identities once when defaults or previous names vanish.
         if (missing) void state.refresh();
+        else state.publish({ status });
       } else {
         if (state.value.status !== "ready") state.publish({ status: "loading" });
         void state.refresh();
@@ -599,12 +634,24 @@ function connectDashboard(hass, listener) {
     state.disconnected = () => {
       state.generation += 1;
       state.requested = false;
-      // A transport reconnect is transient; retain the last successful snapshot.
-      if (state.value.status !== "ready") state.publish({ status: "unavailable" });
+      state.revision = null;
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
+      if (globalThis.document?.visibilityState === "hidden") return;
+      if (state.disconnectTimer !== null || state.value.status === "unavailable") return;
+      // Allow a short transport interruption, but never hide a persistent outage.
+      state.disconnectTimer = setTimeout(() => {
+        state.disconnectTimer = null;
+        if (globalThis.document?.visibilityState !== "hidden") state.publish({ status: "unavailable" });
+      }, dashboardDisconnectDelay);
     };
     state.ready = () => state.update(state.hass, true);
+    state.visible = () => {
+      if (globalThis.document?.visibilityState === "visible") state.ready();
+    };
     connection.addEventListener("disconnected", state.disconnected);
     connection.addEventListener("ready", state.ready);
+    globalThis.document?.addEventListener?.("visibilitychange", state.visible);
     dashboardConnections.set(connection, state);
   }
   state.listeners.add(listener);
@@ -614,12 +661,14 @@ function connectDashboard(hass, listener) {
     update: (next) => state.update(next),
     retry: () => state.update(state.hass, true),
     disconnect: () => {
+      if (state.closed) return;
       state.listeners.delete(listener);
       if (state.listeners.size) return;
       state.closed = true;
+      state.clearRecovery();
       connection.removeEventListener("disconnected", state.disconnected);
       connection.removeEventListener("ready", state.ready);
-      dashboardConnections.delete(connection);
+      globalThis.document?.removeEventListener?.("visibilitychange", state.visible);
     },
   };
 }
@@ -914,7 +963,6 @@ class AlertManagerCard extends HTMLElement {
   set hass(hass) {
     const changed = hass?.locale?.language !== this._hass?.locale?.language
       || hass?.entities !== this._hass?.entities;
-    if (this._hass?.connection !== hass?.connection) this._lastReadyValue = null;
     this._hass = hass;
     this._language = hass?.locale?.language ?? "en";
     this._connect();
@@ -949,9 +997,6 @@ class AlertManagerCard extends HTMLElement {
       this._subscription?.disconnect();
       this._connection = this._hass.connection;
       this._subscription = connectDashboard(this._hass, (value) => {
-        if (value.status !== "loading") {
-          this._lastReadyValue = value.status === "ready" ? value : null;
-        }
         this._value = value;
         this._render();
       });
@@ -994,9 +1039,7 @@ class AlertManagerCard extends HTMLElement {
   }
   _render() {
     if (!this.shadowRoot) return;
-    // Reattaching a card refreshes in the background, including an empty snapshot.
-    const { status, snapshot } = this._value.status === "loading" && this._lastReadyValue
-      ? this._lastReadyValue : this._value;
+    const { status, snapshot } = this._value;
     const startup = status === "ready" && snapshot.startup?.in_progress;
     let groups = status === "ready"
       ? dashboardGroups(snapshot.alerts, this._config, this._hass, this._t) : [];
