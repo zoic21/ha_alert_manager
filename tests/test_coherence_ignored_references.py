@@ -22,6 +22,22 @@ def test_scan_ignores_explicit_entity_like_references(tmp_path: Path) -> None:
     assert result["references_checked"] == 1
 
 
+def test_scan_ignores_date_fields_without_hiding_date_entities(tmp_path: Path) -> None:
+    """Date fields are not entities, but real date references remain checked."""
+    (tmp_path / "configuration.yaml").write_text(
+        "lambda: |-\n"
+        "  auto date = id(homeassistant_time).now();\n"
+        "  return date.tm_hour + date.tm_min + date.tm_yday + date.tm_year;\n"
+        "entity_id: date.missing\n",
+        encoding="utf-8",
+    )
+
+    result = scan_configuration(tmp_path, frozenset())
+
+    assert [row["entity_id"] for row in result["results"]] == ["date.missing"]
+    assert result["references_checked"] == 1
+
+
 def test_scan_applies_custom_ignored_references(tmp_path: Path) -> None:
     """User-configured exact references extend the built-in exclusions."""
     (tmp_path / "configuration.yaml").write_text(

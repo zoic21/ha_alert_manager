@@ -81,6 +81,10 @@ _ACTION_KEYS: Final = frozenset(
 _INTENT_KEYS: Final = frozenset({"condition", "trigger"})
 _IGNORED_ENTITY_REFERENCES: Final = frozenset(
     {
+        "date.tm_hour",
+        "date.tm_min",
+        "date.tm_yday",
+        "date.tm_year",
         "script.execute",
         "script.run",
         "script.start",
