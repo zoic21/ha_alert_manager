@@ -16,6 +16,9 @@ Home Assistant labels can be attached to a rule. They help organize rules and pa
 
 ## Find and organize rules
 
+On mobile, the page header scrolls together with the rules table to leave more
+room for the rules as you scroll down.
+
 The rules table supports search, sorting, configurable columns and filters for enabled/disabled status, labels, integration, device, domain and area. Active/inactive here means the rule is enabled/disabled, not that it currently has an alert.
 
 - **Labels** matches only labels attached directly to the rule. Entity/device labels participate in notification routing and alert filtering, but are not inherited by this rules-list filter.

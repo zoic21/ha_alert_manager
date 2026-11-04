@@ -1400,6 +1400,52 @@ function reportFormValidity(form, { includeDrawer = true } = {}) {
 }
 
 // Source: frontend-src/components/alert-table.js
+function disconnectMobileTableLayout() {
+    this._mobileTableLayoutObserver?.disconnect();
+    this._mobileTableLayoutObserver = null;
+    this._mobileTableLayoutToken = null;
+}
+
+async function syncMobileTableLayout() {
+    disconnectMobileTableLayout.call(this);
+    const tablePage = this.shadowRoot?.querySelector?.("hass-tabs-subpage-data-table");
+    if (!tablePage) return;
+    const token = this._mobileTableLayoutToken = {};
+    await tablePage.updateComplete;
+    if (this._mobileTableLayoutToken !== token) return;
+    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+    if (!nativeTable) return;
+    nativeTable.autoHeight = Boolean(this._narrow);
+    await nativeTable.updateComplete;
+    if (this._mobileTableLayoutToken !== token || !nativeTable.shadowRoot) return;
+    for (const [root, css] of [
+      [tablePage.shadowRoot, mobileTablePageStyles],
+      [nativeTable.shadowRoot, mobileDataTableStyles],
+    ]) {
+      if (!root || root.querySelector("[data-mobile-table-layout-style]")) continue;
+      const style = document.createElement("style");
+      style.setAttribute("data-mobile-table-layout-style", "");
+      style.textContent = css;
+      root.append(style);
+    }
+    if (!this._narrow) return;
+    const updateHeight = () => {
+      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
+      // HA includes an empty trailing row. Count group headers and collapsed
+      // groups from the native rows, rather than the unfiltered source data.
+      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
+      const value = String(rows);
+      if (nativeTable.style.getPropertyValue("--alert-manager-table-rows") !== value) {
+        nativeTable.style.setProperty("--alert-manager-table-rows", value);
+      }
+    };
+    updateHeight();
+    this._mobileTableLayoutObserver = new MutationObserver(updateHeight);
+    this._mobileTableLayoutObserver.observe(nativeTable.shadowRoot, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
+    });
+}
+
 function refreshAlertTableData(kind, tablePage) {
     const sourceRows = kind === "overview"
       ? this._tableRows("overview")
@@ -6328,52 +6374,6 @@ async function handleEntityReplacementAction(action, button) {
 }
 
 // Source: frontend-src/views/coherence.js
-function disconnectCoherenceLayout() {
-    this._coherenceLayoutObserver?.disconnect();
-    this._coherenceLayoutObserver = null;
-    this._coherenceLayoutToken = null;
-}
-
-async function syncCoherenceLayout() {
-    disconnectCoherenceLayout.call(this);
-    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
-    if (!tablePage) return;
-    const token = this._coherenceLayoutToken = {};
-    await tablePage.updateComplete;
-    if (this._coherenceLayoutToken !== token) return;
-    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-    if (!nativeTable) return;
-    nativeTable.autoHeight = Boolean(this._narrow);
-    await nativeTable.updateComplete;
-    if (this._coherenceLayoutToken !== token || !nativeTable.shadowRoot) return;
-    for (const [root, css] of [
-      [tablePage.shadowRoot, coherenceTablePageStyles],
-      [nativeTable.shadowRoot, coherenceDataTableStyles],
-    ]) {
-      if (!root || root.querySelector("[data-coherence-layout-style]")) continue;
-      const style = document.createElement("style");
-      style.setAttribute("data-coherence-layout-style", "");
-      style.textContent = css;
-      root.append(style);
-    }
-    if (!this._narrow) return;
-    const updateHeight = () => {
-      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
-      // HA includes an empty trailing row. Count group headers and collapsed
-      // groups from the native rows, rather than the unfiltered scan results.
-      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
-      const value = String(rows);
-      if (nativeTable.style.getPropertyValue("--coherence-table-rows") !== value) {
-        nativeTable.style.setProperty("--coherence-table-rows", value);
-      }
-    };
-    updateHeight();
-    this._coherenceLayoutObserver = new MutationObserver(updateHeight);
-    this._coherenceLayoutObserver.observe(nativeTable.shadowRoot, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
-    });
-}
-
 function coherenceStatsMarkup() {
     const result = this._coherence;
     if (!result) return "";
@@ -6534,7 +6534,6 @@ function hydrateCoherenceTable() {
     tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
     updateCoherenceSelection.call(this, tablePage);
     restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
-    void syncCoherenceLayout.call(this);
     if (tablePage._alertManagerCoherenceHydrated) return;
     tablePage._alertManagerCoherenceHydrated = true;
     tablePage.addEventListener("selection-changed", (event) => {
@@ -10699,10 +10698,39 @@ const responsiveStyles = `
     }
   }
 
+  :host([narrow]) .table-page-top {
+    padding: 12px 12px 0;
+  }
+  :host([narrow]) .table-page-top .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  :host([narrow]) .summary ha-card {
+    padding: 12px;
+  }
+  :host([narrow]) .summary strong {
+    font-size: 24px;
+  }
+  :host([narrow]) .history-panel,
+  :host([narrow]) .rules-list-panel {
+    padding: 12px;
+  }
+  :host([narrow]) .rules-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  :host([narrow]) .rules-header h2,
+  :host([narrow]) .history-header h2 {
+    font-size: var(--ha-font-size-l, 18px);
+    margin-bottom: 0;
+  }
+
   :host([narrow]) .history-panel .history-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 8px;
   }
 
   .coherence-description-mobile {
@@ -11100,21 +11128,21 @@ const responsiveStyles = `
 
 `;
 
-// Applied inside the native components' shadow roots by the coherence view.
-const coherenceTablePageStyles = `
+// Applied inside the native components' shadow roots by the shared table layout.
+const mobileTablePageStyles = `
   :host([narrow]) ha-data-table {
     height: auto;
     --data-table-row-height: 72px;
   }
 `;
 
-const coherenceDataTableStyles = `
+const mobileDataTableStyles = `
   :host([narrow]) .mdc-data-table {
     height: auto;
     overflow: visible;
   }
   :host([narrow]) .mdc-data-table__table.auto-height {
-    height: calc(var(--coherence-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
+    height: calc(var(--alert-manager-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
   }
   :host([narrow]) .scroller {
     overflow: visible !important;
@@ -11426,7 +11454,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
-    if (previousNarrow !== this._narrow) void syncCoherenceLayout.call(this);
+    if (previousNarrow !== this._narrow) void syncMobileTableLayout.call(this);
     this._updateDrawerLayout(previousNarrow);
   }
   _upgradeProperty(name) {
@@ -11457,7 +11485,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   disconnectedCallback() {
-    disconnectCoherenceLayout.call(this);
+    disconnectMobileTableLayout.call(this);
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
     this._handledAlertDeepLink = null;
@@ -11471,7 +11499,7 @@ class AlertManagerPanel extends HTMLElement {
   _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
-    disconnectCoherenceLayout.call(this);
+    disconnectMobileTableLayout.call(this);
     this._closeAlertDetailsDialog();
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
@@ -11504,7 +11532,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateConfigBackups();
     this._updateCountdowns();
     this._decorateActionIcons();
-    this._syncNarrowTableHeaderBackgrounds();
+    this._syncNarrowTableHeaderBackgrounds(); void syncMobileTableLayout.call(this);
   }
   _noticeTarget = activeNoticeTarget;
   _refreshActiveNotice = refreshActiveNotice;

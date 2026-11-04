@@ -6,14 +6,14 @@ import { AlertManagerApi, call, load, refreshAlerts, refreshCoherence, refreshHi
 import {
   alertDetailsItems, alertRuleName, cancelMoreInfoScrollRestore, closeAlertDetailsDialog,
   compareTableRows, configureDateRangePicker, dateMatches, dateRangeDefaults, dialogEventTarget,
-  displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
+  disconnectMobileTableLayout, displayValue, entityMetadata, facetOptions, filterCount, filteredTableRows, filterValues,
   handleAlertDetailsSelection, handleAlertTableAction, hydrateAlertDetailTimestamps, hydrateDataTables, integrationLabel, loadNativeDateRangePicker,
   nativeDeviceCell, nativeEntityCell, nativeEntityIdCell, nativeGroupColumn,
   nativeRuleCell, nativeSortColumn, nativeStatusCell, nativeTableCell, nativeTableColumns,
   nativeTableData, nativeTimelineCell, navigate, openAlertDeepLink, openAlertDetails, openMoreInfo,
   overviewContentScroller, preserveOverviewScrollAfterMoreInfo, refreshAlertTableData,
   renderAlertDetailsPanel, renderAlertTable, renderDateFilter, renderFacetFilter, renderFilterPane,
-  resetTableFilters, syncNarrowTableHeaderBackgrounds, tableColumns, tableRows,
+  resetTableFilters, syncMobileTableLayout, syncNarrowTableHeaderBackgrounds, tableColumns, tableRows,
   tableSortStateColumn, tableStateGroupColumn, updateSelectionToolbar,
 } from "./components/alert-table.js";
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
@@ -47,9 +47,9 @@ import {
 } from "./views/overview.js";
 import { hydrateHistoryStatistics, handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
 import {
-  coherenceStatsMarkup, coherenceTableRows, disconnectCoherenceLayout, handleCoherenceAction, hydrateCoherenceTable,
+  coherenceStatsMarkup, coherenceTableRows, handleCoherenceAction, hydrateCoherenceTable,
   nativeCoherenceActionCell, nativeCoherenceEntityCell, openCoherenceLink,
-  refreshCoherenceData, renderCoherencePanel, syncCoherenceLayout,
+  refreshCoherenceData, renderCoherencePanel,
 } from "./views/coherence.js";
 import {
   deleteRule, handleRulesAction, handleSelected, hydrateRuleTable, nativeRuleEntitiesCell,
@@ -357,7 +357,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
-    if (previousNarrow !== this._narrow) void syncCoherenceLayout.call(this);
+    if (previousNarrow !== this._narrow) void syncMobileTableLayout.call(this);
     this._updateDrawerLayout(previousNarrow);
   }
   _upgradeProperty(name) {
@@ -388,7 +388,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   disconnectedCallback() {
-    disconnectCoherenceLayout.call(this);
+    disconnectMobileTableLayout.call(this);
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
     this._handledAlertDeepLink = null;
@@ -402,7 +402,7 @@ class AlertManagerPanel extends HTMLElement {
   _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
-    disconnectCoherenceLayout.call(this);
+    disconnectMobileTableLayout.call(this);
     this._closeAlertDetailsDialog();
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
@@ -435,7 +435,7 @@ class AlertManagerPanel extends HTMLElement {
     this._hydrateConfigBackups();
     this._updateCountdowns();
     this._decorateActionIcons();
-    this._syncNarrowTableHeaderBackgrounds();
+    this._syncNarrowTableHeaderBackgrounds(); void syncMobileTableLayout.call(this);
   }
   _noticeTarget = activeNoticeTarget;
   _refreshActiveNotice = refreshActiveNotice;

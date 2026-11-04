@@ -4,6 +4,9 @@
 
 Use **Overview** to see what needs attention now, the dashboard card for a compact view elsewhere in Home Assistant, and **History** to understand resolved and recurring problems.
 
+On mobile, the summary or header scrolls together with the table so the results
+can use the full page as you scroll down.
+
 ## Overview and alert states
 
 An ongoing alert is **Upcoming**, **Active** or **Acknowledged**. Upcoming means a trigger hold or an ordered sequence is in progress; Active means the condition has been confirmed. Acknowledging an alert records that the problem is known, but does not fix or hide it. Acknowledged alerts do not contribute to the active count.

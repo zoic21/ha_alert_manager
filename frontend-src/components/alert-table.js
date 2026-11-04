@@ -8,6 +8,53 @@ import { MAX_DURATION_SECONDS, MDI_ALERT_CIRCLE_OUTLINE, MDI_CHECK_CIRCLE_OUTLIN
 import { durationFieldValue, hydrateDurationFields, renderDurationControl } from "./duration-field.js";
 import { esc } from "../utils/escaping.js";
 import { DEFAULT_TABLE_STATE, REQUIRED_COLUMNS } from "../utils/table-preferences.js";
+import { mobileTablePageStyles, mobileDataTableStyles } from "../styles/responsive-styles.js";
+
+export function disconnectMobileTableLayout() {
+    this._mobileTableLayoutObserver?.disconnect();
+    this._mobileTableLayoutObserver = null;
+    this._mobileTableLayoutToken = null;
+}
+
+export async function syncMobileTableLayout() {
+    disconnectMobileTableLayout.call(this);
+    const tablePage = this.shadowRoot?.querySelector?.("hass-tabs-subpage-data-table");
+    if (!tablePage) return;
+    const token = this._mobileTableLayoutToken = {};
+    await tablePage.updateComplete;
+    if (this._mobileTableLayoutToken !== token) return;
+    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+    if (!nativeTable) return;
+    nativeTable.autoHeight = Boolean(this._narrow);
+    await nativeTable.updateComplete;
+    if (this._mobileTableLayoutToken !== token || !nativeTable.shadowRoot) return;
+    for (const [root, css] of [
+      [tablePage.shadowRoot, mobileTablePageStyles],
+      [nativeTable.shadowRoot, mobileDataTableStyles],
+    ]) {
+      if (!root || root.querySelector("[data-mobile-table-layout-style]")) continue;
+      const style = document.createElement("style");
+      style.setAttribute("data-mobile-table-layout-style", "");
+      style.textContent = css;
+      root.append(style);
+    }
+    if (!this._narrow) return;
+    const updateHeight = () => {
+      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
+      // HA includes an empty trailing row. Count group headers and collapsed
+      // groups from the native rows, rather than the unfiltered source data.
+      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
+      const value = String(rows);
+      if (nativeTable.style.getPropertyValue("--alert-manager-table-rows") !== value) {
+        nativeTable.style.setProperty("--alert-manager-table-rows", value);
+      }
+    };
+    updateHeight();
+    this._mobileTableLayoutObserver = new MutationObserver(updateHeight);
+    this._mobileTableLayoutObserver.observe(nativeTable.shadowRoot, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
+    });
+}
 
 export function refreshAlertTableData(kind, tablePage) {
     const sourceRows = kind === "overview"

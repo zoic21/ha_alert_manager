@@ -5,10 +5,39 @@ export const responsiveStyles = `
     }
   }
 
+  :host([narrow]) .table-page-top {
+    padding: 12px 12px 0;
+  }
+  :host([narrow]) .table-page-top .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  :host([narrow]) .summary ha-card {
+    padding: 12px;
+  }
+  :host([narrow]) .summary strong {
+    font-size: 24px;
+  }
+  :host([narrow]) .history-panel,
+  :host([narrow]) .rules-list-panel {
+    padding: 12px;
+  }
+  :host([narrow]) .rules-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  :host([narrow]) .rules-header h2,
+  :host([narrow]) .history-header h2 {
+    font-size: var(--ha-font-size-l, 18px);
+    margin-bottom: 0;
+  }
+
   :host([narrow]) .history-panel .history-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 8px;
   }
 
   .coherence-description-mobile {
@@ -406,21 +435,21 @@ export const responsiveStyles = `
 
 `;
 
-// Applied inside the native components' shadow roots by the coherence view.
-export const coherenceTablePageStyles = `
+// Applied inside the native components' shadow roots by the shared table layout.
+export const mobileTablePageStyles = `
   :host([narrow]) ha-data-table {
     height: auto;
     --data-table-row-height: 72px;
   }
 `;
 
-export const coherenceDataTableStyles = `
+export const mobileDataTableStyles = `
   :host([narrow]) .mdc-data-table {
     height: auto;
     overflow: visible;
   }
   :host([narrow]) .mdc-data-table__table.auto-height {
-    height: calc(var(--coherence-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
+    height: calc(var(--alert-manager-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
   }
   :host([narrow]) .scroller {
     overflow: visible !important;

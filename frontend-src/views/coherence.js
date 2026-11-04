@@ -5,53 +5,6 @@ import { renderSideDrawer } from "../components/configuration-drawer.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import { restoreNativeTableSelection } from "../components/alert-table.js";
 import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
-import { coherenceTablePageStyles, coherenceDataTableStyles } from "../styles/responsive-styles.js";
-
-export function disconnectCoherenceLayout() {
-    this._coherenceLayoutObserver?.disconnect();
-    this._coherenceLayoutObserver = null;
-    this._coherenceLayoutToken = null;
-}
-
-export async function syncCoherenceLayout() {
-    disconnectCoherenceLayout.call(this);
-    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
-    if (!tablePage) return;
-    const token = this._coherenceLayoutToken = {};
-    await tablePage.updateComplete;
-    if (this._coherenceLayoutToken !== token) return;
-    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
-    if (!nativeTable) return;
-    nativeTable.autoHeight = Boolean(this._narrow);
-    await nativeTable.updateComplete;
-    if (this._coherenceLayoutToken !== token || !nativeTable.shadowRoot) return;
-    for (const [root, css] of [
-      [tablePage.shadowRoot, coherenceTablePageStyles],
-      [nativeTable.shadowRoot, coherenceDataTableStyles],
-    ]) {
-      if (!root || root.querySelector("[data-coherence-layout-style]")) continue;
-      const style = document.createElement("style");
-      style.setAttribute("data-coherence-layout-style", "");
-      style.textContent = css;
-      root.append(style);
-    }
-    if (!this._narrow) return;
-    const updateHeight = () => {
-      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
-      // HA includes an empty trailing row. Count group headers and collapsed
-      // groups from the native rows, rather than the unfiltered scan results.
-      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
-      const value = String(rows);
-      if (nativeTable.style.getPropertyValue("--coherence-table-rows") !== value) {
-        nativeTable.style.setProperty("--coherence-table-rows", value);
-      }
-    };
-    updateHeight();
-    this._coherenceLayoutObserver = new MutationObserver(updateHeight);
-    this._coherenceLayoutObserver.observe(nativeTable.shadowRoot, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
-    });
-}
 
 export function coherenceStatsMarkup() {
     const result = this._coherence;
@@ -213,7 +166,6 @@ export function hydrateCoherenceTable() {
     tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
     updateCoherenceSelection.call(this, tablePage);
     restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
-    void syncCoherenceLayout.call(this);
     if (tablePage._alertManagerCoherenceHydrated) return;
     tablePage._alertManagerCoherenceHydrated = true;
     tablePage.addEventListener("selection-changed", (event) => {
