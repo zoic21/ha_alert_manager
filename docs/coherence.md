@@ -8,6 +8,9 @@
 
 Open **Coherence** and start an analysis. The results identify the missing reference and its source. When a matching Home Assistant editor or object is available, **Open** takes you there; a finding in a custom rule opens that rule's editor.
 
+On mobile, the introduction and results scroll together. The detailed explanation
+is collapsed under **About the analysis** to leave more room for the results.
+
 Reports are kept between restarts. Changing the configuration does not itself mean that a stored finding has been checked again: run another scan after correcting the reference.
 
 When a missing entity appears in the retained rename history and its source can be

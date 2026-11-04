@@ -5,6 +5,53 @@ import { renderSideDrawer } from "../components/configuration-drawer.js";
 import { downloadTextPayload } from "../components/config-backups.js";
 import { restoreNativeTableSelection } from "../components/alert-table.js";
 import { COHERENCE_COLUMNS, COHERENCE_SECONDARY_COLUMNS, COHERENCE_STALE_MS, DEFAULT_COHERENCE_TABLE_STATE } from "../utils/table-preferences.js";
+import { coherenceTablePageStyles, coherenceDataTableStyles } from "../styles/responsive-styles.js";
+
+export function disconnectCoherenceLayout() {
+    this._coherenceLayoutObserver?.disconnect();
+    this._coherenceLayoutObserver = null;
+    this._coherenceLayoutToken = null;
+}
+
+export async function syncCoherenceLayout() {
+    disconnectCoherenceLayout.call(this);
+    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
+    if (!tablePage) return;
+    const token = this._coherenceLayoutToken = {};
+    await tablePage.updateComplete;
+    if (this._coherenceLayoutToken !== token) return;
+    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+    if (!nativeTable) return;
+    nativeTable.autoHeight = Boolean(this._narrow);
+    await nativeTable.updateComplete;
+    if (this._coherenceLayoutToken !== token || !nativeTable.shadowRoot) return;
+    for (const [root, css] of [
+      [tablePage.shadowRoot, coherenceTablePageStyles],
+      [nativeTable.shadowRoot, coherenceDataTableStyles],
+    ]) {
+      if (!root || root.querySelector("[data-coherence-layout-style]")) continue;
+      const style = document.createElement("style");
+      style.setAttribute("data-coherence-layout-style", "");
+      style.textContent = css;
+      root.append(style);
+    }
+    if (!this._narrow) return;
+    const updateHeight = () => {
+      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
+      // HA includes an empty trailing row. Count group headers and collapsed
+      // groups from the native rows, rather than the unfiltered scan results.
+      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
+      const value = String(rows);
+      if (nativeTable.style.getPropertyValue("--coherence-table-rows") !== value) {
+        nativeTable.style.setProperty("--coherence-table-rows", value);
+      }
+    };
+    updateHeight();
+    this._coherenceLayoutObserver = new MutationObserver(updateHeight);
+    this._coherenceLayoutObserver.observe(nativeTable.shadowRoot, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
+    });
+}
 
 export function coherenceStatsMarkup() {
     const result = this._coherence;
@@ -166,6 +213,7 @@ export function hydrateCoherenceTable() {
     tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
     updateCoherenceSelection.call(this, tablePage);
     restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
+    void syncCoherenceLayout.call(this);
     if (tablePage._alertManagerCoherenceHydrated) return;
     tablePage._alertManagerCoherenceHydrated = true;
     tablePage.addEventListener("selection-changed", (event) => {
@@ -431,6 +479,17 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
     </div>`;
 }
 
+function coherenceIntroduction(t) {
+    const description = esc(t("coherence.description"));
+    return `<div><h2>${esc(t("coherence.title"))}</h2>
+      <p class="coherence-description-desktop">${description}</p>
+      <ha-expansion-panel class="coherence-description-mobile">
+        <span slot="header">${esc(t("coherence.about"))}</span>
+        <p>${description}</p>
+      </ha-expansion-panel>
+    </div>`;
+}
+
 export function renderEntityExportDialog({ t }) {
     return `<ha-dialog id="entity-export-dialog" type="alert" width="small" header-title="${esc(t("coherence.export.button"))}" aria-describedby="entity-export-warning">
       <ha-alert id="entity-export-warning" alert-type="warning">${esc(t("coherence.export.warning"))}</ha-alert>
@@ -503,7 +562,7 @@ export function renderCoherence(context) {
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
-          <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+          ${coherenceIntroduction(t)}
           ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
@@ -521,7 +580,7 @@ export function renderCoherence(context) {
         ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
           <div class="coherence-header">
-            <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+            ${coherenceIntroduction(t)}
             ${actions}
           </div>
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>

@@ -6328,6 +6328,52 @@ async function handleEntityReplacementAction(action, button) {
 }
 
 // Source: frontend-src/views/coherence.js
+function disconnectCoherenceLayout() {
+    this._coherenceLayoutObserver?.disconnect();
+    this._coherenceLayoutObserver = null;
+    this._coherenceLayoutToken = null;
+}
+
+async function syncCoherenceLayout() {
+    disconnectCoherenceLayout.call(this);
+    const tablePage = this.shadowRoot?.querySelector?.("[data-coherence-table-page]");
+    if (!tablePage) return;
+    const token = this._coherenceLayoutToken = {};
+    await tablePage.updateComplete;
+    if (this._coherenceLayoutToken !== token) return;
+    const nativeTable = tablePage.shadowRoot?.querySelector?.("ha-data-table");
+    if (!nativeTable) return;
+    nativeTable.autoHeight = Boolean(this._narrow);
+    await nativeTable.updateComplete;
+    if (this._coherenceLayoutToken !== token || !nativeTable.shadowRoot) return;
+    for (const [root, css] of [
+      [tablePage.shadowRoot, coherenceTablePageStyles],
+      [nativeTable.shadowRoot, coherenceDataTableStyles],
+    ]) {
+      if (!root || root.querySelector("[data-coherence-layout-style]")) continue;
+      const style = document.createElement("style");
+      style.setAttribute("data-coherence-layout-style", "");
+      style.textContent = css;
+      root.append(style);
+    }
+    if (!this._narrow) return;
+    const updateHeight = () => {
+      const virtualizer = nativeTable.shadowRoot.querySelector("lit-virtualizer");
+      // HA includes an empty trailing row. Count group headers and collapsed
+      // groups from the native rows, rather than the unfiltered scan results.
+      const rows = Math.max(1, (virtualizer?.items?.length ?? 1) - 1);
+      const value = String(rows);
+      if (nativeTable.style.getPropertyValue("--coherence-table-rows") !== value) {
+        nativeTable.style.setProperty("--coherence-table-rows", value);
+      }
+    };
+    updateHeight();
+    this._coherenceLayoutObserver = new MutationObserver(updateHeight);
+    this._coherenceLayoutObserver.observe(nativeTable.shadowRoot, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
+    });
+}
+
 function coherenceStatsMarkup() {
     const result = this._coherence;
     if (!result) return "";
@@ -6488,6 +6534,7 @@ function hydrateCoherenceTable() {
     tablePage._selectMode = !this._readOnly && this._selectedCoherenceIds.size > 0;
     updateCoherenceSelection.call(this, tablePage);
     restoreNativeTableSelection(tablePage, this._selectedCoherenceIds);
+    void syncCoherenceLayout.call(this);
     if (tablePage._alertManagerCoherenceHydrated) return;
     tablePage._alertManagerCoherenceHydrated = true;
     tablePage.addEventListener("selection-changed", (event) => {
@@ -6753,6 +6800,17 @@ function coherenceActionsMarkup({ loading, deletedEntitiesLoading, entityExportL
     </div>`;
 }
 
+function coherenceIntroduction(t) {
+    const description = esc(t("coherence.description"));
+    return `<div><h2>${esc(t("coherence.title"))}</h2>
+      <p class="coherence-description-desktop">${description}</p>
+      <ha-expansion-panel class="coherence-description-mobile">
+        <span slot="header">${esc(t("coherence.about"))}</span>
+        <p>${description}</p>
+      </ha-expansion-panel>
+    </div>`;
+}
+
 function renderEntityExportDialog({ t }) {
     return `<ha-dialog id="entity-export-dialog" type="alert" width="small" header-title="${esc(t("coherence.export.button"))}" aria-describedby="entity-export-warning">
       <ha-alert id="entity-export-warning" alert-type="warning">${esc(t("coherence.export.warning"))}</ha-alert>
@@ -6825,7 +6883,7 @@ function renderCoherence(context) {
     if (!result) {
       return `<ha-card outlined class="panel coherence-panel">
         <div class="coherence-header">
-          <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+          ${coherenceIntroduction(t)}
           ${actions}
         </div>
         <div class="empty compact">${esc(t("coherence.not_scanned"))}</div>
@@ -6843,7 +6901,7 @@ function renderCoherence(context) {
         ${pageMessages}
         <ha-card outlined class="panel coherence-panel">
           <div class="coherence-header">
-            <div><h2>${esc(t("coherence.title"))}</h2><p>${esc(t("coherence.description"))}</p></div>
+            ${coherenceIntroduction(t)}
             ${actions}
           </div>
           <div class="coherence-stats" data-coherence-stats>${statsMarkup}</div>
@@ -10646,6 +10704,51 @@ const responsiveStyles = `
     align-items: stretch;
     gap: 12px;
   }
+
+  .coherence-description-mobile {
+    display: none;
+  }
+  :host([narrow]) .coherence-panel {
+    padding: 12px;
+  }
+  :host([narrow]) .coherence-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  :host([narrow]) .coherence-header h2 {
+    font-size: var(--ha-font-size-l, 18px);
+    margin-bottom: 0;
+  }
+  :host([narrow]) .coherence-description-desktop {
+    display: none;
+  }
+  :host([narrow]) .coherence-description-mobile {
+    display: block;
+    --expansion-panel-summary-padding: 0;
+    --expansion-panel-content-padding: 0 0 8px;
+  }
+  :host([narrow]) .coherence-actions {
+    width: 100%;
+    gap: 6px;
+  }
+  :host([narrow]) .coherence-action-column {
+    gap: 6px;
+  }
+  :host([narrow]) .coherence-actions ha-button {
+    width: 100%;
+    min-width: 0;
+  }
+  :host([narrow]) .coherence-actions ha-button::part(base) {
+    padding-inline: 8px;
+  }
+  :host([narrow]) .coherence-actions ha-button::part(label) {
+    white-space: normal;
+  }
+  :host([narrow]) .coherence-stats {
+    gap: 4px 12px;
+    margin-top: 8px;
+  }
   :host([narrow]) .history-panel .history-page-actions {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     width: 100%;
@@ -10997,6 +11100,28 @@ const responsiveStyles = `
 
 `;
 
+// Applied inside the native components' shadow roots by the coherence view.
+const coherenceTablePageStyles = `
+  :host([narrow]) ha-data-table {
+    height: auto;
+    --data-table-row-height: 72px;
+  }
+`;
+
+const coherenceDataTableStyles = `
+  :host([narrow]) .mdc-data-table {
+    height: auto;
+    overflow: visible;
+  }
+  :host([narrow]) .mdc-data-table__table.auto-height {
+    height: calc(var(--coherence-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
+  }
+  :host([narrow]) .scroller {
+    overflow: visible !important;
+    overscroll-behavior: auto;
+  }
+`;
+
 // Source: frontend-src/styles/panel-styles.js
 const panelStyles = () => [
   baseStyles,
@@ -11301,6 +11426,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    if (previousNarrow !== this._narrow) void syncCoherenceLayout.call(this);
     this._updateDrawerLayout(previousNarrow);
   }
   _upgradeProperty(name) {
@@ -11331,6 +11457,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   disconnectedCallback() {
+    disconnectCoherenceLayout.call(this);
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
     this._handledAlertDeepLink = null;
@@ -11344,6 +11471,7 @@ class AlertManagerPanel extends HTMLElement {
   _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
+    disconnectCoherenceLayout.call(this);
     this._closeAlertDetailsDialog();
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
@@ -11378,7 +11506,6 @@ class AlertManagerPanel extends HTMLElement {
     this._decorateActionIcons();
     this._syncNarrowTableHeaderBackgrounds();
   }
-
   _noticeTarget = activeNoticeTarget;
   _refreshActiveNotice = refreshActiveNotice;
 
@@ -11684,9 +11811,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   _reportFormValidity = reportFormValidity;
-  _styles() {
-    return panelStyles();
-  }
+  _styles = panelStyles;
 }
 if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);

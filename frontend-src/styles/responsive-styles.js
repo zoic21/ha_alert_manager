@@ -10,6 +10,51 @@ export const responsiveStyles = `
     align-items: stretch;
     gap: 12px;
   }
+
+  .coherence-description-mobile {
+    display: none;
+  }
+  :host([narrow]) .coherence-panel {
+    padding: 12px;
+  }
+  :host([narrow]) .coherence-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  :host([narrow]) .coherence-header h2 {
+    font-size: var(--ha-font-size-l, 18px);
+    margin-bottom: 0;
+  }
+  :host([narrow]) .coherence-description-desktop {
+    display: none;
+  }
+  :host([narrow]) .coherence-description-mobile {
+    display: block;
+    --expansion-panel-summary-padding: 0;
+    --expansion-panel-content-padding: 0 0 8px;
+  }
+  :host([narrow]) .coherence-actions {
+    width: 100%;
+    gap: 6px;
+  }
+  :host([narrow]) .coherence-action-column {
+    gap: 6px;
+  }
+  :host([narrow]) .coherence-actions ha-button {
+    width: 100%;
+    min-width: 0;
+  }
+  :host([narrow]) .coherence-actions ha-button::part(base) {
+    padding-inline: 8px;
+  }
+  :host([narrow]) .coherence-actions ha-button::part(label) {
+    white-space: normal;
+  }
+  :host([narrow]) .coherence-stats {
+    gap: 4px 12px;
+    margin-top: 8px;
+  }
   :host([narrow]) .history-panel .history-page-actions {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     width: 100%;
@@ -359,4 +404,26 @@ export const responsiveStyles = `
     }
   }
 
+`;
+
+// Applied inside the native components' shadow roots by the coherence view.
+export const coherenceTablePageStyles = `
+  :host([narrow]) ha-data-table {
+    height: auto;
+    --data-table-row-height: 72px;
+  }
+`;
+
+export const coherenceDataTableStyles = `
+  :host([narrow]) .mdc-data-table {
+    height: auto;
+    overflow: visible;
+  }
+  :host([narrow]) .mdc-data-table__table.auto-height {
+    height: calc(var(--coherence-table-rows, 1) * var(--data-table-row-height, 72px) + 56px) !important;
+  }
+  :host([narrow]) .scroller {
+    overflow: visible !important;
+    overscroll-behavior: auto;
+  }
 `;

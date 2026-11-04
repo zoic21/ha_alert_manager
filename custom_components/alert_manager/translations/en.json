@@ -212,6 +212,7 @@
       }
     },
     "coherence": {
+      "about": "About the analysis",
       "columns": {
         "action": "Actions",
         "entity": "Missing reference",

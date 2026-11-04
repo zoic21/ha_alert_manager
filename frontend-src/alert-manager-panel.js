@@ -47,9 +47,9 @@ import {
 } from "./views/overview.js";
 import { hydrateHistoryStatistics, handleHistoryAction, historyConditionText, historyRuleName, refreshHistoryData, renderHistoryPanel } from "./views/history.js";
 import {
-  coherenceStatsMarkup, coherenceTableRows, handleCoherenceAction, hydrateCoherenceTable,
+  coherenceStatsMarkup, coherenceTableRows, disconnectCoherenceLayout, handleCoherenceAction, hydrateCoherenceTable,
   nativeCoherenceActionCell, nativeCoherenceEntityCell, openCoherenceLink,
-  refreshCoherenceData, renderCoherencePanel,
+  refreshCoherenceData, renderCoherencePanel, syncCoherenceLayout,
 } from "./views/coherence.js";
 import {
   deleteRule, handleRulesAction, handleSelected, hydrateRuleTable, nativeRuleEntitiesCell,
@@ -357,6 +357,7 @@ class AlertManagerPanel extends HTMLElement {
       const tablePage = this.shadowRoot?.querySelector(selector);
       if (tablePage) tablePage.narrow = this._narrow;
     }
+    if (previousNarrow !== this._narrow) void syncCoherenceLayout.call(this);
     this._updateDrawerLayout(previousNarrow);
   }
   _upgradeProperty(name) {
@@ -387,6 +388,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   disconnectedCallback() {
+    disconnectCoherenceLayout.call(this);
     if (this._timer) window.clearInterval(this._timer);
     this._timer = null;
     this._handledAlertDeepLink = null;
@@ -400,6 +402,7 @@ class AlertManagerPanel extends HTMLElement {
   _syncSensor = syncSensor;
   _render() {
     if (!this.shadowRoot) return;
+    disconnectCoherenceLayout.call(this);
     this._closeAlertDetailsDialog();
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
@@ -434,7 +437,6 @@ class AlertManagerPanel extends HTMLElement {
     this._decorateActionIcons();
     this._syncNarrowTableHeaderBackgrounds();
   }
-
   _noticeTarget = activeNoticeTarget;
   _refreshActiveNotice = refreshActiveNotice;
 
@@ -740,9 +742,7 @@ class AlertManagerPanel extends HTMLElement {
     }
   }
   _reportFormValidity = reportFormValidity;
-  _styles() {
-    return panelStyles();
-  }
+  _styles = panelStyles;
 }
 if (!customElements.get("alert-manager-panel")) {
   customElements.define("alert-manager-panel", AlertManagerPanel);
