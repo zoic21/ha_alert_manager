@@ -166,6 +166,7 @@ test("custom rules use the native Home Assistant table toolbar without grouping"
 
 test("custom rules render without a second tabs subpage wrapper", () => {
   const panel = new Panel();
+  panel._translations["component.alert_manager.config_panel.loading"] = "Loading Alert Manager…";
   panel._hass = {};
   panel._config = { rules: rules() };
   panel._loading = false;

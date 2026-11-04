@@ -213,7 +213,8 @@ pushed commit and requires it to pass, including bundle reproducibility.
   CI workflow, then automatically creates the tag
   `v<version>` at the pushed commit and a GitHub release. Stable releases use the
   matching version entry from `CHANGELOG.md` and fail if it is missing or empty.
-  Versions containing a hyphen use generated notes and `prerelease: true`.
+  Versions containing a hyphen use `prerelease: true` and their matching changelog
+  entry when available, falling back to generated notes otherwise.
 - Push the validated commit to the requested branch. Let the workflow create the
   tag and release; do not also create them manually.
 - Verify the Release workflow, CI (Python, frontend, Home Assistant validation and

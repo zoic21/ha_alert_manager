@@ -1176,6 +1176,7 @@ test("history and coherence data load when their tabs open", async () => {
 test("a recreated panel renders cached state while it refreshes", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const connection = {};
+  let translationRequests = 0;
   const responses = {
     "alert_manager/config/get": completeConfig(),
     "alert_manager/alerts/list": {
@@ -1196,6 +1197,7 @@ test("a recreated panel renders cached state while it refreshes", async () => {
     states: {},
     callWS: async (message) => {
       if (message.type === "frontend/get_translations") {
+        translationRequests += 1;
         return { resources: TRANSLATIONS[message.language] };
       }
       return responses[message.type];
@@ -1209,7 +1211,11 @@ test("a recreated panel renders cached state while it refreshes", async () => {
 
   const recreatedPanel = new Panel();
   recreatedPanel._hass = hass;
+  recreatedPanel._translations = {};
+  recreatedPanel._englishTranslations = {};
   assert.equal(recreatedPanel._restorePanelState(), true);
+  assert.equal(recreatedPanel._translationsLanguage, "fr");
+  assert.equal(recreatedPanel._t("tabs.overview"), previousPanel._t("tabs.overview"));
   assert.deepEqual(recreatedPanel._config, completeConfig());
   assert.equal(recreatedPanel._loading, false);
   const loadingStates = [];
@@ -1219,6 +1225,7 @@ test("a recreated panel renders cached state while it refreshes", async () => {
 
   assert.ok(loadingStates.length > 0);
   assert.equal(loadingStates.includes(true), false);
+  assert.equal(translationRequests, 0);
 });
 
 test("an alert deep link waits for a refreshed row before being consumed", async () => {
@@ -4387,6 +4394,83 @@ test("missing localized keys fall back to English backend resources", () => {
   panel._translations = {};
   panel._englishTranslations = TRANSLATIONS.en;
   assert.equal(panel._t("overview.summary_tracked"), "Total monitored");
+});
+
+test("bootstrap waits for translations without rendering resource identifiers or tabs", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._translations = {};
+  panel._englishTranslations = {};
+  const pendingTranslations = new Map();
+  panel._hass = {
+    states: {},
+    localize: (key) => key === "ui.common.loading" ? "Chargement" : "",
+    callWS: (message) => {
+      if (message.type === "frontend/get_translations") {
+        return new Promise((resolve) => pendingTranslations.set(message.language, resolve));
+      }
+      const responses = {
+        "alert_manager/config/get": completeConfig(),
+        "alert_manager/packs/list": completePacks(),
+        "alert_manager/alerts/list": { alerts: [], pending: [], acknowledge: [] },
+        "config/label_registry/list": [],
+      };
+      return Promise.resolve(responses[message.type] ?? {});
+    },
+  };
+  panel._render();
+  const loading = panel._load();
+  assert.match(panel.shadowRoot.innerHTML, /ha-circular-progress indeterminate/);
+  assert.match(panel.shadowRoot.innerHTML, /aria-label="Chargement"/);
+  const initialMarkup = panel.shadowRoot.innerHTML.replace(/<style>[\s\S]*?<\/style>/g, "");
+  assert.doesNotMatch(initialMarkup, /component\.alert_manager|panel-shell|data-summary/);
+  pendingTranslations.get("fr")({ resources: TRANSLATIONS.fr });
+  pendingTranslations.get("en")({ resources: TRANSLATIONS.en });
+  await loading;
+  assert.match(panel.shadowRoot.innerHTML, /data-summary="active"/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /component\.alert_manager|ha-circular-progress/);
+});
+
+test("translation failure shows a native localized error and a working public retry", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._translations = {};
+  panel._englishTranslations = {};
+  let fail = true;
+  panel._hass = {
+    user: { is_admin: false }, states: {},
+    localize: (key) => ({ "ui.common.unknown_error": "Erreur inconnue", "ui.common.retry": "Réessayer" })[key] ?? "",
+    callWS: async (message) => {
+      if (message.type === "frontend/get_translations") {
+        if (fail) throw new Error("offline");
+        return { resources: TRANSLATIONS[message.language] };
+      }
+      return message.type === "config/label_registry/list" ? [] : { alerts: [], pending: [] };
+    },
+  };
+  await panel._load();
+  assert.match(panel.shadowRoot.innerHTML, /Erreur inconnue/);
+  assert.match(panel.shadowRoot.innerHTML, /data-action="retry-panel-load">Réessayer/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /component\.alert_manager|ha-circular-progress/);
+  fail = false;
+  await panel._handleClick(actionEvent("retry-panel-load"));
+  assert.match(panel.shadowRoot.innerHTML, /data-summary="active"/);
+  assert.doesNotMatch(panel.shadowRoot.innerHTML, /component\.alert_manager|retry-panel-load/);
+});
+
+test("empty translation responses preserve the last usable language and remain retryable", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  panel._translationsLanguage = "fr";
+  panel._language = "en";
+  panel._hass = { callWS: async () => ({ resources: {} }) };
+  await assert.rejects(panel._fetchTranslations("en"), /Missing Alert Manager translations/);
+  assert.equal(panel._translationsLanguage, "fr");
+  assert.equal(panel._translations, TRANSLATIONS.fr);
+  panel._hass.callWS = async () => ({ resources: TRANSLATIONS.en });
+  await panel._fetchTranslations("en");
+  assert.equal(panel._translationsLanguage, "en");
+  assert.equal(panel._t("tabs.overview"), "Overview");
 });
 
 test("changing the Home Assistant locale reloads backend translations", async () => {

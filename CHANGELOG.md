@@ -5,6 +5,24 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.7.0-dev.1 — November 4, 2026
+
+First development prerelease of the 2.7 series.
+
+- Scroll the entire page on mobile in Overview, History, Coherence and Custom
+  rules. More compact headers leave additional room for results, and Coherence's
+  detailed explanation can be expanded when needed.
+- Open Alert Manager without briefly seeing translation identifiers. Previously
+  loaded translations are reused when returning to the page.
+- Improve dashboard card recovery after navigation and connection interruptions,
+  reducing misleading loading or connection-lost messages.
+- Improve compatibility with Home Assistant 2026.11, including current entity
+  names, inherited device areas, entity exports and panel theme colors.
+- Avoid false coherence warnings for template date fields such as `date.tm_hour`.
+
+**To update:** select `2.7.0-dev.1` in HACS, update Alert Manager, restart Home
+Assistant and refresh your browser or Companion App.
+
 ## 2.6.1 — October 28, 2026
 
 - Fix saving notification exceptions that reuse labels in different combinations,

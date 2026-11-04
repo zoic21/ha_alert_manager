@@ -66,6 +66,8 @@ def test_release_workflow_never_rewrites_an_existing_tag() -> None:
     [
         ("2.5.0", "false", False, False),
         ("2.5.0-beta.3", "true", False, False),
+        ("2.7.0-dev.1", "true", False, False),
+        ("2.7.0-dev.1", "true", True, False),
         ("2.5.1", "false", True, False),
         ("2.5.0", "false", False, True),
         ("2.5.0-beta.3", "true", False, True),
@@ -78,14 +80,15 @@ def test_release_uses_user_notes_and_preserves_existing_tags(
     missing_notes: bool,
     tag_exists: bool,
 ) -> None:
-    """Skip existing versions; new stable releases require matching notes."""
+    """Use matching notes, fall back for prereleases, and preserve published tags."""
     workflow = yaml.load(
         (ROOT / ".github" / "workflows" / "release.yml").read_text(),
         Loader=yaml.BaseLoader,
     )
     step = workflow["jobs"]["release"]["steps"][-1]
+    notes_version = "other-version" if missing_notes else version
     (tmp_path / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## 2.5.0 — September 30, 2026\n\n"
+        f"# Changelog\n\n## {notes_version} — September 30, 2026\n\n"
         "### New features\n\nUser-friendly release notes.\n\n"
         "## 2.4.0 — September 22, 2026\n\nPrevious release notes.\n"
     )
@@ -125,7 +128,7 @@ def test_release_uses_user_notes_and_preserves_existing_tags(
         assert not args_file.exists()
         return
 
-    if missing_notes:
+    if missing_notes and prerelease == "false":
         assert result.returncode != 0
         assert "Missing changelog entry" in result.stderr
         assert not args_file.exists()
@@ -136,10 +139,12 @@ def test_release_uses_user_notes_and_preserves_existing_tags(
     assert args[:3] == ["release", "create", f"v{version}"]
     if prerelease == "true":
         assert "--prerelease" in args
+    else:
+        assert "--prerelease" not in args
+    if missing_notes:
         assert "--generate-notes" in args
         assert "--notes-file" not in args
     else:
-        assert "--prerelease" not in args
         assert "--generate-notes" not in args
         notes = Path(args[args.index("--notes-file") + 1]).read_text().strip()
         assert notes == "### New features\n\nUser-friendly release notes."

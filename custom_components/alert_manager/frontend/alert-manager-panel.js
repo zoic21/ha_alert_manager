@@ -126,6 +126,7 @@ function integrationStates(hass, snapshot) {
 // Source: frontend-src/utils/permissions.js
 const readOnlyTabs = new Set(["overview", "history"]);
 const readOnlyActions = new Set([
+  "retry-panel-load",
   "tab", "filter-summary-status", "clear-filter-section", "toggle-filter-option",
   "open-alert-history", "toggle-alert-timestamp", "copy-alert-id", "toggle-alert-id", "close-alert-details",
   "toggle-history-statistics", "history-statistics-period", "history-statistics-leader",
@@ -787,6 +788,8 @@ function syncRuntimeMetadata(states) {
 }
 
 // Source: frontend-src/utils/translations.js
+const PANEL_TRANSLATION_LOADING_KEY = "component.alert_manager.config_panel.loading";
+
 const VALIDATION_ERROR_KEYS = new Map([
   ["Invalid resolution condition", "resolution_condition"],
   ["Sequence requires zero delay and no template", "sequence_options"],
@@ -843,7 +846,29 @@ const VALIDATION_ERROR_PREFIX_KEYS = [
   ["Invalid YAML:", "yaml_invalid"],
 ];
 
+function showTranslationBootstrap() {
+    if (this._translations[PANEL_TRANSLATION_LOADING_KEY] || this._englishTranslations[PANEL_TRANSLATION_LOADING_KEY]) return false;
+    const nativeText = (key) => esc(this._hass?.localize?.(`ui.common.${key}`) ?? "");
+    const failed = !this._loading && this._notice?.kind === "error";
+    this.shadowRoot.innerHTML = `<style>${this._styles()}</style><div class="loading" role="status">
+      ${failed
+        ? `<ha-alert alert-type="error">${nativeText("unknown_error")}</ha-alert>
+          <ha-button data-action="retry-panel-load">${nativeText("retry")}</ha-button>`
+        : `<ha-circular-progress indeterminate aria-label="${nativeText("loading")}"></ha-circular-progress>`}
+    </div>`;
+    return true;
+}
+
+async function handleTranslationAction(action) {
+    if (action !== "retry-panel-load") return false;
+    if (this._loadPromise || this._translationPromise || !this._hass) return true;
+    if (this._config) await this._reloadTranslations();
+    else await this._load();
+    return true;
+}
+
 async function fetchTranslations(language) {
+    if (this._translationsLanguage === language) return;
     const request = (requestedLanguage) => this._api.call({
       type: "frontend/get_translations",
       language: requestedLanguage,
@@ -855,8 +880,14 @@ async function fetchTranslations(language) {
       language === "en" ? Promise.resolve(null) : request("en"),
     ]);
     if (language !== this._language) return;
-    this._translations = localized?.resources ?? {};
-    this._englishTranslations = english?.resources ?? this._translations;
+    const resources = localized?.resources ?? {};
+    const englishResources = english?.resources ?? resources;
+    if (!resources[PANEL_TRANSLATION_LOADING_KEY] && !englishResources[PANEL_TRANSLATION_LOADING_KEY]) {
+      throw new Error("Missing Alert Manager translations");
+    }
+    this._translations = resources;
+    this._englishTranslations = englishResources;
+    this._translationsLanguage = language;
 }
 
 async function reloadTranslations() {
@@ -949,6 +980,7 @@ function restorePanelState() {
     if (!cached || cached.language !== this._language || cached.readOnly !== this._readOnly) return false;
     this._translations = cached.translations;
     this._englishTranslations = cached.englishTranslations;
+    this._translationsLanguage = cached.language;
     this._config = cached.config;
     this._alerts = cached.alerts;
     this._packs = cached.packs;
@@ -11162,7 +11194,7 @@ const panelStyles = () => [
 
 // Source: frontend-src/alert-manager-panel.js
 const ACTION_HANDLERS = [
-  handleConfigBackupAction,
+  handleTranslationAction, handleConfigBackupAction,
   handleAlertTableAction,
   handleOverviewAction,
   handleHistoryAction,
@@ -11318,8 +11350,7 @@ class AlertManagerPanel extends HTMLElement {
   _historyDurationText = historyDurationText;
   _conditionText = conditionText;
   _updateCountdowns = updateCountdowns;
-  _fetchTranslations = fetchTranslations;
-  _reloadTranslations = reloadTranslations;
+  _fetchTranslations = fetchTranslations; _reloadTranslations = reloadTranslations;
   _t = t;
   _errorText = errorText;
   _loadTablePreferences = loadTablePreferences;
@@ -11501,6 +11532,7 @@ class AlertManagerPanel extends HTMLElement {
     if (!this.shadowRoot) return;
     disconnectMobileTableLayout.call(this);
     this._closeAlertDetailsDialog();
+    if (showTranslationBootstrap.call(this)) return;
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
       const kind = currentTablePage.dataset.alertTablePage;

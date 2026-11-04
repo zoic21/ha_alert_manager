@@ -39,7 +39,7 @@ import {
   ensureCoherenceTableState, ensureRulesTableState, loadTablePreferences, makeTableState,
   saveCoherenceTableState, saveRulesTableState, saveTablePreferences,
 } from "./utils/table-preferences.js";
-import { fetchTranslations, reloadTranslations, t, errorText } from "./utils/translations.js";
+import { fetchTranslations, reloadTranslations, t, errorText, handleTranslationAction, showTranslationBootstrap } from "./utils/translations.js";
 import {
   applyOptimisticAcknowledgement, bulkAlertAction, handleOverviewAction,
   refreshOverviewData, refreshStartupBanner, renderOverviewPanel,
@@ -65,7 +65,7 @@ import {
   resetSettingsDraft, saveConfiguration, saveSettings, setEntityDelayEntity, updateConfigurationSaveButton,
 } from "./views/settings.js";
 const ACTION_HANDLERS = [
-  handleConfigBackupAction,
+  handleTranslationAction, handleConfigBackupAction,
   handleAlertTableAction,
   handleOverviewAction,
   handleHistoryAction,
@@ -221,8 +221,7 @@ class AlertManagerPanel extends HTMLElement {
   _historyDurationText = historyDurationText;
   _conditionText = conditionText;
   _updateCountdowns = updateCountdowns;
-  _fetchTranslations = fetchTranslations;
-  _reloadTranslations = reloadTranslations;
+  _fetchTranslations = fetchTranslations; _reloadTranslations = reloadTranslations;
   _t = t;
   _errorText = errorText;
   _loadTablePreferences = loadTablePreferences;
@@ -404,6 +403,7 @@ class AlertManagerPanel extends HTMLElement {
     if (!this.shadowRoot) return;
     disconnectMobileTableLayout.call(this);
     this._closeAlertDetailsDialog();
+    if (showTranslationBootstrap.call(this)) return;
     const currentTablePage = this.shadowRoot.querySelector?.("[data-alert-table-page]");
     if (currentTablePage) {
       const kind = currentTablePage.dataset.alertTablePage;

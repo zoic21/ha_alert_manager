@@ -1,3 +1,7 @@
+import { esc } from "./escaping.js";
+
+const PANEL_TRANSLATION_LOADING_KEY = "component.alert_manager.config_panel.loading";
+
 const VALIDATION_ERROR_KEYS = new Map([
   ["Invalid resolution condition", "resolution_condition"],
   ["Sequence requires zero delay and no template", "sequence_options"],
@@ -54,7 +58,29 @@ const VALIDATION_ERROR_PREFIX_KEYS = [
   ["Invalid YAML:", "yaml_invalid"],
 ];
 
+export function showTranslationBootstrap() {
+    if (this._translations[PANEL_TRANSLATION_LOADING_KEY] || this._englishTranslations[PANEL_TRANSLATION_LOADING_KEY]) return false;
+    const nativeText = (key) => esc(this._hass?.localize?.(`ui.common.${key}`) ?? "");
+    const failed = !this._loading && this._notice?.kind === "error";
+    this.shadowRoot.innerHTML = `<style>${this._styles()}</style><div class="loading" role="status">
+      ${failed
+        ? `<ha-alert alert-type="error">${nativeText("unknown_error")}</ha-alert>
+          <ha-button data-action="retry-panel-load">${nativeText("retry")}</ha-button>`
+        : `<ha-circular-progress indeterminate aria-label="${nativeText("loading")}"></ha-circular-progress>`}
+    </div>`;
+    return true;
+}
+
+export async function handleTranslationAction(action) {
+    if (action !== "retry-panel-load") return false;
+    if (this._loadPromise || this._translationPromise || !this._hass) return true;
+    if (this._config) await this._reloadTranslations();
+    else await this._load();
+    return true;
+}
+
 export async function fetchTranslations(language) {
+    if (this._translationsLanguage === language) return;
     const request = (requestedLanguage) => this._api.call({
       type: "frontend/get_translations",
       language: requestedLanguage,
@@ -66,8 +92,14 @@ export async function fetchTranslations(language) {
       language === "en" ? Promise.resolve(null) : request("en"),
     ]);
     if (language !== this._language) return;
-    this._translations = localized?.resources ?? {};
-    this._englishTranslations = english?.resources ?? this._translations;
+    const resources = localized?.resources ?? {};
+    const englishResources = english?.resources ?? resources;
+    if (!resources[PANEL_TRANSLATION_LOADING_KEY] && !englishResources[PANEL_TRANSLATION_LOADING_KEY]) {
+      throw new Error("Missing Alert Manager translations");
+    }
+    this._translations = resources;
+    this._englishTranslations = englishResources;
+    this._translationsLanguage = language;
 }
 
 export async function reloadTranslations() {

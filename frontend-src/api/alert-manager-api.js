@@ -37,6 +37,7 @@ export function restorePanelState() {
     if (!cached || cached.language !== this._language || cached.readOnly !== this._readOnly) return false;
     this._translations = cached.translations;
     this._englishTranslations = cached.englishTranslations;
+    this._translationsLanguage = cached.language;
     this._config = cached.config;
     this._alerts = cached.alerts;
     this._packs = cached.packs;

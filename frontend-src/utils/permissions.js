@@ -2,6 +2,7 @@ import { TABS } from "./constants.js";
 
 const readOnlyTabs = new Set(["overview", "history"]);
 const readOnlyActions = new Set([
+  "retry-panel-load",
   "tab", "filter-summary-status", "clear-filter-section", "toggle-filter-option",
   "open-alert-history", "toggle-alert-timestamp", "copy-alert-id", "toggle-alert-id", "close-alert-details",
   "toggle-history-statistics", "history-statistics-period", "history-statistics-leader",
