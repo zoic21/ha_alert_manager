@@ -99,6 +99,7 @@ _IGNORED_ENTITY_REFERENCES: Final = frozenset(
         "event.seconds",
         "event.station",
         "event.summary",
+        "event.target",
     }
 )
 _ENTITY_DOMAINS: Final = frozenset(
