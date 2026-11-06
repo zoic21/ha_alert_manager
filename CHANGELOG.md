@@ -5,6 +5,23 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.7.0 — November 6, 2026
+
+- **Easier to use on mobile.** Scroll the whole page in Overview, History,
+  Coherence and Custom rules. Compact headers leave more room for results.
+- **Cleaner panel loading.** Alert Manager waits for translated labels before
+  showing the panel, so you no longer see translation codes flash on screen.
+- **A more reliable dashboard card.** The card recovers more smoothly after
+  switching pages or a brief connection drop, even when there are no alerts.
+- **Better support for Home Assistant 2026.11.** Alert Manager uses current
+  entity names and respects your panel theme. The entity export includes child
+  devices and the areas they inherit from their parent devices.
+- **Fewer false warnings in Coherence.** Common template fields for dates and
+  times no longer trigger missing-entity warnings.
+
+**To update**, install Alert Manager 2.7.0 from HACS, restart Home Assistant,
+then refresh your browser or reopen the Companion App.
+
 ## 2.7.0-dev.1 — November 4, 2026
 
 First development prerelease of the 2.7 series.
