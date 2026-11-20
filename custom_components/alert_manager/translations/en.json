@@ -239,6 +239,11 @@
         "title": "Deleted entities"
       },
       "empty": "No missing references.",
+      "ignore": {
+        "button": "Ignore entity {entity_id}",
+        "success": "Entity {entity_id} is ignored. To include it again, remove it from the ignored references in Configuration → Coherence analysis.",
+        "scan_error": "Entity {entity_id} was added to the ignored references. Run the scan again to refresh the results."
+      },
       "not_scanned": "The scan has not been run yet.",
       "open": "Open",
       "correction": {

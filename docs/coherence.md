@@ -65,6 +65,8 @@ The `bubble_card` directory and its subdirectories are excluded from file scanni
 
 Use the reference exclusions for known or intentional references. An exact ZHA IEEE address can be excluded through the same mechanism. These exclusions concern coherence findings; they are separate from the labels and exclusions used by automatic alert monitoring.
 
+Use the **Ignore entity** action (eye-off icon) on a finding to exclude that entity ID from all coherence checks and refresh the report. The exclusion persists between restarts. To include the entity again, remove it from **References ignored by the coherence scan** in **Configuration → Coherence analysis**, save the settings, and run a new scan.
+
 ## Keep an alert while findings remain
 
 Enable **Create an alert for coherence issues** in **Configuration → Coherence analysis** to maintain one immediate alert while findings remain. The option is off by default and is available as `coherence_alert_enabled` in configuration YAML.

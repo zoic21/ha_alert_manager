@@ -16,6 +16,7 @@ from custom_components.alert_manager.websocket import (
     websocket_alert_acknowledgements_update,
     websocket_alerts_list,
     websocket_coherence_get,
+    websocket_coherence_ignored_entity_add,
     websocket_coherence_scan,
     websocket_config_backup_download,
     websocket_config_backup_restore,
@@ -356,6 +357,10 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         ),
         (websocket_coherence_get, {"id": 18}),
         (websocket_coherence_scan, {"id": 19}),
+        (
+            websocket_coherence_ignored_entity_add,
+            {"id": 30, "entity_id": "sensor.pool"},
+        ),
         (websocket_deleted_entities_list, {"id": 23}),
         (websocket_entity_renames_list, {"id": 24}),
         (websocket_config_recovery_get, {"id": 20}),
@@ -366,7 +371,7 @@ def test_configuration_reads_and_sensitive_paths_remain_admin_only(hass, entry):
         ),
     ):
         asyncio.run(command(hass, connection, message))
-    assert [error[1] for error in connection.errors] == ["unauthorized"] * 23
+    assert [error[1] for error in connection.errors] == ["unauthorized"] * 24
     assert connection.results == []
 
 
@@ -471,7 +476,8 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
         "duration_ms": 4,
     }
 
-    async def scan(_hass):
+    async def scan(_hass, *, after_current):
+        assert after_current is False
         return expected
 
     websocket_module = importlib.import_module(
@@ -482,6 +488,58 @@ def test_coherence_scan_websocket_returns_on_demand_result(hass, entry, monkeypa
 
     assert connection.errors == []
     assert connection.results == [(40, expected)]
+
+
+def test_coherence_ignore_entity_persists_exact_references(hass, entry, tmp_path):
+    (tmp_path / "configuration.yaml").write_text(
+        "entity_id: [sensor.pool, sensor.fountain, sensor.pool_pump]\n"
+        "another_entity_id: sensor.pool\n"
+    )
+    hass.config.path = lambda *parts: str(tmp_path.joinpath(*parts))
+    key = "coherence_ignored_entity_references"
+    ieee = "00:11:22:33:44:55:66:77"
+
+    async def scenario():
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        hass.data[DATA_MANAGER] = manager
+        await manager.async_update_config({key: [ieee]})
+        connection = Connection(admin=True)
+
+        await websocket_coherence_scan(hass, connection, {"id": 1})
+        assert connection.results[-1][1]["missing_count"] == 4
+
+        async def ignore(entity_id, request_id):
+            await websocket_coherence_ignored_entity_add(
+                hass, connection, {"id": request_id, "entity_id": entity_id}
+            )
+
+        await asyncio.gather(ignore("sensor.pool", 2), ignore("sensor.fountain", 3))
+        await ignore("sensor.pool", 4)
+        expected = [ieee, "sensor.fountain", "sensor.pool"]
+        assert sorted(connection.results[-1][1]["ignored_entity_references"]) == (
+            expected
+        )
+        await ignore(ieee, 5)
+        assert connection.errors[-1][:2] == (5, "invalid_format")
+
+        await websocket_coherence_scan(
+            hass, connection, {"id": 6, "after_current": True}
+        )
+        assert [row["entity_id"] for row in connection.results[-1][1]["results"]] == [
+            "sensor.pool_pump"
+        ]
+        await manager.async_unload()
+        restarted = AlertManager(hass, entry)
+        await restarted.async_setup()
+        hass.data[DATA_MANAGER] = restarted
+        assert sorted(restarted.get_config()[key]) == expected
+
+        await restarted.async_update_config({key: [ieee, "sensor.fountain"]})
+        await websocket_coherence_scan(hass, connection, {"id": 7})
+        assert connection.results[-1][1]["missing_count"] == 3
+
+    asyncio.run(scenario())
 
 
 def test_deleted_entities_websocket_returns_newest_fifty(hass, entry):

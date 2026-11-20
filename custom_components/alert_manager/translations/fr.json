@@ -239,6 +239,11 @@
         "title": "Entités supprimées"
       },
       "empty": "Aucune référence manquante.",
+      "ignore": {
+        "button": "Ignorer l’entité {entity_id}",
+        "success": "L’entité {entity_id} est ignorée. Pour la réinclure, retirez-la des références ignorées dans Configuration → Analyse de cohérence.",
+        "scan_error": "L’entité {entity_id} a été ajoutée aux références ignorées. Relancez l’analyse pour actualiser les résultats."
+      },
       "not_scanned": "L’analyse n’a pas encore été lancée.",
       "open": "Ouvrir",
       "correction": {

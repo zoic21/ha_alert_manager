@@ -40,8 +40,18 @@ export class AlertManagerApi {
     });
   }
 
-  scanCoherence() {
-    return this.call({ type: "alert_manager/coherence/scan" });
+  ignoreCoherenceEntity(entityId) {
+    return this.call({
+      type: "alert_manager/coherence/ignored_entities/add",
+      entity_id: entityId,
+    });
+  }
+
+  scanCoherence({ afterCurrent = false } = {}) {
+    return this.call({
+      type: "alert_manager/coherence/scan",
+      ...(afterCurrent ? { after_current: true } : {}),
+    });
   }
 
   async applyEntityReplacement(previewId, occurrenceIds) {
