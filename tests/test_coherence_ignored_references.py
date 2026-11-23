@@ -12,14 +12,18 @@ from custom_components.alert_manager.coherence import scan_configuration
 def test_scan_ignores_explicit_entity_like_references(tmp_path: Path) -> None:
     """Configured false positives are ignored without hiding real missing entities."""
     (tmp_path / "configuration.yaml").write_text(
-        'value: "script.run script.execute sensor.missing"\n',
+        'value: "script.run script.execute event.target event.target_missing '
+        'sensor.missing"\n',
         encoding="utf-8",
     )
 
     result = scan_configuration(tmp_path, frozenset())
 
-    assert [row["entity_id"] for row in result["results"]] == ["sensor.missing"]
-    assert result["references_checked"] == 1
+    assert [row["entity_id"] for row in result["results"]] == [
+        "event.target_missing",
+        "sensor.missing",
+    ]
+    assert result["references_checked"] == 2
 
 
 def test_scan_ignores_date_fields_without_hiding_date_entities(tmp_path: Path) -> None:

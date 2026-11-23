@@ -424,10 +424,55 @@ test("replace is offered only for supported findings without an automatic target
   assert.equal(panel._entityReplacement.new_entity_id, "");
   assert.equal(panel._entityReplacement.coherenceCorrection, undefined);
   assert.equal(panel._nativeCoherenceActionCell(rows[1]).children[0].textContent, panel._t("coherence.correction.button"));
-  for (const row of rows.slice(2)) assert.equal(panel._nativeCoherenceActionCell(row).children.length, 0);
+  const actions = panel._nativeCoherenceActionCell(rows[2]).children;
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].tagName, "HA-ICON-BUTTON");
+  assert.equal(actions[0].children[0].attributes.icon, "mdi:eye-off-outline");
+  assert.equal(panel._nativeCoherenceActionCell(rows[3]).children.length, 0);
 
   panel._hass.user.is_admin = false;
   assert.equal(panel._nativeCoherenceActionCell(rows[0]).children.length, 0);
+});
+
+test("ignoring an entity saves it before rescanning and preserves the exclusion if the scan fails", async () => {
+  const panel = new Panel();
+  panel._activeTab = "coherence";
+  panel._coherence = coherenceResult();
+  panel._config = { coherence_ignored_entity_references: ["sensor.existing"] };
+  panel._ensureSettingsDraft();
+  panel._settingsDraft.coherence_ignored_entity_references.push("sensor.draft");
+  panel._refreshCoherenceData = () => {};
+  panel._t = (key, { entity_id } = {}) => entity_id ? `${key}: ${entity_id}` : key;
+  const entityId = panel._coherence.results[0].entity_id;
+  const result = { results: [], scanned_at: "2026-08-28T12:01:00+00:00" };
+  const calls = [];
+  panel._hass = {
+    user: { is_admin: true },
+    async callWS(message) {
+      calls.push(message);
+      if (message.entity_id) return { ignored_entity_references: ["sensor.existing", entityId] };
+      if (calls.length === 2) throw new Error("Scan failed");
+      return result;
+    },
+  };
+  const [button] = panel._nativeCoherenceActionCell(panel._coherenceTableRows()[0]).children;
+  assert.equal(button.attributes.title, `coherence.ignore.button: ${entityId}`);
+  assert.equal(button.attributes["aria-label"], button.attributes.title);
+  button.listeners.click({ stopPropagation() {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, [
+    { type: "alert_manager/coherence/ignored_entities/add", entity_id: entityId },
+    { type: "alert_manager/coherence/scan", after_current: true },
+  ]);
+  assert.deepEqual(panel._config.coherence_ignored_entity_references, ["sensor.existing", entityId]);
+  assert.deepEqual(panel._settingsDraft.coherence_ignored_entity_references, ["sensor.existing", "sensor.draft", entityId]);
+  assert.deepEqual(panel._notice, { kind: "error", text: `coherence.ignore.scan_error: ${entityId}` });
+  assert.equal(panel._coherenceLoading, false);
+
+  button.listeners.click({ stopPropagation() {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(panel._coherence, result);
+  assert.deepEqual(panel._notice, { kind: "success", text: `coherence.ignore.success: ${entityId}` });
 });
 
 test("coherence opens the exact Home Assistant target only through the Open button", () => {

@@ -223,6 +223,40 @@ def test_scan_overlap_and_failure_use_one_reconciliation(hass, entry, monkeypatc
     asyncio.run(scenario())
 
 
+def test_scan_after_ignoring_waits_for_scan_with_previous_configuration(
+    hass, entry, monkeypatch
+):
+    async def scenario():
+        manager = await setup(hass, entry)
+        entered, release = asyncio.Event(), asyncio.Event()
+        scanned_exclusions = []
+
+        async def scan(_hass, *, ignored_entity_references, **_kwargs):
+            scanned_exclusions.append(ignored_entity_references)
+            if not ignored_entity_references:
+                entered.set()
+                await release.wait()
+            return report(0 if ignored_entity_references else 1)
+
+        monkeypatch.setattr(coherence, "async_scan_configuration", scan)
+        first = asyncio.create_task(coherence.async_run_coherence_scan(hass))
+        await entered.wait()
+        await manager.async_ignore_coherence_entity("sensor.missing_0")
+        second = asyncio.create_task(
+            coherence.async_run_coherence_scan(hass, after_current=True)
+        )
+        await asyncio.sleep(0)
+        assert scanned_exclusions == [frozenset()]
+        release.set()
+        before, after = await asyncio.gather(first, second)
+        assert scanned_exclusions == [frozenset(), frozenset({"sensor.missing_0"})]
+        assert before["missing_count"] == 1
+        assert after["missing_count"] == 0
+        assert hass.data[DATA_COHERENCE_RESULT] is after
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("reload", [False, True])
 @pytest.mark.parametrize("phase", ["scanning", "reconciling"])
 def test_scan_finishing_after_unload_uses_current_manager(

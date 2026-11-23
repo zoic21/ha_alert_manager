@@ -156,15 +156,44 @@ async def websocket_history_list(
 
 @websocket_api.require_admin
 @websocket_api.async_response
-@websocket_api.websocket_command({vol.Required("type"): "alert_manager/coherence/scan"})
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/scan",
+        vol.Optional("after_current"): bool,
+    }
+)
 async def websocket_coherence_scan(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Scan Home Assistant configuration for missing entity references."""
     if (manager := _manager(hass, connection, msg["id"])) is None:
         return
-    report = await async_run_coherence_scan(hass)
+    report = await async_run_coherence_scan(
+        hass, after_current=msg.get("after_current", False)
+    )
     connection.send_result(msg["id"], await manager.async_coherence_snapshot(report))
+
+
+@websocket_api.require_admin
+@websocket_api.async_response
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "alert_manager/coherence/ignored_entities/add",
+        vol.Required("entity_id"): str,
+    }
+)
+async def websocket_coherence_ignored_entity_add(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Persist an entity exclusion for coherence scans."""
+    if (manager := _manager(hass, connection, msg["id"])) is None:
+        return
+    try:
+        ignored = await manager.async_ignore_coherence_entity(msg["entity_id"])
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_VALIDATION, str(err))
+        return
+    connection.send_result(msg["id"], {"ignored_entity_references": ignored})
 
 
 @websocket_api.require_admin
@@ -820,6 +849,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_history_list,
         websocket_coherence_get,
         websocket_coherence_scan,
+        websocket_coherence_ignored_entity_add,
         websocket_coherence_corrections_preview,
         websocket_entity_replacement_preview,
         websocket_entity_replacement_prepare,

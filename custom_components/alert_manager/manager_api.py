@@ -53,6 +53,7 @@ from .validation import (
     merge_rule_update,
     validate_config,
     validate_config_update,
+    validate_entity_id,
     validate_rule_count,
     validate_rule_payload,
     validate_rule_update_fields,
@@ -979,6 +980,18 @@ class _ApiMixin:
     @_serialize_config_mutation
     async def async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Validate, atomically persist and immediately apply config changes."""
+        return await self._async_update_config(changes)
+
+    @_serialize_config_mutation
+    async def async_ignore_coherence_entity(self, entity_id: str) -> list[str]:
+        """Add an exact entity ID to the persisted coherence exclusions."""
+        entity_id = validate_entity_id(entity_id)
+        key = "coherence_ignored_entity_references"
+        config = await self._async_update_config({key: [*self.config[key], entity_id]})
+        return config[key]
+
+    async def _async_update_config(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Apply a partial update under the configuration mutation lock."""
         validate_config_update(changes)
         changes = dict(changes)
         if "rules" in changes:

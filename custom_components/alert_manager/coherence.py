@@ -99,6 +99,7 @@ _IGNORED_ENTITY_REFERENCES: Final = frozenset(
         "event.seconds",
         "event.station",
         "event.summary",
+        "event.target",
     }
 )
 _ENTITY_DOMAINS: Final = frozenset(
@@ -948,9 +949,15 @@ async def _async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
     return result
 
 
-async def async_run_coherence_scan(hass: HomeAssistant) -> dict[str, Any]:
+async def async_run_coherence_scan(
+    hass: HomeAssistant, *, after_current: bool = False
+) -> dict[str, Any]:
     """Share one in-flight scan across every manual and scheduled caller."""
     task: asyncio.Task[dict[str, Any]] | None = hass.data.get(DATA_COHERENCE_SCAN_TASK)
+    if after_current and task is not None and not task.done():
+        # A scan already running may have captured the previous configuration.
+        await asyncio.wait((task,))
+        task = hass.data.get(DATA_COHERENCE_SCAN_TASK)
     if task is None or task.done():
         task = hass.async_create_task(
             _async_run_coherence_scan(hass),

@@ -5,6 +5,33 @@ Development, beta and release-candidate entries summarize user-facing changes. I
 implementation details, cosmetic adjustments, temporary experiments and changes reverted
 before a stable release are intentionally omitted.
 
+## 2.8.0 — November 23, 2026
+
+- **Ignore an entity directly from a Coherence report.** Use the crossed-out eye
+  next to an entity to hide warnings for it and refresh the report. This is
+  handy for equipment you switch off for the season. To check the entity again,
+  remove it from the ignored list in **Configuration → Coherence analysis**,
+  save, and run a new scan.
+- **Fewer false warnings.** Coherence no longer flags the target field in event
+  templates as a missing entity.
+
+**To update**, install Alert Manager 2.8.0 from HACS, restart Home Assistant,
+then refresh your browser or reopen the Companion App.
+
+## 2.7.1-dev.1 — November 20, 2026
+
+Development prerelease.
+
+- **Ignore seasonal entities in Coherence.** Use the crossed-out eye icon to
+  ignore an entity and refresh the report. When you want to include it again,
+  remove it from the ignored references in **Configuration → Coherence analysis**,
+  save, and run a new scan.
+- **Fewer false warnings in event templates.** Coherence skips the template
+  field `event.target`.
+
+**Update in HACS** by selecting `2.7.1-dev.1`. Restart Home Assistant after
+updating, then refresh your browser or reopen the Companion App.
+
 ## 2.7.0 — November 6, 2026
 
 - **Easier to use on mobile.** Scroll the whole page in Overview, History,

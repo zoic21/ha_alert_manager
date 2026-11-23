@@ -216,8 +216,18 @@ class AlertManagerApi {
     });
   }
 
-  scanCoherence() {
-    return this.call({ type: "alert_manager/coherence/scan" });
+  ignoreCoherenceEntity(entityId) {
+    return this.call({
+      type: "alert_manager/coherence/ignored_entities/add",
+      entity_id: entityId,
+    });
+  }
+
+  scanCoherence({ afterCurrent = false } = {}) {
+    return this.call({
+      type: "alert_manager/coherence/scan",
+      ...(afterCurrent ? { after_current: true } : {}),
+    });
   }
 
   async applyEntityReplacement(previewId, occurrenceIds) {
@@ -6430,6 +6440,7 @@ function coherenceTableRows() {
         id: `${reference}:${result.file}:${result.line}:${index}`,
         index,
         entity: reference,
+        ignorable: Boolean(result.entity_id) && (result.reference_type ?? "entity_id") === "entity_id",
         target: result.correction_target ?? "",
         replaceable: Boolean(result.replacement_available) && !this._readOnly,
         selectable: Boolean(result.correction_target) && !this._readOnly,
@@ -6682,6 +6693,23 @@ function nativeCoherenceActionCell(row) {
         void handleEntityReplacementAction.call(this, row.target ? "correct-coherence" : "open-entity-replacement", { dataset: { rowIndex: row.index, entityId: row.entity } });
       });
       content.append(correct);
+    }
+    if (row.ignorable && !this._readOnly) {
+      const ignore = document.createElement("ha-icon-button");
+      const label = this._t("coherence.ignore.button", { entity_id: row.entity });
+      ignore.setAttribute("aria-label", label);
+      ignore.setAttribute("title", label);
+      ignore.style.cssText = "flex:none;--mdc-icon-button-size:40px";
+      ignore.disabled = this._coherenceLoading;
+      const icon = document.createElement("ha-icon");
+      icon.setAttribute("icon", "mdi:eye-off-outline");
+      icon.setAttribute("aria-hidden", "true");
+      ignore.append(icon);
+      ignore.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void handleCoherenceAction.call(this, "ignore-coherence-entity", { dataset: { entityId: row.entity } });
+      });
+      content.append(ignore);
     }
     if (row.link) {
       const open = document.createElement("ha-icon-button");
@@ -7021,16 +7049,33 @@ async function handleCoherenceAction(action, button) {
     }
     return true;
   }
-  if (action !== "scan-coherence") return false;
+  const ignoring = action === "ignore-coherence-entity";
+  if (!ignoring && action !== "scan-coherence") return false;
   if (this._coherenceLoading) return true;
+  const entityId = button?.dataset?.entityId;
+  if (ignoring && (!entityId || this._readOnly || this._entityReplacement?.busy)) return true;
   this._coherenceLoading = true;
   this._notice = null;
   this._refreshCoherenceData();
+  let ignored = false;
   try {
-    this._coherence = await this._api.call({ type: "alert_manager/coherence/scan" });
+    if (ignoring) {
+      const { ignored_entity_references: references } = await this._api.ignoreCoherenceEntity(entityId);
+      this._config = { ...this._config, coherence_ignored_entity_references: references };
+      const draftReferences = this._settingsDraft?.coherence_ignored_entity_references;
+      if (draftReferences && !draftReferences.includes(entityId)) draftReferences.push(entityId);
+      ignored = true;
+    }
+    this._coherence = await this._api.scanCoherence({ afterCurrent: ignoring });
     this._coherenceScannedAt = this._coherence?.scanned_at ?? this._coherenceScannedAt;
+    if (ignoring) {
+      this._notice = { kind: "success", text: this._t("coherence.ignore.success", { entity_id: entityId }) };
+    }
   } catch (error) {
-    this._notice = { kind: "error", text: this._errorText(error) };
+    this._notice = {
+      kind: "error",
+      text: ignored ? this._t("coherence.ignore.scan_error", { entity_id: entityId }) : this._errorText(error),
+    };
   } finally {
     this._coherenceLoading = false;
     this._refreshCoherenceData();
