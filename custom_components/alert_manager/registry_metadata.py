@@ -24,6 +24,13 @@ def device_area_id(hass: HomeAssistant, device: Any) -> str | None:
     return device.area_id
 
 
+def device_parent_id(registry: dr.DeviceRegistry, device_id: str | None) -> str | None:
+    """Return the native parent of a child device, when supported."""
+    if device_id is None:
+        return None
+    return getattr(registry.async_get(device_id), "parent_device_id", None)
+
+
 def entity_display_name(
     hass: HomeAssistant, entity_id: str, *, state: State | None = None
 ) -> str:

@@ -61,17 +61,20 @@ export function renderAutomaticPanel() {
 
 // Presentation-only counterpart of the backend field resolver; values are always
 // validated and evaluated on the server. Missing fields remain missing in drafts.
-export function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities = {}) {
+export function inheritedPackSetting(draft, fieldId, targetId, kind, sourceId, entities = {}, devices = {}) {
   let value = draft[fieldId];
   let origin = "pack";
   const source = sourceId ? draft.source_packs?.[sourceId] : null;
   if (source?.[fieldId] != null && !(fieldId === "enabled" && value === false)) { value = source[fieldId]; origin = "source"; }
   const deviceId = kind === "entity_overrides" ? entities[targetId]?.device_id : targetId;
-  for (const [key, id] of [["device_overrides", deviceId], ["entity_overrides", targetId]]) {
-    if (key === "entity_overrides" && kind === "device_overrides") continue;
+  const parentId = devices[deviceId]?.parent_device_id;
+  const targets = [["device_overrides", parentId], ["device_overrides", deviceId]];
+  if (kind === "entity_overrides") targets.push([kind, targetId]);
+  for (const [key, id] of targets) {
+    if (!id) continue;
     for (const [scope, prefix] of [[draft, ""], [source, "source_"]]) {
       // Exclude the field currently edited: its inherited value is its parent.
-      if (key === kind && ((!sourceId && scope === draft) || (sourceId && scope === source))) continue;
+      if (key === kind && id === targetId && scope === (sourceId ? source : draft)) continue;
       const row = scope?.[key]?.find((row) => row.target_id === id);
       if (row && Object.hasOwn(row, fieldId) && !(fieldId === "enabled" && value === false)) { value = row[fieldId]; origin = `${prefix}${key === "device_overrides" ? "device" : "entity"}`; }
     }
@@ -83,10 +86,11 @@ function targetWarning(pack, row, kind, config, hass, sourceId) {
   const entity = hass?.entities?.[row.target_id];
   const state = hass?.states?.[row.target_id];
   const device = hass?.devices?.[kind === "device_overrides" ? row.target_id : entity?.device_id];
+  const parent = hass?.devices?.[device?.parent_device_id];
   if (!row.target_id) return null;
   if (kind === "device_overrides" ? !device : !entity && !state) return "automatic.orphan_target";
   const excluded = config?.excluded_labels ?? [];
-  if ([...(entity?.labels ?? []), ...(device?.labels ?? [])].some((id) => excluded.includes(id))) return "automatic.blocked_label";
+  if ([...(entity?.labels ?? []), ...(device?.labels ?? []), ...(parent?.labels ?? [])].some((id) => excluded.includes(id))) return "automatic.blocked_label";
   if (config?.monitoring_enabled === false) return "automatic.blocked_global";
   if (config?.automatic?.[pack.id]?.enabled === false) return "automatic.blocked_source";
   if (pack.available === false || (sourceId && config?.automatic?.[sourceId]?.enabled === false)) return "automatic.blocked_source";
@@ -131,7 +135,7 @@ export function renderPackField(pack, field, config, context) {
   if (exclusionField(field)) return `<section class="field full"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))} (${rows.length})</span><ha-selector id="auto-${pack.id}-${field.id}-exclusions" aria-label="${esc(t(`automatic.fields.${field.translation_key}.label`))}"></ha-selector><small>${esc(t("automatic.exclusions_help"))}</small></section>`;
   return `<section class="field full pack-map-field"><div class="configuration-section-heading"><span class="field-label">${esc(t(`automatic.fields.${field.translation_key}.label`))} (${rows.length})</span><ha-button appearance="plain" data-action="add-pack-map-row" data-pack-id="${pack.id}" data-field-id="${field.id}"><ha-svg-icon slot="start" path="${MDI_PLUS}"></ha-svg-icon>${esc(t("buttons.add"))}</ha-button></div>
     ${rows.length ? rows.map((row, index) => {
-      const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities);
+      const parent = inheritedPackSetting(draft[pack.id], "enabled", row.target_id, field.id, sourceId, hass?.entities, hass?.devices);
       const parentBlocked = parent.value === false;
       const warning = (parentBlocked ? parent.origin.includes("device") ? "automatic.blocked_device" : "automatic.blocked_source" : null) ?? targetWarning(sourceId ? context.availablePacks.find((item) => item.id === sourceId) ?? pack : pack, row, field.id, { ...context.config, automatic: draft }, hass, sourceId);
       const blocked = parentBlocked || ["automatic.blocked_source", "automatic.blocked_global", "automatic.blocked_label"].includes(warning);

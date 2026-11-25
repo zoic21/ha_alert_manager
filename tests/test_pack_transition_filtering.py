@@ -481,6 +481,53 @@ def test_device_exclusion_only_applies_to_automatic_packs(
     asyncio.run(scenario())
 
 
+def test_parent_label_changes_reevaluate_child_entities(
+    hass, entry, registry_entry, device_entry
+):
+    """Changing an excluded label on the parent takes effect without a state change."""
+
+    async def scenario():
+        parent = device_entry(hass, device_id="parent", labels={"excluded"})
+        child = device_entry(hass, device_id="child")
+        child.parent_device_id = parent.id
+        registry_entry(hass, "sensor.battery", device_id=child.id)
+        _battery_state(hass, "10")
+        manager = AlertManager(hass, entry)
+        await manager.async_setup()
+        await manager.async_update_config({"excluded_labels": ["excluded"]})
+        rule = await manager.async_create_rule(
+            {
+                "name": "Child battery rule",
+                "entity_ids": ["sensor.battery"],
+                "source": "state",
+                "operator": "below",
+                "value": 20,
+                "duration": 0,
+            }
+        )
+        automatic_id = "battery:sensor.battery"
+        custom_id = f"rule:{rule['id']}:sensor.battery"
+        assert automatic_id not in manager.records
+        assert custom_id in manager.records
+
+        for labels in (set(), {"excluded"}):
+            parent.labels = labels
+            manager._registry_changed(
+                Event(
+                    {
+                        "action": "update",
+                        "device_id": parent.id,
+                        "changes": {"labels": []},
+                    }
+                )
+            )
+            await manager._async_flush_registry_evaluation()
+            assert (automatic_id in manager.records) is (not labels)
+            assert custom_id in manager.records
+
+    asyncio.run(scenario())
+
+
 def test_label_exclusion_only_applies_to_automatic_packs(hass, entry, registry_entry):
     """Excluded labels remain automatic-only and custom tracking stays intact."""
 

@@ -1,7 +1,7 @@
 {
   "domain": "alert_manager",
   "name": "Alert Manager",
-  "categories": ["messaging_notifications"],
+  "categories": ["computers_network.monitoring", "messaging_notifications"],
   "codeowners": ["@zoic21"],
   "config_flow": true,
   "dependencies": [

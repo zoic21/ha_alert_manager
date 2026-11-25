@@ -887,6 +887,25 @@ test("disabled device blocks entity switches and retains hidden settings until r
   assert.equal(draft.battery.entity_overrides[0].threshold, 12);
 });
 
+test("child exceptions show blocks from a parent device override or label", () => {
+  const packs = automaticPacks();
+  const config = { automatic: automaticConfig(), excluded_labels: ["skip"] };
+  config.automatic.battery.device_overrides = { parent: { enabled: false } };
+  config.automatic.battery.entity_overrides = { "sensor.a": { enabled: true } };
+  const draft = Object.fromEntries(packs.map((pack) => [pack.id, automaticPackToDraft(pack, config.automatic[pack.id])]));
+  const hass = {
+    entities: { "sensor.a": { device_id: "child" } },
+    devices: { parent: { labels: ["skip"] }, child: { parent_device_id: "parent" } },
+  };
+  const context = { availablePacks: packs, config, draft, configurationDrawer: { kind: "automatic", id: "battery" }, hass, t };
+
+  assert.match(renderAutomatic(context), /automatic.blocked_device/);
+  draft.battery.device_overrides[0].enabled = true;
+  assert.match(renderAutomatic(context), /automatic.blocked_label/);
+  hass.devices.parent.labels = [];
+  assert.doesNotMatch(renderAutomatic(context), /automatic.blocked_(device|label)/);
+});
+
 
 test("pack exceptions summarize escaped targets and explicit values, with compact hidden settings", () => {
   const packs = automaticPacks();

@@ -702,6 +702,44 @@ def test_entity_override_and_disabled_entity(hass, entry, set_now):
     assert manager.config["automatic"]["flapping"]["entity_overrides"] == {}
 
 
+def test_child_occurrences_use_parent_device_settings(
+    hass, entry, set_now, registry_entry, device_entry
+):
+    """Flapping uses inherited settings for occurrences and reconciliation."""
+    start = datetime(2026, 9, 3, 8, tzinfo=UTC)
+    set_now(start)
+    parent = device_entry(hass, device_id="a" * 32)
+    child = device_entry(hass, device_id="b" * 32)
+    child.parent_device_id = parent.id
+    registry_entry(hass, "sensor.test", device_id=child.id)
+    hass.states.set("sensor.test", "ok")
+    manager = make_manager(hass, entry)
+    run(
+        manager.async_update_config(
+            {
+                "automatic": {
+                    "flapping": {
+                        "enabled": True,
+                        "occurrences": 3,
+                        "device_overrides": {
+                            parent.id: {"occurrences": 2, "recovery": 90}
+                        },
+                    }
+                }
+            }
+        )
+    )
+
+    occurrence(manager, hass, set_now, start)
+    occurrence(manager, hass, set_now, start + timedelta(seconds=10))
+    alert_id = "flapping:unavailable:sensor.test"
+    assert manager.records[alert_id].expires_at == start + timedelta(seconds=100)
+    assert (
+        manager._source_flapping_settings("unavailable:sensor.test", "sensor.test")[0]
+        == 2
+    )
+
+
 def test_disabling_pack_cancels_alert_timer_and_keeps_history(hass, entry, set_now):
     """Disabling the pack cleans runtime work and resolves its active alerts."""
     start = datetime(2026, 9, 3, 8, tzinfo=UTC)

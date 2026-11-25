@@ -140,7 +140,7 @@
       "labels_help": "Added to pack alerts and used for notifications.",
       "exceptions_help": "How do exceptions work?",
       "new_exception": "New exception",
-      "inheritance_help": "Empty numeric fields inherit from the device, then the pack. 0 means immediate for a delay. Disabling the pack or device always takes priority.",
+      "inheritance_help": "Empty numeric fields inherit from the device, its parent device, then the pack. 0 means immediate for a delay. Disabling the pack or either device takes priority.",
       "inherit": "Inherited",
       "monitoring_enabled": "Enabled",
       "monitoring_disabled": "Disabled",

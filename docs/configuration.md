@@ -26,7 +26,7 @@ Each pack has a **Configure** drawer for defaults, labels and device/entity exce
 
 A disabled pack or device blocks its entity exceptions. No exception bypasses the global monitoring switch, an exclusion label or the pack's eligibility checks. Battery thresholds and consecutive failed-cycle counts use the same exception hierarchy. Automation/script errors have no delay by default; consecutive failed cycles are different from a time delay.
 
-In **Configuration → General**, global exclusions use Home Assistant labels on entities or devices and affect automatic monitoring only. Custom rules remain independent. Device exceptions also cover newly added eligible entities.
+In **Configuration → General**, global exclusions use Home Assistant labels on entities or devices and affect automatic monitoring only. Custom rules remain independent. An excluded label on a parent device also covers the entities of its child devices. Device exceptions cover newly added eligible entities and child devices. A child device can override inherited thresholds and delays. Disabling monitoring for the parent also disables it for its children.
 
 Trigger delays belong to individual packs. The pending-alert display delay controls only when a pending alert is shown, not when it becomes active. Pack labels update current alerts when changed; history keeps the labels recorded at resolution.
 

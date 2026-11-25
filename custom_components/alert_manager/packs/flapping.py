@@ -8,6 +8,7 @@ from math import isfinite
 from typing import Any
 
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.hass_dict import HassKey
 
@@ -17,6 +18,7 @@ from ..const import (
     DEFAULT_FLAPPING_WINDOW,
 )
 from ..pack_settings import resolve_settings
+from ..registry_metadata import device_parent_id
 from .base import (
     AutomaticPack,
     PackConfigField,
@@ -75,6 +77,8 @@ def _settings(
     config: dict[str, Any],
     rules_by_id: dict[str, dict[str, Any]],
     device_id: str | None = None,
+    *,
+    parent_device_id: str | None = None,
 ) -> tuple[int, int, int] | None:
     """Resolve source, entity and global settings in descending priority."""
     source_settings = _source_overrides(occurrence, config, rules_by_id)
@@ -84,7 +88,10 @@ def _settings(
     if occurrence.source.rule_id is not None:
         # Explicit custom rule settings retain their own opt-in and priority.
         defaults, _ = resolve_settings(
-            pack_config, occurrence.source.entity_id, device_id
+            pack_config,
+            occurrence.source.entity_id,
+            device_id,
+            parent_device_id=parent_device_id,
         )
         if not defaults["enabled"]:
             return None
@@ -96,6 +103,7 @@ def _settings(
         pack_config,
         occurrence.source.entity_id,
         device_id,
+        parent_device_id=parent_device_id,
         source_id=occurrence.source.type,
     )
     if not defaults["enabled"]:
@@ -218,8 +226,13 @@ def _process_occurrences(
         now_timestamp = now.timestamp()
         source_id = occurrence.source.id
         entry = er.async_get(hass).async_get(occurrence.source.entity_id)
+        device_id = entry.device_id if entry else None
         settings = _settings(
-            occurrence, config, rules_by_id, entry.device_id if entry else None
+            occurrence,
+            config,
+            rules_by_id,
+            device_id,
+            parent_device_id=device_parent_id(dr.async_get(hass), device_id),
         )
         if settings is None:
             data.pop(source_id, None)

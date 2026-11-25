@@ -55,7 +55,7 @@ from .packs import (
 )
 from .packs.execution_errors import PACK_ID as EXECUTION_ERRORS_PACK_ID
 from .packs.flapping import _settings as flapping_settings
-from .registry_metadata import device_area_id, entity_display_name
+from .registry_metadata import device_area_id, device_parent_id, entity_display_name
 from .rule_evaluation import RuleEvaluation, evaluate_rule, rule_current_value
 from .runtime_phase import RuntimePhase
 from .transactions import (
@@ -2204,12 +2204,18 @@ class _RuntimeMixin:
         if self._excluded_labels.intersection(entity_entry.labels):
             return False
 
-        device = None
-        if entity_entry.device_id:
-            device = self._device_registry.async_get(entity_entry.device_id)
-        return not (
-            device is not None and self._excluded_labels.intersection(device.labels)
-        )
+        if not entity_entry.device_id:
+            return True
+        device = self._device_registry.async_get(entity_entry.device_id)
+        if device is None:
+            return True
+        if self._excluded_labels.intersection(device.labels):
+            return False
+        if parent_id := getattr(device, "parent_device_id", None):
+            parent = self._device_registry.async_get(parent_id)
+            if parent is not None and self._excluded_labels.intersection(parent.labels):
+                return False
+        return True
 
     def _is_eligible_automatic_source(self, entity_id: str) -> bool:
         """Apply base eligibility and exclusions before automatic pack selection."""
@@ -2222,10 +2228,19 @@ class _RuntimeMixin:
     ) -> dict[str, Any]:
         """Resolve the current registry membership using constant-time lookups."""
         entry = self._entity_registry.async_get(entity_id)
+        device_id = entry.device_id if entry else None
+        config = self.config["automatic"][pack_id]
+        source = config.get("source_packs", {}).get(source_id, {})
+        parent_id = (
+            device_parent_id(self._device_registry, device_id)
+            if config.get("device_overrides") or source.get("device_overrides")
+            else None
+        )
         return resolve_settings(
-            self.config["automatic"][pack_id],
+            config,
             entity_id,
-            entry.device_id if entry else None,
+            device_id,
+            parent_device_id=parent_id,
             source_id=source_id,
         )[0]
 
@@ -2266,11 +2281,13 @@ class _RuntimeMixin:
             rule_id=rule_id,
         )
         entry = self._entity_registry.async_get(entity_id)
+        device_id = entry.device_id if entry else None
         return flapping_settings(
             PackOccurrence(source, dt_util.now()),
             self.config,
             {rule.id: rule.as_dict()} if rule else {},
-            entry.device_id if entry else None,
+            device_id,
+            parent_device_id=device_parent_id(self._device_registry, device_id),
         )
 
     def _record_monitoring_enabled(self, record: AlertRecord) -> bool:

@@ -42,6 +42,22 @@ def test_disabled_pack_cannot_be_enabled_by_an_exception():
     assert origins["enabled"] == "pack"
 
 
+def test_child_device_inherits_parent_exception_field_by_field():
+    config = {
+        "enabled": True,
+        "delay": 900,
+        "threshold": 15,
+        "device_overrides": {
+            "parent": {"enabled": False, "delay": 60, "threshold": 25},
+            "child": {"enabled": True, "threshold": 20},
+        },
+    }
+    values, _ = resolve_settings(
+        config, "sensor.battery", "child", parent_device_id="parent"
+    )
+    assert values == {"enabled": False, "delay": 60, "threshold": 20}
+
+
 def test_source_exceptions_are_isolated_with_field_by_field_priority():
     config = {
         "enabled": True,

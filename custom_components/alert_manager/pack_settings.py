@@ -10,6 +10,7 @@ def resolve_settings(
     entity_id: str,
     device_id: str | None,
     *,
+    parent_device_id: str | None = None,
     source_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Resolve sparse fields without expanding devices or modifying configuration.
@@ -39,8 +40,12 @@ def resolve_settings(
                 values[key] = value
                 origins[key] = "source"
         scopes.append((source, "source_"))
-    # Entity priority is field-by-field, including across source/default scopes.
-    for kind, target_id in (("device", device_id), ("entity", entity_id)):
+    # More specific targets override fields across source/default scopes.
+    for kind, target_id in (
+        ("device", parent_device_id),
+        ("device", device_id),
+        ("entity", entity_id),
+    ):
         if target_id is None:
             continue
         for scope, prefix in scopes:
