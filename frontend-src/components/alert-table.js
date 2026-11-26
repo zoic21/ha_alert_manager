@@ -1811,6 +1811,7 @@ export async function handleAlertTableAction(action, button, event) {
   if (action === "configure-alert-monitoring") {
     event.preventDefault?.(); event.stopPropagation?.();
     if (this._readOnly) return true;
+    if (this._narrow) await this._loadNativeBottomSheet();
     this._closeAlertDetailsDialog(() => {
       this._activeTab = "settings";
       this._navigate("/alert-manager/settings");

@@ -40,7 +40,7 @@ export function renderSettings(context) {
       ignoredReferenceDraft, configurationDrawer, notificationProfileDraft,
       notificationProfileValidationError, notificationEditorMode,
       notificationUsage = {}, statistics = null, date = (value) => value,
-      busy, useBottomSheet,
+      busy, bottomSheetTag,
       recoveryActive = false, configBackupsMarkup = "",
       automaticMarkup = "",
       configurationDirty = false,
@@ -95,7 +95,7 @@ export function renderSettings(context) {
         settingsDraft, entityDelayDraft, configurationDrawer,
         notificationProfileDraft, notificationProfileValidationError, notificationEditorMode,
         labels: context.labels, notificationExpandedExceptions: context.notificationExpandedExceptions,
-        busy, useBottomSheet, t,
+        busy, bottomSheetTag, t,
       })}
       <div class="settings-fab-positioner"><ha-button type="button" slot="fab" size="l" class="${configurationDirty ? "dirty" : ""}" appearance="accent" variant="brand" data-action="save-configuration" ${busy || recoveryActive ? "disabled" : ""}>${esc(t("settings.save"))}</ha-button></div>
     </div>`;
@@ -151,7 +151,7 @@ export function renderSettingsConfigurationEntry(id, label, count, t) {
 export function renderSettingsConfigurationDrawer(context) {
   const {
     settingsDraft, entityDelayDraft, configurationDrawer,
-    notificationProfileDraft, busy, useBottomSheet, t,
+    notificationProfileDraft, busy, bottomSheetTag, t,
   } = context;
   if (configurationDrawer?.kind === "notification") {
     return renderNotificationProfileDrawer({
@@ -159,7 +159,7 @@ export function renderSettingsConfigurationDrawer(context) {
       labels: context.labels,
       expandedExceptions: context.notificationExpandedExceptions,
       busy,
-      useBottomSheet,
+      bottomSheetTag,
       validationError: context.notificationProfileValidationError,
       mode: context.notificationEditorMode,
       savedProfile: settingsDraft?.notification_profiles?.find(
@@ -201,7 +201,7 @@ export function renderSettingsConfigurationDrawer(context) {
     saveAction: "save-settings",
     saveLabel: t("buttons.save"),
     busy,
-    useBottomSheet,
+    bottomSheetTag,
   });
 }
 
@@ -223,7 +223,7 @@ export function renderSettingsPanel() {
       statistics: this._notificationStats.diagnostics,
       date: (value) => this._date(value),
       busy: this._busy,
-      useBottomSheet: this._useNativeBottomSheet(),
+      bottomSheetTag: this._nativeBottomSheetTag(),
       recoveryActive: this._configRecovery?.active === true,
       configurationDirty: this._automaticDirty || this._settingsDirty,
       automaticMarkup: this._renderAutomatic(),
@@ -630,7 +630,7 @@ export function refreshSettingsConfigurationDrawer(revealSelector) {
     notificationProfileValidationError: this._notificationProfileValidationError,
     notificationEditorMode: this._notificationEditorMode,
     busy: this._busy,
-    useBottomSheet: this._useNativeBottomSheet(),
+    bottomSheetTag: this._nativeBottomSheetTag(),
     t: (key, replacements) => this._t(key, replacements),
   }), revealSelector);
   this._hydrateSelectors();

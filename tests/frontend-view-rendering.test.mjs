@@ -280,13 +280,13 @@ test("rename history supports loading, errors, empty history and native mobile c
   assert.match(render({ loading: true }), /coherence.entity_renames.loading/);
   assert.match(render({ error: "<offline>" }), /<ha-alert alert-type="error">&lt;offline&gt;<\/ha-alert>/);
   assert.match(render({ data: { renames: [] } }), /coherence.entity_renames.empty/);
-  const mobile = render({ useBottomSheet: true });
+  const mobile = render({ bottomSheetTag: "ha-resizable-bottom-sheet" });
   assert.match(mobile, /^<ha-resizable-bottom-sheet/);
   assert.match(mobile, /data-close-action="close-entity-renames"/);
   assert.doesNotMatch(mobile, /side-drawer-backdrop/);
 });
 
-test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
+test("mobile drawers use Home Assistant's snap bottom sheet with a leading close button", () => {
   const configuration = renderConfigurationDrawer({
     title: "Configuration",
     ariaLabel: "Fermer",
@@ -294,20 +294,21 @@ test("mobile drawers use Home Assistant's resizable bottom sheet", () => {
     saveAction: "save-settings",
     saveLabel: "Enregistrer",
     busy: false,
-    useBottomSheet: true,
+    bottomSheetTag: "ha-snap-bottom-sheet",
   });
   const deletedEntities = renderDeletedEntitiesDrawer({
     data: { entities: [] },
     loading: false,
     error: null,
     formatDate: (value) => value,
-    useBottomSheet: true,
+    bottomSheetTag: "ha-snap-bottom-sheet",
     t,
   });
 
   for (const markup of [configuration, deletedEntities]) {
-    assert.match(markup, /^<ha-resizable-bottom-sheet/);
+    assert.match(markup, /^<ha-snap-bottom-sheet[^>]* dismissable>/);
     assert.match(markup, /class="side-drawer-bottom-sheet"/);
+    assert.match(markup, /<ha-icon-button slot="navigationIcon"/);
     assert.doesNotMatch(markup, /side-drawer-backdrop/);
   }
   assert.match(configuration, /data-close-action="close-configuration-drawer"/);
@@ -593,10 +594,10 @@ test("backup restoration uses a native confirmation dialog", () => {
 
 
 test("all configuration drawers keep save actions outside their scroll area", () => {
-  for (const useBottomSheet of [false, true]) {
+  for (const bottomSheetTag of [undefined, "ha-resizable-bottom-sheet"]) {
     const markup = renderConfigurationDrawer({
       title: "Configuration", ariaLabel: "Configuration", resizeLabel: "Resize drawer", content: "Long content",
-      saveAction: "save-settings", saveLabel: "Save", busy: false, useBottomSheet,
+      saveAction: "save-settings", saveLabel: "Save", busy: false, bottomSheetTag,
     });
     assert.match(markup, /role="separator" aria-orientation="vertical" aria-label="Resize drawer" tabindex="0"/);
     assert.match(markup, /<section class="side-drawer-section"><div data-active-notice><\/div>Long content<\/section>\s*<\/div>\s*<div class="actions side-drawer-actions">/);

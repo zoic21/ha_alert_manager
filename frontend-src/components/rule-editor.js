@@ -3,7 +3,7 @@ import { TRANSITION_RULE_SOURCES, ATTRIBUTE_RULE_SOURCES, CUSTOM_RULE_EXCLUDED_E
 import { integrationEntityId } from "../utils/integration-entities.js";
 import { esc } from "../utils/escaping.js";
 import { durationText, newRuleDefaults, normalizeRuleTarget, ruleToYaml } from "../utils/formatting.js";
-import { hydrateConfigurationSorting, renderSideDrawer, renderConfigurationRemove, renderDrawerResizeHandle } from "./configuration-drawer.js";
+import { hydrateConfigurationSorting, renderSideDrawer, renderConfigurationRemove, renderDrawerResizeHandle, replaceBottomSheetContent } from "./configuration-drawer.js";
 
 function consumeRuleEditorNotice(panel, fallback) {
     const message = panel._notice?.text ?? fallback;
@@ -220,12 +220,14 @@ export function refreshRuleEditor() {
       this._render();
       return;
     }
-    layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer,.side-drawer-bottom-sheet").forEach((node) => node.remove());
+    const markup = this._editingRule !== null ? this._renderRuleEditor() : "";
+    const sheet = layout.querySelector?.(".side-drawer-bottom-sheet");
+    if (!replaceBottomSheetContent(sheet, markup, ".rule-editor-drawer")) {
+      layout.querySelectorAll(".rule-editor-backdrop,.rule-editor-drawer,.side-drawer-bottom-sheet").forEach((node) => node.remove());
+      if (markup) layout.insertAdjacentHTML("beforeend", markup);
+    }
     layout.classList.toggle("has-editor", this._editingRule !== null);
     layout.style.setProperty("--rule-editor-width", `${this._ruleEditorWidth}px`);
-    if (this._editingRule !== null) {
-      layout.insertAdjacentHTML("beforeend", this._renderRuleEditor());
-    }
     this._hydrateSelectors();
     this._hydrateYamlEditor();
     this._syncRuleTableEditingHighlight();
@@ -432,7 +434,7 @@ export function renderRuleEditor(context) {
       testLoading,
       t,
       duplicateLabel,
-      useBottomSheet = false,
+      bottomSheetTag,
       renderTextField,
       renderNumberField,
       flappingAvailable = false,
@@ -463,7 +465,7 @@ export function renderRuleEditor(context) {
       drawer,
       backdropClass: "rule-editor-backdrop",
       closeAction: "cancel-rule",
-      useBottomSheet,
+      bottomSheetTag,
     });
 }
 
@@ -479,7 +481,7 @@ export function renderRuleEditorPanel() {
       testLoading: this._ruleTestLoading,
       t: (key, replacements) => this._t(key, replacements),
       duplicateLabel: this._duplicateRuleLabel(),
-      useBottomSheet: this._useNativeBottomSheet(),
+      bottomSheetTag: this._nativeBottomSheetTag(),
       renderTextField: (...args) => this._textField(...args),
       renderNumberField: (...args) => this._numberField(...args),
       renderTestResult: (result) => this._renderRuleTestResult(result),

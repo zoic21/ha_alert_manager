@@ -545,6 +545,51 @@ test("a directly loaded panel replays pre-upgrade Home Assistant properties", ()
   assert.equal(loads, 1);
 });
 
+test("loads Home Assistant's current bottom sheet on demand and keeps older versions working", async () => {
+  const Panel = customElements.get("alert-manager-panel");
+  const panel = new Panel();
+  const currentTag = "ha-snap-bottom-sheet";
+  const legacyTag = "ha-resizable-bottom-sheet";
+  const previousDocument = globalThis.document;
+  const items = customElements._items;
+  let configLoads = 0;
+  let automationLoads = 0;
+  const resolver = { routerOptions: { routes: { config: { load: async () => {
+    configLoads += 1;
+    items.set("ha-panel-config", class {});
+  } } } } };
+  const main = { shadowRoot: { querySelector: () => resolver } };
+  const homeAssistant = { shadowRoot: { querySelector: () => main } };
+  globalThis.document = {
+    querySelector: () => homeAssistant,
+    createElement: () => ({ routerOptions: { routes: { automation: { load: async () => {
+      automationLoads += 1;
+      if (automationLoads === 1) throw new Error("temporary chunk load failure");
+      items.set(currentTag, class {});
+    } } } } }),
+  };
+  panel._hass.panels = { config: { component_name: "config", url_path: "config" } };
+  panel._narrow = true;
+  try {
+    assert.equal(panel._nativeBottomSheetTag(), undefined);
+    assert.equal(await panel._loadNativeBottomSheet(), false);
+    assert.deepEqual(await Promise.all([
+      panel._loadNativeBottomSheet(), panel._loadNativeBottomSheet(),
+    ]), [true, true]);
+    assert.equal(configLoads, 1);
+    assert.equal(automationLoads, 2);
+    items.set(legacyTag, class {});
+    assert.equal(panel._nativeBottomSheetTag(), currentTag);
+    items.delete(currentTag);
+    assert.equal(panel._nativeBottomSheetTag(), legacyTag);
+    panel._narrow = false;
+    assert.equal(panel._nativeBottomSheetTag(), undefined);
+  } finally {
+    globalThis.document = previousDocument;
+    for (const tag of [currentTag, legacyTag, "ha-panel-config"]) items.delete(tag);
+  }
+});
+
 test("an open side drawer follows Home Assistant narrow resize changes", async () => {
   const Panel = customElements.get("alert-manager-panel");
   const panel = new Panel();
@@ -553,7 +598,9 @@ test("an open side drawer follows Home Assistant narrow resize changes", async (
   let captures = 0;
   let renders = 0;
   panel._captureEntityDelayValues = () => { captures += 1; };
-  panel._loadNativeBottomSheet = async () => true;
+  let loaded = false;
+  panel._nativeBottomSheetTag = () => panel._narrow && loaded ? "ha-snap-bottom-sheet" : undefined;
+  panel._loadNativeBottomSheet = async () => { loaded = true; return true; };
   panel._render = () => { renders += 1; };
 
   panel.narrow = true;
@@ -1903,7 +1950,7 @@ test("more info opens only after the alert details dialog is fully closed", asyn
   assert.equal(openedEntity, "sensor.rack");
 });
 
-test("opening a custom rule from an alert navigates and opens its editor", () => {
+test("opening a custom rule from an alert navigates and opens its mobile editor", async () => {
   const panel = tablePanel();
   const configuredRule = {
     id: "temperature",
@@ -1912,16 +1959,21 @@ test("opening a custom rule from an alert navigates and opens its editor", () =>
   };
   panel._config.rules = [configuredRule];
   const navigations = [];
-  let renders = 0;
+  const renders = [];
+  let sheetLoaded = false;
+  panel._narrow = true;
+  panel._nativeBottomSheetTag = () => sheetLoaded ? "ha-snap-bottom-sheet" : undefined;
+  panel._loadNativeBottomSheet = async () => { sheetLoaded = true; return true; };
   panel._navigate = (path) => navigations.push(path);
-  panel._render = () => { renders += 1; };
+  panel._render = () => { renders.push(panel._renderRuleEditor()); };
 
-  assert.equal(panel._openRuleEditor("temperature", { navigate: true }), true);
+  assert.equal(await panel._openRuleEditor("temperature", { navigate: true }), true);
   assert.deepEqual(navigations, ["/alert-manager/rules"]);
   assert.equal(panel._activeTab, "rules");
   assert.deepEqual(panel._editingRule, configuredRule);
   assert.notEqual(panel._editingRule, configuredRule);
-  assert.equal(renders, 1);
+  assert.equal(renders.length, 1);
+  assert.match(renders[0], /^<ha-snap-bottom-sheet/);
 });
 
 test("dashboard renders one compact table with the required default columns and statuses", () => {

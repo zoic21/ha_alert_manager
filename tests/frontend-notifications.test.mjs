@@ -190,7 +190,7 @@ test("notification drawer uses HA selectors and keeps advanced exceptions inline
     packs: [{ id: "battery", translation_key: "battery" }],
     rules: [{ id: "freezer", name: "Freezer" }],
     busy: false,
-    useBottomSheet: false,
+    bottomSheetTag: undefined,
     t,
   });
 
@@ -220,7 +220,7 @@ test("exception switches and reminder reuse the default policy layout", () => {
   const markup = renderNotificationProfileDrawer({
     draft,
     busy: false,
-    useBottomSheet: false,
+    bottomSheetTag: undefined,
     t,
   });
 
@@ -235,7 +235,7 @@ test("notification validation is rendered inside the open drawer", () => {
   const markup = renderNotificationProfileDrawer({
     draft: newNotificationProfileDraft(),
     busy: false,
-    useBottomSheet: false,
+    bottomSheetTag: undefined,
     validationError: "Select one entity",
     t,
   });

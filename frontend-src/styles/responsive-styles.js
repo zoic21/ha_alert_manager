@@ -128,7 +128,7 @@ export const responsiveStyles = `
    * which becomes active before this panel's small-screen media query. Keep
    * these overrides tied to the component so the desktop drawer cannot remain
    * visible inside it at intermediate widths. */
-  ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
+  .side-drawer-bottom-sheet {
     position: fixed;
     z-index: 6;
     inset: 0;
@@ -139,10 +139,19 @@ export const responsiveStyles = `
       var(--ha-border-radius-2xl, 14px)
     );
     --ha-bottom-sheet-border-radius: var(--side-drawer-mobile-border-radius);
+    --ha-bottom-sheet-surface-background: var(--card-background-color);
+  }
+  ha-resizable-bottom-sheet.side-drawer-bottom-sheet {
     --ha-bottom-sheet-border-width: 2px;
     --ha-bottom-sheet-border-style: solid;
     --ha-bottom-sheet-border-color: var(--primary-color);
-    --ha-bottom-sheet-surface-background: var(--card-background-color);
+  }
+  ha-snap-bottom-sheet.side-drawer-bottom-sheet {
+    --ha-bottom-sheet-handle-padding: 0px;
+  }
+  ha-snap-bottom-sheet.side-drawer-bottom-sheet ha-card.side-drawer {
+    box-sizing: border-box;
+    padding-block-start: 20px;
   }
   .side-drawer-bottom-sheet ha-card.side-drawer {
     position: static;
@@ -169,6 +178,20 @@ export const responsiveStyles = `
     flex-wrap: wrap;
   }
   .side-drawer-bottom-sheet .side-drawer-actions .action-spacer {
+    display: none;
+  }
+  /* Keep the drawer usable if Home Assistant's lazy component cannot load. */
+  :host([narrow]) .side-drawer-backdrop + ha-card.side-drawer {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: none;
+    height: 70vh;
+    height: 70dvh;
+    border-width: 0;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  :host([narrow]) .rule-editor-resize {
     display: none;
   }
 

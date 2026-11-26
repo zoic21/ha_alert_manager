@@ -23,59 +23,63 @@ export const SIDE_DRAWER_OPEN_ACTIONS = new Set([
   "edit-notification-profile",
 ]);
 
+const SNAP_BOTTOM_SHEET = "ha-snap-bottom-sheet";
+const LEGACY_BOTTOM_SHEET = "ha-resizable-bottom-sheet";
+
 export const isCompanionApp = () => Boolean(
   window.externalAppV2
   || window.externalApp
   || window.webkit?.messageHandlers?.externalBus,
 );
 
-export function useNativeBottomSheet() {
-  return Boolean(this._narrow && customElements.get("ha-resizable-bottom-sheet"));
+export function nativeBottomSheetTag() {
+  if (!this._narrow) return undefined;
+  if (customElements.get(SNAP_BOTTOM_SHEET)) return SNAP_BOTTOM_SHEET;
+  if (customElements.get(LEGACY_BOTTOM_SHEET)) return LEGACY_BOTTOM_SHEET;
 }
 
 // Home Assistant registers this native component in its lazy automation editor
 // bundle. Load that same route instead of maintaining a local bottom-sheet copy.
 export async function loadNativeBottomSheet(force = false) {
-  if (!force && (!this._narrow || this._useNativeBottomSheet())) return true;
+  if (!force && (!this._narrow || this._nativeBottomSheetTag())) return true;
   if (this._nativeBottomSheetLoadPromise) return this._nativeBottomSheetLoadPromise;
   this._nativeBottomSheetLoadPromise = (async () => {
-    const homeAssistant = document.querySelector?.("home-assistant");
-    const main = homeAssistant?.shadowRoot?.querySelector?.("home-assistant-main");
-    const resolver = main?.shadowRoot?.querySelector?.("partial-panel-resolver");
-    const configPath = Object.values(this._hass?.panels ?? {})
-      .find((panel) => panel.component_name === "config")?.url_path;
-    const loadConfig = configPath
-      ? resolver?.routerOptions?.routes?.[configPath]?.load
-      : undefined;
-    if (typeof loadConfig === "function") await loadConfig();
+    if (!customElements.get("ha-panel-config")) {
+      const homeAssistant = document.querySelector?.("home-assistant");
+      const main = homeAssistant?.shadowRoot?.querySelector?.("home-assistant-main");
+      const resolver = main?.shadowRoot?.querySelector?.("partial-panel-resolver");
+      const configPath = Object.values(this._hass?.panels ?? {})
+        .find((panel) => panel.component_name === "config")?.url_path;
+      await resolver?.routerOptions?.routes?.[configPath]?.load?.();
+    }
     if (!customElements.get("ha-panel-config")) return false;
     const configPanel = document.createElement("ha-panel-config");
-    const loadAutomation = configPanel.routerOptions?.routes?.automation?.load;
-    if (typeof loadAutomation === "function") await loadAutomation();
-    return Boolean(customElements.get("ha-resizable-bottom-sheet"));
-  })().catch(() => false);
+    await configPanel.routerOptions?.routes?.automation?.load?.();
+    return Boolean(customElements.get(SNAP_BOTTOM_SHEET) || customElements.get(LEGACY_BOTTOM_SHEET));
+  })().catch(() => false).finally(() => {
+    this._nativeBottomSheetLoadPromise = null;
+  });
   return this._nativeBottomSheetLoadPromise;
 }
 
-export function updateDrawerLayout(previousNarrow) {
+export async function updateDrawerLayout(previousNarrow) {
+  const hasDrawer = () => this._editingRule !== null || this._configurationDrawer;
   if (
     Boolean(previousNarrow) === this._narrow
     || !this.isConnected
-    || (this._editingRule === null && !this._configurationDrawer)
+    || !hasDrawer()
   ) return;
+  if (this._narrow && !this._nativeBottomSheetTag()) {
+    await this._loadNativeBottomSheet();
+    if (!this._nativeBottomSheetTag() || !this.isConnected || !hasDrawer()) return;
+  }
   if (this._editingRule !== null) this._captureRuleDraft();
   if (this._activeTab === "settings" || this._configurationDrawer?.kind === "automatic") this._captureAutomaticConfigurationValues();
   if (this._activeTab === "settings") {
     this._captureEntityDelayValues();
     this._captureNotificationProfileDraft();
   }
-  if (!this._narrow) {
-    this._render();
-    return;
-  }
-  void this._loadNativeBottomSheet().then((loaded) => {
-    if (loaded && this.isConnected && this._narrow) this._render();
-  });
+  this._render();
 }
 
 export async function handleBottomSheetClosed(panel, actionHandlers, event) {
@@ -85,7 +89,8 @@ export async function handleBottomSheetClosed(panel, actionHandlers, event) {
   for (const handler of actionHandlers) {
     if (await handler.call(panel, action, button, event)) {
       // A native swipe already closed the sheet; remount it if discard was refused.
-      if (action === "close-configuration-drawer" && panel._configurationDrawer) panel._render();
+      if ((action === "close-configuration-drawer" && panel._configurationDrawer)
+        || (action === "cancel-rule" && panel._editingRule !== null)) panel._render();
       return;
     }
   }
@@ -95,12 +100,12 @@ export function renderSideDrawer({
   drawer,
   backdropClass,
   closeAction,
-  useBottomSheet = false,
+  bottomSheetTag,
 }) {
-  if (useBottomSheet) {
-    return `<ha-resizable-bottom-sheet class="side-drawer-bottom-sheet" data-close-action="${esc(closeAction)}">
+  if (bottomSheetTag === SNAP_BOTTOM_SHEET || bottomSheetTag === LEGACY_BOTTOM_SHEET) {
+    return `<${bottomSheetTag} class="side-drawer-bottom-sheet" data-close-action="${esc(closeAction)}"${bottomSheetTag === SNAP_BOTTOM_SHEET ? " dismissable" : ""}>
       ${drawer}
-    </ha-resizable-bottom-sheet>`;
+    </${bottomSheetTag}>`;
   }
   return `<div class="side-drawer-backdrop ${esc(backdropClass)}" data-action="${esc(closeAction)}" aria-hidden="true"></div>
     ${drawer}`;
@@ -120,7 +125,7 @@ export function renderConfigurationDrawer({
   saveAction,
   saveLabel,
   busy,
-  useBottomSheet = false,
+  bottomSheetTag,
 }) {
   const drawer = `<ha-card outlined class="side-drawer configuration-drawer" role="dialog" aria-modal="false" aria-label="${esc(ariaLabel)}">
       ${renderDrawerResizeHandle(resizeLabel)}
@@ -139,7 +144,7 @@ export function renderConfigurationDrawer({
     drawer,
     backdropClass: "configuration-drawer-backdrop",
     closeAction: "close-configuration-drawer",
-    useBottomSheet,
+    bottomSheetTag,
   });
 }
 
@@ -183,27 +188,29 @@ export function mountConfigurationDrawer(root) {
   if (overlay.parentNode !== root) root.append(overlay);
 }
 
+export function replaceBottomSheetContent(sheet, markup, drawerSelector) {
+  if (!sheet || !markup) return null;
+  const template = document.createElement("template");
+  template.innerHTML = markup.trim();
+  const nextSheet = template.content.querySelector(".side-drawer-bottom-sheet");
+  if (!nextSheet || nextSheet.localName !== sheet.localName) return null;
+  const drawer = sheet.querySelector(drawerSelector);
+  const nextDrawer = nextSheet.querySelector(drawerSelector);
+  if (!drawer || !nextDrawer) return null;
+  drawer.replaceWith(nextDrawer);
+  return nextDrawer;
+}
+
 export function replaceConfigurationDrawer(root, markup, revealSelector) {
   root?.querySelector?.(".settings-page")?.classList?.toggle("has-editor", Boolean(markup));
   const currentBottomSheet = root?.querySelector?.(".side-drawer-bottom-sheet");
   const currentDrawer = currentBottomSheet?.querySelector?.(".configuration-drawer")
     ?? root?.querySelector?.(".configuration-drawer");
   const scrollTop = currentDrawer?.querySelector?.(".side-drawer-form")?.scrollTop ?? 0;
-  if (currentBottomSheet && markup) {
-    const template = document.createElement("template");
-    template.innerHTML = markup.trim();
-    const nextBottomSheet = template.content.querySelector(
-      ".side-drawer-bottom-sheet",
-    );
-    const nextDrawer = nextBottomSheet?.querySelector(
-      ".configuration-drawer",
-    );
-    if (currentDrawer && nextDrawer) {
-      currentDrawer.replaceWith(nextDrawer);
-      const nextScroller = nextDrawer.querySelector?.(".side-drawer-form");
-      restoreDrawerScroll(nextScroller, scrollTop, revealSelector);
-      return;
-    }
+  const nextDrawer = replaceBottomSheetContent(currentBottomSheet, markup, ".configuration-drawer");
+  if (nextDrawer) {
+    restoreDrawerScroll(nextDrawer.querySelector?.(".side-drawer-form"), scrollTop, revealSelector);
+    return;
   }
   currentBottomSheet?.remove?.();
   root?.querySelector?.(".configuration-drawer-backdrop")?.remove?.();
