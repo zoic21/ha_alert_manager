@@ -91,7 +91,7 @@ export function updateNotificationProfileUsage(root, usage, t) {
 }
 
 export function renderNotificationProfileDrawer({
-  draft, busy, useBottomSheet, validationError = null, mode = "visual", savedProfile = null, labels = [], expandedExceptions, t,
+  draft, busy, bottomSheetTag, validationError = null, mode = "visual", savedProfile = null, labels = [], expandedExceptions, t,
 }) {
   if (!draft) return "";
   const policy = draft.default_policy;
@@ -130,7 +130,7 @@ export function renderNotificationProfileDrawer({
     saveAction: "save-notification-profile",
     saveLabel: t("buttons.save"),
     busy,
-    useBottomSheet,
+    bottomSheetTag,
   });
 }
 

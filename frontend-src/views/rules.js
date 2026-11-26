@@ -254,9 +254,7 @@ export function hydrateRuleTable() {
           .filter((column) => RULES_SECONDARY_COLUMNS.has(column));
         this._saveRulesTableState();
       },
-      onRowClick: (ruleId) => {
-        this._openRuleEditor(ruleId);
-      },
+      onRowClick: (ruleId) => void this._openRuleEditor(ruleId),
       onFilterChanged: (key, value, checked) => {
         const selected = new Set(this._filterValues(state.filters[key]));
         if (checked) selected.add(value);
@@ -452,7 +450,8 @@ export function nativeRuleNameCell(row, narrow = false) {
     return content;
 }
 
-export function openRuleEditor(ruleId, { navigate = false } = {}) {
+export async function openRuleEditor(ruleId, { navigate = false } = {}) {
+    if (this._narrow && !this._nativeBottomSheetTag()) await this._loadNativeBottomSheet();
     const rule = (this._config?.rules ?? []).find(
       (item) => String(item.id) === String(ruleId),
     );
@@ -642,7 +641,7 @@ export async function handleRulesAction(action, button) {
   const rule = (this._config.rules || []).find((item) => item.id === button.dataset.id);
   if (!rule) return true;
   if (action === "edit-rule") {
-    this._openRuleEditor(rule.id);
+    await this._openRuleEditor(rule.id);
   } else if (action === "toggle-rule") {
     await this._toggleRule(rule.id);
   } else {

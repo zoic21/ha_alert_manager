@@ -255,7 +255,7 @@ test("rule editor uses the native resizable bottom sheet on mobile", () => {
     yamlError: null,
     t,
     duplicateLabel: "Duplicate",
-    useBottomSheet: true,
+    bottomSheetTag: "ha-resizable-bottom-sheet",
     renderTextField: () => "<ha-input></ha-input>",
     renderNumberField: () => "<ha-input></ha-input>",
   });

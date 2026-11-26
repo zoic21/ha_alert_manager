@@ -19,7 +19,7 @@ import {
 import { applyCompleteConfiguration, handleConfigBackupAction, hydrateConfigBackups, renderBackupRestoreDialogPanel, renderConfigBackups } from "./components/config-backups.js";
 import {
   activeNoticeTarget, refreshActiveNotice, handleBottomSheetClosed, isCompanionApp, loadNativeBottomSheet, mountConfigurationDrawer, SIDE_DRAWER_OPEN_ACTIONS,
-  updateDrawerLayout, useNativeBottomSheet,
+  updateDrawerLayout, nativeBottomSheetTag,
 } from "./components/configuration-drawer.js";
 import { captureNotificationProfileDraft, handleNotificationProfileAction } from "./components/notification-profiles.js";
 import {
@@ -86,7 +86,7 @@ class AlertManagerPanel extends HTMLElement {
   _applyCompleteConfiguration = applyCompleteConfiguration;
   _hydrateConfigBackups = hydrateConfigBackups;
   _renderConfigBackups = renderConfigBackups;
-  _useNativeBottomSheet = useNativeBottomSheet;
+  _nativeBottomSheetTag = nativeBottomSheetTag;
   _loadNativeBottomSheet = loadNativeBottomSheet;
   _updateDrawerLayout = updateDrawerLayout;
   _renderBackupRestoreDialog = renderBackupRestoreDialogPanel;
@@ -357,7 +357,7 @@ class AlertManagerPanel extends HTMLElement {
       if (tablePage) tablePage.narrow = this._narrow;
     }
     if (previousNarrow !== this._narrow) void syncMobileTableLayout.call(this);
-    this._updateDrawerLayout(previousNarrow);
+    void this._updateDrawerLayout(previousNarrow);
   }
   _upgradeProperty(name) {
     if (!Object.prototype.hasOwnProperty.call(this, name)) return;

@@ -141,23 +141,23 @@ test("native editor hydration is idempotent and keeps unsaved YAML after remount
   assert.equal(editor.value, "edited");
 });
 
-for (const useBottomSheet of [false, true]) {
-  test(`all scoped drawers render the native menu and YAML editor (bottom sheet=${useBottomSheet})`, () => {
+for (const bottomSheetTag of [undefined, "ha-resizable-bottom-sheet"]) {
+  test(`all scoped drawers render the native menu and YAML editor (bottom sheet=${bottomSheetTag})`, () => {
     const t = (key) => key;
     for (const id of ["entity_delays", "excluded_entities", "excluded_devices"]) {
       const markup = renderSettingsConfigurationDrawer({
         configurationDrawer: { kind: "settings", id, mode: "yaml" },
-        settingsDraft: {}, entityDelayDraft: [], t, useBottomSheet,
+        settingsDraft: {}, entityDelayDraft: [], t, bottomSheetTag,
       });
       assert.match(markup, /data-configuration-yaml-menu/);
       assert.match(markup, /ha-code-editor/);
       assert.doesNotMatch(markup, /id="excluded-entities"|data-delay-index/);
-      assert.equal(markup.includes("<ha-resizable-bottom-sheet"), useBottomSheet);
+      assert.equal(markup.includes("<ha-resizable-bottom-sheet"), Boolean(bottomSheetTag));
     }
     const markup = renderAutomaticConfigurationDrawer({
       configurationDrawer: { kind: "automatic", id: "battery", fieldId: "device_thresholds", mode: "yaml" },
       availablePacks: [{ id: "battery", config_fields: [{ id: "device_thresholds", type: "device_number_map", translation_key: "battery_device_thresholds" }] }],
-      draft: { battery: { device_thresholds: [] } }, t, useBottomSheet,
+      draft: { battery: { device_thresholds: [] } }, t, bottomSheetTag,
     });
     assert.match(markup, /data-configuration-yaml-menu/);
     assert.match(markup, /ha-code-editor/);

@@ -258,7 +258,7 @@ export function nativeCoherenceEntityCell(row, narrow = false) {
 
 export function openCoherenceLink(link) {
     if (link?.type === "custom_rule") {
-      if (!this._readOnly) this._openRuleEditor(link.path, { navigate: true });
+      if (!this._readOnly) void this._openRuleEditor(link.path, { navigate: true });
     } else if (link?.type === "more_info") this._openMoreInfo(link.entity_id);
     else if (link?.type === "navigate") this._navigate(link.path, true);
 }
@@ -319,7 +319,7 @@ export function nativeCoherenceActionCell(row) {
     return content;
 }
 
-function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottomSheet, t }) {
+function renderCoherenceHistoryDrawer({ kind, translationKey, content, bottomSheetTag, t }) {
     const drawer = `<ha-card outlined class="side-drawer ${kind}-drawer" role="dialog" aria-modal="false" aria-label="${esc(t(`${translationKey}.title`))}">
         <ha-dialog-header show-border>
           <ha-icon-button slot="navigationIcon" path="${MDI_CLOSE}" data-action="close-${kind}" aria-label="${esc(t(`${translationKey}.close`))}"></ha-icon-button>
@@ -331,12 +331,12 @@ function renderCoherenceHistoryDrawer({ kind, translationKey, content, useBottom
       drawer,
       backdropClass: `${kind}-drawer-backdrop`,
       closeAction: `close-${kind}`,
-      useBottomSheet,
+      bottomSheetTag,
     });
 }
 
 export function renderDeletedEntitiesDrawer({
-  data, loading, error, formatDate, useBottomSheet = false, t,
+  data, loading, error, formatDate, bottomSheetTag, t,
 }) {
     const entities = data?.entities ?? [];
     const content = loading
@@ -361,7 +361,7 @@ export function renderDeletedEntitiesDrawer({
       kind: "deleted-entities",
       translationKey: "coherence.deleted_entities",
       content,
-      useBottomSheet,
+      bottomSheetTag,
       t,
     });
 }
@@ -388,7 +388,7 @@ function entityRenameIds(oldId, newId, oldLabel, newLabel) {
 }
 
 export function renderEntityRenamesDrawer({
-  data, loading, error, formatDate, useBottomSheet = false, t,
+  data, loading, error, formatDate, bottomSheetTag, t,
 }) {
     const groups = groupEntityRenames(data?.renames ?? []);
     const content = loading
@@ -424,7 +424,7 @@ export function renderEntityRenamesDrawer({
       kind: "entity-renames",
       translationKey: "coherence.entity_renames",
       content,
-      useBottomSheet,
+      bottomSheetTag,
       t,
     });
 }
@@ -503,7 +503,7 @@ export function renderCoherence(context) {
       entityExportLoading = false,
       entityExportOpen = false,
       entityReplacement = null,
-      useBottomSheet = false,
+      bottomSheetTag,
       formatDate = (value) => value,
       t,
     } = context;
@@ -514,7 +514,7 @@ export function renderCoherence(context) {
           loading: deletedEntitiesLoading,
           error: deletedEntitiesError,
           formatDate,
-          useBottomSheet,
+          bottomSheetTag,
           t,
         })
       : entityRenamesOpen
@@ -523,7 +523,7 @@ export function renderCoherence(context) {
             loading: entityRenamesLoading,
             error: entityRenamesError,
             formatDate,
-            useBottomSheet,
+            bottomSheetTag,
             t,
           })
         : "";
@@ -576,7 +576,7 @@ export function renderCoherencePanel() {
       entityExportLoading: this._entityExportLoading,
       entityExportOpen: this._entityExportOpen,
       entityReplacement: this._entityReplacement,
-      useBottomSheet: this._useNativeBottomSheet(),
+      bottomSheetTag: this._nativeBottomSheetTag(),
       formatDate: (value) => this._date(value),
       t: (key, replacements) => this._t(key, replacements),
     });

@@ -27,7 +27,7 @@ function automaticContext(panel) {
   return {
     availablePacks: panel._packs, config: panel._config, draft: panel._automaticMapDraft,
     configurationDrawer: panel._configurationDrawer, busy: panel._busy,
-    useBottomSheet: panel._useNativeBottomSheet(), hass: panel._hass,
+    bottomSheetTag: panel._nativeBottomSheetTag(), hass: panel._hass,
     t: (key, replacements) => panel._t(key, replacements),
   };
 }
@@ -163,7 +163,7 @@ export function renderPackField(pack, field, config, context) {
 }
 
 export function renderAutomaticConfigurationDrawer(context) {
-  const { availablePacks, draft, configurationDrawer: drawer, busy, useBottomSheet, t } = context;
+  const { availablePacks, draft, configurationDrawer: drawer, busy, bottomSheetTag, t } = context;
   if (drawer?.kind !== "automatic") return "";
   const pack = availablePacks.find((pack) => pack.id === drawer.id);
   if (!pack) return "";
@@ -178,7 +178,7 @@ export function renderAutomaticConfigurationDrawer(context) {
     ${sourceId ? `<div class="field full switch-field-row"><span class="field-label">${esc(t("automatic.source_enabled"))}</span><ha-switch id="auto-${pack.id}-source-enabled" aria-label="${esc(t("automatic.source_enabled"))}" ${scope && scope.enabled !== false ? "checked" : ""}></ha-switch></div>` : `<div class="field full"><span class="field-label">${esc(t("automatic.labels"))}</span><ha-selector id="auto-${pack.id}-labels"></ha-selector></div>`}
     ${scope ? `<div class="automatic-pack-settings">${fields.map((field) => renderSetting(field, scope[field.id], `auto-${pack.id}-${field.id}`, { "data-pack-default": pack.id, "data-setting-id": field.id }, t, Boolean(sourceId))).join("")}</div>` + exceptionFields(pack, availablePacks, sourceId).map((field) => renderPackField(pack, field, settings, context)).join("") : ""}
   </div>`;
-  return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, useBottomSheet });
+  return renderConfigurationDrawer({ resizeLabel: t("rules.aria_resize"), title, ariaLabel: t("automatic.close_configuration_aria", { name: title }), headerAction: renderConfigurationYamlMenu(drawer, t), content: renderConfigurationYamlContent(drawer, content, t), saveAction: "save-automatic", saveLabel: t("buttons.save"), busy, bottomSheetTag });
 }
 
 export function ensureAutomaticDraft() {

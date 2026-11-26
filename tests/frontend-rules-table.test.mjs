@@ -236,6 +236,7 @@ test("rules table keeps name and activation visible and wires native controls", 
   assert.deepEqual(panel._tableState.rules.hiddenColumns, ["entities"]);
 
   panel._refreshRuleEditor = () => {};
+  panel._nativeBottomSheetTag = () => "ha-snap-bottom-sheet";
   table.listeners["row-click"]({ detail: { id: "inactive-rule" } });
   assert.equal(panel._editingRule.id, "inactive-rule");
 });

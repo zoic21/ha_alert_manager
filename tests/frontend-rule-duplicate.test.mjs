@@ -118,7 +118,7 @@ test("the native bottom sheet never keeps the desktop drawer nested inside", () 
   const styles = compactCss(panel._styles());
   const smallScreenMedia = styles.indexOf("@media(max-width:700px)");
   const nativeSheet = styles.indexOf(
-    "ha-resizable-bottom-sheet.side-drawer-bottom-sheet{",
+    ".side-drawer-bottom-sheet{position:fixed;",
   );
 
   assert.ok(nativeSheet >= 0);
@@ -137,6 +137,8 @@ test("the native bottom sheet never keeps the desktop drawer nested inside", () 
     styles,
     /\.side-drawer-bottom-sheet \.side-drawer-actions \.action-spacer\{display:none\}/,
   );
+  assert.match(styles, /ha-snap-bottom-sheet\.side-drawer-bottom-sheet\{--ha-bottom-sheet-handle-padding:0px\}/);
+  assert.match(styles, /:host\(\[narrow\]\) \.side-drawer-backdrop \+ ha-card\.side-drawer\{inset:auto 0 0;width:100%;max-width:none/);
 });
 
 test("narrow native table action rows stay gray on every table page", () => {

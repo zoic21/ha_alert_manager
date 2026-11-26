@@ -280,6 +280,18 @@ test("declining a native swipe close remounts the configuration drawer", async (
   assert.equal(renders, 1);
 });
 
+test("declining a native swipe close remounts a rule with its draft", async () => {
+  const p = panel();
+  const draft = { name: "Unsaved rule" };
+  p._editingRule = draft;
+  p._ruleDirty = true;
+  let renders = 0;
+  p._render = () => { renders++; };
+  await handleBottomSheetClosed(p, [handleRulesAction], { target: { dataset: { closeAction: "cancel-rule" } } });
+  assert.equal(p._editingRule, draft);
+  assert.equal(renders, 1);
+});
+
 const { inheritedPackSetting } = await import("../frontend-src/views/automatic.js");
 const { alertDetailsItems } = await import("../frontend-src/components/alert-table.js");
 
